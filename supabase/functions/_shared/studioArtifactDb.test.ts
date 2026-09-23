@@ -191,7 +191,7 @@ void (async () => {
   for (const candidate of malformedResults) {
     try { await executeStudioAtomicCommand(handoffCommand, async () => candidate.value as never); }
     catch (error) {
-      if (error instanceof StudioArtifactError && error.code === 'COMMAND_UNAVAILABLE') {
+      if (error instanceof StudioArtifactError && error.code === 'COMMAND_OUTCOME_UNKNOWN') {
         rejectedMalformedResults.push(candidate.fixture);
       }
     }

@@ -4,6 +4,7 @@ const migration=fs.readFileSync(new URL('../supabase/migrations/20260720160000_p
 const operatorFix=fs.readFileSync(new URL('../supabase/migrations/20260923133000_pr1e_evidence_claim_operator_binding.sql',import.meta.url),'utf8');
 const governAliasFix=fs.readFileSync(new URL('../supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql',import.meta.url),'utf8');
 const studioAuthorityFix=fs.readFileSync(new URL('../supabase/migrations/20260923144653_studio_command_authority_capabilities.sql',import.meta.url),'utf8');
+const studioReceiptFix=fs.readFileSync(new URL('../supabase/migrations/20260923151115_studio_handoff_receipt_binding.sql',import.meta.url),'utf8');
 assert.match(operatorFix,/\(e\.payload->''claimIds''\) @> \(p_payload->''claimIds''\) AND \(e\.payload->''claimIds''\) <@ \(p_payload->''claimIds''\)/);
 assert.match(operatorFix,/PR1E_EVIDENCE_CLAIM_OPERATOR_SOURCE_MISMATCH/);
 assert.match(operatorFix,/marker\.migration_tip = '20260923082000'/);
@@ -21,6 +22,11 @@ for(const readCapability of ['studio.artifacts.read','studio.handoffs.read','stu
 assert.match(studioAuthorityFix,/STUDIO_AUTHORITY_SOURCE_MISMATCH/);
 assert.match(studioAuthorityFix,/CHECK \(migration_tip='20260923144653'\)/);
 assert.doesNotMatch(studioAuthorityFix,/GRANT |INSERT INTO public\.role_capabilities|DROP FUNCTION/i,'the Studio authority correction must not grant capabilities');
+assert.match(studioReceiptFix,/receipt\.response\|\|jsonb_build_object\(''outcome'',''replayed'',''receiptId'',receipt\.id\)/);
+assert.match(studioReceiptFix,/''handoffVersionId'',handoff_version\.id,''expiresAt'',handoff\.expires_at,''receiptId'',receipt\.id/);
+assert.match(studioReceiptFix,/STUDIO_HANDOFF_RECEIPT_SOURCE_MISMATCH/);
+assert.match(studioReceiptFix,/CHECK \(migration_tip='20260923151115'\)/);
+assert.doesNotMatch(studioReceiptFix,/GRANT |INSERT INTO public\.role_capabilities|DELETE FROM|DROP FUNCTION/i,'the receipt correction must preserve authority and history');
 for(const capability of ['assess.v2.review','assess.v2.evidence.attest','assess.v2.approve','assess.v2.govern.resolve','assess.v2.studio.handoff'])assert.ok(migration.includes(capability),capability);
 for(const command of ['review.assign','evidence.attest','review.resolve','revision.start','govern.resolve','studio.handoff'])assert.ok(migration.includes(`assessment_v2.${command}`),command);
 for(const table of ['review_assignments','evidence_attestations','review_resolutions','govern_resolutions','studio_handoffs','studio_sources'])assert.ok(migration.includes(`assess_v2_${table}`),table);

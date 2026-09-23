@@ -89,6 +89,7 @@ assert.deepEqual(decodeStudioEligibleReviewers([{actorId:U[8],displayName:'Indep
 assert.throws(()=>decodeStudioEligibleReviewers(null),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioEligibleReviewers([{actorId:U[8],displayName:''}]),StudioArtifactBoundaryError);
 assert.equal(decodeStudioSafeError({code:'VERSION_CONFLICT',details:'secret table public.foo'}).code,'VERSION_CONFLICT');
+assert.equal(decodeStudioSafeError({code:'COMMAND_OUTCOME_UNKNOWN'}).code,'COMMAND_OUTCOME_UNKNOWN');
 for(const [raw,safe] of [['RESOURCE_STALE','SOURCE_PACKAGE_STALE'],['TEMPLATE_NOT_APPROVED','TEMPLATE_STALE'],['PROVIDER_ROUTE_UNAVAILABLE','PROVIDER_UNAVAILABLE'],['HANDOFF_NOT_ELIGIBLE','HANDOFF_NOT_ELIGIBLE'],['SOURCE_COVERAGE_INCOMPLETE','SOURCE_COVERAGE_INCOMPLETE'],['BUDGET_EXHAUSTED','BUDGET_EXHAUSTED'],['RECEIPT_FINALIZATION_FAILED','RECEIPT_FINALIZATION_FAILED']] as const)assert.equal(decodeStudioSafeError({code:raw}).code,safe);
 assert.equal(decodeStudioSafeError({code:'42P01',details:'secret table public.foo'}).code,'COMMAND_UNAVAILABLE');
 assert.equal(decodeStudioSafeError({error:{errorCode:'SOURCE_COVERAGE_INCOMPLETE'}}).code,'SOURCE_COVERAGE_INCOMPLETE');

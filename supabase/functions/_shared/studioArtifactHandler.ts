@@ -100,7 +100,8 @@ export const handleStudioArtifactCommand = async (
       }
     }
 
-    assertAuthority(await deps.loadFreshAuthority(authorityInput), actor.id, capability);
+    try { assertAuthority(await deps.loadFreshAuthority(authorityInput), actor.id, capability); }
+    catch { throw new StudioArtifactError('COMMAND_OUTCOME_UNKNOWN'); }
     return jsonResponse({ ok: true, ...payload }, status);
   } catch (error) {
     const safe = asStudioArtifactError(error);

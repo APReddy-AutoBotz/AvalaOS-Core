@@ -101,6 +101,7 @@ const stateForError = (error: unknown, generation = false): { state: ViewState; 
   }
   if (!navigator.onLine) return { state: 'offline', message: 'Offline. No command was submitted.' };
   if (error instanceof StudioArtifactBoundaryError) {
+    if (error.code === 'COMMAND_OUTCOME_UNKNOWN') return { state: 'committed_reload_failed', message: 'The server may have committed this action, but its response could not be verified. Reload the committed Studio state before any further mutation.' };
     if (error.code === 'VERSION_CONFLICT') return { state: 'version_conflict', message: 'Version conflict. Reload the current committed state.' };
     if (error.code === 'SOURCE_PACKAGE_STALE' || error.code === 'TEMPLATE_STALE' || error.code === 'HANDOFF_STALE') return { state: 'stale', message: 'The exact source, template, or handoff version changed. The prior committed artifact is preserved.' };
     if (error.code === 'HANDOFF_EXPIRED' || error.code === 'SESSION_EXPIRED') return { state: 'authorization_revoked', message: 'The handoff or session expired. No target document was created.' };

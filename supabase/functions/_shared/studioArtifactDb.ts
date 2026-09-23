@@ -262,7 +262,9 @@ export const executeStudioAtomicCommand = async (
   } else {
     name = STUDIO_RPC.artifactCommand; args = { p_command: command };
   }
-  return normalizeCommandResult(command, await invoke<unknown>(name, args));
+  const raw = await invoke<unknown>(name, args);
+  try { return normalizeCommandResult(command, raw); }
+  catch { throw new StudioArtifactError('COMMAND_OUTCOME_UNKNOWN'); }
 };
 
 type Postgrest = <T>(path: string, init?: RequestInit) => Promise<T>;
