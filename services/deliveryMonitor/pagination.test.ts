@@ -5,10 +5,11 @@ import {
 } from './contracts';
 import {
   createDeliveryItemPageFixture,
+  createDeliveryWorkspaceFixture,
   deliveryItemPageCursorForItem,
   DELIVERY_MONITOR_FIXTURE_IDS,
 } from './fixtures';
-import { mergeDeliveryItemPage } from './workspace';
+import { mergeDeliveryItemPage, replaceDeliveryBaselineEligibilityPage } from './workspace';
 import { emitPrCAssertion } from '../../supabase/functions/_shared/deliveryMonitorPrCTestEvidence';
 
 const paginationContext = {
@@ -105,5 +106,40 @@ marker('DELIVERY-TR-001', 'pagination-production-precondition-250-items-complete
   ...paginationContext,
   pagination: { ...paginationContext.pagination, isComplete: true, performanceMeasurementReady: true },
 });
+
+const eligibilityId = (value: number) => `${String(value).padStart(8, '0')}-0000-4000-8000-${String(value).padStart(12, '0')}`;
+const eligibilitySeed = createDeliveryWorkspaceFixture();
+const eligibilityRows = [1, 2, 3].map(index => ({
+  ...eligibilitySeed.baselineEligibility[0],
+  workPackageId: eligibilityId(30_000 + index),
+  workPackageVersionId: eligibilityId(40_000 + index),
+}));
+const eligibilityCursor = { updatedAt: '2026-08-31T06:30:00.000Z', workPackageId: eligibilityRows[1].workPackageId };
+const eligibilityFirst = decodeDeliveryWorkspaceProjection({
+  ...eligibilitySeed,
+  baselineEligibility: eligibilityRows.slice(0, 2),
+  page: { ...eligibilitySeed.page, baselineEligibilityLimit: 2, baselineEligibilityHasMore: true, baselineEligibilityNextCursor: eligibilityCursor },
+});
+const eligibilitySecond = decodeDeliveryWorkspaceProjection({
+  ...eligibilitySeed,
+  baselineEligibility: eligibilityRows.slice(2),
+  page: { ...eligibilitySeed.page, baselineEligibilityLimit: 2, baselineEligibilityCursorApplied: true },
+});
+const eligibilityRequest = { cursor: eligibilityCursor, limit: 2 };
+const replacedEligibility = replaceDeliveryBaselineEligibilityPage(eligibilityFirst, eligibilitySecond, eligibilityRequest);
+assert.equal(replacedEligibility.baselineEligibility.length, 1);
+assert.equal(replacedEligibility.baselineEligibility[0].workPackageId, eligibilityRows[2].workPackageId);
+assert.equal(replacedEligibility.page.baselineEligibilityHasMore, false);
+assert.equal(replacedEligibility.page.baselineEligibilityNextCursor, undefined);
+assert.deepEqual(replacedEligibility.packages, eligibilityFirst.packages, 'eligibility paging must not replace package or action authority');
+const foreignEligibilityPage = structuredClone(eligibilitySecond);
+foreignEligibilityPage.workspaceId = DELIVERY_MONITOR_FIXTURE_IDS.targetWorkspaceId;
+assert.throws(() => replaceDeliveryBaselineEligibilityPage(eligibilityFirst, foreignEligibilityPage, eligibilityRequest), DeliveryMonitorContractError);
+assert.throws(() => replaceDeliveryBaselineEligibilityPage(eligibilityFirst, eligibilitySecond, {
+  ...eligibilityRequest, cursor: { ...eligibilityCursor, workPackageId: eligibilityRows[0].workPackageId },
+}), DeliveryMonitorContractError);
+const duplicateEligibilityPage = structuredClone(eligibilitySecond);
+duplicateEligibilityPage.baselineEligibility.push(duplicateEligibilityPage.baselineEligibility[0]);
+assert.throws(() => replaceDeliveryBaselineEligibilityPage(eligibilityFirst, duplicateEligibilityPage, eligibilityRequest), DeliveryMonitorContractError);
 
 console.log('Governed Delivery pagination: three bounded pages, cursor integrity, duplicate rejection, tenant reset, and stale-version guards passed.');
