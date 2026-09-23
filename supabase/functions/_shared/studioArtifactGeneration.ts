@@ -182,7 +182,8 @@ export const validateStudioDraft = (
     }
     sectionIds.add(rawSection.id);
     const labels = uniqueStrings(rawSection.labels, 3);
-    if (!labels || labels.some(label => !['human_authored', 'template_required', 'assumption'].includes(label))) throw new Error('invalid');
+    if (!labels || labels.some(label => !['template_required', 'assumption'].includes(label))
+      || labels.includes('template_required') && expectedSection?.required === false) throw new Error('invalid');
     for (const rawAnchor of rawSection.sourceAnchors) {
       if (!object(rawAnchor) || !exact(rawAnchor, ['sourceVersionId', 'locator', 'anchorHash'])
         || typeof rawAnchor.sourceVersionId !== 'string' || !selectedSet.has(rawAnchor.sourceVersionId)

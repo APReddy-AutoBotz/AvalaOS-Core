@@ -45,6 +45,7 @@ for (const [assertionId, invalid] of [
   ['generation.unknown-top-key', { ...valid, provider: 'client-selected' }],
   ['generation.unselected-source-anchor', { ...valid, sections: [{ ...valid.sections[0], sourceAnchors: [{ ...valid.sections[0].sourceAnchors[0], sourceVersionId: ids[1] }] }], }],
   ['generation.unlabelled-unanchored-section', { ...valid, sections: [{ ...valid.sections[1], labels: [] }] }],
+  ['generation.provider-human-authorship-label-rejected', { ...valid, sections: [{ ...valid.sections[1], labels: ['human_authored'] }] }],
   ['generation.incomplete-coverage', { ...valid, coverage: { ...valid.coverage, complete: false } }],
   ['generation.duplicate-section-id', { ...valid, sections: [valid.sections[0], { ...valid.sections[1], id: 'scope' }] }],
 ] as const) {
