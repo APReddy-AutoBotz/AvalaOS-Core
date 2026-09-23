@@ -1,7 +1,7 @@
 import type { Page, Request } from '@playwright/test';
 import type { EnterpriseIntelligenceProjection } from '../../services/enterpriseIntelligence';
 import { emptyAssessDocumentMappingProjection } from '../../services/assessImport/contracts';
-import type { DeliveryWorkspaceProjection, MonitorApprovedBaselinesProjection } from '../../services/deliveryMonitor/contracts';
+import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection, type DeliveryWorkspaceProjection, type MonitorApprovedBaselinesProjection } from '../../services/deliveryMonitor/contracts';
 import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from '../../services/deliveryMonitor/fixtures';
 
 export const ENTERPRISE_API = 'https://127.0.0.1:59999';
@@ -112,7 +112,7 @@ const allowedOperations = new Set([
 ]);
 
 const deliveryWorkspaceFor = (workspaceId: string, secondary = false, organizationId: string = IDS.deliveryOrganization): DeliveryWorkspaceProjection => {
-  const raw = structuredClone(createDeliveryWorkspaceFixture()) as unknown as Record<string, unknown>;
+  const raw = structuredClone(decodeDeliveryWorkspaceProjection(createDeliveryWorkspaceFixture())) as unknown as Record<string, unknown>;
   raw.organizationId = organizationId;
   raw.workspaceId = workspaceId;
   if (secondary) {
@@ -120,13 +120,14 @@ const deliveryWorkspaceFor = (workspaceId: string, secondary = false, organizati
     const sourceItem = structuredClone((sourcePackage.items as Array<Record<string, unknown>>)[0]);
     sourcePackage.id = IDS.deliverySecondaryPackage;
     sourcePackage.currentVersionId = IDS.deliverySecondaryPackageVersion;
-    sourceItem.itemAggregateId = IDS.deliverySecondaryItem;
-    sourceItem.itemVersionId = IDS.deliverySecondaryItemVersion;
+    sourceItem.aggregateId = IDS.deliverySecondaryItem;
+    sourceItem.currentVersionId = IDS.deliverySecondaryItemVersion;
     sourceItem.title = 'Secondary workspace canonical item';
     sourceItem.history = (sourceItem.history as Array<Record<string, unknown>>).map(item => ({ ...item, title: 'Secondary workspace canonical item' }));
     sourcePackage.items = [sourceItem];
     raw.eligibleStudioArtifacts = [];
-    raw.handoffs = [];
+    raw.inbox = [];
+    raw.outbox = [];
     raw.packages = [sourcePackage];
     raw.baselineEligibility = [];
   }
@@ -134,7 +135,7 @@ const deliveryWorkspaceFor = (workspaceId: string, secondary = false, organizati
 };
 
 const monitorProjectionFor = (workspaceId: string, secondary = false, organizationId: string = IDS.deliveryOrganization): MonitorApprovedBaselinesProjection => {
-  const raw = structuredClone(createMonitorBaselinesFixture()) as unknown as Record<string, unknown>;
+  const raw = structuredClone(decodeMonitorApprovedBaselinesProjection(createMonitorBaselinesFixture())) as unknown as Record<string, unknown>;
   raw.organizationId = organizationId;
   raw.workspaceId = workspaceId;
   if (secondary) raw.baselines = [];
@@ -793,23 +794,23 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
           sourcePackage: { version: 1, sourceMode: 'manual', lineageClassification: 'not_assessed', planningOnly: true },
           items: [{
             ...templateItem,
-            itemAggregateId: IDS.deliveryManualItem,
-            itemVersionId: IDS.deliveryManualItemVersion,
+            aggregateId: IDS.deliveryManualItem,
+            currentVersionId: IDS.deliveryManualItemVersion,
             aggregateVersion: 1,
             version: 1,
             status: 'proposed',
-            itemType: authored?.itemType || 'Task',
+            type: (authored?.itemType || 'Task').toLowerCase(),
             title: authored?.title || 'Manual planning item',
             description: authored?.description || 'Manual planning description',
             acceptanceCriteria: authored?.acceptanceCriteria || [],
             nonFunctionalRequirements: authored?.nonFunctionalRequirements || [],
             sourceCitation: undefined,
             decision: undefined,
-            rationale: undefined,
+            diffs: [],
+            actions: ['delivery.item.review'],
             history: [{
               version: 1,
               status: 'proposed',
-              itemType: authored?.itemType || 'Task',
               title: authored?.title || 'Manual planning item',
               description: authored?.description || 'Manual planning description',
               acceptanceCriteria: authored?.acceptanceCriteria || [],
@@ -818,14 +819,16 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
             }],
           }],
           itemPage: { limit: 50, hasMore: false, cursorApplied: false, isComplete: true },
-          acceptedItemCount: null,
           historyPage: { limit: 50, reviewHasMore: false, approvalHasMore: false },
+          reviewState: 'not_requested',
+          approvalState: 'not_requested',
           blockers: ['1 work item decision unresolved.'],
           blockerCount: 1,
           reviewHistory: [],
           approvalHistory: [],
           actions: ['delivery.item.review', 'delivery.package.revision.commit'],
         };
+        delete manualPackage.acceptedItemCount;
         deliveryWorkspace.packages = [...packages.filter(item => item.id !== IDS.deliveryManualPackage), manualPackage];
       }
       projection.commandActivity = [{ commandType: operation, status: 'committed', completedAt: '2026-08-04T09:01:00.000Z', idempotencyState: 'committed' }];

@@ -68,7 +68,7 @@
     "testing/process-lifecycle/fixtures/sources/assess/PROMPT-INJECTION-01.vtt": "sha256:4c5c2d62f52fb7dabd7e16db842d4d74c24e55e1972b57a1645970d8052164e4",
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/browser/enterpriseIntelligence.spec.ts": "sha256:b5c27bb51d9eb0d529e1427d108bddf4853ee810634a28473ff9d95cb353bb3a",
-    "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:48cd8a85e37d1032462f07a80e214e6a62114487d0c04b2602b0c813c9a38a01",
+    "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:12c666d96a629f116a6389e4028089c5e819bb0a1ea03cebd0c21694e080c88c",
     "tests/browser/transcriptFlowPrA.spec.ts": "sha256:74522a9d98ffe20f6a1d6269d6c65523c1677e4a7768cc6adf3c0ca0a0503dd6",
     "App.tsx": "sha256:930b8611d23b29974e67cc016f793e6f5faf2ed392a5a8d10808da1c579edf0c",
     "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
