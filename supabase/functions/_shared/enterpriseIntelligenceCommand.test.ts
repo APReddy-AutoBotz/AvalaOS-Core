@@ -108,6 +108,9 @@ test('uses one exhaustive command-to-current-capability mapping for replay autho
     'transcript.input-bundle.lock': 'transcript.sources.manage',
     'transcript.assess.extract': 'evidence.write',
     'transcript.assess.candidate.review': 'evidence.review',
+    'studio.source.create': 'studio.sources.manage',
+    'studio.bundle.extract': 'studio.sources.manage',
+    'studio.candidate.review': 'studio.sources.manage',
     'transcript.assess.apply.preview': 'transcript.assess.apply',
     'transcript.assess.apply.commit': 'transcript.assess.apply',
     'transcript.assess.conflict.resolve': 'transcript.assess.apply',
@@ -1049,8 +1052,9 @@ const bundleLineagePayload = (caseName: 'apply-preview' | 'apply-commit', index:
     assert.equal(foreignLookupObserved, disposition === 'foreign');
     assert.deepEqual(lookupTables, [
       'enterprise_module_input_bundle_versions', 'enterprise_source_set_versions',
+      'enterprise_module_input_bundles', 'enterprise_source_sets',
       'enterprise_module_input_bundle_items', 'enterprise_source_set_version_items',
-    ], 'extraction request binding must traverse the real four-stage scoped lookup chain');
+    ], 'extraction request binding must traverse the real owner-bound six-stage scoped lookup chain');
     responses.push(await response.text());
     assert.deepEqual(mutations, {
       receiptClaims: 0, receiptFinalizations: 0, receiptFailures: 0,
@@ -1427,6 +1431,11 @@ const assessMappingReplayManifest = {
 
 const replayPayloadFor = (commandType: ReplayCommand) => {
   if (commandType.startsWith('approval.')) return { resourceType: 'evidence_candidate' };
+  if (commandType === 'evidence.extract') return { sourceId: '65000000-0000-4000-8000-0000000000a4' };
+  if (commandType === 'evidence.candidate.review') return { candidateId: selectorFixtures.candidateIds[0] };
+  if (commandType === 'evidence.assess.promote') return {
+    sourceId: '65000000-0000-4000-8000-0000000000a4', candidateIds: [selectorFixtures.candidateIds[0]],
+  };
   if (commandType === 'assess.document-map.analyze') return {
     caseId: assessMappingReplayFixture.caseId,
     expectedCaseVersion: 1,
@@ -1472,12 +1481,16 @@ const replayPayloadFor = (commandType: ReplayCommand) => {
 const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestBindingDependencies> = {
   findOne: async <T>(table: string, query: string) => {
     const id = querySelectorId(query);
+    if (table === 'enterprise_evidence_sources') {
+      return { id, current_version: 1 } as T;
+    }
     if (table === 'enterprise_source_sets' || table === 'enterprise_module_input_bundles') {
       return { id, org_id: base.organizationId, workspace_id: base.workspaceId,
         current_version: 1, owner_module: 'assess' } as T;
     }
     if (table === 'enterprise_evidence_source_versions') {
-      return { id } as T;
+      return { id: selectorFixtures.sourceVersionSelectors[0],
+        source_id: '65000000-0000-4000-8000-0000000000a4', version: 1 } as T;
     }
     if (table === 'enterprise_module_input_bundle_versions') {
       return { id, input_bundle_id: selectorFixtures.inputBundleIds[0], version: 1,
@@ -1497,6 +1510,7 @@ const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestB
     }
     if (table === 'enterprise_evidence_candidates') {
       return { id, version: 1, ai_job_id: '65000000-0000-4000-8000-0000000000a1',
+        source_id: '65000000-0000-4000-8000-0000000000a4',
         source_version_id: selectorFixtures.sourceVersionSelectors[0] } as T;
     }
     if (table === 'enterprise_transcript_extraction_bindings') {
@@ -1524,6 +1538,13 @@ const sameTenantTranscriptBindingDependencies: Partial<TranscriptCommandRequestB
     return null;
   },
   findMany: async <T>(table: string) => {
+    if (table === 'enterprise_evidence_candidates') return [{
+      id: selectorFixtures.candidateIds[0],
+      source_id: '65000000-0000-4000-8000-0000000000a4',
+      source_version_id: selectorFixtures.sourceVersionSelectors[0],
+      ai_job_id: '65000000-0000-4000-8000-0000000000a1',
+      version: 1, provenance_hash: '7'.repeat(64),
+    }] as T[];
     assert.equal(table, 'enterprise_module_input_bundle_items');
     return [{ source_set_id: selectorFixtures.sourceSetIds[0],
       source_set_version_id: selectorFixtures.sourceSetVersionSelectors[0], ordinal: 1 }] as T[];

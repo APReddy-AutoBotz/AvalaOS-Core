@@ -26,6 +26,8 @@ const REQUIRED_TEST_IDS = [
   'PATH-003',
   'PATH-004',
   ...Array.from({ length: 8 }, (_, index) => `HANDOFF-00${index + 1}`),
+  'STUDIO-TR-001',
+  'STUDIO-TR-003',
   'PERF-001',
   'PERF-002-B',
 ];
@@ -43,6 +45,10 @@ const EXACT_NOT_RUN = new Set([
 ]);
 
 const PR_C_FOCUSED_COMMANDS = [
+  { id: 'pr-c-studio-source-api', command: 'npm run test:studio-source-integration:api', environment: 'controlled-node-22' },
+  { id: 'pr-c-studio-source-migration', command: 'npm run test:studio-source-integration:migration', environment: 'controlled-node-22' },
+  { id: 'pr-c-studio-source-postgres', command: 'npm run test:studio-source-integration:postgres', environment: 'controlled-postgresql-16', requiredEnvironment: ['STUDIO_SOURCE_INTEGRATION_DATABASE_URL'] },
+  { id: 'pr-c-studio-source-browser', command: 'npm run test:studio-source-integration:browser', environment: 'controlled-browser-two-profile' },
   { id: 'pr-c-domain', command: 'npm run test:transcript-flow:delivery-monitor-domain', environment: 'controlled-node-22' },
   { id: 'pr-c-client', command: 'npm run test:transcript-flow:delivery-monitor-client', environment: 'controlled-node-22' },
   { id: 'pr-c-api', command: 'npm run test:transcript-flow:delivery-monitor-api', environment: 'controlled-node-22' },
@@ -398,6 +404,78 @@ export const validatePrCRegistryStructure = (root, registry, provenance, { verif
     const tip = approvedFullChainTip(readdirSync(path.join(root, 'supabase/migrations'))
       .filter(name => name.endsWith('.sql')).sort());
     assert(marker.expectedRuntimeContext?.migrationTip === tip, 'PR_C_FRESH_CHAIN_MIGRATION_TIP');
+  }
+  if (commands.has('pr-c-studio-source-api')) {
+    const exactStudioMarker = (assertionId, commandId, owner, testId) => {
+      const matches = registry.assertions.filter(assertion => assertion.assertionId === assertionId);
+      assert(matches.length === 1, `PR_C_STUDIO_MARKER_COUNT:${assertionId}`);
+      const marker = matches[0];
+      assert(marker.commandId === commandId && marker.owner === owner && marker.testId === testId
+        && marker.fixture === 'studio-source-exact-v1', `PR_C_STUDIO_MARKER_BINDING:${assertionId}`);
+      return marker.expectedRuntimeContext;
+    };
+    const api = exactStudioMarker('studio-source-api-assess-owner-confusion-denied',
+      'pr-c-studio-source-api', 'studio-source-api', 'AUTH-002');
+    assert(api.persona.id === '71000000-0000-4000-8000-000000000020'
+      && api.lineage.receiptClaims === 0 && api.lineage.providerEffects === 0
+      && JSON.stringify(api.lineage.deniedCommands) === JSON.stringify([
+        { commandType: 'transcript.assess.extract', status: 404 },
+        { commandType: 'evidence.extract', status: 404 },
+        { commandType: 'evidence.candidate.review', status: 404 },
+        { commandType: 'evidence.assess.promote', status: 404 },
+      ]), 'PR_C_STUDIO_API_DENIAL_BINDING');
+    const postgres = exactStudioMarker('studio-source-postgres-package-manifest',
+      'pr-c-studio-source-postgres', 'studio-source-postgres', 'STUDIO-TR-003');
+    assert(postgres.persona.id === '97000000-0000-4000-8000-000000000330'
+      && postgres.participants?.length === 1
+      && postgres.participants[0].id === '97000000-0000-4000-8000-000000000333',
+    'PR_C_STUDIO_PACKAGE_PERSONA_BINDING');
+    assert(postgres.lineage.packageActor === postgres.participants[0].id
+      && postgres.lineage.planningOnly === true
+      && postgres.lineage.candidateManifestCount === 2
+      && postgres.lineage.packageOutcome === 'committed'
+      && postgres.lineage.packageReceiptStatus === 'committed'
+      && postgres.lineage.replayOutcome === 'replayed'
+      && postgres.lineage.committedPackageRows === 1
+      && postgres.lineage.committedReceiptRows === 1
+      && postgres.lineage.committedAuditRows === 1
+      && postgres.lineage.disabledAttemptStatus === 'STUDIO_FEATURE_DISABLED'
+      && postgres.lineage.featureEnabledDuringDisabledAttempt === false
+      && postgres.lineage.disabledNewPackageRows === 0
+      && postgres.lineage.disabledNewPackageReceiptRows === 0
+      && JSON.stringify(postgres.lineage.genericAssessCommandDenials) === JSON.stringify([
+        { commandType: 'evidence.extract', status: 'ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND' },
+        { commandType: 'evidence.candidate.review', status: 'ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND' },
+        { commandType: 'evidence.assess.promote', status: 'ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND' },
+      ])
+      && JSON.stringify(postgres.lineage.genericAssessSideEffects) === JSON.stringify({
+        jobRowsCreated: 0, candidateRowsMutated: 0, promotionRowsCreated: 0,
+        commandReceiptRowsMutated: 0, providerEffectRowsCreated: 0,
+        budgetReservationRowsCreated: 0, providerUsageRowsCreated: 0,
+        privilegedAuditRowsCreated: 0,
+      }), 'PR_C_STUDIO_PACKAGE_EXECUTION_BINDING');
+    for (const profile of ['desktop-chrome', 'pixel-7']) {
+      const manage = exactStudioMarker(`manage-only-source-create-authorized-${profile}`,
+        'pr-c-studio-source-browser', 'studio-source-browser', 'STUDIO-TR-001');
+      assert(manage.persona.id === '00000061-0000-4000-8000-000000000061'
+        && manage.lineage.profile === profile
+        && manage.lineage.sourceCreateCount === 1
+        && manage.lineage.sourceManageEnabled === true
+        && manage.lineage.sourceReadCapability === false
+        && manage.lineage.artifactGenerateCapability === false,
+      `PR_C_STUDIO_BROWSER_MANAGE_ONLY:${profile}`);
+      const provider = exactStudioMarker(`provider-disabled-zero-call-${profile}`,
+        'pr-c-studio-source-browser', 'studio-source-browser', 'STUDIO-TR-001');
+      assert(provider.lineage.providerExtractionEnabled === false
+        && provider.lineage.sourceExtractionInvocationCount === 0
+        && provider.lineage.providerOrExtractionRequestCount === 0
+        && provider.lineage.prematureSampleCount === 0
+        && provider.lineage.adversarialDelayedRequestCount === 1
+        && provider.lineage.lateTrafficGateRejected === true
+        && provider.lineage.pageClosedBeforeEvidence === true
+        && provider.lineage.observationWindow === 'clean-navigation-through-page-close',
+      `PR_C_STUDIO_PROVIDER_OBSERVER:${profile}`);
+    }
   }
   for (const command of registry.commands) {
     assert(typeof command.command === 'string' && command.command.length > 0, 'PR_C_COMMAND_INVALID');

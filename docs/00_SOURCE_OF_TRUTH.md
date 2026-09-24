@@ -1,5 +1,30 @@
 # AvalaOS Core Source Of Truth
 
+## Studio independent-source correction candidate (2026-09-24)
+
+The approved synthetic business walkthrough reached a joined Assess→Govern→Studio
+source package but did not produce a generated version from that joined package.
+A separate manual-brief BRD completed the independent Studio, Delivery, and
+planning-only Monitor path. These are different proofs. The renewed AI campaign
+expired at 2026-09-24 05:20:42 UTC with five of six additional effect debits
+consumed and USD 3.6980752 conservative aggregate charge under the original
+USD 10 cap. Its three Studio-generation effects are already consumed; the
+remaining campaign effect is not permission for another Studio generation.
+
+Draft PR #264 now carries a corrective local candidate for Studio-owned upload
+or pasted text, exact-bundle extraction, human candidate review, and direct
+planning package eligibility. The prior UI lacked this operable path; reusing
+Assess-labelled extraction would have crossed module authority. The correction
+adds a distinct default-off Studio provider route and exact owner/scope binding.
+Focused local API, fresh-chain PostgreSQL 16, retained PR B PostgreSQL, and
+Desktop/Pixel proof passed. Generic Assess evidence commands and projections
+now reject Studio-private sources and Studio-job candidates, including on shared
+sources; an older candidate also remains hidden beyond 2,000 newer classification
+rows. Populated-upgrade PR B Studio bindings remain readable. No new
+paid call or hosted mutation was made for this correction. Exact-head CI,
+same-head preview and a real hosted generated document from the joined package
+are still `not run`. Controlled-human and production readiness remain unproven.
+
 ## Current synthetic business walkthrough (2026-09-23)
 
 PR #264 head `a89030d` passed all 18 applicable exact-head workflows, including

@@ -1,6 +1,7 @@
 import type { Page, Request } from '@playwright/test';
 import type { EnterpriseIntelligenceProjection } from '../../services/enterpriseIntelligence';
 import { emptyAssessDocumentMappingProjection } from '../../services/assessImport/contracts';
+import { emptyStudioSourceFlowProjection } from '../../services/studioArtifacts/workspaceModel';
 import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection, type DeliveryWorkspaceProjection, type MonitorApprovedBaselinesProjection } from '../../services/deliveryMonitor/contracts';
 import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from '../../services/deliveryMonitor/fixtures';
 
@@ -144,6 +145,7 @@ const monitorProjectionFor = (workspaceId: string, secondary = false, organizati
 
 const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjection => ({
   documentMapping: emptyAssessDocumentMappingProjection(),
+  studioSourceFlow: emptyStudioSourceFlowProjection(),
   schemaVersion: 'enterprise-intelligence-projection-2',
   organizationId: options.deliveryMonitor ? IDS.deliveryOrganization : IDS.organization,
   workspaceId: options.deliveryMonitor ? IDS.deliveryWorkspace : IDS.workspace,

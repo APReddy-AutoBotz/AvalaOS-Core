@@ -22,6 +22,10 @@ import {
   type DeliveryWorkspaceProjection,
   type MonitorApprovedBaselinesProjection,
 } from './deliveryMonitor/contracts.ts';
+import {
+  decodeStudioSourceFlowProjection,
+  type StudioSourceFlowProjection,
+} from './studioArtifacts/workspaceModel.ts';
 
 export const ENTERPRISE_INTELLIGENCE_SCHEMA_VERSION = 'enterprise-intelligence-1';
 export const MODERNIZATION_MODEL_VERSION = 'modernization-disposition-1';
@@ -40,6 +44,7 @@ export type EnterpriseAiProvider = typeof ENTERPRISE_AI_PROVIDERS[number];
 
 export const ENTERPRISE_AI_CAPABILITIES = [
   'assess.evidence.extract',
+  'studio.evidence.extract',
   'assess.evidence.summarize',
   'delivery.work_items.draft',
   'modernization.rationale.draft',
@@ -278,6 +283,7 @@ export interface EnterpriseIntelligenceProjection {
   approvalResources: EnterpriseApprovalResourceProjection[];
   commandActivity: EnterpriseCommandActivityProjection[];
   transcriptFlow: TranscriptFlowProjection;
+  studioSourceFlow: StudioSourceFlowProjection;
   documentMapping: AssessDocumentMappingProjection;
   assessPromotion: {
     state: 'contract_pending' | 'ready' | 'conflict' | 'promoted';
@@ -609,7 +615,7 @@ const projectionKeys = [
   'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines',
   'deliveryWorkspace', 'monitorApprovedBaselines',
   'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity',
-  'transcriptFlow', 'documentMapping', 'assessPromotion',
+  'transcriptFlow', 'studioSourceFlow', 'documentMapping', 'assessPromotion',
 ] as const;
 const prohibitedProjectionKey = /(?:^|_)(?:apiKey|authorization|bearerToken|contentHash|extractedTextHash|idempotencyKey|objectKey|providerKey|rawKey|secret|secretReference|storageBucket|storagePath|versionId)$/i;
 
@@ -640,10 +646,14 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
     || !['ready', 'empty', 'blocked', 'stale', 'unavailable'].includes(String(row.availability))
     || !['providers', 'evidenceSources', 'evidenceCandidates', 'assessDrafts', 'applications', 'studioDocuments', 'deliveryPackages', 'monitorBaselines', 'modernizationDecisions', 'blueprints', 'approvalResources', 'commandActivity'].every(key => Array.isArray(row[key]))
     || !row.transcriptFlow || typeof row.transcriptFlow !== 'object' || Array.isArray(row.transcriptFlow)
+    || !row.studioSourceFlow || typeof row.studioSourceFlow !== 'object' || Array.isArray(row.studioSourceFlow)
     || (row.documentMapping !== undefined && (!row.documentMapping || typeof row.documentMapping !== 'object' || Array.isArray(row.documentMapping)))
     || !row.assessPromotion || typeof row.assessPromotion !== 'object' || Array.isArray(row.assessPromotion)
   ) throw new Error('ENTERPRISE_PROJECTION_INVALID');
-  rejectSensitiveProjectionFields(row);
+  const studioSourceFlow = decodeStudioSourceFlowProjection(row.studioSourceFlow);
+  const existingProjection = { ...row };
+  delete existingProjection.studioSourceFlow;
+  rejectSensitiveProjectionFields(existingProjection);
   decodeTranscriptFlowProjection(row.transcriptFlow);
   const documentMapping = row.documentMapping === undefined
     ? emptyAssessDocumentMappingProjection()
@@ -661,6 +671,7 @@ export const decodeEnterpriseIntelligenceProjection = (value: unknown): Enterpri
   ))) throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
   return {
     ...structuredClone(row),
+    studioSourceFlow,
     documentMapping,
     ...(deliveryWorkspace ? { deliveryWorkspace } : {}),
     ...(monitorApprovedBaselines ? { monitorApprovedBaselines } : {}),

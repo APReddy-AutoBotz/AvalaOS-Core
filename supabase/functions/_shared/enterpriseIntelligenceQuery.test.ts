@@ -211,6 +211,212 @@ assert.equal(projection.assessDrafts[0].versionLabel, 'Draft version 2');
 assert.equal(projection.applications[0].approvedAssessmentLabel, 'Approved assessment v3');
 assert.equal(projection.studioDocuments[0].approvedVersionLabel, 'Approved version 4');
 
+const SHARED_STUDIO_SOURCE = '61000000-0000-4000-8000-000000000061';
+const SHARED_STUDIO_VERSION = '71000000-0000-4000-8000-000000000071';
+const PRIVATE_STUDIO_SOURCE = '62000000-0000-4000-8000-000000000062';
+const PRIVATE_STUDIO_VERSION = '72000000-0000-4000-8000-000000000072';
+const studioLibraryRows = raw();
+studioLibraryRows.studioSourceFlags = [{
+  studio_multisource_enabled: true,
+  studio_source_integration_enabled: true,
+  unified_byok_gateway_enabled: true,
+}];
+studioLibraryRows.studioSourceOwnerships = [{
+  source_id: PRIVATE_STUDIO_SOURCE,
+  source_version_id: PRIVATE_STUDIO_VERSION,
+  created_at: '2026-09-24T04:00:00.000Z',
+}];
+studioLibraryRows.studioSources = [
+  { id: SHARED_STUDIO_SOURCE, display_name: 'Shared Assess library source', mime_type: 'text/plain', status: 'review', deleted_at: null },
+  { id: PRIVATE_STUDIO_SOURCE, display_name: 'Private Studio source', mime_type: 'application/pdf', status: 'review', deleted_at: null },
+];
+studioLibraryRows.studioSourceVersions = [
+  { id: SHARED_STUDIO_VERSION, source_id: SHARED_STUDIO_SOURCE, version: 1, extracted_character_count: 81, extraction_status: 'parsed' },
+  { id: PRIVATE_STUDIO_VERSION, source_id: PRIVATE_STUDIO_SOURCE, version: 1, extracted_character_count: 93, extraction_status: 'parsed' },
+];
+studioLibraryRows.studioProviderRoutes = [
+  { id: '73000000-0000-4000-8000-000000000073', enabled: false, deleted_at: null },
+  { id: '74000000-0000-4000-8000-000000000074', enabled: true, deleted_at: null },
+];
+const studioLibraryProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['studio.sources.manage'],
+}, studioLibraryRows, new Date('2026-09-24T06:00:00.000Z'));
+assert.deepEqual(
+  studioLibraryProjection.studioSourceFlow.sources.map(source => source.versionSelector).sort(),
+  [PRIVATE_STUDIO_VERSION, SHARED_STUDIO_VERSION].sort(),
+  'Studio source authority composes explicitly private and shared library versions',
+);
+assert.deepEqual(studioLibraryProjection.studioSourceFlow.featureState, {
+  sourceMutationsEnabled: true,
+  providerExtractionEnabled: true,
+}, 'one eligible enabled Studio extraction route remains usable when another retained route is disabled');
+
+studioLibraryRows.transcriptFlags = [{ transcript_source_sets_enabled: true, assess_multisource_apply_enabled: true }];
+studioLibraryRows.transcriptSources = studioLibraryRows.studioSources!;
+studioLibraryRows.transcriptSourceVersions = studioLibraryRows.studioSourceVersions!;
+const assessLibraryProjection = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read', 'assess.v2.read'],
+}, studioLibraryRows, new Date('2026-09-24T06:00:00.000Z'));
+assert.deepEqual(
+  assessLibraryProjection.transcriptFlow.sourceVersions.map(source => source.versionSelector),
+  [SHARED_STUDIO_VERSION],
+  'Assess source projection excludes Studio-private source-version metadata while retaining shared library evidence',
+);
+assert.ok(!JSON.stringify(assessLibraryProjection.transcriptFlow).includes(PRIVATE_STUDIO_VERSION));
+assert.ok(!JSON.stringify(assessLibraryProjection.transcriptFlow).includes('Private Studio source'));
+
+const PRIVATE_EVIDENCE_CANDIDATE = '75000000-0000-4000-8000-000000000075';
+const STUDIO_SHARED_EVIDENCE_CANDIDATE = '76000000-0000-4000-8000-000000000076';
+const ASSESS_SHARED_EVIDENCE_CANDIDATE = '77000000-0000-4000-8000-000000000077';
+const STUDIO_SHARED_EXTRACTION_JOB = '78000000-0000-4000-8000-000000000078';
+const PRIVATE_SOURCE_CANARY = 'STUDIO_PRIVATE_SOURCE_MUST_NOT_PROJECT';
+const PRIVATE_CANDIDATE_CANARY = 'STUDIO_PRIVATE_CANDIDATE_EXCERPT_MUST_NOT_PROJECT';
+const STUDIO_SHARED_CANDIDATE_CANARY = 'STUDIO_JOB_SHARED_SOURCE_EXCERPT_MUST_NOT_PROJECT';
+const sharedEvidenceSource = {
+  id: SHARED_STUDIO_SOURCE, display_name: 'Shared Assess evidence library source', mime_type: 'text/plain',
+  current_version: 1, status: 'review', created_by: USER, created_at: '2026-09-24T04:00:00.000Z',
+};
+const privateEvidenceSource = {
+  id: PRIVATE_STUDIO_SOURCE, display_name: PRIVATE_SOURCE_CANARY, mime_type: 'application/pdf',
+  current_version: 1, status: 'review', created_by: USER, created_at: '2026-09-24T04:01:00.000Z',
+};
+const sharedEvidenceVersion = {
+  id: SHARED_STUDIO_VERSION, source_id: SHARED_STUDIO_SOURCE, version: 1, content_hash: '1'.repeat(64),
+  extracted_text_hash: '2'.repeat(64), extracted_character_count: 81, extraction_status: 'parsed', created_at: '2026-09-24T04:00:00.000Z',
+};
+const privateEvidenceVersion = {
+  id: PRIVATE_STUDIO_VERSION, source_id: PRIVATE_STUDIO_SOURCE, version: 1, content_hash: '3'.repeat(64),
+  extracted_text_hash: '4'.repeat(64), extracted_character_count: 93, extraction_status: 'parsed', created_at: '2026-09-24T04:01:00.000Z',
+};
+const evidenceCandidate = (input: { id: string; sourceId: string; sourceVersionId: string; value: string; aiJobId?: string }) => ({
+  id: input.id, ...(input.aiJobId ? { ai_job_id: input.aiJobId } : {}), source_id: input.sourceId,
+  source_version_id: input.sourceVersionId, field_key: 'process_objective', value: input.value, safe_excerpt: input.value,
+  excerpt_hash: '5'.repeat(64), source_locator: 'paragraph:1', confidence: 0.9, prompt_version: 'evidence-1',
+  suggestion_status: 'accepted', version: 1, provenance_hash: '6'.repeat(64), created_by: USER,
+  reviewed_by: REVIEWER, reviewed_at: '2026-09-24T04:05:00.000Z', updated_at: '2026-09-24T04:05:00.000Z',
+});
+const evidenceOnlyRequests: string[] = [];
+const evidenceOnlyDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  evidenceOnlyRequests.push(path);
+  if (path.startsWith('enterprise_evidence_sources?')) return [sharedEvidenceSource, privateEvidenceSource] as T;
+  if (path.startsWith('enterprise_evidence_source_versions?')) return [sharedEvidenceVersion, privateEvidenceVersion] as T;
+  if (path.startsWith('enterprise_evidence_candidates?')) return [
+    evidenceCandidate({ id: ASSESS_SHARED_EVIDENCE_CANDIDATE, sourceId: SHARED_STUDIO_SOURCE, sourceVersionId: SHARED_STUDIO_VERSION, value: 'Assess-owned shared evidence remains visible' }),
+    evidenceCandidate({ id: PRIVATE_EVIDENCE_CANDIDATE, sourceId: PRIVATE_STUDIO_SOURCE, sourceVersionId: PRIVATE_STUDIO_VERSION, value: PRIVATE_CANDIDATE_CANARY }),
+    evidenceCandidate({ id: STUDIO_SHARED_EVIDENCE_CANDIDATE, sourceId: SHARED_STUDIO_SOURCE, sourceVersionId: SHARED_STUDIO_VERSION,
+      value: STUDIO_SHARED_CANDIDATE_CANARY, aiJobId: STUDIO_SHARED_EXTRACTION_JOB }),
+  ] as T;
+  if (path.startsWith('studio_source_version_ownerships?')) {
+    const matchesPrivateSource = path.includes(`source_id=in.(${SHARED_STUDIO_SOURCE},${PRIVATE_STUDIO_SOURCE})`);
+    const matchesPrivateVersion = path.includes(PRIVATE_STUDIO_VERSION);
+    return matchesPrivateSource || matchesPrivateVersion ? [{
+      source_id: PRIVATE_STUDIO_SOURCE, source_version_id: PRIVATE_STUDIO_VERSION, created_at: '2026-09-24T04:01:00.000Z',
+    }] as T : [] as T;
+  }
+  if (path.startsWith('studio_source_extraction_runs?')) return path.includes(STUDIO_SHARED_EXTRACTION_JOB)
+    ? [{ job_id: STUDIO_SHARED_EXTRACTION_JOB }] as T : [] as T;
+  return [] as T;
+});
+const evidenceOnlyAuthority = { ...authority(), capabilities: ['evidence.review'] };
+const evidenceOnlyRows = await evidenceOnlyDatabase.loadProjectionRows(evidenceOnlyAuthority);
+assert.equal(evidenceOnlyRequests.filter(path => path.startsWith('studio_source_version_ownerships?')).length, 2,
+  'evidence-only authority classifies only the exact projected source and version identifiers');
+assert.equal(evidenceOnlyRequests.filter(path => path.startsWith('studio_source_extraction_runs?')).length, 1,
+  'evidence-only authority classifies only the exact candidate job identifiers');
+assert.ok(!evidenceOnlyRequests.some(path => path.includes('order=created_at.desc&limit=2000')),
+  'generic evidence classification never relies on the truncated newest-2000 scans');
+assert.ok(evidenceOnlyRequests.find(path => path.startsWith('enterprise_evidence_candidates?'))?.includes('select=id,ai_job_id,'),
+  'generic evidence query loads DB-owned extraction-job lineage rather than relying on client claims');
+assert.deepEqual(evidenceOnlyRows.studioSourceOwnerships, [{
+  source_id: PRIVATE_STUDIO_SOURCE, source_version_id: PRIVATE_STUDIO_VERSION, created_at: '2026-09-24T04:01:00.000Z',
+}]);
+assert.equal(evidenceOnlyRows.studioExtractionJobClassifications?.[0]?.job_id, STUDIO_SHARED_EXTRACTION_JOB);
+const evidenceOnlyProjection = buildEnterpriseIntelligenceProjection(
+  evidenceOnlyAuthority, evidenceOnlyRows, new Date('2026-09-24T06:00:00.000Z'),
+);
+assert.deepEqual(evidenceOnlyProjection.evidenceSources.map(source => source.id), [SHARED_STUDIO_SOURCE],
+  'generic evidence projection retains the unowned shared Assess source and redacts the Studio-private source/version');
+assert.deepEqual(evidenceOnlyProjection.evidenceCandidates.map(candidate => candidate.id), [ASSESS_SHARED_EVIDENCE_CANDIDATE],
+  'generic evidence projection redacts private candidates and Studio-job candidates on otherwise shared sources');
+const evidenceOnlySerialized = JSON.stringify(evidenceOnlyProjection);
+for (const privateValue of [
+  PRIVATE_STUDIO_SOURCE, PRIVATE_STUDIO_VERSION, PRIVATE_EVIDENCE_CANDIDATE, PRIVATE_SOURCE_CANARY,
+  PRIVATE_CANDIDATE_CANARY, STUDIO_SHARED_EVIDENCE_CANDIDATE, STUDIO_SHARED_CANDIDATE_CANARY, STUDIO_SHARED_EXTRACTION_JOB,
+]) assert.ok(!evidenceOnlySerialized.includes(privateValue), `generic evidence projection must not partially disclose ${privateValue}`);
+assert.ok(evidenceOnlySerialized.includes('Assess-owned shared evidence remains visible'),
+  'same-scope unowned Assess evidence remains reusable after Studio-private lineage filtering');
+
+const OLD_PRIVATE_SOURCE = '81000000-0000-4000-8000-000000000081';
+const OLD_PRIVATE_VERSION = '82000000-0000-4000-8000-000000000082';
+const OLD_PRIVATE_CANDIDATE = '83000000-0000-4000-8000-000000000083';
+const OLD_STUDIO_JOB = '84000000-0000-4000-8000-000000000084';
+const OLD_STUDIO_JOB_CANDIDATE = '85000000-0000-4000-8000-000000000085';
+const OLD_PRIVATE_CANARY = 'OLDER_STUDIO_PRIVATE_VALUE_REFRESHED_AFTER_2001_NEWER_ROWS';
+const OLD_JOB_CANARY = 'OLDER_STUDIO_JOB_VALUE_REFRESHED_AFTER_2001_NEWER_ROWS';
+const newerOwnershipRows = Array.from({ length: 2_001 }, (_, index) => ({
+  source_id: OLD_PRIVATE_SOURCE,
+  source_version_id: `86000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  created_at: '2026-09-24T05:00:00.000Z',
+}));
+const oldOwnershipRow = {
+  source_id: OLD_PRIVATE_SOURCE, source_version_id: OLD_PRIVATE_VERSION, created_at: '2026-01-01T00:00:00.000Z',
+};
+const newerStudioBindings = Array.from({ length: 2_001 }, (_, index) => ({
+  id: `87000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  job_id: `88000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+}));
+const overflowRequests: string[] = [];
+const overflowDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  overflowRequests.push(path);
+  if (path.startsWith('enterprise_evidence_sources?')) return [sharedEvidenceSource, {
+    ...privateEvidenceSource, id: OLD_PRIVATE_SOURCE, display_name: OLD_PRIVATE_CANARY,
+  }] as T;
+  if (path.startsWith('enterprise_evidence_source_versions?')) return [sharedEvidenceVersion, {
+    ...privateEvidenceVersion, id: OLD_PRIVATE_VERSION, source_id: OLD_PRIVATE_SOURCE,
+  }] as T;
+  if (path.startsWith('enterprise_evidence_candidates?')) return [
+    evidenceCandidate({ id: ASSESS_SHARED_EVIDENCE_CANDIDATE, sourceId: SHARED_STUDIO_SOURCE, sourceVersionId: SHARED_STUDIO_VERSION, value: 'Assess shared value survives exact classification' }),
+    evidenceCandidate({ id: OLD_PRIVATE_CANDIDATE, sourceId: OLD_PRIVATE_SOURCE, sourceVersionId: OLD_PRIVATE_VERSION, value: OLD_PRIVATE_CANARY }),
+    evidenceCandidate({ id: OLD_STUDIO_JOB_CANDIDATE, sourceId: SHARED_STUDIO_SOURCE, sourceVersionId: SHARED_STUDIO_VERSION, value: OLD_JOB_CANARY, aiJobId: OLD_STUDIO_JOB }),
+  ] as T;
+  if (path.startsWith('studio_source_version_ownerships?')) {
+    if (path.includes(`source_id=in.(${SHARED_STUDIO_SOURCE},${OLD_PRIVATE_SOURCE})`)) {
+      const parameters = new URLSearchParams(path.split('?')[1]);
+      const offset = Number(parameters.get('offset') || 0);
+      const limit = Number(parameters.get('limit') || 500);
+      return [...newerOwnershipRows, oldOwnershipRow].slice(offset, offset + limit) as T;
+    }
+    if (path.includes(OLD_PRIVATE_VERSION)) return [oldOwnershipRow] as T;
+    if (path.includes('order=created_at.desc&limit=2000')) return newerOwnershipRows.slice(0, 2_000) as T;
+    return [] as T;
+  }
+  if (path.startsWith('studio_source_extraction_runs?')) return path.includes(OLD_STUDIO_JOB)
+    ? [{ job_id: OLD_STUDIO_JOB }] as T : [] as T;
+  if (path.startsWith('studio_source_extraction_bindings?')) return newerStudioBindings.slice(0, 2_000) as T;
+  return [] as T;
+});
+const overflowRows = await overflowDatabase.loadProjectionRows(evidenceOnlyAuthority);
+const overflowProjection = buildEnterpriseIntelligenceProjection(
+  evidenceOnlyAuthority, overflowRows, new Date('2026-09-24T06:00:00.000Z'),
+);
+assert.deepEqual(overflowProjection.evidenceSources.map(source => source.id), [SHARED_STUDIO_SOURCE]);
+assert.deepEqual(overflowProjection.evidenceCandidates.map(candidate => candidate.id), [ASSESS_SHARED_EVIDENCE_CANDIDATE]);
+assert.ok(!JSON.stringify(overflowProjection).includes(OLD_PRIVATE_CANARY));
+assert.ok(!JSON.stringify(overflowProjection).includes(OLD_JOB_CANARY));
+assert.equal(newerOwnershipRows.length, 2_001);
+assert.equal(newerStudioBindings.length, 2_001);
+assert.ok(overflowRows.studioSourceOwnerships?.some(row => row.source_version_id === OLD_PRIVATE_VERSION),
+  'exact paginated classification retains an old private ownership beyond 2,001 newer ownership rows');
+assert.ok(overflowRequests.some(path => path.startsWith('studio_source_version_ownerships?') && path.includes('offset=2000')),
+  'correlated ownership classification paginates beyond the former 2,000-row cutoff');
+assert.ok(overflowRequests.some(path => path.startsWith('studio_source_version_ownerships?')
+  && path.includes(`source_version_id=in.(${SHARED_STUDIO_VERSION},${OLD_PRIVATE_VERSION})`)),
+  'an old Studio-private version is classified by exact identifier even after more than 2,000 newer unrelated ownership rows');
+assert.ok(overflowRequests.some(path => path.startsWith('studio_source_extraction_runs?') && path.includes(OLD_STUDIO_JOB)),
+  'an old Studio extraction job is classified by exact identifier even when its candidate was recently refreshed');
+assert.ok(!overflowRequests.some(path => path.includes('order=created_at.desc&limit=2000')),
+  'overflow regression never asks for a globally truncated Studio classification set');
+
 const mappingRaw = raw();
 const mappingCatalog = '19000000-0000-4000-8000-000000000001';
 const mappingSelector = '19000000-0000-4000-8000-000000000002';

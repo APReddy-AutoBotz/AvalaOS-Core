@@ -5,6 +5,7 @@ import {
 } from './enterpriseIntelligenceClient';
 import { ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION } from './enterpriseIntelligence';
 import { emptyTranscriptFlowProjection } from './transcriptFlow/contracts';
+import { emptyStudioSourceFlowProjection } from './studioArtifacts/workspaceModel';
 
 type Invocation = {
   name: string;
@@ -34,6 +35,11 @@ const sourceVersionId = '10000000-0000-4000-8000-000000000005';
 const supportingSourceId = '10000000-0000-4000-8000-000000000006';
 const supportingVersionId = '10000000-0000-4000-8000-000000000007';
 const bundleId = '10000000-0000-4000-8000-000000000008';
+const bundleVersionId = '10000000-0000-4000-8000-000000000009';
+const sourceSetVersionId = '10000000-0000-4000-8000-000000000010';
+const extractionJobId = '10000000-0000-4000-8000-000000000011';
+const extractionBindingId = '10000000-0000-4000-8000-000000000012';
+const candidateId = '10000000-0000-4000-8000-000000000013';
 const emptyProjection = {
   schemaVersion: ENTERPRISE_INTELLIGENCE_PROJECTION_VERSION,
   organizationId,
@@ -55,6 +61,7 @@ const emptyProjection = {
   approvalResources: [],
   commandActivity: [],
   transcriptFlow: emptyTranscriptFlowProjection(),
+  studioSourceFlow: emptyStudioSourceFlowProjection(),
   assessPromotion: {
     state: 'contract_pending',
     acceptedCandidateCount: 0,
@@ -81,6 +88,123 @@ await (async () => {
   const uppercaseEquivalent = await enterpriseIntelligenceClient.loadProjection({ organizationId, workspaceId });
   assert.equal(uppercaseEquivalent.workspaceId, workspaceId.toUpperCase());
 })();
+
+await (async () => {
+  resetTransport({
+    data: {
+      ok: true, replayed: false, resourceId: sourceId, sourceId, sourceVersionId, version: 1,
+      displayName: 'Studio workshop', mimeType: 'text/plain', status: 'review',
+      extractedCharacterCount: 36, ingestion: 'server_managed',
+    },
+    error: null,
+  });
+  const result = await enterpriseIntelligenceClient.createStudioSource({
+    organizationId,
+    workspaceId,
+    displayName: '  Studio workshop  ',
+    sourceKind: 'pasted_text',
+    filename: 'studio-workshop.txt',
+    mimeType: 'text/plain',
+    contentBase64: 'U3R1ZGlvIHdvcmtzaG9wIHN5bnRoZXRpYyB0ZXh0Lg==',
+  });
+  assert.equal(result.sourceVersionId, sourceVersionId);
+  assert.deepEqual(invocations[0].options.body.payload, {
+    displayName: 'Studio workshop',
+    sourceKind: 'pasted_text',
+    filename: 'studio-workshop.txt',
+    mimeType: 'text/plain',
+    contentBase64: 'U3R1ZGlvIHdvcmtzaG9wIHN5bnRoZXRpYyB0ZXh0Lg==',
+  });
+})();
+
+for (const input of [
+  { filename: 'searchable-control.pdf', mimeType: 'application/pdf' },
+  { filename: 'operating-procedure.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+] as const) {
+  resetTransport({
+    data: {
+      ok: true, replayed: false, resourceId: sourceId, sourceId, sourceVersionId, version: 1,
+      displayName: input.filename, mimeType: input.mimeType, status: 'review',
+      extractedCharacterCount: 24, ingestion: 'server_managed',
+    },
+    error: null,
+  });
+  const result = await enterpriseIntelligenceClient.createStudioSource({
+    organizationId,
+    workspaceId,
+    displayName: input.filename,
+    sourceKind: 'upload',
+    filename: input.filename,
+    mimeType: input.mimeType,
+    contentBase64: 'U3ludGhldGljIHRleHQtYmFzZWQgZG9jdW1lbnQ=',
+  });
+  assert.equal(result.mimeType, input.mimeType);
+  assert.equal((invocations[0].options.body.payload as Record<string, unknown>).mimeType, input.mimeType);
+}
+
+await (async () => {
+  resetTransport({ data: { ok: true, replayed: false, resourceId: extractionJobId }, error: null });
+  await enterpriseIntelligenceClient.extractStudioBundle({
+    organizationId,
+    workspaceId,
+    inputBundleId: bundleId,
+    inputBundleVersionId: bundleVersionId,
+    expectedInputBundleVersion: 2,
+    sources: [{
+      ordinal: 1,
+      sourceSetId,
+      sourceSetVersionId,
+      expectedSourceSetVersion: 3,
+      sourceId,
+      sourceVersionId,
+    }],
+  });
+  assert.deepEqual(invocations[0].options.body.payload, {
+    inputBundleId: bundleId,
+    inputBundleVersionId: bundleVersionId,
+    expectedInputBundleVersion: 2,
+    sources: [{ ordinal: 1, sourceSetId, sourceSetVersionId, expectedSourceSetVersion: 3, sourceId, sourceVersionId }],
+  });
+})();
+
+await (async () => {
+  resetTransport({ data: { ok: true, replayed: false, resourceId: candidateId }, error: null });
+  await enterpriseIntelligenceClient.reviewStudioCandidate({
+    organizationId,
+    workspaceId,
+    candidateId,
+    candidateVersion: 2,
+    extractionJobId,
+    extractionBindingId,
+    inputBundleId: bundleId,
+    inputBundleVersionId: bundleVersionId,
+    expectedInputBundleVersion: 2,
+    sourceSetId,
+    sourceSetVersionId,
+    expectedSourceSetVersion: 3,
+    sourceId,
+    sourceVersionId,
+    status: 'edited',
+    value: '  Reviewed Studio fact  ',
+    reason: '  Corrected the bounded source wording.  ',
+  });
+  assert.deepEqual(invocations[0].options.body.payload, {
+    candidateId, candidateVersion: 2, extractionJobId, extractionBindingId,
+    inputBundleId: bundleId, inputBundleVersionId: bundleVersionId, expectedInputBundleVersion: 2,
+    sourceSetId, sourceSetVersionId, expectedSourceSetVersion: 3, sourceId, sourceVersionId,
+    status: 'edited', value: 'Reviewed Studio fact', reason: 'Corrected the bounded source wording.',
+  });
+})();
+
+for (const run of [
+  () => enterpriseIntelligenceClient.createStudioSource({ organizationId, workspaceId, displayName: 'Studio', sourceKind: 'upload', filename: '../studio.txt', mimeType: 'text/plain', contentBase64: 'VGVzdA==' }),
+  () => enterpriseIntelligenceClient.createStudioSource({ organizationId, workspaceId, displayName: 'Studio', sourceKind: 'upload', filename: 'studio.exe', mimeType: 'application/octet-stream', contentBase64: 'VGVzdA==' }),
+  () => enterpriseIntelligenceClient.extractStudioBundle({ organizationId, workspaceId, inputBundleId: bundleId, inputBundleVersionId: bundleVersionId, expectedInputBundleVersion: 1, sources: [{ ordinal: 2, sourceSetId, sourceSetVersionId, expectedSourceSetVersion: 1, sourceId, sourceVersionId }] }),
+  () => enterpriseIntelligenceClient.reviewStudioCandidate({ organizationId, workspaceId, candidateId, candidateVersion: 1, extractionJobId, extractionBindingId, inputBundleId: bundleId, inputBundleVersionId: bundleVersionId, expectedInputBundleVersion: 1, sourceSetId, sourceSetVersionId, expectedSourceSetVersion: 1, sourceId, sourceVersionId, status: 'edited', value: 'Changed', reason: 'no' }),
+  () => enterpriseIntelligenceClient.reviewStudioCandidate({ organizationId, workspaceId, candidateId, candidateVersion: 1, extractionJobId, extractionBindingId, inputBundleId: bundleId, inputBundleVersionId: bundleVersionId, expectedInputBundleVersion: 1, sourceSetId, sourceSetVersionId, expectedSourceSetVersion: 1, sourceId, sourceVersionId, status: 'rejected', value: 'must-not-send', reason: 'Source does not support this fact.' }),
+]) {
+  await assert.rejects(async () => run(), (error: unknown) => error instanceof EnterpriseIntelligenceClientError && ['STUDIO_SOURCE_INPUT_INVALID', 'STUDIO_SOURCE_BINDING_STALE'].includes(error.code));
+}
 
 await (async () => {
   resetTransport({ data: { ok: true, resourceId: sourceSetId }, error: null });

@@ -5,6 +5,7 @@ import {assertPrCMigrationTail} from './prCMigrationTailContract.mjs';
 const migrationName='20260831062024_governed_delivery_monitor_pr_c.sql';
 const controlledHumanMigrationName='20260904120000_pr_c_controlled_human_exercise_authority.sql';
 const deferredAuthorityMigrationName='20260923190853_pr_c_deferred_binding_authority.sql';
+const studioSourceMigrationName='20260924052038_studio_independent_source_integration.sql';
 const sql=readFileSync(`supabase/migrations/${migrationName}`,'utf8');
 const deferredAuthoritySql=readFileSync(`supabase/migrations/${deferredAuthorityMigrationName}`,'utf8');
 const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')).sort();
@@ -21,8 +22,9 @@ const body=name=>{
 assert.equal(migrations.filter(name=>name===migrationName).length,1);
 assert.equal(migrations.filter(name=>name===controlledHumanMigrationName).length,1);
 assert.equal(migrations.filter(name=>name===deferredAuthorityMigrationName).length,1);
+assert.equal(migrations.filter(name=>name===studioSourceMigrationName).length,1);
 assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
-assert.equal(migrations.at(-1),deferredAuthorityMigrationName);
+assert.equal(migrations.at(-1),studioSourceMigrationName);
 assertPrCMigrationTail(migrations);
 assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
 assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);

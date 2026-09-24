@@ -42,6 +42,7 @@ jobs:
       ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      STUDIO_SOURCE_INTEGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       PR1D_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres

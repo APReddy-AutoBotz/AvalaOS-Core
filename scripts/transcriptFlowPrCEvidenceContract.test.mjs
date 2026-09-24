@@ -15,6 +15,7 @@ const requiredIds = [
   ...Array.from({ length: 4 }, (_, index) => `MONITOR-TR-00${index + 1}`),
   'PATH-003', 'PATH-004',
   ...Array.from({ length: 8 }, (_, index) => `HANDOFF-00${index + 1}`),
+  'STUDIO-TR-001', 'STUDIO-TR-003',
   'PERF-001', 'PERF-002-B',
 ];
 const notRunIds = [
@@ -26,19 +27,18 @@ const notRunIds = [
 const personaCatalog = JSON.parse(readFileSync('testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json', 'utf8'));
 const canonicalRegistry = JSON.parse(readFileSync('testing/process-lifecycle/contracts/pr-c-assertion-registry.json', 'utf8'));
 const requiredPersonas = personaCatalog.personas.filter(persona => persona.evidenceRequired);
-const governedWorkspace = personaCatalog.workspaces.find(workspace => workspace.key === 'governed-delivery');
 
-const runtime = (testId, index) => ({
-  persona: {
-    id: requiredPersonas[index % requiredPersonas.length].id,
-    state: requiredPersonas[index % requiredPersonas.length].state,
-    capabilities: requiredPersonas[index % requiredPersonas.length].capabilities,
-  },
-  organizationId: governedWorkspace.organizationId,
-  workspaceId: governedWorkspace.id,
+const runtime = (testId, index) => {
+  const persona = requiredPersonas[index % requiredPersonas.length];
+  const workspace = personaCatalog.workspaces.find(item => item.key === persona.workspace);
+  return ({
+  persona: { id: persona.id, state: persona.state, capabilities: persona.capabilities },
+  organizationId: workspace.organizationId,
+  workspaceId: workspace.id,
   ...(testId.startsWith('HANDOFF-') ? { edge: 'studio_to_delivery' } : {}),
   ...(testId === 'PERF-002-B' ? { performance: { sampleCount: 20, itemCount: 250, budgetMs: 200 } } : {}),
-});
+  });
+};
 
 const makeContract = () => ({
   registry: {
@@ -78,8 +78,49 @@ const validates = value => validatePrCRegistryStructure(process.cwd(), value.reg
 test('the canonical fresh PostgreSQL marker binds the independently approved full migration tail', () => {
   const provenance = makeContract().provenance;
   const result = validates({ registry: structuredClone(canonicalRegistry), provenance });
-  assert.equal(result.assertionCount, 223);
+  assert.equal(result.assertionCount, 241);
 });
+
+for (const [name, assertionId, mutate, reason] of [
+  ['missing Studio package actor', 'studio-source-postgres-package-manifest', marker => {
+    delete marker.expectedRuntimeContext.participants;
+  }, 'PR_C_STUDIO_PACKAGE_PERSONA_BINDING'],
+  ['substituted Studio package actor', 'studio-source-postgres-package-manifest', marker => {
+    marker.expectedRuntimeContext.participants[0].id = '97000000-0000-4000-8000-000000000330';
+  }, 'PR_C_STUDIO_PACKAGE_PERSONA_BINDING'],
+  ['package actor lineage substitution', 'studio-source-postgres-package-manifest', marker => {
+    marker.expectedRuntimeContext.lineage.packageActor = '97000000-0000-4000-8000-000000000330';
+  }, 'PR_C_STUDIO_PACKAGE_EXECUTION_BINDING'],
+  ['missing PostgreSQL generic Assess denial', 'studio-source-postgres-package-manifest', marker => {
+    marker.expectedRuntimeContext.lineage.genericAssessCommandDenials.pop();
+  }, 'PR_C_STUDIO_PACKAGE_EXECUTION_BINDING'],
+  ['nonzero PostgreSQL generic Assess side effect', 'studio-source-postgres-package-manifest', marker => {
+    marker.expectedRuntimeContext.lineage.genericAssessSideEffects.providerEffectRowsCreated = 1;
+  }, 'PR_C_STUDIO_PACKAGE_EXECUTION_BINDING'],
+  ['missing generic Assess denial', 'studio-source-api-assess-owner-confusion-denied', marker => {
+    marker.expectedRuntimeContext.lineage.deniedCommands.pop();
+  }, 'PR_C_STUDIO_API_DENIAL_BINDING'],
+  ['missing manage-only browser marker', 'manage-only-source-create-authorized-desktop-chrome',
+    (marker, registry) => { registry.assertions = registry.assertions.filter(value => value !== marker); },
+    'PR_C_STUDIO_MARKER_COUNT'],
+  ['substituted manage-only browser persona', 'manage-only-source-create-authorized-desktop-chrome', marker => {
+    marker.expectedRuntimeContext.persona.id = '00000001-0000-4000-8000-000000000001';
+  }, 'PR_C_STUDIO_BROWSER_MANAGE_ONLY'],
+  ['post-observer provider traffic', 'provider-disabled-zero-call-pixel-7', marker => {
+    marker.expectedRuntimeContext.lineage.providerOrExtractionRequestCount = 1;
+  }, 'PR_C_STUDIO_PROVIDER_OBSERVER'],
+  ['omitted delayed-traffic calibration', 'provider-disabled-zero-call-desktop-chrome', marker => {
+    marker.expectedRuntimeContext.lineage.lateTrafficGateRejected = false;
+  }, 'PR_C_STUDIO_PROVIDER_OBSERVER'],
+]) {
+  test(`Studio source evidence rejects ${name}`, () => {
+    const registry = structuredClone(canonicalRegistry);
+    const marker = registry.assertions.find(value => value.assertionId === assertionId);
+    assert.ok(marker);
+    mutate(marker, registry);
+    assert.throws(() => validates({ registry, provenance: makeContract().provenance }), new RegExp(reason, 'u'));
+  });
+}
 
 for (const [name, mutate, reason] of [
   ['stale tip', marker => { marker.expectedRuntimeContext.migrationTip = '20260916181916'; }, 'MIGRATION_TIP'],
@@ -150,14 +191,14 @@ test('PR C evidence commands stream live output while retaining exact bounded by
   });
 });
 
-test('the 81-command registry retains the standalone scoring-law source guard and cannot substitute the former raw diff', () => {
+test('the 85-command registry retains the standalone scoring-law source guard and cannot substitute the former raw diff', () => {
   const expected = expectedPrCCommandRegistry(process.cwd());
-  assert.equal(expected.length, 81);
+  assert.equal(expected.length, 85);
   assert.deepEqual(expected.at(-1), {
     id: 'scoring-drift', command: 'node scripts/checkPrCScoringLawDrift.mjs', environment: 'controlled-git',
   });
   assert.deepEqual(canonicalRegistry.commands, expected);
-  assert.equal(canonicalRegistry.assertions.length, 223);
+  assert.equal(canonicalRegistry.assertions.length, 241);
   assert.equal(canonicalRegistry.assertions.some(assertion => assertion.commandId === 'scoring-drift'), false);
   const substituted = structuredClone(canonicalRegistry);
   substituted.commands.at(-1).command = `git diff --exit-code ${PR_C_BASE_SHA} -- ${['services/scoringEngine.ts', 'services/scoringEngine.test.ts', 'scripts/runScoringRegression.mjs'].join(' ')}`;

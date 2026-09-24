@@ -1,5 +1,26 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Studio independent-source correction candidate (2026-09-24)
+
+Confirmed source defect: the accepted PR B direct-source contract required an
+exact, human-accepted extraction candidate for every selected Studio source,
+but the business UI exposed neither Studio upload/paste nor exact-bundle
+extraction and candidate review. The Assess commands did not enforce the
+source-set/bundle owner module, so calling them from Studio would also have
+crossed an authorization and provider-budget boundary. Draft PR #264 contains
+an additive, default-off Studio-only correction with separate command/provider
+capabilities and exact owner checks. Local fresh-chain PostgreSQL, API and
+Desktop/Pixel focused tests execute the correction. The final local candidate
+also preserves populated PR B bindings, requires an actual package/receipt/audit,
+and denies generic Assess commands and projections access to Studio-private and
+Studio-job evidence, including an older candidate beyond 2,001 newer classification
+rows; retained PR B PostgreSQL passes. Exact-head CI, hosted
+migration/function deployment, preview, and actual real-provider generation
+remain unproven. The previous manual-brief BRD→Delivery→Monitor completion is
+planning-only evidence, not uploaded Studio-source generation proof. No paid
+effect was spent in this correction. Rollback disables the new Studio source
+flag and route, preserves immutable history and budgets, and forward-fixes.
+
 ## Bounded same-campaign renewal and business proof (2026-09-22)
 
 Confirmed capability gap: the expired test campaign has no safe renewal operation.

@@ -1,5 +1,52 @@
 # Governed Delivery and Monitor PR C Evidence
 
+## 2026-09-24 Studio independent-source correction candidate
+
+The existing Draft PR #264 now includes the missing Studio-owned text upload/paste,
+exact locked-bundle extraction, bounded candidate review and direct planning
+package UI/server path. It is additive to the accepted PR B contract. The
+separate `studio.evidence.extract` provider route and
+`studio_source_integration_enabled` flag remain default off; no hosted backend,
+real provider, or campaign ledger was changed during local implementation.
+
+Executed focused local proof: Studio source API 2 exact assertion markers;
+fresh-chain PostgreSQL 16 2 exact markers from production functions (populated
+default-off upgrade, create/parse, shared and private source binding, claim,
+reserve, stage, settle, commit, accept/edit/reject, exact manifest, actual
+planning-only package/receipt/audit and replay, wrong scope, default-off
+package denial, and uncertain recovery with zero provider usage). The database
+tests also preserve pre-migration PR B Studio bindings and deny generic Assess
+extract/review/promote access to Studio-private sources and Studio-job candidates,
+including candidates on shared sources. The safe query projection applies the
+same boundary through exact scoped classification rather than a newest-2,000-row
+deny-list; an adversarial query fixture with 2,001 newer rows keeps older private
+and Studio-job candidates hidden. Retained PR B PostgreSQL passed against the
+full fresh chain. API and PostgreSQL markers now bind each generic Assess denial
+and its zero side effects, and the package marker names the separate actor who
+committed it.
+Desktop Chrome and Pixel 7 passed 12/12 focused browser scenarios with 14 exact
+markers, including the actual manage-only persona and a delayed-traffic negative
+followed by zero extraction/provider requests through clean-page teardown, with zero
+serious/critical axe findings in the asserted direct-package profiles. The
+PostgreSQL chain found and fixed a SQL variable-shadowing defect, a canonical
+storage-path fixture error, an edited-candidate anchor defect, and an uncertain
+job-ledger transition defect. Earlier failed runs and the sandbox-denied initial
+Chromium launch are not passes. Migration static with 11 adversarial
+mutations, Enterprise command/query, root and Edge typechecks passed during
+implementation. The PR C registry now defines 85 canonical commands, 241
+assertion expectations and nine explicit `not_run`
+boundaries; these definitions are not a completed full local or GitHub bundle.
+The governed TypeScript coverage threshold passed unchanged; the modified Studio
+workspace model and source API have separate non-threshold coverage observation.
+Exact-head CI, same-head preview, hosted Studio source integration, a real
+joined-source generated artifact and controlled-human sign-off remain pending.
+
+Safe rollback: leave the additive schema and immutable source/candidate/package,
+receipt, reservation and audit history in place; disable the new workspace flag
+and Studio extraction route for new effects, retain capability-scoped reads,
+reconcile uncertain receipts without retrying a provider effect, then apply an
+additive forward fix. Do not relabel this candidate as Ready or merge it.
+
 Date: 2026-09-03
 Accepted base: `5433cad41721355e3ec5a29bc2f87772540c77b5`
 Branch: `controller/governed-delivery-monitor-pr-c-20260831`
@@ -41,7 +88,7 @@ Evidence rollback is fail closed: discard the unaccepted bundle and rerun the ca
 - The v2 registry and evidence records bind the actual execution identity and canonical command/source/fixture/persona/runtime context per record. The adversarial contract must reject missing/wrong run IDs, stale attempts, wrong workflow/base/head/path, manifest-only substitution, command-result substitution, copied assertion or `not_run` records, base-tracked deletions/renames, and local-to-hosted promotion.
 - Stable tracked documents contain only this contract and the canonical pointer to PR #264. After commit, the actual GitHub run ID/attempt/jobs/artifact/digest and exact Netlify Deploy Preview/commit are recorded in the external PR description so the tracked source digest does not invalidate itself.
 
-No current candidate result is claimed in this tracked section. The active finalization registry defines 81 exact commands, 223 assertion records, and nine explicit `not_run` records; those are definitions awaiting a fresh current-source run, not executed evidence. The immutable generated bundle and PR #264 evidence block become authoritative only after the source freezes and all required checks pass.
+No current complete candidate result is claimed in this tracked section. The active finalization registry defines 85 exact commands, 241 assertion records, and nine explicit `not_run` records; those are definitions awaiting a fresh current-source run, not executed full-platform evidence. The immutable generated bundle and PR #264 evidence block become authoritative only after the source freezes and all required checks pass.
 
 ## Controlled-human preparation authority and current proof state
 

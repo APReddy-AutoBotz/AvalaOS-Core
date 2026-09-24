@@ -10,6 +10,7 @@ import {
   type AssessMappingRunProjection,
 } from '../../services/assessImport/contracts';
 import { emptyTranscriptFlowProjection } from '../../services/transcriptFlow/contracts';
+import { emptyStudioSourceFlowProjection } from '../../services/studioArtifacts/workspaceModel';
 import { extractStructuredSpreadsheet, XLSX_MIME } from '../../supabase/functions/_shared/assessDocumentSpreadsheet';
 import { API, ORG, WS } from './pr1dNetworkFixture';
 
@@ -73,6 +74,7 @@ export const installAssessImportFixture = async (page: Page, options: FixtureOpt
     evidenceSources: [], evidenceCandidates: [], assessDrafts: [], applications: [], studioDocuments: [], deliveryPackages: [], monitorBaselines: [],
     modernizationDecisions: [], blueprints: [], approvalResources: [], commandActivity: [],
     transcriptFlow: { ...emptyTranscriptFlowProjection(), features:{ sourceSetsEnabled:true, assessMultisourceApplyEnabled:true } },
+    studioSourceFlow: emptyStudioSourceFlowProjection(),
     documentMapping: { ...emptyAssessDocumentMappingProjection(), features:options.featureEnabled === false ? { enabled:false, disabledReason:'Supporting-document mapping is disabled for this synthetic workspace.' } : { enabled:true } },
     assessPromotion: { state:'contract_pending', acceptedCandidateCount:0, provenanceComplete:false, idempotencyState:'not_started', conflicts:[] },
   };

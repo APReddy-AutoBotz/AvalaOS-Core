@@ -2,6 +2,23 @@
   "schemaVersion": "delivery-monitor-pr-c-fixtures-1",
   "fixtures": [
     {
+      "id": "studio-source-exact-v1",
+      "covers": ["AUTH-002", "IDEMP-002-B", "STUDIO-TR-001", "STUDIO-TR-003"],
+      "sourcePaths": [
+        "components/docs/StudioSourceIntakeReview.tsx",
+        "components/docs/StudioSourcePackageBuilder.tsx",
+        "services/enterpriseIntelligenceClient.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceStudioSource.test.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.test.ts",
+        "supabase/migrations/20260924052038_studio_independent_source_integration.sql",
+        "scripts/studioSourceIntegrationMigration.test.mjs",
+        "scripts/testStudioSourceIntegrationPostgres.mjs",
+        "tests/browser/studioPrB/studioPrB.spec.ts",
+        "testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json"
+      ],
+      "oracle": "Exact Studio-owned source and locked-bundle lineage is asserted by API, disposable PostgreSQL 16, and Desktop/Pixel browser scenarios before runtime-bound markers emit. Generic Assess paths deny private and Studio-job evidence without side effects, including old candidates beyond 2,001 newer rows. The actual package actor commits one planning-only package, receipt and audit from accepted coverage; replay and default-off are exact. A manage-only browser actor is assertion-bound, and delayed extraction traffic is detected before clean-page teardown proves zero provider requests."
+    },
+    {
       "id": "projection-rpc-postgrest-v1",
       "covers": ["DELIVERY-TR-006", "MONITOR-TR-004", "AUTH-002"],
       "sourcePaths": [

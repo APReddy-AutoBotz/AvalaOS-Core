@@ -1,5 +1,60 @@
 # Assess and Studio AI output correction
 
+## Studio independent-source integration correction (2026-09-24)
+
+Objective: make the already-approved direct Studio source journey operable for a
+business author: upload or paste a bounded text source, select exact immutable
+Studio-owned versions, lock a bundle, extract grounded facts, review each
+candidate, and create a planning-only source package only after complete accepted
+coverage. This is a corrective slice in existing Draft PR #264, based on
+`a379cf63835654ef8ba383a192df02675e68fc6e`; it is not a new product mode
+or a separate documentation PR. The read-only architecture, security, and quality
+reviews closed before implementation writes.
+
+Scope is a Studio-specific server command/projection contract, one additive
+forward migration, strict client decoder and source/candidate UI, focused
+PostgreSQL/API/browser tests, and feature-owned evidence/rollback. Do not reuse
+Assess-labelled extraction or candidate-review commands for Studio, grant broad
+Assess permissions to Studio roles, relax the existing accepted-candidate
+manifest, rewrite accepted migrations, fabricate candidates, or alter Assess
+scoring. Provider execution remains disabled during implementation and local
+verification. No hosted schema/function/flag/secret mutation, paid retry,
+campaign renewal, human approval, PR Ready, merge, or production action follows
+from this source correction.
+
+The trust boundary is exact actor/organization/workspace/authorization-version
+authority plus a Studio-owned locked bundle, its ordered source-set and source
+versions, extraction job and binding, candidate ID/version, and actor-scoped
+idempotency receipt. The server derives provider routing/budget authority and
+returns only bounded safe status, candidate value, locator and review metadata;
+raw documents, storage paths, provider transport, and secrets remain private.
+Upload, extraction, review, and package creation are distinct durable actions;
+the UI reloads the committed projection before claiming success. Concurrent or
+stale operations fail closed, with uncertain provider effects retained for
+fenced reconciliation rather than automatic retry. Wrong module, tenant,
+workspace, selector, role, revoked session, partial coverage, rejected candidate,
+and unselected source must not create a package or extra provider effect.
+
+Acceptance requires a real production-command PostgreSQL chain from exact Studio
+bundle through accepted candidate manifest to direct planning-only package;
+negative authorization, substitution, replay and response-loss tests; Desktop
+Chrome and Pixel 7 browser upload/review/package and scope-switch checks; labelled
+file input, live status, focused errors, and zero serious/critical accessibility
+findings. Run focused affected tests during edits, then one integrated typecheck,
+edge typecheck, workflow/scoring/static-security/build/diff and existing PR C
+evidence pass on frozen source. Record exact commands and sanitized results in
+this PR. Existing numeric performance budgets remain unchanged; unapproved
+provider latency and real-provider semantic quality are `not run`.
+
+Rollout remains default-off and limited to the separately approved synthetic
+target only after exact-head CI, source attestation and a distinct guarded
+release decision. Rollback disables new Studio source/extraction/review/package
+mutations and provider routing while preserving committed sources, candidates,
+sets, bundles, packages, receipts, budgets, and audit for read-only recovery and
+an additive forward fix. The existing same-campaign sixth effect is not a
+Studio-generation allowance: three Studio effects have already been consumed,
+and no additional paid attempt is authorized by this correction.
+
 ## Focused hosted correction (2026-09-23)
 
 The first renewed-campaign Assess Analyze UI attempt on the approved synthetic

@@ -142,6 +142,11 @@ const errorMessages: Record<string, string> = {
   COMMAND_UNAVAILABLE: 'The governed server operation is unavailable. No fallback was used.',
   BUDGET_EXHAUSTED: 'The configured provider budget is exhausted. No provider call was made.',
   SOURCE_INCOMPLETE: 'Every selected source must complete extraction before this bundle can run.',
+  STUDIO_SOURCE_INPUT_INVALID: 'Choose a supported bounded Studio text source and try again.',
+  STUDIO_SOURCE_FLOW_DISABLED: 'Studio source intake is disabled for this workspace.',
+  STUDIO_SOURCE_EXTRACTION_DISABLED: 'Studio source extraction is unavailable. No provider call was made.',
+  STUDIO_SOURCE_BINDING_STALE: 'The exact Studio bundle, source, extraction, or candidate binding changed. Reload before continuing.',
+  SOURCE_COVERAGE_INCOMPLETE: 'Every selected Studio source needs an accepted grounded candidate before a direct package can be created.',
   TRANSCRIPT_SOURCE_SET_MEMBER_LIMIT: 'A source set must contain between 1 and 20 exact source versions.',
   TRANSCRIPT_SOURCE_SET_DUPLICATE_VERSION: 'The same exact source version cannot appear twice in one source set.',
   TRANSCRIPT_ASSESS_MATERIAL_CONFLICT_UNRESOLVED: 'Resolve every material conflict before applying or finalizing this Assess draft.',
@@ -167,6 +172,105 @@ const requireUuidSelector = (value: string) => {
     throw new EnterpriseIntelligenceClientError('RESOURCE_NOT_FOUND');
   }
   return value;
+};
+
+export const STUDIO_SOURCE_MIME_TYPES = [
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/vtt',
+  'application/x-subrip',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+
+const requireStudioBoundedText = (value: unknown, minimum: number, maximum: number, code = 'STUDIO_SOURCE_INPUT_INVALID') => {
+  if (typeof value !== 'string') throw new EnterpriseIntelligenceClientError(code);
+  const trimmed = value.trim();
+  const length = Array.from(trimmed).length;
+  if (length < minimum || length > maximum) throw new EnterpriseIntelligenceClientError(code);
+  return trimmed;
+};
+
+const requireStudioSourceMimeType = (value: unknown) => {
+  if (!STUDIO_SOURCE_MIME_TYPES.includes(value as typeof STUDIO_SOURCE_MIME_TYPES[number])) {
+    throw new EnterpriseIntelligenceClientError('STUDIO_SOURCE_INPUT_INVALID');
+  }
+  return value as typeof STUDIO_SOURCE_MIME_TYPES[number];
+};
+
+const decodeStudioSourceCreateResult = (value: unknown): StudioSourceCreateResult => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+  const item = value as Record<string, unknown>;
+  const allowed = ['ok', 'replayed', 'resourceId', 'sourceId', 'sourceVersionId', 'version', 'displayName', 'mimeType', 'status', 'failureCode', 'extractedCharacterCount', 'ingestion'] as const;
+  if (Object.keys(item).some(key => !allowed.includes(key as typeof allowed[number]))
+    || item.ok !== true || typeof item.replayed !== 'boolean'
+    || !Number.isSafeInteger(item.version) || Number(item.version) < 1
+    || !Number.isSafeInteger(item.extractedCharacterCount) || Number(item.extractedCharacterCount) < 0
+    || item.ingestion !== 'server_managed' || !['review', 'failed'].includes(String(item.status))) {
+    throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+  }
+  const resourceId = requireUuidSelector(String(item.resourceId));
+  const sourceId = requireUuidSelector(String(item.sourceId));
+  const sourceVersionId = requireUuidSelector(String(item.sourceVersionId));
+  if (!sameUuidSelector(resourceId, sourceId)) throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+  const status = item.status as StudioSourceCreateResult['status'];
+  const failureCode = item.failureCode === undefined ? undefined : requireStudioBoundedText(item.failureCode, 1, 120, 'COMMAND_UNAVAILABLE');
+  if ((status === 'failed') !== Boolean(failureCode)) throw new EnterpriseIntelligenceClientError('COMMAND_UNAVAILABLE');
+  return {
+    resourceId,
+    sourceId,
+    sourceVersionId,
+    version: Number(item.version),
+    displayName: requireStudioBoundedText(item.displayName, 1, 240, 'COMMAND_UNAVAILABLE'),
+    mimeType: requireStudioSourceMimeType(item.mimeType),
+    status,
+    ...(failureCode ? { failureCode } : {}),
+    extractedCharacterCount: Number(item.extractedCharacterCount),
+    ingestion: 'server_managed',
+  };
+};
+
+export type StudioSourceCreateResult = {
+  resourceId: string;
+  sourceId: string;
+  sourceVersionId: string;
+  version: number;
+  displayName: string;
+  mimeType: string;
+  status: 'review' | 'failed';
+  failureCode?: string;
+  extractedCharacterCount: number;
+  ingestion: 'server_managed';
+};
+
+export type StudioBundleSourceSelector = {
+  ordinal: number;
+  sourceSetId: string;
+  sourceSetVersionId: string;
+  expectedSourceSetVersion: number;
+  sourceId: string;
+  sourceVersionId: string;
+};
+
+export type StudioCandidateReviewInput = {
+  organizationId: string;
+  workspaceId: string;
+  candidateId: string;
+  candidateVersion: number;
+  extractionJobId: string;
+  extractionBindingId: string;
+  inputBundleId: string;
+  inputBundleVersionId: string;
+  expectedInputBundleVersion: number;
+  sourceSetId: string;
+  sourceSetVersionId: string;
+  expectedSourceSetVersion: number;
+  sourceId: string;
+  sourceVersionId: string;
+  status: 'accepted' | 'rejected' | 'edited';
+  value?: string;
+  reason?: string;
 };
 
 const sameUuidSelector = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
@@ -655,6 +759,115 @@ export const enterpriseIntelligenceClient = {
 
   toggleProviderRoute(input: { organizationId: string; workspaceId: string; expectedAuthorizationVersion: number; providerConfigId: string; routeId: string; capability: EnterpriseAiCapability; enabled: boolean; allowedRoles?: string[] }) {
     return invokeProviderLifecycle({ operation: 'provider.route.toggle', organizationId: input.organizationId, workspaceId: input.workspaceId, expectedAuthorizationVersion: input.expectedAuthorizationVersion, payload: { providerConfigId: input.providerConfigId, routeId: input.routeId, capability: input.capability, enabled: input.enabled, ...(input.allowedRoles ? { allowedRoles: input.allowedRoles } : {}) } });
+  },
+
+  async createStudioSource(input: {
+    organizationId: string;
+    workspaceId: string;
+    displayName: string;
+    sourceKind: 'upload' | 'pasted_text';
+    filename: string;
+    mimeType: string;
+    contentBase64: string;
+  }): Promise<StudioSourceCreateResult> {
+    const displayName = requireStudioBoundedText(input.displayName, 1, 240);
+    const filename = requireStudioBoundedText(input.filename, 1, 240);
+    if (/[\\/]/u.test(filename)
+      || !['upload', 'pasted_text'].includes(input.sourceKind)
+      || typeof input.contentBase64 !== 'string'
+      || input.contentBase64.length < 4
+      || input.contentBase64.length > 16_000_000
+      || input.contentBase64.length % 4 !== 0
+      || !/^[A-Za-z0-9+/]+={0,2}$/u.test(input.contentBase64)) {
+      throw new EnterpriseIntelligenceClientError('STUDIO_SOURCE_INPUT_INVALID');
+    }
+    const mimeType = requireStudioSourceMimeType(input.mimeType);
+    const response = await invokeCommand({
+      commandType: 'studio.source.create',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: { displayName, sourceKind: input.sourceKind, filename, mimeType, contentBase64: input.contentBase64 },
+      outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'],
+    });
+    return decodeStudioSourceCreateResult(response);
+  },
+
+  extractStudioBundle(input: {
+    organizationId: string;
+    workspaceId: string;
+    inputBundleId: string;
+    inputBundleVersionId: string;
+    expectedInputBundleVersion: number;
+    sources: StudioBundleSourceSelector[];
+  }) {
+    if (!Number.isSafeInteger(input.expectedInputBundleVersion) || input.expectedInputBundleVersion < 1
+      || input.sources.length < 1 || input.sources.length > 20
+      || new Set(input.sources.map(source => source.sourceVersionId.toLowerCase())).size !== input.sources.length) {
+      throw new EnterpriseIntelligenceClientError('STUDIO_SOURCE_BINDING_STALE');
+    }
+    const sources = input.sources.map((source, index) => {
+      if (source.ordinal !== index + 1 || !Number.isSafeInteger(source.expectedSourceSetVersion) || source.expectedSourceSetVersion < 1) {
+        throw new EnterpriseIntelligenceClientError('STUDIO_SOURCE_BINDING_STALE');
+      }
+      return {
+        ordinal: source.ordinal,
+        sourceSetId: requireUuidSelector(source.sourceSetId),
+        sourceSetVersionId: requireUuidSelector(source.sourceSetVersionId),
+        expectedSourceSetVersion: source.expectedSourceSetVersion,
+        sourceId: requireUuidSelector(source.sourceId),
+        sourceVersionId: requireUuidSelector(source.sourceVersionId),
+      };
+    });
+    return invokeCommand({
+      commandType: 'studio.bundle.extract',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        inputBundleId: requireUuidSelector(input.inputBundleId),
+        inputBundleVersionId: requireUuidSelector(input.inputBundleVersionId),
+        expectedInputBundleVersion: input.expectedInputBundleVersion,
+        sources,
+      },
+      outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'],
+    });
+  },
+
+  reviewStudioCandidate(input: StudioCandidateReviewInput) {
+    const reason = input.reason?.trim();
+    const value = input.value?.trim();
+    if (!Number.isSafeInteger(input.candidateVersion) || input.candidateVersion < 1
+      || !Number.isSafeInteger(input.expectedInputBundleVersion) || input.expectedInputBundleVersion < 1
+      || !Number.isSafeInteger(input.expectedSourceSetVersion) || input.expectedSourceSetVersion < 1
+      || !['accepted', 'rejected', 'edited'].includes(input.status)
+      || ((input.status === 'rejected' || input.status === 'edited') && (!reason || Array.from(reason).length < 4 || Array.from(reason).length > 2_000))
+      || (input.status === 'edited' && (!value || Array.from(value).length > 12_000))
+      || (input.status !== 'edited' && input.value !== undefined)
+      || (input.status === 'accepted' && reason && Array.from(reason).length > 2_000)) {
+      throw new EnterpriseIntelligenceClientError('STUDIO_SOURCE_BINDING_STALE');
+    }
+    return invokeCommand({
+      commandType: 'studio.candidate.review',
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      payload: {
+        candidateId: requireUuidSelector(input.candidateId),
+        candidateVersion: input.candidateVersion,
+        extractionJobId: requireUuidSelector(input.extractionJobId),
+        extractionBindingId: requireUuidSelector(input.extractionBindingId),
+        inputBundleId: requireUuidSelector(input.inputBundleId),
+        inputBundleVersionId: requireUuidSelector(input.inputBundleVersionId),
+        expectedInputBundleVersion: input.expectedInputBundleVersion,
+        sourceSetId: requireUuidSelector(input.sourceSetId),
+        sourceSetVersionId: requireUuidSelector(input.sourceSetVersionId),
+        expectedSourceSetVersion: input.expectedSourceSetVersion,
+        sourceId: requireUuidSelector(input.sourceId),
+        sourceVersionId: requireUuidSelector(input.sourceVersionId),
+        status: input.status,
+        ...(input.status === 'edited' ? { value } : {}),
+        ...(reason ? { reason } : {}),
+      },
+      outcomeUnknownCodes: ['COMMAND_OUTCOME_UNKNOWN', 'RECEIPT_FINALIZATION_FAILED'],
+    });
   },
 
   createEvidenceSource(input: {

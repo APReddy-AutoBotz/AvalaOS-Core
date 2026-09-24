@@ -19,6 +19,7 @@ import {
 import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from './deliveryMonitor/fixtures';
 import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection } from './deliveryMonitor/contracts';
 import { emptyTranscriptFlowProjection } from './transcriptFlow/contracts';
+import { emptyStudioSourceFlowProjection } from './studioArtifacts/workspaceModel';
 
 const completeFactors: ModernizationFactors = {
   criticality: 'medium',
@@ -239,6 +240,7 @@ test('browser projection decoder rejects raw authority and sensitive server fiel
     studioDocuments: [], deliveryPackages: [], monitorBaselines: [],
     modernizationDecisions: [], blueprints: [], approvalResources: [], commandActivity: [],
     transcriptFlow: emptyTranscriptFlowProjection(),
+    studioSourceFlow: emptyStudioSourceFlowProjection(),
     assessPromotion: { state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [] },
   };
   assert.equal(decodeEnterpriseIntelligenceProjection(baseProjection).authorizationVersion, 7);

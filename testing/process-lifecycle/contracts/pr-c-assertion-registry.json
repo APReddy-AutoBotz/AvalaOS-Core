@@ -6,6 +6,29 @@
   "personasRegistryPath": "testing/process-lifecycle/fixtures/delivery-monitor-pr-c/personas.json",
   "commands": [
     {
+      "id": "pr-c-studio-source-api",
+      "command": "npm run test:studio-source-integration:api",
+      "environment": "controlled-node-22"
+    },
+    {
+      "id": "pr-c-studio-source-migration",
+      "command": "npm run test:studio-source-integration:migration",
+      "environment": "controlled-node-22"
+    },
+    {
+      "id": "pr-c-studio-source-postgres",
+      "command": "npm run test:studio-source-integration:postgres",
+      "environment": "controlled-postgresql-16",
+      "requiredEnvironment": [
+        "STUDIO_SOURCE_INTEGRATION_DATABASE_URL"
+      ]
+    },
+    {
+      "id": "pr-c-studio-source-browser",
+      "command": "npm run test:studio-source-integration:browser",
+      "environment": "controlled-browser-two-profile"
+    },
+    {
       "id": "pr-c-domain",
       "command": "npm run test:transcript-flow:delivery-monitor-domain",
       "environment": "controlled-node-22"
@@ -454,7 +477,7 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "31726abdf4358a03f7af65d97746c4af587794025e21de58483fed6191b97463"
+      "sha256": "5ad79172589c9b8e73fd21c8e8de5fe7ff6cbcf5ab5eef4fb1147fa8950d4efe"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
@@ -498,7 +521,19 @@
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",
-      "sha256": "9cc5488f91fc3d357cba649b4a33c058c2fd45cb2d3d77b3d9b54080b0492382"
+      "sha256": "532ab469bd93fa1a7d9b0faf90994e60975d4a4dd41daea0b42c2510cde9e380"
+    },
+    "studio-source-api": {
+      "path": "supabase/functions/_shared/enterpriseIntelligenceStudioSource.test.ts",
+      "sha256": "2f9b3a27808acfe34f080b82c04ae1e228ce4779bf2737b07c310975399d41b8"
+    },
+    "studio-source-postgres": {
+      "path": "scripts/testStudioSourceIntegrationPostgres.mjs",
+      "sha256": "619f70f2473e356d058254d1a07cc5ba06df31bcfa6551605d483a7df8ad8103"
+    },
+    "studio-source-browser": {
+      "path": "tests/browser/studioPrB/studioPrB.spec.ts",
+      "sha256": "1807a2babfb568a390e9b6ed228e9a87f0aa68fc6a9bae9240200a1a75390c8b"
     }
   },
   "assertions": [
@@ -2146,7 +2181,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260923190853",
+        "migrationTip": "20260924052038",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -8314,6 +8349,801 @@
         "acceptedSet": null,
         "baseline": null,
         "classification": "assessed"
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-api",
+      "owner": "studio-source-api",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "studio-source-api-exact-bundle-binding",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — studio source api exact bundle binding",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "71000000-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.sources.manage"
+          ]
+        },
+        "organizationId": "71000000-0000-4000-8000-000000000002",
+        "workspaceId": "71000000-0000-4000-8000-000000000003",
+        "lineage": {
+          "commandType": "studio.bundle.extract",
+          "ownerModule": "studio",
+          "inputBundleId": "71000000-0000-4000-8000-000000000004",
+          "inputBundleVersionId": "71000000-0000-4000-8000-000000000005",
+          "sourceSetVersionId": "71000000-0000-4000-8000-000000000007",
+          "sourceVersionId": "71000000-0000-4000-8000-000000000009"
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-api",
+      "owner": "studio-source-api",
+      "testId": "AUTH-002",
+      "assertionId": "studio-source-api-assess-owner-confusion-denied",
+      "fixture": "studio-source-exact-v1",
+      "testName": "AUTH-002 — studio source api assess owner confusion denied",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "71000000-0000-4000-8000-000000000020",
+          "state": "active",
+          "capabilities": [
+            "assessment.edit",
+            "evidence.review",
+            "evidence.write"
+          ]
+        },
+        "organizationId": "71000000-0000-4000-8000-000000000002",
+        "workspaceId": "71000000-0000-4000-8000-000000000003",
+        "lineage": {
+          "actualOwnerModule": "studio",
+          "inputBundleId": "71000000-0000-4000-8000-000000000004",
+          "deniedCommands": [
+            {
+              "commandType": "transcript.assess.extract",
+              "status": 404
+            },
+            {
+              "commandType": "evidence.extract",
+              "status": 404
+            },
+            {
+              "commandType": "evidence.candidate.review",
+              "status": 404
+            },
+            {
+              "commandType": "evidence.assess.promote",
+              "status": 404
+            }
+          ],
+          "receiptClaims": 0,
+          "providerEffects": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-postgres",
+      "owner": "studio-source-postgres",
+      "testId": "STUDIO-TR-003",
+      "assertionId": "studio-source-postgres-package-manifest",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-003 — studio source postgres package manifest",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "97000000-0000-4000-8000-000000000330",
+          "state": "active",
+          "capabilities": [
+            "studio.sources.manage"
+          ]
+        },
+        "participants": [
+          {
+            "id": "97000000-0000-4000-8000-000000000333",
+            "state": "active",
+            "capabilities": [
+              "studio.artifacts.generate",
+              "studio.artifacts.read"
+            ]
+          }
+        ],
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011",
+        "lineage": {
+          "actorId": "97000000-0000-4000-8000-000000000330",
+          "organizationId": "97000000-0000-4000-8000-000000000010",
+          "workspaceId": "97000000-0000-4000-8000-000000000011",
+          "inputBundleId": "97000000-0000-4000-8000-000000000346",
+          "inputBundleVersionId": "97000000-0000-4000-8000-000000000347",
+          "sourceSetVersionId": "97000000-0000-4000-8000-000000000345",
+          "sourceVersionId": "97000000-0000-4000-8000-000000000341",
+          "extractionJobId": "97000000-0000-4000-8000-000000000349",
+          "acceptedCandidateCount": 2,
+          "sharedSourceVersionId": "99000000-0000-4000-8000-000000000101",
+          "privateSourceVersionId": "97000000-0000-4000-8000-000000000341",
+          "rejectedCandidateId": "97000000-0000-4000-8000-000000000352",
+          "packageArtifact": "97000000-0000-4000-8000-000000000370",
+          "packageId": "97000000-0000-4000-8000-000000000371",
+          "packageActor": "97000000-0000-4000-8000-000000000333",
+          "planningOnly": true,
+          "candidateManifestCount": 2,
+          "packageOutcome": "committed",
+          "packageReceiptStatus": "committed",
+          "replayOutcome": "replayed",
+          "disabledAttemptStatus": "STUDIO_FEATURE_DISABLED",
+          "featureEnabledDuringDisabledAttempt": false,
+          "committedPackageRows": 1,
+          "committedReceiptRows": 1,
+          "committedAuditRows": 1,
+          "disabledNewPackageRows": 0,
+          "disabledNewPackageReceiptRows": 0,
+          "genericAssessCommandDenials": [
+            {
+              "commandType": "evidence.extract",
+              "status": "ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND"
+            },
+            {
+              "commandType": "evidence.candidate.review",
+              "status": "ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND"
+            },
+            {
+              "commandType": "evidence.assess.promote",
+              "status": "ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND"
+            }
+          ],
+          "genericAssessSideEffects": {
+            "jobRowsCreated": 0,
+            "candidateRowsMutated": 0,
+            "promotionRowsCreated": 0,
+            "commandReceiptRowsMutated": 0,
+            "providerEffectRowsCreated": 0,
+            "budgetReservationRowsCreated": 0,
+            "providerUsageRowsCreated": 0,
+            "privilegedAuditRowsCreated": 0
+          }
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-postgres",
+      "owner": "studio-source-postgres",
+      "testId": "IDEMP-002-B",
+      "assertionId": "studio-source-postgres-budget-uncertain-recovery",
+      "fixture": "studio-source-exact-v1",
+      "testName": "IDEMP-002-B — studio source postgres budget uncertain recovery",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "97000000-0000-4000-8000-000000000330",
+          "state": "active",
+          "capabilities": [
+            "studio.sources.manage"
+          ]
+        },
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011",
+        "lineage": {
+          "actorId": "97000000-0000-4000-8000-000000000330",
+          "organizationId": "97000000-0000-4000-8000-000000000010",
+          "workspaceId": "97000000-0000-4000-8000-000000000011",
+          "receiptId": {
+            "$uuid": true
+          },
+          "extractionJobId": "97000000-0000-4000-8000-000000000361",
+          "reservationId": {
+            "$uuid": true
+          },
+          "recoveryState": "uncertain",
+          "providerUsageRows": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "pasted-source-exact-bundle-extraction-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — pasted source exact bundle extraction desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "sourceId": "00000041-0000-4000-8000-000000000041",
+          "sourceVersionId": "00000042-0000-4000-8000-000000000042",
+          "sourceSetId": "00000034-0000-4000-8000-000000000034",
+          "sourceSetVersionId": "00000035-0000-4000-8000-000000000035",
+          "inputBundleId": "00000036-0000-4000-8000-000000000036",
+          "inputBundleVersionId": "00000037-0000-4000-8000-000000000037",
+          "extractionJobId": "00000048-0000-4000-8000-000000000048",
+          "bindingCount": 1,
+          "candidateCount": 3,
+          "rawProjectionMatches": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-003",
+      "assertionId": "bound-candidate-review-direct-package-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-003 — bound candidate review direct package desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "inputBundleVersionId": "00000037-0000-4000-8000-000000000037",
+          "candidateStatuses": [
+            "accepted",
+            "edited",
+            "rejected"
+          ],
+          "rationaleGateAssertions": 4,
+          "acceptedGroundedCoverage": 1,
+          "sourcePackageId": "00000039-0000-4000-8000-000000000039",
+          "sourcePackageVersion": 1,
+          "artifactId": "00000038-0000-4000-8000-000000000038",
+          "assessApiRequestCount": 0,
+          "seriousCriticalA11yFindings": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "provider-disabled-zero-call-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — provider disabled zero call desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "providerExtractionEnabled": false,
+          "prematureSampleCount": 0,
+          "adversarialDelayedRequestCount": 1,
+          "lateTrafficGateRejected": true,
+          "sourceExtractionInvocationCount": 0,
+          "providerOrExtractionRequestCount": 0,
+          "observationWindow": "clean-navigation-through-page-close",
+          "quiescenceWindowMs": 250,
+          "pageClosedBeforeEvidence": true,
+          "existingCommittedEvidenceReadable": true
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "pdf-docx-upload-mime-binding-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — pdf docx upload mime binding desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "acceptedFileTypes": [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ],
+          "sourceCreateCount": 2,
+          "ocrClaimed": false
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "file-boundaries-default-off-history-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — file boundaries default off history desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "invalidAndOversizeCreateCount": 0,
+          "sourceMutationsEnabled": false,
+          "retainedExtractionCandidateCount": 1,
+          "extractionAttemptCount": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "manage-only-source-create-authorized-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — manage only source create authorized desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000061-0000-4000-8000-000000000061",
+          "state": "active",
+          "capabilities": [
+            "studio.sources.manage"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "sourceCreateCount": 1,
+          "sourceManageEnabled": true,
+          "sourceReadCapability": false,
+          "artifactGenerateCapability": false,
+          "command": "studio.source.create"
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-003",
+      "assertionId": "incomplete-grounding-blocked-desktop-chrome",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-003 — incomplete grounding blocked desktop chrome",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "desktop-chrome",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "inputBundleVersionId": "00000032-0000-4000-8000-000000000032",
+          "provenanceState": "incomplete",
+          "acceptEnabled": false,
+          "editEnabled": false,
+          "directPackageEnabled": false
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "pasted-source-exact-bundle-extraction-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — pasted source exact bundle extraction pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "sourceId": "00000041-0000-4000-8000-000000000041",
+          "sourceVersionId": "00000042-0000-4000-8000-000000000042",
+          "sourceSetId": "00000034-0000-4000-8000-000000000034",
+          "sourceSetVersionId": "00000035-0000-4000-8000-000000000035",
+          "inputBundleId": "00000036-0000-4000-8000-000000000036",
+          "inputBundleVersionId": "00000037-0000-4000-8000-000000000037",
+          "extractionJobId": "00000048-0000-4000-8000-000000000048",
+          "bindingCount": 1,
+          "candidateCount": 3,
+          "rawProjectionMatches": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-003",
+      "assertionId": "bound-candidate-review-direct-package-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-003 — bound candidate review direct package pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "inputBundleVersionId": "00000037-0000-4000-8000-000000000037",
+          "candidateStatuses": [
+            "accepted",
+            "edited",
+            "rejected"
+          ],
+          "rationaleGateAssertions": 4,
+          "acceptedGroundedCoverage": 1,
+          "sourcePackageId": "00000039-0000-4000-8000-000000000039",
+          "sourcePackageVersion": 1,
+          "artifactId": "00000038-0000-4000-8000-000000000038",
+          "assessApiRequestCount": 0,
+          "seriousCriticalA11yFindings": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "provider-disabled-zero-call-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — provider disabled zero call pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "providerExtractionEnabled": false,
+          "prematureSampleCount": 0,
+          "adversarialDelayedRequestCount": 1,
+          "lateTrafficGateRejected": true,
+          "sourceExtractionInvocationCount": 0,
+          "providerOrExtractionRequestCount": 0,
+          "observationWindow": "clean-navigation-through-page-close",
+          "quiescenceWindowMs": 250,
+          "pageClosedBeforeEvidence": true,
+          "existingCommittedEvidenceReadable": true
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "pdf-docx-upload-mime-binding-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — pdf docx upload mime binding pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "acceptedFileTypes": [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ],
+          "sourceCreateCount": 2,
+          "ocrClaimed": false
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "file-boundaries-default-off-history-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — file boundaries default off history pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "invalidAndOversizeCreateCount": 0,
+          "sourceMutationsEnabled": false,
+          "retainedExtractionCandidateCount": 1,
+          "extractionAttemptCount": 0
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-001",
+      "assertionId": "manage-only-source-create-authorized-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-001 — manage only source create authorized pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000061-0000-4000-8000-000000000061",
+          "state": "active",
+          "capabilities": [
+            "studio.sources.manage"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "sourceCreateCount": 1,
+          "sourceManageEnabled": true,
+          "sourceReadCapability": false,
+          "artifactGenerateCapability": false,
+          "command": "studio.source.create"
+        }
+      }
+    },
+    {
+      "commandId": "pr-c-studio-source-browser",
+      "owner": "studio-source-browser",
+      "testId": "STUDIO-TR-003",
+      "assertionId": "incomplete-grounding-blocked-pixel-7",
+      "fixture": "studio-source-exact-v1",
+      "testName": "STUDIO-TR-003 — incomplete grounding blocked pixel 7",
+      "expectedRuntimeContext": {
+        "persona": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "state": "active",
+          "capabilities": [
+            "studio.artifacts.approve",
+            "studio.artifacts.edit",
+            "studio.artifacts.generate",
+            "studio.artifacts.read",
+            "studio.artifacts.review",
+            "studio.handoffs.approve",
+            "studio.handoffs.consume",
+            "studio.handoffs.read",
+            "studio.handoffs.request",
+            "studio.handoffs.review",
+            "studio.sources.manage",
+            "studio.sources.read",
+            "studio.templates.approve",
+            "studio.templates.manage",
+            "studio.templates.read",
+            "studio.templates.review"
+          ]
+        },
+        "organizationId": "00000002-0000-4000-8000-000000000002",
+        "workspaceId": "00000060-0000-4000-8000-000000000060",
+        "lineage": {
+          "profile": "pixel-7",
+          "sourceFlowContract": "studio-source-exact-v1",
+          "inputBundleVersionId": "00000032-0000-4000-8000-000000000032",
+          "provenanceState": "incomplete",
+          "acceptEnabled": false,
+          "editEnabled": false,
+          "directPackageEnabled": false
+        }
       }
     }
   ],

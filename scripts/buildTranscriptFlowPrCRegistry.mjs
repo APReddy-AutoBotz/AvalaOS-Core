@@ -25,6 +25,13 @@ const ALL_EXECUTION_CLASSIFICATIONS = [PR_C_GITHUB_CLASSIFICATION, PR_C_LOCAL_CL
 
 const root = process.cwd();
 const refreshBindingsOnly = process.argv.includes('--refresh-bindings');
+const appendStudioSourceOnly = process.argv.includes('--append-studio-source');
+if (refreshBindingsOnly && appendStudioSourceOnly) throw new Error('PR_C_BUILD_MODE_CONFLICT');
+const studioSourceCommandIds = [
+  'pr-c-studio-source-api',
+  'pr-c-studio-source-postgres',
+  'pr-c-studio-source-browser',
+];
 const selectedCommandIds = [
   'pr-c-domain',
   'pr-c-client',
@@ -36,6 +43,7 @@ const selectedCommandIds = [
   'pr-c-coverage',
   'pr-c-evidence-contract',
   'pr-c-projection-postgrest',
+  ...studioSourceCommandIds,
 ];
 
 const ownerPaths = {
@@ -51,6 +59,9 @@ const ownerPaths = {
   browser: 'tests/browser/deliveryMonitorPrC/deliveryMonitorPrC.spec.ts',
   'browser-scope': 'tests/browser/enterpriseIntelligencePrCScope.spec.ts',
   boundary: 'docs/quality/governed-delivery-monitor-pr-c-evidence.md',
+  'studio-source-api': 'supabase/functions/_shared/enterpriseIntelligenceStudioSource.test.ts',
+  'studio-source-postgres': 'scripts/testStudioSourceIntegrationPostgres.mjs',
+  'studio-source-browser': 'tests/browser/studioPrB/studioPrB.spec.ts',
 };
 
 const notRun = [
@@ -140,7 +151,7 @@ const execute = (command, commandId) => {
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const sha256Pattern = /^[0-9a-f]{64}$/iu;
-const postgresFixtureIdPrefixes = ['300000', '960000', '970000'];
+const postgresFixtureIdPrefixes = ['300000', '960000', '970000', '990000'];
 
 const normalizePostgresGeneratedValues = value => {
   if (Array.isArray(value)) return value.map(normalizePostgresGeneratedValues);
@@ -169,7 +180,7 @@ const normalizePostgresGeneratedValues = value => {
 };
 
 const normalizeRuntimeContext = (context, commandId) => {
-  const expected = commandId === 'pr-c-postgres'
+  const expected = commandId === 'pr-c-postgres' || commandId === 'pr-c-studio-source-postgres'
     ? normalizePostgresGeneratedValues(context)
     : structuredClone(context);
   const performanceEvidence = expected.performance;
@@ -195,11 +206,12 @@ const normalizeRuntimeContext = (context, commandId) => {
 const commands = expectedPrCCommandRegistry(root);
 const commandsById = new Map(commands.map(command => [command.id, command]));
 const seen = new Set();
-const assertions = refreshBindingsOnly
+const assertions = refreshBindingsOnly || appendStudioSourceOnly
   ? JSON.parse(readFileSync(path.join(root, PR_C_REGISTRY_PATH), 'utf8')).assertions
+    .filter(assertion => !appendStudioSourceOnly || !studioSourceCommandIds.includes(assertion.commandId))
   : [];
 
-if (refreshBindingsOnly) {
+if (refreshBindingsOnly || appendStudioSourceOnly) {
   // This registry declares expected assertion context, not an executed PASS.
   // A successor changes the fresh-chain expectation; derive it from the
   // independently allowlisted migration inventory, never caller/manifest input.
@@ -211,7 +223,7 @@ if (refreshBindingsOnly) {
     readdirSync(path.join(root, 'supabase/migrations')).filter(file => file.endsWith('.sql')).sort());
 }
 
-for (const commandId of refreshBindingsOnly ? [] : selectedCommandIds) {
+for (const commandId of refreshBindingsOnly ? [] : appendStudioSourceOnly ? studioSourceCommandIds : selectedCommandIds) {
   const command = commandsById.get(commandId);
   assert(command, `PR_C_BUILD_COMMAND_UNKNOWN:${commandId}`);
   process.stdout.write(`[PR C registry] ${commandId}\n`);
@@ -241,6 +253,7 @@ for (const commandId of refreshBindingsOnly ? [] : selectedCommandIds) {
   process.stdout.write(`[PR C registry] ${commandId}: ${markers.length} assertion markers\n`);
 }
 if (refreshBindingsOnly) process.stdout.write(`[PR C registry] refreshed bindings for ${assertions.length} registered assertion expectations; no command execution is implied\n`);
+if (appendStudioSourceOnly) process.stdout.write(`[PR C registry] appended Studio source expectations from ${studioSourceCommandIds.length} executed focused commands; retained expectations were not rerun\n`);
 
 const owners = Object.fromEntries(Object.entries(ownerPaths).map(([owner, relative]) => {
   const absolute = path.join(root, relative);

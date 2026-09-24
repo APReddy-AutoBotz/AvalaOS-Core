@@ -42,6 +42,10 @@ import {
   type TranscriptSourceRole,
 } from '../../../services/transcriptFlow/contracts.ts';
 import {
+  emptyStudioSourceFlowProjection,
+  type StudioSourceFlowProjection,
+} from '../../../services/studioArtifacts/workspaceModel.ts';
+import {
   ASSESS_DOCUMENT_MAPPING_SCHEMA_VERSION,
   emptyAssessDocumentMappingProjection,
   isAssessMappingJsonValue,
@@ -118,6 +122,22 @@ export interface EnterpriseIntelligenceRawProjection {
   transcriptExtractionBindings: Row[];
   transcriptJobs: Row[];
   transcriptStalenessEvents: Row[];
+  studioSourceFlags?: Row[];
+  studioSourceOwnerships?: Row[];
+  studioExtractionJobClassifications?: Row[];
+  studioSources?: Row[];
+  studioSourceVersions?: Row[];
+  studioSourceCandidates?: Row[];
+  studioSourceSets?: Row[];
+  studioSourceSetVersions?: Row[];
+  studioSourceSetItems?: Row[];
+  studioInputBundles?: Row[];
+  studioInputBundleVersions?: Row[];
+  studioInputBundleItems?: Row[];
+  studioExtractionRuns?: Row[];
+  studioExtractionBindings?: Row[];
+  studioCandidateEdits?: Row[];
+  studioProviderRoutes?: Row[];
   mappingCatalogs: Row[];
   mappingTargets: Row[];
   mappingRuns: Row[];
@@ -294,6 +314,7 @@ const projectionVisibility = (authority: TenantContext) => {
   const assessDraftsVisible = evidenceVisible && hasAny(authority, 'assessment.edit', 'assess.v2.read', 'assess.v2.draft.write');
   const applicationsVisible = hasAny(authority, 'assess.applications.read', 'assess.applications.portfolio.read', 'portfolio.manage');
   const studioVisible = hasAny(authority, 'studio.artifacts.read', 'docs.approve');
+  const studioSourcesVisible = hasAny(authority, 'studio.sources.read', 'studio.sources.manage');
   const deliveryVisible = hasAny(
     authority,
     'project.read', 'project.manage',
@@ -311,6 +332,7 @@ const projectionVisibility = (authority: TenantContext) => {
     assessDraftsVisible,
     applicationsVisible,
     studioVisible,
+    studioSourcesVisible,
     deliveryVisible,
     monitorVisible,
     modernizationVisible,
@@ -332,11 +354,42 @@ const emptyRawProjection = (): EnterpriseIntelligenceRawProjection => ({
   transcriptInputBundles: [], transcriptInputBundleVersions: [], transcriptInputBundleItems: [], transcriptJourneys: [],
   transcriptApplyPreviews: [], transcriptApplyPreviewBatches: [], transcriptCandidateApplications: [], transcriptCandidateRelationships: [], transcriptConflicts: [], transcriptConflictResolutions: [],
   transcriptExtractionBindings: [], transcriptJobs: [], transcriptStalenessEvents: [],
+  studioSourceFlags: [], studioSourceOwnerships: [], studioExtractionJobClassifications: [], studioSources: [], studioSourceVersions: [], studioSourceCandidates: [],
+  studioSourceSets: [], studioSourceSetVersions: [], studioSourceSetItems: [], studioInputBundles: [],
+  studioInputBundleVersions: [], studioInputBundleItems: [], studioExtractionRuns: [], studioExtractionBindings: [],
+  studioCandidateEdits: [], studioProviderRoutes: [],
   mappingCatalogs: [], mappingTargets: [], mappingRuns: [], mappingRunSources: [], mappingProposals: [], mappingReviews: [],
     mappingPreviewBatches: [], mappingPreviewManifests: [], mappingPreviewItems: [], mappingConflicts: [], mappingConflictResolutions: [], mappingApplications: [],
 });
 
 const scoped = (authority: TenantContext) => `org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}`;
+
+const CLASSIFICATION_BATCH_SIZE = 100;
+const CLASSIFICATION_PAGE_SIZE = 500;
+const CLASSIFICATION_ROW_LIMIT = 50_000;
+
+const uniqueUuids = (values: unknown[]) => [...new Set(values.map(value => text(value)).filter(value => uuid.test(value)))];
+const batches = <T>(values: T[], size: number): T[][] => {
+  const result: T[][] = [];
+  for (let offset = 0; offset < values.length; offset += size) result.push(values.slice(offset, offset + size));
+  return result;
+};
+
+const loadClassificationPages = async (
+  query: typeof postgrest,
+  basePath: string,
+): Promise<Row[]> => {
+  const result: Row[] = [];
+  for (let offset = 0; ; offset += CLASSIFICATION_PAGE_SIZE) {
+    const page = await query<Row[]>(`${basePath}&limit=${CLASSIFICATION_PAGE_SIZE}&offset=${offset}`, {
+      method: 'GET', headers: { 'Cache-Control': 'no-store' },
+    });
+    if (!Array.isArray(page) || page.length > CLASSIFICATION_PAGE_SIZE) throw new Error('ENTERPRISE_EVIDENCE_CLASSIFICATION_INVALID');
+    result.push(...page);
+    if (result.length > CLASSIFICATION_ROW_LIMIT) throw new Error('ENTERPRISE_EVIDENCE_CLASSIFICATION_LIMIT');
+    if (page.length < CLASSIFICATION_PAGE_SIZE) return result;
+  }
+};
 
 export const createEnterpriseIntelligenceQueryDatabase = (
   query: typeof postgrest = postgrest,
@@ -351,6 +404,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       assessDraftsVisible,
       applicationsVisible,
       studioVisible,
+      studioSourcesVisible,
       deliveryVisible,
       monitorVisible,
       modernizationVisible,
@@ -375,7 +429,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
     if (evidenceVisible) {
       load('evidenceSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,created_by,created_at&${scope}&deleted_at=is.null&order=created_at.desc&limit=100`);
       load('evidenceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,extraction_status,extraction_failure_code,created_at&${scope}&order=created_at.desc&limit=500`);
-      load('evidenceCandidates', `enterprise_evidence_candidates?select=id,source_id,source_version_id,field_key,value,safe_excerpt,excerpt_hash,source_locator,confidence,prompt_version,suggestion_status,version,provenance_hash,created_by,reviewed_by,reviewed_at,updated_at&${scope}&order=updated_at.desc&limit=1000`);
+      load('evidenceCandidates', `enterprise_evidence_candidates?select=id,ai_job_id,source_id,source_version_id,field_key,value,safe_excerpt,excerpt_hash,source_locator,confidence,prompt_version,suggestion_status,version,provenance_hash,created_by,reviewed_by,reviewed_at,updated_at&${scope}&order=updated_at.desc&limit=1000`);
       if (assessDraftsVisible) {
         load('assessDrafts', `assess_v2_cases?select=id,version,status,updated_at&${scope}&status=eq.draft&deleted_at=is.null&order=updated_at.desc&limit=100`);
       }
@@ -432,6 +486,12 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('reviewEvents', `enterprise_high_impact_review_events?select=id,resource_type,resource_id,reviewer_id,created_at&${scope}&order=created_at.desc&limit=400`);
       load('approvals', `enterprise_high_impact_approvals?select=id,resource_type,resource_id,outcome,created_at&${scope}&order=created_at.desc&limit=400`);
     }
+    if (studioSourcesVisible) {
+      load('studioSourceOwnerships', `studio_source_version_ownerships?select=source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=2000`);
+    }
+    if (studioSourcesVisible) {
+      load('studioExtractionBindings', `studio_source_extraction_bindings?select=id,job_id,input_bundle_id,input_bundle_version_id,input_bundle_version,source_set_id,source_set_version_id,source_set_version,source_id,source_version_id,ordinal,created_at&${scope}&order=created_at.desc&limit=2000`);
+    }
     if (transcriptLineageRequired) {
       load('transcriptFlags', `enterprise_transcript_workspace_flags?select=transcript_source_sets_enabled,assess_multisource_apply_enabled,assess_document_mapping_enabled,governed_journeys_enabled,version,updated_at&${scope}&limit=1`);
       load('transcriptSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,created_at&${scope}&deleted_at=is.null&order=created_at.desc&limit=500`);
@@ -484,6 +544,72 @@ export const createEnterpriseIntelligenceQueryDatabase = (
           rows.mappingApplications = await query<Row[]>(`enterprise_assess_document_mapping_applications?select=preview_batch_id,proposal_id,target_selector_id,assess_case_id,assess_case_version,outcome,applied_at&${scope}&preview_batch_id=eq.${encodeURIComponent(previewBatchId)}&order=applied_at.desc&limit=100`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
         }
       }
+    }
+    if (studioSourcesVisible) {
+      load('studioSourceFlags', `enterprise_transcript_workspace_flags?select=studio_multisource_enabled,unified_byok_gateway_enabled,studio_source_integration_enabled,version,updated_at&${scope}&limit=1`);
+      load('studioSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,deleted_at,created_at&${scope}&order=created_at.desc&limit=2000`);
+      load('studioSourceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,extraction_status,extraction_failure_code,created_at&${scope}&order=created_at.desc&limit=2000`);
+      load('studioSourceCandidates', `enterprise_evidence_candidates?select=id,ai_job_id,source_id,source_version_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,source_locator,confidence,suggestion_status,version,created_by,reviewed_by,reviewed_at,updated_at&${scope}&order=updated_at.desc&limit=2000`);
+      load('studioSourceSets', `enterprise_source_sets?select=id,owner_module,display_label,description,current_version,lifecycle_version,status,created_at,updated_at&${scope}&owner_module=eq.studio&order=updated_at.desc&limit=400`);
+      load('studioSourceSetVersions', `enterprise_source_set_versions?select=id,source_set_id,version,purpose,source_count,extracted_character_count,status,created_at&${scope}&order=created_at.desc&limit=400`);
+      load('studioSourceSetItems', `enterprise_source_set_version_items?select=source_set_version_id,source_set_id,source_version_id,source_id,ordinal,semantic_role,user_note,extracted_character_count&${scope}&order=ordinal.asc&limit=4000`);
+      load('studioInputBundles', `enterprise_module_input_bundles?select=id,owner_module,current_version,created_at,updated_at&${scope}&owner_module=eq.studio&order=updated_at.desc&limit=400`);
+      load('studioInputBundleVersions', `enterprise_module_input_bundle_versions?select=id,input_bundle_id,version,status,created_at&${scope}&order=created_at.desc&limit=400`);
+      load('studioInputBundleItems', `enterprise_module_input_bundle_items?select=input_bundle_version_id,input_bundle_id,ordinal,source_set_version_id,source_set_id,declared_purpose&${scope}&order=ordinal.asc&limit=4000`);
+      load('studioExtractionRuns', `studio_source_extraction_runs?select=job_id,input_bundle_id,input_bundle_version_id,input_bundle_version,status,candidate_count,created_at,completed_at&${scope}&order=created_at.desc&limit=400`);
+      load('studioCandidateEdits', `enterprise_evidence_candidate_edits?select=candidate_id,created_at&${scope}&order=created_at.desc&limit=4000`);
+      load('studioProviderRoutes', `enterprise_ai_capability_routes?select=id,enabled,deleted_at&${scope}&capability=eq.studio.evidence.extract&order=updated_at.desc&limit=20`);
+    }
+    await Promise.all(tasks);
+    if (evidenceVisible || transcriptLineageRequired) {
+      const evidenceSourceIds = evidenceVisible ? uniqueUuids(rows.evidenceSources.map(row => row.id)) : [];
+      const sourceVersionIds = uniqueUuids([
+        ...(evidenceVisible ? rows.evidenceVersions.map(row => row.id) : []),
+        ...(evidenceVisible ? rows.evidenceCandidates.map(row => row.source_version_id) : []),
+        ...(transcriptLineageRequired ? rows.transcriptSourceVersions.map(row => row.id) : []),
+        ...(transcriptAssessVisible ? rows.transcriptCandidates.map(row => row.source_version_id) : []),
+      ]);
+      const evidenceJobIds = evidenceVisible ? uniqueUuids(rows.evidenceCandidates.map(row => row.ai_job_id)) : [];
+
+      const [ownershipsBySource, ownershipsByVersion, studioJobs] = await Promise.all([
+        Promise.all(batches(evidenceSourceIds, CLASSIFICATION_BATCH_SIZE).map(async sourceIds => {
+          const requested = new Set(sourceIds);
+          const result = await loadClassificationPages(query,
+            `studio_source_version_ownerships?select=source_id,source_version_id,created_at&${scope}`
+            + `&source_id=in.(${sourceIds.join(',')})&order=source_id.asc,source_version_id.asc`);
+          if (result.some(row => !requested.has(text(row.source_id)) || !uuid.test(text(row.source_version_id)))) {
+            throw new Error('ENTERPRISE_EVIDENCE_CLASSIFICATION_INVALID');
+          }
+          return result;
+        })),
+        Promise.all(batches(sourceVersionIds, CLASSIFICATION_BATCH_SIZE).map(async versionIds => {
+          const requested = new Set(versionIds);
+          const result = await loadClassificationPages(query,
+            `studio_source_version_ownerships?select=source_id,source_version_id,created_at&${scope}`
+            + `&source_version_id=in.(${versionIds.join(',')})&order=source_version_id.asc`);
+          if (result.some(row => !requested.has(text(row.source_version_id)) || !uuid.test(text(row.source_id)))) {
+            throw new Error('ENTERPRISE_EVIDENCE_CLASSIFICATION_INVALID');
+          }
+          return result;
+        })),
+        Promise.all(batches(evidenceJobIds, CLASSIFICATION_BATCH_SIZE).map(async jobIds => {
+          const requested = new Set(jobIds);
+          const result = await loadClassificationPages(query,
+            `studio_source_extraction_runs?select=job_id&${scope}`
+            + `&job_id=in.(${jobIds.join(',')})&order=job_id.asc`);
+          if (result.some(row => !requested.has(text(row.job_id)))) throw new Error('ENTERPRISE_EVIDENCE_CLASSIFICATION_INVALID');
+          return result;
+        })),
+      ]);
+
+      const ownershipByVersion = new Map((rows.studioSourceOwnerships || [])
+        .filter(row => uuid.test(text(row.source_version_id)))
+        .map(row => [text(row.source_version_id), row]));
+      for (const row of [...ownershipsBySource.flat(), ...ownershipsByVersion.flat()]) {
+        ownershipByVersion.set(text(row.source_version_id), row);
+      }
+      rows.studioSourceOwnerships = [...ownershipByVersion.values()];
+      rows.studioExtractionJobClassifications = studioJobs.flat();
     }
     return rows;
   },
@@ -553,9 +679,19 @@ const projectProviders = (raw: EnterpriseIntelligenceRawProjection, organization
 };
 
 const projectEvidence = (raw: EnterpriseIntelligenceRawProjection, actorId: string) => {
-  const versionBySource = latestBy(raw.evidenceVersions, 'source_id');
+  const studioPrivateSourceIds = new Set((raw.studioSourceOwnerships || []).map(row => text(row.source_id)).filter(Boolean));
+  const studioPrivateVersionIds = new Set((raw.studioSourceOwnerships || []).map(row => text(row.source_version_id)).filter(Boolean));
+  const studioExtractionJobIds = new Set([
+    ...(raw.studioExtractionBindings || []).map(row => text(row.job_id)),
+    ...(raw.studioExtractionJobClassifications || []).map(row => text(row.job_id)),
+  ].filter(Boolean));
+  const evidenceVersions = raw.evidenceVersions.filter(version => (
+    !studioPrivateSourceIds.has(text(version.source_id)) && !studioPrivateVersionIds.has(text(version.id))
+  ));
+  const versionBySource = latestBy(evidenceVersions, 'source_id');
   const sources: EnterpriseEvidenceSourceProjection[] = raw.evidenceSources.flatMap(source => {
-    if (!includes(SUPPORTED_EVIDENCE_MIME_TYPES, source.mime_type) || !includes(['uploaded', 'extracting', 'review', 'deleted', 'failed'] as const, source.status)) return [];
+    if (studioPrivateSourceIds.has(text(source.id)) || !includes(SUPPORTED_EVIDENCE_MIME_TYPES, source.mime_type)
+      || !includes(['uploaded', 'extracting', 'review', 'deleted', 'failed'] as const, source.status)) return [];
     const version = versionBySource.get(text(source.id));
     const characterCount = number(version?.extracted_character_count);
     const extractionState = source.status === 'failed' ? 'failed' as const
@@ -573,7 +709,9 @@ const projectEvidence = (raw: EnterpriseIntelligenceRawProjection, actorId: stri
     }];
   });
   const candidates: EnterpriseEvidenceCandidateProjection[] = raw.evidenceCandidates.flatMap(candidate => {
-    if (!includes(EVIDENCE_CANDIDATE_FIELDS, candidate.field_key) || !includes(['suggested', 'accepted', 'rejected', 'edited'] as const, candidate.suggestion_status)) return [];
+    if (studioPrivateSourceIds.has(text(candidate.source_id)) || studioPrivateVersionIds.has(text(candidate.source_version_id))
+      || studioExtractionJobIds.has(text(candidate.ai_job_id)) || !includes(EVIDENCE_CANDIDATE_FIELDS, candidate.field_key)
+      || !includes(['suggested', 'accepted', 'rejected', 'edited'] as const, candidate.suggestion_status)) return [];
     const candidateValue = text(candidate.value);
     // Candidate values are already canonical database truth. Never manufacture
     // different review evidence by truncating that truth in the projection.
@@ -861,6 +999,7 @@ const projectTranscriptFlow = (
       : 'Governed transcript source sets are disabled for this workspace.';
   const sourceById = new Map(raw.transcriptSources.map(source => [text(source.id), source]));
   const versionById = new Map(raw.transcriptSourceVersions.map(version => [text(version.id), version]));
+  const studioPrivateVersionIds = new Set((raw.studioSourceOwnerships || []).map(row => text(row.source_version_id)));
   const setVersionById = new Map(raw.transcriptSourceSetVersions.map(version => [text(version.id), version]));
   const setById = new Map(raw.transcriptSourceSets.map(sourceSet => [text(sourceSet.id), sourceSet]));
   const bundleVersionById = new Map(raw.transcriptInputBundleVersions.map(version => [text(version.id), version]));
@@ -885,7 +1024,7 @@ const projectTranscriptFlow = (
   const sourceVersions = raw.transcriptSourceVersions.flatMap(version => {
     const source = sourceById.get(text(version.source_id));
     const state = sourceState(source, version);
-    if (!source || !uuid.test(text(source.id)) || !uuid.test(text(version.id)) || !includes(SUPPORTED_EVIDENCE_MIME_TYPES, source.mime_type)) return [];
+    if (!source || studioPrivateVersionIds.has(text(version.id)) || !uuid.test(text(source.id)) || !uuid.test(text(version.id)) || !includes(SUPPORTED_EVIDENCE_MIME_TYPES, source.mime_type)) return [];
     return [{
       sourceId: text(source.id),
       versionSelector: text(version.id),
@@ -905,8 +1044,9 @@ const projectTranscriptFlow = (
     const version = raw.transcriptSourceSetVersions.find(candidate => text(candidate.source_set_id) === text(sourceSet.id)
       && number(candidate.version) === number(sourceSet.current_version));
     if (!version || !uuid.test(text(version.id))) return [];
-    const members = raw.transcriptSourceSetItems
-      .filter(item => text(item.source_set_version_id) === text(version.id))
+    const exactMemberRows = raw.transcriptSourceSetItems.filter(item => text(item.source_set_version_id) === text(version.id));
+    if (exactMemberRows.some(item => studioPrivateVersionIds.has(text(item.source_version_id)))) return [];
+    const members = exactMemberRows
       .sort((left, right) => number(left.ordinal) - number(right.ordinal))
       .flatMap((item, index) => {
         const source = sourceById.get(text(item.source_id));
@@ -956,6 +1096,7 @@ const projectTranscriptFlow = (
       .filter(item => text(item.source_set_version_id) === text(setVersion.id))
       .sort((left, right) => number(left.ordinal) - number(right.ordinal))
       .map(item => text(item.source_version_id)));
+    if (sourceVersionSelectors.some(sourceVersionId => studioPrivateVersionIds.has(sourceVersionId))) return [];
     return [{
       id: text(bundle.id), versionSelector: text(version.id), version: number(version.version, 1), ownerModule: 'assess' as const,
       label: short(items[0]?.declared_purpose, 240) || `Assess input bundle ${number(version.version, 1)}`,
@@ -987,7 +1128,7 @@ const projectTranscriptFlow = (
     const boundSourceSetVersion = setVersionById.get(text(binding?.source_set_version_id));
     const boundBundle = inputBundles.find(bundle => bundle.id === text(binding?.input_bundle_id)
       && bundle.versionSelector === text(binding?.input_bundle_version_id));
-    if (!source || !sourceVersion || !binding || !boundSourceSetVersion || !uuid.test(text(candidate.id))
+    if (!source || !sourceVersion || studioPrivateVersionIds.has(text(candidate.source_version_id)) || !binding || !boundSourceSetVersion || !uuid.test(text(candidate.id))
       || text(binding.source_id) !== text(candidate.source_id) || text(binding.source_version_id) !== text(candidate.source_version_id)
       || text(boundSourceSetVersion.source_set_id) !== text(binding.source_set_id)
       || !boundBundle || !boundBundle.sourceSetVersions.some(lineage => lineage.sourceSetId === text(binding.source_set_id)
@@ -1136,6 +1277,157 @@ const projectTranscriptFlow = (
     assessApplyPreviews: assessVisible ? assessApplyPreviews : [],
     assessRuns: assessVisible ? assessRuns : [],
   };
+};
+
+const projectStudioSourceFlow = (
+  raw: EnterpriseIntelligenceRawProjection,
+  authority: TenantContext,
+): StudioSourceFlowProjection => {
+  const visibility = projectionVisibility(authority);
+  if (!visibility.studioSourcesVisible) return emptyStudioSourceFlowProjection();
+  const studioSourceFlags = raw.studioSourceFlags || [];
+  const studioSources = raw.studioSources || [];
+  const studioSourceVersions = raw.studioSourceVersions || [];
+  const studioSourceCandidates = raw.studioSourceCandidates || [];
+  const studioSourceSets = raw.studioSourceSets || [];
+  const studioSourceSetVersions = raw.studioSourceSetVersions || [];
+  const studioSourceSetItems = raw.studioSourceSetItems || [];
+  const studioInputBundles = raw.studioInputBundles || [];
+  const studioInputBundleVersions = raw.studioInputBundleVersions || [];
+  const studioInputBundleItems = raw.studioInputBundleItems || [];
+  const studioExtractionRuns = raw.studioExtractionRuns || [];
+  const studioExtractionBindings = raw.studioExtractionBindings || [];
+  const studioCandidateEdits = raw.studioCandidateEdits || [];
+  const studioProviderRoutes = raw.studioProviderRoutes || [];
+  const flags = studioSourceFlags[0] || {};
+  const featureEnabled = bool(flags.studio_multisource_enabled) && bool(flags.studio_source_integration_enabled);
+  const canMutate = featureEnabled && authority.capabilities.includes('studio.sources.manage');
+  const routeRows = studioProviderRoutes.filter(route => route.deleted_at === null || route.deleted_at === undefined);
+  const providerRouteEnabled = routeRows.some(route => bool(route.enabled));
+  const providerEnabled = canMutate && bool(flags.unified_byok_gateway_enabled) && providerRouteEnabled;
+  const reason = !featureEnabled ? 'disabled' as const
+    : !canMutate ? 'read_only' as const
+      : !bool(flags.unified_byok_gateway_enabled) ? 'provider_disabled' as const
+        : routeRows.length === 0 ? 'route_unavailable' as const
+          : !providerRouteEnabled ? 'provider_disabled' as const : undefined;
+
+  const sourceById = new Map(studioSources.map(row => [text(row.id), row]));
+  const sourceVersionById = new Map(studioSourceVersions.map(row => [text(row.id), row]));
+  const reusedVersions = new Set(studioSourceSetItems.map(row => text(row.source_version_id)));
+  const sources = studioSourceVersions.flatMap(version => {
+    const source = sourceById.get(text(version.source_id));
+    if (!source || !uuid.test(text(source.id)) || !uuid.test(text(version.id))) return [];
+    const deleted = source.deleted_at !== null && source.deleted_at !== undefined;
+    const extractionStatus = text(version.extraction_status);
+    const state = deleted ? 'deleted' as const : extractionStatus === 'parsed' ? 'ready' as const
+      : extractionStatus.startsWith('failed') ? 'failed' as const : 'pending' as const;
+    const extractedCharacterCount = Math.max(0, number(version.extracted_character_count));
+    return [{ sourceId: text(source.id), versionSelector: text(version.id), displayName: short(source.display_name, 240) || 'Studio source',
+      versionLabel: `v${Math.max(1, number(version.version, 1))}`, mimeType: short(source.mime_type, 160) || 'application/octet-stream',
+      extractedCharacterCount, state, selectable: state === 'ready' && extractedCharacterCount > 0 && extractedCharacterCount <= 500_000,
+      reuseState: reusedVersions.has(text(version.id)) ? 'already_selected_elsewhere' as const : 'unused' as const }];
+  }).slice(0, 2000);
+
+  const setRootById = new Map(studioSourceSets.map(row => [text(row.id), row]));
+  const sourceSets = studioSourceSetVersions.flatMap(version => {
+    const root = setRootById.get(text(version.source_set_id));
+    if (!root || root.owner_module !== 'studio' || !uuid.test(text(root.id)) || !uuid.test(text(version.id))) return [];
+    const members = studioSourceSetItems.filter(row => text(row.source_set_version_id) === text(version.id))
+      .sort((left, right) => number(left.ordinal) - number(right.ordinal)).map(row => {
+        const sourceVersion = sourceVersionById.get(text(row.source_version_id));
+        const source = sourceById.get(text(row.source_id));
+        const sourceDeleted = Boolean(source && source.deleted_at !== null && source.deleted_at !== undefined);
+        const memberState = !source || !sourceVersion ? 'missing' as const : sourceDeleted ? 'deleted' as const
+          : sourceVersion.extraction_status === 'parsed' ? 'ready' as const
+            : text(sourceVersion.extraction_status).startsWith('failed') ? 'failed' as const : 'missing' as const;
+        return { sourceId: text(row.source_id), versionSelector: text(row.source_version_id),
+          displayName: short(source?.display_name, 240) || 'Unavailable Studio source',
+          versionLabel: `v${Math.max(1, number(sourceVersion?.version, 1))}`, ordinal: number(row.ordinal),
+          role: includes(TRANSCRIPT_SOURCE_ROLES, row.semantic_role) ? row.semantic_role : 'reference' as const,
+          ...(short(row.user_note, 500) ? { note: short(row.user_note, 500) } : {}),
+          extractedCharacterCount: Math.max(0, number(row.extracted_character_count)), state: memberState };
+      });
+    if (members.length < 1 || members.length > 20 || members.some((member, index) => member.ordinal !== index + 1)) return [];
+    const blockers = [...new Set(members.filter(member => member.state !== 'ready').map(member => (
+      member.state === 'missing' ? 'STUDIO_SOURCE_OWNERSHIP_OR_VERSION_MISSING' : `STUDIO_SOURCE_${member.state.toUpperCase()}`
+    )))];
+    const rootStatus = text(root.status);
+    const versionStatus = text(version.status);
+    const status = rootStatus === 'archived' ? 'archived' as const
+      : includes(['draft', 'locked', 'superseded'] as const, versionStatus) ? versionStatus : 'draft' as const;
+    return [{ id: text(root.id), versionSelector: text(version.id), version: Math.max(1, number(version.version, 1)), ownerModule: 'studio' as const,
+      label: short(root.display_label, 240) || 'Studio source set', ...(short(root.description, 1_000) ? { description: short(root.description, 1_000) } : {}),
+      versionLabel: `v${Math.max(1, number(version.version, 1))}`, status, sourceCount: members.length,
+      extractedCharacterCount: Math.max(0, number(version.extracted_character_count)), members,
+      lockState: blockers.length ? 'blocked' as const : status === 'locked' ? 'locked' as const : 'ready' as const,
+      blockers, updatedAt: text(root.updated_at) || text(version.created_at) }];
+  }).slice(0, 400);
+
+  const setVersionById = new Map(sourceSets.map(set => [set.versionSelector, set]));
+  const bundleRootById = new Map(studioInputBundles.map(row => [text(row.id), row]));
+  const inputBundles = studioInputBundleVersions.flatMap(version => {
+    const root = bundleRootById.get(text(version.input_bundle_id));
+    if (!root || root.owner_module !== 'studio' || !uuid.test(text(root.id)) || !uuid.test(text(version.id))) return [];
+    const items = studioInputBundleItems.filter(row => text(row.input_bundle_version_id) === text(version.id))
+      .sort((left, right) => number(left.ordinal) - number(right.ordinal));
+    const setVersions = items.map((row, index) => ({ row, set: setVersionById.get(text(row.source_set_version_id)), ordinal: index + 1 }));
+    if (setVersions.length < 1 || setVersions.length > 20 || setVersions.some(item => !item.set || number(item.row.ordinal) !== item.ordinal)) return [];
+    const sourceVersionSelectors = [...new Set(setVersions.flatMap(item => item.set!.members.map(member => member.versionSelector)))];
+    if (sourceVersionSelectors.length < 1 || sourceVersionSelectors.length > 20) return [];
+    const bundleStatus = includes(['draft', 'locked', 'superseded'] as const, version.status) ? version.status : 'draft' as const;
+    return [{ id: text(root.id), versionSelector: text(version.id), version: Math.max(1, number(version.version, 1)), ownerModule: 'studio' as const,
+      label: `Studio source bundle v${Math.max(1, number(version.version, 1))}`, versionLabel: `v${Math.max(1, number(version.version, 1))}`,
+      status: bundleStatus, sourceSetIds: setVersions.map(item => item.set!.id),
+      sourceSetVersions: setVersions.map(item => ({ sourceSetId: item.set!.id, sourceSetVersionSelector: item.set!.versionSelector,
+        sourceSetVersion: item.set!.version, ordinal: item.ordinal })), sourceVersionSelectors,
+      sourceCount: sourceVersionSelectors.length, extractedCharacterCount: sourceVersionSelectors.reduce((sum, id) => (
+        sum + Math.max(0, number(sourceVersionById.get(id)?.extracted_character_count))
+      ), 0), ...(bundleStatus === 'locked' ? { lockedAt: text(version.created_at) } : {}) }];
+  }).slice(0, 400);
+
+  const bindingsByJob = new Map<string, Row[]>();
+  studioExtractionBindings.forEach(binding => bindingsByJob.set(text(binding.job_id), [...(bindingsByJob.get(text(binding.job_id)) || []), binding]));
+  const extractionJobs = studioExtractionRuns.flatMap(run => {
+    if (![run.job_id, run.input_bundle_id, run.input_bundle_version_id].every(value => uuid.test(text(value)))) return [];
+    const status = includes(['running', 'staged', 'succeeded', 'failed', 'uncertain'] as const, run.status) ? run.status : 'requested' as const;
+    const bindingCount = (bindingsByJob.get(text(run.job_id)) || []).length;
+    if (bindingCount < 1) return [];
+    return [{ id: text(run.job_id), inputBundleId: text(run.input_bundle_id), inputBundleVersionId: text(run.input_bundle_version_id),
+      inputBundleVersion: Math.max(1, number(run.input_bundle_version, 1)), status,
+      candidateCount: Math.max(0, number(run.candidate_count)), bindingCount, createdAt: text(run.created_at),
+      ...(run.completed_at ? { completedAt: text(run.completed_at) } : {}) }];
+  }).slice(0, 400);
+
+  const editCountByCandidate = new Map<string, number>();
+  studioCandidateEdits.forEach(edit => editCountByCandidate.set(text(edit.candidate_id), (editCountByCandidate.get(text(edit.candidate_id)) || 0) + 1));
+  const candidates = studioSourceCandidates.flatMap(candidate => {
+    const binding = studioExtractionBindings.find(row => text(row.job_id) === text(candidate.ai_job_id)
+      && text(row.source_id) === text(candidate.source_id) && text(row.source_version_id) === text(candidate.source_version_id));
+    const source = sourceById.get(text(candidate.source_id));
+    const sourceVersion = sourceVersionById.get(text(candidate.source_version_id));
+    if (!binding || !source || !sourceVersion || !uuid.test(text(candidate.id)) || !uuid.test(text(binding.id))) return [];
+    if (!includes(['suggested', 'accepted', 'rejected', 'edited'] as const, candidate.suggestion_status)) return [];
+    const reviewedAt = text(candidate.reviewed_at);
+    const reviewState = candidate.suggestion_status === 'suggested' ? 'pending' as const
+      : text(candidate.reviewed_by) === authority.userId ? 'reviewed_by_you' as const : 'reviewed_by_another' as const;
+    return [{ id: text(candidate.id), candidateVersion: Math.max(1, number(candidate.version, 1)),
+      inputBundleId: text(binding.input_bundle_id), inputBundleVersionId: text(binding.input_bundle_version_id),
+      inputBundleVersion: Math.max(1, number(binding.input_bundle_version, 1)), extractionBindingId: text(binding.id),
+      extractionJobId: text(binding.job_id), sourceSetId: text(binding.source_set_id), sourceSetVersionId: text(binding.source_set_version_id),
+      sourceSetVersion: Math.max(1, number(binding.source_set_version, 1)), sourceId: text(candidate.source_id),
+      sourceVersionId: text(candidate.source_version_id), sourceLabel: short(source.display_name, 240) || 'Studio source',
+      sourceVersionLabel: `v${Math.max(1, number(sourceVersion.version, 1))}`, field: short(candidate.field_key, 240) || 'unresolved_questions',
+      value: boundedUnicodeScalarString(candidate.value, 12_000) || 'Unavailable candidate value',
+      ...(short(candidate.safe_excerpt, 500) ? { safeExcerpt: short(candidate.safe_excerpt, 500) } : {}),
+      sourceLocator: short(candidate.source_locator, 500) || 'source', confidence: Math.min(1, Math.max(0, number(candidate.confidence))),
+      status: candidate.suggestion_status, provenanceState: /^[0-9a-f]{64}$/.test(text(candidate.provenance_hash))
+        && /^[0-9a-f]{64}$/.test(text(candidate.excerpt_hash)) ? 'anchored' as const : 'incomplete' as const,
+      reviewState, editCount: editCountByCandidate.get(text(candidate.id)) || 0,
+      ...(reviewedAt ? { reviewedAt } : {}) }];
+  }).slice(0, 2000);
+
+  return { featureState: { sourceMutationsEnabled: canMutate, providerExtractionEnabled: providerEnabled, ...(reason ? { reason } : {}) },
+    sources, sourceSets, inputBundles, extractionJobs, candidates };
 };
 
 const projectAssessDocumentMapping = (
@@ -1343,6 +1635,7 @@ export const buildEnterpriseIntelligenceProjection = (
   const blueprints = visibility.modernizationVisible ? projectBlueprints(raw, authority.userId) : [];
   const commandActivity = projectCommandActivity(raw, authority);
   const transcriptFlow = projectTranscriptFlow(raw, authority, generatedAt);
+  const studioSourceFlow = projectStudioSourceFlow(raw, authority);
   const documentMapping = projectAssessDocumentMapping(raw, authority);
   const approvalResources = visibility.approvalVisible
     ? projectApprovalResources(raw, authority.userId, evidence.candidates, deliveryPackages, monitorBaselines, modernizationDecisions, blueprints)
@@ -1355,6 +1648,7 @@ export const buildEnterpriseIntelligenceProjection = (
   const projectionCollections = [providers, evidence.sources, evidence.candidates, assessDrafts, applications, studioDocuments, deliveryPackages, monitorBaselines, modernizationDecisions, blueprints,
     approvalResources, commandActivity, transcriptFlow.sourceVersions, transcriptFlow.sourceSets, transcriptFlow.inputBundles, transcriptFlow.journeys,
     transcriptFlow.assessCandidates, transcriptFlow.assessConflicts, transcriptFlow.assessApplyPreviews, transcriptFlow.assessRuns,
+    studioSourceFlow.sources, studioSourceFlow.sourceSets, studioSourceFlow.inputBundles, studioSourceFlow.extractionJobs, studioSourceFlow.candidates,
     documentMapping.catalogs, documentMapping.proposals, documentMapping.previews, documentMapping.conflicts, documentMapping.runs];
   const relevantCapabilities = authority.capabilities.filter(capability => /^(?:org|byok|security|evidence|assessment|assess|transcript|docs|studio|project|delivery|monitor|assemble|approvals|portfolio)\./.test(capability));
   return {
@@ -1380,6 +1674,7 @@ export const buildEnterpriseIntelligenceProjection = (
     approvalResources,
     commandActivity,
     transcriptFlow,
+    studioSourceFlow,
     documentMapping,
     assessPromotion: assessPromotionAuthorized ? {
       state: promotionActivity?.status === 'committed' ? 'promoted' : promotionActivity ? 'conflict' : 'contract_pending',
