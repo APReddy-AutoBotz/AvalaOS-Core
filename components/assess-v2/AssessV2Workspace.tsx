@@ -15,7 +15,7 @@ import {
 import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
 import { buildDecisionPackRenderModel } from '../../services/assessV2/decisionVersion';
 import { FIELD_REGISTRY } from '../../services/assessV2/registry';
-import { createUnknownAgentNecessityFacts, type CaseFact, type PrimitiveType } from '../../services/assessV2/types';
+import { createUnknownAgentNecessityFacts, type CaseFact, type InteractionMode, type PrimitiveType } from '../../services/assessV2/types';
 import { ASSESS_V1_SCORE_VERSION } from '../../services/assessV1Compatibility';
 import AssessV2ReviewWorkspace from './AssessV2ReviewWorkspace';
 import AssessV2EconomicsWorkspace from './AssessV2EconomicsWorkspace';
@@ -38,6 +38,13 @@ const unknownInteractionFacts = () => ({
 type InteractionFactKey = keyof ReturnType<typeof unknownInteractionFacts>;
 const interactionFactKeys = Object.keys(unknownInteractionFacts()) as InteractionFactKey[];
 const contextualInteractionFacts = new Set<InteractionFactKey>(['highImpact', 'financialAction', 'untrustedContentWithTools']);
+const requiredInteractionFacts: Record<InteractionMode, readonly InteractionFactKey[]> = {
+  read: ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'],
+  write: ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract', 'machineIdentity', 'leastPrivilege'],
+  event: ['eventSemantics'],
+  ui: ['uiStable'],
+  operational: ['testEnvironment', 'accountableOwner', 'monitored', 'capacityKnown'],
+};
 const V1_CLONE_ELIGIBLE_STATUSES = new Set<Assessment['status']>(['Approved', 'Handed Off to Docs']);
 const V1_CLONE_UNAVAILABLE_MESSAGE = `V1 cloning is unavailable. Clone requires an Approved or Handed Off to Docs assessment finalized with ${ASSESS_V1_SCORE_VERSION}.`;
 const isEligibleV1CloneSource = (assessment: Assessment | null): assessment is Assessment => Boolean(
@@ -111,10 +118,15 @@ export default function AssessV2Workspace({ processId, processName, processDescr
     !draft.applicationAssets.length && 'an application asset', !draft.interactions.length && 'an application interaction',
     !draft.evidenceLinks.length && 'linked evidence',
     draft.primitives.some(item => !item.name.trim() || !item.description.trim()) && 'a meaningful name and description for every primitive',
+    !draft.edges.some(item => item.fromPrimitiveId !== item.toPrimitiveId) && 'an edge between two different primitives',
+    !draft.decisionPoints.some(item => item.name.trim() && item.ruleDescription.trim() && new Set(item.outcomeLabels.map(label => label.trim()).filter(Boolean)).size >= 2) && 'a decision rule with two distinct outcomes',
+    !draft.exceptionPaths.some(item => item.name.trim() && item.trigger.trim() && item.resolutionPrimitiveIds.length > 0) && 'an exception trigger and resolution primitive',
     draft.interactions.some(item => !draft.primitives.some(primitive => primitive.id === item.primitiveId) || !draft.applicationAssets.some(asset => asset.id === item.assetId)) && 'valid primitive and application references for every interaction',
     draft.evidenceLinks.some(item => !item.claimIds.length) && 'an exact claim for every evidence item',
+    !draft.evidenceLinks.some(item => item.sourceType !== 'template' && item.claimIds.length > 0) && 'non-template evidence linked to an exact claim',
     !draft.primitives.some(item => (Object.values(item.facts) as CaseFact[]).some(fact => fact.value !== null && fact.status !== 'unknown' && fact.source !== 'template')) && 'at least one known process fact',
     !draft.applicationAssets.some(item => Boolean(item.accountableOwner?.trim()) && [item.strategicLifespan, item.technicalHealth, item.businessCriticality, item.ownershipModel, item.vendorRoadmap, item.operatingStability].some(value => value !== 'unknown')) && 'application lifecycle and accountable owner facts',
+    !draft.interactions.some(item => item.operationName.trim() && item.dataClassification !== 'Unknown' && requiredInteractionFacts[item.mode].every(key => item.facts[key] !== null)) && 'a classified interaction with the required facts for its declared mode',
   ].filter(Boolean) as string[] : [], [draft]);
   const hasUnsavedChanges = draft !== null && savedDraftFingerprint !== authorDraftFingerprint(draft);
 

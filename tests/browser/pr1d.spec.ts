@@ -412,6 +412,10 @@ test('displayed primitive and lifecycle controls allow a scaffolded V2 case to f
   await page.getByLabel('Application 1 strategic lifespan').selectOption('long');
   await page.getByLabel('Application 1 accountable owner').fill('process-owner');
   await page.getByLabel('Interaction 1 data classification').selectOption('Internal');
+  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await expect(page.getByRole('status').filter({hasText:'a classified interaction with the required facts for its declared mode'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(0);
   for (const fact of ['interfaceAvailable','operationCovered','apiDocumented','errorContract']) {
     await page.getByLabel(`Interaction 1 ${fact}`).selectOption('true');
   }
