@@ -28,7 +28,7 @@ const fixtureState=await loadFixture();
 
 test('controlled-human controller entrypoints execute cross-platform and reject missing phases fail-closed',()=>{
   const cases=[
-    ['scripts/prCControlledHumanEnvironment.mjs','usage: prCControlledHumanEnvironment.mjs <preflight|plan|apply|verify|quiesce|checkpoint-observe|deprovision|recover-reset|post-deprovision-verify> [--request path] [--output path]'],
+    ['scripts/prCControlledHumanEnvironment.mjs','usage: prCControlledHumanEnvironment.mjs <preflight|plan|apply|verify|synthetic-session-bind|quiesce|checkpoint-observe|deprovision|recover-reset|post-deprovision-verify> [--request path] [--output path]'],
     ['scripts/prCControlledHumanEnvironmentMigration.mjs','usage: prCControlledHumanEnvironmentMigration.mjs <preflight|apply|verify> [--output path]'],
   ];
   for(const [script,usage] of cases){

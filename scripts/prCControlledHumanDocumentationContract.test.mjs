@@ -55,8 +55,8 @@ async function snapshot() {
 
 function validate({ documents, primary, recovery, registry, diagnosticTopology }) {
   const definitions = paragraph(documents.evidence, 'No current complete candidate result is claimed');
-  assert.match(definitions, new RegExp(`defines ${registry.commands.length} exact commands, ${registry.assertions.length} assertion records, and nine explicit`, 'u'));
-  assert.equal(registry.notRun.length, 9);
+  assert.match(definitions, new RegExp(`defines ${registry.commands.length} exact commands, ${registry.assertions.length} assertion records, and ten explicit`, 'u'));
+  assert.equal(registry.notRun.length, 10);
   const ordinal = registry.commands.findIndex(command => command.id === 'scoring-drift') + 1;
   assert.equal(ordinal, registry.commands.length, 'scoring law remains the final canonical command');
   assert.equal(registry.commands[ordinal - 1].command, 'node scripts/checkPrCScoringLawDrift.mjs');
