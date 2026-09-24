@@ -153,14 +153,20 @@ const governed = spawnSync(process.execPath, [
 if (governed.stdout) process.stdout.write(governed.stdout);
 if (governed.stderr) process.stderr.write(governed.stderr);
 
+// This coverage command owns its registered Delivery/Monitor assertions, but
+// not the Studio source API assertions owned by pr-c-studio-source-api. Keep
+// every other marker, TAP outcome and coverage total fail-closed.
+const coverageOutput = output => output.split(/\r?\n/u)
+  .filter(line => !/^(?:#\s*)?PR_C_ASSERTION\s+\{.*"owner":"studio-source-api".*\}$/u.test(line.trim()))
+  .join('\n');
 const integration = spawnSync(process.execPath, [
   '--experimental-test-coverage',
   ...MODIFIED_INTEGRATION_SOURCE_SET.map(value => `--test-coverage-include=${compiled(value)}`),
   '--test',
   ...MODIFIED_INTEGRATION_TEST_SET.map(compiled),
 ], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-if (integration.stdout) process.stdout.write(integration.stdout);
-if (integration.stderr) process.stderr.write(integration.stderr);
+if (integration.stdout) process.stdout.write(coverageOutput(integration.stdout));
+if (integration.stderr) process.stderr.write(coverageOutput(integration.stderr));
 
 const status = governed.status === 0 && integration.status === 0 ? 'passed' : 'failed';
 console.log(`PR_C_MODIFIED_INTEGRATION_COVERAGE_OBSERVATION ${JSON.stringify({

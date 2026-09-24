@@ -341,7 +341,9 @@ export const createControlledPreviewNetworkObserver = async ({
       let response;
       try {
         response = await boundedRouteOperation({
-          operation: () => route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30_000 }),
+          // Only a connection reset on an allowed GET/HEAD may be retried once.
+          // Redirects, HTTP failures and response-identity checks still fail closed.
+          operation: () => route.fetch({ maxRedirects: 0, maxRetries: 1, timeout: 30_000 }),
           timeoutMs: fetchGuardTimeoutMs,
           phase: 'fetch',
           rejectedCategory: 'fetch-rejected',

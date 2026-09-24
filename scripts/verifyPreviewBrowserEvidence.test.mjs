@@ -398,7 +398,7 @@ test('context guard rejects a foreign redirect with one fetch and one terminal a
     request: () => request,
     fetch: async options => {
       fetchCalls += 1;
-      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 1, timeout: 30_000 });
       return {
         url: () => allowedUrl,
         status: () => 302,
@@ -449,7 +449,7 @@ test('context guard fulfills one exact first-party response with no retry or sub
     request: () => request,
     fetch: async options => {
       fetchCalls += 1;
-      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 1, timeout: 30_000 });
       return successResponse;
     },
     fulfill: async options => actions.push(options.response === successResponse ? 'fulfilled-exact' : 'fulfilled-substituted'),
@@ -501,7 +501,7 @@ test('finish drains an already-started allowed image fetch before page and conte
   const routeCompletion = guard({
     request: () => request,
     fetch: async options => {
-      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 1, timeout: 30_000 });
       return deferredFetch;
     },
     fulfill: async () => { order.push(['image-fulfilled']); },
@@ -713,7 +713,7 @@ test('async fetch rejection aborts exactly once, signals the observed operation,
   await assert.rejects(harness.observer.run(() => harness.guard({
     request: () => request,
     fetch: async options => {
-      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 1, timeout: 30_000 });
       throw new Error('must be sanitized');
     },
     fulfill: async () => actions.push('fulfill'),
@@ -735,7 +735,7 @@ test('ignored fetch timeout is bounded, invokes one fallback abort, and exposes 
   await assert.rejects(harness.observer.run(() => harness.guard({
     request: () => request,
     fetch: async options => {
-      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+      assert.deepEqual(options, { maxRedirects: 0, maxRetries: 1, timeout: 30_000 });
       return new Promise(() => {});
     },
     fulfill: async () => actions.push('fulfill'),

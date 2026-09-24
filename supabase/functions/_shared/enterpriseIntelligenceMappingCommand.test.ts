@@ -25,7 +25,9 @@ test('analyze receipt binding derives exact server case, bundle, set and source 
     const rows: Record<string, unknown> = {
       assess_v2_cases: { id: payload.caseId, version: 3, head_version_id: id(12), schema_version: 'assess-v2-schema-2026-07', status: 'draft' },
       enterprise_module_input_bundle_versions: { id: payload.inputBundleVersionId, input_bundle_id: payload.inputBundleId, version: 2, bundle_hash: 'a'.repeat(64) },
+      enterprise_module_input_bundles: { id: payload.inputBundleId, owner_module: 'assess' },
       enterprise_source_set_versions: { id: payload.selections[0].sourceSetVersionId, source_set_id: payload.selections[0].sourceSetId, version: 5 },
+      enterprise_source_sets: { id: payload.selections[0].sourceSetId, owner_module: 'assess' },
       enterprise_module_input_bundle_items: { source_set_version_id: payload.selections[0].sourceSetVersionId },
       enterprise_source_set_version_items: { source_id: payload.selections[0].sourceId },
     };
@@ -42,7 +44,9 @@ test('wrong tenant/current case or substituted selected source fails before rece
     await assert.rejects(deriveTranscriptCommandRequestBinding(authority, envelope, { findOne: async <T>(table: string) => {
       if (table === 'assess_v2_cases') return (substitute === 'case' ? null : { id: payload.caseId, version: 3, head_version_id: id(12), schema_version: 'assess-v2-schema-2026-07', status: 'draft' }) as T | null;
       if (table === 'enterprise_module_input_bundle_versions') return { id: payload.inputBundleVersionId, input_bundle_id: payload.inputBundleId, version: 2, bundle_hash: 'a'.repeat(64) } as T;
+      if (table === 'enterprise_module_input_bundles') return { id: payload.inputBundleId, owner_module: 'assess' } as T;
       if (table === 'enterprise_source_set_versions') return { id: payload.selections[0].sourceSetVersionId, source_set_id: payload.selections[0].sourceSetId, version: 5 } as T;
+      if (table === 'enterprise_source_sets') return { id: payload.selections[0].sourceSetId, owner_module: 'assess' } as T;
       if (table === 'enterprise_module_input_bundle_items') return { source_set_version_id: payload.selections[0].sourceSetVersionId } as T;
       if (table === 'enterprise_source_set_version_items') return { source_id: substitute === 'source' ? id(99) : payload.selections[0].sourceId } as T;
       return null;
@@ -79,7 +83,9 @@ test('the real handler rejects a same-organization foreign-workspace selected so
   const rows: Record<string, Record<string, unknown>> = {
     assess_v2_cases: { id: payload.caseId, version: 3, head_version_id: id(12), schema_version: 'assess-v2-schema-2026-07', status: 'draft' },
     enterprise_module_input_bundle_versions: { id: payload.inputBundleVersionId, input_bundle_id: payload.inputBundleId, version: 2, bundle_hash: 'a'.repeat(64) },
+    enterprise_module_input_bundles: { id: payload.inputBundleId, owner_module: 'assess' },
     enterprise_source_set_versions: { id: payload.selections[0].sourceSetVersionId, source_set_id: payload.selections[0].sourceSetId, version: 5 },
+    enterprise_source_sets: { id: payload.selections[0].sourceSetId, owner_module: 'assess' },
     enterprise_module_input_bundle_items: { source_set_version_id: payload.selections[0].sourceSetVersionId },
     enterprise_source_set_version_items: { source_id: payload.selections[0].sourceId, workspace_id: id(90) },
   };
