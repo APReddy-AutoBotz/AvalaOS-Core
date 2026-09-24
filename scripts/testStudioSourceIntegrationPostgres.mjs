@@ -17,9 +17,10 @@ assert.equal(parsedAdminUrl.pathname, '/postgres');
 
 const { Client } = pg;
 const migrationName = '20260924052038_studio_independent_source_integration.sql';
+const syntheticMigrationName = '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql';
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 assert.equal(migrations.at(-2), migrationName);
-assert.equal(migrations.at(-1), '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql');
+assert.equal(migrations.at(-1), syntheticMigrationName);
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -85,7 +86,7 @@ try {
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
   `);
-  for (const migration of migrations.slice(0, -1)) await transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8'));
+  for (const migration of migrations.slice(0, -2)) await transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8'));
   assert.ok(Number((await one(db, "SELECT current_setting('server_version_num')::int version")).version) >= 160000);
 
   // A populated pre-migration Studio set may already reference shared/Assess-library
@@ -140,6 +141,7 @@ try {
   await db.query(`SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,'accepted',$6,$7,'Retained pre-migration Studio review')`,
     [fixture.candidate, fixture.org, fixture.workspace, legacyCandidate.value, legacyCandidate.excerpt_hash, fixture.reviewer, legacyCandidate.value]);
   await transaction(db, migrationName, await readFile(join('supabase/migrations', migrationName), 'utf8'));
+  await transaction(db, syntheticMigrationName, await readFile(join('supabase/migrations', syntheticMigrationName), 'utf8'));
   assert.equal(await count(db, 'public.enterprise_source_set_version_items', 'WHERE source_set_version_id=$1', [legacySetVersion]), 1);
   assert.equal(await count(db, 'public.studio_legacy_extraction_binding_compatibility', 'WHERE binding_id=$1 AND job_id=$2', [legacyBinding, fixture.job]), 1);
   await expectedFailure(() => db.query(`INSERT INTO public.enterprise_transcript_extraction_bindings(id,org_id,workspace_id,job_id,receipt_id,
