@@ -1735,6 +1735,7 @@ jobs:
           npm run pr-c-synthetic-acceptance:migration-verify -- --output output/synthetic/migration-verify.json
 
       - name: Prepare and independently verify the synthetic exercise
+        id: prepare
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
           PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
@@ -1806,7 +1807,7 @@ jobs:
           npm run pr-c-synthetic-acceptance:verify -- --policy testing/process-lifecycle/contracts/pr-c-solo-owner-synthetic-policy.json --browser output/synthetic/browser-campaign.json --session-binding output/synthetic/session-binding.json --requester-observer output/synthetic/server-observer-requester.json --reviewer-observer output/synthetic/server-observer-reviewer.json --approver-observer output/synthetic/server-observer-approver.json --quiesce output/synthetic/quiesce.json --deprovision output/synthetic/deprovision.json --post-deprovision output/synthetic/post-deprovision.json --output output/synthetic/verified-session.json
 
       - name: Recover bounded synthetic state after any failed phase
-        if: failure()
+        if: ${{ failure() && steps.prepare.outcome != 'skipped' }}
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
           PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}

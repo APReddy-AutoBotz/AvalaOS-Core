@@ -70,6 +70,9 @@ const validate = workflow => {
   const verify = job.steps[stepIndex(job, 'Recompute acceptance from raw browser and server evidence')].run;
   assert.match(verify, /--session-binding output\/synthetic\/session-binding\.json/u);
   assert.match(verify, /PR_C_SYNTHETIC_ACCEPTANCE_COMPLETED_AT/u);
+  assert.equal(job.steps[stepIndex(job, 'Prepare and independently verify the synthetic exercise')].id, 'prepare');
+  assert.equal(job.steps[stepIndex(job, 'Recover bounded synthetic state after any failed phase')].if,
+    "${{ failure() && steps.prepare.outcome != 'skipped' }}");
   const cleanup = job.steps[stepIndex(job, 'Always erase private browser state and intermediate resume metadata')];
   assert.equal(cleanup.if, 'always()');
   assert.match(cleanup.run, /browser-storage-private/u);
@@ -94,6 +97,7 @@ test('workflow contract rejects selection, sequence, session binding, and privat
     value => { const steps = value.jobs.synthetic_role_acceptance.steps; const left = stepIndex(value.jobs.synthetic_role_acceptance, 'Quiesce before the final read-only browser proof'); const right = stepIndex(value.jobs.synthetic_role_acceptance, 'Run active browser journeys without provider egress'); [steps[left], steps[right]] = [steps[right], steps[left]]; },
     value => { value.jobs.synthetic_role_acceptance.steps.find(step => step.name === 'Upload only sanitized verified synthetic evidence').with.path += '\noutput/synthetic/browser-storage-private/'; },
     value => { value.jobs.synthetic_role_acceptance.steps.find(step => step.name === 'Always erase private browser state and intermediate resume metadata').if = 'success()'; },
+    value => { value.jobs.synthetic_role_acceptance.steps.find(step => step.name === 'Recover bounded synthetic state after any failed phase').if = 'failure()'; },
   ]) {
     const changed = structuredClone(workflow); mutate(changed); assert.throws(() => validate(changed), assert.AssertionError);
   }
