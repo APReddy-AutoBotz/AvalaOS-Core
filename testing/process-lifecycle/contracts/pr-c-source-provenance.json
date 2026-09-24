@@ -177,7 +177,7 @@
     "scripts/prCControlledHumanDocumentationContract.test.mjs": "sha256:5b8a78c8414de464d741dcbd53e28df09e67f4b63171d18c6caab49f645a2b83",
     "scripts/prCControlledHumanEdgeDeploy.mjs": "sha256:d5c4e9058f379ef62bcf2d56c2b5160135862dea161b81bea04c3312a013f6ea",
     "scripts/prCControlledHumanEdgeDeploy.test.mjs": "sha256:eb9d9cd159d077e7ebb91bfe806ca22eac597a628a2e364c30fb8b23ba29e261",
-    "scripts/prCControlledHumanEnvironment.mjs": "sha256:5d595894fd02cc0513d86852658355fcf1ac726368dfe6daee888b473fec9941",
+    "scripts/prCControlledHumanEnvironment.mjs": "sha256:c819f39d24ed129dbfa41a8d8611d2c0ff306aed299ea9a8b9ff2228792ef547",
     "scripts/prCControlledHumanEnvironment.test.mjs": "sha256:b72f22b1b326950daf47127a12d98af85365a0aa86edd4cc168cb0195de11dcc",
     "scripts/prCControlledHumanEnvironmentMigration.mjs": "sha256:a41ce9a5ff2abfd2662be42ef38624bd371f18d5b891a198f0916818ea86eca8",
     "scripts/prCControlledHumanEnvironmentMigration.test.mjs": "sha256:d27ff03c3b9f8714080d1501e18a3f32fd015259fa28faf95388d74ea2465f04",

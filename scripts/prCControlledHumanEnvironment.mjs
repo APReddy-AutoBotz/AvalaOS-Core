@@ -735,6 +735,8 @@ export class PostgresEnvironmentAdapter {
   }
   async observeDuty(context,humanRole,requestedSteps,requestDigest,executionKind='human') {
     const request=exactObserverRequest(executionKind,humanRole,requestedSteps);
+    const syntheticSchema=context.migrationTip===SYNTHETIC_ACCEPTANCE_MIGRATION_TIP;
+    if(executionKind==='synthetic'&&!syntheticSchema)fail('PR_C_SYNTHETIC_MIGRATION_TIP_REJECTED');
     const requestEnvelope=executionKind==='human'
       ?{humanRole,steps:requestedSteps}
       :{executionKind:'synthetic',syntheticRole:humanRole,steps:requestedSteps};
@@ -751,7 +753,10 @@ export class PostgresEnvironmentAdapter {
       if(request.some(step=>step.stepId==='verify-history-readable-and-actions-absent'
         ? timestampMs(step.startedAt)<quiescedAt
         : timestampMs(step.completedAt)>=quiescedAt))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_QUIESCE_ORDER_REJECTED');
-      const existing=(await db.query(`select checkpoint_id,step_id,request_digest,safe_record,observed_at from public.pr_c_controlled_human_step_observations where exercise_id=$1 and human_role=$2 and execution_kind=$3 order by observed_at,checkpoint_id,step_id`,[state.id,humanRole,executionKind])).rows;
+      const existing=(await db.query(syntheticSchema
+        ?`select checkpoint_id,step_id,request_digest,safe_record,observed_at from public.pr_c_controlled_human_step_observations where exercise_id=$1 and human_role=$2 and execution_kind=$3 order by observed_at,checkpoint_id,step_id`
+        :`select checkpoint_id,step_id,request_digest,safe_record,observed_at from public.pr_c_controlled_human_step_observations where exercise_id=$1 and human_role=$2 order by observed_at,checkpoint_id,step_id`,
+      syntheticSchema?[state.id,humanRole,executionKind]:[state.id,humanRole])).rows;
       if(existing.length) {
         if(existing.length!==request.length||existing.some(row=>row.request_digest!==requestDigest))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REPLAY_REJECTED');
         const indexed=new Map(existing.map(row=>[`${row.checkpoint_id}\0${row.step_id}`,row]));
@@ -982,8 +987,10 @@ export class PostgresEnvironmentAdapter {
           auditDigest:exactBinding?.safe_record.auditDigest??sha256('not-applicable'),result:observedResult,denialProofKind:denialProofKind??'not_applicable',
           denialCodeDigest:exactBinding?.safe_record.denialCodeDigest??sha256('absence'),observedDeltas,safety,serverObservedAt};
         const record={...base,inspectionDigest:sha256(base)};records.push(record);
-        await db.query(`insert into public.pr_c_controlled_human_step_observations(exercise_id,checkpoint_id,step_id,persona_key,human_role,execution_kind,request_digest,started_at,completed_at,inspection_digest,safe_record,observed_at)
+        if(syntheticSchema)await db.query(`insert into public.pr_c_controlled_human_step_observations(exercise_id,checkpoint_id,step_id,persona_key,human_role,execution_kind,request_digest,started_at,completed_at,inspection_digest,safe_record,observed_at)
           values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12)`,[state.id,step.checkpointId,step.stepId,step.personaKey,humanRole,executionKind,requestDigest,step.startedAt,step.completedAt,record.inspectionDigest,JSON.stringify(record),state.observed_at]);
+        else await db.query(`insert into public.pr_c_controlled_human_step_observations(exercise_id,checkpoint_id,step_id,persona_key,human_role,request_digest,started_at,completed_at,inspection_digest,safe_record,observed_at)
+          values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,[state.id,step.checkpointId,step.stepId,step.personaKey,humanRole,requestDigest,step.startedAt,step.completedAt,record.inspectionDigest,JSON.stringify(record),state.observed_at]);
       }
       await db.query('commit');
       return {...(executionKind==='human'?{humanRole}:{executionKind,syntheticRole:humanRole}),observedAt:new Date(state.observed_at).toISOString(),...controlledHumanObserverLifecycleWitness(lifecycle),steps:records};
