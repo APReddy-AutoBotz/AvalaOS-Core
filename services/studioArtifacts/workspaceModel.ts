@@ -1,5 +1,5 @@
-import type { TenantContextProjection } from '../../types';
-import type { StudioArtifactSectionDto, StudioCanonicalSourceAnchorDto, StudioSectionNonSourceLabel, StudioWorkspaceSelectedSourceDto } from './contracts';
+import type { TenantContextProjection } from '../../types.ts';
+import type { StudioArtifactSectionDto, StudioCanonicalSourceAnchorDto, StudioSectionNonSourceLabel, StudioWorkspaceSelectedSourceDto } from './contracts.ts';
 
 export interface StudioAuthorityTicket { readonly identity: string; readonly epoch: number }
 export const studioAuthorityIdentity = (context: Pick<TenantContextProjection, 'organizationId' | 'workspaceId' | 'userId' | 'authorizationVersion'>) => (

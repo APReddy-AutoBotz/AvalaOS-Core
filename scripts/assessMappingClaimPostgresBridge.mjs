@@ -41,7 +41,7 @@ export async function verifyAssessMappingClaimPostgresBridge({database,fixture,c
   const sourceBindings=[{...selection,parserVersion:persisted.parser_version,normalizedHash:textHash,extractedByteCount:bytes.length,sheetCount:0,cellCount:0,warnings:[]}];
   const authority={actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,authorizationVersion};
   const payload={caseId,expectedCaseVersion:1,inputBundleId:bundleId,inputBundleVersionId:bundleVersionId,expectedInputBundleVersion:1,selections:[selection]};
-  const allowedTables=new Set(['assess_v2_cases','enterprise_module_input_bundle_versions','enterprise_source_set_versions','enterprise_module_input_bundle_items','enterprise_source_set_version_items']);
+  const allowedTables=new Set(['assess_v2_cases','enterprise_module_input_bundle_versions','enterprise_module_input_bundles','enterprise_source_set_versions','enterprise_source_sets','enterprise_module_input_bundle_items','enterprise_source_set_version_items']);
   const findOne=async(table,query)=>{
    assert.ok(allowedTables.has(table));const params=new URLSearchParams(query),columns=params.get('select');assert.match(columns,/^[a-z_]+(?:,[a-z_]+)*$/);
    params.delete('select');const args=[],where=[];

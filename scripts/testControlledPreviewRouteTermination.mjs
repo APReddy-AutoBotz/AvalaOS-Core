@@ -5,7 +5,7 @@ import { createControlledPreviewNetworkObserver } from './previewBrowserEvidence
 
 const EXPECTED_HEAD = 'a'.repeat(40);
 const EXPECTED_DEPLOY = 'b'.repeat(24);
-const FETCH_OPTIONS = Object.freeze({ maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
+const FETCH_OPTIONS = Object.freeze({ maxRedirects: 0, maxRetries: 1, timeout: 30_000 });
 const PROFILES = Object.freeze([
   Object.freeze({ id: 'desktop-chrome', context: {} }),
   Object.freeze({ id: 'pixel-7', context: devices['Pixel 7'] }),
@@ -130,7 +130,7 @@ const runFaultCase = async ({ browser, loopback, profile, fault }) => {
     immutableOrigin: origin,
     expectedHead: EXPECTED_HEAD,
     expectedDeployId: EXPECTED_DEPLOY,
-    fetchGuardTimeoutMs: 100,
+    fetchGuardTimeoutMs: fault.id === 'native-fetch-reset' ? 1_000 : 100,
     terminalGuardTimeoutMs: 100,
     drainTimeoutMs: 150,
     drainQuietMs: 5,
@@ -176,7 +176,9 @@ const runFaultCase = async ({ browser, loopback, profile, fault }) => {
   else assert.equal(counters.fulfill, 0);
   assert.equal(counters.abort, 1, 'failed request must receive exactly one abort attempt');
   const serverRequests = loopback.requestCount() - requestsBefore;
-  if (fault.id === 'native-fetch-reset' || ['response-identity', 'fulfill-rejected'].includes(fault.id)) {
+  if (fault.id === 'native-fetch-reset') {
+    assert.equal(serverRequests, 2, 'native reset may make only the initial request and one bounded retry');
+  } else if (['response-identity', 'fulfill-rejected'].includes(fault.id)) {
     assert.equal(serverRequests, 1, 'native transport must perform exactly one HTTP request');
   } else {
     assert.equal(serverRequests, 0, 'injected pre-transport failures must not reach the server');

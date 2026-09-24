@@ -54,7 +54,7 @@ async function snapshot() {
 }
 
 function validate({ documents, primary, recovery, registry, diagnosticTopology }) {
-  const definitions = paragraph(documents.evidence, 'No current candidate result is claimed');
+  const definitions = paragraph(documents.evidence, 'No current complete candidate result is claimed');
   assert.match(definitions, new RegExp(`defines ${registry.commands.length} exact commands, ${registry.assertions.length} assertion records, and nine explicit`, 'u'));
   assert.equal(registry.notRun.length, 9);
   const ordinal = registry.commands.findIndex(command => command.id === 'scoring-drift') + 1;
@@ -162,7 +162,7 @@ test('active documentation rejects stale counts, reusable topology and false Edg
     ['coverage', 'forward-fix the seventeen-source contract or its 900,000 ms whole-child containment', 'forward-fix the sixteen-source contract or its 900,000 ms whole-child containment'],
   ]) {
     const changed = structuredClone(source);
-    assert.ok(changed.documents[key].includes(before));
+    assert.ok(changed.documents[key].includes(before), `${key}: ${before}`);
     changed.documents[key] = changed.documents[key].replace(before, after);
     assert.throws(() => validate(changed), assert.AssertionError, `${key}: ${before}`);
   }
