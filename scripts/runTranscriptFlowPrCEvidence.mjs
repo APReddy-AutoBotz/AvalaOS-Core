@@ -266,6 +266,9 @@ process.stdout.write(`PR C evidence summary: ${JSON.stringify({ result: manifest
 
 if (failed) {
   const lastCommand = commandRecords.at(-1);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    process.stdout.write(`::error title=PR C evidence command failed::${lastCommand?.id ?? 'unknown'} exited ${lastCommand?.exitCode ?? 'unknown'}; inspect sanitized evidence for details.\n`);
+  }
   throw new Error(`PR_C_EVIDENCE_FAILED:${JSON.stringify({
     missing,
     lastCommand: lastCommand?.id,
