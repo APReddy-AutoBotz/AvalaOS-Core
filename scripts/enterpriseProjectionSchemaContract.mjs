@@ -4,12 +4,12 @@ import { createHash } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 
-export const ENTERPRISE_PROJECTION_SITE_COUNT = 51;
+export const ENTERPRISE_PROJECTION_SITE_COUNT = 66;
 export const RELATIONSHIP_REVIEW_TABLE = 'enterprise_evidence_candidate_relationship_reviews';
 // Reviewed target -> call-kind -> table -> ordered-column inventory. This is
 // independent of both the source being extracted and the database catalog.
 // A legitimate projection change requires explicit review of this binding.
-export const ENTERPRISE_PROJECTION_INVENTORY_SHA256 = '3fab1c935251e0c8c33a4100638b6d38eb7fd0014f3215f31b626e79e3ac7a4e';
+export const ENTERPRISE_PROJECTION_INVENTORY_SHA256 = '0a3bab822d6a7f614ea3674a71528ea05f97fdc475bfa8b39061ec0e7a7a8bd7';
 
 const fail = (code, detail = '') => {
   throw new Error(`ENTERPRISE_PROJECTION_SCHEMA_${code}${detail ? `:${detail}` : ''}`);

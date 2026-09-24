@@ -2257,7 +2257,7 @@
         },
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
-        "migrationTip": "20260923190853",
+        "migrationTip": "20260924052038",
         "roleBoundary": {
           "executionRole": "service_role",
           "directSourceSelect": false,

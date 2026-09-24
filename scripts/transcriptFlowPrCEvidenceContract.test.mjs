@@ -143,6 +143,15 @@ for (const [name, mutate, reason] of [
   });
 }
 
+test('deferred service-role PostgreSQL assertion rejects a stale fresh-chain migration tip', () => {
+  const registry = structuredClone(canonicalRegistry);
+  const marker = registry.assertions.find(value => value.assertionId === 'PG16-SERVICE-ROLE-DEFERRED-BINDING-LIFECYCLE');
+  assert.ok(marker);
+  marker.expectedRuntimeContext.migrationTip = '20260923190853';
+  assert.throws(() => validates({ registry, provenance: makeContract().provenance }),
+    /PR_C_DEFERRED_FRESH_CHAIN_MIGRATION_TIP/u);
+});
+
 class FakeCommandChild extends EventEmitter {
   constructor() {
     super();

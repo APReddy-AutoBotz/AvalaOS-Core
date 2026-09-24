@@ -100,7 +100,7 @@ test('reviewed inventory rejects dropping a column without changing the site cou
   const changed = replaceOnce(source, 'assess_application_assets?select=id,name,created_at',
     'assess_application_assets?select=id,created_at');
   const contract = extractEnterpriseProjectionSchemaContract(changed);
-  assert.equal(contract.siteCount, 51);
+  assert.equal(contract.siteCount, ENTERPRISE_PROJECTION_SITE_COUNT);
   assert.throws(() => assertEnterpriseProjectionInventory(contract), /ENTERPRISE_PROJECTION_SCHEMA_INVENTORY_MISMATCH/u);
 });
 
@@ -108,7 +108,7 @@ test('reviewed inventory rejects another valid-schema table and columns at the s
   const changed = replaceOnce(source, 'assess_application_assets?select=id,name,created_at',
     'enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,created_by,created_at');
   const contract = extractEnterpriseProjectionSchemaContract(changed);
-  assert.equal(contract.siteCount, 51);
+  assert.equal(contract.siteCount, ENTERPRISE_PROJECTION_SITE_COUNT);
   assert.throws(() => assertEnterpriseProjectionInventory(contract), /ENTERPRISE_PROJECTION_SCHEMA_INVENTORY_MISMATCH/u);
 });
 
@@ -119,7 +119,7 @@ test('reviewed inventory rejects a renamed target or reordered selection', () =>
       'assess_application_assets?select=name,id,created_at'),
   ]) {
     const contract = extractEnterpriseProjectionSchemaContract(changed);
-    assert.equal(contract.siteCount, 51);
+    assert.equal(contract.siteCount, ENTERPRISE_PROJECTION_SITE_COUNT);
     assert.throws(() => assertEnterpriseProjectionInventory(contract), /ENTERPRISE_PROJECTION_SCHEMA_INVENTORY_MISMATCH/u);
   }
 });

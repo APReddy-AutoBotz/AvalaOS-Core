@@ -62,14 +62,34 @@ const transcriptExtractEnd = command.indexOf('const commandTranscriptAssessCandi
 const transcriptExtract = command.slice(transcriptExtractStart, transcriptExtractEnd);
 const transcriptBindingStart = command.indexOf('const deriveTranscriptCommandRequestBinding');
 const transcriptBindingEnd = command.indexOf('const assertCommittedEnterpriseReceiptIdentity', transcriptBindingStart);
-const transcriptBinding = command.slice(transcriptBindingStart, transcriptBindingEnd);
+const transcriptExactBindingStart = command.indexOf("if (envelope.commandType === 'transcript.assess.extract')", transcriptBindingStart);
+const transcriptExactBindingEnd = command.indexOf("if (envelope.commandType === 'studio.bundle.extract')", transcriptExactBindingStart);
+if (transcriptExactBindingStart < transcriptBindingStart || transcriptExactBindingEnd <= transcriptExactBindingStart
+  || transcriptExactBindingEnd >= transcriptBindingEnd) {
+  throw new Error('Transcript extraction must retain its exact preclaim binding boundary.');
+}
+const transcriptBinding = command.slice(transcriptExactBindingStart, transcriptExactBindingEnd);
+const studioReviewStart = command.indexOf('const commandStudioCandidateReview');
+const studioReviewEnd = command.indexOf('const requireApprovalResourceType', studioReviewStart);
+if (studioReviewStart < transcriptExtractEnd || studioReviewEnd <= studioReviewStart
+  || studioReviewEnd >= transcriptBindingStart) {
+  throw new Error('Studio candidate review must retain its exact command boundary.');
+}
+const studioReview = command.slice(studioReviewStart, studioReviewEnd);
 const commandWithoutTranscriptExactSelector = [
   command.slice(0, transcriptExtractStart),
-  command.slice(transcriptExtractEnd, transcriptBindingStart),
+  command.slice(transcriptExtractEnd, studioReviewStart),
+  command.slice(studioReviewEnd, transcriptBindingStart),
   command.slice(transcriptBindingEnd),
 ].join('');
 if (/payload\.(?:sourceVersionId|assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(commandWithoutTranscriptExactSelector)) {
   throw new Error('Enterprise commands may not accept browser-supplied authoritative versions, hashes, or item identifiers.');
+}
+if (!studioReview.includes("'sourceId', 'sourceVersionId', 'status'")
+  || !studioReview.includes('p_source_version: requireUuid(payload.sourceVersionId)')
+  || !studioReview.includes("'studio_review_source_candidate_v1'")
+  || /payload\.(?:assessmentVersionId|studioVersion|studioContentHash|packageVersionId|approvedItemIds)\b/u.test(studioReview)) {
+  throw new Error('Studio candidate review may accept only the exact source-version selector for server-bound review.');
 }
 if (!transcriptExtract.includes("'inputBundleId', 'inputBundleVersionSelector', 'expectedInputBundleVersion'")
   || !transcriptExtract.includes("'sourceSetId', 'sourceSetVersionSelector', 'expectedSourceSetVersion', 'sourceVersionSelector'")

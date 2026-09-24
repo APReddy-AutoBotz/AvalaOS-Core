@@ -221,6 +221,11 @@ if (refreshBindingsOnly || appendStudioSourceOnly) {
     && fresh[0].fixture === 'fresh-pg16', 'PR_C_BUILD_FRESH_CHAIN_BINDING');
   fresh[0].expectedRuntimeContext.migrationTip = approvedFullChainTip(
     readdirSync(path.join(root, 'supabase/migrations')).filter(file => file.endsWith('.sql')).sort());
+  const deferred = assertions.filter(value => value.assertionId === 'PG16-SERVICE-ROLE-DEFERRED-BINDING-LIFECYCLE');
+  assert(deferred.length === 1 && deferred[0].commandId === 'pr-c-postgres'
+    && deferred[0].owner === 'postgres' && deferred[0].testId === 'AUTH-002'
+    && deferred[0].fixture === 'service-role-deferred-pg16', 'PR_C_BUILD_DEFERRED_FRESH_CHAIN_BINDING');
+  deferred[0].expectedRuntimeContext.migrationTip = fresh[0].expectedRuntimeContext.migrationTip;
 }
 
 for (const commandId of refreshBindingsOnly ? [] : appendStudioSourceOnly ? studioSourceCommandIds : selectedCommandIds) {

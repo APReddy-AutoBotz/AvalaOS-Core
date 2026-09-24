@@ -404,6 +404,13 @@ export const validatePrCRegistryStructure = (root, registry, provenance, { verif
     const tip = approvedFullChainTip(readdirSync(path.join(root, 'supabase/migrations'))
       .filter(name => name.endsWith('.sql')).sort());
     assert(marker.expectedRuntimeContext?.migrationTip === tip, 'PR_C_FRESH_CHAIN_MIGRATION_TIP');
+    const deferred = registry.assertions.filter(assertion => assertion.assertionId === 'PG16-SERVICE-ROLE-DEFERRED-BINDING-LIFECYCLE');
+    assert(deferred.length === 1, 'PR_C_DEFERRED_FRESH_CHAIN_MARKER_COUNT');
+    const deferredMarker = deferred[0];
+    assert(deferredMarker.commandId === 'pr-c-postgres' && deferredMarker.owner === 'postgres'
+      && deferredMarker.testId === 'AUTH-002' && deferredMarker.fixture === 'service-role-deferred-pg16',
+    'PR_C_DEFERRED_FRESH_CHAIN_MARKER_BINDING');
+    assert(deferredMarker.expectedRuntimeContext?.migrationTip === tip, 'PR_C_DEFERRED_FRESH_CHAIN_MIGRATION_TIP');
   }
   if (commands.has('pr-c-studio-source-api')) {
     const exactStudioMarker = (assertionId, commandId, owner, testId) => {

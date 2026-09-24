@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
 
 const adminUrl=process.env.PR1E_MIGRATION_DATABASE_URL;if(!adminUrl){console.error('PR1E_MIGRATION_DATABASE_URL is required.');process.exit(1);}
 const {Client}=pg;const dbName='avalaos_pr1e_migration_test';const createdRoles=[];
@@ -16,6 +17,7 @@ try{
   await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);await admin.query(`CREATE DATABASE ${dbName}`);test=await connect(urlFor(dbName));
   await tx(test,"CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid'; GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;");
   const migrations=fs.readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort();
+  const expectedFullChainTip=approvedFullChainTip(migrations);
   for(const name of migrations){
     const sql=fs.readFileSync(path.join('supabase/migrations',name),'utf8');
     await tx(test,sql);
@@ -39,8 +41,8 @@ try{
   assert.match(handoffCommandDefinition,/receipt\.response\|\|jsonb_build_object\('outcome','replayed','receiptId',receipt\.id\)/);
   assert.match(handoffCommandDefinition,/result:=result\|\|jsonb_build_object\('handoffVersionId',handoff_version\.id,'expiresAt',handoff\.expires_at,'receiptId',receipt\.id\)/);
   const bootstrapDefinition=(await test.query("SELECT pg_get_functiondef('public.synthetic_ai_campaign_bootstrap(uuid,uuid,uuid,bigint,text,text,text,text,uuid,uuid,uuid,uuid,timestamptz)'::regprocedure) AS source")).rows[0].source;
-  assert.match(bootstrapDefinition,/marker\.migration_tip='20260923190853'/);
-  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,'20260923190853');
+  assert.match(bootstrapDefinition,new RegExp(`marker\\.migration_tip='${expectedFullChainTip}'`));
+  assert.equal((await test.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,expectedFullChainTip);
   for(const table of ['assess_v2_review_assignments','assess_v2_evidence_attestations','assess_v2_review_resolutions','assess_v2_govern_resolutions','assess_v2_studio_handoffs','assess_v2_studio_sources']){
     assert.equal((await test.query('SELECT relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[`public.${table}`])).rows[0].relforcerowsecurity,true);
     assert.equal((await test.query("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[`public.${table}`])).rows[0].allowed,false);
