@@ -529,7 +529,7 @@
     },
     "studio-source-postgres": {
       "path": "scripts/testStudioSourceIntegrationPostgres.mjs",
-      "sha256": "a0684f7c025601c3f150709b19e1a49eebb1bbceef01075ebc8a77ddae406ca7"
+      "sha256": "a35029ac0987df1446d693c8c9075ebb75c41e4dbe19aea58a4b164b2961ebc2"
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
