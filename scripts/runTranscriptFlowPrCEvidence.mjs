@@ -42,6 +42,12 @@ const parseMarkers = (commandId, output) => output.split(/\r?\n/gu).flatMap(line
   const fields = ['assertionId', 'fixture', 'owner', 'result', 'runtimeContext', 'testId'];
   if (JSON.stringify(Object.keys(marker).sort()) !== JSON.stringify(fields)) throw new Error('PR_C_MARKER_FIELDS');
   if (marker.result !== 'passed') throw new Error(`PR_C_MARKER_RESULT:${marker.testId}`);
+  // The retained PR B browser batch also executes Studio source scenarios. Their
+  // PR C ownership is the separate pr-c-studio-source-browser command; keep the
+  // PR B suite exit and raw output digest, but do not relabel its duplicate markers.
+  if (commandId === 'pr-b-browser' && marker.owner === 'studio-source-browser'
+    && marker.fixture === 'studio-source-exact-v1'
+    && /^STUDIO-TR-00[13]$/u.test(marker.testId)) return [];
   return [{ ...marker, commandId }];
 });
 

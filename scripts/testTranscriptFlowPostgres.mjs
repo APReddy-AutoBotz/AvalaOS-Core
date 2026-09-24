@@ -86,7 +86,7 @@ try{
 
   const enterpriseProjectionSource=await readFile('supabase/functions/_shared/enterpriseIntelligenceQuery.ts','utf8');
   const projectionSchemaContract=await assertEnterpriseProjectionSchema(database,enterpriseProjectionSource);
-  assert.equal(projectionSchemaContract.siteCount,51);
+  assert.equal(projectionSchemaContract.siteCount,66);
   const relationshipSelection='enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
   assert.equal(enterpriseProjectionSource.split(relationshipSelection).length-1,1,
     'Relationship review projection must have one exact reviewer-backed selector');
