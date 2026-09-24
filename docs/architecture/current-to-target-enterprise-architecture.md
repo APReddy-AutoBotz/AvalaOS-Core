@@ -1,5 +1,18 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## PR #264 synthetic acceptance evidence boundary
+
+The AP-approved `solo-owner-synthetic-v1` policy authorizes one controller to
+exercise distinct synthetic requester, reviewer and approver application
+identities for PR #264 acceptance. Machine observations require an explicit
+execution kind in the retained exercise and observation authority, a separate
+schema/verifier/result, and exact policy, head, run/attempt, preview, backend,
+exercise and cleanup bindings. Existing human comments, signatures and
+`CONTROLLED-HUMAN` validation remain strict and cannot accept synthetic records.
+Browser labels do not establish actor identity; server-derived account/session
+bindings and observed command effects do. Rollback disables the synthetic path
+and new mutations while preserving immutable records for forward repair.
+
 Approved implementation design: an additive, initially empty campaign authority
 must not convert existing provider-free markers to provider authorization.
 Exact database-owned target/scope/configuration/key/model/operation bindings and

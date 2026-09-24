@@ -1,5 +1,22 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## PR #264 approved synthetic acceptance correction (2026-09-24)
+
+The owner approved the scoped replacement policy in
+`docs/planning/solo-developer-synthetic-acceptance-plan.md`; implementation and
+execution are pending. Confirmed source defect for proposed machine reuse: the
+current controlled-human observer persists a `human_role` and labels some
+browser-only steps `human_attestation` / `attested`. Reusing it unchanged would
+misstate synthetic provenance and could permit evidence-type substitution.
+The correction needs an additive execution-kind boundary, separate synthetic
+schema/verifier/result and strict human-only replay. Focused negative proof must
+cover wrong policy or release binding, repeated application identities, omitted
+steps, fabricated server effects, nonzero provider activity, and incomplete
+cleanup. `SYNTHETIC-ROLE-ACCEPTANCE` and `CONTROLLED-HUMAN` remain `not_run` until
+their distinct actual sessions verify. Prior CI or local tests are not the new
+hosted campaign. Merge/readiness remain NO-GO; the final merge decision belongs
+to AP after exact-candidate proof.
+
 ## Studio independent-source correction candidate (2026-09-24)
 
 Confirmed source defect: the accepted PR B direct-source contract required an
@@ -258,8 +275,8 @@ Sandbox passed 38 cases with 30 unchanged explicit server skips; the complete
 corrective browser pass includes 86 executed checks across five suites.
 All 20 selected canonical authority/regression/static/coverage commands and
 final independent reviews passed. New-head CI remains pending.
-Neither exploratory proof nor synthetic
-accounts replace the independent three-human gate, which remains pending.
+That earlier exploratory proof did not satisfy the then-current human gate. The
+2026-09-24 PR-specific synthetic policy above now governs acceptance.
 The empty-target setup initially blocked email login through the CLI's provider
 flag; enabling that provider while preserving global signup denial corrected it.
 Hosted advisor warnings about executable security-definer functions require

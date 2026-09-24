@@ -1,5 +1,12 @@
 # Governed Delivery And Monitor PR C Controlled-Human Walkthrough
 
+AP approved `solo-owner-synthetic-v1` on 2026-09-24 as a PR #264-only
+alternative to this three-human walkthrough. This walkthrough and its
+human-attestation verifier remain unchanged; its status below stays `not_run`.
+Automated acceptance must use the separate synthetic schema, execution kind,
+server-observed evidence and `SYNTHETIC-ROLE-ACCEPTANCE` disposition described
+in `docs/planning/solo-developer-synthetic-acceptance-plan.md`.
+
 Status: `not_run`
 
 ## Edge packaging and failed-deployment evidence correction

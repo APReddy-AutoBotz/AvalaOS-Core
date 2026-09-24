@@ -5,6 +5,21 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
+    inputs:
+      acceptance_mode:
+        description: Exact approved acceptance policy
+        required: true
+        type: choice
+        default: exact-head-ci
+        options: [exact-head-ci, solo-owner-synthetic-v1]
+      exact_head_sha:
+        description: Exact open PR 264 head SHA
+        required: false
+        type: string
+      netlify_deploy_id:
+        description: Exact PR 264 preview deploy ID
+        required: false
+        type: string
 
 permissions:
   actions: read
@@ -18,7 +33,7 @@ concurrency:
 
 jobs:
   exact-head-governed-evidence:
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    if: ${{ (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'workflow_dispatch' && inputs.acceptance_mode == 'exact-head-ci') }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -1627,5 +1642,195 @@ jobs:
         with:
           name: pr264-controlled-human-recovery-${{ needs.controlled_human_authority.outputs.exact-head-sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: output/controlled-human/recovery.json
+          if-no-files-found: error
+          retention-days: 14
+
+  synthetic_role_acceptance:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.acceptance_mode == 'solo-owner-synthetic-v1' }}
+    environment: hosted-nonproduction-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PR_C_SYNTHETIC_ACCEPTANCE_POLICY: solo-owner-synthetic-v1
+      PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS: hosted_nonproduction_pilot
+      PR_C_CONTROLLED_HUMAN_PR_NUMBER: 264
+      PR_C_CONTROLLED_HUMAN_RELEASE_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA: ${{ inputs.exact_head_sha }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
+      PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN: https://deploy-preview-264--avalaos-pilot.netlify.app
+      PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST }}
+      PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: ${{ vars.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT }}
+      PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: ${{ vars.PR_C_CONTROLLED_HUMAN_PUBLIC_TARGET_DIGEST }}
+      PR_C_CONTROLLED_HUMAN_SITE_NAME: avalaos-pilot
+      PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT: deploy-preview
+    steps:
+      - name: Authorize exact synthetic policy, actor, open PR head, and preview deploy
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ inputs.exact_head_sha }}
+          EXPECTED_DEPLOY: ${{ inputs.netlify_deploy_id }}
+          EXPECTED_EXERCISE: ${{ vars.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST }}
+          EXPECTED_TARGET: ${{ vars.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT }}
+          EXPECTED_PUBLIC_TARGET: ${{ vars.PR_C_CONTROLLED_HUMAN_PUBLIC_TARGET_DIGEST }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        with:
+          script: |
+            const reject = message => core.setFailed(`PR 264 synthetic acceptance rejected: ${message}`);
+            const trusted = value => String(value || '').toLowerCase() === 'apreddy-autobotz';
+            if (!trusted(context.actor) || !trusted(process.env.TRIGGERING_ACTOR)) return reject('unauthorized actor');
+            if (!/^[0-9a-f]{40}$/.test(process.env.EXPECTED_HEAD || '')) return reject('head binding');
+            if (!/^[0-9a-f]{24}$/.test(process.env.EXPECTED_DEPLOY || '')) return reject('deploy binding');
+            for (const value of [process.env.EXPECTED_EXERCISE, process.env.EXPECTED_TARGET, process.env.EXPECTED_PUBLIC_TARGET]) if (!/^sha256:[0-9a-f]{64}$/.test(value || '')) return reject('backend binding');
+            const { data: pull } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: 264 });
+            if (pull.state !== 'open' || pull.head.sha !== process.env.EXPECTED_HEAD || pull.head.ref !== 'controller/governed-delivery-monitor-pr-c-20260831' || pull.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}` || pull.base.ref !== 'main') return reject('untrusted PR source');
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, { owner: context.repo.owner, repo: context.repo.repo, workflow_id: 'transcript-flow-pr-c.yml', event: 'pull_request', head_sha: process.env.EXPECTED_HEAD, status: 'success', per_page: 100 });
+            const candidates = runs.filter(run => run.id !== context.runId && run.head_sha === process.env.EXPECTED_HEAD && run.conclusion === 'success');
+            let exactHeadCi = false;
+            for (const run of candidates) {
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, { owner: context.repo.owner, repo: context.repo.repo, run_id: run.id, per_page: 100 });
+              if (jobs.some(job => job.name === 'exact-head-governed-evidence' && job.conclusion === 'success')) { exactHeadCi = true; break; }
+            }
+            if (!exactHeadCi) return reject('missing successful exact-head governed CI');
+
+      - name: Checkout exact approved PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.exact_head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Require exact checkout
+        run: test "$(git rev-parse HEAD)" = "$PR_C_CONTROLLED_HUMAN_RELEASE_SHA"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Create private synthetic workspace and verify owner policy
+        run: |
+          install -d -m 700 output/synthetic
+          node --input-type=module -e "import {readFile} from 'node:fs/promises'; import {validateSyntheticOwnerPolicy} from './scripts/prCSyntheticAcceptanceEvidence.mjs'; validateSyntheticOwnerPolicy(JSON.parse(await readFile('testing/process-lifecycle/contracts/pr-c-solo-owner-synthetic-policy.json','utf8')))"
+
+      - name: Bind Supabase project, API, and database without disclosure
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+        run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
+
+      - name: Apply and verify the exact synthetic acceptance migration
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+        run: |
+          node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+          npm run pr-c-synthetic-acceptance:migration-preflight -- --output output/synthetic/migration-preflight.json
+          npm run pr-c-synthetic-acceptance:migration-apply -- --output output/synthetic/migration-apply.json
+          npm run pr-c-synthetic-acceptance:migration-verify -- --output output/synthetic/migration-verify.json
+
+      - name: Prepare and independently verify the synthetic exercise
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+          PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON: ${{ secrets.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON }}
+        run: |
+          npm run pr-c-controlled-human:preflight -- --output output/synthetic/environment-preflight.json
+          npm run pr-c-controlled-human:plan -- --output output/synthetic/environment-plan.json
+          npm run pr-c-controlled-human:apply -- --output output/synthetic/environment-apply.json
+          npm run pr-c-controlled-human:verify -- --output output/synthetic/environment-verify.json
+
+      - name: Verify exact preview response identity before browser authentication
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: node scripts/verifyPr264ControlledHumanPreview.mjs
+
+      - name: Run active browser journeys without provider egress
+        env:
+          PR_C_SYNTHETIC_ACCEPTANCE_PASSWORD_BUNDLE_JSON: ${{ secrets.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON }}
+        run: npm run pr-c-synthetic-acceptance:browser -- --phase active --preparation output/synthetic/environment-verify.json --output output/synthetic/browser-active.json --state-directory output/synthetic/browser-storage-private
+
+      - name: Bind exact application actors and sessions at the server
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: |
+          node --input-type=module -e "import {readFile,writeFile} from 'node:fs/promises'; import {buildSyntheticSessionBindingRequest} from './scripts/prCSyntheticAcceptanceEvidence.mjs'; const active=JSON.parse(await readFile('output/synthetic/browser-active.json','utf8')); await writeFile('output/synthetic/session-binding-request.json',JSON.stringify(buildSyntheticSessionBindingRequest(active.personas),null,2)+'\n',{flag:'wx',mode:0o600})"
+          node scripts/prCControlledHumanEnvironment.mjs synthetic-session-bind --request output/synthetic/session-binding-request.json --output output/synthetic/session-binding.json
+
+      - name: Quiesce before the final read-only browser proof
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: node scripts/prCControlledHumanEnvironment.mjs quiesce --authority output/synthetic/environment-verify.json --output output/synthetic/quiesce.json
+
+      - name: Run read-only browser proof, sign out all personas, and erase private state
+        env:
+          PR_C_SYNTHETIC_ACCEPTANCE_PASSWORD_BUNDLE_JSON: ${{ secrets.PR_C_CONTROLLED_HUMAN_PASSWORD_BUNDLE_JSON }}
+        run: npm run pr-c-synthetic-acceptance:browser -- --phase read-only --preparation output/synthetic/environment-verify.json --input output/synthetic/browser-active.json --output output/synthetic/browser-campaign.json --state-directory output/synthetic/browser-storage-private
+
+      - name: Build exact observer requests from browser evidence
+        run: |
+          node --input-type=module -e "import {readFile,writeFile} from 'node:fs/promises'; import {buildSyntheticObserverRequest} from './scripts/prCSyntheticAcceptanceEvidence.mjs'; const campaign=JSON.parse(await readFile('output/synthetic/browser-campaign.json','utf8')); for(const role of ['requester','reviewer','approver']) await writeFile('output/synthetic/observer-request-'+role+'.json',JSON.stringify(buildSyntheticObserverRequest(role,campaign.checkpoints),null,2)+'\n',{flag:'wx',mode:0o600})"
+
+      - name: Independently observe every server action, denial, and absence
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+        run: |
+          node scripts/prCControlledHumanEnvironment.mjs checkpoint-observe --request output/synthetic/observer-request-requester.json --output output/synthetic/server-observer-requester.json
+          node scripts/prCControlledHumanEnvironment.mjs checkpoint-observe --request output/synthetic/observer-request-reviewer.json --output output/synthetic/server-observer-reviewer.json
+          node scripts/prCControlledHumanEnvironment.mjs checkpoint-observe --request output/synthetic/observer-request-approver.json --output output/synthetic/server-observer-approver.json
+
+      - name: Deprovision and independently verify cleanup
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node scripts/prCControlledHumanEnvironment.mjs deprovision --authority output/synthetic/quiesce.json --output output/synthetic/deprovision.json
+          node scripts/prCControlledHumanEnvironment.mjs post-deprovision-verify --authority output/synthetic/deprovision.json --output output/synthetic/post-deprovision.json
+
+      - name: Recompute acceptance from raw browser and server evidence
+        run: |
+          export PR_C_SYNTHETIC_ACCEPTANCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          npm run pr-c-synthetic-acceptance:verify -- --policy testing/process-lifecycle/contracts/pr-c-solo-owner-synthetic-policy.json --browser output/synthetic/browser-campaign.json --session-binding output/synthetic/session-binding.json --requester-observer output/synthetic/server-observer-requester.json --reviewer-observer output/synthetic/server-observer-reviewer.json --approver-observer output/synthetic/server-observer-approver.json --quiesce output/synthetic/quiesce.json --deprovision output/synthetic/deprovision.json --post-deprovision output/synthetic/post-deprovision.json --output output/synthetic/verified-session.json
+
+      - name: Recover bounded synthetic state after any failed phase
+        if: failure()
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_EXERCISE_ID: ${{ secrets.PR_C_CONTROLLED_HUMAN_EXERCISE_ID }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_URL }}
+          PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/prCControlledHumanEnvironment.mjs recover-reset --reason abort --output output/synthetic/recovery.json
+
+      - name: Always erase private browser state and intermediate resume metadata
+        if: always()
+        run: node --input-type=module -e "import {rm} from 'node:fs/promises'; await rm('output/synthetic/browser-storage-private',{recursive:true,force:true}); await rm('output/synthetic/browser-active.json',{force:true}); await rm('output/synthetic/session-binding-request.json',{force:true})"
+
+      - name: Upload only sanitized verified synthetic evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr264-synthetic-role-acceptance-${{ inputs.exact_head_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/synthetic/verified-session.json
+            output/synthetic/browser-campaign.json
+            output/synthetic/session-binding.json
+            output/synthetic/server-observer-requester.json
+            output/synthetic/server-observer-reviewer.json
+            output/synthetic/server-observer-approver.json
+            output/synthetic/quiesce.json
+            output/synthetic/deprovision.json
+            output/synthetic/post-deprovision.json
           if-no-files-found: error
           retention-days: 14

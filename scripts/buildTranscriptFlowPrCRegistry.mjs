@@ -77,7 +77,12 @@ const notRun = [
   },
   {
     testId: 'CONTROLLED-HUMAN', owner: 'boundary', testName: 'Controlled human walkthrough', command: null,
-    reason: 'The AP authorized a dedicated synthetic PR #264 preview exercise, but automation and source contracts cannot substitute for an actually completed, signed three-distinct-human session; until that exact session verifies after deprovision, this boundary remains not_run.',
+    reason: 'AP approved a separate PR #264 synthetic acceptance policy in place of the three-human merge prerequisite. No three-human session executed, so this separate human result remains not_run and cannot be inferred from machine evidence.',
+    applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
+  },
+  {
+    testId: 'SYNTHETIC-ROLE-ACCEPTANCE', owner: 'boundary', testName: 'Solo-owner synthetic role acceptance', command: null,
+    reason: 'The canonical credential-free CI registry does not run the protected PR #264 preview exercise. Only a separately verified complete policy-bound synthetic campaign on the exact head can pass this result.',
     applicableExecutionClassifications: ALL_EXECUTION_CLASSIFICATIONS,
   },
   {

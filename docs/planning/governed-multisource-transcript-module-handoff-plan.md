@@ -1,5 +1,16 @@
 # Governed Multi-Source Text Transcript And Optional Module Handoff Plan
 
+PR #264 acceptance amendment (2026-09-24): AP approved the PR-specific
+`solo-owner-synthetic-v1` policy in
+`docs/planning/solo-developer-synthetic-acceptance-plan.md`. A complete verified
+synthetic campaign with distinct application actors may replace the previous
+three-independent-human merge prerequisite for this PR. Keep the human path
+unchanged and `CONTROLLED-HUMAN` as `not_run`. The separate
+`SYNTHETIC-ROLE-ACCEPTANCE` result is pending until all eight journeys, fourteen
+checkpoints, server/preview bindings and deprovision prove one exact candidate.
+Final merge remains an AP decision; this amendment gives no real-provider,
+production, external-user or general readiness authority.
+
 Current scope extension: on 2026-09-16 AP explicitly approved the native Assess supporting-document implementation in `docs/planning/assess-supporting-document-mapping.md`, including bounded CSV/XLSX. The text-only limit below describes the original PR A/B/C workstream and does not prohibit this separately approved extension. Earlier acceptance/evidence is preserved, not retroactively extended to the new formats or typed mapping. Assess and Studio remain independent source consumers; no automatic handoff or approval is added.
 
 Status: PR A accepted through PR #255 at `11e670003a73b0ab5a28650b70afac4b267760f4`; PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; existing Draft PR #264 is the authorized PR C corrective continuation and remains merge NO-GO pending full exact-head verification
@@ -1359,13 +1370,13 @@ This workstream is complete only when:
 10. platform AI capabilities use the unified certified BYOK gateway and atomic budgets;
 11. all feature and retained tests pass with exact per-assertion evidence;
 12. rollback/read-only behavior is executed and recorded;
-13. controlled human testing completes with synthetic data and all material defects retested; and
+13. PR #264's approved solo-owner synthetic acceptance completes with distinct application actors, exact-head browser/server evidence, verified cleanup, and all material defects retested; `CONTROLLED-HUMAN` remains `not_run` under this PR-specific policy; and
 14. no hosted, deployment, production, security-certification, compliance, or automation-execution claim is made without separately executed evidence.
 
 ## 29. Known unknowns and separate approvals
 
 - Exact provider/model choices and pricing are runtime configuration and require current verification before any real-provider smoke test.
-- Dedicated synthetic Supabase and PR #264 Deploy Preview preparation/execution are authorized only for the controlled-human gate and remain `not_run` until exact evidence is produced. All other hosted Storage, Vault, Edge, Supabase, Netlify, deployment, and domain behavior remains outside this plan.
+- Dedicated synthetic Supabase and the PR #264 Deploy Preview may be used for the approved `solo-owner-synthetic-v1` acceptance campaign. That separate result remains `not_run` until exact evidence is produced; the human result stays `not_run`. All other hosted Storage, Vault, Edge, Supabase, Netlify, deployment, and domain behavior remains outside this plan.
 - Real provider calls/keys, production or customer credentials, stable/custom-domain deployment, production, and customer/external-user data require separate explicit approval.
 - Audio/video transcription, remote meeting integration, external issue-tracker sync, live telemetry, and task execution require new scope approval and their own threat model.
 - Any future execution path must require approved Assess ancestry even when planning-only direct Studio/Delivery paths exist.

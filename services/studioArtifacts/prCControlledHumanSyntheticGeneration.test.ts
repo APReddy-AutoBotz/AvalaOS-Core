@@ -95,6 +95,18 @@ test('builds the exact attested server command without content, provider, route,
   }
 });
 
+test('accepts the exact forward synthetic migration tip on the same attested preview', () => {
+  const command = buildPrCControlledHumanSyntheticGenerationCommand(
+    context, { sourcePackage, template }, 'pr264:synthetic:request:forward', U[10], binding,
+    { ...attestation, migrationTip: '20260924113000' },
+  );
+  assert.equal(command.exerciseDigest, binding.exerciseDigest);
+  assert.throws(() => buildPrCControlledHumanSyntheticGenerationCommand(
+    context, { sourcePackage, template }, 'pr264:synthetic:request:wrong', U[10], binding,
+    { ...attestation, migrationTip: '20260924113001' as '20260924113000' },
+  ), PrCControlledHumanSyntheticGenerationBoundaryError);
+});
+
 test('executes only when controlled runtime, binding, attestation, scope, capability and lineage are exact', async () => {
   let invoked: Record<string, unknown> | null = null;
   const response = await executePrCControlledHumanSyntheticGeneration(

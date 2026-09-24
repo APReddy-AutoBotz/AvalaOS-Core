@@ -4,6 +4,7 @@ import {
   PR_C_CONTROLLED_HUMAN_CONTRACT_VERSION,
   PR_C_CONTROLLED_HUMAN_MIGRATION_TIP,
   PR_C_CONTROLLED_HUMAN_PREVIEW_ORIGIN,
+  PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP,
   RUNTIME_BOUNDARY_USER_MESSAGE,
   RUNTIME_MODES,
   RuntimeBoundaryError,
@@ -70,6 +71,11 @@ const controlledAttestation = {
 assert.deepEqual(
   validateControlledHumanBackendAttestation(controlledAttestation, controlledResolution.binding),
   controlledAttestation,
+);
+const syntheticAttestation = { ...controlledAttestation, migrationTip: PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP } as const;
+assert.deepEqual(
+  validateControlledHumanBackendAttestation(syntheticAttestation, controlledResolution.binding),
+  syntheticAttestation,
 );
 
 assert.equal(resolveControlledHumanBrowserBinding({

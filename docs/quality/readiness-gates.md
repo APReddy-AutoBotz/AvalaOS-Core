@@ -1,5 +1,14 @@
 # Readiness Gates
 
+PR #264 policy update (2026-09-24): AP approved
+`solo-owner-synthetic-v1` as the PR-specific replacement for independent
+three-human acceptance. The human gate remains `not_run`; the new
+`SYNTHETIC-ROLE-ACCEPTANCE` gate is also `not_run` until complete automated
+journeys, server proofs, exact preview/backend binding and independently
+verified cleanup pass on one final candidate. Merge remains NO-GO pending those
+results, required CI/preview checks and AP's final merge confirmation. This
+does not advance pilot, production or other readiness gates.
+
 Reference: `docs/00_SOURCE_OF_TRUTH.md`.
 
 No gate passes without evidence, verification, and AP acceptance where required. Historical evidence proves a gate state at the time it was written; current gate status is maintained here and in `docs/task-ledger.md`.

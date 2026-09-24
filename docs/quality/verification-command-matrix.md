@@ -1,5 +1,15 @@
 # Verification Command Matrix
 
+PR #264 solo-owner synthetic acceptance (approved 2026-09-24): use the focused
+`test:pr-c-synthetic-acceptance` feature gate for policy/session, observer-mode,
+workflow and runner changes. Preserve the human verifier's negative rejection of
+synthetic input. The complete eight-journey/fourteen-checkpoint campaign runs
+once against the final exact candidate and its approved synthetic preview;
+local or mocked results cannot pass `SYNTHETIC-ROLE-ACCEPTANCE`. Prior human
+commands below remain valid for the separate `CONTROLLED-HUMAN` path, which is
+`not_run` under this PR-specific waiver. Record exact commands and outcomes
+after execution; avoid repeating unrelated regressions during focused repair.
+
 ## One-time synthetic AI renewal — focused continuation
 
 AP prioritizes the actual Assess/Studio business walkthrough. While implementing

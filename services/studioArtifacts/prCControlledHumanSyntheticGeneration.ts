@@ -1,5 +1,10 @@
 import type { TenantContextProjection } from '../../types';
-import type { ControlledHumanBackendAttestation, ControlledHumanBrowserBinding } from '../runtimeMode';
+import {
+  PR_C_CONTROLLED_HUMAN_MIGRATION_TIP,
+  PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP,
+  type ControlledHumanBackendAttestation,
+  type ControlledHumanBrowserBinding,
+} from '../runtimeMode.ts';
 import type { ControlledHumanCommandAnchor } from '../supabaseClient';
 import type { StudioSourcePackageIdentity } from './client';
 import type { StudioCommandResponse } from './contracts';
@@ -124,7 +129,8 @@ export const buildPrCControlledHumanSyntheticGenerationCommand = (
     || attestation.exerciseDigest !== binding.exerciseDigest || attestation.targetFingerprint !== binding.targetFingerprint
     || attestation.attested !== true || attestation.contractVersion !== 'pr-c-controlled-human-attestation-1'
     || attestation.environmentClass !== 'hosted_nonproduction_pilot' || attestation.prNumber !== 264
-    || attestation.migrationTip !== '20260904120000' || !DIGEST.test(attestation.personaManifestDigest)
+    || ![PR_C_CONTROLLED_HUMAN_MIGRATION_TIP, PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP].includes(attestation.migrationTip)
+    || !DIGEST.test(attestation.personaManifestDigest)
     || !DIGEST.test(attestation.fixtureManifestDigest)
     || attestation.productionAuthorized !== false || attestation.customerDataAuthorized !== false
     || attestation.realProviderCallsAuthorized !== false) {

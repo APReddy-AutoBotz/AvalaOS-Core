@@ -913,6 +913,34 @@ export const validateControlledHumanObservedDuty = ({ humanRole, requestedSteps,
   return Object.freeze({humanRole,stepCount:serverSteps.length,machineStepKeys:Object.freeze(observedMachineKeys)});
 };
 
+// Shared server-proof validation for the explicitly separate synthetic mode.
+// It adapts only neutral observer fields; it never creates or validates a human
+// checkpoint, signature, participant, comment, or human evidence disposition.
+export const validateControlledExerciseObservedDuty = ({ executionKind, role, requestedSteps, serverSteps, proofPairs }) => {
+  assert(executionKind === 'synthetic', 'PR_C_SYNTHETIC_OBSERVED_DUTY_EXECUTION_KIND');
+  assert(Array.isArray(requestedSteps) && Array.isArray(serverSteps) && requestedSteps.length === serverSteps.length,
+    'PR_C_SYNTHETIC_OBSERVED_DUTY_COUNT');
+  const normalized = serverSteps.map((record, index) => {
+    assertExactKeys(record, ['checkpointId', 'stepId', 'personaKey', 'executionKind', 'applicationActorDigest', 'applicationSessionDigest',
+      'authenticatedPersonaDigest', 'capabilityDigest', 'scopeDigest', 'action', 'resourceKind', 'resourceFamily', 'machineAttemptDigest',
+      'bindingToken', 'safeBindingDigest', 'causalEventDigest', 'resourceDigest', 'expectedVersion', 'version', 'requestIdentityDigest',
+      'receiptDigest', 'auditDigest', 'observationKind', 'result', 'denialProofKind', 'denialCodeDigest', 'observedDeltas', 'safety',
+      'serverObservedAt', 'inspectionDigest'], [], `PR_C_SYNTHETIC_SERVER_STEP:${index}`);
+    assert(record.executionKind === 'synthetic', `PR_C_SYNTHETIC_SERVER_STEP:${index}_EXECUTION_KIND`);
+    assertDigest(record.applicationActorDigest, `PR_C_SYNTHETIC_SERVER_STEP:${index}_ACTOR`);
+    assertDigest(record.applicationSessionDigest, `PR_C_SYNTHETIC_SERVER_STEP:${index}_SESSION`);
+    const requested = requestedSteps[index];
+    assert(requested?.applicationActorDigest === record.applicationActorDigest
+      && requested?.applicationSessionDigest === record.applicationSessionDigest
+      && requested?.attemptDigest === record.machineAttemptDigest,
+    `PR_C_SYNTHETIC_SERVER_STEP:${index}_IDENTITY_BINDING`);
+    const { executionKind: _kind, applicationActorDigest: _actor, applicationSessionDigest: _session,
+      machineAttemptDigest, ...shared } = record;
+    return { ...shared, humanAttemptDigest: machineAttemptDigest };
+  });
+  return validateControlledHumanObservedDuty({ humanRole: role, requestedSteps, serverSteps: normalized, proofPairs });
+};
+
 const validateServerObserver = ({ preparation, quiesceRecord, humanRole, observations, serverObserver }) => {
   assertExactKeys(serverObserver, ['contractVersion', 'phase', 'status', 'environmentClass', 'releaseSha', 'reviewHeadSha', 'prNumber', 'deployId', 'deployOrigin', 'exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'personaManifestDigest', 'fixtureManifestDigest', 'migrationTip', 'productionAuthorized', 'customerDataAuthorized', 'realProviderCallsAuthorized', 'humanRole', 'requestDigest', 'observedAt', 'lifecycle', 'concurrencyVersion', 'operationEventSequence', 'operationEventDigest', 'immutableHistoryDigest', 'inspectionDigest', 'steps'], [], 'PR_C_CH_SERVER_OBSERVER');
   assert(serverObserver.contractVersion === CONTROLLER_SCHEMA_VERSION && serverObserver.phase === 'checkpoint-observe' && serverObserver.status === 'passed', 'PR_C_CH_SERVER_OBSERVER_STATUS');

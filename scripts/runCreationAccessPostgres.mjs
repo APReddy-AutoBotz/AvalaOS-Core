@@ -61,8 +61,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20260924052038');
-  assert.equal(migrations.length, 90);
+  assert.equal(approvedFullChainTip(migrations), '20260924113000');
+  assert.equal(migrations.length, 91);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -86,7 +86,8 @@ try {
   assert.equal(migrations[renewalIndex + 6], '20260923151115_studio_handoff_receipt_binding.sql');
   assert.equal(migrations[renewalIndex + 7], '20260923190853_pr_c_deferred_binding_authority.sql');
   assert.equal(migrations[renewalIndex + 8], '20260924052038_studio_independent_source_integration.sql');
-  assert.equal(renewalIndex, migrations.length - 9);
+  assert.equal(migrations[renewalIndex + 9], '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql');
+  assert.equal(renewalIndex, migrations.length - 10);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
@@ -117,7 +118,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20260924052038') => {
+  const assertFinalIdentity = async (db, expectedTip = '20260924113000') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {

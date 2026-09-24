@@ -20,6 +20,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20260923151115_studio_handoff_receipt_binding.sql',
   '20260923190853_pr_c_deferred_binding_authority.sql',
   '20260924052038_studio_independent_source_integration.sql',
+  '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -28,7 +29,7 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, and Studio independent-source successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, and solo-owner synthetic-acceptance successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners must validate the approved tail before deriving its

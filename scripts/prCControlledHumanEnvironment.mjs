@@ -10,12 +10,14 @@ import { createClient } from '@supabase/supabase-js';
 import { canonicalSupabasePublicOrigin } from '../services/supabasePublicCredential.mjs';
 import { CONTROLLED_HUMAN_CATALOG, CONTROLLED_HUMAN_EXECUTION_ORDER, CONTROLLED_HUMAN_SERVER_ACTIONS, HUMAN_DUTY_BY_PERSONA, validateControlledHumanProofPairs } from './prCControlledHumanEvidenceContract.mjs';
 import { createControlledHumanPostgresClientConfig, validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
+import { deriveSyntheticApplicationActorDigest, deriveSyntheticApplicationSessionDigest } from './prCSyntheticIdentity.mjs';
 
 const { Client } = pg;
 export const CONTROLLER_VERSION = 'pr-c-controlled-human-controller-1';
 export const ATTESTATION_VERSION = 'pr-c-controlled-human-attestation-1';
 export const FIXTURE_PATH = 'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json';
 export const EXPECTED_MIGRATION_TIP = '20260904120000';
+export const SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260924113000';
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -153,22 +155,35 @@ function expectedDutySteps(humanRole) {
       .map(step=>({...step,...stepObservationContract(step.stepId,step.negative),checkpointId,action:step.stepId,resourceKind:stepResourceKind(step.stepId)}));
   });
 }
-function exactObserverRequest(humanRole,steps) {
+function exactObserverRequest(executionKind,humanRole,steps) {
+  if(!['human','synthetic'].includes(executionKind))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_EXECUTION_KIND_REJECTED');
   const expected=expectedDutySteps(humanRole);
   if(!Array.isArray(steps)||steps.length!==expected.length)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
   let priorCompleted=-Infinity;
   return steps.map((record,index)=>{
-    exactKeys(record,['checkpointId','stepId','personaKey','startedAt','completedAt','attemptDigest','bindingToken'],'PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
+    exactKeys(record,executionKind==='synthetic'
+      ?['checkpointId','stepId','personaKey','startedAt','completedAt','attemptDigest','bindingToken','applicationActorDigest','applicationSessionDigest']
+      :['checkpointId','stepId','personaKey','startedAt','completedAt','attemptDigest','bindingToken'],'PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
     const wanted=expected[index];
     if(record.checkpointId!==wanted.checkpointId||record.stepId!==wanted.stepId||record.personaKey!==wanted.personaKey)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
     const started=timestampMs(record.startedAt);const completed=timestampMs(record.completedAt);
     if(!Number.isFinite(started)||!Number.isFinite(completed)||new Date(started).toISOString()!==record.startedAt||new Date(completed).toISOString()!==record.completedAt
       ||completed<=started||started<=priorCompleted||!DIGEST.test(record.attemptDigest))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_TIME_REJECTED');
+    if(executionKind==='synthetic'&&(!DIGEST.test(record.applicationActorDigest)||!DIGEST.test(record.applicationSessionDigest)))
+      fail('PR_C_CONTROLLED_HUMAN_OBSERVER_SYNTHETIC_IDENTITY_REJECTED');
     const requiresBinding=wanted.observationKind==='server_event'||wanted.observationKind==='negative_attempt';
     if(requiresBinding?!DIGEST.test(record.bindingToken):record.bindingToken!==null)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_BINDING_REJECTED');
     priorCompleted=completed;
     return {...record,negative:wanted.negative,action:wanted.action,resourceKind:wanted.resourceKind,observationKind:wanted.observationKind,expectedResult:wanted.expectedResult};
   });
+}
+export function validateControlledExerciseObserverRequest(observerRecord) {
+  const synthetic=observerRecord?.executionKind==='synthetic';
+  exactKeys(observerRecord,synthetic?['executionKind','syntheticRole','steps']:['humanRole','steps'],'PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
+  const executionKind=synthetic?'synthetic':'human';
+  const role=synthetic?observerRecord.syntheticRole:observerRecord.humanRole;
+  const steps=exactObserverRequest(executionKind,role,observerRecord.steps);
+  return Object.freeze({executionKind,role,steps});
 }
 function resourceFamilies(resourceKind) {
   if(resourceKind==='assess')return ['assess_process','assess_case','assess_studio_handoff','evidence_source','evidence_source_version','source_set','source_set_version','input_bundle','input_bundle_version','evidence_candidate','candidate_relationship_review','assess_conflict','assess_conflict_resolution'];
@@ -304,7 +319,8 @@ export function checkoutIdentity(cwd = process.cwd()) {
   return { head, dirty };
 }
 
-export function deriveControlledHumanExerciseBinding(values, fixtureState) {
+export function deriveControlledHumanExerciseBinding(values, fixtureState, migrationTip = EXPECTED_MIGRATION_TIP) {
+  if(![EXPECTED_MIGRATION_TIP,SYNTHETIC_ACCEPTANCE_MIGRATION_TIP].includes(migrationTip))fail('PR_C_CONTROLLED_HUMAN_MIGRATION_TIP_REJECTED');
   if (values.environmentClass !== 'hosted_nonproduction_pilot') fail('PR_C_CONTROLLED_HUMAN_ENVIRONMENT_REJECTED');
   if (values.prNumber !== 264) fail('PR_C_CONTROLLED_HUMAN_PR_REJECTED');
   if (!SHA.test(values.releaseSha ?? '') || values.reviewHeadSha !== values.releaseSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
@@ -326,13 +342,13 @@ export function deriveControlledHumanExerciseBinding(values, fixtureState) {
     publicTargetDigest: values.publicTargetDigest,
     personaManifestDigest: fixtureState.personaManifestDigest,
     fixtureManifestDigest: fixtureState.fixtureManifestDigest,
-    migrationTip: EXPECTED_MIGRATION_TIP,
+    migrationTip,
   });
   return Object.freeze({
     exerciseDigest,
     personaManifestDigest: fixtureState.personaManifestDigest,
     fixtureManifestDigest: fixtureState.fixtureManifestDigest,
-    migrationTip: EXPECTED_MIGRATION_TIP,
+    migrationTip,
   });
 }
 
@@ -354,7 +370,10 @@ export function deriveContext(env, fixtureState, checkout = checkoutIdentity(), 
   const expectedCheckoutSha=trustedRecoverySha??values.releaseSha;
   if(trustedRecoverySha!==undefined&&(!allowTrustedRecoveryCheckout||env.PR_C_CONTROLLED_HUMAN_RECOVERY_MODE!=='trusted-current-pr-head'||!SHA.test(trustedRecoverySha)))
     fail('PR_C_CONTROLLED_HUMAN_RECOVERY_CHECKOUT_REJECTED');
-  const exerciseBinding=deriveControlledHumanExerciseBinding(values,fixtureState);
+  const syntheticPolicy=env.PR_C_SYNTHETIC_ACCEPTANCE_POLICY;
+  if(syntheticPolicy!==undefined&&syntheticPolicy!=='solo-owner-synthetic-v1')fail('PR_C_CONTROLLED_HUMAN_SYNTHETIC_POLICY_REJECTED');
+  const migrationTip=syntheticPolicy==='solo-owner-synthetic-v1'?SYNTHETIC_ACCEPTANCE_MIGRATION_TIP:EXPECTED_MIGRATION_TIP;
+  const exerciseBinding=deriveControlledHumanExerciseBinding(values,fixtureState,migrationTip);
   if (checkout.head !== expectedCheckoutSha) fail('PR_C_CONTROLLED_HUMAN_SHA_REJECTED');
   if (checkout.dirty) fail('PR_C_CONTROLLED_HUMAN_DIRTY_CHECKOUT');
   if (!DEPLOY_ID.test(values.deployId ?? '')) fail('PR_C_CONTROLLED_HUMAN_DEPLOY_REJECTED');
@@ -386,7 +405,7 @@ export function assertTargetInventory(inventory, context, { allowSeeded = true, 
   if (inventory.actualTargetFingerprint !== context.targetFingerprint) fail('PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT_MISMATCH');
   const marker = inventory.marker;
   if (!marker || marker.product_key !== 'avalaos-core' || marker.environment_class !== 'hosted_nonproduction_pilot'
-    || marker.migration_tip !== EXPECTED_MIGRATION_TIP || marker.production_authorized !== false
+    || marker.migration_tip !== context.migrationTip || marker.production_authorized !== false
     || marker.customer_data_authorized !== false || marker.real_provider_calls_authorized !== false) fail('PR_C_CONTROLLED_HUMAN_MARKER_MISMATCH');
   if (Number(inventory.providerRows) !== 0) fail('PR_C_CONTROLLED_HUMAN_PROVIDER_STATE_REJECTED');
   if (Number(inventory.unsafeDeprovisionedRows) !== 0) fail('PR_C_CONTROLLED_HUMAN_PARTIAL_RESET_REJECTED');
@@ -397,7 +416,7 @@ export function assertTargetInventory(inventory, context, { allowSeeded = true, 
       || !DIGEST.test(prior.exercise_digest??'')||!SHA.test(prior.release_sha??'')||prior.review_head_sha!==prior.release_sha
       || !DEPLOY_ID.test(prior.deploy_id??'')||prior.deploy_origin!==PREVIEW_ORIGIN
       || prior.target_fingerprint!==context.targetFingerprint||!DIGEST.test(prior.persona_manifest_digest??'')||!DIGEST.test(prior.fixture_manifest_digest??'')
-      || prior.migration_tip!==EXPECTED_MIGRATION_TIP) fail('PR_C_CONTROLLED_HUMAN_HISTORY_REJECTED');
+      || ![EXPECTED_MIGRATION_TIP,SYNTHETIC_ACCEPTANCE_MIGRATION_TIP].includes(prior.migration_tip)) fail('PR_C_CONTROLLED_HUMAN_HISTORY_REJECTED');
     priorDigests.add(prior.exercise_digest);
   }
   const cycleCount=inventory.priorExercises.length+(inventory.exercise?1:0);
@@ -714,9 +733,12 @@ export class PostgresEnvironmentAdapter {
       fail('PR_C_CONTROLLED_HUMAN_INSPECTION_WITNESS_REJECTED');
     return {...safeState,postInspectionDigest,inspectionObservedAt:witness.inspection_observed_at,inspectionAttemptDigest:witness.inspection_attempt_digest};
   }
-  async observeDuty(context,humanRole,requestedSteps,requestDigest) {
-    const request=exactObserverRequest(humanRole,requestedSteps);
-    if(!DIGEST.test(requestDigest)||requestDigest!==sha256({humanRole,steps:requestedSteps}))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
+  async observeDuty(context,humanRole,requestedSteps,requestDigest,executionKind='human') {
+    const request=exactObserverRequest(executionKind,humanRole,requestedSteps);
+    const requestEnvelope=executionKind==='human'
+      ?{humanRole,steps:requestedSteps}
+      :{executionKind:'synthetic',syntheticRole:humanRole,steps:requestedSteps};
+    if(!DIGEST.test(requestDigest)||requestDigest!==sha256(requestEnvelope))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
     const db=this.client;await db.query('begin');
     try {
       const state=(await db.query(`select exercise.id,exercise.org_id,exercise.workspace_id,exercise.lifecycle,exercise.concurrency_version,exercise.quiesced_at,
@@ -729,14 +751,14 @@ export class PostgresEnvironmentAdapter {
       if(request.some(step=>step.stepId==='verify-history-readable-and-actions-absent'
         ? timestampMs(step.startedAt)<quiescedAt
         : timestampMs(step.completedAt)>=quiescedAt))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_QUIESCE_ORDER_REJECTED');
-      const existing=(await db.query(`select checkpoint_id,step_id,request_digest,safe_record,observed_at from public.pr_c_controlled_human_step_observations where exercise_id=$1 and human_role=$2 order by observed_at,checkpoint_id,step_id`,[state.id,humanRole])).rows;
+      const existing=(await db.query(`select checkpoint_id,step_id,request_digest,safe_record,observed_at from public.pr_c_controlled_human_step_observations where exercise_id=$1 and human_role=$2 and execution_kind=$3 order by observed_at,checkpoint_id,step_id`,[state.id,humanRole,executionKind])).rows;
       if(existing.length) {
         if(existing.length!==request.length||existing.some(row=>row.request_digest!==requestDigest))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REPLAY_REJECTED');
         const indexed=new Map(existing.map(row=>[`${row.checkpoint_id}\0${row.step_id}`,row]));
         const records=request.map(step=>indexed.get(`${step.checkpointId}\0${step.stepId}`));
         if(records.some(value=>!value))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REPLAY_REJECTED');
         const lifecycle=await this.lifecycleInspection(context);await db.query('commit');
-        return {humanRole,observedAt:new Date(Math.max(...records.map(row=>timestampMs(row.observed_at)))).toISOString(),
+        return {...(executionKind==='human'?{humanRole}:{executionKind,syntheticRole:humanRole}),observedAt:new Date(Math.max(...records.map(row=>timestampMs(row.observed_at)))).toISOString(),
           ...controlledHumanObserverLifecycleWitness(lifecycle),steps:records.map(row=>row.safe_record)};
       }
       const contracts=(await db.query(`select contract.checkpoint_id,contract.step_id,contract.persona_key,contract.negative,contract.action contract_action,contract.resource_kind,contract.observation_kind,contract.expected_result,contract.expected_actions,contract.capability_digest,
@@ -776,6 +798,8 @@ export class PostgresEnvironmentAdapter {
         from public.pr_c_controlled_human_action_anchors where exercise_id=$1 order by created_at,checkpoint_id,step_id`,[state.id])).rows;
       const actionBindings=(await db.query(`select anchor_id,checkpoint_id,step_id,persona_key,actor_id,observation_kind,action,result,denial_proof_kind,resource_family,resource_id,expected_version,observed_version,request_id,receipt_source,receipt_id,audit_id,intent_digest,denial_code_digest,binding_token,safe_record,created_at
         from public.pr_c_controlled_human_action_bindings where exercise_id=$1 order by created_at,checkpoint_id,step_id`,[state.id])).rows;
+      const syntheticSessions=executionKind==='synthetic'?(await db.query(`select persona_key,application_actor_digest,application_session_digest
+        from public.pr_c_synthetic_acceptance_session_bindings where exercise_id=$1 order by persona_key`,[state.id])).rows:[];
       const safetyRaw=(await db.query(`select
         (select count(*)::int from public.profiles profile join public.pr_c_controlled_human_persona_bindings binding on binding.auth_user_id=profile.id where binding.exercise_id=$1 and coalesce((profile.metadata->>'synthetic')::boolean,false)=false) customer_data_records,
         (select count(*)::int from public.profiles profile join public.pr_c_controlled_human_persona_bindings binding on binding.auth_user_id=profile.id where binding.exercise_id=$1 and profile.email not like 'prc264.%@example.invalid') external_users`,[state.id])).rows[0];
@@ -795,6 +819,11 @@ export class PostgresEnvironmentAdapter {
           ||contract.catalog_action!==(Array.isArray(contract.expected_actions)?contract.expected_actions[0]:null)))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_CATALOG_REJECTED');
         const actualCapabilityDigest=sha256(contract.capabilities);
         if(actualCapabilityDigest!==contract.capability_digest)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_AUTHORITY_REJECTED');
+        if(executionKind==='synthetic'){
+          const session=syntheticSessions.find(value=>value.persona_key===contract.persona_key);
+          if(!session||step.applicationActorDigest!==session.application_actor_digest||step.applicationSessionDigest!==session.application_session_digest)
+            fail('PR_C_CONTROLLED_HUMAN_OBSERVER_SYNTHETIC_IDENTITY_REJECTED');
+        }
         const start=timestampMs(step.startedAt);const completed=timestampMs(step.completedAt);
         const windowReceipts=receipts.filter(value=>value.actor_id===contract.auth_user_id&&timestampMs(value.event_at)>=start&&timestampMs(value.event_at)<=completed);
         const windowAudits=audits.filter(value=>value.actor_id===contract.auth_user_id&&timestampMs(value.created_at)>=start&&timestampMs(value.created_at)<=completed);
@@ -944,19 +973,52 @@ export class PostgresEnvironmentAdapter {
         const causalEventDigest=causalEvent?sha256(causalEvent):absenceWitness?sha256(absenceWitness):sha256('not-applicable');
         if(causalEventDigest!==sha256('not-applicable')&&usedCausalEvents.has(causalEventDigest))fail('PR_C_CONTROLLED_HUMAN_OBSERVER_EVENT_REUSE_REJECTED');
         if(causalEventDigest!==sha256('not-applicable'))usedCausalEvents.add(causalEventDigest);
-        const base={checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,
+        const attemptField=executionKind==='human'?{humanAttemptDigest:step.attemptDigest}:{machineAttemptDigest:step.attemptDigest};
+        const syntheticIdentity=executionKind==='synthetic'?{executionKind,applicationActorDigest:step.applicationActorDigest,applicationSessionDigest:step.applicationSessionDigest}:{};
+        const base={checkpointId:step.checkpointId,stepId:step.stepId,personaKey:step.personaKey,...syntheticIdentity,
           authenticatedPersonaDigest,capabilityDigest:actualCapabilityDigest,scopeDigest,
-          action:exactBinding?.action??contract.contract_action,resourceKind:contract.resource_kind,resourceFamily,observationKind:observedKind,humanAttemptDigest:step.attemptDigest,bindingToken,safeBindingDigest:exactBinding?sha256(exactBinding.safe_record):sha256({safeBinding:'not_applicable'}),causalEventDigest,resourceDigest,expectedVersion:exactBinding?Number(exactBinding.expected_version):version,version,
+          action:exactBinding?.action??contract.contract_action,resourceKind:contract.resource_kind,resourceFamily,observationKind:observedKind,...attemptField,bindingToken,safeBindingDigest:exactBinding?sha256(exactBinding.safe_record):sha256({safeBinding:'not_applicable'}),causalEventDigest,resourceDigest,expectedVersion:exactBinding?Number(exactBinding.expected_version):version,version,
           requestIdentityDigest:exactBinding?.safe_record.requestDigest??sha256('not-applicable'),receiptDigest:exactBinding?.safe_record.receiptDigest??sha256('not-applicable'),
           auditDigest:exactBinding?.safe_record.auditDigest??sha256('not-applicable'),result:observedResult,denialProofKind:denialProofKind??'not_applicable',
           denialCodeDigest:exactBinding?.safe_record.denialCodeDigest??sha256('absence'),observedDeltas,safety,serverObservedAt};
         const record={...base,inspectionDigest:sha256(base)};records.push(record);
-        await db.query(`insert into public.pr_c_controlled_human_step_observations(exercise_id,checkpoint_id,step_id,persona_key,human_role,request_digest,started_at,completed_at,inspection_digest,safe_record,observed_at)
-          values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)`,[state.id,step.checkpointId,step.stepId,step.personaKey,humanRole,requestDigest,step.startedAt,step.completedAt,record.inspectionDigest,JSON.stringify(record),state.observed_at]);
+        await db.query(`insert into public.pr_c_controlled_human_step_observations(exercise_id,checkpoint_id,step_id,persona_key,human_role,execution_kind,request_digest,started_at,completed_at,inspection_digest,safe_record,observed_at)
+          values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12)`,[state.id,step.checkpointId,step.stepId,step.personaKey,humanRole,executionKind,requestDigest,step.startedAt,step.completedAt,record.inspectionDigest,JSON.stringify(record),state.observed_at]);
       }
       await db.query('commit');
-      return {humanRole,observedAt:new Date(state.observed_at).toISOString(),...controlledHumanObserverLifecycleWitness(lifecycle),steps:records};
+      return {...(executionKind==='human'?{humanRole}:{executionKind,syntheticRole:humanRole}),observedAt:new Date(state.observed_at).toISOString(),...controlledHumanObserverLifecycleWitness(lifecycle),steps:records};
     } catch(error) {await db.query('rollback');throw error}
+  }
+
+  async bindSyntheticSessions(context,request,requestDigest) {
+    if(request?.executionKind!=='synthetic'||!Array.isArray(request.personas)||request.personas.length!==12||!DIGEST.test(requestDigest)
+      ||requestDigest!==sha256(request))fail('PR_C_SYNTHETIC_SESSION_BINDING_REJECTED');
+    const db=this.client;await db.query('begin');
+    try {
+      const exercise=(await db.query(`select id,lifecycle from public.pr_c_controlled_human_exercises where exercise_digest=$1 for share`,[context.exerciseDigest])).rows[0];
+      if(!exercise||exercise.lifecycle!=='active')fail('PR_C_SYNTHETIC_SESSION_BINDING_STATE_REJECTED');
+      const existing=(await db.query(`select persona_key,application_actor_digest,application_session_digest,request_digest from public.pr_c_synthetic_acceptance_session_bindings where exercise_id=$1 order by persona_key`,[exercise.id])).rows;
+      if(existing.length){
+        if(existing.length!==12||existing.some(record=>record.request_digest!==requestDigest))fail('PR_C_SYNTHETIC_SESSION_BINDING_REPLAY_REJECTED');
+        await db.query('commit');return {executionKind:'synthetic',sessionBindingCount:12,sessionBindingDigest:sha256(existing.map(record=>({personaKey:record.persona_key,applicationActorDigest:record.application_actor_digest,applicationSessionDigest:record.application_session_digest})))};
+      }
+      const rows=(await db.query(`select binding.persona_key,binding.auth_user_id,session.id session_id
+        from public.pr_c_controlled_human_persona_bindings binding join auth.sessions session on session.user_id=binding.auth_user_id
+        where binding.exercise_id=$1 order by binding.persona_key,session.id`,[exercise.id])).rows;
+      const seenActors=new Set(),seenSessions=new Set();
+      for(const persona of request.personas){
+        exactKeys(persona,['personaKey','applicationActorDigest','applicationSessionDigest'],'PR_C_SYNTHETIC_SESSION_BINDING_REJECTED');
+        const candidates=rows.filter(row=>row.persona_key===persona.personaKey);
+        if(!candidates.length)fail('PR_C_SYNTHETIC_SESSION_BINDING_REJECTED');
+        const actorDigests=[...new Set(candidates.map(row=>deriveSyntheticApplicationActorDigest({exerciseDigest:context.exerciseDigest,personaKey:row.persona_key,authUserId:row.auth_user_id})))];
+        const sessionDigests=candidates.map(row=>deriveSyntheticApplicationSessionDigest({exerciseDigest:context.exerciseDigest,personaKey:row.persona_key,sessionId:row.session_id}));
+        if(actorDigests.length!==1||persona.applicationActorDigest!==actorDigests[0]||!sessionDigests.includes(persona.applicationSessionDigest)
+          ||seenActors.has(persona.applicationActorDigest)||seenSessions.has(persona.applicationSessionDigest))fail('PR_C_SYNTHETIC_SESSION_BINDING_REJECTED');
+        seenActors.add(persona.applicationActorDigest);seenSessions.add(persona.applicationSessionDigest);
+        await db.query(`insert into public.pr_c_synthetic_acceptance_session_bindings(exercise_id,persona_key,application_actor_digest,application_session_digest,request_digest) values($1,$2,$3,$4,$5)`,[exercise.id,persona.personaKey,persona.applicationActorDigest,persona.applicationSessionDigest,requestDigest]);
+      }
+      await db.query('commit');return {executionKind:'synthetic',sessionBindingCount:12,sessionBindingDigest:sha256(request.personas)};
+    }catch(error){await db.query('rollback');throw error}
   }
 }
 
@@ -1224,13 +1286,19 @@ export async function postDeprovisionVerify(context,database) {
   const inventory=await database.inspect(context);assertTargetInventory(inventory,context);
   return safeResult('post-deprovision-verify','passed',context,{...assertDeprovisionedInspection(await database.lifecycleInspection(context)),replayed:true});
 }
-export async function checkpointObserve(context,database,humanRecord) {
-  exactKeys(humanRecord,['humanRole','steps'],'PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED');
-  exactObserverRequest(humanRecord.humanRole,humanRecord.steps);
+export async function checkpointObserve(context,database,observerRecord) {
+  const {executionKind,role}=validateControlledExerciseObserverRequest(observerRecord);
   const inventory=await database.inspect(context);assertTargetInventory(inventory,context);
-  const requestDigest=sha256(humanRecord);const observed=await database.observeDuty(context,humanRecord.humanRole,humanRecord.steps,requestDigest);
+  const requestDigest=sha256(observerRecord);const observed=await database.observeDuty(context,role,observerRecord.steps,requestDigest,executionKind);
   const inspectionDigest=sha256({requestDigest,observed});
-  return safeResult('checkpoint-observe','passed',context,{humanRole:humanRecord.humanRole,requestDigest,...observed,inspectionDigest});
+  return safeResult('checkpoint-observe','passed',context,{requestDigest,...observed,inspectionDigest});
+}
+export async function bindSyntheticSessions(context,database,request) {
+  exactKeys(request,['executionKind','personas'],'PR_C_SYNTHETIC_SESSION_BINDING_REJECTED');
+  if(request.executionKind!=='synthetic'||!Array.isArray(request.personas))fail('PR_C_SYNTHETIC_SESSION_BINDING_REJECTED');
+  const inventory=await database.inspect(context);assertTargetInventory(inventory,context);
+  const requestDigest=sha256(request);const result=await database.bindSyntheticSessions(context,request,requestDigest);
+  return safeResult('synthetic-session-bind','passed',context,{requestDigest,...result});
 }
 export async function deprovision(context, database, expectedVersion, admin, options={}) {
   const inventory=await database.inspect(context); assertTargetInventory(inventory,context);
@@ -1297,7 +1365,7 @@ async function loadAuthority(args,expectedPhases,context) {
   return {authority,authorityDigest:sha256(authority)};
 }
 async function main() {
-  const [phase,...args]=process.argv.slice(2); if (!['preflight','plan','apply','verify','quiesce','checkpoint-observe','deprovision','recover-reset','post-deprovision-verify'].includes(phase)) fail('usage: prCControlledHumanEnvironment.mjs <preflight|plan|apply|verify|quiesce|checkpoint-observe|deprovision|recover-reset|post-deprovision-verify> [--request path] [--output path]');
+  const [phase,...args]=process.argv.slice(2); if (!['preflight','plan','apply','verify','synthetic-session-bind','quiesce','checkpoint-observe','deprovision','recover-reset','post-deprovision-verify'].includes(phase)) fail('usage: prCControlledHumanEnvironment.mjs <preflight|plan|apply|verify|synthetic-session-bind|quiesce|checkpoint-observe|deprovision|recover-reset|post-deprovision-verify> [--request path] [--output path]');
   const outputIndex=args.indexOf('--output'); const outputPath=outputIndex>=0?args[outputIndex+1]:undefined;
   if (outputIndex>=0&&!outputPath) fail('PR_C_CONTROLLED_HUMAN_OUTPUT_REQUIRED');
   const fixtureState=await loadFixture(); const context=deriveContext(process.env,fixtureState,checkoutIdentity(),{allowTrustedRecoveryCheckout:phase==='recover-reset'});
@@ -1312,6 +1380,11 @@ async function main() {
       const requestIndex=args.indexOf('--request');const requestPath=requestIndex>=0?args[requestIndex+1]:undefined;if(!requestPath)fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REQUIRED');
       let request;try{request=JSON.parse(await readFile(requestPath,'utf8'))}catch{fail('PR_C_CONTROLLED_HUMAN_OBSERVER_REQUEST_REJECTED')}
       return emit(await checkpointObserve(context,database,request),outputPath);
+    }
+    if (phase==='synthetic-session-bind') {
+      const requestIndex=args.indexOf('--request');const requestPath=requestIndex>=0?args[requestIndex+1]:undefined;if(!requestPath)fail('PR_C_SYNTHETIC_SESSION_BINDING_REQUEST_REQUIRED');
+      let request;try{request=JSON.parse(await readFile(requestPath,'utf8'))}catch{fail('PR_C_SYNTHETIC_SESSION_BINDING_REJECTED')}
+      return emit(await bindSyntheticSessions(context,database,request),outputPath);
     }
     if(phase==='recover-reset') {
       const reasonIndex=args.indexOf('--reason');const reason=reasonIndex>=0?args[reasonIndex+1]:undefined;

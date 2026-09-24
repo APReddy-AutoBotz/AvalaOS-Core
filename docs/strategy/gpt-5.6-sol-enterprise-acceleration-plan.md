@@ -1,5 +1,18 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## PR #264 solo-owner acceptance continuation (2026-09-24)
+
+AP approved `docs/planning/solo-developer-synthetic-acceptance-plan.md` on the
+existing Draft PR #264 branch. Implement a separate, versioned synthetic
+acceptance result bound to the exact candidate, preview, backend and exercise;
+preserve the three-human verifier and report `CONTROLLED-HUMAN` as `not_run`.
+Use distinct application actors and server-observed decisions, complete all
+eight journeys and fourteen checkpoints, verify bounded deprovision, then bind
+the final CI and preview results. During repair, run focused feature tests;
+run the complete campaign once for the final candidate. The earlier human
+prerequisite is waived for this PR only, while final merge still requires AP
+confirmation. No real-provider renewal or production action follows.
+
 AP subsequently approved the local AI correction's same-branch commit/push,
 exact-head CI and separate USD 0/month Mumbai synthetic AI project. Follow
 `docs/planning/assess-studio-ai-output-correction.md` for isolation, aggregate
@@ -69,7 +82,7 @@ Governed Delivery and Monitor PR C is the active substantial implementation boun
 
 The corrective continuation in PR #264 is merge-blocked until the production UI can recover a reviewer-blocked package from a completely loaded and exactly bound descendant set, only materially changed selected descendants can be authored, and the new package version traverses fresh item decisions, review, and approval before Monitor changes. The same candidate must synchronously isolate all sensitive/draft Enterprise Intelligence browser state across organization/workspace/actor changes and bind every evidence assertion, `not_run` record, and command result to the canonical workflow path, run ID, attempt, base, exact head, runtime context, and artifact path derived independently from the execution environment. Final-review hardening additionally requires deletion/rename-aware evidence scope, currently authorized exact committed replay before mutable runtime gates but after authority checks, UUID-semantic equality across requested/outer/nested Delivery and Monitor projections, unique novel recovery-result item-version identities across the complete predecessor set, and production client adapters that remove only the tenant transport envelope before strict action-selector validation. Stable repository documents define this contract; run-specific acceptance is published through the immutable CI artifact and the existing PR description after commit.
 
-AP authority added on 2026-09-04 is limited to controlled-human preparation and execution for PR #264 on the exact Deploy Preview plus one dedicated synthetic `hosted_nonproduction_pilot` backend. It does not authorize production, AvalaOS.com/custom domains, customer/external-user data, real provider keys/calls, broad reset, promotion, readiness, or merge. The preview client must bind the exact head/deploy/exercise/backend and migration tip `20260904120000` to a server attestation before authentication or server projection; the permanent stable-site production-context guard remains separately fail closed and never activates controlled-human variables. The human gate remains `not_run` until three distinct humans finish every signed checkpoint, bounded deprovision is verified, and all exact-head gates pass. Final merge still requires a new AP confirmation.
+AP authority added on 2026-09-04 is limited to controlled-human preparation and execution for PR #264 on the exact Deploy Preview plus one dedicated synthetic `hosted_nonproduction_pilot` backend. It does not authorize production, AvalaOS.com/custom domains, customer/external-user data, real provider keys/calls, broad reset, promotion, readiness, or merge. The preview client must bind the exact head/deploy/exercise/backend and migration tip `20260904120000` to a server attestation before authentication or server projection; the permanent stable-site production-context guard remains separately fail closed and never activates controlled-human variables. The earlier human path remains valid only for actual distinct-human evidence. Under the 2026-09-24 PR-specific policy above, the human gate stays `not_run` and the separate synthetic campaign, bounded deprovision and exact-head gates must pass. Final merge still requires a new AP confirmation.
 
 ## Studio PR B accepted boundary
 

@@ -1,5 +1,19 @@
 # AvalaOS Core Source Of Truth
 
+## PR #264 solo-owner synthetic acceptance authority (2026-09-24)
+
+AP approved the PR-specific `solo-owner-synthetic-v1` plan in
+`docs/planning/solo-developer-synthetic-acceptance-plan.md`. A verified automated
+campaign using distinct synthetic application actors may replace the earlier
+three-independent-human merge prerequisite for PR #264 only. The original
+`CONTROLLED-HUMAN` result remains `not_run`; machine evidence must have its own
+`SYNTHETIC-ROLE-ACCEPTANCE` result and cannot claim human attestation. This
+approval permits the bounded implementation and synthetic exercise on the exact
+PR preview and approved synthetic backend. The new campaign is `not_run`, and
+merge remains NO-GO until its complete exact-candidate evidence, cleanup, CI,
+preview, and final AP merge confirmation are available. Real-provider spending,
+production, and broader readiness are outside this approval.
+
 ## Studio independent-source correction candidate (2026-09-24)
 
 The approved synthetic business walkthrough reached a joined Assess→Govern→Studio
@@ -288,7 +302,7 @@ and coverage commands passed at one frozen source fingerprint; final independent
 reviews found no confirmed blocker. New-head CI verification remains a separate
 gate and will repeat the full creation-access and retained PostgreSQL suites.
 Production, customer data, real providers, AvalaOS.com and merge remain
-outside this approval. The original three-human acceptance gate is unchanged.
+outside this approval. That earlier decision did not change the then-current human gate; the 2026-09-24 PR-specific policy above now replaces it for PR #264.
 The exploratory target must retain zero provider configurations and real keys;
 new role capabilities do not prove configured or provider-free generation.
 
@@ -317,7 +331,7 @@ PR C is explicitly authorized on branch `controller/governed-delivery-monitor-pr
 
 PR #264 is a corrective continuation of this same substantial boundary, not a new branch or PR. The current candidate implements four source corrections together: a production blocked-package revision path that binds a complete current descendant manifest while authoring only explicitly selected material changes and then requires fresh review/approval; synchronous clearing and async fencing of every Enterprise Intelligence secret, file, selector, draft, preview, pending action, and error across organization/workspace/actor changes; fail-closed per-record evidence identity derived from the actual workflow/local execution context; and reconciliation of this active authority set plus the external PR description. Successive fresh reviews additionally require and the current source implements five fail-closed hardenings: governed evidence rejects base-tracked deletions and renames instead of omitting them from provenance; currently authorized exact committed receipt replay remains recoverable after mutable feature or read-only controls change while new effects remain gated; outer, requested, and nested Delivery/Monitor projection scopes must match under UUID semantics; a blocked-recovery result must contain unique new item-version identities that reuse no predecessor item-version identity from the complete descendant set; and every production Delivery/Monitor client adapter isolates the organization/workspace transport envelope from the strict action selector while preserving rejection of any other unrecognized claim. Tracked files define the stable contract and canonical artifact pointer only; they do not embed a mutable final-run hash that would invalidate their own provenance. Exact candidate/run/attempt/artifact/preview results belong in the immutable CI artifact and PR #264 description after the source is committed. Merge remains NO-GO until the full current-source matrix, fresh final read-only reviews, exact committed-head GitHub Actions, and same-head Netlify preview all pass. `PERF-003` and `PERF-004` remain `not_run` because no AP-approved numeric budgets exist.
 
-On 2026-09-04 the AP narrowly authorized preparation and execution of PR #264 controlled-human testing only on its exact Netlify Deploy Preview and one dedicated synthetic `hosted_nonproduction_pilot` backend. The preview must fail closed unless its exact head, deployment, exercise, backend fingerprint, and controlled-human migration tip `20260904120000` are server-attested before authentication; browser state and response headers are not authority. The permanent Netlify production-context gate remains limited to the pre-existing exact authorized stable non-production pilot tuple and does not enable controlled-human mode. AvalaOS.com/custom domains, production, customer or external-user data, real provider keys/calls, broad reset, merge, promotion, and readiness or certification claims remain prohibited. `CONTROLLED-HUMAN` remains `not_run` until three distinct humans complete every signed checkpoint on the exact head, bounded deprovision succeeds, and all exact-head checks pass; only then may the AP be asked for final merge confirmation.
+On 2026-09-04 the AP narrowly authorized preparation and execution of PR #264 controlled-human testing only on its exact Netlify Deploy Preview and one dedicated synthetic `hosted_nonproduction_pilot` backend. The preview must fail closed unless its exact head, deployment, exercise, backend fingerprint, and controlled-human migration tip `20260904120000` are server-attested before authentication; browser state and response headers are not authority. The permanent Netlify production-context gate remains limited to the pre-existing exact authorized stable non-production pilot tuple and does not enable controlled-human mode. AvalaOS.com/custom domains, production, customer or external-user data, real provider keys/calls, broad reset, merge, promotion, and readiness or certification claims remain prohibited. The earlier human path remains valid only for actual distinct-human evidence. Under the 2026-09-24 PR-specific policy, `CONTROLLED-HUMAN` remains `not_run`; the separate complete synthetic campaign, bounded deprovision, exact-head checks, and AP final merge confirmation govern PR #264.
 
 ## Workstream 6 pilot operations candidate
 

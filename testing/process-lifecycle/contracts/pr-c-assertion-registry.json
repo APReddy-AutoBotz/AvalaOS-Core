@@ -477,7 +477,7 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "5ad79172589c9b8e73fd21c8e8de5fe7ff6cbcf5ab5eef4fb1147fa8950d4efe"
+      "sha256": "7a9a8d878070aa8c49e184af7f974273715fd9db9a0e4a8739edddb81d950db4"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
@@ -529,7 +529,7 @@
     },
     "studio-source-postgres": {
       "path": "scripts/testStudioSourceIntegrationPostgres.mjs",
-      "sha256": "619f70f2473e356d058254d1a07cc5ba06df31bcfa6551605d483a7df8ad8103"
+      "sha256": "a0684f7c025601c3f150709b19e1a49eebb1bbceef01075ebc8a77ddae406ca7"
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
@@ -2181,7 +2181,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260924052038",
+        "migrationTip": "20260924113000",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -2257,7 +2257,7 @@
         },
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
-        "migrationTip": "20260924052038",
+        "migrationTip": "20260924113000",
         "roleBoundary": {
           "executionRole": "service_role",
           "directSourceSelect": false,
@@ -9175,7 +9175,18 @@
       "owner": "boundary",
       "testName": "Controlled human walkthrough",
       "command": null,
-      "reason": "The AP authorized a dedicated synthetic PR #264 preview exercise, but automation and source contracts cannot substitute for an actually completed, signed three-distinct-human session; until that exact session verifies after deprovision, this boundary remains not_run.",
+      "reason": "AP approved a separate PR #264 synthetic acceptance policy in place of the three-human merge prerequisite. No three-human session executed, so this separate human result remains not_run and cannot be inferred from machine evidence.",
+      "applicableExecutionClassifications": [
+        "github_candidate",
+        "local_candidate"
+      ]
+    },
+    {
+      "testId": "SYNTHETIC-ROLE-ACCEPTANCE",
+      "owner": "boundary",
+      "testName": "Solo-owner synthetic role acceptance",
+      "command": null,
+      "reason": "The canonical credential-free CI registry does not run the protected PR #264 preview exercise. Only a separately verified complete policy-bound synthetic campaign on the exact head can pass this result.",
       "applicableExecutionClassifications": [
         "github_candidate",
         "local_candidate"
