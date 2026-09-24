@@ -27,6 +27,12 @@
     },
     {
       "pattern": "localStorage",
+      "pathPrefix": "scripts/runPrCSyntheticAcceptanceBrowser.mjs",
+      "reason": "test/control documentation",
+      "futureAction": "Keep browser-storage inspection confined to synthetic test-session identity binding and sign-out verification; never use it as server authorization."
+    },
+    {
+      "pattern": "localStorage",
       "pathPrefix": "tests/browser/pr1g.spec.ts",
       "reason": "test/control documentation",
       "futureAction": "Keep deterministic production-App PR 1G browser fixture setup confined to browser tests; do not treat it as runtime authority."
