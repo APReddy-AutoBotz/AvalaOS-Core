@@ -14,6 +14,9 @@ export const SYNTHETIC_PRIOR_VERSION = '20260924052038';
 export const SYNTHETIC_PRIOR_NAME = 'studio_independent_source_integration';
 export const SYNTHETIC_CHAIN_START_VERSION = '20260904120000';
 export const SYNTHETIC_CHAIN_START_NAME = 'pr_c_controlled_human_exercise_authority';
+export const SYNTHETIC_INTERRUPTED_VERSION = '20260916083814';
+export const SYNTHETIC_INTERRUPTED_NAME = 'assess_supporting_document_mapping';
+export const SYNTHETIC_INTERRUPTED_MARKER_TIP = '20260916003000';
 
 const fail = code => { throw new Error(code); };
 
@@ -49,6 +52,15 @@ export function classifySyntheticMigrationChain(state, remote, local, targetFing
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_HISTORY_REJECTED');
   if (remote.length === local.length && classifySyntheticMigrationState(state) === 'current')
     return { pendingMigrationCount: 0, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
+  // The first protected attempt committed exactly four canonical migrations
+  // before the next migration rejected retained deprovisioned history.
+  if (remote.length === boundary + 5 && remote.at(-1)?.version === SYNTHETIC_INTERRUPTED_VERSION
+    && remote.at(-1)?.name === SYNTHETIC_INTERRUPTED_NAME
+    && state.marker.migration_tip === SYNTHETIC_INTERRUPTED_MARKER_TIP
+    && state.latestVersion === SYNTHETIC_INTERRUPTED_VERSION && state.latestName === SYNTHETIC_INTERRUPTED_NAME
+    && state.executionKindColumn === false && state.sessionBindingTable === false
+    && state.retainedAuthRecoveryAccepted === false)
+    return { pendingMigrationCount: local.length - remote.length, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
   if (remote.length !== boundary + 1 || state.marker.migration_tip !== SYNTHETIC_CHAIN_START_VERSION
     || state.latestVersion !== SYNTHETIC_CHAIN_START_VERSION || state.latestName !== SYNTHETIC_CHAIN_START_NAME
     || state.executionKindColumn !== false || state.sessionBindingTable !== false || state.retainedAuthRecoveryAccepted !== false)

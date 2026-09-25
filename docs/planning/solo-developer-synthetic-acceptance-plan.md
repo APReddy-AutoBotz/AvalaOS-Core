@@ -139,11 +139,15 @@ repurpose a provider-free marker, or authorize a new project.
   bypass, production UI mode, or automatic production approval is part of this work.
 
 The dedicated PR #264 backend resumed with the original controlled-human migration
-tip. Its 72 applied migrations exactly match the repository prefix, leaving 19
-canonical files through the synthetic acceptance migration. Before the protected
-acceptance job advances that schema, it must prove the exact target fingerprint,
-provider-free marker, no live exercise, and exact migration prefix; the Supabase
-CLI then records the repository versions in order. Any partial migration failure
+tip and 72 applied migrations. The first protected synthetic attempt applied four
+more canonical files, then stopped at an empty-history precondition. The target
+now has 76 applied migrations and 15 pending through synthetic acceptance. Before
+resuming, the job must prove the exact target fingerprint, provider-free marker,
+no live exercise, and this exact canonical prefix. The three pending migration
+history gates admit only the one prior deprovisioned exercise with its exact
+completed apply, quiesce, and deprovision receipts plus the prepared abort receipt;
+they still reject active, unbound, or differently staged history. The Supabase CLI
+records the remaining repository versions in order. A further partial failure
 stops the job for inspection, without resetting or repurposing the backend.
 The older exercise has been deprovisioned with twelve banned synthetic accounts,
 zero sessions and active memberships, and retained history. Its abort receipt

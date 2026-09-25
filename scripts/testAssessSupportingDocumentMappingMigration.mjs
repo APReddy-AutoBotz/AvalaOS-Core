@@ -53,7 +53,10 @@ check('MAP-MIG-030-xlsx-retains-parser-version',xlsxSql.includes("NEW.parser_ver
 check('MAP-MIG-031-xlsx-exact-predecessor',xlsxContract.predecessorTip==='20260916151050'&&xlsxContract.currentTip==='20260916181916',XLSX_INGESTION_MIGRATION_PATH);
 check('MAP-MIG-032-xlsx-trigger-identity',xlsxSql.includes('trigger_row.tgtype = 7')&&xlsxSql.includes('trigger_row.tgfoid = source_function_oid'),XLSX_INGESTION_MIGRATION_PATH);
 check('MAP-MIG-033-xlsx-function-identity',xlsxSql.includes('replacement_function_oid IS DISTINCT FROM source_function_oid')&&xlsxSql.includes('replacement_function_acl IS DISTINCT FROM old_function_acl'),XLSX_INGESTION_MIGRATION_PATH);
-check('MAP-MIG-034-xlsx-history-gate',xlsxSql.includes('exercise_count <> 0 OR recovery_count <> 0'),XLSX_INGESTION_MIGRATION_PATH);
+check('MAP-MIG-034-xlsx-history-gate',xlsxSql.includes('exercise_count <> 0 OR recovery_count <> 0')
+  && xlsxSql.includes('exercise_count <> 1 OR recovery_count <> 4')
+  && xlsxSql.includes("historical.lifecycle = 'deprovisioned'")
+  && xlsxSql.includes("recovery.operation = 'abort' AND recovery.state = 'prepared'"),XLSX_INGESTION_MIGRATION_PATH);
 check('MAP-MIG-035-xlsx-schema-contracts',xlsxSql.includes("constraint_row.conname = 'enterprise_evidence_sources_mime_type_check'")&&xlsxSql.includes("constraint_row.conname = 'enterprise_evidence_source_versions_parser_kind_check'"),XLSX_INGESTION_MIGRATION_PATH);
 check('MAP-MIG-036-xlsx-retained-formats',xlsxContract.retainedParserCaseCount===9,XLSX_INGESTION_MIGRATION_PATH);
 check('MAP-MIG-037-xlsx-assess-document-classification',xlsxSql.includes("CREATE OR REPLACE FUNCTION public.enterprise_assess_v2_source_type(")&&xlsxSql.includes("RETURN 'document'"),XLSX_INGESTION_MIGRATION_PATH);

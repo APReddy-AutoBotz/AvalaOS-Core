@@ -167,6 +167,11 @@ test('mapping identity convergence is exact, atomic, and rejects adversarial con
     'GET DIAGNOSTICS changed_count = ROW_COUNT',
     'changed_count <> 1',
     'exercise_count <> 0 OR recovery_count <> 0',
+    'exercise_count <> 1 OR recovery_count <> 4',
+    "historical.lifecycle = 'deprovisioned'",
+    'cardinality(recovery.auth_user_ids) = 12',
+    "recovery.operation IN ('apply','quiesce','deprovision') AND recovery.state = 'completed'",
+    "recovery.operation = 'abort' AND recovery.state = 'prepared'",
     "to_regprocedure('public.enterprise_commit_assess_document_mapping_preview_v1(uuid,uuid,text,uuid,bigint,uuid,uuid,jsonb,uuid,uuid,uuid,bigint,uuid,uuid,bigint)')",
   ];
   for (const marker of required) assert.ok(sql.includes(marker), `missing identity contract: ${marker}`);

@@ -81,7 +81,29 @@ BEGIN
   SELECT count(*) INTO recovery_count
   FROM public.pr_c_controlled_human_recovery_authorities;
   IF exercise_count <> 0 OR recovery_count <> 0 THEN
-    RAISE EXCEPTION 'ASSESS_MAPPING_IDENTITY_PRECONDITION_FAILED';
+    -- The prior controlled exercise may be retained only after its exact
+    -- deprovision receipt. Preserve that immutable history through the chain.
+    IF exercise_count <> 1 OR recovery_count <> 4 OR NOT EXISTS (
+      SELECT 1 FROM public.pr_c_controlled_human_exercises historical
+      WHERE historical.lifecycle = 'deprovisioned'
+        AND historical.migration_tip = '20260904120000'
+        AND historical.synthetic_only
+        AND NOT historical.production_authorized
+        AND NOT historical.customer_data_authorized
+        AND NOT historical.real_provider_calls_authorized
+        AND (
+          SELECT count(*) FROM public.pr_c_controlled_human_recovery_authorities recovery
+          WHERE recovery.exercise_digest = historical.exercise_digest
+            AND recovery.release_sha = historical.release_sha
+            AND recovery.deploy_id = historical.deploy_id
+            AND recovery.target_fingerprint = historical.target_fingerprint
+            AND (recovery.operation <> 'apply' OR cardinality(recovery.auth_user_ids) = 12)
+            AND ((recovery.operation IN ('apply','quiesce','deprovision') AND recovery.state = 'completed')
+              OR (recovery.operation = 'abort' AND recovery.state = 'prepared'))
+        ) = 4
+    ) THEN
+      RAISE EXCEPTION 'ASSESS_MAPPING_IDENTITY_PRECONDITION_FAILED';
+    END IF;
   END IF;
 
   ALTER TABLE public.hosted_pilot_environment_identity

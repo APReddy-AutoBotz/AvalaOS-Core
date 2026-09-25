@@ -56,7 +56,29 @@ BEGIN
   SELECT count(*) INTO exercise_count FROM public.pr_c_controlled_human_exercises;
   SELECT count(*) INTO recovery_count FROM public.pr_c_controlled_human_recovery_authorities;
   IF exercise_count <> 0 OR recovery_count <> 0 THEN
-    RAISE EXCEPTION 'PROJECTION_RPC_VOLATILITY_PRECONDITION_FAILED';
+    -- Preserve the single prior deprovisioned exercise and its exact recovery
+    -- receipts; all live, unbound, or differently staged history still fails.
+    IF exercise_count <> 1 OR recovery_count <> 4 OR NOT EXISTS (
+      SELECT 1 FROM public.pr_c_controlled_human_exercises historical
+      WHERE historical.lifecycle = 'deprovisioned'
+        AND historical.migration_tip = '20260904120000'
+        AND historical.synthetic_only
+        AND NOT historical.production_authorized
+        AND NOT historical.customer_data_authorized
+        AND NOT historical.real_provider_calls_authorized
+        AND (
+          SELECT count(*) FROM public.pr_c_controlled_human_recovery_authorities recovery
+          WHERE recovery.exercise_digest = historical.exercise_digest
+            AND recovery.release_sha = historical.release_sha
+            AND recovery.deploy_id = historical.deploy_id
+            AND recovery.target_fingerprint = historical.target_fingerprint
+            AND (recovery.operation <> 'apply' OR cardinality(recovery.auth_user_ids) = 12)
+            AND ((recovery.operation IN ('apply','quiesce','deprovision') AND recovery.state = 'completed')
+              OR (recovery.operation = 'abort' AND recovery.state = 'prepared'))
+        ) = 4
+    ) THEN
+      RAISE EXCEPTION 'PROJECTION_RPC_VOLATILITY_PRECONDITION_FAILED';
+    END IF;
   END IF;
 
   delivery_oid := pg_catalog.to_regprocedure(

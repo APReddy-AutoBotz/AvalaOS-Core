@@ -312,6 +312,47 @@ try {
   await apply(upgrade.db, [oldConvergenceName]);
   await apply(upgrade.db, [mappingName]);
 
+  const assertRetainedHistoryUpgrade = async (scenario, sql, expectedTip) => {
+    report.activeScenario = scenario;
+    await upgrade.db.query('BEGIN');
+    try {
+      const digest = `sha256:${'6'.repeat(64)}`;
+      const release = '7'.repeat(40);
+      const deploy = '8'.repeat(24);
+      const fingerprint = `sha256:${'9'.repeat(64)}`;
+      await upgrade.db.query(`INSERT INTO pr_c_controlled_human_exercises(
+        id,exercise_digest,environment_class,pull_request_number,release_sha,review_head_sha,deploy_id,deploy_origin,
+        target_fingerprint,public_target_digest,persona_manifest_digest,fixture_manifest_digest,migration_tip,
+        org_id,workspace_id,lifecycle,quiesced_at,quiesced_history_digest,deprovisioned_at)
+        VALUES($1,$2,'hosted_nonproduction_pilot',264,$3,$3,$4,'https://deploy-preview-264--avalaos-pilot.netlify.app',
+          $5,$6,$7,$8,'20260904120000',$9,$10,'deprovisioned',statement_timestamp(),$11,statement_timestamp())`,
+      [randomUUID(), digest, release, deploy, fingerprint, `sha256:${'a'.repeat(64)}`,
+        `sha256:${'b'.repeat(64)}`, `sha256:${'c'.repeat(64)}`, ids[1], ids[2], `sha256:${'d'.repeat(64)}`]);
+      const boundUsers = Array.from({ length: 12 }, () => randomUUID());
+      for (const [operation, state] of [['apply', 'completed'], ['quiesce', 'completed'],
+        ['deprovision', 'completed'], ['abort', 'prepared']]) {
+        await upgrade.db.query(`INSERT INTO pr_c_controlled_human_recovery_authorities(
+          exercise_digest,release_sha,deploy_id,target_fingerprint,authority_digest,operation,state,
+          expected_version,auth_user_ids,expires_at)
+          VALUES($1,$2,$3,$4,$5,$6,$7,0,$8::uuid[],statement_timestamp()+interval '1 hour')`,
+        [digest, release, deploy, fingerprint, `sha256:${'e'.repeat(64)}`, operation, state,
+          operation === 'apply' ? boundUsers : []]);
+      }
+      await upgrade.db.query(sql);
+      const observed = (await upgrade.db.query(`SELECT
+        (SELECT migration_tip FROM hosted_pilot_environment_identity WHERE singleton) tip,
+        (SELECT count(*)::int FROM pr_c_controlled_human_exercises) exercises,
+        (SELECT count(*)::int FROM pr_c_controlled_human_recovery_authorities) recoveries`)).rows[0];
+      assert.deepEqual(observed, { tip: expectedTip, exercises: 1, recoveries: 4 });
+    } finally { await upgrade.db.query('ROLLBACK'); }
+    const retainedCounts = (await upgrade.db.query(`SELECT
+      (SELECT count(*)::int FROM pr_c_controlled_human_exercises) exercises,
+      (SELECT count(*)::int FROM pr_c_controlled_human_recovery_authorities) recoveries`)).rows[0];
+    assert.deepEqual(retainedCounts, { exercises: 0, recoveries: 0 });
+    report.scenarios.push({ scenario, status: 'passed', retainedHistory: 'deprovisioned_only' });
+    delete report.activeScenario;
+  };
+
   const assertOldMappingIdentity = async () => {
     const identity = (await upgrade.db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
@@ -401,6 +442,7 @@ try {
   await assertOldMappingIdentity();
   assert.deepEqual(await retained(), before);
   report.scenarios.push({ scenario: 'mapping-identity-blocks-concurrent-history-writers-until-commit', status: 'passed', cases: fencedHistories });
+  await assertRetainedHistoryUpgrade('mapping-identity-preserves-deprovisioned-history', mappingConvergenceSql, '20260916151050');
   await apply(upgrade.db, [mappingConvergenceName]);
   assert.deepEqual(await retained(), before);
   const assertPreXlsxIdentity = async () => {
@@ -531,6 +573,7 @@ try {
   }finally{await upgrade.db.query('ROLLBACK')}
   await assertPreXlsxIdentity();assert.deepEqual(await retainedXlsxUpgradeState(),retainedBeforeXlsx);
   report.scenarios.push({scenario:'xlsx-ingestion-blocks-concurrent-identity-history-and-source-writers',status:'passed',tables:5});
+  await assertRetainedHistoryUpgrade('xlsx-ingestion-preserves-deprovisioned-history', xlsxCorrectionSql, '20260916181916');
   await apply(upgrade.db,[xlsxCorrectionName]);
   assert.deepEqual(await retained(), before);
   assert.deepEqual(await retainedXlsxUpgradeState(),retainedBeforeXlsx);
@@ -668,6 +711,7 @@ try {
   assert.deepEqual(await projectionAuthority(upgrade.db),projectionBefore);
   assert.equal(projectionFencedTables.length,3);
   report.scenarios.push({scenario:'projection-volatility-blocks-concurrent-identity-and-history-writers',status:'passed',tables:projectionFencedTables});
+  await assertRetainedHistoryUpgrade('projection-volatility-preserves-deprovisioned-history', projectionVolatilitySql, '20260916203406');
   await apply(upgrade.db,[projectionVolatilityName]);
   const projectionAfter=await projectionAuthority(upgrade.db);
   for(const name of ['enterprise_delivery_workspace_projection','enterprise_monitor_approved_baselines_projection']){
