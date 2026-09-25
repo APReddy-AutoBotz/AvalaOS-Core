@@ -138,6 +138,19 @@ repurpose a provider-free marker, or authorize a new project.
 - Reuse current preview controls and account interfaces. No new end-user permission
   bypass, production UI mode, or automatic production approval is part of this work.
 
+The dedicated PR #264 backend resumed with the original controlled-human migration
+tip. Its 72 applied migrations exactly match the repository prefix, leaving 19
+canonical files through the synthetic acceptance migration. Before the protected
+acceptance job advances that schema, it must prove the exact target fingerprint,
+provider-free marker, no live exercise, and exact migration prefix; the Supabase
+CLI then records the repository versions in order. Any partial migration failure
+stops the job for inspection, without resetting or repurposing the backend.
+The older exercise has been deprovisioned with twelve banned synthetic accounts,
+zero sessions and active memberships, and retained history. Its abort receipt
+exposed a confirmed source defect: the prior completion function rejected those
+deliberately retained disabled users. The synthetic forward migration narrows completion to
+exactly bound, banned accounts and still rejects surviving partial pre-seed users.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

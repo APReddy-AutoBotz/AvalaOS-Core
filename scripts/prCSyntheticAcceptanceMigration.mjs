@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -12,6 +12,8 @@ export const SYNTHETIC_MIGRATION_VERSION = '20260924113000';
 export const SYNTHETIC_MIGRATION_NAME = 'pr_c_synthetic_acceptance_execution_kind';
 export const SYNTHETIC_PRIOR_VERSION = '20260924052038';
 export const SYNTHETIC_PRIOR_NAME = 'studio_independent_source_integration';
+export const SYNTHETIC_CHAIN_START_VERSION = '20260904120000';
+export const SYNTHETIC_CHAIN_START_NAME = 'pr_c_controlled_human_exercise_authority';
 
 const fail = code => { throw new Error(code); };
 
@@ -24,12 +26,34 @@ export function classifySyntheticMigrationState(state) {
   if (marker.migration_tip === SYNTHETIC_PRIOR_VERSION && state.latestVersion === SYNTHETIC_PRIOR_VERSION && state.latestName === SYNTHETIC_PRIOR_NAME
     && state.executionKindColumn === false && state.executionKindConstraint === false
     && state.sessionBindingTable === false && state.sessionBindingImmutableTrigger === false
-    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === false && state.markerAssertionTip === '20260904120000') return 'pending';
+    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === false && state.markerAssertionTip === SYNTHETIC_CHAIN_START_VERSION
+    && state.retainedAuthRecoveryAccepted === false) return 'pending';
   if (marker.migration_tip === SYNTHETIC_MIGRATION_VERSION && state.latestVersion === SYNTHETIC_MIGRATION_VERSION
     && state.latestName === SYNTHETIC_MIGRATION_NAME && state.executionKindColumn === true && state.executionKindConstraint === true
     && state.sessionBindingTable === true && state.sessionBindingImmutableTrigger === true
-    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === true && state.markerAssertionTip === SYNTHETIC_MIGRATION_VERSION) return 'current';
+    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === true && state.markerAssertionTip === SYNTHETIC_MIGRATION_VERSION
+    && state.retainedAuthRecoveryAccepted === true) return 'current';
   fail('PR_C_SYNTHETIC_MIGRATION_STATE_REJECTED');
+}
+
+export function classifySyntheticMigrationChain(state, remote, local, targetFingerprint, expectedTargetFingerprint) {
+  if (!state?.marker || state.marker.product_key !== 'avalaos-core' || state.marker.environment_class !== 'hosted_nonproduction_pilot'
+    || state.marker.production_authorized !== false || state.marker.customer_data_authorized !== false
+    || state.marker.real_provider_calls_authorized !== false || state.liveExerciseCount !== 0
+    || targetFingerprint !== expectedTargetFingerprint)
+    fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_STATE_REJECTED');
+  const boundary = local.findIndex(row => row.version === SYNTHETIC_CHAIN_START_VERSION);
+  if (boundary < 0 || local.at(-1)?.version !== SYNTHETIC_MIGRATION_VERSION
+    || local.length - boundary - 1 !== 19
+    || remote.some((row, index) => row.version !== local[index]?.version || row.name !== local[index]?.name))
+    fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_HISTORY_REJECTED');
+  if (remote.length === local.length && classifySyntheticMigrationState(state) === 'current')
+    return { pendingMigrationCount: 0, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
+  if (remote.length !== boundary + 1 || state.marker.migration_tip !== SYNTHETIC_CHAIN_START_VERSION
+    || state.latestVersion !== SYNTHETIC_CHAIN_START_VERSION || state.latestName !== SYNTHETIC_CHAIN_START_NAME
+    || state.executionKindColumn !== false || state.sessionBindingTable !== false || state.retainedAuthRecoveryAccepted !== false)
+    fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_STATE_REJECTED');
+  return { pendingMigrationCount: 19, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
 }
 
 export class SyntheticAcceptanceMigrationAdapter {
@@ -51,8 +75,20 @@ export class SyntheticAcceptanceMigrationAdapter {
     const markerDefinition = (await this.client.query(`select pg_get_functiondef('public.pr_c_controlled_human_assert_marker()'::regprocedure) definition`)).rows[0].definition;
     const markerAssertionTip = markerDefinition.includes("marker.migration_tip = '20260924113000'") ? SYNTHETIC_MIGRATION_VERSION
       : markerDefinition.includes("marker.migration_tip = '20260904120000'") ? '20260904120000' : null;
+    const recoveryDefinition = (await this.client.query(`select pg_get_functiondef('public.pr_c_controlled_human_complete_recovery(text,text,text)'::regprocedure) definition`)).rows[0].definition;
+    const retainedAuthRecoveryAccepted = recoveryDefinition.includes('user_record.banned_until');
     const liveExerciseCount = Number((await this.client.query(`select count(*)::int count from public.pr_c_controlled_human_exercises where lifecycle<>'deprovisioned'`)).rows[0].count);
-    return { marker, latestVersion: latest?.version ?? null, latestName: latest?.name ?? null, executionKindColumn, executionKindConstraint, sessionBindingTable, sessionBindingImmutableTrigger, humanExerciseTipAccepted, syntheticExerciseTipAccepted, markerAssertionTip, liveExerciseCount };
+    return { marker, latestVersion: latest?.version ?? null, latestName: latest?.name ?? null, executionKindColumn, executionKindConstraint, sessionBindingTable, sessionBindingImmutableTrigger, humanExerciseTipAccepted, syntheticExerciseTipAccepted, markerAssertionTip, retainedAuthRecoveryAccepted, liveExerciseCount };
+  }
+  async inspectChain() {
+    await this.client.query(`select public.pr_c_controlled_human_assert_provider_state()`);
+    const state = await this.inspect();
+    const remote = (await this.client.query(`select version,name from supabase_migrations.schema_migrations order by version`)).rows;
+    const local = (await readdir('supabase/migrations')).filter(name => /^\d{14}_[a-z0-9_]+[.]sql$/u.test(name)).sort()
+      .map(name => ({ version: name.slice(0, 14), name: name.slice(15, -4) }));
+    const identity = (await this.client.query(`select (select system_identifier::text from pg_control_system()) system_identifier,current_database() database_name,current_user database_role`)).rows[0];
+    const targetFingerprint = sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`);
+    return classifySyntheticMigrationChain(state, remote, local, targetFingerprint, process.env.PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT);
   }
   async apply(migration) {
     await this.client.query('begin');
@@ -77,6 +113,7 @@ const loadMigration = async () => {
 
 export async function runSyntheticMigration(phase, adapter, migration) {
   if (process.env.PR_C_SYNTHETIC_ACCEPTANCE_POLICY !== 'solo-owner-synthetic-v1') fail('PR_C_SYNTHETIC_MIGRATION_POLICY_REJECTED');
+  if (phase === 'chain-preflight') return { schemaVersion: 'pr-c-synthetic-acceptance-migration-1', phase, status: 'passed', ...await adapter.inspectChain() };
   const state = classifySyntheticMigrationState(await adapter.inspect());
   if (phase === 'preflight') return { schemaVersion: 'pr-c-synthetic-acceptance-migration-1', phase, status: 'passed', disposition: state, migrationVersion: SYNTHETIC_MIGRATION_VERSION, migrationDigest: migration.digest };
   if (phase === 'apply') return { schemaVersion: 'pr-c-synthetic-acceptance-migration-1', phase, status: 'passed', ...await adapter.apply(migration), migrationVersion: SYNTHETIC_MIGRATION_VERSION, migrationDigest: migration.digest };
@@ -86,7 +123,7 @@ export async function runSyntheticMigration(phase, adapter, migration) {
 
 async function main() {
   const [phase, ...args] = process.argv.slice(2);
-  if (!['preflight', 'apply', 'verify'].includes(phase)) fail('usage: prCSyntheticAcceptanceMigration.mjs <preflight|apply|verify> [--output path]');
+  if (!['chain-preflight', 'preflight', 'apply', 'verify'].includes(phase)) fail('usage: prCSyntheticAcceptanceMigration.mjs <chain-preflight|preflight|apply|verify> [--output path]');
   const outputIndex = args.indexOf('--output'); const output = outputIndex >= 0 ? args[outputIndex + 1] : undefined;
   const migration = await loadMigration();
   const adapter = new SyntheticAcceptanceMigrationAdapter(process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL);

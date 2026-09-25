@@ -1725,6 +1725,26 @@ jobs:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
         run: node --input-type=module -e "import {validateSupabaseTargetTuple} from './scripts/prCControlledHumanEnvironment.mjs'; validateSupabaseTargetTuple(process.env.SUPABASE_PROJECT_REF,process.env.PR_C_CONTROLLED_HUMAN_SUPABASE_URL,process.env.PR_C_CONTROLLED_HUMAN_DATABASE_URL)"
 
+      - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.101.0
+
+      - name: Require the exact provider-free pending migration chain
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+        run: |
+          node scripts/prCControlledHumanPostgresTls.mjs verify-ca
+          node scripts/prCSyntheticAcceptanceMigration.mjs chain-preflight --output output/synthetic/migration-chain-preflight.json
+
+      - name: Apply only the canonical pending migration files
+        env:
+          PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}
+          SUPABASE_TELEMETRY_DISABLED: '1'
+        run: |
+          export PGSSLROOTCERT="$PWD/testing/process-lifecycle/trust/supabase-prod-ca-2021.crt"
+          supabase db push --db-url "$PR_C_CONTROLLED_HUMAN_DATABASE_URL" --dry-run
+          supabase db push --db-url "$PR_C_CONTROLLED_HUMAN_DATABASE_URL" --yes
+
       - name: Apply and verify the exact synthetic acceptance migration
         env:
           PR_C_CONTROLLED_HUMAN_DATABASE_URL: ${{ secrets.PR_C_CONTROLLED_HUMAN_DATABASE_URL }}

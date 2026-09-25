@@ -102,3 +102,58 @@ BEGIN
  ELSE RAISE EXCEPTION 'PR_C_SYNTHETIC_ACCEPTANCE_IDENTITY_SOURCE_MISMATCH';END IF;
 END
 $pr_c_synthetic_acceptance_identity_forward$;
+
+-- An abort after a seeded exercise retains disabled synthetic Auth users as
+-- immutable exercise history. A partial pre-seed abort still removes its users.
+CREATE OR REPLACE FUNCTION public.pr_c_controlled_human_complete_recovery(
+  p_exercise_digest text,p_release_sha text,p_operation text
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  IF p_operation='apply' AND NOT EXISTS (
+    SELECT 1 FROM public.pr_c_controlled_human_exercises exercise
+    WHERE exercise.exercise_digest=p_exercise_digest AND exercise.release_sha=p_release_sha
+  ) THEN RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED'; END IF;
+  IF p_operation='quiesce' AND NOT EXISTS (
+    SELECT 1 FROM public.pr_c_controlled_human_exercises exercise
+    WHERE exercise.exercise_digest=p_exercise_digest AND exercise.release_sha=p_release_sha
+      AND exercise.lifecycle IN ('read_only','deprovisioned') AND exercise.quiesced_history_digest IS NOT NULL
+  ) THEN RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED'; END IF;
+  IF p_operation='deprovision' AND NOT EXISTS (
+    SELECT 1 FROM public.pr_c_controlled_human_exercises exercise
+    WHERE exercise.exercise_digest=p_exercise_digest AND exercise.release_sha=p_release_sha AND exercise.lifecycle='deprovisioned'
+  ) THEN RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED'; END IF;
+  IF p_operation IN ('abort','expiry') THEN
+    IF EXISTS (SELECT 1 FROM public.pr_c_controlled_human_exercises exercise WHERE exercise.exercise_digest=p_exercise_digest) THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM public.pr_c_controlled_human_exercises exercise
+        JOIN public.pr_c_controlled_human_recovery_authorities source
+          ON source.exercise_digest=exercise.exercise_digest AND source.release_sha=exercise.release_sha AND source.operation='apply'
+        WHERE exercise.exercise_digest=p_exercise_digest AND exercise.release_sha=p_release_sha
+          AND exercise.lifecycle='deprovisioned' AND exercise.quiesced_history_digest IS NOT NULL
+          AND cardinality(source.auth_user_ids)=12
+          AND (SELECT count(*) FROM public.pr_c_controlled_human_persona_bindings binding WHERE binding.exercise_id=exercise.id)=12
+          AND NOT EXISTS (
+            SELECT 1 FROM public.pr_c_controlled_human_persona_bindings binding
+            LEFT JOIN auth.users user_record ON user_record.id=binding.auth_user_id
+            WHERE binding.exercise_id=exercise.id
+              AND (NOT (binding.auth_user_id=ANY(source.auth_user_ids))
+                OR user_record.id IS NULL OR user_record.banned_until IS NULL
+                OR user_record.banned_until<=statement_timestamp()+interval '10 years'
+                OR EXISTS (SELECT 1 FROM auth.sessions session WHERE session.user_id=binding.auth_user_id)
+                OR EXISTS (SELECT 1 FROM public.workspace_memberships membership
+                  WHERE membership.user_id=binding.auth_user_id AND membership.status='active'))
+          )
+      ) THEN RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED'; END IF;
+    ELSIF EXISTS (
+      SELECT 1 FROM public.pr_c_controlled_human_recovery_authorities source
+      CROSS JOIN LATERAL unnest(source.auth_user_ids) user_id(value)
+      JOIN auth.users user_record ON user_record.id=user_id.value
+      WHERE source.exercise_digest=p_exercise_digest AND source.release_sha=p_release_sha AND source.operation='apply'
+    ) THEN RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED'; END IF;
+  END IF;
+  PERFORM public.pr_c_controlled_human_assert_marker();
+  PERFORM public.pr_c_controlled_human_assert_provider_state();
+  UPDATE public.pr_c_controlled_human_recovery_authorities SET state='completed',updated_at=statement_timestamp()
+  WHERE exercise_digest=p_exercise_digest AND release_sha=p_release_sha AND operation=p_operation;
+  IF NOT FOUND THEN RAISE EXCEPTION 'PR_C_CONTROLLED_HUMAN_RECOVERY_REJECTED'; END IF;
+END $$;
