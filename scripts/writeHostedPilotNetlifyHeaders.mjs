@@ -61,10 +61,6 @@ const publicOrigin = canonicalSupabasePublicOrigin(publicSupabaseUrl);
 const actualPublicTargetDigest = publicOrigin
   ? `sha256:${createHash('sha256').update(`pr-c-controlled-human-public-target\0${publicOrigin}`).digest('hex')}`
   : null;
-const publicBackendConfigurationValid = publicOrigin !== null
-  && isSafePublicSupabaseCredential(publicSupabaseAnonKey)
-  && DIGEST_PATTERN.test(expectedPublicTargetDigest ?? '')
-  && actualPublicTargetDigest === expectedPublicTargetDigest;
 
 const controlledHumanCandidateClaimed = (
   context === 'deploy-preview'
@@ -94,7 +90,10 @@ const previewChecks = {
   runtime: [undefined, 'pilot'].includes(process.env.VITE_AVALA_RUNTIME_MODE),
   exercise: DIGEST_PATTERN.test(exerciseDigest ?? ''),
   target: DIGEST_PATTERN.test(targetFingerprint ?? ''),
-  publicBackend: publicBackendConfigurationValid,
+  publicOrigin: publicOrigin !== null,
+  publicKey: isSafePublicSupabaseCredential(publicSupabaseAnonKey),
+  publicDigest: DIGEST_PATTERN.test(expectedPublicTargetDigest ?? ''),
+  publicTarget: actualPublicTargetDigest === expectedPublicTargetDigest,
   browserEnvironment: unexpectedBrowserEnvironment.length === 0,
   privateEnvironment: !forbiddenPrivateEnvironmentPresent,
 };

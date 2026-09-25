@@ -150,6 +150,19 @@ test('retry branch fallback still rejects foreign PR identity and reports only f
   } finally { await result.cleanup(); }
 });
 
+test('public backend rejection identifies only the failed check, never a credential or target', async () => {
+  for (const [override, reason] of [
+    [{ VITE_SUPABASE_ANON_KEY: undefined }, 'publicKey'],
+    [{ PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: `sha256:${'f'.repeat(64)}` }, 'publicTarget'],
+  ]) {
+    const result = await runCase(override);
+    try {
+      assert.match(result.stderr, new RegExp(`NETLIFY_PR_C_CONTROLLED_HUMAN_PREVIEW_REQUIRED:${reason}`));
+      assert.doesNotMatch(result.stderr, /sb_publishable_|sha256:|supabase\.co/);
+    } finally { await result.cleanup(); }
+  }
+});
+
 test('emits only public-safe exact release and deployment identity headers', async () => {
   const result = await runCase();
   try {
