@@ -187,7 +187,7 @@
     "scripts/prCControlledHumanObservationFixture.mjs": "sha256:5c813e98038a995cd7f91ea4645693b323f7407178b2aa885f776a0ec6adbfec",
     "scripts/prCControlledHumanPostgresTls.mjs": "sha256:322a3647333240f77a5b64c4362357b4476dca78f694405030c2709efd63878c",
     "scripts/prCControlledHumanPostgresTls.test.mjs": "sha256:38e673f9da9e994684aba3e4bcbb4976235e383ae72337c5a0ac347e50bba99f",
-    "scripts/prCControlledHumanSecurityContract.test.mjs": "sha256:e669dfc9037377cb1fcfd4c1f97999fe67a3477f37beef7bfe9e5d666a44b3e1",
+    "scripts/prCControlledHumanSecurityContract.test.mjs": "sha256:0825cb1d222ca626e0c09a85dbb8e2606208dd5189e2e4420d7b6755c7aed781",
     "scripts/prCControlledHumanWorkflowContract.test.mjs": "sha256:186821350070ece832295831534cf0b47486f6eef194098be720abb9627cc434",
     "scripts/prCControlledHumanWorkflowSecrets.mjs": "sha256:7728e9773b1a7c56faaed96227879e9126860faddb4d973e5b5a937781c8b640",
     "scripts/prCEvidenceCommandRunner.mjs": "sha256:141f92c1dd6ff1c054cd1c2698f907c7d3bfac9d4db88e375b933c0033227269",
