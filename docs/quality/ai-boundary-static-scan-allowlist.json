@@ -318,7 +318,7 @@
       "pattern": "VITE_GEMINI_API_KEY",
       "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
       "lines": [
-        230
+        261
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the synthetic browser-provider variable confined to a rejection test; never use a real provider value."
