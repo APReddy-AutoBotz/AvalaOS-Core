@@ -283,7 +283,7 @@
     "scripts/verifyPreviewBrowserEvidence.mjs": "sha256:087944c604e24a52b6bcb6ba400705235b93045fcc2a7005f7350dea640288d8",
     "scripts/verifyPreviewBrowserEvidence.test.mjs": "sha256:b57e1ea9603eb8aa5ae8ac52336e82089eb1ca3573e01758bb952435157ac1f9",
     "scripts/verifyTranscriptFlowPrCEvidence.mjs": "sha256:2d23a231fde411d7072d40b6cdc1ea0190302e5703844462f5f2b0d21a8d5128",
-    "scripts/writeHostedPilotNetlifyHeaders.mjs": "sha256:31f49d52bd0524e92b5d43ff2fe865c1fbcaebd70b02ce257934986b38c043e0",
+    "scripts/writeHostedPilotNetlifyHeaders.mjs": "sha256:d3a1f2190e4ab92125620783e1585811674fc99183fd65d02b4ccc52c3448dc3",
     "scripts/writeHostedPilotNetlifyHeaders.test.mjs": "sha256:447a719e038167a517f1700240ad8fbbdd599af966212bdfb221b1fa6cfe5903",
     "scripts/writePrCControlledHumanObservationTemplates.mjs": "sha256:dd6c5a24153eaa30ec7fd858080248bb741811f25b41f8f46928dd3bd8818664",
     "services/adapters/assessAdapter.ts": "sha256:d6d4753cec33fc83bbfc4a124f659acffc27bcff63bc32d5f924fbf8835a024f",
