@@ -132,6 +132,24 @@ test('accepts only the exact PR #264 controlled-human Deploy Preview tuple', asy
   await expectAccepted();
 });
 
+test('accepts an exact PR preview retry when Git-event flags are absent', async () => {
+  await expectAccepted({ BRANCH: exactPreviewTuple.HEAD, HEAD: undefined, PULL_REQUEST: undefined });
+  await expectAccepted({ BRANCH: exactPreviewTuple.HEAD, HEAD: '', PULL_REQUEST: 'false' });
+  await expectAccepted({ BRANCH: exactPreviewTuple.HEAD, PULL_REQUEST: 'false' });
+});
+
+test('retry branch fallback still rejects foreign PR identity and reports only failed check names', async () => {
+  const retry = { BRANCH: exactPreviewTuple.HEAD, HEAD: undefined, PULL_REQUEST: 'false' };
+  await expectRejected({ ...retry, BRANCH: 'main' });
+  await expectRejected({ ...retry, HEAD: 'main' });
+  await expectRejected({ ...retry, REVIEW_ID: '265' });
+  const result = await runCase({ ...retry, REVIEW_ID: '265' });
+  try {
+    assert.match(result.stderr, /NETLIFY_PR_C_CONTROLLED_HUMAN_PREVIEW_REQUIRED:review/);
+    assert.doesNotMatch(result.stderr, /sb_publishable_|sha256:|supabase\.co/);
+  } finally { await result.cleanup(); }
+});
+
 test('emits only public-safe exact release and deployment identity headers', async () => {
   const result = await runCase();
   try {

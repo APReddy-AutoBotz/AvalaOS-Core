@@ -75,22 +75,30 @@ const controlledHumanCandidateClaimed = (
   )
 ) || (reviewId === EXPECTED_REVIEW_ID && headBranch === EXPECTED_BRANCH);
 
-const exactControlledHumanPreview = /^[0-9a-f]{40}$/.test(release ?? '')
-  && /^[0-9a-f]{24}$/.test(deployId ?? '')
-  && context === 'deploy-preview'
-  && siteName === EXPECTED_SITE
-  && headBranch === EXPECTED_BRANCH
-  && pullRequest === 'true'
-  && reviewId === EXPECTED_REVIEW_ID
-  && siteUrl === EXPECTED_SITE_URL
-  && deployOrigin === EXPECTED_PREVIEW_ORIGIN
-  && deployUrl === `https://${deployId}--${EXPECTED_SITE}.netlify.app`
-  && [undefined, 'pilot'].includes(process.env.VITE_AVALA_RUNTIME_MODE)
-  && DIGEST_PATTERN.test(exerciseDigest ?? '')
-  && DIGEST_PATTERN.test(targetFingerprint ?? '')
-  && publicBackendConfigurationValid
-  && unexpectedBrowserEnvironment.length === 0
-  && !forbiddenPrivateEnvironmentPresent;
+// A Netlify retry can retain the PR deploy context without the original Git
+// event flags. In that case require the exact read-only branch metadata too.
+const previewBranchIdentity = (headBranch === EXPECTED_BRANCH && pullRequest === 'true')
+  || (branch === EXPECTED_BRANCH
+    && (headBranch === EXPECTED_BRANCH || headBranch === undefined || headBranch === '')
+    && [undefined, 'true', 'false'].includes(pullRequest));
+const previewChecks = {
+  release: /^[0-9a-f]{40}$/.test(release ?? ''),
+  deploy: /^[0-9a-f]{24}$/.test(deployId ?? ''),
+  context: context === 'deploy-preview',
+  site: siteName === EXPECTED_SITE,
+  branch: previewBranchIdentity,
+  review: reviewId === EXPECTED_REVIEW_ID,
+  siteUrl: siteUrl === EXPECTED_SITE_URL,
+  previewUrl: deployOrigin === EXPECTED_PREVIEW_ORIGIN,
+  deployUrl: deployUrl === `https://${deployId}--${EXPECTED_SITE}.netlify.app`,
+  runtime: [undefined, 'pilot'].includes(process.env.VITE_AVALA_RUNTIME_MODE),
+  exercise: DIGEST_PATTERN.test(exerciseDigest ?? ''),
+  target: DIGEST_PATTERN.test(targetFingerprint ?? ''),
+  publicBackend: publicBackendConfigurationValid,
+  browserEnvironment: unexpectedBrowserEnvironment.length === 0,
+  privateEnvironment: !forbiddenPrivateEnvironmentPresent,
+};
+const exactControlledHumanPreview = Object.values(previewChecks).every(Boolean);
 
 // Preserve the permanent stable-host guard that predates PR #264. Netlify's
 // `production` context is a dedicated non-production pilot URL only when every
@@ -106,7 +114,8 @@ const authorizedStablePilotTestingContext = /^[0-9a-f]{40}$/.test(release ?? '')
   && stableTestingAuthorization === 'authorized';
 
 if (controlledHumanCandidateClaimed && !exactControlledHumanPreview) {
-  throw new Error('NETLIFY_PR_C_CONTROLLED_HUMAN_PREVIEW_REQUIRED');
+  const failedChecks = Object.entries(previewChecks).filter(([, valid]) => !valid).map(([name]) => name);
+  throw new Error(`NETLIFY_PR_C_CONTROLLED_HUMAN_PREVIEW_REQUIRED:${failedChecks.join(',')}`);
 }
 
 if (context === 'production' && !authorizedStablePilotTestingContext) {
