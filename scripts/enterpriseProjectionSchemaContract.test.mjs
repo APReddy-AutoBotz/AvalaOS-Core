@@ -12,7 +12,7 @@ import {
 
 const sourcePath = new URL('../supabase/functions/_shared/enterpriseIntelligenceQuery.ts', import.meta.url);
 const source = await readFile(sourcePath, 'utf8');
-const relationshipNeedle = `${RELATIONSHIP_REVIEW_TABLE}?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at`;
+const relationshipNeedle = `${RELATIONSHIP_REVIEW_TABLE}?select=id,candidate_id,candidate_version,source_id,source_version_id,input_bundle_id,input_bundle_version_id,relationship,suggested_application_intent,suggested_apply_target,rationale,reviewer_id,created_at`;
 
 const replaceOnce = (input, before, after) => {
   assert.equal(input.split(before).length - 1, 1, `expected exactly one mutation target: ${before}`);
