@@ -284,7 +284,7 @@
     "scripts/verifyPreviewBrowserEvidence.test.mjs": "sha256:b57e1ea9603eb8aa5ae8ac52336e82089eb1ca3573e01758bb952435157ac1f9",
     "scripts/verifyTranscriptFlowPrCEvidence.mjs": "sha256:2d23a231fde411d7072d40b6cdc1ea0190302e5703844462f5f2b0d21a8d5128",
     "scripts/writeHostedPilotNetlifyHeaders.mjs": "sha256:e0ad9412d90d4d29fed0db83f0962ce96db1fa4d4b18dc4bdb61dda784ac9098",
-    "scripts/writeHostedPilotNetlifyHeaders.test.mjs": "sha256:952c873e25337de994616a66020d4f80db3a922bbc0989dd64dc53c521ea5f40",
+    "scripts/writeHostedPilotNetlifyHeaders.test.mjs": "sha256:6c551ca69957b01222de8610d6d2cb118d6b1ce6ae8c6360d38e910e4617885e",
     "scripts/writePrCControlledHumanObservationTemplates.mjs": "sha256:dd6c5a24153eaa30ec7fd858080248bb741811f25b41f8f46928dd3bd8818664",
     "services/adapters/assessAdapter.ts": "sha256:d6d4753cec33fc83bbfc4a124f659acffc27bcff63bc32d5f924fbf8835a024f",
     "services/adapters/authAdapter.ts": "sha256:9ddc465e1c42e039a9e6fb6eb2eccb9f14cec14a50a301a06637003b343d74d0",
