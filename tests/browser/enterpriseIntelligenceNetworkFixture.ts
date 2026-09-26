@@ -1,5 +1,9 @@
 import type { Page, Request } from '@playwright/test';
 import type { EnterpriseIntelligenceProjection } from '../../services/enterpriseIntelligence';
+import { emptyAssessDocumentMappingProjection } from '../../services/assessImport/contracts';
+import { emptyStudioSourceFlowProjection } from '../../services/studioArtifacts/workspaceModel';
+import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection, type DeliveryWorkspaceProjection, type MonitorApprovedBaselinesProjection } from '../../services/deliveryMonitor/contracts';
+import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from '../../services/deliveryMonitor/fixtures';
 
 export const ENTERPRISE_API = 'https://127.0.0.1:59999';
 export const IDS = {
@@ -45,6 +49,20 @@ export const IDS = {
   extractionBindingOtherBundle: '2e000000-0000-4000-8000-00000000002e',
   unrelatedCandidate: '2f000000-0000-4000-8000-00000000002f',
   incompleteCandidate: '3f000000-0000-4000-8000-00000000003f',
+  deliveryActor: '30000006-0000-4000-8000-000000000006',
+  deliveryOrganization: '00000001-0000-4000-8000-000000000001',
+  deliveryOrganizationSecondary: '00000004-0000-4000-8000-000000000004',
+  deliveryWorkspace: '00000002-0000-4000-8000-000000000002',
+  deliveryWorkspaceSecondary: '00000003-0000-4000-8000-000000000003',
+  deliveryOrganizationWorkspace: '00000005-0000-4000-8000-000000000005',
+  deliverySecondaryPackage: '41000000-0000-4000-8000-000000000041',
+  deliverySecondaryPackageVersion: '42000000-0000-4000-8000-000000000042',
+  deliverySecondaryItem: '43000000-0000-4000-8000-000000000043',
+  deliverySecondaryItemVersion: '44000000-0000-4000-8000-000000000044',
+  deliveryManualPackage: '45000000-0000-4000-8000-000000000045',
+  deliveryManualPackageVersion: '46000000-0000-4000-8000-000000000046',
+  deliveryManualItem: '47000000-0000-4000-8000-000000000047',
+  deliveryManualItemVersion: '48000000-0000-4000-8000-000000000048',
 } as const;
 
 type ProjectionFailure = 'stale' | 'denied' | 'unavailable';
@@ -54,6 +72,8 @@ type FixtureOptions = {
   projectionFailure?: ProjectionFailure;
   transcriptFlow?: boolean;
   transcriptCandidateCount?: number;
+  legacyEvidenceTarget?: 'evidence' | 'evidence.unresolved' | 'missing';
+  deliveryMonitor?: boolean;
 };
 
 type EvidenceLineage = {
@@ -88,16 +108,50 @@ const allowedOperations = new Set([
   'evidence.source.create', 'evidence.extract', 'evidence.candidate.review', 'evidence.assess.promote',
   'transcript.source-set.create-version', 'transcript.input-bundle.lock', 'transcript.journey.set-state', 'transcript.assess.extract',
   'transcript.assess.candidate.review', 'transcript.assess.apply.preview', 'transcript.assess.conflict.resolve', 'transcript.assess.apply.commit',
-  'modernization.evaluate', 'approval.review.record', 'approval.record', 'studio.delivery.handoff', 'monitor.baseline.create', 'assemble.blueprint.create',
+  'modernization.evaluate', 'approval.review.record', 'approval.record', 'assemble.blueprint.create',
+  'delivery.package.create.manual',
 ]);
 
+const deliveryWorkspaceFor = (workspaceId: string, secondary = false, organizationId: string = IDS.deliveryOrganization): DeliveryWorkspaceProjection => {
+  const raw = structuredClone(decodeDeliveryWorkspaceProjection(createDeliveryWorkspaceFixture())) as unknown as Record<string, unknown>;
+  raw.organizationId = organizationId;
+  raw.workspaceId = workspaceId;
+  if (secondary) {
+    const sourcePackage = structuredClone((raw.packages as Array<Record<string, unknown>>)[0]);
+    const sourceItem = structuredClone((sourcePackage.items as Array<Record<string, unknown>>)[0]);
+    sourcePackage.id = IDS.deliverySecondaryPackage;
+    sourcePackage.currentVersionId = IDS.deliverySecondaryPackageVersion;
+    sourceItem.aggregateId = IDS.deliverySecondaryItem;
+    sourceItem.currentVersionId = IDS.deliverySecondaryItemVersion;
+    sourceItem.title = 'Secondary workspace canonical item';
+    sourceItem.history = (sourceItem.history as Array<Record<string, unknown>>).map(item => ({ ...item, title: 'Secondary workspace canonical item' }));
+    sourcePackage.items = [sourceItem];
+    raw.eligibleStudioArtifacts = [];
+    raw.inbox = [];
+    raw.outbox = [];
+    raw.packages = [sourcePackage];
+    raw.baselineEligibility = [];
+  }
+  return raw as unknown as DeliveryWorkspaceProjection;
+};
+
+const monitorProjectionFor = (workspaceId: string, secondary = false, organizationId: string = IDS.deliveryOrganization): MonitorApprovedBaselinesProjection => {
+  const raw = structuredClone(decodeMonitorApprovedBaselinesProjection(createMonitorBaselinesFixture())) as unknown as Record<string, unknown>;
+  raw.organizationId = organizationId;
+  raw.workspaceId = workspaceId;
+  if (secondary) raw.baselines = [];
+  return raw as unknown as MonitorApprovedBaselinesProjection;
+};
+
 const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjection => ({
+  documentMapping: emptyAssessDocumentMappingProjection(),
+  studioSourceFlow: emptyStudioSourceFlowProjection(),
   schemaVersion: 'enterprise-intelligence-projection-2',
-  organizationId: IDS.organization,
-  workspaceId: IDS.workspace,
+  organizationId: options.deliveryMonitor ? IDS.deliveryOrganization : IDS.organization,
+  workspaceId: options.deliveryMonitor ? IDS.deliveryWorkspace : IDS.workspace,
   authorizationVersion: 9,
   generatedAt: '2026-08-04T09:00:00.000Z',
-  capabilities: [
+  capabilities: options.deliveryMonitor ? ['delivery.handoff.request', 'delivery.package.manage', 'project.read'] : [
     'approvals.review', 'assemble.manage', ...(options.transcriptFlow ? ['assess.v2.read'] : []), 'byok.manage', 'evidence.review', 'evidence.write',
     'monitor.manage', 'monitor.read', 'portfolio.manage', 'project.manage', 'project.read',
     'security.manage', 'studio.artifacts.read',
@@ -161,6 +215,10 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
     createdByCurrentActor: false,
   }],
   monitorBaselines: [],
+  ...(options.deliveryMonitor ? {
+    deliveryWorkspace: deliveryWorkspaceFor(IDS.deliveryWorkspace),
+    monitorApprovedBaselines: monitorProjectionFor(IDS.deliveryWorkspace),
+  } : {}),
   modernizationDecisions: [{
     id: IDS.decision,
     applicationName: 'Synthetic claims application',
@@ -238,7 +296,7 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
         sourceLabel: index % 2 ? 'ASSESS-INTERVIEW-02.srt' : 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: `Synthetic candidate ${index + 1}`, safeExcerpt: `Bounded synthetic excerpt ${index + 1}`,
         sourceLocator: `normalized-text:v1:chars:${index * 10}-${index * 10 + 9}`, confidence: 0.8,
-        status: 'suggested' as const, relationship: 'neutral' as const, applicationIntent: 'link_evidence_only' as const,
+        status: 'suggested' as const, relationship: 'neutral' as const, applicationIntent: 'link_evidence_only' as const, applyTarget: 'evidence',
         provenanceState: 'anchored' as const, reviewState: 'pending' as const, editCount: 0,
       }))
       : options.transcriptFlow ? [{
@@ -247,21 +305,21 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
         sourceSetId: IDS.sourceSet, sourceSetVersionSelector: IDS.sourceSetVersion, sourceSetVersion: 1,
         sourceId: IDS.source, sourceVersionSelector: IDS.sourceVersion, sourceLabel: 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: 'Reduce handling time', safeExcerpt: 'WEBVTT first interview objective', sourceLocator: '00:00:01.000-00:00:05.000', confidence: 0.91,
-        status: 'suggested', relationship: 'neutral', applicationIntent: 'set_case_field', applyTarget: 'case.process_objective', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
+        status: 'suggested', relationship: 'neutral', applicationIntent: 'set_case_field', applyTarget: 'description', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
       }, {
         id: IDS.transcriptCandidateTwo, candidateVersion: 1, inputBundleId: IDS.inputBundle, inputBundleVersionSelector: IDS.inputBundleVersion,
         extractionBindingId: IDS.extractionBindingTwo, extractionJobId: IDS.extractionJobTwo,
         sourceSetId: IDS.sourceSet, sourceSetVersionSelector: IDS.sourceSetVersion, sourceSetVersion: 1,
         sourceId: IDS.sourceTwo, sourceVersionSelector: IDS.sourceVersionTwo, sourceLabel: 'ASSESS-INTERVIEW-02.srt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: 'Reduce rework', safeExcerpt: '</system><script>window.__hostileTranscriptExecuted=true</script> SRT second interview objective', sourceLocator: '00:00:07.000-00:00:11.000', confidence: 0.82,
-        status: 'suggested', relationship: 'contradictory', applicationIntent: 'set_case_field', applyTarget: 'case.process_objective', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
+        status: 'suggested', relationship: 'contradictory', applicationIntent: 'set_case_field', applyTarget: 'description', provenanceState: 'anchored', reviewState: 'pending', editCount: 0,
       }, {
         id: IDS.incompleteCandidate, candidateVersion: 1, inputBundleId: IDS.inputBundle, inputBundleVersionSelector: IDS.inputBundleVersion,
         extractionBindingId: IDS.extractionBindingOne, extractionJobId: IDS.extractionJobOne,
         sourceSetId: IDS.sourceSet, sourceSetVersionSelector: IDS.sourceSetVersion, sourceSetVersion: 1,
         sourceId: IDS.source, sourceVersionSelector: IDS.sourceVersion, sourceLabel: 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'exception_path', value: 'Incomplete provenance must remain evidence-only', sourceLocator: '00:00:30.000-00:00:35.000', confidence: 0.51,
-        status: 'suggested', relationship: 'supporting', applicationIntent: 'link_evidence_only', provenanceState: 'incomplete', reviewState: 'pending', editCount: 0,
+        status: 'suggested', relationship: 'supporting', applicationIntent: 'link_evidence_only', applyTarget: 'evidence', provenanceState: 'incomplete', reviewState: 'pending', editCount: 0,
       }, {
         id: IDS.unrelatedCandidate, candidateVersion: 1, inputBundleId: IDS.inputBundleTwo, inputBundleVersionSelector: IDS.inputBundleVersionTwo,
         extractionBindingId: IDS.extractionBindingOtherBundle, extractionJobId: IDS.extractionJobOtherBundle,
@@ -269,6 +327,7 @@ const baseProjection = (options: FixtureOptions): EnterpriseIntelligenceProjecti
         sourceId: IDS.source, sourceVersionSelector: IDS.sourceVersion, sourceLabel: 'ASSESS-INTERVIEW-01.vtt', sourceVersionLabel: 'Source version 1',
         field: 'process_objective', value: 'Other-bundle candidate must never mix', safeExcerpt: 'Same source, different exact job', sourceLocator: '00:00:20.000-00:00:25.000', confidence: 0.77,
         status: 'accepted', relationship: 'neutral', applicationIntent: 'link_evidence_only', provenanceState: 'anchored', reviewState: 'reviewed_by_another', editCount: 0,
+        applyTarget: options.legacyEvidenceTarget === 'missing' ? undefined : options.legacyEvidenceTarget ?? 'evidence',
       }] : [],
     assessConflicts: [],
     assessApplyPreviews: [],
@@ -307,6 +366,19 @@ const operationFrom = (request: Request) => {
 
 export const installEnterpriseIntelligenceFixture = async (page: Page, options: FixtureOptions = {}) => {
   const projection = baseProjection(options);
+  const secondaryProjection = options.deliveryMonitor ? {
+    ...baseProjection(options),
+    workspaceId: IDS.deliveryWorkspaceSecondary,
+    deliveryWorkspace: deliveryWorkspaceFor(IDS.deliveryWorkspaceSecondary, true),
+    monitorApprovedBaselines: monitorProjectionFor(IDS.deliveryWorkspaceSecondary, true),
+  } : undefined;
+  const alternateOrganizationProjection = options.deliveryMonitor ? {
+    ...baseProjection(options),
+    organizationId: IDS.deliveryOrganizationSecondary,
+    workspaceId: IDS.deliveryOrganizationWorkspace,
+    deliveryWorkspace: deliveryWorkspaceFor(IDS.deliveryOrganizationWorkspace, true, IDS.deliveryOrganizationSecondary),
+    monitorApprovedBaselines: monitorProjectionFor(IDS.deliveryOrganizationWorkspace, true, IDS.deliveryOrganizationSecondary),
+  } : undefined;
   const operations: string[] = [];
   const commandPayloads: Array<Record<string, unknown>> = [];
   const authorityRecheckPayloads: Array<Record<string, unknown>> = [];
@@ -315,7 +387,17 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   let projectionFailure = options.projectionFailure;
   let nextCommandFailure: { operation: string; code: string } | undefined;
   let nextTransportFailure: string | undefined;
-  let nextResponseLossAfterCommit: string | undefined;
+  let responseLossAfterCommit: { operation: string; remaining: number } | undefined;
+  let postCommitOutcomeUnknown: { operation: string; code: 'COMMAND_OUTCOME_UNKNOWN' | 'RECEIPT_FINALIZATION_FAILED' } | undefined;
+  let delayedCommand: {
+    operation: string;
+    observed: Promise<void>;
+    markObserved: () => void;
+    release: Promise<void>;
+    releaseNow: () => void;
+    settled: Promise<void>;
+    markSettled: () => void;
+  } | undefined;
   let nextProviderStale: { operation: string; revokeAuthority: boolean; managedWrite: boolean } | undefined;
   let providerAuthorityRevoked = false;
   let authorityRecheckTransportFailures = 0;
@@ -331,6 +413,19 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
   let managedSecretCleanups = 0;
   let providerValidations = 0;
   let providerEffects = 0;
+  const queryWorkspaceIds: string[] = [];
+
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>(next => { resolve = next; });
+    return { promise, resolve };
+  };
+  const shouldLoseCommittedResponse = (operation: string) => {
+    if (responseLossAfterCommit?.operation !== operation || responseLossAfterCommit.remaining < 1) return false;
+    responseLossAfterCommit.remaining -= 1;
+    if (responseLossAfterCommit.remaining === 0) responseLossAfterCommit = undefined;
+    return true;
+  };
 
   page.on('request', request => {
     const url = new URL(request.url());
@@ -388,9 +483,19 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         const failure = failures[projectionFailure];
         return route.fulfill({ status: failure.status, headers, body: JSON.stringify({ code: failure.code }) });
       }
-      projection.generatedAt = new Date(Date.parse(projection.generatedAt) + 1_000).toISOString();
+      const body = request.postDataJSON() as { organizationId?: string; workspaceId?: string };
+      queryWorkspaceIds.push(body.workspaceId || '');
+      const selectedProjection = body.organizationId === projection.organizationId && body.workspaceId === projection.workspaceId
+        ? projection
+        : body.organizationId === secondaryProjection?.organizationId && body.workspaceId === secondaryProjection.workspaceId
+          ? secondaryProjection
+          : body.organizationId === alternateOrganizationProjection?.organizationId && body.workspaceId === alternateOrganizationProjection.workspaceId
+            ? alternateOrganizationProjection
+            : undefined;
+      if (!selectedProjection) return route.fulfill({ status: 403, headers, body: JSON.stringify({ code: 'TENANT_ACCESS_DENIED' }) });
+      selectedProjection.generatedAt = new Date(Date.parse(selectedProjection.generatedAt) + 1_000).toISOString();
       successfulProjectionResponses += 1;
-      return route.fulfill({ status: 200, headers, body: JSON.stringify({ projection }) });
+      return route.fulfill({ status: 200, headers, body: JSON.stringify({ projection: selectedProjection }) });
     }
     if (pathname.endsWith('/enterprise-intelligence-command') || pathname.endsWith('/enterprise-provider-lifecycle')) {
       const operation = operationFrom(request);
@@ -411,6 +516,11 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         nextCommandFailure = undefined;
         return route.fulfill({ status: 409, headers, body: JSON.stringify({ ok: false, error: { code: failure.code } }) });
       }
+      const activeDelay = delayedCommand?.operation === operation ? delayedCommand : undefined;
+      if (activeDelay) {
+        activeDelay.markObserved();
+        await activeDelay.release;
+      }
       if (nextProviderStale?.operation === operation) {
         const stale = nextProviderStale;
         nextProviderStale = undefined;
@@ -427,6 +537,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
       }
 
       if (commandKey && committedCommandKeys.has(commandKey)) {
+        if (shouldLoseCommittedResponse(operation)) return route.abort('failed');
         return route.fulfill({
           status: 200,
           headers,
@@ -616,7 +727,7 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         })))) return route.fulfill({ status: 409, headers, body: JSON.stringify({ ok: false, error: { code: 'RESOURCE_STALE' } }) });
         const selections = body.payload?.selections || [];
         const conflict = {
-          id: IDS.conflict, field: 'case.process_objective', candidateIds: selections.map(selection => selection.candidateId),
+          id: IDS.conflict, field: 'description', candidateIds: selections.map(selection => selection.candidateId),
           candidateSummaries: selections.map(selection => projection.transcriptFlow.assessCandidates.find(candidate => candidate.id === selection.candidateId)?.value || 'Selected candidate'),
           manualValue: 'Preserve the manually authored objective', material: true, resolution: 'unresolved' as const, resolutionVersion: 1,
         };
@@ -656,32 +767,6 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
         if (projection.transcriptFlow.assessApplyPreviews[0]) projection.transcriptFlow.assessApplyPreviews[0].status = 'applied';
         projection.assessDrafts[0].versionLabel = 'Draft version 2';
       }
-      if (operation === 'studio.delivery.handoff') {
-        projection.studioDocuments[0].handoffState = 'already_handed_off';
-        projection.deliveryPackages = [...projection.deliveryPackages, {
-          id: IDS.packageDraft,
-          label: 'New synthetic Delivery draft',
-          status: 'draft',
-          currentVersionLabel: 'Committed package version',
-          sourceLabel: 'Approved synthetic requirements',
-          lineageState: 'complete',
-          items: [{ itemType: 'Epic', title: 'Governed intake', acceptanceCriteriaCount: 1, sourceLocator: 'requirements section 1' }],
-          createdByCurrentActor: true,
-        }];
-      }
-      if (operation === 'monitor.baseline.create') {
-        projection.monitorBaselines = [{
-          id: IDS.monitor,
-          label: 'Synthetic read-only baseline',
-          workPackageId: IDS.package,
-          status: 'approval_required',
-          readiness: 'review_required',
-          approvedItemCount: 1,
-          lineageComplete: true,
-          liveTelemetryConnected: false,
-          createdByCurrentActor: true,
-        }];
-      }
       if (operation === 'assemble.blueprint.create') {
         projection.blueprints = [{
           id: IDS.blueprint,
@@ -694,14 +779,72 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
           createdByCurrentActor: true,
         }];
       }
+      if (operation === 'delivery.package.create.manual' && projection.deliveryWorkspace) {
+        const body = request.postDataJSON() as { payload?: { manualBrief?: string; items?: Array<{ itemType?: string; title?: string; description?: string; acceptanceCriteria?: string[]; nonFunctionalRequirements?: string[] }> } };
+        const authored = body.payload?.items?.[0];
+        const deliveryWorkspace = projection.deliveryWorkspace as unknown as Record<string, unknown>;
+        const packages = deliveryWorkspace.packages as Array<Record<string, unknown>>;
+        const templatePackage = structuredClone(packages[0]);
+        const templateItem = structuredClone((templatePackage.items as Array<Record<string, unknown>>)[0]);
+        const manualPackage: Record<string, unknown> = {
+          ...templatePackage,
+          id: IDS.deliveryManualPackage,
+          currentVersionId: IDS.deliveryManualPackageVersion,
+          currentVersion: 1,
+          aggregateVersion: 1,
+          status: 'draft',
+          sourcePackage: { version: 1, sourceMode: 'manual', lineageClassification: 'not_assessed', planningOnly: true },
+          items: [{
+            ...templateItem,
+            aggregateId: IDS.deliveryManualItem,
+            currentVersionId: IDS.deliveryManualItemVersion,
+            aggregateVersion: 1,
+            version: 1,
+            status: 'proposed',
+            type: (authored?.itemType || 'Task').toLowerCase(),
+            title: authored?.title || 'Manual planning item',
+            description: authored?.description || 'Manual planning description',
+            acceptanceCriteria: authored?.acceptanceCriteria || [],
+            nonFunctionalRequirements: authored?.nonFunctionalRequirements || [],
+            sourceCitation: undefined,
+            decision: undefined,
+            diffs: [],
+            actions: ['delivery.item.review'],
+            history: [{
+              version: 1,
+              status: 'proposed',
+              title: authored?.title || 'Manual planning item',
+              description: authored?.description || 'Manual planning description',
+              acceptanceCriteria: authored?.acceptanceCriteria || [],
+              nonFunctionalRequirements: authored?.nonFunctionalRequirements || [],
+              createdAt: '2026-08-31T06:40:00.000Z',
+            }],
+          }],
+          itemPage: { limit: 50, hasMore: false, cursorApplied: false, isComplete: true },
+          historyPage: { limit: 50, reviewHasMore: false, approvalHasMore: false },
+          reviewState: 'not_requested',
+          approvalState: 'not_requested',
+          blockers: ['1 work item decision unresolved.'],
+          blockerCount: 1,
+          reviewHistory: [],
+          approvalHistory: [],
+          actions: ['delivery.item.review', 'delivery.package.revision.commit'],
+        };
+        delete manualPackage.acceptedItemCount;
+        deliveryWorkspace.packages = [...packages.filter(item => item.id !== IDS.deliveryManualPackage), manualPackage];
+      }
       projection.commandActivity = [{ commandType: operation, status: 'committed', completedAt: '2026-08-04T09:01:00.000Z', idempotencyState: 'committed' }];
       if (commandKey) committedCommandKeys.add(commandKey);
       domainEffectCounts.set(operation, (domainEffectCounts.get(operation) || 0) + 1);
-      if (nextResponseLossAfterCommit === operation) {
-        nextResponseLossAfterCommit = undefined;
+      if (postCommitOutcomeUnknown?.operation === operation) {
+        const failure = postCommitOutcomeUnknown;
+        postCommitOutcomeUnknown = undefined;
+        return route.fulfill({ status: 503, headers, body: JSON.stringify({ ok: false, error: { code: failure.code } }) });
+      }
+      if (shouldLoseCommittedResponse(operation)) {
         return route.abort('failed');
       }
-      return route.fulfill({
+      await route.fulfill({
         status: 200,
         headers,
         body: JSON.stringify({
@@ -715,6 +858,11 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
           status: 'committed',
         }),
       });
+      if (activeDelay) {
+        activeDelay.markSettled();
+        if (delayedCommand === activeDelay) delayedCommand = undefined;
+      }
+      return;
     }
     unexpectedRequests.push(`${request.method()} ${pathname}`);
     return route.fulfill({ status: 404, headers, body: JSON.stringify({ code: 'FIXTURE_ROUTE_NOT_FOUND' }) });
@@ -808,7 +956,33 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
     unexpectedRequests,
     failNext(operation: string, code: string) { nextCommandFailure = { operation, code }; },
     transportFailNext(operation: string) { nextTransportFailure = operation; },
-    loseResponseAfterCommitNext(operation: string) { nextResponseLossAfterCommit = operation; },
+    loseResponseAfterCommitNext(operation: string) { responseLossAfterCommit = { operation, remaining: 1 }; },
+    loseResponsesAfterCommitNext(operation: string, count = 2) {
+      if (!Number.isSafeInteger(count) || count < 1) throw new Error('FIXTURE_RESPONSE_LOSS_COUNT_INVALID');
+      responseLossAfterCommit = { operation, remaining: count };
+    },
+    reportPostCommitOutcomeUnknownNext(operation: string, code: 'COMMAND_OUTCOME_UNKNOWN' | 'RECEIPT_FINALIZATION_FAILED' = 'COMMAND_OUTCOME_UNKNOWN') {
+      postCommitOutcomeUnknown = { operation, code };
+    },
+    delayNext(operation: string) {
+      if (delayedCommand) throw new Error('FIXTURE_DELAY_ALREADY_ACTIVE');
+      const observed = deferred();
+      const release = deferred();
+      const settled = deferred();
+      delayedCommand = { operation, observed: observed.promise, markObserved: observed.resolve, release: release.promise, releaseNow: release.resolve, settled: settled.promise, markSettled: settled.resolve };
+    },
+    waitForDelayedCommand(operation: string) {
+      if (delayedCommand?.operation !== operation) throw new Error('FIXTURE_DELAY_NOT_ACTIVE');
+      return delayedCommand.observed;
+    },
+    releaseDelayedCommand(operation: string) {
+      if (delayedCommand?.operation !== operation) throw new Error('FIXTURE_DELAY_NOT_ACTIVE');
+      delayedCommand.releaseNow();
+    },
+    waitForDelayedCommandCompletion(operation: string) {
+      if (delayedCommand?.operation !== operation) throw new Error('FIXTURE_DELAY_NOT_ACTIVE');
+      return delayedCommand.settled;
+    },
     staleProviderAfterManagedWriteNext(operation: 'provider.secret.bind' | 'provider.secret.rotate') {
       nextProviderStale = { operation, revokeAuthority: false, managedWrite: true };
     },
@@ -836,6 +1010,11 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
       };
     },
     domainEffectCount(operation: string) { return domainEffectCounts.get(operation) || 0; },
+    queryWorkspaceIds() { return [...queryWorkspaceIds]; },
+    manualPackageCount() {
+      const packages = (projection.deliveryWorkspace as unknown as { packages?: Array<{ sourcePackage?: { sourceMode?: string } }> } | undefined)?.packages || [];
+      return packages.filter(item => item.sourcePackage?.sourceMode === 'manual').length;
+    },
     runtimeEvidenceContext(assertion: string, fixtureId: string) {
       if (successfulProjectionResponses === 0) throw new Error(`BROWSER_EVIDENCE_WITHOUT_PROJECTION:${assertion}`);
       return {

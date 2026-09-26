@@ -1,5 +1,5 @@
-import type { TenantContextProjection } from '../../types';
-import type { StudioArtifactSectionDto, StudioCanonicalSourceAnchorDto, StudioSectionNonSourceLabel, StudioWorkspaceSelectedSourceDto } from './contracts';
+import type { TenantContextProjection } from '../../types.ts';
+import type { StudioArtifactSectionDto, StudioCanonicalSourceAnchorDto, StudioSectionNonSourceLabel, StudioWorkspaceSelectedSourceDto } from './contracts.ts';
 
 export interface StudioAuthorityTicket { readonly identity: string; readonly epoch: number }
 export const studioAuthorityIdentity = (context: Pick<TenantContextProjection, 'organizationId' | 'workspaceId' | 'userId' | 'authorizationVersion'>) => (
@@ -71,6 +71,63 @@ export interface StudioSourceAuthorityProjection {
   enabled: boolean; disabledReason: string | null; sourceVersions: readonly StudioSourceVersionOption[];
   sourceSets: readonly StudioSourceSetSummary[]; inputBundles: readonly StudioInputBundleSummary[];
 }
+
+export interface StudioSourceFlowSource {
+  sourceId: string; versionSelector: string; displayName: string; versionLabel: string; mimeType: string;
+  extractedCharacterCount: number; state: 'pending'|'ready'|'failed'|'deleted'; selectable: boolean;
+  reuseState: 'unused'|'already_selected_elsewhere';
+}
+export interface StudioSourceFlowMember {
+  sourceId: string; versionSelector: string; displayName: string; versionLabel: string; ordinal: number;
+  role: 'primary'|'supporting'|'contradictory'|'reference'; note?: string; extractedCharacterCount: number;
+  state: 'ready'|'failed'|'deleted'|'missing';
+}
+export interface StudioSourceFlowSet {
+  id: string; versionSelector: string; version: number; ownerModule: 'studio'; label: string; description?: string;
+  versionLabel: string; status: 'draft'|'locked'|'superseded'|'archived'; sourceCount: number;
+  extractedCharacterCount: number; members: readonly StudioSourceFlowMember[]; lockState: 'ready'|'locked'|'blocked';
+  blockers: readonly string[]; updatedAt: string;
+}
+export interface StudioSourceFlowBundle {
+  id: string; versionSelector: string; version: number; ownerModule: 'studio'; label: string; versionLabel: string;
+  status: 'draft'|'locked'|'superseded'; sourceSetIds: readonly string[];
+  sourceSetVersions: readonly {sourceSetId:string;sourceSetVersionSelector:string;sourceSetVersion:number;ordinal:number}[];
+  sourceVersionSelectors: readonly string[]; sourceCount: number; extractedCharacterCount: number; lockedAt?: string;
+}
+export interface StudioSourceFlowJob {
+  id: string; inputBundleId: string; inputBundleVersionId: string; inputBundleVersion: number;
+  status: 'requested'|'running'|'staged'|'succeeded'|'failed'|'uncertain'; candidateCount: number;
+  bindingCount: number; createdAt: string; completedAt?: string;
+}
+export interface StudioSourceFlowCandidate {
+  id: string; candidateVersion: number; inputBundleId: string; inputBundleVersionId: string; inputBundleVersion: number;
+  extractionBindingId: string; extractionJobId: string; sourceSetId: string; sourceSetVersionId: string;
+  sourceSetVersion: number; sourceId: string; sourceVersionId: string; sourceLabel: string; sourceVersionLabel: string;
+  field: string; value: string; safeExcerpt?: string; sourceLocator: string; confidence: number;
+  status: 'suggested'|'accepted'|'rejected'|'edited'; provenanceState: 'anchored'|'incomplete';
+  reviewState: 'pending'|'reviewed_by_you'|'reviewed_by_another'; editCount: number; reviewedAt?: string;
+}
+export interface StudioSourceFlowProjection {
+  featureState: {
+    sourceMutationsEnabled: boolean;
+    providerExtractionEnabled: boolean;
+    reason?: 'disabled'|'read_only'|'provider_disabled'|'route_unavailable';
+  };
+  sources: readonly StudioSourceFlowSource[];
+  sourceSets: readonly StudioSourceFlowSet[];
+  inputBundles: readonly StudioSourceFlowBundle[];
+  extractionJobs: readonly StudioSourceFlowJob[];
+  candidates: readonly StudioSourceFlowCandidate[];
+}
+
+export const emptyStudioSourceFlowProjection = (): StudioSourceFlowProjection => ({
+  featureState: { sourceMutationsEnabled: false, providerExtractionEnabled: false, reason: 'disabled' },
+  sources: [],
+  sourceSets: [],
+  inputBundles: [],
+  extractionJobs: [],
+  candidates: [],
+});
 
 export interface StudioTemplateSummary {
   templateId: string;
@@ -164,6 +221,72 @@ const optionalUuid = (value: unknown) => value === null ? null : uuid(value);
 const optionalPositive = (value: unknown) => value === null ? null : integer(value, 1);
 const optionalHash = (value: unknown) => value === null ? null : hash(value);
 const strings = (value: unknown, limit = 50): readonly string[] => Array.isArray(value) && value.length <= limit ? value.map(item => text(item, 1_000)) : fail();
+const allowed = (value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []) => {
+  const keys = Object.keys(value);
+  if (required.some(key => !(key in value)) || keys.some(key => !required.includes(key) && !optional.includes(key))) fail();
+};
+const decimal = (value: unknown, minimum: number, maximum: number): number => typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum ? value : fail();
+
+const sourceFlowRootKeys = ['featureState','sources','sourceSets','inputBundles','extractionJobs','candidates'] as const;
+const sourceFlowFeatureKeys = ['sourceMutationsEnabled','providerExtractionEnabled'] as const;
+const sourceFlowSourceKeys = ['sourceId','versionSelector','displayName','versionLabel','mimeType','extractedCharacterCount','state','selectable','reuseState'] as const;
+const sourceFlowSetKeys = ['id','versionSelector','version','ownerModule','label','versionLabel','status','sourceCount','extractedCharacterCount','members','lockState','blockers','updatedAt'] as const;
+const sourceFlowMemberKeys = ['sourceId','versionSelector','displayName','versionLabel','ordinal','role','extractedCharacterCount','state'] as const;
+const sourceFlowBundleKeys = ['id','versionSelector','version','ownerModule','label','versionLabel','status','sourceSetIds','sourceSetVersions','sourceVersionSelectors','sourceCount','extractedCharacterCount'] as const;
+const sourceFlowBundleSetKeys = ['sourceSetId','sourceSetVersionSelector','sourceSetVersion','ordinal'] as const;
+const sourceFlowJobKeys = ['id','inputBundleId','inputBundleVersionId','inputBundleVersion','status','candidateCount','bindingCount','createdAt'] as const;
+const sourceFlowCandidateKeys = ['id','candidateVersion','inputBundleId','inputBundleVersionId','inputBundleVersion','extractionBindingId','extractionJobId','sourceSetId','sourceSetVersionId','sourceSetVersion','sourceId','sourceVersionId','sourceLabel','sourceVersionLabel','field','value','sourceLocator','confidence','status','provenanceState','reviewState','editCount'] as const;
+
+export const decodeStudioSourceFlowProjection = (value: unknown): StudioSourceFlowProjection => {
+  const root=record(value);exact(root,sourceFlowRootKeys);
+  const feature=record(root.featureState);allowed(feature,sourceFlowFeatureKeys,['reason']);
+  const sourceMutationsEnabled=bool(feature.sourceMutationsEnabled),providerExtractionEnabled=bool(feature.providerExtractionEnabled);
+  const reason=feature.reason===undefined?undefined:oneOf(feature.reason,['disabled','read_only','provider_disabled','route_unavailable'] as const);
+  if(sourceMutationsEnabled&&reason==='disabled')fail();
+  if(providerExtractionEnabled&&(reason==='provider_disabled'||reason==='route_unavailable'))fail();
+  const sources=Array.isArray(root.sources)&&root.sources.length<=2000?root.sources.map(value=>{const item=record(value);exact(item,sourceFlowSourceKeys);return{sourceId:uuid(item.sourceId),versionSelector:uuid(item.versionSelector),displayName:text(item.displayName,240),versionLabel:text(item.versionLabel,120),mimeType:text(item.mimeType,160),extractedCharacterCount:integer(item.extractedCharacterCount),state:oneOf(item.state,['pending','ready','failed','deleted'] as const),selectable:bool(item.selectable),reuseState:oneOf(item.reuseState,['unused','already_selected_elsewhere'] as const)};}):fail();
+  const sourceByVersion=new Map(sources.map(source=>[source.versionSelector,source]));if(sourceByVersion.size!==sources.length)fail();
+  const sourceSets=Array.isArray(root.sourceSets)&&root.sourceSets.length<=400?root.sourceSets.map(value=>{const item=record(value);allowed(item,sourceFlowSetKeys,['description']);const members=Array.isArray(item.members)&&item.members.length>=1&&item.members.length<=20?item.members.map((value,index)=>{const member=record(value);allowed(member,sourceFlowMemberKeys,['note']);const ordinal=integer(member.ordinal,1);if(ordinal!==index+1)fail();const versionSelector=uuid(member.versionSelector),sourceId=uuid(member.sourceId),source=sourceByVersion.get(versionSelector);if(!source||source.sourceId!==sourceId)fail();return{sourceId,versionSelector,displayName:text(member.displayName,240),versionLabel:text(member.versionLabel,120),ordinal,role:oneOf(member.role,['primary','supporting','contradictory','reference'] as const),...(member.note===undefined?{}:{note:text(member.note,500)}),extractedCharacterCount:integer(member.extractedCharacterCount),state:oneOf(member.state,['ready','failed','deleted','missing'] as const)};}):fail();const sourceCount=integer(item.sourceCount,1);if(sourceCount!==members.length||new Set(members.map(member=>member.versionSelector)).size!==members.length)fail();return{id:uuid(item.id),versionSelector:uuid(item.versionSelector),version:integer(item.version,1),ownerModule:oneOf(item.ownerModule,['studio'] as const),label:text(item.label,240),...(item.description===undefined?{}:{description:text(item.description,1000)}),versionLabel:text(item.versionLabel,120),status:oneOf(item.status,['draft','locked','superseded','archived'] as const),sourceCount,extractedCharacterCount:integer(item.extractedCharacterCount),members,lockState:oneOf(item.lockState,['ready','locked','blocked'] as const),blockers:strings(item.blockers,50),updatedAt:date(item.updatedAt)};}):fail();
+  const setByVersion=new Map(sourceSets.map(set=>[set.versionSelector,set]));if(setByVersion.size!==sourceSets.length)fail();
+  const inputBundles=Array.isArray(root.inputBundles)&&root.inputBundles.length<=400?root.inputBundles.map(value=>{const item=record(value);allowed(item,sourceFlowBundleKeys,['lockedAt']);const sourceSetIds=Array.isArray(item.sourceSetIds)&&item.sourceSetIds.length>=1&&item.sourceSetIds.length<=20?item.sourceSetIds.map(uuid):fail();const sourceSetVersions=Array.isArray(item.sourceSetVersions)&&item.sourceSetVersions.length===sourceSetIds.length?item.sourceSetVersions.map((value,index)=>{const set=record(value);exact(set,sourceFlowBundleSetKeys);const ordinal=integer(set.ordinal,1),sourceSetId=uuid(set.sourceSetId),sourceSetVersionSelector=uuid(set.sourceSetVersionSelector),projected=setByVersion.get(sourceSetVersionSelector);if(ordinal!==index+1||sourceSetIds[index]!==sourceSetId||(projected&&(projected.id!==sourceSetId||projected.version!==integer(set.sourceSetVersion,1))))fail();return{sourceSetId,sourceSetVersionSelector,sourceSetVersion:integer(set.sourceSetVersion,1),ordinal};}):fail();const sourceVersionSelectors=Array.isArray(item.sourceVersionSelectors)&&item.sourceVersionSelectors.length>=1&&item.sourceVersionSelectors.length<=20?item.sourceVersionSelectors.map(uuid):fail();const sourceCount=integer(item.sourceCount,1);if(new Set(sourceSetIds).size!==sourceSetIds.length||new Set(sourceVersionSelectors).size!==sourceVersionSelectors.length||sourceCount!==sourceVersionSelectors.length)fail();return{id:uuid(item.id),versionSelector:uuid(item.versionSelector),version:integer(item.version,1),ownerModule:oneOf(item.ownerModule,['studio'] as const),label:text(item.label,240),versionLabel:text(item.versionLabel,120),status:oneOf(item.status,['draft','locked','superseded'] as const),sourceSetIds,sourceSetVersions,sourceVersionSelectors,sourceCount,extractedCharacterCount:integer(item.extractedCharacterCount),...(item.lockedAt===undefined?{}:{lockedAt:date(item.lockedAt)})};}):fail();
+  const bundleByVersion=new Map(inputBundles.map(bundle=>[bundle.versionSelector,bundle]));if(bundleByVersion.size!==inputBundles.length)fail();
+  const extractionJobs=Array.isArray(root.extractionJobs)&&root.extractionJobs.length<=400?root.extractionJobs.map(value=>{const item=record(value);allowed(item,sourceFlowJobKeys,['completedAt']);const inputBundleId=uuid(item.inputBundleId),inputBundleVersionId=uuid(item.inputBundleVersionId),inputBundleVersion=integer(item.inputBundleVersion,1),bundle=bundleByVersion.get(inputBundleVersionId);if(!bundle||bundle.id!==inputBundleId||bundle.version!==inputBundleVersion)fail();return{id:uuid(item.id),inputBundleId,inputBundleVersionId,inputBundleVersion,status:oneOf(item.status,['requested','running','staged','succeeded','failed','uncertain'] as const),candidateCount:integer(item.candidateCount),bindingCount:integer(item.bindingCount),createdAt:date(item.createdAt),...(item.completedAt===undefined?{}:{completedAt:date(item.completedAt)})};}):fail();
+  const jobById=new Map(extractionJobs.map(job=>[job.id,job]));if(jobById.size!==extractionJobs.length)fail();
+  const candidates=Array.isArray(root.candidates)&&root.candidates.length<=2000?root.candidates.map(value=>{const item=record(value);allowed(item,sourceFlowCandidateKeys,['safeExcerpt','reviewedAt']);const inputBundleId=uuid(item.inputBundleId),inputBundleVersionId=uuid(item.inputBundleVersionId),inputBundleVersion=integer(item.inputBundleVersion,1),extractionJobId=uuid(item.extractionJobId),job=jobById.get(extractionJobId),bundle=bundleByVersion.get(inputBundleVersionId);if(!job||!bundle||job.inputBundleId!==inputBundleId||job.inputBundleVersionId!==inputBundleVersionId||job.inputBundleVersion!==inputBundleVersion)fail();const sourceSetId=uuid(item.sourceSetId),sourceSetVersionId=uuid(item.sourceSetVersionId),sourceSetVersion=integer(item.sourceSetVersion,1),sourceId=uuid(item.sourceId),sourceVersionId=uuid(item.sourceVersionId),set=setByVersion.get(sourceSetVersionId);if(!set||set.id!==sourceSetId||set.version!==sourceSetVersion||!bundle.sourceSetVersions.some(binding=>binding.sourceSetId===sourceSetId&&binding.sourceSetVersionSelector===sourceSetVersionId&&binding.sourceSetVersion===sourceSetVersion)||!bundle.sourceVersionSelectors.includes(sourceVersionId)||!set.members.some(member=>member.sourceId===sourceId&&member.versionSelector===sourceVersionId))fail();const status=oneOf(item.status,['suggested','accepted','rejected','edited'] as const),reviewState=oneOf(item.reviewState,['pending','reviewed_by_you','reviewed_by_another'] as const);if((status==='suggested')!==(reviewState==='pending')||(status==='suggested')!==(item.reviewedAt===undefined))fail();return{id:uuid(item.id),candidateVersion:integer(item.candidateVersion,1),inputBundleId,inputBundleVersionId,inputBundleVersion,extractionBindingId:uuid(item.extractionBindingId),extractionJobId,sourceSetId,sourceSetVersionId,sourceSetVersion,sourceId,sourceVersionId,sourceLabel:text(item.sourceLabel,240),sourceVersionLabel:text(item.sourceVersionLabel,120),field:text(item.field,240),value:text(item.value,12000),...(item.safeExcerpt===undefined?{}:{safeExcerpt:text(item.safeExcerpt,500)}),sourceLocator:text(item.sourceLocator,500),confidence:decimal(item.confidence,0,1),status,provenanceState:oneOf(item.provenanceState,['anchored','incomplete'] as const),reviewState,editCount:integer(item.editCount),...(item.reviewedAt===undefined?{}:{reviewedAt:date(item.reviewedAt)})};}):fail();
+  if(new Set(candidates.map(candidate=>candidate.id)).size!==candidates.length)fail();
+  return{featureState:{sourceMutationsEnabled,providerExtractionEnabled,...(reason?{reason}:{})},sources,sourceSets,inputBundles,extractionJobs,candidates};
+};
+
+export const studioDirectPackageEligibility = (projection: StudioSourceFlowProjection, inputBundleVersionId: string) => {
+  const bundle=projection.inputBundles.find(item=>item.versionSelector===inputBundleVersionId&&item.status==='locked');
+  if(!bundle)return{eligible:false,message:'Select an exact locked Studio bundle.'};
+  const jobs=projection.extractionJobs.filter(job=>job.inputBundleId===bundle.id&&job.inputBundleVersionId===bundle.versionSelector&&job.inputBundleVersion===bundle.version)
+    .sort((left,right)=>Date.parse(right.createdAt)-Date.parse(left.createdAt));
+  if(!jobs.length)return{eligible:false,message:'Run governed Studio extraction for this exact bundle.'};
+  const candidatesFor=(job:StudioSourceFlowJob)=>projection.candidates.filter(candidate=>
+    candidate.extractionJobId===job.id
+    && candidate.inputBundleId===bundle.id
+    && candidate.inputBundleVersionId===bundle.versionSelector
+    && candidate.inputBundleVersion===bundle.version
+    && bundle.sourceVersionSelectors.includes(candidate.sourceVersionId));
+  const coverageFor=(job:StudioSourceFlowJob)=>{
+    const candidates=candidatesFor(job);
+    if(candidates.length!==job.candidateCount||job.bindingCount!==bundle.sourceCount)return{complete:false,candidates,missing:bundle.sourceVersionSelectors};
+    if(candidates.some(candidate=>candidate.status==='suggested'||candidate.reviewState==='pending'))return{complete:false,candidates,missing:bundle.sourceVersionSelectors};
+    const covered=new Set(candidates.filter(candidate=>['accepted','edited'].includes(candidate.status)&&candidate.provenanceState==='anchored').map(candidate=>candidate.sourceVersionId));
+    const missing=bundle.sourceVersionSelectors.filter(sourceVersionId=>!covered.has(sourceVersionId));
+    return{complete:missing.length===0,candidates,missing};
+  };
+  const acceptedJob=jobs.find(job=>job.status==='succeeded'&&coverageFor(job).complete);
+  if(acceptedJob)return{eligible:true,message:'Every exact selected source has reviewed, accepted grounded coverage.'};
+  const job=jobs[0];
+  if(job.status==='uncertain')return{eligible:false,message:'Extraction outcome is uncertain. Reload and reconcile before continuing.'};
+  if(job.status!=='succeeded')return{eligible:false,message:`Extraction is ${job.status}. A direct package is not yet eligible.`};
+  const result=coverageFor(job);
+  if(result.candidates.length!==job.candidateCount||job.bindingCount!==bundle.sourceCount)return{eligible:false,message:'The exact extraction projection is incomplete. Reload committed state.'};
+  if(result.candidates.some(candidate=>candidate.status==='suggested'||candidate.reviewState==='pending'))return{eligible:false,message:'Review every grounded candidate before creating the package.'};
+  return{eligible:false,message:`Accepted grounded coverage is missing for ${result.missing.length} selected source${result.missing.length===1?'':'s'}.`};
+};
 
 const sourceKeys = ['sourceId','sourceVersionId','version','label','family','role','selected','suggestionStatus','citationCount','conflictCount'] as const;
 const decodeSource = (value: unknown): StudioSelectedSource => {

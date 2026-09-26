@@ -30,6 +30,8 @@
     "node_modules",
     "dist",
     "dist-ssr",
+    "output/test-runs",
+    "output/local-private",
     ".agent",
     ".github",
     "supabase"

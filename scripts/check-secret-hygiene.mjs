@@ -171,15 +171,18 @@ const rawSecretLiteralPatterns = [
 const sensitiveStorageKeyPattern = /(?:api[-_ ]?key|provider[-_ ]?key|token|service[-_ ]?role|secret|credential|password)/i;
 const deterministicBrowserAuthFixturePaths = new Set([
   'tests/browser/pr1c.spec.ts',
-  'tests/browser/pr1d.spec.ts',
+  'tests/browser/pr1dNetworkFixture.ts',
   'tests/browser/pr1e.spec.ts',
   'tests/browser/pr1f.spec.ts',
   'tests/browser/pr1g.spec.ts',
 ]);
 const isDeterministicBrowserAuthFixtureWrite = (relativePath, lineText) => {
   const fixtureKey = ['sb', '127', 'auth', token.toLowerCase()].join('-');
-  return deterministicBrowserAuthFixturePaths.has(relativePath)
-    && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`);
+  const syntheticFixtureKey = ['sb', 'synthetic', 'auth', token.toLowerCase()].join('-');
+  return (deterministicBrowserAuthFixturePaths.has(relativePath)
+    && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`))
+    || (relativePath === 'scripts/prCSyntheticAcceptanceBrowser.test.mjs'
+      && lineText.includes(`${storageGlobal}.setItem('${syntheticFixtureKey}'`));
 };
 
 

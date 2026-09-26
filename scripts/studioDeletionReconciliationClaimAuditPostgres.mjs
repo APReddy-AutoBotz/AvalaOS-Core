@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {performance} from 'node:perf_hooks';
 import {createApprovedStudioFixture,privateCommand} from './studioPrivateArtifactPostgresFixture.mjs';
 
 const claimAction='studio.rendition.deletion.reconciliation.claim';
@@ -124,6 +125,84 @@ const makeStateStale=async(db,attemptId)=>db.query(
 const claim=async(db,attemptId)=>(await db.query(
   'SELECT public.studio_deletion_reconciliation_claim($1::uuid) claim',[attemptId],
 )).rows[0].claim;
+
+const wait=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
+
+const claimMatureZeroDayFixture=async({db,attemptId,renditionId,timeoutMs=2000,pollMs=50})=>{
+  const deadline=performance.now()+timeoutMs;
+  let observations=0;
+  while(true){
+    let transactionOpen=false;
+    try{
+      await db.query('BEGIN');
+      transactionOpen=true;
+      const row=(await db.query(
+        `SELECT a.state attempt_state,a.reconciliation_count,r.lifecycle,
+                p.retention_days,p.indefinite policy_indefinite,
+                r.retention_indefinite,r.retention_until,
+                (public.studio_effective_retention(r.id)->>'indefinite')::boolean effective_indefinite,
+                (public.studio_effective_retention(r.id)->>'retentionUntil')::timestamptz effective_retention_until,
+                public.studio_active_hold_count(r.id)::int active_hold_count,
+                (SELECT count(*)::int
+                 FROM public.studio_rendition_retention_extensions e
+                 WHERE e.rendition_id=r.id) retention_extension_count,
+                COALESCE(
+                  (public.studio_effective_retention(r.id)->>'retentionUntil')::timestamptz,
+                  'infinity'::timestamptz
+                ) <= now() retention_eligible
+         FROM public.studio_rendition_deletion_attempts a
+         JOIN public.studio_renditions r ON r.id=a.rendition_id
+         JOIN public.studio_retention_policies p ON p.id=r.retention_policy_id
+         WHERE a.id=$1::uuid AND r.id=$2::uuid
+         FOR UPDATE OF a,r`,
+        [attemptId,renditionId],
+      )).rows[0];
+      observations+=1;
+      if(!row
+        || row.attempt_state!=='reconciliation_required'
+        || Number(row.reconciliation_count)!==2
+        || row.lifecycle!=='deleting'
+        || Number(row.retention_days)!==0
+        || row.policy_indefinite!==false
+        || row.retention_indefinite!==false
+        || row.retention_until===null
+        || row.effective_indefinite!==false
+        || row.effective_retention_until===null
+        || Number(row.active_hold_count)!==0
+        || Number(row.retention_extension_count)!==0){
+        throw new Error('ZERO_DAY_RETENTION_FIXTURE_INVALID');
+      }
+      if(row.retention_eligible){
+        const restoredClaim=await claim(db,attemptId);
+        await db.query('COMMIT');
+        transactionOpen=false;
+        return{
+          restoredClaim,
+          maturity:{
+            attemptState:row.attempt_state,
+            reconciliationCount:Number(row.reconciliation_count),
+            lifecycle:row.lifecycle,
+            retentionDays:Number(row.retention_days),
+            policyIndefinite:row.policy_indefinite,
+            renditionIndefinite:row.retention_indefinite,
+            effectiveIndefinite:row.effective_indefinite,
+            activeHoldCount:Number(row.active_hold_count),
+            retentionExtensionCount:Number(row.retention_extension_count),
+            eligible:true,
+            observations,
+          },
+        };
+      }
+      await db.query('ROLLBACK');
+      transactionOpen=false;
+    }catch(error){
+      if(transactionOpen)await db.query('ROLLBACK');
+      throw error;
+    }
+    if(performance.now()>=deadline)throw new Error('ZERO_DAY_RETENTION_FIXTURE_NOT_MATURE');
+    await wait(pollMs);
+  }
+};
 
 const executionClaim=async(db,attemptId)=>(await db.query(
   'SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',[attemptId],
@@ -582,7 +661,7 @@ export async function runStudioDeletionExecutionAuthorityEvidence({db,peer,scena
   for(let index=0;index<4;index++)repeatedErrors.push(await rejected(()=>claim(db,attemptId)));
   const repeatedAfter={attempt:await attemptSnapshot(db,attemptId),audits:await auditCounts()};
   await setRuntime({});
-  const restoredClaim=await claim(db,attemptId);
+  const {restoredClaim,maturity:restoredMaturity}=await claimMatureZeroDayFixture({db,attemptId,renditionId});
   const restoredState=await attemptSnapshot(db,attemptId);
   const restoredOwnershipRows=await actionRows(db,claimAction,attemptId);
 
@@ -723,10 +802,18 @@ export async function runStudioDeletionExecutionAuthorityEvidence({db,peer,scena
     async()=>{for(const row of [...pauseRecords.map(item=>item.error),...repeatedErrors])assert.match(row,/STUDIO_READ_ONLY/)},
     async()=>{for(const row of pauseRecords)assert.deepEqual(row.after,row.before)},
     async()=>assert.deepEqual(repeatedAfter,repeatedBefore),
-    async()=>assert.deepEqual(
-      {claimCount:Number(restoredClaim.reconciliationCount),persistedCount:Number(restoredState.reconciliation_count),state:restoredState.state,lifecycle:restoredState.lifecycle},
-      {claimCount:3,persistedCount:3,state:'reconciling',lifecycle:'deleting'},
-    ),
+    async()=>{
+      assert.deepEqual(
+        {claimCount:Number(restoredClaim.reconciliationCount),persistedCount:Number(restoredState.reconciliation_count),state:restoredState.state,lifecycle:restoredState.lifecycle},
+        {claimCount:3,persistedCount:3,state:'reconciling',lifecycle:'deleting'},
+      );
+      const {observations,...maturity}=restoredMaturity;
+      assert.deepEqual(
+        maturity,
+        {attemptState:'reconciliation_required',reconciliationCount:2,lifecycle:'deleting',retentionDays:0,policyIndefinite:false,renditionIndefinite:false,effectiveIndefinite:false,activeHoldCount:0,retentionExtensionCount:0,eligible:true},
+      );
+      assert.ok(observations>=1);
+    },
     async()=>assert.deepEqual({phase:renditionRecovery.phase,count:Number(renditionRecovery.reconciliationCount)},{phase:'pre_render',count:1}),
     async()=>assert.equal(initialExecutionAfter-initialExecutionBefore,1),
     async()=>assert.equal(Number(initialExecutionAudit.metadata.executionFence),Number(initialBinding.fence)),
@@ -758,7 +845,7 @@ export async function runStudioDeletionExecutionAuthorityEvidence({db,peer,scena
   for(let index=0;index<checks.length;index++)await scenario(names[index],checks[index]);
   const evidence={
     paused:pauseRecords.map(row=>({field:Object.keys(row.disabled)[0],stateDelta:row.before.attempt.state===row.after.attempt.state?0:1,countDelta:Number(row.after.attempt.reconciliation_count)-Number(row.before.attempt.reconciliation_count),fenceDelta:Number(row.after.attempt.execution_fence)-Number(row.before.attempt.execution_fence),auditDelta:row.after.audits.execution+row.after.audits.ownership+row.after.audits.exhaustion-row.before.audits.execution-row.before.audits.ownership-row.before.audits.exhaustion})),
-    restored:{count:Number(restoredState.reconciliation_count),state:restoredState.state},
+    restored:{count:Number(restoredState.reconciliation_count),state:restoredState.state,maturity:restoredMaturity},
     initial:{returnedFence:Number(initialBinding.fence),auditedFence:Number(initialExecutionAudit.metadata.executionFence)},
     concurrent:{bindings:concurrentResults.filter(Boolean).length,auditDelta:concurrentAfter-concurrentBefore},
     reclaim:{previousFence:Number(concurrentBinding.fence),returnedFence:Number(reclaimedBinding.fence),auditDelta:reclaimAfter-reclaimBefore},

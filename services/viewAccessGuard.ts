@@ -1,5 +1,14 @@
 import { DEFAULT_ENABLED_MODULES, MODULE_HOME_VIEW } from '../constants/moduleConfig';
-import { Organization, ProductModuleKey, Scope, ScopeType, User, View } from '../types';
+import {
+  EnterpriseSessionState,
+  Organization,
+  ProductModuleKey,
+  Scope,
+  ScopeType,
+  TenantContextProjection,
+  User,
+  View,
+} from '../types';
 
 export type ViewAccessReason =
   | 'auth_loading'
@@ -78,6 +87,85 @@ const ALL_ASSESS_SCOPES = [
 
 const DELIVERY_WORK_SCOPES = [ScopeType.MY_WORK, ScopeType.PROJECT, ScopeType.TEAM];
 const DOCS_WORK_SCOPES = [ScopeType.MY_WORK, ScopeType.TEAM, ScopeType.PROJECT];
+
+// These capabilities grant presentation/navigation only. Mutation components
+// and server commands continue to enforce their own exact capability and
+// authorization-version contracts.
+export const AUTHORITATIVE_VIEW_PRESENTATION_CAPABILITIES: Partial<Record<View, readonly string[]>> = {
+  [View.DASHBOARD]: ['monitor.read'],
+  [View.PORTFOLIO]: ['monitor.read'],
+  [View.PROCESS_CATALOG]: ['assess.read'],
+  [View.TEMPLATE_LIBRARY]: ['assess.read'],
+  [View.PROCESS_DETAIL]: ['assess.read'],
+  [View.GUIDED_ASSESSMENT]: ['assess.read'],
+  [View.ENTERPRISE_INTELLIGENCE]: ['assess.read'],
+  [View.DOCS_FORGE]: [
+    'studio.sources.read',
+    'studio.handoffs.read',
+    'studio.artifacts.read',
+    'studio.artifacts.review',
+    'studio.artifacts.approve',
+  ],
+  [View.TEMPLATE_STUDIO]: ['studio.templates.read'],
+  [View.DOCS]: [
+    'studio.artifacts.read',
+    'studio.artifacts.review',
+    'studio.artifacts.approve',
+  ],
+  [View.WORKSPACE]: [
+    'studio.artifacts.read',
+    'studio.artifacts.review',
+    'studio.artifacts.approve',
+  ],
+  [View.BOARDS]: ['delivery.read', 'project.read'],
+  [View.LIST]: ['delivery.read', 'project.read'],
+  [View.BACKLOG]: ['delivery.read', 'backlog.read'],
+  [View.ROADMAP]: ['delivery.read', 'roadmap.read'],
+  [View.CALENDAR]: ['delivery.read', 'project.read'],
+  [View.GANTT]: ['delivery.read', 'roadmap.read'],
+  [View.WORKLOAD]: ['delivery.read', 'capacity.read'],
+  [View.SPRINT_PLANNING]: ['delivery.read', 'backlog.read'],
+  [View.DELIVERY_PACK]: [
+    'delivery.read',
+    'project.read',
+    'delivery.handoff.request',
+    'delivery.handoff.review',
+    'delivery.handoff.approve',
+    'delivery.handoff.consume',
+    'delivery.package.manage',
+    'delivery.package.review',
+    'delivery.package.approve',
+  ],
+  [View.TIMESHEETS]: ['delivery.read', 'timesheets.read'],
+  [View.AUTOMATIONS]: ['delivery.read', 'automation.view'],
+};
+
+export const bindAuthoritativePresentationCapabilities = ({
+  userId,
+  organizationId,
+  workspaceId,
+  sessionState,
+  tenantContext,
+}: {
+  userId?: string | null;
+  organizationId?: string | null;
+  workspaceId?: string | null;
+  sessionState: EnterpriseSessionState;
+  tenantContext?: TenantContextProjection | null;
+}): readonly string[] => {
+  if (!userId || !organizationId || !workspaceId || !tenantContext) return [];
+  if (!['ready', 'read_only'].includes(sessionState)) return [];
+  if (tenantContext.userId !== userId
+    || tenantContext.organizationId !== organizationId
+    || tenantContext.workspaceId !== workspaceId
+    || !Number.isSafeInteger(tenantContext.authorizationVersion)
+    || tenantContext.authorizationVersion < 1
+    || !Array.isArray(tenantContext.capabilities)
+    || tenantContext.capabilities.some(
+      capability => typeof capability !== 'string' || capability.length === 0 || capability.trim() !== capability,
+    )) return [];
+  return [...new Set(tenantContext.capabilities)];
+};
 
 export const VIEW_ACCESS_METADATA: Record<View, ViewAccessMetadata> = {
   [View.DASHBOARD]: {
@@ -327,15 +415,16 @@ export function hasViewPermission(user: User, requiredPermissions: string[]) {
   return requiredPermissions.some(permission => userPermissions.includes(permission));
 }
 
-function hasAuthoritativeViewCapability(input: ResolveViewAccessInput, requiredPermissions: string[]) {
+function hasAuthoritativeViewCapability(input: ResolveViewAccessInput, view: View) {
   const capabilities = input.authoritativeCapabilities ?? [];
-  return capabilities.includes('assess.read') && requiredPermissions.includes('assessment.review');
+  const presentationCapabilities = AUTHORITATIVE_VIEW_PRESENTATION_CAPABILITIES[view] ?? [];
+  return presentationCapabilities.some(capability => capabilities.includes(capability));
 }
 
-function hasEffectiveViewPermission(input: ResolveViewAccessInput, requiredPermissions: string[]) {
+function hasEffectiveViewPermission(input: ResolveViewAccessInput, requiredPermissions: string[], view: View = input.view) {
   return Boolean(input.user && (
     hasViewPermission(input.user, requiredPermissions) ||
-    hasAuthoritativeViewCapability(input, requiredPermissions)
+    hasAuthoritativeViewCapability(input, view)
   ));
 }
 
@@ -365,7 +454,7 @@ function getDeniedFallback(
     const candidate = VIEW_ACCESS_METADATA[candidateView];
     if (!candidate || candidate.status !== 'active') continue;
     if (!isModuleEnabled(candidate.module, enabledModules)) continue;
-    if (!hasEffectiveViewPermission(input, candidate.requiredPermissions)) continue;
+    if (!hasEffectiveViewPermission(input, candidate.requiredPermissions, candidate.view)) continue;
 
     return {
       fallbackView: candidate.view,

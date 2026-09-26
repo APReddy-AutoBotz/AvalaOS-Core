@@ -267,7 +267,7 @@ const defaultTransport: AssessV2Transport = {
       .eq('workspace_id', workspaceId)
       .eq('process_id', processId)
       .is('deleted_at', null)
-      .in('status', ['draft', 'reviewer_ready'])
+      .neq('status', 'superseded')
       .order('updated_at', { ascending: false })
       .order('id', { ascending: true })
       .limit(1)

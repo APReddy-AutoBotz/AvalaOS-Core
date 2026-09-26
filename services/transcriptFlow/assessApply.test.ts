@@ -24,21 +24,21 @@ const candidate = (id: string, value: string, sourceLabel: string): TranscriptAs
   status: 'accepted',
   relationship: 'neutral',
   applicationIntent: 'set_case_field',
-  applyTarget: 'case.process_objective',
+  applyTarget: 'description',
   provenanceState: 'anchored',
   reviewState: 'reviewed_by_you',
   editCount: 0,
 });
 
 const candidates = [candidate(FIRST, 'Reduce handling time', 'Interview A'), candidate(SECOND, 'Reduce rework', 'Interview B')];
-const selections = candidates.map(item => ({ candidateId: item.id, candidateVersion: 1, intent: 'set_case_field' as const, target: 'case.process_objective' }));
+const selections = candidates.map(item => ({ candidateId: item.id, candidateVersion: 1, intent: 'set_case_field' as const, target: 'description' }));
 
 const plan = planTranscriptAssessApply({
   assessDraftId: ASSESS,
   expectedDraftVersion: 7,
   candidates,
   selections,
-  targets: [{ key: 'case.process_objective', allowedIntents: ['set_case_field'], currentManualValue: 'Preserve manual objective' }],
+  targets: [{ key: 'description', allowedIntents: ['set_case_field'], currentManualValue: 'Preserve manual objective' }],
 });
 assert.equal(plan.scoringMutation, false);
 assert.equal(plan.selections.length, 2);
@@ -48,17 +48,28 @@ const evidenceOnly = planTranscriptAssessApply({
   assessDraftId: ASSESS,
   expectedDraftVersion: 7,
   candidates: [candidates[0]],
-  selections: [{ candidateId: FIRST, candidateVersion: 1, intent: 'link_evidence_only', target: 'unused' }],
+  selections: [{ candidateId: FIRST, candidateVersion: 1, intent: 'link_evidence_only', target: 'evidence' }],
   targets: [],
 });
 assert.deepEqual(evidenceOnly.evidenceOnlyCandidateIds, [FIRST]);
+assert.equal(planTranscriptAssessApply({
+  assessDraftId: ASSESS, expectedDraftVersion: 7, candidates: [candidates[0]],
+  selections: [{ ...selections[0], target: 'name' }],
+  targets: [{ key: 'name', allowedIntents: ['set_case_field'] }],
+}).selections[0].target, 'name');
+for (const target of ['case.name', 'case.description', 'case.process_objective', 'score']) {
+  assert.throws(() => planTranscriptAssessApply({
+    assessDraftId: ASSESS, expectedDraftVersion: 7, candidates: [candidates[0]],
+    selections: [{ ...selections[0], target }], targets: [{ key: target, allowedIntents: ['set_case_field'] }],
+  }), /TRANSCRIPT_ASSESS_LEGACY_TARGET_UNSAFE/);
+}
 
 assert.throws(() => planTranscriptAssessApply({
   assessDraftId: ASSESS,
   expectedDraftVersion: 7,
   candidates: [{ ...candidates[0], provenanceState: 'incomplete' }],
   selections: [selections[0]],
-  targets: [{ key: 'case.process_objective', allowedIntents: ['set_case_field'] }],
+  targets: [{ key: 'description', allowedIntents: ['set_case_field'] }],
 }), /TRANSCRIPT_ASSESS_CANDIDATE_NOT_APPLICABLE/);
 
 assert.throws(
@@ -68,7 +79,7 @@ assert.throws(
 assert.doesNotThrow(() => assertTranscriptAssessFinalizable([{ material: false, resolution: 'unresolved' }]));
 assert.throws(() => planTranscriptAssessApply({
   assessDraftId: 'not-a-uuid', expectedDraftVersion: 0, candidates, selections,
-  targets: [{ key: 'case.process_objective', allowedIntents: ['set_case_field'] }],
+  targets: [{ key: 'description', allowedIntents: ['set_case_field'] }],
 }), /TRANSCRIPT_ASSESS_TARGET_STALE/);
 assert.throws(() => planTranscriptAssessApply({
   assessDraftId: ASSESS, expectedDraftVersion: 7, candidates, selections: [], targets: [],
@@ -76,12 +87,17 @@ assert.throws(() => planTranscriptAssessApply({
 assert.throws(() => planTranscriptAssessApply({
   assessDraftId: ASSESS, expectedDraftVersion: 7, candidates,
   selections: [{ ...selections[0], candidateId: 'not-a-uuid' }],
-  targets: [{ key: 'case.process_objective', allowedIntents: ['set_case_field'] }],
+  targets: [{ key: 'description', allowedIntents: ['set_case_field'] }],
 }), /TRANSCRIPT_ASSESS_SELECTION_INVALID/);
 assert.throws(() => planTranscriptAssessApply({
   assessDraftId: ASSESS, expectedDraftVersion: 7, candidates,
   selections: [{ ...selections[0], intent: 'create_primitive' }],
-  targets: [{ key: 'case.process_objective', allowedIntents: ['set_case_field'] }],
+  targets: [{ key: 'description', allowedIntents: ['set_case_field'] }],
+}), /TRANSCRIPT_ASSESS_LEGACY_TARGET_UNSAFE/);
+assert.throws(() => planTranscriptAssessApply({
+  assessDraftId: ASSESS, expectedDraftVersion: 7, candidates: [candidates[0]],
+  selections: [{ candidateId: FIRST, candidateVersion: 1, intent: 'link_evidence_only', target: 'evidence.unresolved' }],
+  targets: [],
 }), /TRANSCRIPT_ASSESS_TARGET_INVALID/);
 
 console.log('Transcript Assess apply domain tests passed.');

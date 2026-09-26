@@ -1,8 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CANONICAL_AP_PROJECT_ID, CANONICAL_AP_WORKFLOW_NAME } from '../../data/mockData';
+import { decodeAcceptanceExecutionProfile } from '../../scripts/acceptanceExecutionProfile.mjs';
+import { openProductNavigation } from './productNavigationReadiness';
 
-const releaseSha = process.env.ACCEPTANCE_RELEASE_SHA ?? process.env.EXPECTED_RELEASE_SHA;
-const deployId = process.env.NETLIFY_DEPLOY_ID;
+const executionProfile = decodeAcceptanceExecutionProfile(process.env, {
+  expectedCheckoutSha: process.env.ACCEPTANCE_EXECUTION_KIND === 'local_source_fixture'
+    ? process.env.ACCEPTANCE_CHECKOUT_SHA
+    : undefined,
+});
+const releaseSha = executionProfile.releaseSha;
+const deployId = executionProfile.deployId;
 
 const canonicalBoardsNavigation = {
   urlView: 'boards',
@@ -23,9 +30,16 @@ const canonicalDeliveryPackNavigation = {
 const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>>) => {
   expect(response?.ok(), 'hosted response').toBeTruthy();
   const headers = response?.headers() ?? {};
-  expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
-  expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
-  expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+  if (executionProfile.executionKind === 'hosted_preview') {
+    expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
+    expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
+    expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+  } else {
+    expect(new URL(response!.url()).origin, 'local source fixture response origin').toBe(executionProfile.targetOrigin);
+    expect(headers['x-avalaos-release'], 'local source fixture must not synthesize hosted release headers').toBeUndefined();
+    expect(headers['x-avalaos-environment'], 'local source fixture must not synthesize hosted environment headers').toBeUndefined();
+    expect(headers['x-avalaos-netlify-deploy-id'], 'local source fixture must not synthesize hosted deploy headers').toBeUndefined();
+  }
 };
 
 const readDurableProjectNavigation = async (page: Page) => page.evaluate(() => {
@@ -68,15 +82,6 @@ const selectCanonicalProject = async (page: Page) => {
   await project.click();
 };
 
-const openProductNavigation = async (page: Page) => {
-  const opener = page.getByRole('button', { name: 'Open navigation' });
-  if (!(await opener.isVisible().catch(() => false))) return;
-  const mobileIdentity = page.getByTestId('mobile-current-user');
-  if (await mobileIdentity.isVisible().catch(() => false)) return;
-  await opener.click();
-  await expect(mobileIdentity).toBeVisible({ timeout: 15_000 });
-};
-
 const clickProductNav = async (page: Page, label: string) => {
   let target = page.getByRole('button', { name: label, exact: true });
   if (!(await target.isVisible().catch(() => false))) {
@@ -88,11 +93,21 @@ const clickProductNav = async (page: Page, label: string) => {
 };
 
 test.beforeAll(() => {
+  if (executionProfile.executionKind === 'declaration_only') throw new Error('ACCEPTANCE_DECLARATION_IS_NOT_EXECUTABLE');
   expect(releaseSha, 'controller history probe must bind to an exact release SHA').toMatch(/^[0-9a-f]{40}$/u);
-  expect(deployId, 'controller history probe must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
+  if (executionProfile.executionKind === 'hosted_preview') {
+    expect(deployId, 'controller history probe must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
+  } else if (executionProfile.executionKind === 'local_source_fixture') {
+    expect(deployId, 'local controller history must not synthesize a Netlify deployment ID').toBeNull();
+    expect(executionProfile.checkoutSha, 'local controller history must bind the exact checkout').toBe(releaseSha);
+  }
 });
 
-test('[CONTROLLER-NAV-HISTORY-001] user navigation is traversable with browser Back and Forward', async ({ page }) => {
+const navigationTitle = executionProfile.executionKind === 'local_source_fixture'
+  ? '[SYNTHETIC-REGRESSION:CONTROLLER-NAV-HISTORY-001] user navigation is traversable with browser Back and Forward'
+  : '[CONTROLLER-NAV-HISTORY-001] user navigation is traversable with browser Back and Forward';
+
+test(navigationTitle, async ({ page }) => {
   await enterDeliveryLead(page);
   await selectCanonicalProject(page);
   await expect.poll(

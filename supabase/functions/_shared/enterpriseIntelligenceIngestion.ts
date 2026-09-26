@@ -2,6 +2,8 @@ import {
   isSupportedEvidenceMimeType,
   type SupportedEvidenceMimeType,
 } from '../../../services/enterpriseIntelligence.ts';
+import { extractStructuredSpreadsheet, XLSX_MIME } from './assessDocumentSpreadsheet.ts';
+export { extractStructuredSpreadsheet } from './assessDocumentSpreadsheet.ts';
 
 export const MAX_EVIDENCE_BYTES = 12_000_000;
 export const MAX_EXTRACTED_EVIDENCE_CHARACTERS = 500_000;
@@ -26,6 +28,7 @@ export const classifyEvidenceExtractionFailure = (
     || message.startsWith('PDF_')
     || message.startsWith('DOCX_')
     || message.startsWith('EVIDENCE_TEXT_')
+    || message.startsWith('SPREADSHEET_')
     || error instanceof TypeError
   ) return 'MALFORMED_SOURCE';
   return null;
@@ -254,6 +257,7 @@ export const extractEvidenceText = async (
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_EVIDENCE_BYTES) throw new Error('EVIDENCE_BYTES_INVALID');
   let text: string;
   if (mimeType === 'application/pdf') text = await extractPdfText(bytes);
+  else if (mimeType === XLSX_MIME) text = (await extractStructuredSpreadsheet(bytes, XLSX_MIME)).text;
   else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') text = stripXml(await extractDocxXml(bytes));
   else {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)

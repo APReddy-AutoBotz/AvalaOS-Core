@@ -66,8 +66,13 @@ export const planTranscriptAssessApply = (input: {
     }
     if (!TRANSCRIPT_ASSESS_APPLICATION_INTENTS.includes(selection.intent)) throw new Error('TRANSCRIPT_ASSESS_INTENT_INVALID');
     if (selection.intent === 'link_evidence_only') {
+      if (selection.target !== 'evidence') throw new Error('TRANSCRIPT_ASSESS_TARGET_INVALID');
       evidenceOnlyCandidateIds.push(candidate.id);
     } else {
+      if (selection.intent !== 'set_case_field'
+        || (selection.target !== 'name' && selection.target !== 'description')) {
+        throw new Error('TRANSCRIPT_ASSESS_LEGACY_TARGET_UNSAFE');
+      }
       const target = targets.get(selection.target);
       if (!target || !target.allowedIntents.includes(selection.intent)) throw new Error('TRANSCRIPT_ASSESS_TARGET_INVALID');
     }

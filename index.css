@@ -37,8 +37,8 @@
   --av-shadow-md: 0 18px 40px rgba(15, 23, 42, 0.11);
   --av-focus-ring: #0b5f8a;
 
-  --kp-font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --kp-font-display: Outfit, Inter, ui-sans-serif, system-ui, sans-serif;
+  --kp-font-ui: "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --kp-font-display: "Outfit Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 
   --kp-obsidian-980: #030712;
   --kp-obsidian-950: #001b2f;
@@ -274,7 +274,7 @@ body.app-bg {
 }
 
 .brand-wordmark {
-  font-family: "Playfair Display", Outfit, Inter, serif;
+  font-family: "Playfair Display", "Outfit Variable", "Inter Variable", serif;
   font-weight: 800;
   letter-spacing: -0.025em;
   color: var(--kp-navy-900);
@@ -419,7 +419,10 @@ header.glass {
   border: 1px solid var(--kp-border);
   color: var(--kp-text);
   border-radius: var(--kp-radius-md);
-  transition: all 180ms ease;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
 }
 
 .dark .btn-ghost {
@@ -708,14 +711,10 @@ header.glass {
 
 @keyframes kp-screen-in {
   from {
-    opacity: 0;
     transform: translateY(8px);
-    filter: blur(3px);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
-    filter: blur(0);
   }
 }
 

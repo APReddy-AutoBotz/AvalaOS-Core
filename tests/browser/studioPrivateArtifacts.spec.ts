@@ -89,12 +89,22 @@ interface FixtureOptions {
   reloadFailure?: boolean;
   committedPending?: boolean;
   transportRecoveredReplay?: boolean;
+  gateFirstPrivateProjection?: boolean;
 }
 
 async function installFixture(page: Page, options: FixtureOptions = {}) {
   const capabilities = options.capabilities ?? allCapabilities;
   let renditions = options.renditions ?? [];
   let failReload = false;
+  let firstPrivateProjectionPending = options.gateFirstPrivateProjection === true;
+  let releaseFirstPrivateProjection!: () => void;
+  let markFirstPrivateProjectionStarted!: () => void;
+  const firstPrivateProjectionRelease = new Promise<void>(resolve => {
+    releaseFirstPrivateProjection = resolve;
+  });
+  const firstPrivateProjectionStarted = new Promise<void>(resolve => {
+    markFirstPrivateProjectionStarted = resolve;
+  });
   const requests: { path: string; queryKeys: string[]; body: any }[] = [];
   const user = {
     id: ACTOR,
@@ -229,6 +239,11 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
       return ok(route, artifactProjection);
     }
     if (url.pathname.includes('studio_private_artifact_projection')) {
+      if (firstPrivateProjectionPending) {
+        firstPrivateProjectionPending = false;
+        markFirstPrivateProjectionStarted();
+        await firstPrivateProjectionRelease;
+      }
       if (failReload) {
         failReload = false;
         return route.fulfill({
@@ -370,7 +385,12 @@ async function installFixture(page: Page, options: FixtureOptions = {}) {
     }
     return ok(route, []);
   });
-  return { requests, privateProjection };
+  return {
+    requests,
+    privateProjection,
+    firstPrivateProjectionStarted,
+    releaseFirstPrivateProjection,
+  };
 }
 
 async function openDocs(page: Page) {
@@ -393,6 +413,98 @@ test('approved canonical artifact shows governed rendition controls', async ({ p
   await expect(panel.getByRole('button', { name: 'Generate Markdown' })).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'Generate PDF' })).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'Generate DOCX' })).toBeEnabled();
+});
+
+test('available governed download is fully opaque on its first enabled frame', async ({ page }) => {
+  const fixture = await installFixture(page, {
+    gateFirstPrivateProjection: true,
+    renditions: [rendition('markdown')],
+  });
+  let released = false;
+  try {
+    await page.goto('/tests/browser/studioPrivateArtifactsHarness.html');
+    await fixture.firstPrivateProjectionStarted;
+    const markdownCard = page.getByTestId('rendition-markdown');
+    const downloadUnavailable = markdownCard.getByRole('button', { name: 'Download unavailable' });
+    await expect(downloadUnavailable).toBeVisible();
+    await expect(downloadUnavailable).toBeDisabled();
+
+    const disabledStyle = await downloadUnavailable.evaluate(element => {
+      const style = getComputedStyle(element);
+      (element as HTMLElement).dataset.transitionProbe = 'studio-download-markdown';
+      const observedDisabledStyle = {
+        opacity: style.opacity,
+        transitionProperty: style.transitionProperty,
+      };
+      (window as any).__studioPrivateArtifactEnabledStyle = new Promise(resolve => {
+        const observer = new MutationObserver(() => {
+          if ((element as HTMLButtonElement).disabled) return;
+          const enabledStyle = getComputedStyle(element);
+          const immediateOpacity = enabledStyle.opacity;
+          const immediateTransitionProperty = enabledStyle.transitionProperty;
+          const immediateOpacityTransitions = element.getAnimations().filter(animation => (
+            typeof CSSTransition !== 'undefined' &&
+            animation instanceof CSSTransition &&
+            animation.transitionProperty === 'opacity'
+          )).length;
+          observer.disconnect();
+          requestAnimationFrame(() => {
+            const firstFrameStyle = getComputedStyle(element);
+            const firstFrameOpacityTransitions = element.getAnimations().filter(animation => (
+              typeof CSSTransition !== 'undefined' &&
+              animation instanceof CSSTransition &&
+              animation.transitionProperty === 'opacity'
+            )).length;
+            resolve({
+              immediateOpacity,
+              immediateTransitionProperty,
+              immediateOpacityTransitions,
+              firstFrameOpacity: firstFrameStyle.opacity,
+              firstFrameOpacityTransitions,
+            });
+          });
+        });
+        observer.observe(element, { attributes: true, attributeFilter: ['disabled'] });
+      });
+      return observedDisabledStyle;
+    });
+    expect(disabledStyle.opacity).toBe('0.5');
+
+    fixture.releaseFirstPrivateProjection();
+    released = true;
+    const enabledStyle = await page.evaluate(() => (
+      (window as any).__studioPrivateArtifactEnabledStyle as Promise<{
+        immediateOpacity: string;
+        immediateTransitionProperty: string;
+        immediateOpacityTransitions: number;
+        firstFrameOpacity: string;
+        firstFrameOpacityTransitions: number;
+      }>
+    ));
+    expect(enabledStyle.immediateOpacity).toBe('1');
+    expect(enabledStyle.firstFrameOpacity).toBe('1');
+    expect(enabledStyle.immediateOpacityTransitions).toBe(0);
+    expect(enabledStyle.firstFrameOpacityTransitions).toBe(0);
+    const transitionProperties = enabledStyle.immediateTransitionProperty
+      .split(',')
+      .map(value => value.trim());
+    expect(transitionProperties).not.toContain('all');
+    expect(transitionProperties).not.toContain('opacity');
+    const downloadMarkdown = markdownCard.getByRole('button', { name: 'Download Markdown' });
+    await expect(downloadMarkdown).toBeEnabled();
+    expect(await downloadMarkdown.getAttribute('data-transition-probe')).toBe('studio-download-markdown');
+
+    const axe = await new AxeBuilder({ page })
+      .include('[data-testid="studio-artifact-renditions"]')
+      .analyze();
+    expect(
+      axe.violations.filter(
+        violation => violation.impact === 'serious' || violation.impact === 'critical',
+      ),
+    ).toEqual([]);
+  } finally {
+    if (!released) fixture.releaseFirstPrivateProjection();
+  }
 });
 
 test('unauthorized capabilities disable every private mutation and download', async ({ page }) => {

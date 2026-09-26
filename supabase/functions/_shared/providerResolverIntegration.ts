@@ -10,6 +10,7 @@ import { ProviderResolverAuditEventShell } from './providerResolverAudit.ts';
 import { persistProviderResolverAuditEvent } from './providerResolverAuditDb.ts';
 import { buildProviderResolverDbDeps } from './providerResolverDb.ts';
 import { ProviderSecretLookupResult, resolveProviderSecretForDecision } from './providerSecretAdapter.ts';
+import { assertSyntheticAiLegacyResolverAllowed } from './syntheticAiCampaign.ts';
 
 type SafeFailureClass =
   | 'mode_not_allowed'
@@ -63,6 +64,7 @@ export type ProviderGovernedOperationDeps = {
   resolverDeps?: ProviderResolverDeps;
   resolveSecret?: (decision: LegacyProviderResolverDecision) => Promise<ProviderSecretLookupResult>;
   persistAudit?: (event: ProviderResolverAuditEventShell) => Promise<{ status: 'persisted' | 'skipped'; reason?: string }>;
+  assertCampaignLegacy?: typeof assertSyntheticAiLegacyResolverAllowed;
 };
 
 const readServerMode = () => {
@@ -168,6 +170,17 @@ export const runProviderGovernedOperation = async <T>(
     }
   } catch {
     return safeFailure('audit_context_unsafe', decision.correlationId);
+  }
+
+  try {
+    await (deps.assertCampaignLegacy || assertSyntheticAiLegacyResolverAllowed)({
+      organizationId: decision.orgId,
+      workspaceId: decision.workspaceId,
+      providerConfigId: decision.providerConfigId,
+      keyRefId: decision.keyRefId,
+    });
+  } catch {
+    return safeFailure('provider_call_blocked', decision.correlationId);
   }
 
   let secret: ProviderSecretLookupResult;

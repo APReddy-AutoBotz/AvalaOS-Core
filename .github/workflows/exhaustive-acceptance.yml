@@ -21,6 +21,7 @@ permissions:
   contents: read
 
 env:
+  ACCEPTANCE_EXECUTION_KIND: hosted_preview
   RELEASE_SHA: ${{ inputs.release_sha || github.event.pull_request.head.sha }}
   NETLIFY_DEPLOY_ID: ${{ inputs.netlify_deploy_id || 'pull-request-not-deployed' }}
   HOSTED_PILOT_URL: ${{ inputs.hosted_url || 'https://avalaos-pilot.netlify.app' }}
@@ -105,6 +106,9 @@ jobs:
 
       - name: Validate deterministic hosted declarations
         env:
+          ACCEPTANCE_EXECUTION_KIND: declaration_only
+          HOSTED_PILOT_URL: ''
+          NETLIFY_DEPLOY_ID: ''
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --list --reporter=list
@@ -139,7 +143,7 @@ jobs:
         env:
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
           ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
-        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts
+        run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1
 
       - name: Generate unified PASS FAIL BLOCKED UNCOVERED results
         id: report

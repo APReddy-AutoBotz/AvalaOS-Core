@@ -1,12 +1,337 @@
 # AvalaOS Core Source Of Truth
 
+## PR #264 solo-owner synthetic acceptance authority (2026-09-24)
+
+AP approved the PR-specific `solo-owner-synthetic-v1` plan in
+`docs/planning/solo-developer-synthetic-acceptance-plan.md`. A verified automated
+campaign using distinct synthetic application actors may replace the earlier
+three-independent-human merge prerequisite for PR #264 only. The original
+`CONTROLLED-HUMAN` result remains `not_run`; machine evidence must have its own
+`SYNTHETIC-ROLE-ACCEPTANCE` result and cannot claim human attestation. This
+approval permits the bounded implementation and synthetic exercise on the exact
+PR preview and approved synthetic backend. The new campaign is `not_run`, and
+merge remains NO-GO until its complete exact-candidate evidence, cleanup, CI,
+preview, and final AP merge confirmation are available. Real-provider spending,
+production, and broader readiness are outside this approval.
+
+## Studio independent-source correction candidate (2026-09-24)
+
+The approved synthetic business walkthrough reached a joined Assess→Govern→Studio
+source package but did not produce a generated version from that joined package.
+A separate manual-brief BRD completed the independent Studio, Delivery, and
+planning-only Monitor path. These are different proofs. The renewed AI campaign
+expired at 2026-09-24 05:20:42 UTC with five of six additional effect debits
+consumed and USD 3.6980752 conservative aggregate charge under the original
+USD 10 cap. Its three Studio-generation effects are already consumed; the
+remaining campaign effect is not permission for another Studio generation.
+
+Draft PR #264 now carries a corrective local candidate for Studio-owned upload
+or pasted text, exact-bundle extraction, human candidate review, and direct
+planning package eligibility. The prior UI lacked this operable path; reusing
+Assess-labelled extraction would have crossed module authority. The correction
+adds a distinct default-off Studio provider route and exact owner/scope binding.
+Focused local API, fresh-chain PostgreSQL 16, retained PR B PostgreSQL, and
+Desktop/Pixel proof passed. Generic Assess evidence commands and projections
+now reject Studio-private sources and Studio-job candidates, including on shared
+sources; an older candidate also remains hidden beyond 2,000 newer classification
+rows. Populated-upgrade PR B Studio bindings remain readable. No new
+paid call or hosted mutation was made for this correction. Exact-head CI,
+same-head preview and a real hosted generated document from the joined package
+are still `not run`. Controlled-human and production readiness remain unproven.
+
+## Current synthetic business walkthrough (2026-09-23)
+
+PR #264 head `a89030d` passed all 18 applicable exact-head workflows, including
+independently verified native Assess and PR C evidence. Only the separately
+approved `avalaos-ai-synthetic` target was used. The same-campaign renewal and
+domain-budget migrations, two affected Edge functions and private preview were
+source-verified. A second real provider-validation call succeeded; the original
+USD 10 cap now retains USD 1.8122384 conservative charge (two consumed
+validation debits including the earlier one, plus the USD 0.86932 carry).
+Invoice cost is not independently verified.
+
+The Assess screen uploaded and parsed the synthetic transcript, SOP and CSV,
+then locked their three-source bundle. The first mapping attempt failed closed
+before a campaign debit or provider network call: its token reservation allowed
+4,096 output tokens while the gateway request used its 2,000-token default.
+The failed receipt and uncertain token reservation remain retained, with zero
+mapping proposals and no Assess apply. Both provider runtimes are off. A
+one-line request-limit correction is under focused verification; only its new
+exact-head CI and source-verified synthetic deployment may precede a deliberate
+fresh attempt. No automatic replay, ledger rewrite, approval or handoff follows.
+Studio's synthetic author preset also omitted two read capabilities; the
+approved target alone received those two narrowly guarded read grants, without
+approval authority. Studio generation remains untested. Controlled-human and
+production readiness remain unproven.
+
+## Business-workflow-first AI continuation (2026-09-22)
+
+AP renewed the actual synthetic Assess/Studio testing approval within the
+original USD 10 total cap. Read-only hosted preflight confirms runtime off, one
+expired campaign, USD 1.3407792 retained conservative charge and the domain-budget
+migration not yet installed. Current authority cannot safely renew itself.
+The active AI-output plan owns one append-only, same-campaign, at-most-24-hour
+renewal, limited to six new effects (maximum aggregate USD 4.1695344), with no
+history reset or automatic paid retry. Closed read-only reviews precede this
+bounded implementation. Focused checks accompany fixes; actual observed business
+steps, not regression-suite totals, determine the workflow result. Existing
+exact-head deployment gates remain in force. Hosted mapping, document generation,
+human acceptance and production readiness remain unproven.
+
+Renewal/contrast candidate `ef0cc875` is on the existing PR #264 branch. Its
+creation-access CI stopped before migrations on a stale test-harness assertion
+that still made the domain-budget predecessor last. A focused regression
+reproduced `80 !== 81`; the correction asserts the renewal successor is last and
+rejects missing/reordered/extra tails. The twenty focused contract tests pass;
+the failed CI attempt remains retained, and corrected-head CI is still required.
+No additional paid call or hosted change was made. The scoped security review
+reported no findings, but its sealed artifact retained a partial-coverage flag;
+it must not be represented as full security clearance.
+
+## Current Studio accessibility correction hold (2026-09-22)
+
+Navigation correction head `c08f42c` passed 17 applicable workflows, including
+independently verified Native Assess and Preview QA. PR C failed its 48th command:
+51/52 private-artifact browser cases passed, but enabled Pixel download buttons
+briefly had insufficient text contrast. The remaining 33 commands did not run.
+The shared ghost-button opacity transition is a confirmed source defect, with a
+bounded CSS/actual-first-frame regression correction governed by the active
+AI-output plan. Permissions, native disablement and accessibility thresholds stay
+unchanged. PR #264 remains Draft/merge NO-GO pending corrected-source proof and CI.
+Separately, all 28 preview full-page contrast-incomplete summaries remain
+`unresolved_manual`; green automated checks are not full accessibility proof.
+Historical font anomalies remain unresolved. No paid calls or manual hosted-backend
+mutations follow; preserve the expired campaign and existing aggregate charges.
+
+## Current campaign expiry boundary (2026-09-22)
+
+The approved synthetic AI campaign expired at `2026-09-19T05:07:16.751Z`.
+Continuation is local and provider-free while the domain-budget correction is
+verified. Runtime remains disabled; no expiry extension, replacement campaign,
+ledger reset or paid retry is authorized by a generic continuation. Preserve the
+USD 1.3407792 conservative aggregate charge and all retained attempts. A further
+paid acceptance run requires explicit bounded authorization and an implementation
+that preserves the original aggregate cap and prior charges.
+
+## Current post-push browser evidence correction (2026-09-22)
+
+The domain-budget correction was committed and pushed as `0bf6571`. Native Assess
+CI passed and its artifact was independently verified: 25 commands, 14 budget
+assertions, 32 browser cases, 1,106 source hashes and eight rejected verifier
+mutations. Preview QA exposed a separate confirmed test-harness readiness race:
+Pixel reload chose a hidden desktop identity before the mobile header mounted.
+The application snapshot contained the correct Delivery Pack and mobile opener.
+The failed local Sandbox result remains 37 passed, one failed and 30 declared
+skips; it is not accepted as a green preview workflow. A shared fail-closed
+navigation-readiness helper, executable delayed/missing-shell tests and exact
+source bindings are the bounded correction. No product, permission, scoring,
+provider or timeout change is authorized by this harness repair. New-source local
+Sandbox/navigation proof and all new-head checks are required before acceptance.
+
+Local follow-up exposed intermittent rejected external font requests. One run
+retained 37/1 with opaque origins; another retained 36/2 and identified the direct
+Google font-asset `/l/font` category. Its declared dependency ancestry remains
+unproven. Actual-source Desktop/Pixel diagnostics did not reproduce it and cannot
+close it. The correction keeps the strict allowlist unchanged, retains all failed
+attempts and requires canonical final-source validation; no speculative static
+traffic exception or claim of full readiness follows.
+
+The final unchanged-enforcement local candidate subsequently passed 38 Sandbox
+cases (30 explicit skips), both navigation-history cases, 78 preview contracts,
+catalog/oracle/network-observer checks and all eight static commands. Bounded
+security/quality reviews found no code blocker. Final provenance refresh and
+new committed-head CI remain gates; the historical font anomaly stays unresolved.
+
+## Current domain-budget integration hold (2026-09-18)
+
+Local correction on 2026-09-22 is verified: the final frozen source passed all
+25 canonical commands, 32 Desktop/Pixel cases, 14 explicit SQL budget/recovery
+scenarios, fresh/populated migration checks and six local recovery assertions.
+The two defects found after the earlier green run are now corrected: lost mapping
+transfer-claim responses recover only unconsumed ownership, and Studio terminal
+replay finalizes without loading mutable template/provider material. Mandatory
+measured coverage is bound into CI. Final read-only architecture, quality and
+security reviews found no remaining blocker in this correction. The active
+domain-budget evidence record preserves both earlier failed attempts and the final
+source-bound results, including a new completed security scan; the previous scan's
+publication limitation remains disclosed. Same-branch commit/push and new-head CI
+follow. No hosted acceptance, paid retry or readiness claim follows.
+
+Claim correction `ca6a616a659ea678a3b5d9a556d916d96d1b50f2` passed all 18
+applicable exact-head workflows and synthetic command-function source verification.
+The next hosted mapping attempt failed before provider access because its run is
+not a legacy Enterprise AI job required by the token-budget RPCs. Read-only
+architecture, security and quality reviews also confirmed Studio's real receipt
+cannot satisfy the campaign's Enterprise-only receipt authority. The active
+AI-output plan now owns one coherent forward-schema/runtime correction and real
+SQL-to-mocked-provider lifecycle tests for both paths. These are correctness and
+recovery blockers, not demonstrated cross-tenant disclosure. Provider runtime is
+off; charge remains conservatively USD 1.3407792 with no analysis debit. Existing
+charges, failed records, campaign expiry and provider-free targets stay unchanged.
+The correction is proven only at the local synthetic boundary above. Its new-head
+CI, full hosted mapping/Studio acceptance and production readiness remain unproven;
+earlier green tests must not be promoted to these claims.
+
+## Current synthetic AI acceptance correction (2026-09-18)
+
+The dedicated AI target now has executed TXT upload/source-set/bundle UI evidence
+and one real provider validation. Assess mapping failed before provider debit due
+to confirmed SQL/Edge claim hash and null-projection contract defects. The local
+correction passes 23 canonical commands and 32 Desktop/Pixel scenarios; see
+`docs/quality/assess-mapping-claim-contract-correction-evidence.md` for failed
+attempts, source binding and proof limits. Exact-head hosted acceptance is pending.
+Provider execution is disabled during repair. Conservative aggregate charge
+is USD 1.3407792 of the existing USD 10 cap; the local ledger is sealed. These
+bounded results supersede earlier not-run activation statements only for this
+synthetic target. Mapping, Studio end-to-end acceptance and production readiness
+are not proven. Existing provider-free environments remain untouched.
+
+## Approved hosted AI safeguards implementation
+
+AP approved local implementation of separate synthetic AI target authority and
+server-enforced aggregate spending controls. Initial read-only design reviews are closed.
+Existing provider-free flags remain false; the new authority is additive and
+disabled unless explicitly provisioned for the separately approved target.
+The immutable USD 10 campaign includes USD 0.86932 conservatively carried forward and reserves
+USD 0.4714592 conservatively per additional effect, with no refunds or reset.
+Nineteen additional effects fit; the twentieth must reject. Paid local execution
+is stopped. Hosted activation and full UI acceptance remain not run pending new
+gates. See the active AI-output correction plan for scope and rollback and
+[active safeguards evidence](quality/synthetic-ai-campaign-safeguards-evidence.md)
+for executed local results and remaining review boundaries.
+
+## Subsequent isolated AI release approval (2026-09-17)
+
+AP approved same-branch commit/push, exact-head CI and a separate AI-enabled
+synthetic environment, confirming `avalaos-ai-synthetic` in Mumbai at USD 0/month.
+This supersedes the initial local-only release prohibitions below, not their
+evidence boundaries. The aggregate OpenAI cap remains USD 10 including prior
+charges. Both existing provider-free backends remain unchanged. Server-only keys,
+target binding and durable aggregate budget controls must pass before activation.
+Merge, document approval/handoff, production, AvalaOS.com and customer data remain
+unauthorized. See `docs/planning/assess-studio-ai-output-correction.md`.
+
+## Approved local AI-output correction (2026-09-17)
+
+AP authorized the local synthetic Assess/Studio correction governed by
+`docs/planning/assess-studio-ai-output-correction.md`, using the saved OpenAI key
+in memory within the existing aggregate USD 10 cap. No hosted provider activation,
+deployment, approval/handoff, push or merge is authorized by this continuation.
+Assess mapping and the final PDD, BRD and FRD real-provider component fixtures pass.
+The correction combines template/canonical-citation validation, opaque citation
+references, Studio-only readable untrusted framing and OpenAI schema-enforced
+section counts with schema overhead reserved before effect. Earlier failures,
+including actor corruption, weakened prohibitions and omitted sections, remain
+retained. Encoding causation is not proven. These fixture passes are not general
+semantic correctness, hosted end-to-end proof or document approval. Current
+conservative campaign charge is USD 0.86932 of USD 10; further paid calls stopped.
+
+
+## Approved native Assess supporting-document continuation
+
+Current exploratory release hold (2026-09-17): head `484ce7a7bc897180043a395254991b57a05bdbc5`
+passed all 18 applicable workflows and its approved synthetic draft/backend were
+content-verified. Hosted upload remains unproven: a STABLE Delivery projection
+RPC takes authorization row locks and fails in PostgREST's read-only transaction
+(405 / SQLSTATE `25006`). The bounded correction covers both Delivery/Monitor RPC
+volatility, actual PostgREST regressions and a separate ignored-harness
+actor-binding defect. The active supporting-document plan owns this continuation.
+Six accounts and the manual case are preserved; zero uploads/provider effects
+were created. Previous local/CI success is not hosted upload or AI proof.
+The bounded correction now passes all 23 native local commands, 32 Desktop/Pixel
+scenarios, actual PostgREST before/after proof, 16 real migration rejection cases
+and six recovery assertions. Exact results and retained failed attempts are in
+`docs/quality/assess-projection-transaction-correction-evidence.md`. The complete
+81-command PR C execution is required in new exact-head CI; local registry
+validation is not that execution. Exploratory activation remains gated.
+
+Head `aba2a8e2011df5e9375cb909f19aecf35b10d950` subsequently passed 17 applicable
+workflows, including the exact-head native gate. PR C run `35155097345`, attempt 1,
+correctly rejected a stale registry migration-tip expectation after PostgreSQL
+emitted the current tip. The active plan owns the bounded independent-tail
+validation correction and new-head CI gate. Product/migration code and the frozen
+human backend remain unchanged; hosted upload is still unproven.
+
+Release continuation: corrected head `a0f914ff2f3a35359806b2a088df8b9701e9a03f` passed all 18 applicable exact-head workflows; the separate hosted-live workflow remained intentionally skipped. The approved exploratory target received the 77-migration chain, source-verified functions and an immutable draft, preserving its six accounts and zero provider configurations. Actual browser testing then exposed a confirmed query/schema defect: relationship reviews selected `created_by` instead of canonical `reviewer_id`, stopping the projection before upload. The failed attempt and bounded production-query/schema-regression correction are recorded in `docs/quality/assess-document-mapping-projection-correction-evidence.md`. Upload/analysis readiness is not claimed; corrected-source local, CI and exploratory retry gates remain mandatory. The frozen controlled-human backend remains untouched.
+
+Current release hold: projection correction `e3ca6930eca8b79f9f03d5178753331eac8d9124` passed all 18 applicable workflows. Before deployment, source/installed-schema inspection and real PostgreSQL testing confirmed two XLSX omissions: the source-version ingestion trigger and the native Assess document-evidence classifier. The active plan owns one additive atomic correction for both functions and the synthetic identity marker, with real receipt-backed ingestion, applied spreadsheet evidence and upgrade regressions. Earlier mocked/CSV-fixture results do not prove these boundaries. Current-source local validation passed 22/22 commands and 32/32 Desktop/Pixel scenarios; independent source/evidence reviews found no remaining implementation blocker. Results and retained failed attempts are in `docs/quality/assess-document-xlsx-ingestion-correction-evidence.md`. Fresh exact-head CI and resumed exploratory proof remain required. No exploratory upload/provider effects were created; preserve the six accounts, saved manual case and frozen human backend.
+
+AP approved document upload inside the current Assess workspace, governed AI-assisted field mapping and editable human review on 2026-09-16. The implementation contract is `docs/planning/assess-supporting-document-mapping.md`. This explicitly extends the earlier text-transcript-only scope to bounded CSV/XLSX supporting documents while preserving independent Assess/Studio source sets, explicit application and optional handoffs. The implementation and its 22-command local feature gate are complete in the existing PR #264 worktree; exact current results, corrective attempts and retained-browser boundaries are recorded in `docs/quality/assess-supporting-document-mapping-evidence.md`. Previous PR C/creation-access results are not proof of this new slice. AP subsequently approved commit/push, exact-head CI and activation only in the separately approved exploratory synthetic preview. These release gates remain planned verification until their exact results are recorded; the frozen controlled-human backend stays untouched. The feature remains default-off in source. Real-provider calls, merge and production are not authorized.
+
+Native import targets V2 authoring. V1 scoring and all deterministic V2 evaluation/approval authority remain unchanged. Unsupported/ambiguous facts remain unknown or evidence-only, manual values do not silently lose to AI, and only a typed, reviewed, exact-version server transaction may create a new immutable draft. The historical free-text/label-only apply adapter is not accepted as native Assess field-mapping proof.
+
+## Creation-access repair — current implementation and CI correction
+
+On 2026-09-15 AP approved the focused creation-access and synthetic Admin repair
+in `docs/planning/creation-access-synthetic-admin-remediation.md`. It adds a
+server-authorized process-create command, correct governed Studio/Delivery entry
+routes, capability-aware portfolio presentation, clearer V1/V2 choices, and bounded
+Admin-managed synthetic accounts. Local implementation, verification and bounded
+independent reviews completed before commit `03592bba35fd79c65155c04c48b6d52e4dc86298`, pushed to the existing PR #264 branch. Evidence is recorded in
+`docs/quality/creation-access-remediation-evidence.md`; this is not a hosted fix
+or a new acceptance PASS. The existing twelve-persona
+PR264 backend and immutable evidence are not changed. AP subsequently approved the
+separate exploratory target at the quoted $0/month and pausing MockMate with data
+preserved. That new target now has all 75 migrations, one independently verified
+initial Admin, four fixed role presets, zero provider configurations, and four
+non-provider Edge functions. On exact head `3352f5ffeb08d493ec6202ce65dae28608e07502`,
+the isolated immutable draft passed the actual Admin provisioning -> author login
+-> process/V2 creation -> draft save -> fresh-session reopen -> signout journey.
+Independent SQL readback matched tenant, request/idempotency, saved lineage and
+audit bindings. This is narrow exploratory proof, not whole-platform acceptance.
+The same head's creation-access CI passed; retained PR C and preview checks exposed
+two further source defects now locally corrected with 28/28 commands and 156/156
+browser checks passed. New-source CI/preview remains a
+separate gate; the completed hosted proof must not be relabelled to a later head.
+Commit `c038bbd2a6c3c8ff861fd0dcc22d46eea5cb364c` subsequently passed its full
+28-command creation-access CI and the hosted blocked-route boundary. Its retained
+PR C/preview pipelines both stopped on the same ten local Sandbox fixture failures:
+obsolete combined Admin navigation and an incomplete-discovery scenario that
+expected Draft before starting an assessment. The corrective scope is the actual
+Admin Workbench plus separate Enterprise Intelligence denial, and a real saved
+incomplete V1 draft with no score or decision pack. Corrected fixtures then exposed
+a local Sandbox navigation defect: a defined empty server-capabilities projection
+discarded the synthetic Admin destination during reconciliation. The repair keeps
+local presentation distinct from server denial and uses one guarded Admin
+navigation transition. It grants no new product permissions or scoring changes;
+the corrected Sandbox regression passed 38 Desktop/Pixel cases with 30 unchanged
+explicit server-scenario `not_run` cases. Navigation history passed on both devices.
+The wider fixture/account/blocked-binding runs bring this corrective pass to
+86 browser passes. All 20 selected canonical authority, regression, static/build
+and coverage commands passed at one frozen source fingerprint; final independent
+reviews found no confirmed blocker. New-head CI verification remains a separate
+gate and will repeat the full creation-access and retained PostgreSQL suites.
+Production, customer data, real providers, AvalaOS.com and merge remain
+outside this approval. That earlier decision did not change the then-current human gate; the 2026-09-24 PR-specific policy above now replaces it for PR #264.
+The exploratory target must retain zero provider configurations and real keys;
+new role capabilities do not prove configured or provider-free generation.
+
+Exact-head CI exposed three retained-check defects: the migration contract still
+required the old tip to be globally last; operational identity lagged the new
+ledger tip; and a UI contract assumed `id` was the first input attribute. The
+2026-09-16 corrective continuation adds strict shared successor validation,
+attribute-order-independent label checks, and forward migration `20260916003000`.
+Already-applied migrations remain immutable. This forward correction was applied
+and independently verified only on the separately approved exploratory target.
+The remaining corrections concern the retained fresh-chain test's stale expected
+tip and an App render-time authority exception hiding the blocked-route UI.
+Command authority stays fail-closed; frozen human-backend identity is unchanged.
+
 ## Governed multi-source transcript PR A accepted source/CI boundary
 
 PR #255 accepted final head `460c44864b9d240321e727945411ced51dd0fe30` and merged as `11e670003a73b0ab5a28650b70afac4b267760f4`. Its accepted record includes all 15 applicable workflows, the Netlify preview, and a fresh independent review. PR A adds default-off immutable Source Library sets and input bundles; exact source-set-version, bundle-version, extraction-job, binding, candidate, preview-batch, and Assess-draft lineage; selective staleness of only unconsumed dependants; transcript-assisted review/conflict/batch-apply authority; first-class Groq through the shared server gateway; atomic fenced provider budgets; durable cleanup recovery; responsive Candidate Review UI; and assertion-owned process-lifecycle evidence. Source-only query authority is limited to source/source-set/input-bundle projections; every Assess-owned collection and mixed Assess staleness selector requires `assess.v2.read`. Historical consumed ancestry remains readable, the initial default-off path preserves the legacy single-source review projection, and existing Assess scoring law is unchanged. The accepted evidence boundary is 33 exact commands, 194 executed assertion markers, six explicit `not_run` results, 68 source-provenance entries, mocked providers, disposable PostgreSQL 16, Desktop Chrome, and Pixel 7. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain `not_run` or unproven.
 
-## Governed multi-source transcript PR B active implementation boundary
+## Governed multi-source transcript PR B accepted source boundary
 
-PR B is explicitly authorized on branch `controller/governed-multisource-studio-pr-b-20260828` from accepted `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. It is limited to independent Studio source packages, direct/Assess-derived/hybrid source modes, optional target-accepted Assess-to-Studio handoffs, governed tenant templates, business-friendly structured artifact editing, source coverage/provenance, unified server-side provider generation, and the directly required migration, security, browser, evidence, and rollback controls. Focused local final-source mocked-provider, disposable PostgreSQL 16, Desktop Chrome, Pixel 7, accessibility, performance, migration, coverage, type/static, and assertion-contract checks pass. The final local registry capture binds 61 exact commands, 322 passed assertions, 193 fixtures, 11 owners, and 15 explicit `not_run` boundaries; all 88 canonicalized source files were rehashed and the evidence contract passed 23/23. Executed remediation covers exact manual 0/0 and hybrid workspace/artifact parity, runtime-control removal and restoration of projection mutation actions, reservation-aware timeout reconciliation without a second provider or budget authority, failure finalization restricted to no reservation or exact released-before-effect/no-transfer-pending compatibility, and deterministic owned-server teardown for retained PR 1E/1F/1G browser gates. One server-owned source-package-currentness predicate covers Assess, Studio-bundle, hybrid-both-halves, and manual-brief integrity; generation request, claim, final provider reservation, finalization, and both safe projections use that same decision under exact upstream locks. Stale inputs cannot acquire new provider authority, while an already-effected result whose source advances is retained as `stale_completed` without moving current or approved heads. Exact-head retained-matrix CI, preview, fresh post-correction security/quality review, and repository acceptance remain pending; no final review disposition is claimed. PR C Delivery/Monitor generalization, real providers, live infrastructure, deployment, pilot, production, security certification, and compliance certification remain outside this PR or `not_run`. Focused local proof is not a readiness claim.
+PR #263 exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged into `main` as parent of `5433cad41721355e3ec5a29bc2f87772540c77b5`. PR B establishes independent Studio source packages, direct/Assess-derived/hybrid modes, optional target-accepted Assess-to-Studio handoffs, governed tenant templates, business-friendly structured artifact editing, source coverage/provenance, and unified server-side provider generation. Its immutable historical registry remains the authority for its 61 exact commands, 322 passed assertions, 193 fixtures, 11 owners, and 15 explicit `not_run` boundaries. Those `not_run` Delivery and Monitor results are not rewritten or promoted by PR C. Hosted/live infrastructure, real providers, deployment, pilot, production, security certification, and compliance certification remain unproven.
+
+## Governed Delivery and Monitor PR C active implementation boundary
+
+PR C is explicitly authorized on branch `controller/governed-delivery-monitor-pr-c-20260831` from post-PR-B `main` at `5433cad41721355e3ec5a29bc2f87772540c77b5`. It is one additive vertical slice: generalized and manual Delivery source packages; explicit target-accepted Studio-to-Delivery handoffs; immutable Delivery item aggregates, versions, decisions, review, and approval; and one exact approved-package/accepted-item-set baseline projected read-only into both Enterprise Intelligence and the primary Monitor surface. New behavior remains default off behind `module_handoffs_enabled`, `direct_delivery_planning_enabled`, `delivery_item_review_enabled`, and `monitor_approved_baseline_enabled`. Legacy IDs, hashes, approvals, source classifications, and read-only projections must remain compatible; rollback disables new mutations while retaining committed history for additive forward repair.
+
+PR #264 is a corrective continuation of this same substantial boundary, not a new branch or PR. The current candidate implements four source corrections together: a production blocked-package revision path that binds a complete current descendant manifest while authoring only explicitly selected material changes and then requires fresh review/approval; synchronous clearing and async fencing of every Enterprise Intelligence secret, file, selector, draft, preview, pending action, and error across organization/workspace/actor changes; fail-closed per-record evidence identity derived from the actual workflow/local execution context; and reconciliation of this active authority set plus the external PR description. Successive fresh reviews additionally require and the current source implements five fail-closed hardenings: governed evidence rejects base-tracked deletions and renames instead of omitting them from provenance; currently authorized exact committed receipt replay remains recoverable after mutable feature or read-only controls change while new effects remain gated; outer, requested, and nested Delivery/Monitor projection scopes must match under UUID semantics; a blocked-recovery result must contain unique new item-version identities that reuse no predecessor item-version identity from the complete descendant set; and every production Delivery/Monitor client adapter isolates the organization/workspace transport envelope from the strict action selector while preserving rejection of any other unrecognized claim. Tracked files define the stable contract and canonical artifact pointer only; they do not embed a mutable final-run hash that would invalidate their own provenance. Exact candidate/run/attempt/artifact/preview results belong in the immutable CI artifact and PR #264 description after the source is committed. Merge remains NO-GO until the full current-source matrix, fresh final read-only reviews, exact committed-head GitHub Actions, and same-head Netlify preview all pass. `PERF-003` and `PERF-004` remain `not_run` because no AP-approved numeric budgets exist.
+
+On 2026-09-04 the AP narrowly authorized preparation and execution of PR #264 controlled-human testing only on its exact Netlify Deploy Preview and one dedicated synthetic `hosted_nonproduction_pilot` backend. The preview must fail closed unless its exact head, deployment, exercise, backend fingerprint, and controlled-human migration tip `20260904120000` are server-attested before authentication; browser state and response headers are not authority. The permanent Netlify production-context gate remains limited to the pre-existing exact authorized stable non-production pilot tuple and does not enable controlled-human mode. AvalaOS.com/custom domains, production, customer or external-user data, real provider keys/calls, broad reset, merge, promotion, and readiness or certification claims remain prohibited. The earlier human path remains valid only for actual distinct-human evidence. Under the 2026-09-24 PR-specific policy, `CONTROLLED-HUMAN` remains `not_run`; the separate complete synthetic campaign, bounded deprovision, exact-head checks, and AP final merge confirmation govern PR #264.
 
 ## Workstream 6 pilot operations candidate
 

@@ -18,12 +18,28 @@ if (!process.env.DATABASE_URL) {
   process.exit(0);
 }
 
-const client = new Client({ connectionString: process.env.DATABASE_URL });
-await client.connect();
+const adminUrl = process.env.DATABASE_URL;
+const databaseName = `pr1f_${process.pid}_${Date.now()}`;
+if (!/^[a-z0-9_]+$/.test(databaseName)) throw new Error('PR1F_INVALID_TEMP_DATABASE_NAME');
+const databaseUrl = new URL(adminUrl);
+databaseUrl.pathname = `/${databaseName}`;
+const admin = new Client({ connectionString: adminUrl });
+let client;
+let databaseCreated = false;
+let transactionOpen = false;
 try {
+  await admin.connect();
+  if ((await admin.query('select 1 from pg_database where datname=$1', [databaseName])).rowCount) {
+    throw new Error(`PR1F_TEMP_DATABASE_ALREADY_EXISTS:${databaseName}`);
+  }
+  await admin.query(`create database ${databaseName}`);
+  databaseCreated = true;
+  client = new Client({ connectionString: databaseUrl.toString() });
+  await client.connect();
   const version = await client.query('show server_version_num');
   if (Number(version.rows[0].server_version_num) < 160000) throw new Error(`POSTGRESQL_16_REQUIRED: ${version.rows[0].server_version_num}`);
   await client.query('begin');
+  transactionOpen = true;
   await client.query('create schema if not exists public');
   await client.query('create extension if not exists pgcrypto');
   await client.query("do $$ begin create role anon; exception when duplicate_object then null; end $$;");
@@ -37,16 +53,21 @@ try {
   await client.query("create table if not exists public.assess_v2_cases(id uuid not null,workspace_id uuid not null,org_id uuid not null,deleted_at timestamptz,primary key(id,workspace_id,org_id))");
   await client.query("create table if not exists public.assess_v2_decision_versions(id uuid not null,case_id uuid not null,workspace_id uuid not null,org_id uuid not null,source_version_id uuid not null,primary key(id,case_id,workspace_id,org_id))");
   await client.query("create table if not exists public.assess_v2_review_resolutions(id uuid not null,case_id uuid not null,decision_id uuid not null,workspace_id uuid not null,org_id uuid not null,source_version_id uuid not null,resolution text not null,resolved_at timestamptz not null default now(),primary key(id,case_id,decision_id,workspace_id,org_id))");
-  await client.query("create or replace function public.has_workspace_capability(uuid,uuid,text) returns boolean language sql stable as $$ select true $$");
-  await client.query("create or replace function public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint) returns void language plpgsql as $$ begin if $4='invalid' then raise exception 'PR1F_INVALID_CAPABILITY'; end if; end $$");
+  await client.query("create or replace function public.has_workspace_capability(p_workspace_id uuid,p_org_id uuid,p_capability_key text) returns boolean language sql stable as $$ select true $$");
+  await client.query("create or replace function public.pr1b_assert_command_authority(p_actor uuid,p_org uuid,p_workspace uuid,p_capability text,p_version bigint) returns void language plpgsql as $$ begin if $4='invalid' then raise exception 'PR1F_INVALID_CAPABILITY'; end if; end $$");
   await client.query(sql);
   const tables = await client.query("select relrowsecurity, relforcerowsecurity from pg_class where relname in ('assess_v2_economic_versions','assess_v2_realized_outcomes','assess_v2_outcome_reviews') order by relname");
   if (tables.rows.some(row => !row.relrowsecurity || !row.relforcerowsecurity)) throw new Error('PR1F_RLS_NOT_FORCED');
   await client.query('rollback');
+  transactionOpen = false;
   console.log('PR 1F PostgreSQL 16 executable migration checks passed: fresh migration, forced RLS, private RPC ACL and append-only outcome review schema.');
 } catch (error) {
-  await client.query('rollback').catch(()=>{});
+  if (transactionOpen) await client?.query('rollback').catch(()=>{});
   throw error;
 } finally {
-  await client.end();
+  await client?.end().catch(()=>{});
+  if (databaseCreated) {
+    await admin.query(`drop database if exists ${databaseName} with (force)`);
+  }
+  await admin.end().catch(()=>{});
 }

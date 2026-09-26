@@ -27,16 +27,19 @@ import {
   type StudioHandoffOption,
   type StudioSourcePackageIdentity,
 } from '../../services/studioArtifacts/client';
-import type { StudioWorkspaceProjection } from '../../services/studioArtifacts/workspaceModel';
-import { StudioAuthorityEpoch, studioAuthorityIdentity, type StudioAuthorityTicket } from '../../services/studioArtifacts/workspaceModel';
-import { enterpriseIntelligenceClient } from '../../services/enterpriseIntelligenceClient';
+import type { StudioSourceFlowBundle, StudioSourceFlowCandidate, StudioSourceFlowProjection, StudioWorkspaceProjection } from '../../services/studioArtifacts/workspaceModel';
+import { StudioAuthorityEpoch, studioAuthorityIdentity, studioDirectPackageEligibility, type StudioAuthorityTicket } from '../../services/studioArtifacts/workspaceModel';
+import { enterpriseIntelligenceClient, type StudioBundleSourceSelector, type StudioCandidateReviewInput, type StudioSourceCreateResult } from '../../services/enterpriseIntelligenceClient';
 import StudioArtifactRenditions from './StudioArtifactRenditions';
 import StudioSourceCoverage from './StudioSourceCoverage';
 import StructuredArtifactEditor from './StructuredArtifactEditor';
 import StudioHandoffCenter from './StudioHandoffCenter';
 import StudioSourcePackageBuilder, { type StudioSourceSetDraft } from './StudioSourcePackageBuilder';
+import StudioSourceIntakeReview from './StudioSourceIntakeReview';
 import StatusBadge from '../shared/ui/StatusBadge';
 import { validateStudioDraftContent } from '../../services/studioArtifacts/draftValidation';
+import { isControlledHumanRuntimeEnabled } from '../../services/supabaseClient';
+import { executePrCControlledHumanSyntheticGeneration, PrCControlledHumanSyntheticGenerationBoundaryError } from '../../services/studioArtifacts/prCControlledHumanSyntheticGeneration';
 
 interface Props {
   /** React remount key used when the tenant/workspace scope changes. */
@@ -46,6 +49,12 @@ interface Props {
   online?: boolean;
   captureMode?: boolean;
   transport?: StudioArtifactTransport;
+  sourceFlowTransport?:{
+    load:(context:TenantContextProjection)=>Promise<{authorizationVersion:number;studioSourceFlow:StudioSourceFlowProjection}>;
+    create:(input:{organizationId:string;workspaceId:string;displayName:string;sourceKind:'upload'|'pasted_text';filename:string;mimeType:string;contentBase64:string})=>Promise<StudioSourceCreateResult>;
+    extract:(input:{organizationId:string;workspaceId:string;inputBundleId:string;inputBundleVersionId:string;expectedInputBundleVersion:number;sources:StudioBundleSourceSelector[]})=>Promise<unknown>;
+    review:(input:StudioCandidateReviewInput)=>Promise<unknown>;
+  };
 }
 
 type ViewState =
@@ -92,8 +101,14 @@ const capability: Record<StudioCommandType, string> = {
 };
 
 const stateForError = (error: unknown, generation = false): { state: ViewState; message: string } => {
+  if (error instanceof PrCControlledHumanSyntheticGenerationBoundaryError) {
+    return { state: 'generation_failed', message: error.code === 'MALFORMED_RESULT'
+      ? 'Synthetic generation returned a mismatched exact binding. No success is recorded; retry the same exact operation to reconcile.'
+      : 'Synthetic controlled-human generation is unavailable for this exact exercise. No success is recorded; retry the same exact operation to reconcile.' };
+  }
   if (!navigator.onLine) return { state: 'offline', message: 'Offline. No command was submitted.' };
   if (error instanceof StudioArtifactBoundaryError) {
+    if (error.code === 'COMMAND_OUTCOME_UNKNOWN') return { state: 'committed_reload_failed', message: 'The server may have committed this action, but its response could not be verified. Reload the committed Studio state before any further mutation.' };
     if (error.code === 'VERSION_CONFLICT') return { state: 'version_conflict', message: 'Version conflict. Reload the current committed state.' };
     if (error.code === 'SOURCE_PACKAGE_STALE' || error.code === 'TEMPLATE_STALE' || error.code === 'HANDOFF_STALE') return { state: 'stale', message: 'The exact source, template, or handoff version changed. The prior committed artifact is preserved.' };
     if (error.code === 'HANDOFF_EXPIRED' || error.code === 'SESSION_EXPIRED') return { state: 'authorization_revoked', message: 'The handoff or session expired. No target document was created.' };
@@ -111,12 +126,13 @@ const stateForError = (error: unknown, generation = false): { state: ViewState; 
 
 const sequence: StudioArtifactProjectionDto['lifecycle'][] = ['draft', 'reviewer_ready', 'in_review', 'approval_ready', 'approved'];
 
-export default function StudioArtifactWorkspace({ context, capabilities = context.capabilities, online = true, captureMode = false, transport }: Props) {
+export default function StudioArtifactWorkspace({ context, capabilities = context.capabilities, online = true, captureMode = false, transport, sourceFlowTransport }: Props) {
   const [handoffs, setHandoffs] = useState<StudioHandoffOption[]>([]);
   const [handoffId, setHandoffId] = useState('');
   const [artifactType, setArtifactType] = useState<StudioArtifactType>('brd');
   const [artifact, setArtifact] = useState<StudioArtifactProjectionDto | null>(null);
   const [workspace, setWorkspace] = useState<StudioWorkspaceProjection | null>(null);
+  const [studioSourceFlow, setStudioSourceFlow] = useState<StudioSourceFlowProjection | null>(null);
   const [artifactWorkspace, setArtifactWorkspace] = useState<StudioArtifactWorkspaceProjectionDto | null>(null);
   const [artifactSummaries, setArtifactSummaries] = useState<StudioArtifactSummaryPageDto | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState('');
@@ -136,14 +152,17 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const [selectedTemplateVersionId,setSelectedTemplateVersionId]=useState('');
   const authorityIdentity = studioAuthorityIdentity(context);
   const authorityEpoch = useRef(new StudioAuthorityEpoch(context));
+  const syntheticGenerationAttemptRef = useRef<{fingerprint:string;idempotencyKey:string;requestId:string}|null>(null);
   authorityEpoch.current.rebind(context);
   const accepts = useCallback((ticket: StudioAuthorityTicket) => authorityEpoch.current.accepts(ticket), []);
   const canReadArtifacts = capabilities.includes('studio.artifacts.read');
+  const canReadSources = capabilities.some(item=>item==='studio.sources.read'||item==='studio.sources.manage');
   const canReadWorkspace = capabilities.some(item => ['studio.sources.read', 'studio.handoffs.read', 'studio.templates.read'].includes(item));
   const offline = !online || !navigator.onLine;
   const blockedByReload = state==='committed_reload_failed';
   const blocked = offline || blockedByReload || ['loading', 'generating', 'stale', 'version_conflict', 'authorization_revoked', 'read_only', 'command_failed', 'generation_failed'].includes(state) || artifact?.readOnly === true || workspace?.readOnly === true;
   const conditions = useMemo(() => conditionsText.split('\n').map(item => item.trim()).filter(Boolean), [conditionsText]);
+  const controlledHumanSyntheticGeneration = isControlledHumanRuntimeEnabled();
 
   const clearProjection = useCallback(() => {
     setArtifact(null);
@@ -152,6 +171,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     selectedArtifactIdRef.current='';
     setSelectedArtifactId('');
     setWorkspace(null);
+    setStudioSourceFlow(null);
     setReceipt(null);
     setReviewers([]);
     setReviewerId('');
@@ -164,6 +184,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     setGovernedSelection(null);
     setSelectedBundleVersionId('');
     setSelectedTemplateVersionId('');
+    syntheticGenerationAttemptRef.current=null;
   }, []);
 
   const loadGovernedSummary = useCallback(async (summary: StudioArtifactSummaryDto, ticket: StudioAuthorityTicket) => {
@@ -214,7 +235,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     }
     setState('loading');
     try {
-      const [artifactResult, workspaceResult, summaryResult] = await Promise.all([
+      const [artifactResult, workspaceResult, summaryResult, sourceFlowResult] = await Promise.all([
         canReadArtifacts
           ? readStudioHandoffs(context, transport).then(value => ({ value, unavailable: false })).catch(() => ({ value: [] as StudioHandoffOption[], unavailable: true }))
           : Promise.resolve({ value: [] as StudioHandoffOption[], unavailable: false }),
@@ -224,9 +245,14 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         canReadArtifacts
           ? readStudioArtifactSummaries(context, 0, 20, transport).then(value => ({ value, unavailable: false })).catch(() => ({ value: null, unavailable: true }))
           : Promise.resolve({ value: null, unavailable: false }),
+        canReadSources
+          ? (sourceFlowTransport?sourceFlowTransport.load(context):enterpriseIntelligenceClient.loadProjection({organizationId:context.organizationId,workspaceId:context.workspaceId,expectedAuthorizationVersion:context.authorizationVersion})).then(value=>({value,unavailable:false})).catch(()=>({value:null,unavailable:true}))
+          : Promise.resolve({value:null,unavailable:false}),
       ]);
       if (!accepts(ticket)) return;
       const workspaceProjection = workspaceResult.value;
+      const sourceProjection=sourceFlowResult.value;
+      setStudioSourceFlow(sourceProjection&&sourceProjection.authorizationVersion===context.authorizationVersion?sourceProjection.studioSourceFlow:null);
       setArtifactSummaries(summaryResult.value);
       setWorkspace(workspaceProjection);
       setSelectedTemplateVersionId(current=>workspaceProjection?.templates.some(item=>item.templateVersionId===current&&item.lifecycle==='approved'&&(item.artifactType===type||item.artifactType==='custom'))?current:'');
@@ -236,7 +262,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setHandoffId(id);
       if (!canReadArtifacts) {
         setState('empty');
-        setMessage(workspaceProjection ? 'Authorized governed Studio projections loaded. Artifact content is not available to this capability set.' : 'No authorized Studio projection is available to this capability set.');
+        setMessage(workspaceProjection||sourceProjection ? 'Authorized governed Studio projections loaded. Artifact content is not available to this capability set.' : 'No authorized Studio projection is available to this capability set.');
         return;
       }
       const summary = summaryResult.value?.items.find(item => item.id === selectedArtifactIdRef.current)
@@ -281,7 +307,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setState(next.state === 'command_failed' ? 'stale' : next.state);
       setMessage(next.state === 'command_failed' ? 'Studio authority is unavailable. Reload the current committed state.' : next.message);
     }
-  }, [accepts, artifactType, canReadArtifacts, canReadWorkspace, captureMode, clearProjection, context, loadGovernedSummary, offline, transport]);
+  }, [accepts, artifactType, canReadArtifacts, canReadSources, canReadWorkspace, captureMode, clearProjection, context, loadGovernedSummary, offline, sourceFlowTransport, transport]);
 
   useEffect(() => {
     void load('', artifactType, false);
@@ -383,11 +409,14 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     try{const next=await readStudioArtifactSummaries(context,offset,artifactSummaries.limit,transport);if(!accepts(ticket))return;setArtifactSummaries(next);const first=next.items[0];if(first)await loadGovernedSummary(first,ticket);}catch{if(accepts(ticket))setMessage('Artifact index page could not be loaded. The committed artifact remains visible.');}
   };
 
-  const reloadWorkspaceAfterSourceCommit=async(success:string,ticket:StudioAuthorityTicket)=>{const next=await readStudioWorkspace(context,1,transport);if(!accepts(ticket))return;if(!next){setState('committed_reload_failed');setMessage('Source command committed, but projection reload failed. Mutations are blocked.');throw new Error('reload');}setWorkspace(next);setMessage(success);};
+  const reloadWorkspaceAfterSourceCommit=async(success:string,ticket:StudioAuthorityTicket)=>{const requireWorkspaceReload=Boolean(workspace);const [next,enterprise]=await Promise.all([readStudioWorkspace(context,1,transport).catch(()=>null),sourceFlowTransport?sourceFlowTransport.load(context):enterpriseIntelligenceClient.loadProjection({organizationId:context.organizationId,workspaceId:context.workspaceId,expectedAuthorizationVersion:context.authorizationVersion})]);if(!accepts(ticket))return;if((requireWorkspaceReload&&!next)||enterprise.authorizationVersion!==context.authorizationVersion){setState('committed_reload_failed');setMessage('Source command committed, but its exact projection reload failed. Mutations are blocked.');throw new Error('reload');}if(next)setWorkspace(next);setStudioSourceFlow(enterprise.studioSourceFlow);setMessage(success);};
   const commitStudioSourceSet=async(draft:StudioSourceSetDraft)=>{const ticket=authorityEpoch.current.issue();if(!capabilities.includes('studio.sources.manage'))throw new StudioArtifactBoundaryError('PERMISSION_DENIED');const invoke=transport?.commitStudioSourceSet??((input)=>enterpriseIntelligenceClient.commitStudioTranscriptSourceSet(input));await invoke({organizationId:context.organizationId,workspaceId:context.workspaceId,...draft});if(!accepts(ticket))return;await reloadWorkspaceAfterSourceCommit('Immutable Studio source-set version committed and reloaded.',ticket);};
   const lockStudioInputBundle=async(sourceSetVersionSelectors:string[])=>{const ticket=authorityEpoch.current.issue();if(!capabilities.includes('studio.sources.manage'))throw new StudioArtifactBoundaryError('PERMISSION_DENIED');const invoke=transport?.lockStudioInputBundle??((input)=>enterpriseIntelligenceClient.lockStudioTranscriptInputBundle(input));await invoke({organizationId:context.organizationId,workspaceId:context.workspaceId,sourceSetVersionSelectors,label:'Studio transcript bundle'});if(!accepts(ticket))return;await reloadWorkspaceAfterSourceCommit('Exact Studio input bundle locked and reloaded.',ticket);};
+  const createStudioSource=async(input:{displayName:string;sourceKind:'upload'|'pasted_text';filename:string;mimeType:string;contentBase64:string})=>{const ticket=authorityEpoch.current.issue();if(!capabilities.includes('studio.sources.manage')||!studioSourceFlow?.featureState.sourceMutationsEnabled)throw new StudioArtifactBoundaryError('PERMISSION_DENIED');const create=sourceFlowTransport?.create??enterpriseIntelligenceClient.createStudioSource;const result=await create({organizationId:context.organizationId,workspaceId:context.workspaceId,...input});if(!accepts(ticket))throw new StudioArtifactBoundaryError('AUTHORITY_STALE');await reloadWorkspaceAfterSourceCommit(result.status==='failed'?'Studio source retained with a bounded parsing failure.':'Private immutable Studio source committed and reloaded.',ticket);return{status:result.status,...(result.failureCode?{failureCode:result.failureCode}:{})};};
+  const extractStudioBundle=async(bundle:StudioSourceFlowBundle)=>{const ticket=authorityEpoch.current.issue();if(!capabilities.includes('studio.sources.manage')||!studioSourceFlow?.featureState.sourceMutationsEnabled||!studioSourceFlow.featureState.providerExtractionEnabled)throw new StudioArtifactBoundaryError('PERMISSION_DENIED');const selected=new Set(bundle.sourceVersionSelectors);const sources=bundle.sourceSetVersions.flatMap(binding=>{const set=studioSourceFlow.sourceSets.find(item=>item.id===binding.sourceSetId&&item.versionSelector===binding.sourceSetVersionSelector&&item.version===binding.sourceSetVersion);if(!set)throw new StudioArtifactBoundaryError('SOURCE_PACKAGE_STALE');return set.members.filter(member=>selected.has(member.versionSelector)).map(member=>({sourceSetId:set.id,sourceSetVersionId:set.versionSelector,expectedSourceSetVersion:set.version,sourceId:member.sourceId,sourceVersionId:member.versionSelector}));}).map((source,index)=>({...source,ordinal:index+1}));if(sources.length!==bundle.sourceCount||new Set(sources.map(source=>source.sourceVersionId)).size!==bundle.sourceCount)throw new StudioArtifactBoundaryError('SOURCE_COVERAGE_INCOMPLETE');const extract=sourceFlowTransport?.extract??enterpriseIntelligenceClient.extractStudioBundle;await extract({organizationId:context.organizationId,workspaceId:context.workspaceId,inputBundleId:bundle.id,inputBundleVersionId:bundle.versionSelector,expectedInputBundleVersion:bundle.version,sources});if(!accepts(ticket))throw new StudioArtifactBoundaryError('AUTHORITY_STALE');await reloadWorkspaceAfterSourceCommit('Governed Studio extraction committed and exact candidates reloaded.',ticket);};
+  const reviewStudioCandidate=async(input:{candidate:StudioSourceFlowCandidate;status:'accepted'|'rejected'|'edited';value?:string;reason?:string})=>{const ticket=authorityEpoch.current.issue();if(!capabilities.includes('studio.sources.manage')||!studioSourceFlow?.featureState.sourceMutationsEnabled)throw new StudioArtifactBoundaryError('PERMISSION_DENIED');const candidate=input.candidate;const review=sourceFlowTransport?.review??enterpriseIntelligenceClient.reviewStudioCandidate;await review({organizationId:context.organizationId,workspaceId:context.workspaceId,candidateId:candidate.id,candidateVersion:candidate.candidateVersion,extractionJobId:candidate.extractionJobId,extractionBindingId:candidate.extractionBindingId,inputBundleId:candidate.inputBundleId,inputBundleVersionId:candidate.inputBundleVersionId,expectedInputBundleVersion:candidate.inputBundleVersion,sourceSetId:candidate.sourceSetId,sourceSetVersionId:candidate.sourceSetVersionId,expectedSourceSetVersion:candidate.sourceSetVersion,sourceId:candidate.sourceId,sourceVersionId:candidate.sourceVersionId,status:input.status,...(input.value!==undefined?{value:input.value}:{}),...(input.reason!==undefined?{reason:input.reason}:{})});if(!accepts(ticket))throw new StudioArtifactBoundaryError('AUTHORITY_STALE');await reloadWorkspaceAfterSourceCommit('Studio candidate review committed and exact projection reloaded.',ticket);};
   const exactPackageFromResult=async(result:StudioCommandResponse,ticket:StudioAuthorityTicket,expectedMode?:StudioSourcePackageIdentity['sourceMode'])=>{const resource=result.resource as Record<string,unknown>;const artifactId=typeof resource.artifactId==='string'?resource.artifactId:result.resourceId;const sourcePackageId=typeof resource.sourcePackageId==='string'?resource.sourcePackageId:'';if(artifactId!==result.resourceId||!sourcePackageId)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');const sourcePackage=await readStudioSourcePackageIdentity(context,artifactId,transport);if(!accepts(ticket))throw new StudioArtifactBoundaryError('AUTHORITY_STALE');if(sourcePackage.artifactId!==artifactId||sourcePackage.sourcePackageId!==sourcePackageId||sourcePackage.sourcePackageVersion!==sourcePackage.version||(expectedMode&&sourcePackage.sourceMode!==expectedMode))throw new StudioArtifactBoundaryError('SOURCE_PACKAGE_STALE');setGovernedSelection({artifactId,sourcePackage});selectedArtifactIdRef.current=artifactId;setSelectedArtifactId(artifactId);const exactWorkspace=await readStudioArtifactWorkspace(context,artifactId,0,20,transport);if(!accepts(ticket))throw new StudioArtifactBoundaryError('AUTHORITY_STALE');setArtifactWorkspace(exactWorkspace);if(canReadArtifacts){try{const summaries=await readStudioArtifactSummaries(context,0,20,transport);if(accepts(ticket))setArtifactSummaries(summaries);}catch{/* The committed package remains usable by exact command result identity. */}}return{artifactId,sourcePackage};};
-  const createStudioSourcePackage=async(input:{mode:'direct';bundleVersionId:string}|{mode:'manual';manualBrief:string})=>{const ticket=authorityEpoch.current.issue();if(!workspace)throw new StudioArtifactBoundaryError('COMMAND_UNAVAILABLE');const bundle=input.mode==='direct'?workspace.sourceAuthority.inputBundles.find(item=>item.inputBundleVersionId===input.bundleVersionId):null;if(input.mode==='direct'&&!bundle)throw new StudioArtifactBoundaryError('SOURCE_PACKAGE_STALE');const payload=input.mode==='direct'?{sourceMode:'direct_transcript_bundle',artifactType,studioInputBundle:{id:bundle!.inputBundleId,versionId:bundle!.inputBundleVersionId,version:bundle!.currentVersion},manualBrief:null}:{sourceMode:'manual_brief',artifactType,studioInputBundle:null,manualBrief:input.manualBrief};const result=await executeStudioWorkspaceCommand(context,'studio.source-package.create',0,payload,crypto.randomUUID(),transport);if(!accepts(ticket))return;setReceipt(result);const verified=await exactPackageFromResult(result,ticket,input.mode==='direct'?'direct_transcript_bundle':'manual_brief');if(!verified.sourcePackage.planningOnly||verified.sourcePackage.lineageClassification!=='not_assessed'||verified.sourcePackage.hasAssessAncestry||(input.mode==='manual'?!verified.sourcePackage.hasManualBrief:!verified.sourcePackage.hasStudioTranscriptBundle))throw new StudioArtifactBoundaryError('MALFORMED_RESULT');if(accepts(ticket))setMessage('Exact Studio Source Package committed and verified · Not assessed · planning only.');};
+  const createStudioSourcePackage=async(input:{mode:'direct';bundleVersionId:string}|{mode:'manual';manualBrief:string})=>{const ticket=authorityEpoch.current.issue();if(!workspace)throw new StudioArtifactBoundaryError('COMMAND_UNAVAILABLE');const bundle=input.mode==='direct'?workspace.sourceAuthority.inputBundles.find(item=>item.inputBundleVersionId===input.bundleVersionId):null;if(input.mode==='direct'&&!bundle)throw new StudioArtifactBoundaryError('SOURCE_PACKAGE_STALE');if(input.mode==='direct'&&(!studioSourceFlow||!studioDirectPackageEligibility(studioSourceFlow,input.bundleVersionId).eligible))throw new StudioArtifactBoundaryError('SOURCE_COVERAGE_INCOMPLETE');const payload=input.mode==='direct'?{sourceMode:'direct_transcript_bundle',artifactType,studioInputBundle:{id:bundle!.inputBundleId,versionId:bundle!.inputBundleVersionId,version:bundle!.currentVersion},manualBrief:null}:{sourceMode:'manual_brief',artifactType,studioInputBundle:null,manualBrief:input.manualBrief};const result=await executeStudioWorkspaceCommand(context,'studio.source-package.create',0,payload,crypto.randomUUID(),transport);if(!accepts(ticket))return;setReceipt(result);const verified=await exactPackageFromResult(result,ticket,input.mode==='direct'?'direct_transcript_bundle':'manual_brief');if(!verified.sourcePackage.planningOnly||verified.sourcePackage.lineageClassification!=='not_assessed'||verified.sourcePackage.hasAssessAncestry||(input.mode==='manual'?!verified.sourcePackage.hasManualBrief:!verified.sourcePackage.hasStudioTranscriptBundle))throw new StudioArtifactBoundaryError('MALFORMED_RESULT');if(accepts(ticket))setMessage('Exact Studio Source Package committed and verified · Not assessed · planning only.');};
 
   const generateGovernedPackage=async()=>{
     const ticket=authorityEpoch.current.issue();
@@ -397,13 +426,20 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setState('command_failed');setMessage('Select an available approved exact template version for this artifact type. The prior source package remains committed.');return;
     }
     const template=selectedTemplate.ownership==='system'?{kind:'system' as const,versionId:selectedTemplate.templateVersionId,version:String(selectedTemplate.version)}:{kind:'tenant' as const,templateId:selectedTemplate.templateId,versionId:selectedTemplate.templateVersionId,version:Number(selectedTemplate.version)};
+    const syntheticTemplate=selectedTemplate.ownership==='system'
+      ? {kind:'system' as const,versionId:selectedTemplate.templateVersionId,version:String(selectedTemplate.version),hash:selectedTemplate.templateHash}
+      : {kind:'tenant' as const,templateId:selectedTemplate.templateId,versionId:selectedTemplate.templateVersionId,version:Number(selectedTemplate.version),hash:selectedTemplate.templateHash};
     let committed=false;setState('generating');setMessage('Reloading exact source package heads before generation. Success appears only after the committed v2 projection reloads.');
     try{
       const sourcePackage=await readStudioSourcePackageIdentity(context,governedSelection.artifactId,transport);
       if(!accepts(ticket))return;
       if(sourcePackage.artifactId!==governedSelection.artifactId||sourcePackage.sourcePackageId!==governedSelection.sourcePackage.sourcePackageId||sourcePackage.sourcePackageVersion!==governedSelection.sourcePackage.sourcePackageVersion)throw new StudioArtifactBoundaryError('SOURCE_PACKAGE_STALE');
-      const result=await executeStudioWorkspaceCommand(context,'studio.generation.request',sourcePackage.aggregateVersion,{artifactId:sourcePackage.artifactId,sourcePackageId:sourcePackage.sourcePackageId,sourcePackageVersion:sourcePackage.sourcePackageVersion,template,expectedCurrentVersionId:sourcePackage.currentVersionId,expectedApprovedVersionId:sourcePackage.currentApprovedVersionId},crypto.randomUUID(),transport);
+      const syntheticAttempt=controlledHumanSyntheticGeneration?(()=>{const fingerprint=[sourcePackage.artifactId,sourcePackage.aggregateVersion,sourcePackage.sourcePackageId,sourcePackage.sourcePackageVersion,sourcePackage.sourcePackageHash,sourcePackage.currentVersionId??'',sourcePackage.currentApprovedVersionId??'',selectedTemplate.templateVersionId,selectedTemplate.templateHash].join(':');const retained=syntheticGenerationAttemptRef.current;if(retained?.fingerprint===fingerprint)return retained;const created={fingerprint,idempotencyKey:`pr264.${crypto.randomUUID()}`,requestId:crypto.randomUUID()};syntheticGenerationAttemptRef.current=created;return created;})():null;
+      const result=controlledHumanSyntheticGeneration
+        ? await executePrCControlledHumanSyntheticGeneration(context,{sourcePackage,template:syntheticTemplate,requestId:syntheticAttempt!.requestId},syntheticAttempt!.idempotencyKey)
+        : await executeStudioWorkspaceCommand(context,'studio.generation.request',sourcePackage.aggregateVersion,{artifactId:sourcePackage.artifactId,sourcePackageId:sourcePackage.sourcePackageId,sourcePackageVersion:sourcePackage.sourcePackageVersion,template,expectedCurrentVersionId:sourcePackage.currentVersionId,expectedApprovedVersionId:sourcePackage.currentApprovedVersionId},crypto.randomUUID(),transport);
       if(!accepts(ticket))return;
+      if(controlledHumanSyntheticGeneration)syntheticGenerationAttemptRef.current=null;
       committed=true;setReceipt(result);
       if(result.outcome==='generation_failed'){setState('generation_failed');setMessage(`Generation attempt committed (receipt ${result.receiptId}) and failed. No artifact version was created.`);return;}
       if(result.outcome==='generation_stale'){setState('stale');setMessage(`Generation attempt committed (receipt ${result.receiptId}) but the exact source or template became stale. No current artifact version moved.`);return;}
@@ -411,7 +447,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       const [value, exactWorkspace]=await Promise.all([readStudioArtifactV2(context,sourcePackage.artifactId,transport),readStudioArtifactWorkspace(context,sourcePackage.artifactId,0,20,transport)]);if(!accepts(ticket))return;const projectedPackage=value.sourcePackage,projectedTemplate=value.template;
       if(!projectedPackage||!projectedTemplate||value.contractVersion!=='studio-artifact-2'||!('sourcePackageId' in value.ancestry)||value.id!==sourcePackage.artifactId||value.ancestry.sourcePackageId!==sourcePackage.sourcePackageId||value.ancestry.sourcePackageVersion!==sourcePackage.sourcePackageVersion||value.ancestry.sourcePackageHash!==sourcePackage.sourcePackageHash||projectedPackage.id!==sourcePackage.sourcePackageId||projectedPackage.version!==sourcePackage.sourcePackageVersion||projectedTemplate.templateVersionId!==selectedTemplate.templateVersionId||projectedTemplate.version!==selectedTemplate.version||projectedTemplate.templateHash!==selectedTemplate.templateHash)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
       if(exactWorkspace.artifact.id!==value.id||exactWorkspace.artifact.currentVersionId!==value.currentVersion.id||exactWorkspace.sourcePackage.id!==sourcePackage.sourcePackageId||exactWorkspace.sourcePackage.version!==sourcePackage.sourcePackageVersion||exactWorkspace.sourcePackage.hash!==sourcePackage.sourcePackageHash)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
-      setArtifact(value);setArtifactWorkspace(exactWorkspace);setGovernedSelection({artifactId:sourcePackage.artifactId,sourcePackage});setState(value.readOnly?'read_only':value.lifecycle);setMessage(`${labels[value.lifecycle]} committed from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; v2 projection reloaded.`);
+      setArtifact(value);setArtifactWorkspace(exactWorkspace);setGovernedSelection({artifactId:sourcePackage.artifactId,sourcePackage});setState(value.readOnly?'read_only':value.lifecycle);setMessage(controlledHumanSyntheticGeneration?`${labels[value.lifecycle]} committed as visibly marked synthetic controlled-human output from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; no provider route or provider call was used.`:`${labels[value.lifecycle]} committed from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; v2 projection reloaded.`);
     }catch(error){if(!accepts(ticket))return;if(committed){setState('committed_reload_failed');setMessage('Generation command committed, but the exact v2 projection reload failed or mismatched. Mutations are blocked.');return;}const next=stateForError(error,true);setState(next.state);setMessage(next.message);}
   };
 
@@ -432,7 +468,10 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
           : {handoffId:handoff.handoffId,handoffVersion:handoff.version,outcome:action==='review-approve'||action==='final-approve'?'approve':action==='request-changes'?'changes_requested':'reject',rationale,conditions:[]};
     setMessage('Submitting handoff decision. No target exists until a committed consume response is reloaded.');
     let result;
-    try { result = await executeStudioWorkspaceCommand(context,command,handoff.version??0,payload,crypto.randomUUID(),transport); }
+    const commandVersion=action==='request'?0:handoff.version;
+    if(action==='request'&&(!Number.isSafeInteger(handoff.sourceVersion)||Number(handoff.sourceVersion)<1)){setMessage('The exact upstream source version is unavailable. Reload before performing this handoff action.');return;}
+    if(action!=='request'&&(!Number.isSafeInteger(commandVersion)||Number(commandVersion)<1)){setMessage('The exact handoff version is unavailable. Reload before performing this handoff action.');return;}
+    try { result = await executeStudioWorkspaceCommand(context,command,Number(commandVersion),payload,crypto.randomUUID(),transport,action==='request'?{handoffSourceVersion:Number(handoff.sourceVersion)}:undefined); }
     catch(error) { if(!accepts(ticket))return;const next=stateForError(error); setState(next.state); setMessage(next.message); return; }
     if(!accepts(ticket))return;
     try { if(action==='consume')await exactPackageFromResult(result,ticket);const next=await readStudioWorkspace(context,workspace.sourcePage,transport);if(!accepts(ticket))return;if(!next) throw new Error('reload'); setWorkspace(next); setMessage(action==='consume'?`Handoff consumed and exact source package verified (receipt ${result.receiptId}). Approval alone did not create a document.`:`Handoff decision committed (receipt ${result.receiptId}).`); } catch { if(!accepts(ticket))return;setState('committed_reload_failed'); setMessage(`Handoff decision committed (receipt ${result.receiptId}), but exact projection reload failed. Mutations are blocked.`); }
@@ -451,14 +490,18 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const legacyProjection = Boolean(artifact && artifact.contractVersion !== 'studio-artifact-2');
   const editableArtifact = exact('draft','changes_requested','review_rejected','approval_rejected');
   const showStructuredEditor = Boolean(artifact && (artifact.contractVersion === 'studio-artifact-2' || editableArtifact));
+  const directPackageEligibility=studioSourceFlow?studioDirectPackageEligibility(studioSourceFlow,selectedBundleVersionId):{eligible:false,message:'Studio source extraction and candidate review projection is unavailable. No direct package can be created.'};
+  const sourceIntake=!canReadSources?null:studioSourceFlow?<div className="px-4 sm:px-5"><StudioSourceIntakeReview key={`studio-source-flow:${authorityIdentity}`} projection={studioSourceFlow} disabled={blocked||Boolean(workspace?.readOnly)} canManageSources={capabilities.includes('studio.sources.manage')} selectedBundleVersionId={selectedBundleVersionId} onSelectBundle={setSelectedBundleVersionId} onCreateSource={createStudioSource} onExtract={extractStudioBundle} onReview={reviewStudioCandidate}/></div>:<div className="px-4 sm:px-5"><section aria-labelledby="studio-source-intake-unavailable" className="av-surface mt-4 p-4"><h3 id="studio-source-intake-unavailable" className="text-lg font-bold">Studio source intake unavailable</h3><p role="status" className="mt-2 text-sm font-semibold">The exact Studio source projection could not be verified. Upload, extraction, candidate review, and direct-package creation are disabled; no Assess fallback is used.</p></section></div>;
 
   return (
-    <section data-testid="studio-artifact-workspace" data-studio-usable={state !== 'loading' && Boolean(artifact || workspace) ? 'true' : 'false'} data-studio-projection-state={artifact ? 'artifact-ready' : workspace ? 'workspace-ready' : state === 'loading' ? 'loading' : 'empty-ready'} aria-labelledby="studio-artifact-title" className="av-surface mt-6 overflow-hidden">
+    <section data-testid="studio-artifact-workspace" data-studio-usable={state !== 'loading' && Boolean(artifact || workspace || studioSourceFlow) ? 'true' : 'false'} data-studio-projection-state={artifact ? 'artifact-ready' : workspace ? 'workspace-ready' : studioSourceFlow ? 'source-ready' : state === 'loading' ? 'loading' : 'empty-ready'} aria-labelledby="studio-artifact-title" className="av-surface mt-6 overflow-hidden">
       <header className="border-b border-[var(--av-color-border)] bg-[var(--av-color-bg-subtle)]/70 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="av-eyebrow">Avala Studio · governed artifact</p><h2 id="studio-artifact-title" className="mt-1 text-2xl font-bold text-[var(--av-color-text)]">Artifact workspace</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--av-color-text-muted)]">Structured content is committed by server authority. Business users see the governed artifact first; exact JSON, hashes, ancestry, and receipts remain available under advanced details.</p></div><StatusBadge tone="info">{captureMode ? 'Synthetic fixture' : 'Committed source'}</StatusBadge></div>
       </header>
 
-      {workspace && <div className="px-4 sm:px-5"><section aria-labelledby="studio-journey-intent-title" className="av-surface mt-4 p-4"><h3 id="studio-journey-intent-title" className="text-lg font-bold text-[var(--av-color-text)]">Journey navigation intent</h3><div className="mt-3 flex flex-wrap items-end gap-3"><label className="av-form-label min-w-52">Desired exit<select aria-label="Desired exit" value={desiredExit} onChange={event=>setDesiredExit(event.target.value as typeof desiredExit)} className="av-input mt-2"><option value="studio">Studio</option><option value="delivery">Delivery</option><option value="monitor">Monitor</option></select></label><label className="av-form-label min-w-72">Exact approved template<select aria-label="Exact approved Studio template" value={selectedTemplateVersionId} onChange={event=>{const versionId=event.target.value;setSelectedTemplateVersionId(versionId);setWorkspace(current=>current?{...current,template:current.templates.find(item=>item.templateVersionId===versionId)??null}:current);}} className="av-input mt-2"><option value="">Select exact template version</option>{workspace.templates.filter(item=>item.lifecycle==='approved'&&item.actions.includes('studio.generation.request')&&(item.artifactType===artifactType||item.artifactType==='custom')).map(item=><option key={item.templateVersionId} value={item.templateVersionId}>{item.name} · v{item.version} · {item.templateVersionId}</option>)}</select></label><p role="status" className="pb-2 text-sm font-semibold text-[var(--av-color-text-muted)]">Exit after {desiredExit}. Navigation intent only; no domain resource was created or changed.</p></div></section><StudioSourcePackageBuilder projection={workspace.sourceAuthority} artifactType={artifactType} disabled={blocked||workspace.readOnly} canManageSources={capabilities.includes('studio.sources.manage')} canCreatePackage={capabilities.includes('studio.artifacts.generate')} selectedBundleVersionId={selectedBundleVersionId} onSelectBundle={setSelectedBundleVersionId} onCommitSourceSet={commitStudioSourceSet} onLockInputBundle={lockStudioInputBundle} onCreatePackage={createStudioSourcePackage}/><StudioSourceCoverage projection={workspace} artifactProjection={artifactWorkspace} onPage={page => void loadWorkspacePage(page)} /><StudioHandoffCenter inbox={workspace.inbox} outbox={workspace.outbox} disabled={blocked || workspace.readOnly} canAction={canHandoffAction} onAction={handoffAction} /></div>}
+      {sourceIntake}
+
+      {workspace && <div className="px-4 sm:px-5">{controlledHumanSyntheticGeneration&&<p role="status" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">Synthetic controlled-human test output only · exact PR #264 exercise · no provider route, key, or provider call.</p>}<section aria-labelledby="studio-journey-intent-title" className="av-surface mt-4 p-4"><h3 id="studio-journey-intent-title" className="text-lg font-bold text-[var(--av-color-text)]">Journey navigation intent</h3><div className="mt-3 flex flex-wrap items-end gap-3"><label className="av-form-label min-w-52">Desired exit<select aria-label="Desired exit" value={desiredExit} onChange={event=>setDesiredExit(event.target.value as typeof desiredExit)} className="av-input mt-2"><option value="studio">Studio</option><option value="delivery">Delivery</option><option value="monitor">Monitor</option></select></label><label className="av-form-label min-w-72">Exact approved template<select aria-label="Exact approved Studio template" value={selectedTemplateVersionId} onChange={event=>{const versionId=event.target.value;setSelectedTemplateVersionId(versionId);setWorkspace(current=>current?{...current,template:current.templates.find(item=>item.templateVersionId===versionId)??null}:current);}} className="av-input mt-2"><option value="">Select exact template version</option>{workspace.templates.filter(item=>item.lifecycle==='approved'&&item.actions.includes('studio.generation.request')&&(item.artifactType===artifactType||item.artifactType==='custom')).map(item=><option key={item.templateVersionId} value={item.templateVersionId}>{item.name} · v{item.version} · {item.templateVersionId}</option>)}</select></label><p role="status" className="pb-2 text-sm font-semibold text-[var(--av-color-text-muted)]">Exit after {desiredExit}. Navigation intent only; no domain resource was created or changed.</p></div></section><StudioSourcePackageBuilder projection={workspace.sourceAuthority} artifactType={artifactType} disabled={blocked||workspace.readOnly||!studioSourceFlow?.featureState.sourceMutationsEnabled} canManageSources={capabilities.includes('studio.sources.manage')} canCreatePackage={capabilities.includes('studio.artifacts.generate')} directPackageEligible={directPackageEligibility.eligible} directPackageMessage={directPackageEligibility.message} selectedBundleVersionId={selectedBundleVersionId} onSelectBundle={setSelectedBundleVersionId} onCommitSourceSet={commitStudioSourceSet} onLockInputBundle={lockStudioInputBundle} onCreatePackage={createStudioSourcePackage}/><StudioSourceCoverage projection={workspace} artifactProjection={artifactWorkspace} onPage={page => void loadWorkspacePage(page)} /><StudioHandoffCenter inbox={workspace.inbox} outbox={workspace.outbox} disabled={blocked || workspace.readOnly} canAction={canHandoffAction} onAction={handoffAction} /></div>}
 
       {['generation_failed', 'command_failed', 'version_conflict', 'authorization_revoked', 'stale'].includes(state) && (
         <div role="alert" className="mx-4 mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
@@ -501,7 +544,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
             </div>
           </div>
           <div className="flex flex-wrap content-start items-start gap-2">
-            <button type="button" disabled={blocked||!capabilities.includes('studio.artifacts.generate')||!governedSelection||!selectedTemplateVersionId||state==='generating'} onClick={()=>void generateGovernedPackage()} className="btn-primary min-h-10 px-3 text-xs font-bold disabled:opacity-50">Generate governed package draft</button>
+            <button type="button" disabled={blocked||!capabilities.includes('studio.artifacts.generate')||!governedSelection||!selectedTemplateVersionId||state==='generating'} onClick={()=>void generateGovernedPackage()} className="btn-primary min-h-10 px-3 text-xs font-bold disabled:opacity-50">{controlledHumanSyntheticGeneration?'Generate synthetic controlled-human draft':'Generate governed package draft'}</button>
             <button type="button" disabled={!handoffId||!can('studio.artifact.generation.request') || state === 'generating' || Boolean(artifact && !['draft', 'changes_requested', 'review_rejected', 'approval_rejected', 'approved'].includes(artifact.lifecycle))} onClick={() => void run('studio.artifact.generation.request', { studioHandoffId: handoffId, artifactType })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">{legacyProjection ? 'Generate draft' : 'Generate legacy accepted-handoff draft'}</button>
             <button type="button" disabled={!can('studio.artifact.draft.revise') || !artifact || !draft || !exact('draft', 'changes_requested', 'review_rejected', 'approval_rejected')} onClick={revise} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Commit revision</button>
             <button type="button" disabled={!can('studio.artifact.review.submit') || !exact('draft')} onClick={() => void run('studio.artifact.review.submit', { artifactId: artifact!.id, artifactVersionId: artifact!.currentVersion.id })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Submit for review</button>

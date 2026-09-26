@@ -262,6 +262,16 @@ const main = async () => {
     try {
       await bootstrapSupabaseAuthority(dirty);
       await applyMigrations(dirty, baselineMigrations);
+      const prePr1aAuditRelations = await dirty.query(`
+        SELECT
+          to_regclass('public.ai_generation_jobs') AS ai_generation_jobs,
+          to_regclass('public.ai_usage_events') AS ai_usage_events
+      `);
+      assert.deepEqual(prePr1aAuditRelations.rows, [{ ai_generation_jobs: null, ai_usage_events: null }]);
+      await assert.rejects(
+        dirty.query('SELECT public.pr_c_controlled_human_provider_state()'),
+        /PR_C_CONTROLLED_HUMAN_PROVIDER_SCHEMA_MISMATCH/,
+      );
       await runSql(dirty, 'legacy AI audit fixture', legacyFixture);
       const dirtyOrgId = '55555555-5555-4555-8555-555555555555';
       await dirty.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, 'Dirty Migration', 'dirty-migration')`, [dirtyOrgId]);
