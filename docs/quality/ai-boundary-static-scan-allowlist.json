@@ -81,6 +81,13 @@
   ],
   "entries": [
     {
+      "pattern": "localStorage",
+      "path": "scripts/prCSyntheticAcceptanceBrowser.test.mjs",
+      "lines": [83, 92],
+      "reason": "test/control documentation",
+      "futureAction": "Keep synthetic browser session setup and storage-state verification in this test only; never use browser storage as server authorization."
+    },
+    {
       "pattern": "GROQ_API_KEY",
       "path": "scripts/prCControlledHumanCredentialPreflight.test.mjs",
       "lines": [198],

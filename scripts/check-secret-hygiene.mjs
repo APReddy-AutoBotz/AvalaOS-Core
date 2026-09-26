@@ -178,8 +178,11 @@ const deterministicBrowserAuthFixturePaths = new Set([
 ]);
 const isDeterministicBrowserAuthFixtureWrite = (relativePath, lineText) => {
   const fixtureKey = ['sb', '127', 'auth', token.toLowerCase()].join('-');
-  return deterministicBrowserAuthFixturePaths.has(relativePath)
-    && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`);
+  const syntheticFixtureKey = ['sb', 'synthetic', 'auth', token.toLowerCase()].join('-');
+  return (deterministicBrowserAuthFixturePaths.has(relativePath)
+    && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`))
+    || (relativePath === 'scripts/prCSyntheticAcceptanceBrowser.test.mjs'
+      && lineText.includes(`${storageGlobal}.setItem('${syntheticFixtureKey}'`));
 };
 
 
