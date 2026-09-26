@@ -265,13 +265,20 @@ const clickFirstLabel = async (page, labels, interactionSequence, required = tru
   return null;
 };
 
-const signIn = async ({ page, personaKey, password, exerciseDigest, previewOrigin }) => {
+export const signIn = async ({ page, personaKey, password, exerciseDigest, previewOrigin }) => {
   await page.goto(`${previewOrigin}/sign-in`, { waitUntil: 'domcontentloaded' });
   await waitForUsablePage(page);
   const email = deterministicPersonaEmail(personaKey, exerciseDigest);
   await page.getByLabel(/work email|email/iu).first().fill(email);
   await page.getByLabel(/password/iu).first().fill(password);
   await page.getByRole('button', { name: /sign in|continue to workspace/iu }).first().click();
+  const signInOutcome = await (await page.waitForFunction(() => {
+    const form = document.querySelector('input[type="password"]')?.closest('form');
+    if (!form) return 'signed_in';
+    if (form.querySelector('[role="alert"]')) return 'rejected';
+    return null;
+  }, undefined, { timeout: 30_000 })).jsonValue();
+  assert.equal(signInOutcome, 'signed_in', `PR_C_SYNTHETIC_BROWSER_SIGN_IN_REJECTED:${personaKey}`);
   await page.getByTestId('controlled-human-nonproduction-banner').waitFor({ state: 'visible', timeout: 30_000 });
   const identity = await page.evaluate(() => {
     const visit = value => {

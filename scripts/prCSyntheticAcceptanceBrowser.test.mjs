@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { chromium } from '@playwright/test';
 
 import {
   CONTROLLED_HUMAN_CATALOG,
@@ -18,6 +19,7 @@ import {
   deterministicPersonaEmail,
   latestCompletedAt,
   parsePasswordBundle,
+  signIn,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
 import {
   deriveSyntheticApplicationActorDigest,
@@ -62,6 +64,36 @@ test('browser identity digests exactly match the shared server-observer algorith
   const rotated = deriveBrowserIdentityDigests({ exerciseDigest, personaKey: 'requester', authUserId: actorId, sessionId: '40000002-0000-4000-8000-000000000002' });
   assert.throws(() => assertResumedIdentity(actual, rotated, 'requester'), /RESUME_IDENTITY_REJECTED/u);
   assert.throws(() => deriveBrowserIdentityDigests({ exerciseDigest, personaKey: 'requester', authUserId: actorId, sessionId: '' }), /APPLICATION_IDENTITY_REJECTED/u);
+});
+
+test('sign-in waits for authentication even when the controlled preview banner is already visible', async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const token = `header.${Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.signature`;
+    await page.route('https://synthetic.invalid/**', route => route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body>
+        <section data-testid="controlled-human-nonproduction-banner">Synthetic preview</section>
+        <form><label>Work email<input type="email"></label><label>Password<input type="password"></label>
+          <button type="submit">Sign in to AvalaOS</button></form>
+        <script>document.querySelector('form').addEventListener('submit', event => {
+          event.preventDefault(); setTimeout(() => {
+            localStorage.setItem('sb-synthetic-auth-token', JSON.stringify({ access_token: ${JSON.stringify(token)}, user: { id: ${JSON.stringify(actorId)} } }));
+            document.querySelector('form').remove();
+          }, 100);
+        });</script>
+      </body></html>`,
+    }));
+    const identity = await signIn({ page, personaKey: 'requester', password: 'Synthetic-password-00!', exerciseDigest, previewOrigin: 'https://synthetic.invalid' });
+    assert.deepEqual(identity, deriveBrowserIdentityDigests({ exerciseDigest, personaKey: 'requester', authUserId: actorId, sessionId }));
+    const stored = await context.storageState();
+    assert.equal(stored.origins.some(origin => origin.localStorage.some(item => item.name === 'sb-synthetic-auth-token')), true);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
 });
 
 test('active resume boundary is the latest completion across catalog-ordered checkpoints', () => {

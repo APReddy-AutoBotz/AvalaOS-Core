@@ -38,7 +38,7 @@ export const supabase = createClient(
   serverConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
   serverConfigured ? supabaseAnonKey : 'placeholder',
   controlledHumanBoundaryRequested
-    ? { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
+    ? { auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false } }
     : undefined,
 );
 

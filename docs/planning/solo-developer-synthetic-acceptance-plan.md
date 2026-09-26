@@ -140,15 +140,22 @@ repurpose a provider-free marker, or authorize a new project.
 
 The dedicated PR #264 backend resumed with the original controlled-human migration
 tip and 72 applied migrations. The first protected synthetic attempt applied four
-more canonical files, then stopped at an empty-history precondition. The target
-now has 76 applied migrations and 15 pending through synthetic acceptance. Before
-resuming, the job must prove the exact target fingerprint, provider-free marker,
-no live exercise, and this exact canonical prefix. The three pending migration
-history gates admit only the one prior deprovisioned exercise with its exact
-completed apply, quiesce, and deprovision receipts plus the prepared abort receipt;
-they still reject active, unbound, or differently staged history. The Supabase CLI
-records the remaining repository versions in order. A further partial failure
-stops the job for inspection, without resetting or repurposing the backend.
+more canonical files, then stopped at an empty-history precondition. The repaired
+[second attempt](https://github.com/APReddy-AutoBotz/AvalaOS-Core/actions/runs/36174691292)
+applied and verified the remaining 15 migrations, including synthetic
+acceptance, for the exact 91-migration repository chain. Its exercise preparation
+and preview identity checks passed, but its first browser login failed before any
+checkpoint because the controlled preview disabled session persistence while the
+browser runner required a retained session and treated the pre-login banner as
+sign-in completion. Bounded abort recovery passed, and a read-only target check
+confirmed 91 applied migrations at `20260924113000`, zero live exercises, two
+deprovisioned exercises, 24 banned synthetic Auth users, and zero Auth sessions.
+Immutable history remains; there is no synthetic acceptance PASS. Before another
+run, prove the exact target fingerprint, provider-free marker, full canonical
+migration chain, no live exercise, and safe retained history. The three historical
+migration guards admitted the first prior safe history before being applied;
+active, unbound, or differently staged history remains rejected. Do not reset or
+repurpose the backend after a partial failure.
 The older exercise has been deprovisioned with twelve banned synthetic accounts,
 zero sessions and active memberships, and retained history. Its abort receipt
 exposed a confirmed source defect: the prior completion function rejected those
