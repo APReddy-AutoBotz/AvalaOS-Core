@@ -1050,6 +1050,7 @@ export const prepareAssessConflictPreview = async (page, interactionSequence, bu
   await draft.selectOption(caseId);
   interactionSequence.push('select:exact-assess-draft');
   const include = review.getByRole('checkbox', { name: 'Include in preview', exact: true });
+  await include.first().waitFor({ state: 'visible' });
   assert(await include.count() >= 1, 'PR_C_SYNTHETIC_BROWSER_REVIEWED_ASSESS_CANDIDATE_MISSING');
   await include.first().check();
   interactionSequence.push('select:reviewed-assess-candidate');

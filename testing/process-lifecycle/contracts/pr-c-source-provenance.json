@@ -223,7 +223,7 @@
     "scripts/runPr1aCoverage.test.mjs": "sha256:0fa5951c06e480e7a196a4ed2405a9ac89c9d0af0dc1731e3f3fc90508a2dd08",
     "scripts/runPrCControlledHumanScriptCoverage.mjs": "sha256:e7baf1a76e5aa955001d8fc46fe7b4ecb20e1765178acd3376085f8308d99de7",
     "scripts/runPrCControlledHumanScriptCoverage.test.mjs": "sha256:6889521f070a21bcc2d38f4eb0ce71a80b381f21a7de958988ae99b1bd114b8c",
-    "scripts/runPrCSyntheticAcceptanceBrowser.mjs": "sha256:649a50a4b64b00d3234704611fbf1cf3b5589c3539873cf1b6b3bcf99b48141c",
+    "scripts/runPrCSyntheticAcceptanceBrowser.mjs": "sha256:1e88214f898ac35141c1748575109c19e1072c2e538df71effd8483548751c03",
     "scripts/runRetainedEvidenceContract.mjs": "sha256:73b9024806ae18dd25234b7ddd5ebd9d7094324689f763fede1008521a27c9cc",
     "scripts/runRetainedEvidenceContract.test.mjs": "sha256:33381cec1e62c954f2cdf1086ed4202d70f085252b9643caf156b91247c7bdcb",
     "scripts/runRetainedPrAEvidenceContract.mjs": "sha256:fd0ca34beabf9bbf6f6de481c2951da36af787003b1d5d884cf3b8365f646e24",
