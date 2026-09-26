@@ -30,19 +30,25 @@ const exerciseDigest = `sha256:${'a'.repeat(64)}`;
 const actorId = '30000001-0000-4000-8000-000000000001';
 const sessionId = '40000001-0000-4000-8000-000000000001';
 
-test('browser execution catalog covers the exact 83 steps and preserves execution order', () => {
+test('browser execution catalog covers the exact 84 steps and preserves execution order', () => {
   const catalog = buildBrowserExecutionCatalog();
-  assert.equal(catalog.length, 83);
-  assert.equal(catalog.filter(record => record.serverAction).length, 42);
+  assert.equal(catalog.length, 84);
+  assert.equal(catalog.filter(record => record.serverAction).length, 43);
   assert.equal(catalog.filter(record => !record.serverAction).length, 41);
-  assert.equal(new Set(catalog.map(record => `${record.checkpointId}:${record.stepId}`)).size, 83);
+  assert.equal(new Set(catalog.map(record => `${record.checkpointId}:${record.stepId}`)).size, 84);
   assert.deepEqual([...new Set(catalog.map(record => record.checkpointId))], CONTROLLED_HUMAN_EXECUTION_ORDER);
   assert.equal(catalog.at(-1).stepId, 'verify-history-readable-and-actions-absent');
   assert.deepEqual(
     CONTROLLED_HUMAN_CATALOG.flatMap(record => record.steps.map(step => requiredSyntheticBrowserAssertionId(record.checkpointId, step.stepId))).length,
-    83,
+    84,
   );
-  assert.equal(CONTROLLED_HUMAN_SERVER_ACTIONS.length, 42);
+  assert.equal(CONTROLLED_HUMAN_SERVER_ACTIONS.length, 43);
+  const revisedDecision = catalog.find(record => record.checkpointId === 'CH-07' && record.stepId === 'decide-revised-descendant');
+  assert.equal(revisedDecision?.personaKey, 'delivery_author');
+  assert.equal(revisedDecision?.serverAction?.action, 'delivery.item.review');
+  const revisedDecisionIndex = catalog.findIndex(record => record === revisedDecision);
+  assert.equal(catalog[revisedDecisionIndex - 1]?.stepId, 'commit-only-explicitly-edited-descendants');
+  assert.equal(catalog[revisedDecisionIndex + 1]?.stepId, 'review-complete-revised-package');
 });
 
 test('password bundle requires every distinct canonical persona credential', () => {
@@ -108,7 +114,7 @@ test('runner is two phase, uses the synthetic migration tip, and contains no agg
   const source = await readFile(new URL('./runPrCSyntheticAcceptanceBrowser.mjs', import.meta.url), 'utf8');
   assert.match(source, /--phase/u);
   assert.match(source, /\['active', 'read-only'\]/u);
-  assert.match(source, /20260924113000/u);
+  assert.match(source, /20260926053818/u);
   assert.match(source, /PR_C_SYNTHETIC_BROWSER_EPHEMERAL_STATE_REMAINS/u);
   assert.doesNotMatch(source, /controlledProofVisible|assertBodyPattern|suite.*exit.*passed/iu);
   assert.match(source, /requiredSyntheticBrowserAssertionId/u);

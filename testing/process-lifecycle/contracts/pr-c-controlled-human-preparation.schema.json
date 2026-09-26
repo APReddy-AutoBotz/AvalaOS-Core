@@ -32,9 +32,9 @@
           "additionalProperties": false,
           "required": ["studioArtifactCount", "eligibleStudioArtifactCount", "packageCount", "approvedBaselineCount"],
           "properties": {
-            "studioArtifactCount": { "const": 2 },
+            "studioArtifactCount": { "const": 3 },
             "eligibleStudioArtifactCount": { "const": 2 },
-            "packageCount": { "const": 2 },
+            "packageCount": { "const": 3 },
             "approvedBaselineCount": { "const": 1 }
           }
         },

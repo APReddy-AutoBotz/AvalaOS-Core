@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, selectExactEligibleStudioBundle, selectStudioTranscriptSources } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -13,6 +14,59 @@ const markerC=(info:TestInfo,testId:'STUDIO-TR-001'|'STUDIO-TR-003',assertionId:
 const isSourceProviderTraffic=(request:Request)=>{const url=request.url();if(/https:\/\/(?:api\.openai\.com|api\.groq\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com)(?:\/|$)/i.test(url))return true;if(!/\/functions\/v1\/enterprise-intelligence(?:[/?]|$)/i.test(url))return false;return /studio\.(?:evidence|bundle)\.extract/i.test(`${url}\n${request.postData()??''}`);};
 const navigate=async(page:Page,url:string,ready?:()=>Promise<void>)=>{let lastError:unknown;for(let attempt=1;attempt<=2;attempt+=1){try{await page.goto(url,{waitUntil:'commit',timeout:60_000});if(ready)await ready();return;}catch(error){lastError=error;if(attempt<2)await page.goto('about:blank',{waitUntil:'load',timeout:5_000}).catch(()=>undefined);}}throw lastError;};
 const open=async(page:Page,query='')=>navigate(page,`/tests/browser/studioPrB/harness.html${query}`,async()=>{await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible({timeout:15_000});});
+
+test('PR C synthetic runner selects two exact Studio sources without selecting Assess sources', async ({page}) => {
+  await open(page, '?mode=direct');
+  const interactions: string[] = [];
+  const names = ['Studio workshop transcript', 'Studio correction notes'];
+  expect(await selectStudioTranscriptSources(page, interactions, names)).toEqual({ sourceCount: 2, assessSourceCount: 0 });
+  expect(interactions).toHaveLength(2);
+  expect(await selectStudioTranscriptSources(page, interactions, names)).toEqual({ sourceCount: 2, assessSourceCount: 0 });
+  expect(interactions).toHaveLength(2);
+});
+
+test('PR C synthetic runner edits, commits, submits, and assigns one exact source-bound Studio draft', async ({page}) => {
+  await open(page, '?mode=direct');
+  const builder=page.getByRole('region',{name:'Studio Source Package builder'});
+  await builder.getByLabel('Exact locked Studio bundle').selectOption({index:1});
+  await builder.getByRole('button',{name:'Create direct planning package'}).click();
+  await expect(builder.getByText(/Direct BRD source package committed and reloaded/)).toBeVisible();
+  await page.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');
+  await page.getByRole('button',{name:'Generate governed package draft'}).click();
+  await expect(page.getByText(/Draft committed from exact Studio Source Package v1/)).toBeVisible();
+  const interactions:string[]=[];
+  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'BRD · direct transcript bundle',reviewerLabel:'Independent reviewer'});
+  expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
+  expect(interactions).toEqual(['select:synthetic-studio-transcript-draft','commit:immutable-structured-studio-revision','submit-and-assign:synthetic-studio-transcript-draft']);
+  await expect(page.getByText('In review committed.',{exact:true})).toBeVisible();
+});
+
+test('PR C synthetic runner scopes a Studio handoff action to one exact resource and state', async ({page}) => {
+  await open(page, '?multiEligible=1');
+  const interactions:string[]=[];
+  const selected=await exactStudioHandoffAction(page,interactions,{
+    tab:'Inbox',resource:/^Approved AP assessment v3 · v2$/u,state:'approved',button:'Start Studio draft',
+  });
+  await expect(selected.card.getByText('Approved AP assessment v3 · v2',{exact:true})).toBeVisible();
+  await expect(selected.control).toBeEnabled();
+  expect(interactions).toEqual(['tab:studio-handoff-inbox']);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('PR C synthetic runner selects the only direct-package-eligible bundle from two locked Studio bundles', async ({page}) => {
+  await open(page, '?mode=direct&sourceJourney=1');
+  const builder=page.getByRole('region',{name:'Studio Source Package builder'});
+  await builder.locator('label').filter({hasText:'Existing Studio exact set'}).getByRole('checkbox').check();
+  await builder.getByRole('button',{name:'Lock Studio input bundle'}).click();
+  await expect(builder.getByText('Exact Studio input bundle locked and reloaded.')).toBeVisible();
+  const select=builder.getByLabel('Exact locked Studio bundle',{exact:true});
+  await expect(select.locator('option')).toHaveCount(3);
+  const interactions:string[]=[];
+  expect(await selectExactEligibleStudioBundle(page,interactions)).toEqual({optionCount:2,eligibleCount:1});
+  await expect(select).toHaveValue('00000032-0000-4000-8000-000000000032');
+  await expect(builder.getByRole('button',{name:'Create direct planning package',exact:true})).toBeEnabled();
+  expect(interactions).toEqual(['select:exact-eligible-studio-bundle']);
+});
 
 test('Studio-owned pasted source is exactly bundled, extracted, reviewed, and packaged',async({page},info)=>{const assessRequests:string[]=[];page.on('request',request=>{if(/\/(?:rest|functions)\/v1\/.*(?:assess|transcript)/i.test(request.url()))assessRequests.push(request.url());});await open(page,'?mode=direct&sourceJourney=1');const intake=page.getByRole('region',{name:'Upload, extract, and review Studio sources'});const builder=page.getByRole('region',{name:'Studio Source Package builder'});const rawToken='RAW-ONLY-DO-NOT-PROJECT-9001';await intake.getByLabel('Pasted source name').fill('Studio incident workshop');await intake.getByLabel('Pasted Studio text').fill(`Operations must route every invoice exception to a human reviewer. The operations lead owns the control. ${rawToken}`);await intake.getByRole('button',{name:'Store pasted Studio source'}).click();await expect(intake.getByText('Private pasted Studio source stored and reloaded.')).toBeVisible();const rawProjectionMatches=await page.getByText(rawToken,{exact:false}).count();expect(rawProjectionMatches).toBe(0);const uploaded=builder.locator('li').filter({hasText:'Studio incident workshop · v1'});await uploaded.getByRole('button',{name:'Use in Studio'}).click();await builder.getByLabel('Source-set label').fill('Uploaded Studio evidence');await builder.getByRole('button',{name:'Commit Studio source set'}).click();await expect(builder.getByText('Immutable Studio source-set version committed and reloaded.')).toBeVisible();await builder.locator('label').filter({hasText:'Uploaded Studio evidence'}).getByRole('checkbox').check();await builder.getByRole('button',{name:'Lock Studio input bundle'}).click();await expect(builder.getByText('Exact Studio input bundle locked and reloaded.')).toBeVisible();await intake.getByLabel('Exact Studio bundle for extraction').selectOption('00000037-0000-4000-8000-000000000037');await expect(builder.getByRole('button',{name:'Create direct planning package'})).toBeDisabled();await intake.getByRole('button',{name:'Run governed Studio extraction'}).click();await expect(intake.getByText('Latest extraction: succeeded · 1 exact source bindings · 3 candidates.')).toBeVisible();markerC(info,'STUDIO-TR-001','pasted-source-exact-bundle-extraction',{sourceId:'00000041-0000-4000-8000-000000000041',sourceVersionId:'00000042-0000-4000-8000-000000000042',sourceSetId:'00000034-0000-4000-8000-000000000034',sourceSetVersionId:'00000035-0000-4000-8000-000000000035',inputBundleId:'00000036-0000-4000-8000-000000000036',inputBundleVersionId:'00000037-0000-4000-8000-000000000037',extractionJobId:'00000048-0000-4000-8000-000000000048',bindingCount:1,candidateCount:3,rawProjectionMatches});const requirement=intake.locator('article').filter({hasText:'business_requirement'});await requirement.getByRole('button',{name:'Accept'}).click();await expect(requirement.getByText('accepted',{exact:true})).toBeVisible();const owner=intake.locator('article').filter({hasText:'control_owner'});await owner.getByRole('button',{name:'Edit'}).click();await owner.getByLabel('Reviewed value').fill('Senior operations lead');const editCommit=owner.getByRole('button',{name:'Commit reviewed edit'});await expect(editCommit).toBeDisabled();await owner.getByLabel('Review rationale').fill('Clarifies accountable control ownership.');await expect(editCommit).toBeEnabled();await editCommit.click();await expect(owner.getByText('edited',{exact:true})).toBeVisible();const unsupported=intake.locator('article').filter({hasText:'unsupported_assumption'});await unsupported.getByRole('button',{name:'Reject'}).click();const rejectCommit=unsupported.getByRole('button',{name:'Commit rejection'});await expect(rejectCommit).toBeDisabled();await unsupported.getByLabel('Review rationale').fill('The source does not support this risk claim.');await expect(rejectCommit).toBeEnabled();await rejectCommit.click();await expect(unsupported.getByText('rejected',{exact:true})).toBeVisible();await expect(intake.getByText('Every exact selected source has reviewed, accepted grounded coverage.')).toBeVisible();await expect(builder.getByRole('button',{name:'Create direct planning package'})).toBeEnabled();await builder.getByRole('button',{name:'Create direct planning package'}).click();await expect(builder.getByText(/Direct BRD source package committed and reloaded/)).toBeVisible();await expect(page.getByText(/00000039-0000-4000-8000-000000000039 · v1/)).toBeVisible();expect(assessRequests).toEqual([]);const severe=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations.filter(item=>item.impact==='serious'||item.impact==='critical');expect(severe).toEqual([]);markerC(info,'STUDIO-TR-003','bound-candidate-review-direct-package',{inputBundleVersionId:'00000037-0000-4000-8000-000000000037',candidateStatuses:['accepted','edited','rejected'],rationaleGateAssertions:4,acceptedGroundedCoverage:1,sourcePackageId:'00000039-0000-4000-8000-000000000039',sourcePackageVersion:1,artifactId:'00000038-0000-4000-8000-000000000038',assessApiRequestCount:assessRequests.length,seriousCriticalA11yFindings:severe.length});});
 

@@ -156,6 +156,53 @@ migration chain, no live exercise, and safe retained history. The three historic
 migration guards admitted the first prior safe history before being applied;
 active, unbound, or differently staged history remains rejected. Do not reset or
 repurpose the backend after a partial failure.
+
+The [third protected attempt](https://github.com/APReddy-AutoBotz/AvalaOS-Core/actions/runs/36214823362)
+on exact PR head `10ac1b4c68386b8cafb1fb134ccd02a6b59282c7` passed exercise
+preparation and preview identity, then failed at the first Assess browser step:
+`PR_C_SYNTHETIC_BROWSER_CONTROL_COUNT:select-two-assess-transcripts`.
+Bounded abort recovery and private browser-state erasure passed; no checkpoint or
+synthetic acceptance result passed. Source inspection confirms a runner defect:
+it looks for a nonexistent `Use in Assess` button and may navigate to Process
+Catalog instead of Enterprise Intelligence > Source Library. The following
+runner step also names nonexistent `Mapping Review` and `Save assessment draft`
+controls; its seeded Assess case is already in review, while the candidate-review
+UI selects only editable drafts. Repair the browser actions and their fixture
+prerequisites together, then run focused product-backed checks before requesting
+another protected exercise. Do not treat a renamed locator or a green local
+catalog test as acceptance proof.
+
+The repair candidate adds the forward migration
+`20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql` after the
+91-migration tip. It recognizes only exact disabled, keyless, attempt-free Studio
+extraction provenance in the dedicated synthetic exercise and advances that
+environment's marker after checking for live exercises. The fixture supplies
+separate Assess and Studio source ownership, an editable Studio transcript
+draft, and a blocked Delivery recovery package so the browser can use real
+controls. This is a candidate until the focused database and browser checks,
+exact-head CI and preview, and a complete protected exercise pass. Rollback
+disables the synthetic acceptance path and Studio source integration, retains
+the forward migration and immutable exercise history, and leaves the previous
+blocking disposition in place.
+
+Focused local execution for this repair passed: PostgreSQL 16 exercised the
+fresh migration, a rejected live-exercise tip advance, exact provider-free
+Studio provenance, three unmatched-lineage adversarials, both seed/deprovision
+cycles, retained history, and the separate revised-item decision (1/1).
+Environment and evidence contracts passed 59/59; the 84-step synthetic contract
+suite passed 21/21. The Studio and Delivery browser controls, including CH-07,
+passed their focused Desktop Chrome and Pixel checks. These results are local
+executed evidence. Exact-head CI, preview identity, and a complete protected
+synthetic campaign are not run for this candidate.
+
+AP approved one additional CH-07 synthetic observation on 2026-09-26. After
+`delivery.package.revision.commit`, the Delivery author must separately arm and
+accept the revised descendant through `delivery.item.review` before the
+independent reviewer can approve the package. This makes the automated gate
+84 steps while preserving every original 83 observation and all 14 checkpoint
+identities. It changes acceptance tooling only; the server's review and approval
+rules remain unchanged.
+
 The older exercise has been deprovisioned with twelve banned synthetic accounts,
 zero sessions and active memberships, and retained history. Its abort receipt
 exposed a confirmed source defect: the prior completion function rejected those

@@ -815,9 +815,12 @@ assert.deepEqual({
 
 // Check the actual production path, not just a table name or empty mock result.
 // The retained PostgreSQL gate independently validates all selected columns.
-const relationshipReviewColumns = 'id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
+const relationshipReviewColumns = 'id,candidate_id,candidate_version,source_id,source_version_id,input_bundle_id,input_bundle_version_id,relationship,suggested_application_intent,suggested_apply_target,rationale,reviewer_id,created_at';
 const relationshipReviewRow = {
   id: HIDDEN_CANARY_IDS.relationship, candidate_id: CANDIDATE, candidate_version: 1,
+  source_id: SOURCE, source_version_id: SOURCE_VERSION,
+  input_bundle_id: TRANSCRIPT_BUNDLE, input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION,
+  suggested_application_intent: 'set_case_field', suggested_apply_target: 'description',
   relationship: 'supporting', rationale: 'Reviewed synthetic evidence', reviewer_id: REVIEWER,
   created_at: '2026-08-04T08:07:00.000Z',
 };
@@ -844,6 +847,43 @@ const reviewedCandidateProjection = buildEnterpriseIntelligenceProjection({
 assert.equal(reviewedCandidateProjection.availability, 'ready');
 assert.equal(reviewedCandidateProjection.transcriptFlow.assessCandidates[0].relationship, 'supporting',
   'successfully loaded relationship review reaches the authorized candidate projection');
+const prePreviewCandidateRows = structuredClone(reviewedCandidateRows);
+prePreviewCandidateRows.transcriptApplyPreviews = [];
+prePreviewCandidateRows.transcriptApplyPreviewBatches = [];
+const prePreviewCandidate = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, prePreviewCandidateRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessCandidates[0];
+assert.equal(prePreviewCandidate.applicationIntent, 'set_case_field');
+assert.equal(prePreviewCandidate.applyTarget, 'description',
+  'an exact reviewed safe destination is available before its first preview');
+const staleReviewRows = structuredClone(prePreviewCandidateRows);
+staleReviewRows.transcriptCandidateRelationships[0].candidate_version = 2;
+const staleReviewCandidate = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, staleReviewRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessCandidates[0];
+assert.equal(staleReviewCandidate.applyTarget, undefined,
+  'a review of another candidate version cannot authorize a preview destination');
+const foreignBundleReviewRows = structuredClone(prePreviewCandidateRows);
+foreignBundleReviewRows.transcriptCandidateRelationships[0].input_bundle_version_id = HIDDEN_CANARY_IDS.relationship;
+const foreignBundleReviewCandidate = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, foreignBundleReviewRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessCandidates[0];
+assert.equal(foreignBundleReviewCandidate.applyTarget, undefined,
+  'a review for another locked bundle cannot authorize a preview destination');
+const foreignSourceReviewRows = structuredClone(prePreviewCandidateRows);
+foreignSourceReviewRows.transcriptCandidateRelationships[0].source_version_id = HIDDEN_CANARY_IDS.relationship;
+const foreignSourceReviewCandidate = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, foreignSourceReviewRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessCandidates[0];
+assert.equal(foreignSourceReviewCandidate.applyTarget, undefined,
+  'a review for another source version cannot authorize a preview destination');
+const unsafeReviewRows = structuredClone(prePreviewCandidateRows);
+unsafeReviewRows.transcriptCandidateRelationships[0].suggested_apply_target = 'primitive.rulesStable';
+const unsafeReviewCandidate = buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['assess.v2.read'],
+}, unsafeReviewRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessCandidates[0];
+assert.equal(unsafeReviewCandidate.applyTarget, undefined,
+  'legacy structural destinations remain unavailable to the browser preview');
 
 const transcriptTablesRequestedFor = async (capabilities: string[]) => {
   const requested: string[] = [];

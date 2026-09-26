@@ -17,7 +17,8 @@ export const CONTROLLER_VERSION = 'pr-c-controlled-human-controller-1';
 export const ATTESTATION_VERSION = 'pr-c-controlled-human-attestation-1';
 export const FIXTURE_PATH = 'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json';
 export const EXPECTED_MIGRATION_TIP = '20260904120000';
-export const SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260924113000';
+export const SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260926053818';
+const RETAINED_SYNTHETIC_ACCEPTANCE_MIGRATION_TIPS = Object.freeze(['20260924113000']);
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -25,7 +26,7 @@ const DEPLOY_ID = /^[0-9a-f]{24}$/u;
 const PREVIEW_ORIGIN = 'https://deploy-preview-264--avalaos-pilot.netlify.app';
 export const FEATURE_FLAGS = Object.freeze([
   'transcript_source_sets_enabled','assess_multisource_apply_enabled','unified_byok_gateway_enabled','governed_journeys_enabled',
-  'studio_multisource_enabled','studio_tenant_templates_enabled','module_handoffs_enabled','direct_studio_planning_enabled',
+  'studio_multisource_enabled','studio_source_integration_enabled','studio_tenant_templates_enabled','module_handoffs_enabled','direct_studio_planning_enabled',
   'direct_delivery_planning_enabled','delivery_item_review_enabled','monitor_approved_baseline_enabled',
 ]);
 const DOMAIN_FAMILIES = Object.freeze({
@@ -35,7 +36,7 @@ const DOMAIN_FAMILIES = Object.freeze({
   pilot_environments:'pilot_environment',pilot_tenants:'pilot_tenant',
 });
 const RESOURCE_FAMILY_LIMITS = Object.freeze({
-  assess_process:4,assess_case:4,assess_review_resolution:16,assess_studio_handoff:4,evidence_source:12,evidence_source_version:24,
+  assess_process:5,assess_case:4,assess_review_resolution:16,assess_studio_handoff:4,evidence_source:12,evidence_source_version:24,
   source_set:8,source_set_version:16,input_bundle:8,input_bundle_version:16,evidence_candidate:32,
   candidate_relationship_review:32,assess_conflict:16,assess_conflict_resolution:32,tenant_template:8,
   tenant_template_version:16,tenant_template_review:16,tenant_template_approval:16,module_handoff:8,module_handoff_review:16,module_handoff_approval:16,
@@ -416,7 +417,7 @@ export function assertTargetInventory(inventory, context, { allowSeeded = true, 
       || !DIGEST.test(prior.exercise_digest??'')||!SHA.test(prior.release_sha??'')||prior.review_head_sha!==prior.release_sha
       || !DEPLOY_ID.test(prior.deploy_id??'')||prior.deploy_origin!==PREVIEW_ORIGIN
       || prior.target_fingerprint!==context.targetFingerprint||!DIGEST.test(prior.persona_manifest_digest??'')||!DIGEST.test(prior.fixture_manifest_digest??'')
-      || ![EXPECTED_MIGRATION_TIP,SYNTHETIC_ACCEPTANCE_MIGRATION_TIP].includes(prior.migration_tip)) fail('PR_C_CONTROLLED_HUMAN_HISTORY_REJECTED');
+      || ![EXPECTED_MIGRATION_TIP,...RETAINED_SYNTHETIC_ACCEPTANCE_MIGRATION_TIPS,SYNTHETIC_ACCEPTANCE_MIGRATION_TIP].includes(prior.migration_tip)) fail('PR_C_CONTROLLED_HUMAN_HISTORY_REJECTED');
     priorDigests.add(prior.exercise_digest);
   }
   const cycleCount=inventory.priorExercises.length+(inventory.exercise?1:0);
@@ -503,7 +504,7 @@ export class PostgresEnvironmentAdapter {
     try {
       await db.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [context.targetFingerprint]);
       const existing = (await db.query(`select exercise_digest,lifecycle from public.pr_c_controlled_human_exercises where exercise_digest=$1 for update`,[context.exerciseDigest])).rows[0];
-      if (existing) { if (existing.lifecycle !== 'active') fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REPLAY_REJECTED'); await db.query('rollback'); return { replayed:true, personaCount:users.length, studioArtifactCount:2, eligibleStudioArtifactCount:2, packageCount:2, baselineCount:1, lifecycle:'active', concurrencyVersion:1 }; }
+      if (existing) { if (existing.lifecycle !== 'active') fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REPLAY_REJECTED'); await db.query('rollback'); return { replayed:true, personaCount:users.length, studioArtifactCount:3, eligibleStudioArtifactCount:2, packageCount:3, baselineCount:1, lifecycle:'active', concurrencyVersion:1 }; }
       const ids = buildIdentifiers(context, fixtureState);
       await db.query(`update public.enterprise_intelligence_runtime_control set enabled=true,read_only=false,provider_enabled=false,delivery_enabled=true,updated_at=statement_timestamp() where singleton`);
       await db.query(`update public.studio_artifact_runtime_control set enabled=true,read_only=false,provider_enabled=false,updated_at=statement_timestamp() where singleton`);
@@ -544,8 +545,8 @@ export class PostgresEnvironmentAdapter {
       const journeyIds=buildJourneyIdentifiers(context);
       await db.query(`insert into public.pilot_operations_environments(id,org_id,workspace_id,environment_type,lifecycle,expected_schema_version,required_capabilities,maintenance,read_only,created_by) values($1,$2,$3,'pilot_candidate','active_non_live',$4,'[]',false,false,$5)`,[journeyIds.pilotEnvironment,ids.mainOrg,ids.deliveryWorkspace,context.migrationTip,requester.id]);
       await db.query(`insert into public.pilot_operations_tenants(id,org_id,workspace_id,environment_id,lifecycle,created_by) values($1,$2,$3,$4,'active',$5)`,[journeyIds.pilotTenant,ids.mainOrg,ids.deliveryWorkspace,journeyIds.pilotEnvironment,requester.id]);
-      for (const workspace of [ids.deliveryWorkspace,ids.otherWorkspace]) await db.query(`insert into public.enterprise_transcript_workspace_flags(org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,studio_multisource_enabled,studio_tenant_templates_enabled,module_handoffs_enabled,direct_studio_planning_enabled,direct_delivery_planning_enabled,delivery_item_review_enabled,monitor_approved_baseline_enabled,updated_by)
-        values($1,$2,$3,$3,$3,$3,$3,$3,$3,$3,$3,$3,$3,$4)`,[ids.mainOrg,workspace,workspace===ids.deliveryWorkspace,requester.id]);
+      for (const workspace of [ids.deliveryWorkspace,ids.otherWorkspace]) await db.query(`insert into public.enterprise_transcript_workspace_flags(org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,studio_multisource_enabled,studio_source_integration_enabled,studio_tenant_templates_enabled,module_handoffs_enabled,direct_studio_planning_enabled,direct_delivery_planning_enabled,delivery_item_review_enabled,monitor_approved_baseline_enabled,updated_by)
+        values($1,$2,$3,$3,$3,$3,$3,$3,$3,$3,$3,$3,$3,$3,$4)`,[ids.mainOrg,workspace,workspace===ids.deliveryWorkspace,requester.id]);
       await db.query(`insert into public.enterprise_transcript_workspace_flags(org_id,workspace_id,module_handoffs_enabled,direct_delivery_planning_enabled,delivery_item_review_enabled,monitor_approved_baseline_enabled,updated_by) values($1,$2,false,false,false,false,$3)`,[ids.crossOrg,ids.crossWorkspace,crossActor.id]);
       const requesterAuthorizationVersion=Number((await db.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[ids.mainOrg,requester.id])).rows[0]?.version);
       if(!Number.isSafeInteger(requesterAuthorizationVersion)||requesterAuthorizationVersion<1) fail('PR_C_CONTROLLED_HUMAN_AUTHORIZATION_VERSION_REJECTED');
@@ -580,10 +581,14 @@ export class PostgresEnvironmentAdapter {
       const reviewed=await invoke('delivery_reviewer','delivery.package.review.resolve',{workPackageId:baselinePackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:baselinePackage.packageVersionId,expectedPackageAggregateVersion:2,outcome:'approved',rationale:'Independent synthetic controlled-human review.'},'baseline-review');
       const approved=await invoke('delivery_approver','delivery.package.approval.resolve',{workPackageId:baselinePackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:baselinePackage.packageVersionId,expectedPackageAggregateVersion:2,outcome:'approved',rationale:'Independent synthetic controlled-human approval.'},'baseline-approve');
       const baseline=await invoke('delivery_approver','monitor.baseline.create',{workPackageId:baselinePackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:baselinePackage.packageVersionId},'baseline-create-monitor');
-      const seedDigest = sha256({exerciseDigest:context.exerciseDigest,personaCount:users.length,studioSeed,prerequisiteSeed,packageResult,baselinePackage,accepted,reviewed,approved,baseline,providerCalls:0});
+      const recoveryFixture=fixtureState.fixture.seed.blockedRecoveryPackage;
+      const recoveryPackage=await invoke('delivery_author','delivery.package.create.manual',{manualBrief:recoveryFixture.brief,items:recoveryFixture.items},'recovery-create');
+      const recoveryAccepted=await invoke('requester','delivery.item.review',{itemAggregateId:recoveryPackage.items[0].aggregateId,expectedAggregateVersion:1,expectedItemVersionId:recoveryPackage.items[0].versionId,outcome:'accepted',rationale:'Synthetic recovery item accepted before independent package review.'},'recovery-item-accept');
+      const recoveryReview=await invoke('delivery_reviewer','delivery.package.review.resolve',{workPackageId:recoveryPackage.resourceId,expectedPackageVersion:1,expectedPackageVersionId:recoveryPackage.packageVersionId,expectedPackageAggregateVersion:2,outcome:'changes_requested',rationale:'Synthetic response-loss recovery requires one selected descendant revision.'},'recovery-review-changes');
+      const seedDigest = sha256({exerciseDigest:context.exerciseDigest,personaCount:users.length,studioSeed,prerequisiteSeed,packageResult,baselinePackage,accepted,reviewed,approved,baseline,recoveryPackage,recoveryAccepted,recoveryReview,providerCalls:0});
       await db.query(`insert into public.pr_c_controlled_human_operation_events(exercise_id,sequence,operation,safe_result_digest) values($1,1,'seeded',$2)`,[context.exerciseId,seedDigest]);
       await db.query('commit');
-      return { replayed:false, personaCount:users.length, studioArtifactCount:2, eligibleStudioArtifactCount:2,packageCount:2,baselineCount:1,transcriptSourceCount:prerequisiteSeed.sourceCount,sourceSetCount:prerequisiteSeed.sourceSetCount,inputBundleCount:prerequisiteSeed.inputBundleCount,candidateCount:prerequisiteSeed.candidateCount,conflictCount:prerequisiteSeed.conflictCount,tenantTemplateCount:prerequisiteSeed.templateCount,lifecycle:'active',concurrencyVersion:1 };
+      return { replayed:false, personaCount:users.length, studioArtifactCount:3, eligibleStudioArtifactCount:2,packageCount:3,baselineCount:1,transcriptSourceCount:prerequisiteSeed.sourceCount,sourceSetCount:prerequisiteSeed.sourceSetCount,inputBundleCount:prerequisiteSeed.inputBundleCount,candidateCount:prerequisiteSeed.candidateCount,conflictCount:prerequisiteSeed.conflictCount,tenantTemplateCount:prerequisiteSeed.templateCount,lifecycle:'active',concurrencyVersion:1 };
     } catch (error) { await db.query('rollback'); throw error; }
   }
   async verify(context, expectedPersonaCount) {
@@ -613,7 +618,7 @@ export class PostgresEnvironmentAdapter {
       + (select count(*)::int from public.hosted_pilot_provider_simulations) provider_rows,
       (flags.transcript_source_sets_enabled::int+flags.assess_multisource_apply_enabled::int+flags.unified_byok_gateway_enabled::int+flags.governed_journeys_enabled::int+
        flags.studio_multisource_enabled::int+flags.studio_tenant_templates_enabled::int+flags.module_handoffs_enabled::int+flags.direct_studio_planning_enabled::int+
-       flags.direct_delivery_planning_enabled::int+flags.delivery_item_review_enabled::int+flags.monitor_approved_baseline_enabled::int) feature_flag_count,
+       flags.direct_delivery_planning_enabled::int+flags.delivery_item_review_enabled::int+flags.monitor_approved_baseline_enabled::int+flags.studio_source_integration_enabled::int) feature_flag_count,
       control.enabled runtime_enabled,control.provider_enabled,control.read_only,studio_control.enabled studio_runtime_enabled,studio_control.read_only studio_read_only,studio_control.provider_enabled studio_provider_enabled
       from public.pr_c_controlled_human_exercises exercise
       join public.enterprise_transcript_workspace_flags flags on flags.org_id=exercise.org_id and flags.workspace_id=exercise.workspace_id
@@ -623,16 +628,23 @@ export class PostgresEnvironmentAdapter {
     const projection=(await this.client.query(`select public.enterprise_delivery_workspace_projection((select org_id from public.pr_c_controlled_human_exercises where exercise_digest=$1),(select workspace_id from public.pr_c_controlled_human_exercises where exercise_digest=$1),$2::jsonb) projection`,[context.exerciseDigest,JSON.stringify({actorId:requester,authorizationVersion:requesterAuthorizationVersion})])).rows[0]?.projection;
     const eligibleIds=new Set((projection?.eligibleStudioArtifacts??[]).map(value=>value.studioArtifactId));
     if (!row || row.lifecycle !== 'active' || Number(row.persona_count) !== expectedPersonaCount || Number(row.active_memberships) !== expectedPersonaCount - 1
-      || Number(row.package_count) < 2 || Number(row.baseline_count) < 1 || Number(row.provider_rows) !== 0 || row.provider_enabled || row.studio_provider_enabled || row.read_only || row.studio_read_only
+      || Number(row.package_count) < 3 || Number(row.baseline_count) < 1 || Number(row.provider_rows) !== 0 || row.provider_enabled || row.studio_provider_enabled || row.read_only || row.studio_read_only
       || !row.runtime_enabled || !row.studio_runtime_enabled || Number(row.studio_artifact_count)<2 || Number(row.approved_studio_artifact_count)<2 || Number(row.assessed_studio_artifact_count)<1 || Number(row.direct_studio_artifact_count)<1
-      || Number(row.transcript_source_count)<4 || Number(row.source_set_count)<2 || Number(row.input_bundle_count)<2 || Number(row.candidate_count)<2 || Number(row.conflict_count)<1 || Number(row.tenant_template_count)<1
+      || Number(row.transcript_source_count)<6 || Number(row.source_set_count)<3 || Number(row.input_bundle_count)<3 || Number(row.candidate_count)<2 || Number(row.conflict_count)<1 || Number(row.tenant_template_count)<1
       || Number(row.pilot_environment_count)!==1 || Number(row.pilot_tenant_count)!==1 || eligibleIds.size<2
       || Number(row.feature_flag_count)!==FEATURE_FLAGS.length) fail('PR_C_CONTROLLED_HUMAN_VERIFY_REJECTED');
     return { personaCount:Number(row.persona_count), activeMembershipCount:Number(row.active_memberships), studioArtifactCount:Number(row.studio_artifact_count), eligibleStudioArtifactCount:eligibleIds.size, packageCount:Number(row.package_count), baselineCount:Number(row.baseline_count),transcriptSourceCount:Number(row.transcript_source_count),sourceSetCount:Number(row.source_set_count),inputBundleCount:Number(row.input_bundle_count),candidateCount:Number(row.candidate_count),conflictCount:Number(row.conflict_count),tenantTemplateCount:Number(row.tenant_template_count),providerRowCount:0,lifecycle:row.lifecycle,concurrencyVersion:Number(row.concurrency_version),featureFlagCount:Number(row.feature_flag_count) };
   }
   async quiesce(context, expectedVersion) {
     const digest = sha256({exerciseDigest:context.exerciseDigest,operation:'quiesce',expectedVersion});
-    return (await this.client.query(`select public.pr_c_controlled_human_quiesce($1,$2,$3) result`,[context.exerciseDigest,expectedVersion,digest])).rows[0].result;
+    await this.client.query('begin');
+    try {
+      const result=(await this.client.query(`select public.pr_c_controlled_human_quiesce($1,$2,$3) result`,[context.exerciseDigest,expectedVersion,digest])).rows[0].result;
+      await this.client.query(`update public.enterprise_transcript_workspace_flags flags set studio_source_integration_enabled=false,updated_at=statement_timestamp()
+        from public.pr_c_controlled_human_exercises exercise where exercise.exercise_digest=$1 and exercise.org_id=flags.org_id and exercise.workspace_id=flags.workspace_id and exercise.lifecycle='read_only'`,[context.exerciseDigest]);
+      await this.client.query('commit');
+      return result;
+    } catch(error) { await this.client.query('rollback'); throw error; }
   }
   async prepareRecovery(context,operation,expectedVersion,authorityDigest=sha256({exerciseDigest:context.exerciseDigest,operation,expectedVersion})) {
     return (await this.client.query(`select public.pr_c_controlled_human_prepare_recovery($1,$2,$3,$4,$5,$6,$7,statement_timestamp()+interval '2 hours') result`,
@@ -671,7 +683,7 @@ export class PostgresEnvironmentAdapter {
     const state=(await this.client.query(`select exercise.id,exercise.lifecycle,exercise.concurrency_version,
       (flags.transcript_source_sets_enabled::int+flags.assess_multisource_apply_enabled::int+flags.unified_byok_gateway_enabled::int+flags.governed_journeys_enabled::int+
        flags.studio_multisource_enabled::int+flags.studio_tenant_templates_enabled::int+flags.module_handoffs_enabled::int+flags.direct_studio_planning_enabled::int+
-       flags.direct_delivery_planning_enabled::int+flags.delivery_item_review_enabled::int+flags.monitor_approved_baseline_enabled::int) feature_flag_count,
+       flags.direct_delivery_planning_enabled::int+flags.delivery_item_review_enabled::int+flags.monitor_approved_baseline_enabled::int+flags.studio_source_integration_enabled::int) feature_flag_count,
       (control.read_only::int+studio_control.read_only::int) runtime_read_only_count,
       (control.provider_enabled::int+studio_control.provider_enabled::int) runtime_provider_enabled_count,
       (select count(*)::int from public.pr_c_controlled_human_persona_bindings where exercise_id=exercise.id) bound_persona_count,
@@ -1038,13 +1050,16 @@ export function buildIdentifiers(context, fixtureState) {
 function buildJourneyIdentifiers(context,suffix='') {
   const id=label=>deterministicUuid(context.exerciseId,`${label}${suffix}`);
   return {
-    assessProcess:id('assess-process'),assessCase:id('assess-case'),assessSourceVersion:id('assess-source-version'),assessDecision:id('assess-decision'),
+    assessProcess:id('assess-process'),browserAssessProcess:id('browser-assess-process'),assessCase:id('assess-case'),assessSourceVersion:id('assess-source-version'),assessDecision:id('assess-decision'),
     assessEvidence:id('assess-evidence'),assessReview:id('assess-review'),assessAttestation:id('assess-attestation'),assessResolution:id('assess-resolution'),
     assessGovern:id('assess-govern'),assessHandoff:id('assess-studio-handoff'),moduleHandoff:id('module-handoff-assess-studio'),pilotEnvironment:id('pilot-environment'),pilotTenant:id('pilot-tenant'),
     assessedVersion:id('studio-version-assessed'),
     directArtifact:id('studio-artifact-direct'),directSourcePackage:id('studio-source-package-direct'),directVersion:id('studio-version-direct'),
+    studioTranscriptDraft:id('studio-transcript-draft'),studioTranscriptDraftPackage:id('studio-transcript-draft-package'),studioTranscriptDraftVersion:id('studio-transcript-draft-version'),
     assessSourceSet:id('assess-source-set'),assessSourceSetVersion:id('assess-source-set-version'),assessInputBundle:id('assess-input-bundle'),assessInputBundleVersion:id('assess-input-bundle-version'),
     studioSourceSet:id('studio-source-set'),studioSourceSetVersion:id('studio-source-set-version'),studioInputBundle:id('studio-input-bundle'),studioInputBundleVersion:id('studio-input-bundle-version'),
+    studioTranscriptSourceSet:id('studio-transcript-source-set'),studioTranscriptSourceSetVersion:id('studio-transcript-source-set-version'),
+    studioTranscriptInputBundle:id('studio-transcript-input-bundle'),studioTranscriptInputBundleVersion:id('studio-transcript-input-bundle-version'),
     customTemplate:id('tenant-template'),customTemplateVersion:id('tenant-template-version'),customTemplateReview:id('tenant-template-review'),customTemplateApproval:id('tenant-template-approval'),
     assessConflict:id('assess-conflict'),
   };
@@ -1053,6 +1068,9 @@ function buildJourneyIdentifiers(context,suffix='') {
 async function seedTranscriptAndTemplatePrerequisites(db,context,fixtureState,ids,actors,authorizationVersions) {
   await db.query('set constraints all deferred');
   const journey=buildJourneyIdentifiers(context);const hash=value=>sha256(value).slice(7);
+  await db.query(`insert into public.assess_processes(id,org_id,workspace_id,name,description,status)
+    values($1,$2,$3,'Synthetic PR C Assess draft','Manually complete and review the exact two-source synthetic Assess case.','Draft')`,
+  [journey.browserAssessProcess,ids.mainOrg,ids.deliveryWorkspace]);
   const sourceRows=[];
   for(const [owner,labels] of Object.entries(fixtureState.fixture.seed.transcriptSets)) {
     for(let index=0;index<labels.length;index++) {
@@ -1083,13 +1101,112 @@ async function seedTranscriptAndTemplatePrerequisites(db,context,fixtureState,id
     await db.query(`insert into public.enterprise_module_input_bundle_versions(id,input_bundle_id,org_id,workspace_id,version,bundle_hash,status,created_by) values($1,$2,$3,$4,1,$5,'locked',$6)`,[inputBundleVersionId,inputBundleId,ids.mainOrg,ids.deliveryWorkspace,bundleHash,actors.requester.id]);
     await db.query(`insert into public.enterprise_module_input_bundle_items(input_bundle_version_id,input_bundle_id,org_id,workspace_id,ordinal,item_kind,source_set_version_id,source_set_id,resource_hash,declared_purpose) values($1,$2,$3,$4,1,'source_set',$5,$6,$7,$8)`,[inputBundleVersionId,inputBundleId,ids.mainOrg,ids.deliveryWorkspace,versionId,sourceSetId,manifestHash,`Synthetic ${owner} transcript selection`]);
   }
+  const studioTranscriptSources=sourceRows.filter(row=>row.owner==='studioDraft');
+  const studioTranscriptManifestHash=hash(studioTranscriptSources.map(row=>({sourceId:row.sourceId,versionId:row.versionId,contentHash:row.contentHash})));
+  await db.query(`insert into public.enterprise_source_sets(id,org_id,workspace_id,owner_module,display_label,description,current_version,status,created_by)
+    values($1,$2,$3,'studio','Synthetic Studio provider-free draft transcripts','Synthetic-only exact controlled-human Studio draft source set',1,'locked',$4)`,
+    [journey.studioTranscriptSourceSet,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id]);
+  await db.query(`insert into public.enterprise_source_set_versions(id,source_set_id,org_id,workspace_id,version,purpose,manifest_hash,source_count,extracted_character_count,status,created_by)
+    values($1,$2,$3,$4,1,'Synthetic provider-free Studio draft input',$5,$6,$7,'locked',$8)`,
+    [journey.studioTranscriptSourceSetVersion,journey.studioTranscriptSourceSet,ids.mainOrg,ids.deliveryWorkspace,studioTranscriptManifestHash,studioTranscriptSources.length,studioTranscriptSources.reduce((sum,row)=>sum+row.characterCount,0),actors.requester.id]);
+  for(let index=0;index<studioTranscriptSources.length;index++) await db.query(`insert into public.enterprise_source_set_version_items(source_set_version_id,source_set_id,source_version_id,source_id,org_id,workspace_id,ordinal,semantic_role,content_hash,extracted_text_hash,extracted_character_count)
+    values($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10)`,[journey.studioTranscriptSourceSetVersion,journey.studioTranscriptSourceSet,studioTranscriptSources[index].versionId,studioTranscriptSources[index].sourceId,ids.mainOrg,ids.deliveryWorkspace,index+1,index===0?'primary':'supporting',studioTranscriptSources[index].contentHash,studioTranscriptSources[index].characterCount]);
+  for(const source of studioTranscriptSources) await db.query(`insert into public.studio_source_version_ownerships(source_version_id,source_id,org_id,workspace_id,created_by)
+    values($1,$2,$3,$4,$5)`,[source.versionId,source.sourceId,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id]);
+  // These disabled, keyless jobs make the already locked Assess bundle reviewable
+  // without granting provider authority or recording a provider call. The
+  // provider-state guard independently checks every receipt/job/binding tuple.
+  const offlineConfigId=deterministicUuid(context.exerciseId,'assess-offline-config');
+  const offlineRouteId=deterministicUuid(context.exerciseId,'assess-offline-route');
+  const studioOfflineRouteId=deterministicUuid(context.exerciseId,'studio-offline-route');
+  await db.query(`insert into public.ai_provider_configs(id,org_id,provider,display_name,default_model,status,evidence_ref,created_by,updated_by)
+    values($1,$2,'groq','PR C controlled-human offline provenance','synthetic-no-provider','disabled',$3,$4,$4)`,
+  [offlineConfigId,ids.mainOrg,`pr-c-controlled-human:${context.exerciseDigest}`,actors.requester.id]);
+  await db.query(`insert into public.enterprise_ai_capability_routes(id,org_id,workspace_id,provider_config_id,capability,model,enabled,created_by,updated_by)
+    values($1,$2,$3,$4,'assess.evidence.extract','synthetic-no-provider',false,$5,$5)`,
+  [offlineRouteId,ids.mainOrg,ids.deliveryWorkspace,offlineConfigId,actors.requester.id]);
+  await db.query(`insert into public.enterprise_ai_capability_routes(id,org_id,workspace_id,provider_config_id,capability,model,enabled,created_by,updated_by)
+    values($1,$2,$3,$4,'studio.evidence.extract','synthetic-no-provider',false,$5,$5)`,
+  [studioOfflineRouteId,ids.mainOrg,ids.deliveryWorkspace,offlineConfigId,actors.requester.id]);
   const assessSources=sourceRows.filter(row=>row.owner==='assess');const candidateIds=[];
   for(let index=0;index<assessSources.length;index++) {
     const candidateId=deterministicUuid(context.exerciseId,`assess-candidate-${index+1}`);candidateIds.push(candidateId);
     const source=assessSources[index];
-    await db.query(`insert into public.enterprise_evidence_candidates(id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,version,source_locator,confidence,suggestion_status,created_by)
-      values($1,$2,$3,$4,$5,'process_objective',$6,$6,$7,$8,1,$9,1,'accepted',$10)`,[candidateId,source.sourceId,source.versionId,ids.mainOrg,ids.deliveryWorkspace,`Synthetic objective ${index+1}`,hash(`excerpt-${index}`),hash({sourceVersionId:source.versionId,candidateId}),'normalized-text:v1:chars:0-10',actors.requester.id]);
+    const receiptId=deterministicUuid(context.exerciseId,`assess-offline-receipt-${index+1}`);
+    const requestId=deterministicUuid(context.exerciseId,`assess-offline-request-${index+1}`);
+    const jobId=deterministicUuid(context.exerciseId,`assess-offline-job-${index+1}`);
+    await db.query(`insert into public.enterprise_ai_command_receipts(id,org_id,workspace_id,actor_id,command_type,runtime_area,idempotency_key,initial_request_id,last_request_id,request_hash,status,resource_id,response,completed_at)
+      values($1,$2,$3,$4,'evidence.extract','ingestion',$5,$6,$6,$7,'committed',$8,$9::jsonb,statement_timestamp())`,
+    [receiptId,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id,`pr264-offline-${source.versionId}`,requestId,'a'.repeat(64),source.sourceId,JSON.stringify({offlineSynthetic:true,exerciseDigest:context.exerciseDigest})]);
+    await db.query(`insert into public.enterprise_ai_job_ledger(id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,source_refs,actor_id,request_id,idempotency_key,status,output_hash,approval_state,receipt_id,source_id,source_version_id,route_id,metadata,completed_at)
+      values($1,$2,$3,'assess.evidence.extract',$4,'groq','synthetic-no-provider','controlled-human-offline','1',$5::jsonb,$6,$7,$8,'succeeded',$9,'review_required',$10,$11,$12,$13,$14::jsonb,statement_timestamp())`,
+    [jobId,ids.mainOrg,ids.deliveryWorkspace,offlineConfigId,JSON.stringify([{sourceId:source.sourceId,sourceVersionId:source.versionId}]),actors.requester.id,deterministicUuid(context.exerciseId,`assess-offline-job-request-${index+1}`),`pr264-offline-job-${source.versionId}`,'b'.repeat(64),receiptId,source.sourceId,source.versionId,offlineRouteId,JSON.stringify({controlledHumanSyntheticNoProvider:true,exerciseDigest:context.exerciseDigest})]);
+    await db.query(`insert into public.enterprise_transcript_extraction_bindings(org_id,workspace_id,job_id,receipt_id,input_bundle_version_id,input_bundle_id,bundle_hash,source_id,source_version_id,provider_route_id,provider_config_id,model,authorization_version,created_by,source_set_id,source_set_version_id)
+      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'synthetic-no-provider',$12,$13,$14,$15)`,
+    [ids.mainOrg,ids.deliveryWorkspace,jobId,receiptId,journey.assessInputBundleVersion,journey.assessInputBundle,hash({owner:'assess',sourceSetId:journey.assessSourceSet,versionId:journey.assessSourceSetVersion,manifestHash:hash(assessSources.map(row=>({sourceId:row.sourceId,versionId:row.versionId,contentHash:row.contentHash})))}),source.sourceId,source.versionId,offlineRouteId,offlineConfigId,authorizationVersions.requester,actors.requester.id,journey.assessSourceSet,journey.assessSourceSetVersion]);
+    await db.query(`insert into public.enterprise_evidence_candidates(id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,version,source_locator,confidence,ai_job_id,prompt_version,suggestion_status,created_by,reviewed_by,reviewed_at)
+      values($1,$2,$3,$4,$5,'process_objective',$6,$6,$7,$8,1,$9,1,$10,'1','accepted',$11,$11,statement_timestamp())`,
+    [candidateId,source.sourceId,source.versionId,ids.mainOrg,ids.deliveryWorkspace,`Synthetic objective ${index+1}`,hash(`excerpt-${index}`),hash({sourceVersionId:source.versionId,candidateId}),'normalized-text:v1:chars:0-10',jobId,actors.requester.id]);
+    const reviewReceiptId=deterministicUuid(context.exerciseId,`assess-review-receipt-${index+1}`);
+    await db.query(`insert into public.enterprise_ai_command_receipts(id,org_id,workspace_id,actor_id,command_type,runtime_area,idempotency_key,initial_request_id,last_request_id,request_hash,status,resource_id,response,completed_at)
+      values($1,$2,$3,$4,'transcript.assess.candidate.review','ingestion',$5,$6,$6,$7,'committed',$8,'{}'::jsonb,statement_timestamp())`,
+    [reviewReceiptId,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id,`pr264-review-${source.versionId}`,deterministicUuid(context.exerciseId,`assess-review-request-${index+1}`),hash({candidateId}),candidateId]);
+    await db.query(`insert into public.enterprise_evidence_candidate_relationship_reviews(org_id,workspace_id,candidate_id,source_id,source_version_id,input_bundle_version_id,input_bundle_id,candidate_version,relationship,suggested_application_intent,suggested_apply_target,rationale,reviewer_id,authorization_version,receipt_id)
+      values($1,$2,$3,$4,$5,$6,$7,1,'supporting','set_case_field','description','Reviewed keyless synthetic Assess destination',$8,$9,$10)`,
+    [ids.mainOrg,ids.deliveryWorkspace,candidateId,source.sourceId,source.versionId,journey.assessInputBundleVersion,journey.assessInputBundle,actors.requester.id,authorizationVersions.requester,reviewReceiptId]);
   }
+  const studioBundleHash=hash({owner:'studio',sourceSetId:journey.studioTranscriptSourceSet,versionId:journey.studioTranscriptSourceSetVersion,manifestHash:studioTranscriptManifestHash});
+  await db.query(`insert into public.enterprise_module_input_bundles(id,org_id,workspace_id,owner_module,current_version,created_by) values($1,$2,$3,'studio',1,$4)`,
+    [journey.studioTranscriptInputBundle,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id]);
+  await db.query(`insert into public.enterprise_module_input_bundle_versions(id,input_bundle_id,org_id,workspace_id,version,bundle_hash,status,created_by) values($1,$2,$3,$4,1,$5,'locked',$6)`,
+    [journey.studioTranscriptInputBundleVersion,journey.studioTranscriptInputBundle,ids.mainOrg,ids.deliveryWorkspace,studioBundleHash,actors.requester.id]);
+  await db.query(`insert into public.enterprise_module_input_bundle_items(input_bundle_version_id,input_bundle_id,org_id,workspace_id,ordinal,item_kind,source_set_version_id,source_set_id,resource_hash,declared_purpose) values($1,$2,$3,$4,1,'source_set',$5,$6,$7,'Synthetic provider-free Studio transcript draft')`,
+    [journey.studioTranscriptInputBundleVersion,journey.studioTranscriptInputBundle,ids.mainOrg,ids.deliveryWorkspace,journey.studioTranscriptSourceSetVersion,journey.studioTranscriptSourceSet,studioTranscriptManifestHash]);
+  const studioExtractReceipt=deterministicUuid(context.exerciseId,'studio-offline-extract-receipt');
+  const studioExtractRequest=deterministicUuid(context.exerciseId,'studio-offline-extract-request');
+  const studioExtractToken=deterministicUuid(context.exerciseId,'studio-offline-extract-token');
+  const studioExtractJob=deterministicUuid(context.exerciseId,'studio-offline-extract-job');
+  const studioCandidateRows=studioTranscriptSources.map((source,index)=>({
+    candidateId:deterministicUuid(context.exerciseId,`studio-candidate-${index+1}`),
+    bindingId:deterministicUuid(context.exerciseId,`studio-extraction-binding-${index+1}`),source,index,
+    value:`Synthetic Studio requirement ${index+1}`,locator:`normalized-text:v1:chars:${index*20}-${index*20+19}`,
+  }));
+  await db.query(`insert into public.enterprise_ai_command_receipts(id,org_id,workspace_id,actor_id,command_type,runtime_area,idempotency_key,initial_request_id,last_request_id,request_hash,status,resource_id,response,execution_token,execution_fence,completed_at)
+    values($1,$2,$3,$4,'studio.bundle.extract','ingestion',$5,$6,$6,$7,'committed',$8,$9::jsonb,$10,1,statement_timestamp())`,
+  [studioExtractReceipt,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id,`pr264-studio-offline-${journey.studioTranscriptInputBundleVersion}`,studioExtractRequest,'c'.repeat(64),studioExtractJob,JSON.stringify({offlineSynthetic:true,exerciseDigest:context.exerciseDigest}),studioExtractToken]);
+  const sourceRefs=studioCandidateRows.map(({source,index})=>({ordinal:index+1,sourceSetId:journey.studioTranscriptSourceSet,sourceSetVersionId:journey.studioTranscriptSourceSetVersion,sourceSetVersion:1,sourceId:source.sourceId,sourceVersionId:source.versionId}));
+  await db.query(`insert into public.enterprise_ai_job_ledger(id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,source_refs,actor_id,request_id,idempotency_key,status,output_hash,approval_state,receipt_id,request_hash,execution_token,execution_fence,attempt_count,recovery_count,route_id,metadata,completed_at)
+    values($1,$2,$3,'studio.evidence.extract',$4,'groq','synthetic-no-provider','studio.evidence.extract','controlled-human-offline-1',$5::jsonb,$6,$7,$8,'succeeded',$9,'review_required',$10,$11,$12,1,0,0,$13,$14::jsonb,statement_timestamp())`,
+  [studioExtractJob,ids.mainOrg,ids.deliveryWorkspace,offlineConfigId,JSON.stringify(sourceRefs),actors.requester.id,studioExtractRequest,`pr264-studio-offline-job-${journey.studioTranscriptInputBundleVersion}`,'d'.repeat(64),studioExtractReceipt,'c'.repeat(64),studioExtractToken,studioOfflineRouteId,JSON.stringify({controlledHumanSyntheticNoProvider:true,exerciseDigest:context.exerciseDigest})]);
+  await db.query(`insert into public.studio_source_extraction_runs(job_id,org_id,workspace_id,receipt_id,input_bundle_id,input_bundle_version_id,input_bundle_version,bundle_hash,route_id,provider_config_id,provider,model,prompt_key,prompt_version,request_hash,authorization_version,execution_token,execution_fence,status,staged_candidates,safe_result,output_hash,candidate_count,created_by,completed_at)
+    values($1,$2,$3,$4,$5,$6,1,$7,$8,$9,'groq','synthetic-no-provider','studio.evidence.extract','controlled-human-offline-1',$10,$11,$12,1,'succeeded',$13::jsonb,$14::jsonb,$15,2,$16,statement_timestamp())`,
+  [studioExtractJob,ids.mainOrg,ids.deliveryWorkspace,studioExtractReceipt,journey.studioTranscriptInputBundle,journey.studioTranscriptInputBundleVersion,studioBundleHash,studioOfflineRouteId,offlineConfigId,'c'.repeat(64),authorizationVersions.requester,studioExtractToken,JSON.stringify(studioCandidateRows.map(({candidateId,source})=>({candidateId,sourceId:source.sourceId,sourceVersionId:source.versionId}))),JSON.stringify({controlledHumanSyntheticNoProvider:true,exerciseDigest:context.exerciseDigest}),'d'.repeat(64),actors.requester.id]);
+  for(const row of studioCandidateRows) {
+    const excerptHash=hash(`studio-excerpt-${row.index}`);const provenanceHash=hash({sourceVersionId:row.source.versionId,candidateId:row.candidateId});
+    await db.query(`insert into public.studio_source_extraction_bindings(id,job_id,org_id,workspace_id,input_bundle_id,input_bundle_version_id,input_bundle_version,source_set_id,source_set_version_id,source_set_version,source_id,source_version_id,ordinal)
+      values($1,$2,$3,$4,$5,$6,1,$7,$8,1,$9,$10,$11)`,
+    [row.bindingId,studioExtractJob,ids.mainOrg,ids.deliveryWorkspace,journey.studioTranscriptInputBundle,journey.studioTranscriptInputBundleVersion,journey.studioTranscriptSourceSet,journey.studioTranscriptSourceSetVersion,row.source.sourceId,row.source.versionId,row.index+1]);
+    await db.query(`insert into public.enterprise_evidence_candidates(id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,version,source_locator,confidence,ai_job_id,prompt_version,suggestion_status,created_by,reviewed_by,reviewed_at)
+      values($1,$2,$3,$4,$5,'rules',$6,$6,$7,$8,1,$9,1,$10,'controlled-human-offline-1','accepted',$11,$11,statement_timestamp())`,
+    [row.candidateId,row.source.sourceId,row.source.versionId,ids.mainOrg,ids.deliveryWorkspace,row.value,excerptHash,provenanceHash,row.locator,studioExtractJob,actors.requester.id]);
+    const storedCandidate=(await db.query(`select provenance_hash,excerpt_hash,value from public.enterprise_evidence_candidates where id=$1`,[row.candidateId])).rows[0];
+    row.provenanceHash=storedCandidate.provenance_hash;row.excerptHash=storedCandidate.excerpt_hash;
+    const reviewReceipt=deterministicUuid(context.exerciseId,`studio-candidate-review-receipt-${row.index+1}`);
+    const reviewRequest=deterministicUuid(context.exerciseId,`studio-candidate-review-request-${row.index+1}`);
+    await db.query(`insert into public.enterprise_ai_command_receipts(id,org_id,workspace_id,actor_id,command_type,runtime_area,idempotency_key,initial_request_id,last_request_id,request_hash,status,resource_id,response,execution_token,execution_fence,completed_at)
+      values($1,$2,$3,$4,'studio.candidate.review','ingestion',$5,$6,$6,$7,'committed',$8,'{}'::jsonb,$9,1,statement_timestamp())`,
+    [reviewReceipt,ids.mainOrg,ids.deliveryWorkspace,actors.requester.id,`pr264-studio-candidate-${row.candidateId}`,reviewRequest,hash({candidateId:row.candidateId}),row.candidateId,deterministicUuid(context.exerciseId,`studio-candidate-review-token-${row.index+1}`)]);
+    await db.query(`insert into public.studio_source_candidate_decisions(candidate_id,job_id,binding_id,org_id,workspace_id,input_bundle_id,input_bundle_version_id,source_set_id,source_set_version_id,source_id,source_version_id,decision_status,candidate_version,candidate_provenance_hash,excerpt_hash,value_hash,reason_hash,reviewed_by,reviewer_authorization_version,receipt_id,execution_fence)
+      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'accepted',1,$12,$13,$14,$15,$16,$17,$18,1)`,
+    [row.candidateId,studioExtractJob,row.bindingId,ids.mainOrg,ids.deliveryWorkspace,journey.studioTranscriptInputBundle,journey.studioTranscriptInputBundleVersion,journey.studioTranscriptSourceSet,journey.studioTranscriptSourceSetVersion,row.source.sourceId,row.source.versionId,storedCandidate.provenance_hash,storedCandidate.excerpt_hash,hash(storedCandidate.value),hash(''),actors.requester.id,authorizationVersions.requester,reviewReceipt]);
+  }
+  const studioCoverage=(await db.query(`select
+    (select count(distinct source_item.source_version_id)::int from public.enterprise_module_input_bundle_items bundle_item join public.enterprise_source_set_version_items source_item on source_item.source_set_version_id=bundle_item.source_set_version_id and source_item.org_id=bundle_item.org_id and source_item.workspace_id=bundle_item.workspace_id where bundle_item.input_bundle_version_id=$1) source_count,
+    (select count(*)::int from public.studio_source_extraction_bindings binding where binding.input_bundle_version_id=$1) binding_count,
+    (select count(*)::int from public.studio_source_extraction_bindings binding join public.enterprise_evidence_candidates candidate on candidate.ai_job_id=binding.job_id and candidate.source_id=binding.source_id and candidate.source_version_id=binding.source_version_id join public.studio_source_candidate_decisions decision on decision.candidate_id=candidate.id and decision.binding_id=binding.id and decision.job_id=binding.job_id where binding.input_bundle_version_id=$1) decision_count,
+    (select count(*)::int from public.studio_source_extraction_bindings binding join public.enterprise_evidence_candidates candidate on candidate.ai_job_id=binding.job_id and candidate.source_id=binding.source_id and candidate.source_version_id=binding.source_version_id join public.studio_source_candidate_decisions decision on decision.candidate_id=candidate.id and decision.binding_id=binding.id and decision.job_id=binding.job_id where binding.input_bundle_version_id=$1 and candidate.suggestion_status='accepted' and candidate.reviewed_by is not null and candidate.reviewed_at is not null and decision.decision_status=candidate.suggestion_status and decision.candidate_version=candidate.version and decision.candidate_provenance_hash=candidate.provenance_hash and decision.excerpt_hash=candidate.excerpt_hash and decision.source_id=candidate.source_id and decision.source_version_id=candidate.source_version_id and decision.reviewed_by=candidate.reviewed_by and decision.value_hash=encode(public.digest(convert_to(candidate.value,'UTF8'),'sha256'),'hex')) covered_count`,[journey.studioTranscriptInputBundleVersion])).rows[0];
+  if(Number(studioCoverage.source_count)!==2||Number(studioCoverage.binding_count)!==2||Number(studioCoverage.covered_count)!==2)
+    fail(`PR_C_CONTROLLED_HUMAN_STUDIO_SOURCE_COVERAGE_REJECTED:${studioCoverage.source_count}:${studioCoverage.binding_count}:${studioCoverage.decision_count}:${studioCoverage.covered_count}`);
   await db.query(`insert into public.enterprise_assess_evidence_conflicts(id,org_id,workspace_id,assess_case_id,input_bundle_version_id,input_bundle_id,application_intent,target_key,candidate_ids,candidate_binding_hash,is_material,created_by)
     values($1,$2,$3,$4,$5,$6,'set_case_field','process_objective',$7::uuid[],$8,true,$9)`,[journey.assessConflict,ids.mainOrg,ids.deliveryWorkspace,journey.assessCase,journey.assessInputBundleVersion,journey.assessInputBundle,candidateIds,hash(candidateIds),actors.requester.id]);
   const template=fixtureState.fixture.seed.customTemplate;const fieldSchema={type:'object',properties:{context:{type:'string'},requirements:{type:'array'}},additionalProperties:false};
@@ -1100,7 +1217,30 @@ async function seedTranscriptAndTemplatePrerequisites(db,context,fixtureState,id
     values($1,$2,$3,$4,1,$5,$6::jsonb,$7::jsonb,'studio-renderer-2','studio-artifact-2',$8,'approved',$9,$10)`,[journey.customTemplateVersion,journey.customTemplate,ids.mainOrg,ids.deliveryWorkspace,template.artifactClass,JSON.stringify(template.sections),JSON.stringify(fieldSchema),templateHash,actors.requester.id,authorizationVersions.requester]);
   await db.query(`insert into public.studio_tenant_template_review_events(id,template_id,template_version_id,org_id,workspace_id,reviewer_id,reviewer_authorization_version,outcome,rationale) values($1,$2,$3,$4,$5,$6,$7,'approved','Independent synthetic template review')`,[journey.customTemplateReview,journey.customTemplate,journey.customTemplateVersion,ids.mainOrg,ids.deliveryWorkspace,actors.studio_reviewer.id,authorizationVersions.studio_reviewer]);
   await db.query(`insert into public.studio_tenant_template_approval_events(id,template_id,template_version_id,review_event_id,org_id,workspace_id,approver_id,approver_authorization_version,outcome,rationale) values($1,$2,$3,$4,$5,$6,$7,$8,'approved','Independent synthetic template approval')`,[journey.customTemplateApproval,journey.customTemplate,journey.customTemplateVersion,journey.customTemplateReview,ids.mainOrg,ids.deliveryWorkspace,actors.studio_approver.id,authorizationVersions.studio_approver]);
-  return {sourceCount:4,sourceSetCount:2,inputBundleCount:2,candidateCount:2,conflictCount:1,templateCount:1};
+  const draftFixture=fixtureState.fixture.seed.studioTranscriptDraft;
+  const draftPackageCommand={actorId:actors.requester.id,organizationId:ids.mainOrg,workspaceId:ids.deliveryWorkspace,
+    artifactId:journey.studioTranscriptDraft,sourcePackageId:journey.studioTranscriptDraftPackage,
+    requestId:deterministicUuid(context.exerciseId,'studio-transcript-draft-package-request'),idempotencyKey:'pr264-studio-transcript-draft-package',
+    authorizationVersion:authorizationVersions.requester,payload:{sourceMode:'direct_transcript_bundle',artifactType:draftFixture.artifactType,
+      studioInputBundleId:journey.studioTranscriptInputBundle,studioInputBundleVersionId:journey.studioTranscriptInputBundleVersion,studioInputBundleVersion:1}};
+  const draftPackage=(await db.query(`select public.studio_artifact_source_package_create($1::jsonb) result`,[JSON.stringify(draftPackageCommand)])).rows[0].result;
+  if(draftPackage.resourceId!==journey.studioTranscriptDraft||draftPackage.sourcePackageId!==journey.studioTranscriptDraftPackage
+    ||draftPackage.sourceMode!=='direct_transcript_bundle'||draftPackage.lineageClassification!=='not_assessed'||draftPackage.planningOnly!==true)
+    fail('PR_C_CONTROLLED_HUMAN_STUDIO_TRANSCRIPT_DRAFT_BINDING_REJECTED');
+  const draftAnchors=studioCandidateRows.map(row=>({sourceVersionId:row.source.versionId,locator:row.locator,anchorHash:row.excerptHash}));
+  const draftContent={contractVersion:'studio-artifact-2',title:draftFixture.title,summary:draftFixture.summary,
+    sections:draftFixture.sections.map((section,index)=>({...section,sourceAnchors:[draftAnchors[index]],labels:['human_authored']})),
+    coverage:{selectedSourceVersionIds:studioTranscriptSources.map(source=>source.versionId),coveredSourceVersionIds:studioTranscriptSources.map(source=>source.versionId),complete:true}};
+  const draftContentSafe=(await db.query(`select public.studio_pr_b_structured_artifact_content_safe($1::jsonb,package) safe
+    from public.studio_artifact_source_packages package where package.id=$2 and package.artifact_id=$3`,
+  [JSON.stringify(draftContent),journey.studioTranscriptDraftPackage,journey.studioTranscriptDraft])).rows[0]?.safe;
+  if(!draftContentSafe) fail('PR_C_CONTROLLED_HUMAN_STUDIO_TRANSCRIPT_DRAFT_CONTENT_REJECTED');
+  await db.query(`insert into public.studio_artifact_versions(id,artifact_id,org_id,workspace_id,version,template_id,content_schema_version,renderer_version,content,content_hash,lifecycle,generation_attempt_id,author_id,author_authorization_version,source_package_id,source_package_hash,template_kind,tenant_template_version_id,template_version,template_hash,is_stale_completion)
+    values($1,$2,$3,$4,1,null,'studio-artifact-2','studio-renderer-2',$5::jsonb,public.enterprise_sha256_jsonb($5::jsonb),'draft',null,$6,$7,$8,$9,'tenant',$10,'1',$11,false)`,
+  [journey.studioTranscriptDraftVersion,journey.studioTranscriptDraft,ids.mainOrg,ids.deliveryWorkspace,JSON.stringify(draftContent),actors.requester.id,authorizationVersions.requester,journey.studioTranscriptDraftPackage,draftPackage.sourcePackageHash,journey.customTemplateVersion,templateHash]);
+  await db.query(`update public.studio_artifact_aggregates set current_version_id=$2,aggregate_version=1,lifecycle='draft',updated_at=statement_timestamp() where id=$1`,
+    [journey.studioTranscriptDraft,journey.studioTranscriptDraftVersion]);
+  return {sourceCount:6,sourceSetCount:3,inputBundleCount:3,candidateCount:4,conflictCount:1,templateCount:1,studioDraftCount:1};
 }
 export async function seedAssessUpstream(db,context,ids,actors,authorizationVersions,suffix='') {
   const journey=buildJourneyIdentifiers(context,suffix);const requester=actors.requester;const reviewer=actors.studio_reviewer;const approver=actors.studio_approver;
@@ -1234,7 +1374,7 @@ export async function preflight(context, database) {
   return safeResult('preflight','passed',context,{disposition:inventory.exercise?'exact_replay':inventory.priorExercises.length?'retained_history_ready':'dedicated_empty',existingLifecycle:inventory.exercise?.lifecycle??null,priorDeprovisionedExerciseCount:inventory.priorExercises.length,unexpectedDataCount:0,providerRowCount:0});
 }
 export function plan(context, fixtureState) {
-  return safeResult('plan','passed',context,{personaCount:fixtureState.personas.length,featureFlagCount:fixtureState.fixture.featureFlags.length,seedStudioArtifactCount:2,eligibleStudioArtifactCount:2,seedPackageCount:2,seedBaselineCount:1,operations:['create_admin_auth_users','seed_exact_synthetic_scope','seed_approved_assessed_studio_artifact','seed_approved_direct_studio_artifact','verify_studio_to_delivery_eligibility','seed_canonical_manual_draft','seed_canonical_approved_baseline','verify_public_attestation'],deprovisionOperations:['disable_flags_and_set_read_only','revoke_exact_sessions','suspend_exact_memberships','retain_immutable_history']});
+  return safeResult('plan','passed',context,{personaCount:fixtureState.personas.length,featureFlagCount:fixtureState.fixture.featureFlags.length,seedStudioArtifactCount:3,eligibleStudioArtifactCount:2,seedPackageCount:3,seedBaselineCount:1,operations:['create_admin_auth_users','seed_exact_synthetic_scope','seed_provider_free_studio_transcript_draft','seed_approved_assessed_studio_artifact','seed_approved_direct_studio_artifact','verify_studio_to_delivery_eligibility','seed_canonical_manual_draft','seed_canonical_approved_baseline','seed_canonical_blocked_recovery_package','verify_public_attestation'],deprovisionOperations:['disable_flags_and_set_read_only','revoke_exact_sessions','suspend_exact_memberships','retain_immutable_history']});
 }
 async function failureBoundary(options,name) { if(options?.afterMutation) await options.afterMutation(name); }
 export async function apply(context, fixtureState, database, admin, passwordBundle, options={}) {

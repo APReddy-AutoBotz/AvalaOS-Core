@@ -60,9 +60,9 @@ const common = {
 const controllerRecord = phase => ({
   contractVersion: 'pr-c-controlled-human-controller-1', phase, status: 'passed', ...common,
   ...(phase === 'preflight' ? { disposition: 'dedicated_empty', existingLifecycle: null, unexpectedDataCount: 0, providerRowCount: 0 } : {}),
-  ...(phase === 'plan' ? { personaCount: 12, featureFlagCount: 11, seedStudioArtifactCount: 2, eligibleStudioArtifactCount: 2, seedPackageCount: 2, seedBaselineCount: 1, operations: ['bounded-seed'], deprovisionOperations: ['bounded-deprovision'] } : {}),
-  ...(phase === 'apply' ? { personaCount: 12, studioArtifactCount: 2, eligibleStudioArtifactCount: 2, packageCount: 2, baselineCount: 1, lifecycle: 'active', concurrencyVersion: 1, replayed: false, authUsersCreated: 12, providerRowCount: 0, zeroEgress: true } : {}),
-  ...(phase === 'verify' ? { personaCount: 12, activeMembershipCount: 11, studioArtifactCount: 2, eligibleStudioArtifactCount: 2, packageCount: 2, baselineCount: 1, providerRowCount: 0, lifecycle: 'active', concurrencyVersion: 1, featureFlagCount: 11, attestation: { status: 'matched' }, zeroEgress: true, unexpectedDataCount: 0 } : {}),
+  ...(phase === 'plan' ? { personaCount: 12, featureFlagCount: 12, seedStudioArtifactCount: 3, eligibleStudioArtifactCount: 2, seedPackageCount: 3, seedBaselineCount: 1, operations: ['bounded-seed'], deprovisionOperations: ['bounded-deprovision'] } : {}),
+  ...(phase === 'apply' ? { personaCount: 12, studioArtifactCount: 3, eligibleStudioArtifactCount: 2, packageCount: 3, baselineCount: 1, lifecycle: 'active', concurrencyVersion: 1, replayed: false, authUsersCreated: 12, providerRowCount: 0, zeroEgress: true } : {}),
+  ...(phase === 'verify' ? { personaCount: 12, activeMembershipCount: 11, studioArtifactCount: 3, eligibleStudioArtifactCount: 2, packageCount: 3, baselineCount: 1, providerRowCount: 0, lifecycle: 'active', concurrencyVersion: 1, featureFlagCount: 12, attestation: { status: 'matched' }, zeroEgress: true, unexpectedDataCount: 0 } : {}),
   ...(phase === 'quiesce' ? { lifecycle: 'read_only', concurrencyVersion: 2, featureFlagCountEnabled: 0, runtimeControlReadOnlyCount: 2, runtimeControlProviderEnabledCount: 0, operationEventSequence: 2, operationEventDigest: d('quiesce-event'), immutableHistoryDigest: d('quiesced-history'), transitionedAt: '2026-09-04T10:02:40.500Z', authorityDigest: canonicalDigest(controllerRecord('verify')) } : {}),
   ...(['deprovision','post-deprovision-verify'].includes(phase) ? {
     lifecycle: 'deprovisioned', concurrencyVersion: 3, replayed: phase === 'post-deprovision-verify', sessionsRevoked: 12, credentialsDisabled: 12,
@@ -309,7 +309,7 @@ test('downloaded role templates bind verified preparation and reach compaction b
 });
 
 test('maps every application persona to exactly one human duty and reconstructs all checkpoints', () => {
-  assert.deepEqual(CONTROLLED_HUMAN_EXECUTION_ORDER, ['CH-01','CH-02','CH-03','CH-04','CH-05','CH-06','CH-07','CH-08','CH-09','CH-10','CH-11','CH-12','CH-14','CH-13']);
+  assert.deepEqual(CONTROLLED_HUMAN_EXECUTION_ORDER, ['CH-01','CH-02','CH-03','CH-04','CH-05','CH-06','CH-07','CH-08','CH-09','CH-10','CH-14','CH-11','CH-12','CH-13']);
   for (const record of CONTROLLED_HUMAN_CATALOG) for (const step of record.steps) assert.ok(['requester','reviewer','approver'].includes(HUMAN_DUTY_BY_PERSONA[step.personaKey]));
   assert.deepEqual([...new Set(CONTROLLED_HUMAN_CATALOG.map(record=>record.journeyId))], REQUIRED_JOURNEYS);
 });
@@ -508,7 +508,7 @@ test('published schemas are fail-closed and version-aligned', () => {
   }
 });
 
-test('validates authentic built artifacts against every published JSON Schema and rejects 82/84-step totals', () => {
+test('validates authentic built artifacts against every published JSON Schema and rejects 82/83/85-step totals', () => {
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   addFormats(ajv);
   const contracts = path.join(root,'testing/process-lifecycle/contracts');
@@ -525,11 +525,11 @@ test('validates authentic built artifacts against every published JSON Schema an
     assert.equal(validate(value),true,`${name}: ${ajv.errorsText(validate.errors)}`);
   }
   const sessionSchema=validators.get('pr-c-controlled-human-session.schema.json');
-  for(const count of [82,84]) {
+  for(const count of [82,83,85]) {
     const altered=clone(session());altered.totals.stepCount=count;altered.totals.passedStepCount=count;
     assert.equal(sessionSchema(altered),false,`${count} steps must fail schema validation`);
   }
-  assert.equal(CONTROLLED_HUMAN_CATALOG.reduce((total,checkpoint)=>total+checkpoint.steps.length,0),83);
+  assert.equal(CONTROLLED_HUMAN_CATALOG.reduce((total,checkpoint)=>total+checkpoint.steps.length,0),84);
 });
 test('checkpoint evidence rejects runtime job and human-role substitution',()=>{assert.throws(()=>checkpoint('requester','human-one','1001','2001',preparation(),controllerRecord('quiesce'),'controlled_human_reviewer'),/CAPTURE_JOB_ROLE/u);});
 test('retained producer evidence rejects stale workflow, wrong job, run attempt, and schema identity',()=>{

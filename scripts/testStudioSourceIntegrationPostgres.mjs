@@ -18,9 +18,11 @@ assert.equal(parsedAdminUrl.pathname, '/postgres');
 const { Client } = pg;
 const migrationName = '20260924052038_studio_independent_source_integration.sql';
 const syntheticMigrationName = '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql';
+const syntheticStudioFixtureMigrationName = '20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql';
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-2), migrationName);
-assert.equal(migrations.at(-1), syntheticMigrationName);
+assert.equal(migrations.at(-3), migrationName);
+assert.equal(migrations.at(-2), syntheticMigrationName);
+assert.equal(migrations.at(-1), syntheticStudioFixtureMigrationName);
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -86,7 +88,7 @@ try {
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
   `);
-  for (const migration of migrations.slice(0, -2)) await transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8'));
+  for (const migration of migrations.slice(0, -3)) await transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8'));
   assert.ok(Number((await one(db, "SELECT current_setting('server_version_num')::int version")).version) >= 160000);
 
   // A populated pre-migration Studio set may already reference shared/Assess-library
@@ -142,6 +144,7 @@ try {
     [fixture.candidate, fixture.org, fixture.workspace, legacyCandidate.value, legacyCandidate.excerpt_hash, fixture.reviewer, legacyCandidate.value]);
   await transaction(db, migrationName, await readFile(join('supabase/migrations', migrationName), 'utf8'));
   await transaction(db, syntheticMigrationName, await readFile(join('supabase/migrations', syntheticMigrationName), 'utf8'));
+  await transaction(db, syntheticStudioFixtureMigrationName, await readFile(join('supabase/migrations', syntheticStudioFixtureMigrationName), 'utf8'));
   assert.equal(await count(db, 'public.enterprise_source_set_version_items', 'WHERE source_set_version_id=$1', [legacySetVersion]), 1);
   assert.equal(await count(db, 'public.studio_legacy_extraction_binding_compatibility', 'WHERE binding_id=$1 AND job_id=$2', [legacyBinding, fixture.job]), 1);
   await expectedFailure(() => db.query(`INSERT INTO public.enterprise_transcript_extraction_bindings(id,org_id,workspace_id,job_id,receipt_id,
@@ -154,10 +157,10 @@ try {
     WHERE org_id=$1 AND workspace_id=$2`, [fixture.org, fixture.workspace])).studio_source_integration_enabled, false);
 
   const identity = await one(db, `SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`);
-  assert.equal(identity.migration_tip, '20260924113000');
+  assert.equal(identity.migration_tip, '20260926053818');
   const identityConstraint = await one(db, `SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
     WHERE conrelid='public.hosted_pilot_environment_identity'::regclass AND conname='hosted_pilot_environment_identity_migration_tip_check'`);
-  assert.equal(identityConstraint.expression, "(migration_tip = '20260924113000'::text)");
+  assert.equal(identityConstraint.expression, "(migration_tip = '20260926053818'::text)");
   const role = fixed(331);
   const orgRole = fixed(332);
   const packageActor = fixed(333);

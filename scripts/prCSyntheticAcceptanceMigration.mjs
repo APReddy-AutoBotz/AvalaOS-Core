@@ -7,11 +7,11 @@ import { sha256 } from './prCControlledHumanEnvironment.mjs';
 import { createControlledHumanPostgresClientConfig } from './prCControlledHumanPostgresTls.mjs';
 
 const { Client } = pg;
-export const SYNTHETIC_MIGRATION_FILE = 'supabase/migrations/20260924113000_pr_c_synthetic_acceptance_execution_kind.sql';
-export const SYNTHETIC_MIGRATION_VERSION = '20260924113000';
-export const SYNTHETIC_MIGRATION_NAME = 'pr_c_synthetic_acceptance_execution_kind';
-export const SYNTHETIC_PRIOR_VERSION = '20260924052038';
-export const SYNTHETIC_PRIOR_NAME = 'studio_independent_source_integration';
+export const SYNTHETIC_MIGRATION_FILE = 'supabase/migrations/20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql';
+export const SYNTHETIC_MIGRATION_VERSION = '20260926053818';
+export const SYNTHETIC_MIGRATION_NAME = 'pr_c_synthetic_studio_provider_free_fixture';
+export const SYNTHETIC_PRIOR_VERSION = '20260924113000';
+export const SYNTHETIC_PRIOR_NAME = 'pr_c_synthetic_acceptance_execution_kind';
 export const SYNTHETIC_CHAIN_START_VERSION = '20260904120000';
 export const SYNTHETIC_CHAIN_START_NAME = 'pr_c_controlled_human_exercise_authority';
 export const SYNTHETIC_INTERRUPTED_VERSION = '20260916083814';
@@ -27,14 +27,16 @@ export function classifySyntheticMigrationState(state) {
     fail('PR_C_SYNTHETIC_MIGRATION_MARKER_REJECTED');
   if (state.liveExerciseCount !== 0) fail('PR_C_SYNTHETIC_MIGRATION_LIVE_EXERCISE_REJECTED');
   if (marker.migration_tip === SYNTHETIC_PRIOR_VERSION && state.latestVersion === SYNTHETIC_PRIOR_VERSION && state.latestName === SYNTHETIC_PRIOR_NAME
-    && state.executionKindColumn === false && state.executionKindConstraint === false
-    && state.sessionBindingTable === false && state.sessionBindingImmutableTrigger === false
-    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === false && state.markerAssertionTip === SYNTHETIC_CHAIN_START_VERSION
-    && state.retainedAuthRecoveryAccepted === false) return 'pending';
+    && state.executionKindColumn === true && state.executionKindConstraint === true
+    && state.sessionBindingTable === true && state.sessionBindingImmutableTrigger === true
+    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === true
+    && state.fixtureExerciseTipAccepted === false && state.markerAssertionTip === SYNTHETIC_PRIOR_VERSION
+    && state.retainedAuthRecoveryAccepted === true) return 'pending';
   if (marker.migration_tip === SYNTHETIC_MIGRATION_VERSION && state.latestVersion === SYNTHETIC_MIGRATION_VERSION
     && state.latestName === SYNTHETIC_MIGRATION_NAME && state.executionKindColumn === true && state.executionKindConstraint === true
     && state.sessionBindingTable === true && state.sessionBindingImmutableTrigger === true
-    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === true && state.markerAssertionTip === SYNTHETIC_MIGRATION_VERSION
+    && state.humanExerciseTipAccepted === true && state.syntheticExerciseTipAccepted === true && state.fixtureExerciseTipAccepted === true
+    && state.markerAssertionTip === SYNTHETIC_MIGRATION_VERSION
     && state.retainedAuthRecoveryAccepted === true) return 'current';
   fail('PR_C_SYNTHETIC_MIGRATION_STATE_REJECTED');
 }
@@ -47,11 +49,14 @@ export function classifySyntheticMigrationChain(state, remote, local, targetFing
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_STATE_REJECTED');
   const boundary = local.findIndex(row => row.version === SYNTHETIC_CHAIN_START_VERSION);
   if (boundary < 0 || local.at(-1)?.version !== SYNTHETIC_MIGRATION_VERSION
-    || local.length - boundary - 1 !== 19
+    || local.length - boundary - 1 !== 20
     || remote.some((row, index) => row.version !== local[index]?.version || row.name !== local[index]?.name))
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_HISTORY_REJECTED');
   if (remote.length === local.length && classifySyntheticMigrationState(state) === 'current')
     return { pendingMigrationCount: 0, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
+  if (remote.length === local.length - 1 && remote.at(-1)?.version === SYNTHETIC_PRIOR_VERSION
+    && remote.at(-1)?.name === SYNTHETIC_PRIOR_NAME && classifySyntheticMigrationState(state) === 'pending')
+    return { pendingMigrationCount: 1, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
   // The first protected attempt committed exactly four canonical migrations
   // before the next migration rejected retained deprovisioned history.
   if (remote.length === boundary + 5 && remote.at(-1)?.version === SYNTHETIC_INTERRUPTED_VERSION
@@ -65,7 +70,7 @@ export function classifySyntheticMigrationChain(state, remote, local, targetFing
     || state.latestVersion !== SYNTHETIC_CHAIN_START_VERSION || state.latestName !== SYNTHETIC_CHAIN_START_NAME
     || state.executionKindColumn !== false || state.sessionBindingTable !== false || state.retainedAuthRecoveryAccepted !== false)
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_STATE_REJECTED');
-  return { pendingMigrationCount: 19, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
+  return { pendingMigrationCount: 20, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
 }
 
 export class SyntheticAcceptanceMigrationAdapter {
@@ -84,13 +89,15 @@ export class SyntheticAcceptanceMigrationAdapter {
     const exerciseTipExpression = (await this.client.query(`select pg_get_expr(conbin,conrelid,false) expression from pg_constraint where conrelid='public.pr_c_controlled_human_exercises'::regclass and conname='pr_c_controlled_human_exercises_migration_tip_check'`)).rows[0]?.expression ?? '';
     const humanExerciseTipAccepted = exerciseTipExpression.includes('20260904120000');
     const syntheticExerciseTipAccepted = exerciseTipExpression.includes('20260924113000');
+    const fixtureExerciseTipAccepted = exerciseTipExpression.includes(SYNTHETIC_MIGRATION_VERSION);
     const markerDefinition = (await this.client.query(`select pg_get_functiondef('public.pr_c_controlled_human_assert_marker()'::regprocedure) definition`)).rows[0].definition;
-    const markerAssertionTip = markerDefinition.includes("marker.migration_tip = '20260924113000'") ? SYNTHETIC_MIGRATION_VERSION
+    const markerAssertionTip = markerDefinition.includes(`marker.migration_tip = '${SYNTHETIC_MIGRATION_VERSION}'`) ? SYNTHETIC_MIGRATION_VERSION
+      : markerDefinition.includes("marker.migration_tip = '20260924113000'") ? SYNTHETIC_PRIOR_VERSION
       : markerDefinition.includes("marker.migration_tip = '20260904120000'") ? '20260904120000' : null;
     const recoveryDefinition = (await this.client.query(`select pg_get_functiondef('public.pr_c_controlled_human_complete_recovery(text,text,text)'::regprocedure) definition`)).rows[0].definition;
     const retainedAuthRecoveryAccepted = recoveryDefinition.includes('user_record.banned_until');
     const liveExerciseCount = Number((await this.client.query(`select count(*)::int count from public.pr_c_controlled_human_exercises where lifecycle<>'deprovisioned'`)).rows[0].count);
-    return { marker, latestVersion: latest?.version ?? null, latestName: latest?.name ?? null, executionKindColumn, executionKindConstraint, sessionBindingTable, sessionBindingImmutableTrigger, humanExerciseTipAccepted, syntheticExerciseTipAccepted, markerAssertionTip, retainedAuthRecoveryAccepted, liveExerciseCount };
+    return { marker, latestVersion: latest?.version ?? null, latestName: latest?.name ?? null, executionKindColumn, executionKindConstraint, sessionBindingTable, sessionBindingImmutableTrigger, humanExerciseTipAccepted, syntheticExerciseTipAccepted, fixtureExerciseTipAccepted, markerAssertionTip, retainedAuthRecoveryAccepted, liveExerciseCount };
   }
   async inspectChain() {
     await this.client.query(`select public.pr_c_controlled_human_assert_provider_state()`);

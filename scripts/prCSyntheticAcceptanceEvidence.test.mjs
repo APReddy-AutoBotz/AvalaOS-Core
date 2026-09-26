@@ -63,7 +63,7 @@ const personas = SYNTHETIC_PERSONA_ORDER.map((personaKey, index) => ({
 const binding = {
   repository: 'APReddy-AutoBotz/AvalaOS-Core', prNumber: 264, branch: 'controller/governed-delivery-monitor-pr-c-20260831', exactHead: 'a'.repeat(40),
   preview: { origin: 'https://deploy-preview-264--avalaos-pilot.netlify.app', deployId: 'b'.repeat(24), releaseSha: 'a'.repeat(40), environment: 'hosted_nonproduction_pilot', context: 'deploy-preview', reviewId: 264, siteName: 'avalaos-pilot' },
-  backend: { exerciseDigest: digest(1), targetFingerprint: digest(2), publicTargetDigest: digest(3), personaManifestDigest: digest(4), fixtureManifestDigest: digest(5), migrationTip: '20260924113000' },
+  backend: { exerciseDigest: digest(1), targetFingerprint: digest(2), publicTargetDigest: digest(3), personaManifestDigest: digest(4), fixtureManifestDigest: digest(5), migrationTip: '20260926053818' },
   producer: { workflowPath: '.github/workflows/transcript-flow-pr-c.yml', job: 'synthetic_role_acceptance', event: 'workflow_dispatch', runId: '1001', runAttempt: 1, owner: 'APReddy-AutoBotz' },
 };
 
@@ -79,10 +79,10 @@ test('owner policy is exact, versioned, and PR scoped', async () => {
   }
 });
 
-test('synthetic observer requests cover all 83 steps with application identities', () => {
+test('synthetic observer requests cover all 84 steps with application identities', () => {
   const requests = ['requester', 'reviewer', 'approver'].map(role => buildSyntheticObserverRequest(role, checkpoints));
   assert.equal(requests.reduce((total, request) => total + request.steps.length, 0), SYNTHETIC_STEP_COUNT);
-  assert.equal(new Set(requests.flatMap(request => request.steps.map(step => `${step.checkpointId}\0${step.stepId}`))).size, 83);
+  assert.equal(new Set(requests.flatMap(request => request.steps.map(step => `${step.checkpointId}\0${step.stepId}`))).size, 84);
   for (const request of requests) {
     const validated = validateControlledExerciseObserverRequest(request);
     assert.equal(validated.executionKind, 'synthetic'); assert.equal(validated.role, request.syntheticRole);
@@ -131,7 +131,7 @@ test('catalog assertion ids are state specific and stable', () => {
     const checkpoint = catalogByCheckpoint.get(checkpointId);
     return checkpoint.steps.map(step => requiredSyntheticBrowserAssertionId(checkpointId, step.stepId));
   });
-  assert.equal(ids.length, 83); assert.equal(new Set(ids).size, 83);
+  assert.equal(ids.length, 84); assert.equal(new Set(ids).size, 84);
   assert.ok(ids.every(value => value.endsWith('.observed') && value.startsWith('ch-')));
 });
 
@@ -159,7 +159,7 @@ test('green process shape cannot replace a required per-step browser observation
 });
 
 test('post-observer egress and failed cleanup cannot produce acceptance', () => {
-  const steps = Array.from({ length: 83 }, () => ({ safety: { providerEgress: 0, realProviderCalls: 0, customerDataRecords: 0, externalUsers: 0 } }));
+  const steps = Array.from({ length: 84 }, () => ({ safety: { providerEgress: 0, realProviderCalls: 0, customerDataRecords: 0, externalUsers: 0 } }));
   assert.deepEqual(validateSyntheticServerSafety(steps), { providerEgress: 0, realProviderCalls: 0, customerDataRecords: 0, externalUsers: 0 });
   steps[82].safety.providerEgress = 1;
   assert.throws(() => validateSyntheticServerSafety(steps), /PR_C_SYNTHETIC_SAFETY/u);

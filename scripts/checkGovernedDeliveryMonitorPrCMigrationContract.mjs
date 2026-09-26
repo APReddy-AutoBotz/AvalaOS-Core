@@ -7,6 +7,7 @@ const controlledHumanMigrationName='20260904120000_pr_c_controlled_human_exercis
 const deferredAuthorityMigrationName='20260923190853_pr_c_deferred_binding_authority.sql';
 const studioSourceMigrationName='20260924052038_studio_independent_source_integration.sql';
 const syntheticAcceptanceMigrationName='20260924113000_pr_c_synthetic_acceptance_execution_kind.sql';
+const syntheticStudioFixtureMigrationName='20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql';
 const sql=readFileSync(`supabase/migrations/${migrationName}`,'utf8');
 const deferredAuthoritySql=readFileSync(`supabase/migrations/${deferredAuthorityMigrationName}`,'utf8');
 const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')).sort();
@@ -25,8 +26,10 @@ assert.equal(migrations.filter(name=>name===controlledHumanMigrationName).length
 assert.equal(migrations.filter(name=>name===deferredAuthorityMigrationName).length,1);
 assert.equal(migrations.filter(name=>name===studioSourceMigrationName).length,1);
 assert.equal(migrations.filter(name=>name===syntheticAcceptanceMigrationName).length,1);
+assert.equal(migrations.filter(name=>name===syntheticStudioFixtureMigrationName).length,1);
 assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
-assert.equal(migrations.at(-1),syntheticAcceptanceMigrationName);
+assert.equal(migrations.at(-2),syntheticAcceptanceMigrationName);
+assert.equal(migrations.at(-1),syntheticStudioFixtureMigrationName);
 assertPrCMigrationTail(migrations);
 assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
 assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);

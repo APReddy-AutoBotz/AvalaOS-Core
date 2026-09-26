@@ -509,7 +509,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('transcriptApplyPreviews', `enterprise_assess_apply_previews?select=id,assess_case_id,expected_case_version,input_bundle_version_id,candidate_id,candidate_version,application_intent,target_key,target_id,proposed_value,created_at,expires_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptApplyPreviewBatches', `enterprise_assess_apply_preview_batches?select=id,assess_case_id,expected_case_version,input_bundle_id,input_bundle_version_id,source_set_version_ids,preview_ids,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptCandidateApplications', `enterprise_assess_candidate_applications?select=preview_id,preview_batch_id,assess_case_id,assess_case_version,applied_at&${scope}&order=applied_at.desc&limit=1000`);
-      load('transcriptCandidateRelationships', `enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at&${scope}&order=created_at.desc,id.desc&limit=1000`);
+      load('transcriptCandidateRelationships', `enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,source_id,source_version_id,input_bundle_id,input_bundle_version_id,relationship,suggested_application_intent,suggested_apply_target,rationale,reviewer_id,created_at&${scope}&order=created_at.desc,id.desc&limit=1000`);
       load('transcriptConflicts', `enterprise_assess_evidence_conflicts?select=id,assess_case_id,input_bundle_version_id,application_intent,target_key,candidate_ids,is_material,current_resolution_version,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptConflictResolutions', `enterprise_assess_evidence_conflict_resolutions?select=conflict_id,version,resolution,chosen_candidate_id,authored_value,rationale,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptExtractionBindings', `enterprise_transcript_extraction_bindings?select=id,job_id,input_bundle_version_id,input_bundle_id,source_set_version_id,source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=1000`);
@@ -1137,8 +1137,19 @@ const projectTranscriptFlow = (
       || !boundBundle.sourceVersionSelectors.includes(text(candidate.source_version_id))
       || !includes(['suggested', 'accepted', 'rejected', 'edited'] as const, candidate.suggestion_status)) return [];
     const latestPreview = (assessVisible ? raw.transcriptApplyPreviews : []).find(preview => text(preview.candidate_id) === text(candidate.id));
+    const relationship = relationshipByCandidate.get(text(candidate.id));
+    const exactReview = relationship && number(relationship.candidate_version) === number(candidate.version, 1)
+      && text(relationship.source_id) === text(candidate.source_id)
+      && text(relationship.source_version_id) === text(candidate.source_version_id)
+      && text(relationship.input_bundle_id) === boundBundle.id
+      && text(relationship.input_bundle_version_id) === boundBundle.versionSelector ? relationship : undefined;
+    const reviewedIntent = exactReview?.suggested_application_intent;
+    const reviewedTarget = text(exactReview?.suggested_apply_target);
+    const safeReviewedTarget = (reviewedIntent === 'set_case_field' && ['name', 'description'].includes(reviewedTarget))
+      || (reviewedIntent === 'link_evidence_only' && reviewedTarget === 'evidence');
     const intent = includes(TRANSCRIPT_ASSESS_APPLICATION_INTENTS, latestPreview?.application_intent)
-      ? latestPreview?.application_intent as TranscriptAssessApplicationIntent : 'link_evidence_only' as const;
+      ? latestPreview?.application_intent as TranscriptAssessApplicationIntent
+      : safeReviewedTarget ? reviewedIntent as TranscriptAssessApplicationIntent : 'link_evidence_only' as const;
     const value = text(candidate.value);
     if (!isUnicodeScalarString(value) || Array.from(value).length > 12_000) return [];
     return [{
@@ -1151,9 +1162,9 @@ const projectTranscriptFlow = (
       sourceVersionLabel: `Source version ${number(sourceVersion.version, 1)}`, field: short(candidate.field_key, 160), value,
       safeExcerpt: short(candidate.safe_excerpt, 1_000) || undefined, sourceLocator: short(candidate.source_locator, 400),
       confidence: Math.max(0, Math.min(1, number(candidate.confidence))), status: candidate.suggestion_status as 'suggested' | 'accepted' | 'rejected' | 'edited',
-      relationship: includes(['neutral', 'supporting', 'contradictory'] as const, relationshipByCandidate.get(text(candidate.id))?.relationship)
-        ? relationshipByCandidate.get(text(candidate.id))?.relationship as 'neutral' | 'supporting' | 'contradictory' : 'neutral' as const,
-      applicationIntent: intent, applyTarget: short(latestPreview?.target_key, 240) || undefined,
+      relationship: includes(['neutral', 'supporting', 'contradictory'] as const, exactReview?.relationship)
+        ? exactReview?.relationship as 'neutral' | 'supporting' | 'contradictory' : 'neutral' as const,
+      applicationIntent: intent, applyTarget: short(latestPreview?.target_key, 240) || (safeReviewedTarget ? reviewedTarget : undefined),
       provenanceState: candidate.source_locator ? 'anchored' as const : 'incomplete' as const,
       reviewState: !candidate.reviewed_by ? 'pending' as const : text(candidate.reviewed_by) === authority.userId ? 'reviewed_by_you' as const : 'reviewed_by_another' as const,
       editCount: Math.max(0, number(candidate.version, 1) - 1), reviewedAt: text(candidate.reviewed_at) || undefined,

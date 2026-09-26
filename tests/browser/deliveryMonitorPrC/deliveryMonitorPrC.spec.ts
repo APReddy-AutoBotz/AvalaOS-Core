@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
+import { selectExactRevisedDeliveryDescendant } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const organizationId = '00000001-0000-4000-8000-000000000001';
 const workspaceId = '00000002-0000-4000-8000-000000000002';
@@ -92,6 +93,15 @@ const assertNoPublicHashes = async (page: Page) => {
   }));
   expect(exposed.text).not.toMatch(/\b[0-9a-f]{64}\b/i);
   expect(exposed.attributes.some(name => /hash/i.test(name))).toBe(false);
+};
+
+const tabTo = async (page: Page, control: ReturnType<Page['getByRole']>) => {
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+  for (let count = 1; count <= 300; count += 1) {
+    await page.keyboard.press('Tab');
+    if (await control.evaluate(node => node === document.activeElement)) return count;
+  }
+  throw new Error('focused control was not keyboard reachable');
 };
 
 test('deterministic Studio proposal is cited and handoff request never auto-creates a target', async ({ page }, info) => {
@@ -223,6 +233,52 @@ test('item edit creates immutable descendant and decisions require accessible ra
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
   await expect(second.getByText(/Decision: rejected/)).toBeVisible();
   marker(info, 'DELIVERY-TR-004', 'proposals-accept-or-reject-with-rationale', 'DELIVERY-ITEM-REVISION-01', { packageId, packageVersionId, packageVersion: 1, classification: 'assessed', acceptedItemAggregateId: '00001001-0000-4000-8000-000000001001', rejectedItemAggregateId: '00001002-0000-4000-8000-000000001002', rationaleRequired: true, publicHashesObserved: false });
+});
+
+test('PR C synthetic CH-14 reaches exact handoff and item controls without committing a mutation', async ({page}) => {
+  await open(page,'?state=planning');
+  const handoffSection=page.getByRole('region',{name:'Studio → Delivery handoffs'});
+  const eligible=handoffSection.getByLabel('Eligible exact Studio artifact');
+  await expect(eligible.locator('option')).toHaveCount(1);
+  await expect(eligible.locator('option')).toContainText('Not assessed · Planning only');
+  await expect(handoffSection.getByText(/^Server-derived handoff preview · [1-9][0-9]* items$/)).toHaveCount(1);
+  const request=handoffSection.getByRole('button',{name:'Request handoff',exact:true});
+  expect(await tabTo(page,request)).toBeGreaterThan(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await open(page);
+  const item=page.getByTestId('delivery-item-00001001-0000-4000-8000-000000001001');
+  const edit=item.getByRole('button',{name:'Edit immutable descendant',exact:true});
+  expect(await tabTo(page,edit)).toBeGreaterThan(0);
+  await edit.click();
+  const dialog=page.getByRole('dialog',{name:'Confirm governed decision'});
+  await dialog.getByLabel('Item title').fill('Preserved synthetic invalid input');
+  await dialog.getByRole('button',{name:'Confirm',exact:true}).click();
+  await expect(dialog.getByRole('alert')).toBeFocused();
+  await expect(dialog.getByLabel('Item title')).toHaveValue('Preserved synthetic invalid input');
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(edit).toBeFocused();
+  await expect(item.getByRole('heading',{name:'Canonical work item 001',exact:true})).toBeVisible();
+  await expect(item.getByText(/^Decision:/)).toHaveCount(0);
+});
+
+test('PR C synthetic CH-07 scopes the revised descendant decision to the exact governed package and child', async ({page}) => {
+  await open(page,'?state=blocked-small');
+  await page.getByRole('button',{name:'Prepare blocked package recovery',exact:true}).click();
+  await page.getByLabel('Select Canonical work item 001 for recovery',{exact:true}).check();
+  await page.getByLabel('Recovery title for Canonical work item 001',{exact:true}).fill('Synthetic governed work item revision · synthetic blocker resolved');
+  await page.getByLabel('Recovery rationale for Canonical work item 001',{exact:true}).fill('Resolve the exact independent synthetic review request.');
+  await page.getByRole('button',{name:'Submit resolved package',exact:true}).click();
+  const interactions:string[]=[];
+  const selected=await selectExactRevisedDeliveryDescendant(page,interactions,packageId);
+  await expect(selected.card).toHaveAttribute('data-item-title',selected.title);
+  await expect(selected.card).toHaveAttribute('data-item-status','edited');
+  await expect(selected.control).toBeEnabled();
+  expect(selected).toMatchObject({itemCount:1,pageCount:1});
+  await expect(page.getByTestId('governed-delivery-workspace').getByRole('button',{name:'Accept proposal',exact:true})).toHaveCount(1);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(interactions).toContain('select:exact-bound-delivery-package');
+  expect(interactions).toContain('select:exact-current-revised-delivery-descendant');
 });
 
 test('blocked package cannot affect Monitor and manual Delivery has no fabricated ancestry', async ({ page }, info) => {

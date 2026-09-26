@@ -9,6 +9,7 @@ import { parseAssessV2DraftPayload } from '../../supabase/functions/_shared/asse
 import { PROCESS_CREATE_CAPABILITY, parseProcessCreateEnvelope } from '../../services/processCreationContract';
 import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, type AssessmentCaseV2, createUnknownAgentNecessityFacts } from '../../services/assessV2/types';
 import { ALL_CAPABILITIES, API, ASSESSMENT, ORG, PROCESS, SECONDARY_WS, USER, WS, installEnterpriseFixture, jsonHeaders } from './pr1dNetworkFixture';
+import { completeAssessDraft, finalizeAssessDraftForReview } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const expectProcessCatalog = async (page: Page) => {
   const catalog = page.getByTestId('process-catalog-view');
@@ -37,6 +38,30 @@ const assertProcessModalAccess = async (page: Page) => {
   expect(violations.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 };
+
+test('PR C synthetic runner manually completes and reloads the real Assess V2 draft', async ({ page }) => {
+  await installEnterpriseFixture(page, { initialStatus: 'Ready for Review' });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  await page.getByRole('button', { name: 'View' }).first().click();
+  const interactions: string[] = [];
+  const observed = await completeAssessDraft(page, interactions);
+  expect(observed).toEqual({ createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true });
+  expect(interactions).toContain('save:assess-v2-draft');
+  await expect(page.getByLabel('Application 1 accountable owner')).toHaveValue('Synthetic Assess owner');
+});
+
+test('PR C synthetic runner finalizes the manually completed Assess draft for independent review', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus: 'Ready for Review' });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  await page.getByRole('button', { name: 'View' }).first().click();
+  const interactions: string[] = [];
+  await completeAssessDraft(page, interactions);
+  expect(await finalizeAssessDraftForReview(page, interactions)).toEqual({ finalized: true });
+  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
+  expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(1);
+});
 
 test('new process form traps keyboard focus and closes with Escape on Desktop and Pixel', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page,{capabilities:[...ALL_CAPABILITIES,PROCESS_CREATE_CAPABILITY]});

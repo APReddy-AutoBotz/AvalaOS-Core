@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { IDS, installEnterpriseIntelligenceFixture } from './enterpriseIntelligenceNetworkFixture';
+import { prepareAssessConflictPreview, selectAssessTranscriptSources } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const workspace = (page: Page) => page.getByTestId('enterprise-intelligence-workspace');
 const tab = (page: Page, name: string) => workspace(page).getByRole('button', { name, exact: true });
@@ -19,6 +20,36 @@ const selectByText = async (select: Locator, text: string) => {
   expect(value).toBeTruthy();
   await select.selectOption(value!);
 };
+
+test('PR C synthetic runner selects sources and uses their exact seeded locked Assess bundle', async ({ page }) => {
+  const fixture = await installEnterpriseIntelligenceFixture(page, { transcriptFlow: true });
+  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  await tab(page, 'Source Library').click();
+  const interactions: string[] = [];
+  const observed = await selectAssessTranscriptSources(page, interactions, ['ASSESS-INTERVIEW-01.vtt', 'ASSESS-INTERVIEW-02.srt'], {
+    sourceSetLabel: 'Primary interview set', bundleLabel: 'Primary claims bundle',
+  });
+  expect(observed).toEqual({ sourceCount: 2, committedSourceSet: true, lockedInputBundle: true });
+  expect(interactions).toContain('select:exact-locked-assess-bundle');
+  expect(await page.locator('section[aria-labelledby="transcript-candidate-review-title"]').getByLabel('Locked input bundle').locator('option:checked').textContent()).toContain('Primary claims bundle');
+  expect(fixture.commandPayloads).toEqual([]);
+  expect(fixture.unexpectedRequests).toEqual([]);
+});
+
+test('PR C synthetic runner previews a material conflict from the exact reviewed Assess candidate', async ({ page }) => {
+  const fixture = await installEnterpriseIntelligenceFixture(page, { transcriptFlow: true });
+  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html');
+  await tab(page, 'Candidate Review').click();
+  const review = page.locator('section[aria-labelledby="transcript-candidate-review-title"]');
+  await review.getByRole('combobox', { name: 'Locked input bundle' }).selectOption({ label: 'Primary claims bundle · Input-bundle version 1 · 2 sources' });
+  await review.getByRole('button', { name: 'Accept', exact: true }).first().click();
+  const interactions: string[] = [];
+  const prepared = await prepareAssessConflictPreview(page, interactions, 'Primary claims bundle');
+  expect(prepared).toEqual({ selectedDraft: true, reviewedCandidate: true, materialConflictCount: 1 });
+  expect(interactions).toContain('preview:material-assess-conflict');
+  expect(fixture.commandPayloads.some(body => body.commandType === 'transcript.assess.apply.preview')).toBe(true);
+  expect(fixture.unexpectedRequests).toEqual([]);
+});
 
 const assertAccessibleAndContained = async (page: Page) => {
   const results = await new AxeBuilder({ page }).include('[data-testid="enterprise-intelligence-workspace"]').analyze();

@@ -48,6 +48,7 @@
     "unified_byok_gateway_enabled",
     "governed_journeys_enabled",
     "studio_multisource_enabled",
+    "studio_source_integration_enabled",
     "studio_tenant_templates_enabled",
     "module_handoffs_enabled",
     "direct_studio_planning_enabled",
@@ -58,7 +59,8 @@
   "seed": {
     "transcriptSets": {
       "assess": ["Synthetic Assess discovery transcript A", "Synthetic Assess discovery transcript B"],
-      "studio": ["Synthetic Studio requirements transcript A", "Synthetic Studio requirements transcript B"]
+      "studio": ["Synthetic Studio requirements transcript A", "Synthetic Studio requirements transcript B"],
+      "studioDraft": ["Synthetic Studio draft transcript A", "Synthetic Studio draft transcript B"]
     },
     "customTemplate": {
       "name": "Synthetic controlled-human requirements template",
@@ -67,6 +69,15 @@
       "sections": [
         { "id": "context", "title": "Context", "required": true, "fieldKind": "narrative" },
         { "id": "requirements", "title": "Requirements", "required": true, "fieldKind": "requirements" }
+      ]
+    },
+    "studioTranscriptDraft": {
+      "artifactType": "brd",
+      "title": "Synthetic Studio transcript draft",
+      "summary": "Editable provider-free Studio draft bound to the exact two-source synthetic Studio bundle.",
+      "sections": [
+        { "id": "context", "title": "Context", "body": "Synthetic Studio source context retained for controlled acceptance editing." },
+        { "id": "requirements", "title": "Requirements", "body": "Synthetic Studio requirements retained for controlled acceptance editing." }
       ]
     },
     "assessedStudioArtifact": {
@@ -98,6 +109,12 @@
       "brief": "Synthetic approved baseline fixture. No execution, customer data, or provider traffic.",
       "items": [
         { "clientKey": "controlled-human-baseline", "itemType": "Milestone", "title": "Synthetic approved baseline", "description": "Read-only Monitor comparison fixture.", "acceptanceCriteria": ["The server derives the immutable baseline."], "nonFunctionalRequirements": ["Live telemetry remains disconnected."] }
+      ]
+    },
+    "blockedRecoveryPackage": {
+      "brief": "Synthetic blocked recovery package for controlled response-loss verification.",
+      "items": [
+        { "clientKey": "controlled-human-recovery", "itemType": "Task", "title": "Synthetic blocked recovery item", "description": "Exercise one exact canonical revision under response-loss recovery.", "acceptanceCriteria": ["Only the selected descendant changes."], "nonFunctionalRequirements": ["No baseline, external execution, or provider egress."] }
       ]
     }
   },

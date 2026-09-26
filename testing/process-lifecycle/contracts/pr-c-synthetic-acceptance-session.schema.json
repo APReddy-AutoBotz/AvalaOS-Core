@@ -42,7 +42,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["journeyCount", "checkpointCount", "stepCount", "passedStepCount", "failedStepCount", "blockedStepCount", "providerEgress", "realProviderCalls", "customerDataRecords", "externalUsers"],
       "properties": {
-        "journeyCount": { "const": 8 }, "checkpointCount": { "const": 14 }, "stepCount": { "const": 83 }, "passedStepCount": { "const": 83 },
+        "journeyCount": { "const": 8 }, "checkpointCount": { "const": 14 }, "stepCount": { "const": 84 }, "passedStepCount": { "const": 84 },
         "failedStepCount": { "const": 0 }, "blockedStepCount": { "const": 0 }, "providerEgress": { "const": 0 }, "realProviderCalls": { "const": 0 },
         "customerDataRecords": { "const": 0 }, "externalUsers": { "const": 0 }
       }
@@ -86,7 +86,7 @@
           "properties": {
             "exerciseDigest": { "$ref": "#/$defs/digest" }, "targetFingerprint": { "$ref": "#/$defs/digest" },
             "publicTargetDigest": { "$ref": "#/$defs/digest" }, "personaManifestDigest": { "$ref": "#/$defs/digest" },
-            "fixtureManifestDigest": { "$ref": "#/$defs/digest" }, "migrationTip": { "const": "20260924113000" }
+            "fixtureManifestDigest": { "$ref": "#/$defs/digest" }, "migrationTip": { "const": "20260926053818" }
           }
         },
         "producer": {

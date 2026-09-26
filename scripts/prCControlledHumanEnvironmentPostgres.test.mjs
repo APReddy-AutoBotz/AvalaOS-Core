@@ -31,7 +31,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const identity=(await bootstrap.query(`select (select system_identifier::text from pg_control_system()) system_identifier,current_database() database_name,current_user database_role`)).rows[0];
     const targetFingerprint=sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`);await bootstrap.end();
     const fixtureState=await loadFixture();const head='83cab00bee481df22351302cc8c1c00bda3f1664';const migration=await loadMigration();
-    const baseEnvironment={PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:'264',PR_C_CONTROLLED_HUMAN_RELEASE_SHA:head,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:head,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'6a99cc001122334455667788',PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000264',PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:targetFingerprint,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'1'.repeat(64)}`,PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview'};
+    const baseEnvironment={PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:'264',PR_C_CONTROLLED_HUMAN_RELEASE_SHA:head,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:head,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'6a99cc001122334455667788',PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000264',PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:targetFingerprint,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'1'.repeat(64)}`,PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview',PR_C_SYNTHETIC_ACCEPTANCE_POLICY:'solo-owner-synthetic-v1'};
     const context=deriveContext(baseEnvironment,fixtureState,{head,dirty:''});const migrationContext=deriveMigrationContext({...baseEnvironment,PR_C_CONTROLLED_HUMAN_MIGRATION_DIGEST:migration.digest},fixtureState,migration,{head,dirty:''});
     migrationAdapter=new PostgresEnvironmentMigrationAdapter(databaseUrl.toString(),migration.sql);await migrationAdapter.connect();assert.equal((await migrationPreflight(migrationContext,migrationAdapter)).disposition,'exact_additive_apply');
     // Exercise the production read-only transaction protocol against real PG16.
@@ -49,7 +49,28 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     assert.deepEqual(await migrationAdapter.inspect(),priorInventory);
     try { assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,false); }
     catch(error) { throw new Error(`${error.message} position=${error.position??'unknown'} where=${error.where??'unknown'}`,{cause:error}); }
-    await migrationVerify(migrationContext,migrationAdapter);assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,true);await migrationAdapter.close();migrationAdapter=null;
+    await migrationVerify(migrationContext,migrationAdapter);assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,true);
+    const tailMigrations=migrations.slice(migrationIndex+1);
+    for(const name of tailMigrations){
+      const sql=await readFile(join('supabase/migrations',name),'utf8');
+      if(name==='20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql'){
+        await migrationAdapter.client.query('begin');
+        try{
+          const liveActor='40000000-0000-4000-8000-000000000901',liveOrg='40000000-0000-4000-8000-000000000902',liveWorkspace='40000000-0000-4000-8000-000000000903';
+          await migrationAdapter.client.query(`insert into auth.users(id,email) values($1,'prc264.migration-live@example.invalid')`,[liveActor]);
+          await migrationAdapter.client.query(`insert into public.profiles(id,email,full_name,status,metadata) values($1,'prc264.migration-live@example.invalid','Migration live exercise guard','active','{"synthetic":true}'::jsonb)`,[liveActor]);
+          await migrationAdapter.client.query(`insert into public.organizations(id,name,slug,status,settings,created_by) values($1,'Migration live guard','pr264-migration-live-guard','active','{"syntheticOnly":true}'::jsonb,$2)`,[liveOrg,liveActor]);
+          await migrationAdapter.client.query(`insert into public.workspaces(id,org_id,name,slug,status,metadata,created_by) values($1,$2,'Migration live guard','migration-live-guard','active','{"syntheticOnly":true}'::jsonb,$3)`,[liveWorkspace,liveOrg,liveActor]);
+          await migrationAdapter.client.query(`insert into public.pr_c_controlled_human_exercises(id,exercise_digest,environment_class,pull_request_number,release_sha,review_head_sha,deploy_id,deploy_origin,target_fingerprint,public_target_digest,persona_manifest_digest,fixture_manifest_digest,migration_tip,org_id,workspace_id,lifecycle) values('40000000-0000-4000-8000-000000000904',$1,'hosted_nonproduction_pilot',264,$2,$2,$3,'https://deploy-preview-264--avalaos-pilot.netlify.app',$4,$5,$6,$7,'20260924113000',$8,$9,'active')`,[`sha256:${'9'.repeat(64)}`,'9'.repeat(40),'9'.repeat(24),`sha256:${'8'.repeat(64)}`,`sha256:${'7'.repeat(64)}`,`sha256:${'6'.repeat(64)}`,`sha256:${'5'.repeat(64)}`,liveOrg,liveWorkspace]);
+          try{await migrationAdapter.client.query(sql);assert.fail('migration tip advanced while a live controlled-human exercise existed')}
+          catch(error){if(!/PR_C_SYNTHETIC_STUDIO_FIXTURE_IDENTITY_SOURCE_MISMATCH/u.test(error.message))throw new Error(`unexpected Studio fixture migration rejection: ${error.message} position=${error.position??'unknown'}`,{cause:error})}
+        }finally{await migrationAdapter.client.query('rollback')}
+      }
+      await migrationAdapter.client.query('begin');
+      try{await migrationAdapter.client.query(sql);await migrationAdapter.client.query(`insert into supabase_migrations.schema_migrations(version,statements,name) values($1,$2::text[],$3)`,[name.slice(0,14),[sql],name.slice(15,-4)]);await migrationAdapter.client.query('commit')}
+      catch(error){await migrationAdapter.client.query('rollback');throw new Error(`${name}: ${error.message}`,{cause:error})}
+    }
+    await migrationAdapter.close();migrationAdapter=null;
     database=new PostgresEnvironmentAdapter(databaseUrl.toString());await database.connect();
     const abortContext=deriveContext({...baseEnvironment,PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000263'},fixtureState,{head,dirty:''});const partialUser=deterministicUuid(abortContext.exerciseId,'partial-auth-user');
     await database.prepareRecovery(abortContext,'apply',0);await database.client.query(`insert into auth.users(id,email,raw_user_meta_data) values($1,'prc264.partial@example.invalid',$2::jsonb)`,[partialUser,JSON.stringify({synthetic:true,exerciseDigest:abortContext.exerciseDigest,personaKey:'requester'})]);await database.recordAuthUser(abortContext,partialUser);
@@ -62,7 +83,40 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const applyRecovery=await database.prepareRecovery(context,'apply',0);assert.equal(applyRecovery.state,'prepared');
     for(const user of users)await database.client.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3::jsonb)',[user.id,user.email,JSON.stringify({synthetic:true,exerciseDigest:context.exerciseDigest,personaKey:user.key})]);
     for(const user of users)await database.recordAuthUser(context,user.id);
-    const seeded=await database.seed(context,fixtureState,users);assert.deepEqual(seeded,{replayed:false,personaCount:12,studioArtifactCount:2,eligibleStudioArtifactCount:2,packageCount:2,baselineCount:1,transcriptSourceCount:4,sourceSetCount:2,inputBundleCount:2,candidateCount:2,conflictCount:1,tenantTemplateCount:1,lifecycle:'active',concurrencyVersion:1});
+    const seeded=await database.seed(context,fixtureState,users);assert.deepEqual(seeded,{replayed:false,personaCount:12,studioArtifactCount:3,eligibleStudioArtifactCount:2,packageCount:3,baselineCount:1,transcriptSourceCount:6,sourceSetCount:3,inputBundleCount:3,candidateCount:4,conflictCount:1,tenantTemplateCount:1,lifecycle:'active',concurrencyVersion:1});
+    const assessBrowserPrerequisite=(await database.client.query(`select
+      (select count(*)::int from public.assess_processes process where process.org_id=exercise.org_id and process.workspace_id=exercise.workspace_id and process.name='Synthetic PR C Assess draft') process_count,
+      (select count(*)::int from public.enterprise_transcript_extraction_bindings binding join public.enterprise_module_input_bundles bundle on bundle.id=binding.input_bundle_id where bundle.org_id=exercise.org_id and bundle.workspace_id=exercise.workspace_id and bundle.owner_module='assess') bound_source_count,
+      (select count(*)::int from public.enterprise_evidence_candidate_relationship_reviews review join public.enterprise_evidence_candidates candidate on candidate.id=review.candidate_id where review.org_id=exercise.org_id and review.workspace_id=exercise.workspace_id and review.input_bundle_id in (select bundle.id from public.enterprise_module_input_bundles bundle where bundle.owner_module='assess' and bundle.org_id=exercise.org_id and bundle.workspace_id=exercise.workspace_id) and review.candidate_version=candidate.version and review.suggested_application_intent='set_case_field' and review.suggested_apply_target='description') reviewed_destination_count
+      from public.pr_c_controlled_human_exercises exercise where exercise.exercise_digest=$1`,[context.exerciseDigest])).rows[0];
+    assert.deepEqual(assessBrowserPrerequisite,{process_count:1,bound_source_count:2,reviewed_destination_count:2},'Assess browser fixtures retain one editable process and exact keyless candidate lineage');
+    const studioBrowserPrerequisite=(await database.client.query(`select
+      (select count(*)::int from public.studio_source_version_ownerships ownership where ownership.org_id=exercise.org_id and ownership.workspace_id=exercise.workspace_id) owned_source_count,
+      (select count(*)::int from public.studio_source_extraction_runs run where run.org_id=exercise.org_id and run.workspace_id=exercise.workspace_id and run.status='succeeded' and run.model='synthetic-no-provider') extraction_run_count,
+      (select count(*)::int from public.studio_source_extraction_bindings binding where binding.org_id=exercise.org_id and binding.workspace_id=exercise.workspace_id) extraction_binding_count,
+      (select count(*)::int from public.studio_source_candidate_decisions decision where decision.org_id=exercise.org_id and decision.workspace_id=exercise.workspace_id and decision.decision_status='accepted') candidate_decision_count,
+      artifact.lifecycle artifact_lifecycle,artifact.aggregate_version,version.lifecycle version_lifecycle,version.content->>'title' artifact_title,
+      package.source_mode,package.candidate_count,package.anchor_count
+      from public.pr_c_controlled_human_exercises exercise
+      join public.studio_artifact_aggregates artifact on artifact.org_id=exercise.org_id and artifact.workspace_id=exercise.workspace_id and artifact.lifecycle='draft'
+      join public.studio_artifact_versions version on version.id=artifact.current_version_id
+      join public.studio_artifact_source_packages package on package.id=artifact.source_package_id
+      where exercise.exercise_digest=$1`,[context.exerciseDigest])).rows[0];
+    assert.deepEqual(studioBrowserPrerequisite,{owned_source_count:2,extraction_run_count:1,extraction_binding_count:2,candidate_decision_count:2,
+      artifact_lifecycle:'draft',aggregate_version:'1',version_lifecycle:'draft',artifact_title:'Synthetic Studio transcript draft',source_mode:'direct_transcript_bundle',candidate_count:2,anchor_count:2},
+    'Studio browser fixture retains one editable provider-free exact two-source draft');
+    const recoveryBrowserPrerequisite=(await database.client.query(`select package.status,source.source_mode,source.lineage_classification,source.planning_only,material.manual_brief,
+      review.outcome review_state,(select count(*)::int from public.enterprise_delivery_work_item_aggregates aggregate join public.enterprise_delivery_work_item_versions version on version.id=aggregate.current_version_id where aggregate.work_package_id=package.id and version.title='Synthetic blocked recovery item' and version.status='accepted') accepted_item_count,
+      (select count(*)::int from public.enterprise_monitor_baselines baseline where baseline.work_package_id=package.id) baseline_count
+      from public.pr_c_controlled_human_exercises exercise
+      join public.enterprise_delivery_work_packages package on package.org_id=exercise.org_id and package.workspace_id=exercise.workspace_id
+      join public.enterprise_delivery_source_packages source on source.id=package.source_package_id
+      join public.enterprise_delivery_manual_materials material on material.source_package_id=source.id
+      join public.enterprise_delivery_package_review_events review on review.work_package_id=package.id and review.package_version_id=package.current_version_id
+      where exercise.exercise_digest=$1 and material.manual_brief=$2`,[context.exerciseDigest,fixtureState.fixture.seed.blockedRecoveryPackage.brief])).rows[0];
+    assert.deepEqual(recoveryBrowserPrerequisite,{status:'blocked',source_mode:'manual',lineage_classification:'not_assessed',planning_only:true,manual_brief:'Synthetic blocked recovery package for controlled response-loss verification.',review_state:'changes_requested',accepted_item_count:1,baseline_count:0},
+      'Delivery recovery fixture retains one exact blocked reviewed package and no Monitor baseline');
+    assert.deepEqual((await database.client.query('select public.pr_c_controlled_human_provider_state() value')).rows[0].value,{unsafeRows:0,providerEgress:0,providerCalls:0});
     const preCompletionInventory=await database.inspect(context);assertTargetInventory(preCompletionInventory,context);
     const completionRaceScope=(await database.client.query(`select org_id,workspace_id from public.pr_c_controlled_human_exercises where exercise_digest=$1`,[context.exerciseDigest])).rows[0];
     const lateProviderReceiptId=deterministicUuid(context.exerciseId,'late-provider-recovery-completion-race');
@@ -81,7 +135,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     await assert.rejects(database.client.query(`insert into public.pr_c_controlled_human_exercises(id,exercise_digest,environment_class,pull_request_number,release_sha,review_head_sha,deploy_id,deploy_origin,target_fingerprint,public_target_digest,persona_manifest_digest,fixture_manifest_digest,migration_tip,org_id,workspace_id,lifecycle,quiesced_at,deprovisioned_at)
       select $1,$2,environment_class,pull_request_number,release_sha,review_head_sha,deploy_id,'https://deploy-preview-264--substituted-site.netlify.app',target_fingerprint,public_target_digest,persona_manifest_digest,fixture_manifest_digest,migration_tip,org_id,workspace_id,'deprovisioned',statement_timestamp(),statement_timestamp()
       from public.pr_c_controlled_human_exercises where exercise_digest=$3`,[deterministicUuid(context.exerciseId,'wrong-origin-exercise'),`sha256:${'f'.repeat(64)}`,context.exerciseDigest]),/check constraint/u);
-    const verified=await database.verify(context,12);assert.equal(verified.activeMembershipCount,11);assert.equal(verified.studioArtifactCount,2);assert.equal(verified.eligibleStudioArtifactCount,2);assert.equal(verified.packageCount,2);assert.equal(verified.baselineCount,1);assert.equal(verified.providerRowCount,0);
+    const verified=await database.verify(context,12);assert.equal(verified.activeMembershipCount,11);assert.equal(verified.studioArtifactCount,3);assert.equal(verified.eligibleStudioArtifactCount,2);assert.equal(verified.packageCount,3);assert.equal(verified.baselineCount,1);assert.equal(verified.providerRowCount,0);
     const attestation=(await database.client.query(`select public.pr_c_controlled_human_public_attestation($1,$2,$3,$4,$5,$6) result`,[context.releaseSha,context.reviewHeadSha,context.deployId,context.deployOrigin,context.exerciseDigest,context.publicTargetDigest])).rows[0].result;
     assert.equal(attestation.attested,true);assert.equal(attestation.exerciseDigest,context.exerciseDigest);assert.equal(Object.hasOwn(attestation,'organizationId'),false);
     await assert.rejects(database.client.query(`select public.pr_c_controlled_human_public_attestation($1,$2,$3,$4,$5,$6)`,[context.releaseSha,context.reviewHeadSha,context.deployId,'https://avalaos.com',context.exerciseDigest,context.publicTargetDigest]),/PR_C_CONTROLLED_HUMAN_ATTESTATION_MISMATCH/u);
@@ -162,7 +216,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       (select count(*)::int from public.privileged_audit_events where action='pr_c.controlled_human.synthetic_studio_generate') audits,
       (select count(*)::int from public.studio_artifact_generation_attempts) attempts,
       aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where id=$1`,[generationBinding.artifact_id])).rows[0];
-    const providerBoundaryLabels=new Set(['provider row present','provider job ledger present','provider usage ledger present','provider job attempt present','provider staged extraction present','legacy AI generation job present','legacy AI usage event present','provider audit event present','provider effect journal present','provider runtime effect present','nonoffline provider job effect present','Studio generation attempt present','isolated provider key reference','isolated pilot provider binding','isolated provider budget reservation','isolated provider cleanup job','isolated standalone provider receipt','isolated usage ledger','isolated job attempt','isolated staged result','isolated provider effect']);
+    const providerBoundaryLabels=new Set(['provider row present','provider job ledger present','provider usage ledger present','provider job attempt present','provider staged extraction present','legacy AI generation job present','legacy AI usage event present','provider audit event present','provider effect journal present','provider runtime effect present','nonoffline provider job effect present','Studio run attached to Assess job','Studio binding without exact run','Studio decision without exact accepted candidate','Studio generation attempt present','isolated provider key reference','isolated pilot provider binding','isolated provider budget reservation','isolated provider cleanup job','isolated standalone provider receipt','isolated usage ledger','isolated job attempt','isolated staged result','isolated provider effect']);
     const rejectGeneration=async({label,command=generationCommand,mutate,pattern})=>{
       const before=await generationSnapshot();await database.client.query('begin');
       try{
@@ -181,7 +235,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
           await assert.rejects(database.prepareRecovery(context,'quiesce',1),/PROVIDER_STATE_REJECTED/u,`${label} recovery preflight boundary`);
           await database.client.query('rollback to savepoint provider_recovery_boundary');
           await database.client.query('savepoint provider_quiesce_boundary');
-          await assert.rejects(database.quiesce(context,1),/PROVIDER_STATE_REJECTED/u,`${label} quiesce boundary`);
+          await assert.rejects(database.client.query(`select public.pr_c_controlled_human_quiesce($1,1,$2)`,[context.exerciseDigest,sha256({exerciseDigest:context.exerciseDigest,operation:'quiesce',expectedVersion:1})]),/PROVIDER_STATE_REJECTED/u,`${label} quiesce boundary`);
           await database.client.query('rollback to savepoint provider_quiesce_boundary');
         }
         await database.client.query('savepoint provider_generation_boundary');
@@ -265,6 +319,21 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
         await database.client.query(`insert into public.enterprise_ai_job_ledger(id,org_id,workspace_id,capability,provider,model,prompt_key,prompt_version,source_refs,actor_id,request_id,idempotency_key,status,output_hash,approval_state,metadata,receipt_id) values($1,$2,$3,'assess.evidence.extract','openai','forbidden-model','forbidden-model-effect','1','[]'::jsonb,$4,$5,'forbidden-model-effect','succeeded',$6,'review_required','{}'::jsonb,$7)`,[jobId,generationBinding.org_id,generationBinding.workspace_id,generationBinding.actor_id,requestId,'b'.repeat(64),receiptId]);
         await database.client.query(`insert into public.enterprise_ai_effect_journal(receipt_id,org_id,workspace_id,operation_type,effect_key,resource_id,terminal_status,safe_result,result_hash,execution_fence) values($1,$2,$3,'evidence.extract','forbidden-model-effect',$2,'committed','{}'::jsonb,public.enterprise_sha256_jsonb('{}'::jsonb),1)`,[receiptId,generationBinding.org_id,generationBinding.workspace_id]);
       }],
+      ['Studio run attached to Assess job',async()=>{
+        await database.client.query(`alter table public.studio_source_extraction_runs disable trigger all`);
+        await database.client.query(`update public.studio_source_extraction_runs set job_id=(select id from public.enterprise_ai_job_ledger where org_id=$1 and workspace_id=$2 and capability='assess.evidence.extract' order by id limit 1) where job_id=(select id from public.enterprise_ai_job_ledger where org_id=$1 and workspace_id=$2 and capability='studio.evidence.extract' order by id limit 1)`,[generationBinding.org_id,generationBinding.workspace_id]);
+        await database.client.query(`alter table public.studio_source_extraction_runs enable trigger all`);
+      }],
+      ['Studio binding without exact run',async()=>{
+        await database.client.query(`alter table public.studio_source_extraction_bindings disable trigger all`);
+        await database.client.query(`update public.studio_source_extraction_bindings set job_id=(select id from public.enterprise_ai_job_ledger where org_id=$1 and workspace_id=$2 and capability='assess.evidence.extract' order by id limit 1) where id=(select id from public.studio_source_extraction_bindings where org_id=$1 and workspace_id=$2 order by id limit 1)`,[generationBinding.org_id,generationBinding.workspace_id]);
+        await database.client.query(`alter table public.studio_source_extraction_bindings enable trigger all`);
+      }],
+      ['Studio decision without exact accepted candidate',async()=>{
+        await database.client.query(`alter table public.studio_source_candidate_decisions disable trigger all`);
+        await database.client.query(`update public.studio_source_candidate_decisions set candidate_id=(select id from public.enterprise_evidence_candidates where org_id=$1 and workspace_id=$2 and ai_job_id in(select id from public.enterprise_ai_job_ledger where capability='assess.evidence.extract') order by id limit 1) where candidate_id=(select candidate_id from public.studio_source_candidate_decisions where org_id=$1 and workspace_id=$2 order by candidate_id limit 1)`,[generationBinding.org_id,generationBinding.workspace_id]);
+        await database.client.query(`alter table public.studio_source_candidate_decisions enable trigger all`);
+      }],
       ['Studio generation attempt present',async()=>{
         // Superuser-only fixture bypass creates an otherwise valid retained row;
         // the controller predicate, not production triggers, must fail closed.
@@ -330,22 +399,25 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       where binding.exercise_id=$1 and binding.persona_key=any(array['requester','studio_reviewer','studio_approver'])`,[context.exerciseId])).rows.map(row=>[row.persona_key,row]));
     const humanAssessHandoff=deterministicUuid(context.exerciseId,'assess-studio-handoff-human');
     const humanModuleHandoff=deterministicUuid(context.exerciseId,'controlled-human-module-handoff');
+    const hybridTargetBundleId=deterministicUuid(context.exerciseId,'studio-transcript-input-bundle');
+    const hybridTargetBundleVersionId=deterministicUuid(context.exerciseId,'studio-transcript-input-bundle-version');
     const hybridTargetBundle=(await database.client.query(`select bundle.id,version.id version_id,version.version,version.bundle_hash
       from public.enterprise_module_input_bundles bundle join public.enterprise_module_input_bundle_versions version
         on version.input_bundle_id=bundle.id and version.version=bundle.current_version
       join public.pr_c_controlled_human_resource_ownership ownership
         on ownership.exercise_id=$3 and ownership.resource_family='input_bundle' and ownership.resource_id=bundle.id
       where bundle.org_id=$1 and bundle.workspace_id=$2 and bundle.owner_module='studio' and version.status='locked'
+        and bundle.id=$4 and version.id=$5 and version.version=1
         and exists(select 1 from public.enterprise_module_input_bundle_items bundle_item
           join public.enterprise_source_set_version_items source_item on source_item.source_set_version_id=bundle_item.source_set_version_id
           where bundle_item.input_bundle_version_id=version.id)
-      order by bundle.id limit 1`,[generationBinding.org_id,generationBinding.workspace_id,context.exerciseId])).rows[0];
+      limit 1`,[generationBinding.org_id,generationBinding.workspace_id,context.exerciseId,hybridTargetBundleId,hybridTargetBundleVersionId])).rows[0];
     assert.ok(hybridTargetBundle,'CH-03 requires an exact locked Studio supplement bundle');
     await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
-    const hybridOfflineLineage=(await database.client.query(`select public.pr_c_controlled_human_prepare_offline_lineage($1,$2,$3) result`,[context.exerciseDigest,hybridTargetBundle.id,Number(hybridTargetBundle.version)])).rows[0].result;
-    assert.equal(hybridOfflineLineage.status,'prepared');assert.ok(Number(hybridOfflineLineage.createdLineageCount)>0);
+    const hybridCandidateManifest=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) manifest`,[generationBinding.org_id,generationBinding.workspace_id,hybridTargetBundle.version_id])).rows[0].manifest;
+    assert.equal(hybridCandidateManifest.length,2,'CH-03 requires exact reviewed provider-free Studio coverage');
     const offlineProvider=(await database.client.query(`select job.id job_id,job.receipt_id,job.provider_config_id,job.route_id,job.source_id,job.source_version_id,job.actor_id
-      from public.enterprise_ai_job_ledger job where job.org_id=$1 and job.workspace_id=$2 and job.model='synthetic-no-provider' order by job.id limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
+      from public.enterprise_ai_job_ledger job where job.org_id=$1 and job.workspace_id=$2 and job.model='synthetic-no-provider' and job.capability='assess.evidence.extract' order by job.id limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
     const pilotEnvironment=(await database.client.query(`select id from public.pilot_operations_environments where org_id=$1 and workspace_id=$2 limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
     assert.ok(offlineProvider?.job_id&&pilotEnvironment?.id,'isolated provider adversarials require exact accepted offline lineage');
     const isolatedProviderMutations=[
@@ -395,8 +467,8 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     }finally{await database.client.query('rollback')}
     const runModuleHandoffSuccess=async()=>{
       await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
-      const lineage=(await database.client.query(`select public.pr_c_controlled_human_prepare_offline_lineage($1,$2,$3) result`,[context.exerciseDigest,hybridTargetBundle.id,Number(hybridTargetBundle.version)])).rows[0].result;
-      assert.equal(lineage.status,'prepared');assert.equal(Number(lineage.createdLineageCount),0);
+      const manifest=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,hybridTargetBundle.version_id])).rows[0].value;
+      assert.equal(manifest.length,2,'CH-03 reuses the exact reviewed provider-free Studio lineage without mutation');
       const targetInputBundle={id:hybridTargetBundle.id,versionId:hybridTargetBundle.version_id,version:Number(hybridTargetBundle.version)};
       const requestedHandoff=await runHandoffStep({persona:'requester',stepId:'request-studio-handoff',commandType:'handoff.request',expectedVersion:1,commandExpectedVersion:0,payload:{upstreamHandoffId:humanAssessHandoff,artifactType:'brd',targetInputBundle},targetFamily:'assess_studio_handoff',targetId:humanAssessHandoff});
       assert.equal(requestedHandoff.binding.resourceFamily,'module_handoff');assert.equal(requestedHandoff.binding.observedVersion,1);
@@ -444,36 +516,21 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const requesterAuthorizationVersion=Number(generationBinding.authorization_version);
     await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
     await database.client.query('begin');try{
-      const bundleA=(await database.client.query(`select bundle.id,version.id version_id,version.version,version.bundle_hash,item.source_set_version_id,item.source_set_id,item.resource_hash,item.declared_purpose from public.enterprise_module_input_bundles bundle join public.enterprise_module_input_bundle_versions version on version.input_bundle_id=bundle.id and version.version=bundle.current_version join public.enterprise_module_input_bundle_items item on item.input_bundle_version_id=version.id where bundle.org_id=$1 and bundle.workspace_id=$2 and bundle.owner_module='studio' limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
-      const bundleB=deterministicUuid(context.exerciseId,'intent-b-input-bundle'),bundleBVersion=deterministicUuid(context.exerciseId,'intent-b-input-bundle-version');
-      await database.client.query(`insert into public.enterprise_module_input_bundles(id,org_id,workspace_id,owner_module,current_version,created_by) values($1,$2,$3,'studio',1,$4)`,[bundleB,generationBinding.org_id,generationBinding.workspace_id,generationBinding.actor_id]);
-      await database.client.query(`insert into public.enterprise_module_input_bundle_versions(id,input_bundle_id,org_id,workspace_id,version,bundle_hash,status,created_by) values($1,$2,$3,$4,1,$5,'locked',$6)`,[bundleBVersion,bundleB,generationBinding.org_id,generationBinding.workspace_id,'e'.repeat(64),generationBinding.actor_id]);
-      await database.client.query(`insert into public.enterprise_module_input_bundle_items(input_bundle_version_id,input_bundle_id,org_id,workspace_id,ordinal,item_kind,source_set_version_id,source_set_id,resource_hash,declared_purpose) values($1,$2,$3,$4,1,'source_set',$5,$6,$7,$8)`,[bundleBVersion,bundleB,generationBinding.org_id,generationBinding.workspace_id,bundleA.source_set_version_id,bundleA.source_set_id,bundleA.resource_hash,bundleA.declared_purpose]);
-      const providerId=deterministicUuid(context.exerciseId,'intent-b-provider'),routeId=deterministicUuid(context.exerciseId,'intent-b-route');
-      await database.client.query(`insert into public.ai_provider_configs(id,org_id,provider,display_name,default_model,status,created_by,updated_by) values($1,$2,'groq','Synthetic transaction-only intent verifier','synthetic-model','active',$3,$3)`,[providerId,generationBinding.org_id,generationBinding.actor_id]);
-      await database.client.query(`insert into public.enterprise_ai_capability_routes(id,org_id,workspace_id,provider_config_id,capability,model,enabled,created_by,updated_by) values($1,$2,$3,$4,'assess.evidence.extract','synthetic-model',false,$5,$5)`,[routeId,generationBinding.org_id,generationBinding.workspace_id,providerId,generationBinding.actor_id]);
-      const sourceRows=(await database.client.query(`select source.id source_id,source_version.id source_version_id,item.source_set_id,item.source_set_version_id from public.enterprise_source_set_version_items item join public.enterprise_evidence_source_versions source_version on source_version.id=item.source_version_id join public.enterprise_evidence_sources source on source.id=source_version.source_id where item.source_set_version_id=$1 order by item.ordinal`,[bundleA.source_set_version_id])).rows;
-      for(const [index,source] of sourceRows.entries()){
-        const receiptId=deterministicUuid(context.exerciseId,`intent-b-extraction-receipt-${index}`),jobId=deterministicUuid(context.exerciseId,`intent-b-extraction-job-${index}`);
-        const extractionRequest=deterministicUuid(context.exerciseId,`intent-b-extract-request-${index}`);
-        await database.client.query(`insert into public.enterprise_ai_command_receipts(id,org_id,workspace_id,actor_id,command_type,runtime_area,idempotency_key,initial_request_id,last_request_id,request_hash,status,resource_id,response,completed_at) values($1,$2,$3,$4,'evidence.extract','ingestion',$5,$6,$6,$7,'committed',$8,'{}'::jsonb,statement_timestamp())`,[receiptId,generationBinding.org_id,generationBinding.workspace_id,generationBinding.actor_id,`intent-b-extract-${index}`,extractionRequest,'a'.repeat(64),source.source_id]);
-        await database.client.query(`insert into public.enterprise_ai_job_ledger(id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,source_refs,actor_id,request_id,idempotency_key,status,output_hash,approval_state,receipt_id,source_id,source_version_id,route_id) values($1,$2,$3,'assess.evidence.extract',$4,'groq','synthetic-model','intent-verifier','1',$5::jsonb,$6,$7,$8,'succeeded',$9,'review_required',$10,$11,$12,$13)`,[jobId,generationBinding.org_id,generationBinding.workspace_id,providerId,JSON.stringify([{sourceId:source.source_id,sourceVersionId:source.source_version_id}]),generationBinding.actor_id,deterministicUuid(context.exerciseId,`intent-b-job-request-${index}`),`intent-b-job-${index}`,'b'.repeat(64),receiptId,source.source_id,source.source_version_id,routeId]);
-        await database.client.query(`insert into public.enterprise_transcript_extraction_bindings(org_id,workspace_id,job_id,receipt_id,input_bundle_version_id,input_bundle_id,bundle_hash,source_id,source_version_id,provider_route_id,provider_config_id,model,authorization_version,created_by,source_set_id,source_set_version_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'synthetic-model',$12,$13,$14,$15)`,[generationBinding.org_id,generationBinding.workspace_id,jobId,receiptId,bundleBVersion,bundleB,'e'.repeat(64),source.source_id,source.source_version_id,routeId,providerId,requesterAuthorizationVersion,generationBinding.actor_id,source.source_set_id,source.source_set_version_id]);
-        await database.client.query(`insert into public.enterprise_evidence_candidates(id,source_id,source_version_id,org_id,workspace_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,version,source_locator,confidence,ai_job_id,prompt_version,suggestion_status,created_by,reviewed_by,reviewed_at) values($1,$2,$3,$4,$5,'process_objective','Synthetic transaction-only candidate','Synthetic candidate',$6,$7,1,$8,1,$9,'1','accepted',$10,$10,statement_timestamp())`,[deterministicUuid(context.exerciseId,`intent-b-candidate-${index}`),source.source_id,source.source_version_id,generationBinding.org_id,generationBinding.workspace_id,'c'.repeat(64),'d'.repeat(64),`normalized-text:v1:chars:${index*10}-${index*10+9}`,jobId,generationBinding.actor_id]);
-      }
-      const directSelectors={sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:bundleA.id,studioInputBundleVersionId:bundleA.version_id,studioInputBundleVersion:Number(bundleA.version)};
-      const directAnchor=(await database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-10','create-direct-studio-plan','input_bundle',$2,$3,$4::jsonb) result`,[context.exerciseDigest,bundleA.id,Number(bundleA.version),JSON.stringify(directSelectors)])).rows[0].result;
-      const directCommand={actorId:generationBinding.actor_id,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,artifactId:deterministicUuid(context.exerciseId,'intent-b-direct-artifact'),sourcePackageId:deterministicUuid(context.exerciseId,'intent-b-direct-package'),requestId:directAnchor.execution.requestId,idempotencyKey:'intent-b-direct-source',authorizationVersion:requesterAuthorizationVersion,payload:{sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:bundleB,studioInputBundleVersionId:bundleBVersion,studioInputBundleVersion:1}};
+      const bundleA=hybridTargetBundle;
+      const bundleB=(await database.client.query(`select bundle.id,version.id version_id,version.version from public.enterprise_module_input_bundles bundle join public.enterprise_module_input_bundle_versions version on version.input_bundle_id=bundle.id and version.version=bundle.current_version where bundle.id=$1 and version.id=$2 and bundle.org_id=$3 and bundle.workspace_id=$4 and bundle.owner_module='studio' and version.status='locked'`,[deterministicUuid(context.exerciseId,'studio-input-bundle'),deterministicUuid(context.exerciseId,'studio-input-bundle-version'),generationBinding.org_id,generationBinding.workspace_id])).rows[0];
+      assert.ok(bundleB&&bundleB.id!==bundleA.id);
+      const directSelectors={sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:bundleB.id,studioInputBundleVersionId:bundleB.version_id,studioInputBundleVersion:Number(bundleB.version)};
+      const directAnchor=(await database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-10','create-direct-studio-plan','input_bundle',$2,$3,$4::jsonb) result`,[context.exerciseDigest,bundleB.id,Number(bundleB.version),JSON.stringify(directSelectors)])).rows[0].result;
+      const directCommand={actorId:generationBinding.actor_id,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,artifactId:deterministicUuid(context.exerciseId,'intent-b-direct-artifact'),sourcePackageId:deterministicUuid(context.exerciseId,'intent-b-direct-package'),requestId:directAnchor.execution.requestId,idempotencyKey:'intent-b-direct-source',authorizationVersion:requesterAuthorizationVersion,payload:{sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:bundleA.id,studioInputBundleVersionId:bundleA.version_id,studioInputBundleVersion:Number(bundleA.version)}};
       await database.client.query(`select public.studio_artifact_source_package_create($1::jsonb)`,[JSON.stringify(directCommand)]);
       await assert.rejects(database.client.query(`select public.pr_c_controlled_human_complete_step($1,$2)`,[context.exerciseDigest,directAnchor.safeAnchor.challengeToken]),/INTENT_REJECTED/u);
     }finally{await database.client.query('rollback')}
     const runDirectSourceSuccess=async()=>{await observationFixture.beforeMachineStep('CH-10','create-direct-studio-plan');await database.client.query('begin');try{
     await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
-    const directBundle=(await database.client.query(`select bundle.id,version.id version_id,version.version,version.bundle_hash from public.enterprise_module_input_bundles bundle join public.enterprise_module_input_bundle_versions version on version.input_bundle_id=bundle.id and version.version=bundle.current_version where bundle.org_id=$1 and bundle.workspace_id=$2 and bundle.owner_module='studio' limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
-    const offlineLineage=(await database.client.query(`select public.pr_c_controlled_human_prepare_offline_lineage($1,$2,$3) result`,[context.exerciseDigest,directBundle.id,Number(directBundle.version)])).rows[0].result;
-    assert.equal(offlineLineage.status,'prepared');assert.equal(Number(offlineLineage.createdLineageCount),0);
-    const offlineReplay=(await database.client.query(`select public.pr_c_controlled_human_prepare_offline_lineage($1,$2,$3) result`,[context.exerciseDigest,directBundle.id,Number(directBundle.version)])).rows[0].result;
-    assert.equal(offlineReplay.createdLineageCount,0);assert.equal(offlineReplay.lineageDigest,offlineLineage.lineageDigest);
+    const directBundle=hybridTargetBundle;
+    const directManifest=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,directBundle.version_id])).rows[0].value;
+    const directManifestReplay=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,directBundle.version_id])).rows[0].value;
+    assert.equal(directManifest.length,2);assert.deepEqual(directManifestReplay,directManifest);
     const directSelectors={sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:directBundle.id,studioInputBundleVersionId:directBundle.version_id,studioInputBundleVersion:Number(directBundle.version)};
     const sourcePackageAnchor=(await database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-10','create-direct-studio-plan','input_bundle',$2,$3,$4::jsonb) result`,[
       context.exerciseDigest,directBundle.id,Number(directBundle.version),JSON.stringify(directSelectors)])).rows[0].result;
@@ -490,7 +547,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     }catch(error){await database.client.query('rollback');throw error}};
     await database.client.query('begin');try{
       const executedArtifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where org_id=$1 and workspace_id=$2 and lifecycle='approved' order by id limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
-      const anchoredArtifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where org_id=$1 and workspace_id=$2 and id<>$3 order by id limit 1`,[generationBinding.org_id,generationBinding.workspace_id,executedArtifact.id])).rows[0];assert.ok(anchoredArtifact&&executedArtifact);
+      const anchoredArtifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where org_id=$1 and workspace_id=$2 and current_approved_version_id is not null and id<>$3 order by id limit 1`,[generationBinding.org_id,generationBinding.workspace_id,executedArtifact.id])).rows[0];assert.ok(anchoredArtifact&&executedArtifact);
       await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
       const selectors={studioArtifactId:anchoredArtifact.id,studioArtifactVersionId:anchoredArtifact.current_approved_version_id,targetWorkspaceId:generationBinding.workspace_id,expectedAggregateVersion:Number(anchoredArtifact.aggregate_version),expectedCurrentVersionId:anchoredArtifact.current_version_id,expectedApprovedVersionId:anchoredArtifact.current_approved_version_id};
       const deliveryAnchor=(await database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-04','request-exact-studio-handoff','studio_artifact',$2,$3,$4::jsonb) result`,[context.exerciseDigest,anchoredArtifact.id,Number(anchoredArtifact.aggregate_version),JSON.stringify(selectors)])).rows[0].result;
@@ -826,7 +883,14 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       const revisionSelectors={workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),expectedItemsDigest:sha256(expectedItems),expectedItemCount:expectedItems.length,itemRevisionsDigest:sha256(itemRevisions),revisionCount:itemRevisions.length};
       const revision=await invokeControlledDelivery({checkpointId:'CH-07',stepId:'commit-only-explicitly-edited-descendants',personaKey:'delivery_author',targetFamily:'delivery_work_package',targetId:pkg.id,expectedVersion:Number(pkg.aggregate_version),selectors:revisionSelectors,action:'delivery.package.revision.commit',payload:{workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),expectedItems,itemRevisions}});
       const revisedItems=await packageItems(pkg.id);
-      for(const [index,item] of revisedItems.entries())await invokeDeliveryPrerequisite('delivery_author','delivery.item.review',{itemAggregateId:item.item_aggregate_id,expectedAggregateVersion:Number(item.aggregate_version),expectedItemVersionId:item.current_version_id,outcome:'accepted',rationale:`Accept revised snapshot item ${index+1}.`},`accept-revised-${index}`);
+      const revisedChild=revisedItems.find(item=>item.item_aggregate_id===selected.item_aggregate_id);
+      assert.ok(revisedChild);assert.equal(revisedChild.title,revisionItem.title);
+      for(const [index,item] of revisedItems.entries())if(item.item_aggregate_id!==revisedChild.item_aggregate_id)
+        await invokeDeliveryPrerequisite('delivery_author','delivery.item.review',{itemAggregateId:item.item_aggregate_id,expectedAggregateVersion:Number(item.aggregate_version),expectedItemVersionId:item.current_version_id,outcome:'accepted',rationale:`Accept carried-forward snapshot item ${index+1}.`},`accept-carried-revised-${index}`);
+      const revisedDecisionRationale='Accept the exact revised descendant before independent package review.';
+      const revisedDecisionSelectors={itemAggregateId:revisedChild.item_aggregate_id,expectedAggregateVersion:Number(revisedChild.aggregate_version),expectedItemVersionId:revisedChild.current_version_id,outcome:'accepted',rationaleDigest:jsonTextSha(revisedDecisionRationale)};
+      const revisedDecision=await invokeControlledDelivery({checkpointId:'CH-07',stepId:'decide-revised-descendant',personaKey:'delivery_author',targetFamily:'delivery_item',targetId:revisedChild.item_aggregate_id,expectedVersion:Number(revisedChild.aggregate_version),selectors:revisedDecisionSelectors,action:'delivery.item.review',payload:{itemAggregateId:revisedChild.item_aggregate_id,expectedAggregateVersion:Number(revisedChild.aggregate_version),expectedItemVersionId:revisedChild.current_version_id,outcome:'accepted',rationale:revisedDecisionRationale}});
+      assert.equal(revisedDecision.binding.action,'delivery.item.review');assert.equal(revisedDecision.binding.observedVersion,Number(revisedChild.aggregate_version)+1);
       pkg=await packageState(pkg.id);const reviewRationale='Review complete revised package independently.';const reviewSelectors=packageDecisionDescriptor(pkg,'approved',reviewRationale);
       await invokeControlledDelivery({checkpointId:'CH-07',stepId:'review-complete-revised-package',personaKey:'delivery_reviewer',targetFamily:'delivery_work_package',targetId:pkg.id,expectedVersion:Number(pkg.current_version),selectors:reviewSelectors,action:'delivery.package.review.resolve',payload:{workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),outcome:'approved',rationale:reviewRationale}});
       const approvalRationale='Approve the exact independently reviewed revision.';const approvalSelectors=packageDecisionDescriptor(pkg,'approved',approvalRationale);
@@ -987,7 +1051,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const positiveCoverage=(await database.client.query(`select
       array(select step_id from public.pr_c_controlled_human_intent_catalog where observation_kind='server_event' order by checkpoint_id,step_id) expected,
       array(select distinct binding.step_id from public.pr_c_controlled_human_action_bindings binding join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id where exercise.exercise_digest=$1 and binding.observation_kind='server_event' order by binding.step_id) completed`,[context.exerciseDigest])).rows[0];
-    assert.equal(positiveCoverage.expected.length,34,'canonical server-event catalog size drifted');
+    assert.equal(positiveCoverage.expected.length,35,'canonical server-event catalog size drifted');
     assert.deepEqual([...positiveCoverage.completed].sort(),[...positiveCoverage.expected].sort(),'every positive catalog step must remain persisted through anchor -> production authority -> exact controlled completion');
     assert.deepEqual([...completedPositiveSteps].sort(),[...positiveCoverage.expected].sort(),'the in-process success ledger must exactly match the persisted positive catalog');
     const sqlCatalog=(await database.client.query(`select
@@ -995,14 +1059,14 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       array_agg(step_id order by checkpoint_id,step_id) filter(where observation_kind='server_event') positive_steps,
       array_agg(step_id order by checkpoint_id,step_id) filter(where observation_kind='negative_attempt') negative_steps
       from public.pr_c_controlled_human_intent_catalog`)).rows[0];
-    assert.equal(sqlCatalog.all_steps.length,42);assert.equal(sqlCatalog.positive_steps.length,34);assert.equal(sqlCatalog.negative_steps.length,8);
+    assert.equal(sqlCatalog.all_steps.length,43);assert.equal(sqlCatalog.positive_steps.length,35);assert.equal(sqlCatalog.negative_steps.length,8);
     const persistedCatalog=(await database.client.query(`select array_agg(step_id order by checkpoint_id,step_id) steps from public.pr_c_controlled_human_action_bindings binding join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id where exercise.exercise_digest=$1`,[context.exerciseDigest])).rows[0].steps;
-    assert.deepEqual([...persistedCatalog].sort(),[...sqlCatalog.all_steps].sort(),'all 42 machine-observable bindings must be persisted before observation');
-    assert.equal(authenticProofPairs.length,42,'duplicate, extra, or missing authentic envelope');
+    assert.deepEqual([...persistedCatalog].sort(),[...sqlCatalog.all_steps].sort(),'all 43 machine-observable bindings must be persisted before observation');
+    assert.equal(authenticProofPairs.length,43,'duplicate, extra, or missing authentic envelope');
     assert.deepEqual(authenticProofPairs.filter(pair=>pair.binding.result==='succeeded').map(pair=>pair.stepId).sort(),[...sqlCatalog.positive_steps].sort());
     assert.deepEqual(authenticProofPairs.filter(pair=>pair.binding.result==='denied').map(pair=>pair.stepId).sort(),[...sqlCatalog.negative_steps].sort());
     assert.equal(validateControlledHumanProofPairs(authenticProofPairs),authenticProofPairs);
-    assert.deepEqual(validateControlledHumanObserverEnvelopeBridge(authenticProofPairs),{total:42,positive:34,negative:8});
+    assert.deepEqual(validateControlledHumanObserverEnvelopeBridge(authenticProofPairs),{total:43,positive:35,negative:8});
     await database.client.query(`select set_config('request.jwt.claim.sub','',false)`);
     const scope=(await database.client.query(`select exercise.org_id,exercise.workspace_id,binding.auth_user_id requester_id,(select id from public.workspaces where org_id=exercise.org_id and id<>exercise.workspace_id limit 1) other_workspace_id from public.pr_c_controlled_human_exercises exercise join public.pr_c_controlled_human_persona_bindings binding on binding.exercise_id=exercise.id and binding.persona_key='requester' where exercise.exercise_digest=$1`,[context.exerciseDigest])).rows[0];
     const humanProcess=deterministicUuid(context.exerciseId,'representative-human-process');await database.client.query(`insert into public.assess_processes(id,org_id,workspace_id,name,status) values($1,$2,$3,'Representative human mutation','Draft')`,[humanProcess,scope.org_id,scope.workspace_id]);assertTargetInventory(await database.inspect(context),context);
@@ -1024,7 +1088,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       from public.pr_c_controlled_human_action_anchors anchor join public.pr_c_controlled_human_action_bindings binding on binding.anchor_id=anchor.id
       join public.pr_c_controlled_human_exercises exercise on exercise.id=anchor.exercise_id where exercise.exercise_digest=$1 order by anchor.created_at,anchor.checkpoint_id,anchor.step_id`,[context.exerciseDigest])).rows;
     const persistedProofPairs=persistedPairs.map(row=>({checkpointId:row.checkpoint_id,stepId:row.step_id,anchor:row.safe_anchor,binding:row.safe_record}));
-    validateControlledHumanProofPairs(persistedProofPairs);assert.equal(persistedProofPairs.length,42);
+    validateControlledHumanProofPairs(persistedProofPairs);assert.equal(persistedProofPairs.length,43);
     const timingByStep=new Map(persistedPairs.map(row=>[`${row.checkpoint_id}\0${row.step_id}`,{anchorAt:new Date(row.anchor_at).getTime(),bindingAt:new Date(row.binding_at).getTime(),bindingToken:row.safe_record.bindingToken}]));
     const blockedObservationActivity=(await readBlockedObservationActivity()).map(row=>({source:row.source,occurredAt:new Date(row.occurred_at).getTime()}));
     for(const step of orderedSteps){
@@ -1121,7 +1185,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       assert.equal(observed.steps.length,steps.length);assert.ok(observed.steps.every((record,index)=>record.humanAttemptDigest===steps[index].attemptDigest));
     }
     const observedMachineKeys=observedDuties.flatMap(duty=>duty.validation.machineStepKeys).sort();
-    assert.deepEqual(observedMachineKeys,CONTROLLED_HUMAN_SERVER_ACTIONS.map(item=>`${item.checkpointId}\0${item.stepId}`).sort(),'observer coverage must equal the exact 42-step machine catalog');
+    assert.deepEqual(observedMachineKeys,CONTROLLED_HUMAN_SERVER_ACTIONS.map(item=>`${item.checkpointId}\0${item.stepId}`).sort(),'observer coverage must equal the exact 43-step machine catalog');
     validateControlledHumanProofPairs(persistedProofPairs,observedDuties.flatMap(duty=>duty.observed.steps));
     const observedStep=new Map(observedDuties.flatMap(duty=>duty.observed.steps.map(step=>[step.stepId,step])));
     const proofSentinel=(await database.client.query(`select 'sha256:'||public.pr_c_controlled_human_sha256_jsonb(jsonb_build_object('proof','not_applicable')) digest`)).rows[0].digest;
@@ -1152,7 +1216,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       assert.equal((await database.lifecycleInspection(context)).safety.providerEgress,1);await assert.rejects(postDeprovisionVerify(context,database),/PROVIDER_STATE_REJECTED|PARTIAL_RESET_REJECTED/u);
     }finally{await database.client.query('rollback')}
     const postVerified=await postDeprovisionVerify(context,database);assert.deepEqual(postVerified.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});assert.equal(postVerified.postInspectionDigest,postState.postInspectionDigest);assert.notEqual(postVerified.inspectionAttemptDigest,postState.inspectionAttemptDigest);assert.ok(Date.parse(postVerified.inspectionObservedAt)>=Date.parse(postState.inspectionObservedAt));assert.equal(postVerified.operationEventSequence,postState.operationEventSequence);
-    assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_packages`)).rows[0].count),7);
+    assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_packages`)).rows[0].count),8);
     assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_monitor_baselines`)).rows[0].count),3);
     const auditCountAfterFirst=Number((await database.client.query(`select count(*) count from public.privileged_audit_events`)).rows[0].count);assert.ok(auditCountAfterFirst>=2);
     assert.equal(Number((await database.client.query(`select count(*) count from public.workspace_memberships where status='active'`)).rows[0].count),0);
@@ -1163,7 +1227,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     assert.equal(Number((await database.client.query(`select count(*) count from public.pilot_operations_tenants where lifecycle='deprovisioned'`)).rows[0].count),1);
     assert.equal(Number((await database.client.query(`select count(*) count from public.pilot_operations_environments where lifecycle='deactivated' and maintenance and read_only`)).rows[0].count),1);
     assert.equal(Number((await database.client.query(`select count(*) count from public.pr_c_controlled_human_operation_events`)).rows[0].count),5);
-    const newHead='d'.repeat(40);const contextTwo=deriveContext({PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:'264',PR_C_CONTROLLED_HUMAN_RELEASE_SHA:newHead,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:newHead,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'6b99cc001122334455667788',PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000265',PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:targetFingerprint,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'1'.repeat(64)}`,PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview'},fixtureState,{head:newHead,dirty:''});
+    const newHead='d'.repeat(40);const contextTwo=deriveContext({PR_C_CONTROLLED_HUMAN_ENVIRONMENT_CLASS:'hosted_nonproduction_pilot',PR_C_CONTROLLED_HUMAN_PR_NUMBER:'264',PR_C_CONTROLLED_HUMAN_RELEASE_SHA:newHead,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:newHead,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'6b99cc001122334455667788',PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN:'https://deploy-preview-264--avalaos-pilot.netlify.app',PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000265',PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT:targetFingerprint,PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST:`sha256:${'1'.repeat(64)}`,PR_C_CONTROLLED_HUMAN_SITE_NAME:'avalaos-pilot',PR_C_CONTROLLED_HUMAN_NETLIFY_CONTEXT:'deploy-preview',PR_C_SYNTHETIC_ACCEPTANCE_POLICY:'solo-owner-synthetic-v1'},fixtureState,{head:newHead,dirty:''});
     const staleSession=deterministicUuid(context.exerciseId,'stale-session-after-reset');await database.client.query('insert into auth.sessions(id,user_id) values($1,$2)',[staleSession,users[0].id]);
     const unsafeRetainedInventory=await database.inspect(contextTwo);assert.ok(Number(unsafeRetainedInventory.unsafeDeprovisionedRows)>0);assert.throws(()=>assertTargetInventory(unsafeRetainedInventory,contextTwo),/PARTIAL_RESET_REJECTED/u);
     await database.client.query('delete from auth.sessions where id=$1',[staleSession]);
@@ -1172,12 +1236,12 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     await database.prepareRecovery(contextTwo,'apply',0);
     for(const user of usersTwo)await database.client.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3::jsonb)',[user.id,user.email,JSON.stringify({synthetic:true,exerciseDigest:contextTwo.exerciseDigest,personaKey:user.key})]);
     for(const user of usersTwo)await database.recordAuthUser(contextTwo,user.id);
-    const seededTwo=await database.seed(contextTwo,fixtureState,usersTwo);assert.equal(seededTwo.studioArtifactCount,2);assert.equal(seededTwo.eligibleStudioArtifactCount,2);await database.completeRecovery(contextTwo,'apply');await database.verify(contextTwo,12);
+    const seededTwo=await database.seed(contextTwo,fixtureState,usersTwo);assert.equal(seededTwo.studioArtifactCount,3);assert.equal(seededTwo.eligibleStudioArtifactCount,2);await database.completeRecovery(contextTwo,'apply');await database.verify(contextTwo,12);
     for(let index=0;index<2;index++)await database.client.query('insert into auth.sessions(id,user_id) values($1,$2)',[deterministicUuid(contextTwo.exerciseId,`session-${index}`),usersTwo[index].id]);
     await database.prepareRecovery(contextTwo,'quiesce',1);await database.quiesce(contextTwo,1);const secondQuiescedInspection=await database.lifecycleInspection(contextTwo);await database.bindQuiescedHistory(contextTwo,2,secondQuiescedInspection.immutableHistoryDigest);await database.completeRecovery(contextTwo,'quiesce');const secondSessionCount=await database.revokeSessions(contextTwo);assert.equal(secondSessionCount,2);await database.prepareRecovery(contextTwo,'deprovision',2);await database.finalizeDeprovision(contextTwo,2,secondSessionCount,12);await database.completeRecovery(contextTwo,'deprovision');
     assert.equal(Number((await database.client.query(`select count(*) count from public.pr_c_controlled_human_exercises where lifecycle='deprovisioned'`)).rows[0].count),2);
-    assert.equal(Number((await database.client.query(`select count(*) count from public.studio_artifact_aggregates`)).rows[0].count),6);
-    assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_packages`)).rows[0].count),9);
+    assert.equal(Number((await database.client.query(`select count(*) count from public.studio_artifact_aggregates`)).rows[0].count),8);
+    assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_packages`)).rows[0].count),11);
     assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_monitor_baselines`)).rows[0].count),4);
     assert.ok(Number((await database.client.query(`select count(*) count from public.privileged_audit_events`)).rows[0].count)>auditCountAfterFirst);
     assert.equal(Number((await database.client.query(`select count(*) count from public.workspace_memberships where status='active'`)).rows[0].count),0);

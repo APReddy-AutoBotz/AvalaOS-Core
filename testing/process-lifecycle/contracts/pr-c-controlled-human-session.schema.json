@@ -31,7 +31,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["journeyCount", "checkpointCount", "stepCount", "passedStepCount", "failedStepCount", "blockedStepCount", "providerEgressCount", "realProviderCallCount", "customerDataRecordCount", "externalUserCount"],
       "properties": {
-        "journeyCount": { "const": 8 }, "checkpointCount": { "const": 14 }, "stepCount": { "const": 83 }, "passedStepCount": { "const": 83 },
+        "journeyCount": { "const": 8 }, "checkpointCount": { "const": 14 }, "stepCount": { "const": 84 }, "passedStepCount": { "const": 84 },
         "failedStepCount": { "const": 0 }, "blockedStepCount": { "const": 0 }, "providerEgressCount": { "const": 0 },
         "realProviderCallCount": { "const": 0 }, "customerDataRecordCount": { "const": 0 }, "externalUserCount": { "const": 0 }
       }

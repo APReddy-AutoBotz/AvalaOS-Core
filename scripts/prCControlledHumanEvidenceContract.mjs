@@ -43,23 +43,28 @@ export const deriveControlledHumanPullRequestRuntime = (env, expectedJob) => {
 };
 
 const loadServerActionCatalog = () => {
-  const migration = readFileSync(path.resolve('supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql'), 'utf8');
   const marker = 'INSERT INTO public.pr_c_controlled_human_intent_catalog';
-  const start = migration.indexOf(marker);
-  const end = migration.indexOf(';', start);
-  if (!(start >= 0 && end > start)) throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_MISSING');
-  const values = migration.slice(start, end);
   const rows = [];
   const rowPattern = /\('([^']+)','([^']+)','([^']+)','([^']+)','([^']+)','([^']+)','([^']+)','([^']+)','([^']+)','([^']+)',(?:'([^']+)'|NULL),(?:'([^']+)'|NULL),(?:'([^']+)'|NULL)\)/gu;
-  for (const match of values.matchAll(rowPattern)) {
-    rows.push(Object.freeze({
+  for (const [filename, expectedCount] of [
+    ['20260904120000_pr_c_controlled_human_exercise_authority.sql', 42],
+    ['20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql', 1],
+  ]) {
+    const migration = readFileSync(path.resolve('supabase/migrations', filename), 'utf8');
+    const start = migration.indexOf(marker);
+    const end = migration.indexOf(';', start);
+    if (!(start >= 0 && end > start)) throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_MISSING');
+    const matches = [...migration.slice(start, end).matchAll(rowPattern)];
+    if (matches.length !== expectedCount) throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_PARSE');
+    for (const match of matches) rows.push(Object.freeze({
       checkpointId: match[1], stepId: match[2], observationKind: match[3], action: match[4], targetFamily: match[5],
       targetVersionDimension: match[6], effectFamily: match[7], transitionKind: match[8], selectorSchema: match[9],
       effectResolver: match[10], expectedOutcome: match[11] ?? null, expectedDenialCode: match[12] ?? null,
       replayOfStepId: match[13] ?? null,
     }));
   }
-  if (rows.length !== 42) throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_PARSE');
+  if (rows.length !== 43 || new Set(rows.map(row => `${row.checkpointId}\0${row.stepId}`)).size !== rows.length)
+    throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_PARSE');
   return Object.freeze(rows);
 };
 
@@ -68,7 +73,7 @@ const loadServerActionCatalog = () => {
 export const CONTROLLED_HUMAN_SERVER_ACTIONS = loadServerActionCatalog();
 SERVER_EVENT_STEPS = new Set(CONTROLLED_HUMAN_SERVER_ACTIONS.filter(item => item.observationKind === 'server_event').map(item => item.stepId));
 const serverActionByStep = new Map(CONTROLLED_HUMAN_SERVER_ACTIONS.map(item=>[`${item.checkpointId}\0${item.stepId}`,item]));
-if(CONTROLLED_HUMAN_SERVER_ACTIONS.length!==42||SERVER_EVENT_STEPS.size!==34)throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_DRIFT');
+if(CONTROLLED_HUMAN_SERVER_ACTIONS.length!==43||SERVER_EVENT_STEPS.size!==35)throw new Error('PR_C_CH_SERVER_ACTION_CATALOG_DRIFT');
 
 const assert = (condition, code) => {
   if (!condition) throw new Error(code);
@@ -181,7 +186,8 @@ export const CONTROLLED_HUMAN_CATALOG = Object.freeze([
     testIds: ['DELIVERY-TR-003', 'DELIVERY-TR-005', 'MONITOR-TR-001'],
     steps: [
       step('request-package-changes', 'delivery_reviewer'), step('verify-monitor-unchanged-while-blocked', 'delivery_reviewer', true),
-      step('commit-only-explicitly-edited-descendants', 'delivery_author'), step('review-complete-revised-package', 'delivery_reviewer'),
+      step('commit-only-explicitly-edited-descendants', 'delivery_author'), step('decide-revised-descendant', 'delivery_author'),
+      step('review-complete-revised-package', 'delivery_reviewer'),
       step('approve-exact-revised-package', 'delivery_approver'),
     ],
   },
@@ -258,7 +264,7 @@ export const REQUIRED_JOURNEYS = Object.freeze([
 
 export const CONTROLLED_HUMAN_EXECUTION_ORDER = Object.freeze([
   'CH-01', 'CH-02', 'CH-03', 'CH-04', 'CH-05', 'CH-06', 'CH-07', 'CH-08',
-  'CH-09', 'CH-10', 'CH-11', 'CH-12', 'CH-14', 'CH-13',
+  'CH-09', 'CH-10', 'CH-14', 'CH-11', 'CH-12', 'CH-13',
 ]);
 
 const catalogByCheckpoint = new Map(CONTROLLED_HUMAN_CATALOG.map(record => [record.checkpointId, record]));
@@ -463,20 +469,20 @@ const validateControllerRecord = (record, expectedPhase, common) => {
   if (expectedPhase === 'preflight') {
     assert(['dedicated_empty', 'exact_replay'].includes(record.disposition) && record.unexpectedDataCount === 0 && record.providerRowCount === 0, 'PR_C_CH_CONTROLLER_PREFLIGHT_COUNTS');
   } else if (expectedPhase === 'plan') {
-    assert(record.personaCount === 12 && record.featureFlagCount === 11
-      && record.seedStudioArtifactCount === 2 && record.eligibleStudioArtifactCount === 2
-      && record.seedPackageCount === 2 && record.seedBaselineCount === 1
+    assert(record.personaCount === 12 && record.featureFlagCount === 12
+      && record.seedStudioArtifactCount === 3 && record.eligibleStudioArtifactCount === 2
+      && record.seedPackageCount === 3 && record.seedBaselineCount === 1
       && Array.isArray(record.operations) && Array.isArray(record.deprovisionOperations), 'PR_C_CH_CONTROLLER_PLAN_COUNTS');
   } else if (expectedPhase === 'apply') {
-    assert(record.personaCount === 12 && record.studioArtifactCount === 2 && record.eligibleStudioArtifactCount === 2
-      && record.packageCount === 2 && record.baselineCount === 1 && record.lifecycle === 'active'
+    assert(record.personaCount === 12 && record.studioArtifactCount === 3 && record.eligibleStudioArtifactCount === 2
+      && record.packageCount === 3 && record.baselineCount === 1 && record.lifecycle === 'active'
       && record.concurrencyVersion === 1 && record.providerRowCount === 0 && record.zeroEgress === true
       && [0, 12].includes(record.authUsersCreated), 'PR_C_CH_CONTROLLER_APPLY_COUNTS');
   } else if (expectedPhase === 'verify') {
     assert(record.personaCount === 12 && record.activeMembershipCount === 11
-      && record.studioArtifactCount === 2 && record.eligibleStudioArtifactCount === 2
-      && record.packageCount === 2 && record.baselineCount === 1 && record.providerRowCount === 0
-      && record.lifecycle === 'active' && record.concurrencyVersion === 1 && record.featureFlagCount === 11
+      && record.studioArtifactCount === 3 && record.eligibleStudioArtifactCount === 2
+      && record.packageCount === 3 && record.baselineCount === 1 && record.providerRowCount === 0
+      && record.lifecycle === 'active' && record.concurrencyVersion === 1 && record.featureFlagCount === 12
       && record.zeroEgress === true && record.unexpectedDataCount === 0, 'PR_C_CH_CONTROLLER_VERIFY_COUNTS');
   } else if (expectedPhase === 'deprovision') {
     assert(record.lifecycle === 'deprovisioned' && record.featureFlagCountEnabled === 0 && record.runtimeControlReadOnlyCount === 2
@@ -602,9 +608,9 @@ export const validatePreparationEvidence = preparation => {
   assertExactKeys(preparation.backend, ['targetFingerprint', 'publicTargetDigest', 'exerciseDigest', 'personaManifestDigest', 'fixtureManifestDigest', 'migrationTip', 'seedCounts', 'concurrencyVersion', 'controllerPhaseDigests', 'productionAuthorized', 'customerDataAuthorized', 'realProviderCallsAuthorized', 'realProviderCallCount', 'providerEgressCount'], [], 'PR_C_CH_PREPARATION_BACKEND_RECORD');
   for (const key of ['targetFingerprint', 'publicTargetDigest', 'exerciseDigest', 'personaManifestDigest', 'fixtureManifestDigest']) assertDigest(preparation.backend[key], `PR_C_CH_PREPARATION_BACKEND:${key}`);
   assertExactKeys(preparation.backend.seedCounts, ['studioArtifactCount', 'eligibleStudioArtifactCount', 'packageCount', 'approvedBaselineCount'], [], 'PR_C_CH_PREPARATION_SEED_COUNTS');
-  assert(preparation.backend.seedCounts.studioArtifactCount === 2
+  assert(preparation.backend.seedCounts.studioArtifactCount === 3
     && preparation.backend.seedCounts.eligibleStudioArtifactCount === 2
-    && preparation.backend.seedCounts.packageCount === 2
+    && preparation.backend.seedCounts.packageCount === 3
     && preparation.backend.seedCounts.approvedBaselineCount === 1
     && preparation.backend.concurrencyVersion === 1, 'PR_C_CH_PREPARATION_SEED_BINDING');
   assert(preparation.backend.productionAuthorized === false && preparation.backend.customerDataAuthorized === false && preparation.backend.realProviderCallsAuthorized === false && preparation.backend.realProviderCallCount === 0 && preparation.backend.providerEgressCount === 0, 'PR_C_CH_PREPARATION_STOP_STATES');

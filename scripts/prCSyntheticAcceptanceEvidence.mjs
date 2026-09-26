@@ -51,7 +51,7 @@ export const requiredSyntheticBrowserAssertionId = (checkpointId, stepId) => `${
 
 const orderedCatalog = CONTROLLED_HUMAN_EXECUTION_ORDER.map(checkpointId => catalogByCheckpoint.get(checkpointId));
 export const SYNTHETIC_STEP_COUNT = orderedCatalog.reduce((total, checkpoint) => total + checkpoint.steps.length, 0);
-assert(SYNTHETIC_STEP_COUNT === 83, 'PR_C_SYNTHETIC_CATALOG_STEP_COUNT');
+assert(SYNTHETIC_STEP_COUNT === 84, 'PR_C_SYNTHETIC_CATALOG_STEP_COUNT');
 
 export const SYNTHETIC_PERSONA_ORDER = Object.freeze([...new Set(orderedCatalog.flatMap(record => record.steps.map(step => step.personaKey)))]);
 
@@ -79,7 +79,7 @@ const validateBinding = binding => {
     && binding.preview.siteName === 'avalaos-pilot', 'PR_C_SYNTHETIC_PREVIEW_IDENTITY');
   exactKeys(binding.backend, ['exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'personaManifestDigest', 'fixtureManifestDigest', 'migrationTip'], 'PR_C_SYNTHETIC_BACKEND');
   for (const field of ['exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'personaManifestDigest', 'fixtureManifestDigest']) digest(binding.backend[field], `PR_C_SYNTHETIC_BACKEND_${field}`);
-  assert(binding.backend.migrationTip === '20260924113000', 'PR_C_SYNTHETIC_BACKEND_MIGRATION_TIP');
+  assert(binding.backend.migrationTip === '20260926053818', 'PR_C_SYNTHETIC_BACKEND_MIGRATION_TIP');
   exactKeys(binding.producer, ['workflowPath', 'job', 'event', 'runId', 'runAttempt', 'owner'], 'PR_C_SYNTHETIC_PRODUCER');
   assert(binding.producer.workflowPath === SYNTHETIC_WORKFLOW_PATH && binding.producer.job === SYNTHETIC_WORKFLOW_JOB
     && binding.producer.event === 'workflow_dispatch' && RUN_ID.test(String(binding.producer.runId))
@@ -294,7 +294,7 @@ export const buildVerifiedSyntheticAcceptanceSession = ({ policy, binding, perso
     journeys: REQUIRED_JOURNEYS.map(journeyId => ({ journeyId, checkpointIds: CONTROLLED_HUMAN_CATALOG.filter(record => record.journeyId === journeyId).map(record => record.checkpointId), outcome: 'passed' })),
     checkpoints,
     serverObservers,
-    totals: { journeyCount: 8, checkpointCount: 14, stepCount: 83, passedStepCount: 83, failedStepCount: 0, blockedStepCount: 0, ...aggregateSafety },
+    totals: { journeyCount: 8, checkpointCount: 14, stepCount: 84, passedStepCount: 84, failedStepCount: 0, blockedStepCount: 0, ...aggregateSafety },
     lifecycle: {
       quiesceDigest: canonicalDigest(quiesceRecord),
       sessionBindingDigest: canonicalDigest(sessionBindingRecord),
@@ -320,8 +320,8 @@ const validateSyntheticAcceptanceSessionShape = session => {
   assert(JSON.stringify(session.journeys.map(record => record.journeyId)) === JSON.stringify(REQUIRED_JOURNEYS)
     && session.journeys.every(record => record.outcome === 'passed'), 'PR_C_SYNTHETIC_SESSION_JOURNEYS');
   exactKeys(session.totals, ['journeyCount', 'checkpointCount', 'stepCount', 'passedStepCount', 'failedStepCount', 'blockedStepCount', 'providerEgress', 'realProviderCalls', 'customerDataRecords', 'externalUsers'], 'PR_C_SYNTHETIC_SESSION_TOTALS');
-  assert(session.totals.journeyCount === 8 && session.totals.checkpointCount === 14 && session.totals.stepCount === 83
-    && session.totals.passedStepCount === 83 && session.totals.failedStepCount === 0 && session.totals.blockedStepCount === 0
+  assert(session.totals.journeyCount === 8 && session.totals.checkpointCount === 14 && session.totals.stepCount === 84
+    && session.totals.passedStepCount === 84 && session.totals.failedStepCount === 0 && session.totals.blockedStepCount === 0
     && ['providerEgress', 'realProviderCalls', 'customerDataRecords', 'externalUsers'].every(field => session.totals[field] === 0), 'PR_C_SYNTHETIC_SESSION_TOTAL_VALUES');
   exactKeys(session.lifecycle, ['sessionBindingDigest', 'quiesceDigest', 'quiescedHistoryDigest', 'deprovisionDigest', 'independentCleanupDigest', 'postInspectionDigest', 'status'], 'PR_C_SYNTHETIC_SESSION_LIFECYCLE');
   assert(session.lifecycle.status === 'verified_deprovisioned', 'PR_C_SYNTHETIC_SESSION_CLEANUP');
