@@ -512,7 +512,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('transcriptCandidateRelationships', `enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,source_id,source_version_id,input_bundle_id,input_bundle_version_id,relationship,suggested_application_intent,suggested_apply_target,rationale,reviewer_id,created_at&${scope}&order=created_at.desc,id.desc&limit=1000`);
       load('transcriptConflicts', `enterprise_assess_evidence_conflicts?select=id,assess_case_id,input_bundle_version_id,application_intent,target_key,candidate_ids,is_material,current_resolution_version,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptConflictResolutions', `enterprise_assess_evidence_conflict_resolutions?select=conflict_id,version,resolution,chosen_candidate_id,authored_value,rationale,created_at&${scope}&order=created_at.desc&limit=1000`);
-      load('transcriptExtractionBindings', `enterprise_transcript_extraction_bindings?select=id,job_id,input_bundle_version_id,input_bundle_id,source_set_version_id,source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=1000`);
+      load('transcriptExtractionBindings', `enterprise_transcript_extraction_bindings?select=id,job_id,input_bundle_version_id,input_bundle_id,source_set_id,source_set_version_id,source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=1000`);
       load('transcriptJobs', `enterprise_ai_job_ledger?select=id,status,failure_class,created_at,completed_at&${scope}&capability=eq.assess.evidence.extract&order=created_at.desc&limit=1000`);
       load('transcriptStalenessEvents', `enterprise_transcript_staleness_events?select=resource_kind,resource_id,created_at&${scope}&order=created_at.desc&limit=4000`);
     }
@@ -1207,7 +1207,10 @@ const projectTranscriptFlow = (
       || number(first.expected_case_version) !== number(batch.expected_case_version)) return [];
     const previewIds = previews.map(preview => text(preview.id)).filter(id => uuid.test(id));
     const candidateIds = previews.map(preview => text(preview.candidate_id)).filter(id => uuid.test(id));
-    const conflicts = conflictProjections.filter(conflict => conflict.candidateIds.some(candidateId => candidateIds.includes(candidateId)));
+    const conflicts = conflictProjections.filter(conflict => conflict.candidateIds.some(candidateId => candidateIds.includes(candidateId))
+      && (assessVisible ? raw.transcriptConflicts : []).some(row => text(row.id) === conflict.id
+        && text(row.assess_case_id) === text(batch.assess_case_id)
+        && text(row.input_bundle_version_id) === text(batch.input_bundle_version_id)));
     const allApplied = previewIds.every(previewId => applicationByPreview.has(previewId));
     const expiresAt = previews.map(preview => text(preview.expires_at)).filter(value => Number.isFinite(Date.parse(value))).sort()[0] || generatedAt.toISOString();
     const stale = Date.parse(expiresAt) <= generatedAt.getTime()

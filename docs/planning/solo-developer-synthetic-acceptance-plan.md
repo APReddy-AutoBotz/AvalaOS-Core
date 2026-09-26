@@ -269,6 +269,18 @@ adds safe checkpoint, step, and control codes to the failure boundary without
 publishing page text or identifiers. Later steps were `not run`; no complete
 84-step PASS exists.
 
+At head `6226637b72a52d1b044993726b3964d7473a554d`, all 48 exact-head
+checks and the exact preview passed. Protected run `36259628158` completed
+preparation and the first two CH-01 browser steps, then failed while waiting
+for a reviewed candidate's preview checkbox. Bounded recovery and private-state
+cleanup passed; the dedicated target has no live exercise or unbanned synthetic
+user. The production query omitted the extraction binding's `source_set_id`
+even though the candidate and run projections require it for exact lineage.
+The focused repair loads that field and scopes preview conflicts to the
+selected Assess case and immutable bundle, so a conflict from the separately
+seeded case cannot attach to the browser-created draft. Remaining steps were
+`not run`; no complete 84-step PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

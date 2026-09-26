@@ -781,6 +781,22 @@ assert.deepEqual(assessProjection.transcriptFlow.assessRuns[0].extractionBinding
 }], 'run projects exact binding lineage instead of a current source-set root');
 assert.equal(assessProjection.transcriptFlow.assessApplyPreviews[0].id, TRANSCRIPT_PREVIEW_BATCH,
   'browser projection commits and returns the real preview-batch identifier');
+const crossCaseConflictRows = structuredClone(transcriptOnlyRows);
+crossCaseConflictRows.transcriptConflicts = [{
+  id: HIDDEN_CANARY_IDS.conflict, assess_case_id: HIDDEN_CANARY_IDS.assessDraft,
+  input_bundle_version_id: TRANSCRIPT_BUNDLE_VERSION, application_intent: 'set_case_field',
+  target_key: 'description', candidate_ids: [CANDIDATE], is_material: true,
+  current_resolution_version: 0, created_at: '2026-08-04T08:07:00.000Z',
+}];
+assert.equal(buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read', 'assess.v2.read'],
+}, crossCaseConflictRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessApplyPreviews[0].conflicts.length, 0,
+  'a conflict for another Assess case never blocks this exact preview even when it names the same candidate');
+crossCaseConflictRows.transcriptConflicts[0].assess_case_id = ASSESS_DRAFT;
+assert.equal(buildEnterpriseIntelligenceProjection({
+  ...authority(), capabilities: ['transcript.sources.read', 'assess.v2.read'],
+}, crossCaseConflictRows, new Date('2026-08-04T09:00:00.000Z')).transcriptFlow.assessApplyPreviews[0].conflicts.length, 1,
+  'the selected Assess case still projects its material conflict');
 assert.equal(assessProjection.transcriptFlow.inputBundles[0].status, 'locked',
   'disabled feature flags retain immutable transcript lineage as a read-only rollback projection');
 
@@ -825,7 +841,14 @@ const relationshipReviewRow = {
   created_at: '2026-08-04T08:07:00.000Z',
 };
 const relationshipReviewRequests: string[] = [];
+const extractionBindingRequests: string[] = [];
 const relationshipReviewDatabase = createEnterpriseIntelligenceQueryDatabase(async <T>(path: string): Promise<T> => {
+  if (path.startsWith('enterprise_transcript_extraction_bindings?')) {
+    extractionBindingRequests.push(path);
+    assert.equal(path, `enterprise_transcript_extraction_bindings?select=id,job_id,input_bundle_version_id,input_bundle_id,source_set_id,source_set_version_id,source_id,source_version_id,created_at&org_id=eq.${ORG}&workspace_id=eq.${WORKSPACE}&order=created_at.desc&limit=1000`,
+      'production extraction-binding query selects the source-set ID required for exact candidate and run lineage');
+    return transcriptOnlyRows.transcriptExtractionBindings as T;
+  }
   if (path.startsWith('enterprise_evidence_candidate_relationship_reviews?')) {
     relationshipReviewRequests.push(path);
     assert.equal(path, `enterprise_evidence_candidate_relationship_reviews?select=${relationshipReviewColumns}&org_id=eq.${ORG}&workspace_id=eq.${WORKSPACE}&order=created_at.desc,id.desc&limit=1000`,
@@ -838,9 +861,12 @@ const relationshipReviewRows = await relationshipReviewDatabase.loadProjectionRo
   ...authority(), capabilities: ['assess.v2.read'],
 });
 assert.equal(relationshipReviewRequests.length, 1, 'canonical Assess authority loads the relationship table exactly once');
+assert.equal(extractionBindingRequests.length, 1, 'canonical Assess authority loads exact extraction-binding lineage once');
 assert.deepEqual(relationshipReviewRows.transcriptCandidateRelationships, [relationshipReviewRow]);
+assert.deepEqual(relationshipReviewRows.transcriptExtractionBindings, transcriptOnlyRows.transcriptExtractionBindings);
 const reviewedCandidateRows = structuredClone(transcriptOnlyRows);
 reviewedCandidateRows.transcriptCandidateRelationships = relationshipReviewRows.transcriptCandidateRelationships;
+reviewedCandidateRows.transcriptExtractionBindings = relationshipReviewRows.transcriptExtractionBindings;
 const reviewedCandidateProjection = buildEnterpriseIntelligenceProjection({
   ...authority(), capabilities: ['assess.v2.read'],
 }, reviewedCandidateRows, new Date('2026-08-04T09:00:00.000Z'));
