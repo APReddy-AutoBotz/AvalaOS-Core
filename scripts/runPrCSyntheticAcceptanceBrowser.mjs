@@ -187,6 +187,13 @@ export const safeBrowserRoute = pageUrl => {
   return route;
 };
 
+export const safeBrowserStepFailure = (planned, error) => {
+  const message = String(error?.message ?? '');
+  const safeCode = /^(PR_C_SYNTHETIC_BROWSER_[A-Z0-9_]+)(?::|$)/u.exec(message)?.[1];
+  const diagnostic = safeCode ?? (/(?:locator\.waitFor|TimeoutError): Timeout [0-9]+ms exceeded/u.test(message) ? 'LOCATOR_TIMEOUT' : 'BROWSER_ERROR');
+  return new Error(`PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:${planned.checkpointId}:${planned.stepId}:${diagnostic}`);
+};
+
 const parseArguments = argv => {
   const parsed = { output: '', input: '', preparation: '', stateDirectory: '', headed: false, phase: '' };
   for (let index = 0; index < argv.length; index += 1) {
@@ -450,7 +457,7 @@ const openSurface = async (page, surface, interactionSequence, stepId = '') => {
     : await page.getByTestId('governed-studio-creation-route').count() > 0;
   if (!ready) await navigateProductPath(page, NAVIGATION_PATHS[surface], interactionSequence);
   const target = enterprise ? page.getByTestId('enterprise-intelligence-workspace') : page.getByTestId('governed-studio-creation-route');
-  await target.waitFor({ state: 'visible' });
+  await target.waitFor({ state: 'visible' }).catch(() => { throw new Error(`PR_C_SYNTHETIC_BROWSER_SURFACE_MISSING:${surface}`); });
   const tab = TAB_BY_STEP[stepId] ?? TAB_LABELS[surface][0];
   if (tab) {
     const control = target.getByRole('navigation', { name: 'Enterprise Intelligence surfaces' }).getByRole('button', { name: tab, exact: true });
@@ -1064,7 +1071,7 @@ export const prepareAssessReviewApproval = async (page, interactionSequence) => 
 
 export const prepareAssessConflictPreview = async (page, interactionSequence, bundleLabel = 'Synthetic assess transcript selection') => {
   const review = page.locator('section[aria-labelledby="transcript-candidate-review-title"]');
-  await review.waitFor({ state: 'visible' });
+  await review.waitFor({ state: 'visible' }).catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CANDIDATE_REVIEW_MISSING'); });
   await review.getByRole('combobox', { name: 'Locked input bundle', exact: true })
     .selectOption({ label: `${bundleLabel} · Input-bundle version 1 · 2 sources` });
   const draft = review.getByRole('combobox', { name: 'Editable Assess draft', exact: true });
@@ -1075,14 +1082,15 @@ export const prepareAssessConflictPreview = async (page, interactionSequence, bu
   await draft.selectOption(caseId);
   interactionSequence.push('select:exact-assess-draft');
   const include = review.getByRole('checkbox', { name: 'Include in preview', exact: true });
-  await include.first().waitFor({ state: 'visible' });
+  await include.first().waitFor({ state: 'visible' }).catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CANDIDATE_MISSING'); });
   assert(await include.count() >= 1, 'PR_C_SYNTHETIC_BROWSER_REVIEWED_ASSESS_CANDIDATE_MISSING');
   await include.first().check();
   interactionSequence.push('select:reviewed-assess-candidate');
   const preview = review.getByRole('button', { name: 'Preview exact Assess changes', exact: true });
   assert(await preview.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PREVIEW_DISABLED');
   await preview.click();
-  await review.getByRole('heading', { name: 'Conflict: Case description', exact: true }).waitFor({ state: 'visible' });
+  await review.getByRole('heading', { name: 'Conflict: Case description', exact: true }).waitFor({ state: 'visible' })
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CONFLICT_PREVIEW_MISSING'); });
   interactionSequence.push('preview:material-assess-conflict');
   return { selectedDraft: true, reviewedCandidate: true, materialConflictCount: await review.locator('article[aria-labelledby^="conflict-"]').count() };
 };
@@ -1393,7 +1401,11 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       }
       const session = personas.get(planned.personaKey);
       assert(session, `PR_C_SYNTHETIC_BROWSER_CONTEXT_MISSING:${planned.personaKey}`);
-      records.get(planned.checkpointId).steps.push(await executePlannedStep({ planned, session, providerEgress, state, nextTime }));
+      try {
+        records.get(planned.checkpointId).steps.push(await executePlannedStep({ planned, session, providerEgress, state, nextTime }));
+      } catch (error) {
+        throw safeBrowserStepFailure(planned, error);
+      }
     }
     assert.equal(providerEgress.length, 0, 'PR_C_SYNTHETIC_BROWSER_PROVIDER_EGRESS');
     const storageStateFiles = [];

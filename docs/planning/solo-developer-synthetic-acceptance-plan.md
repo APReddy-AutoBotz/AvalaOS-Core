@@ -258,6 +258,17 @@ focused repair retains only the non-identifying `view` and `scope` navigation
 fields in browser evidence. Later steps were `not run`; no complete 84-step
 PASS exists.
 
+At head `8a4a0cb8bfff3d7cef1cd92b015ced43ec9b6c8a`, all 48 exact-head
+checks and the exact preview passed. Protected run `36256085515` passed
+preparation, then the active browser phase timed out waiting
+for a locator. The runner's generic error did not identify the catalog step or
+control, so the precise UI cause remains a suspected defect requiring deeper
+validation. Bounded recovery and private-state cleanup passed; the dedicated
+target again has no live exercise or unbanned synthetic user. The next candidate
+adds safe checkpoint, step, and control codes to the failure boundary without
+publishing page text or identifiers. Later steps were `not run`; no complete
+84-step PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

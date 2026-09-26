@@ -20,6 +20,7 @@ import {
   latestCompletedAt,
   parsePasswordBundle,
   safeBrowserRoute,
+  safeBrowserStepFailure,
   selectAssessTranscriptSources,
   signIn,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
@@ -38,6 +39,15 @@ test('browser evidence route keeps surface navigation without query object ident
   assert(!route.includes(actorId));
   assert.equal(safeBrowserRoute('https://synthetic.invalid/'), '/');
   assert.throws(() => safeBrowserRoute('https://synthetic.invalid/?view=Process+Detail'), /NAVIGATION_REJECTED/u);
+});
+
+test('browser step failure identifies its catalog step without exposing locator or page text', () => {
+  const planned = { checkpointId: 'CH-01', stepId: 'resolve-material-assess-conflict' };
+  const error = safeBrowserStepFailure(planned, new Error('locator.waitFor: Timeout 30000ms exceeded. Private page text'));
+  assert.equal(error.message, 'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:LOCATOR_TIMEOUT');
+  assert(!error.message.includes('Private page text'));
+  const specific = safeBrowserStepFailure(planned, new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CANDIDATE_MISSING'));
+  assert.equal(specific.message, 'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:PR_C_SYNTHETIC_BROWSER_ASSESS_CANDIDATE_MISSING');
 });
 
 test('browser execution catalog covers the exact 84 steps and preserves execution order', () => {
