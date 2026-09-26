@@ -87,7 +87,7 @@ try{
   const enterpriseProjectionSource=await readFile('supabase/functions/_shared/enterpriseIntelligenceQuery.ts','utf8');
   const projectionSchemaContract=await assertEnterpriseProjectionSchema(database,enterpriseProjectionSource);
   assert.equal(projectionSchemaContract.siteCount,66);
-  const relationshipSelection='enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,relationship,rationale,reviewer_id,created_at';
+  const relationshipSelection='enterprise_evidence_candidate_relationship_reviews?select=id,candidate_id,candidate_version,source_id,source_version_id,input_bundle_id,input_bundle_version_id,relationship,suggested_application_intent,suggested_apply_target,rationale,reviewer_id,created_at';
   assert.equal(enterpriseProjectionSource.split(relationshipSelection).length-1,1,
     'Relationship review projection must have one exact reviewer-backed selector');
   const substitutedProjectionSource=enterpriseProjectionSource.replace(relationshipSelection,
