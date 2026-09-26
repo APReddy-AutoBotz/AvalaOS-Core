@@ -19,6 +19,7 @@ import {
   deterministicPersonaEmail,
   latestCompletedAt,
   parsePasswordBundle,
+  selectAssessTranscriptSources,
   signIn,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
 import {
@@ -97,6 +98,18 @@ test('sign-in waits for authentication even when the controlled preview banner i
     const stored = await context.storageState();
     assert.equal(stored.origins.some(origin => origin.localStorage.some(item => item.name === 'sb-synthetic-auth-token')), true);
     await context.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Assess source selection reports a failed server projection without leaking its error text', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<main data-testid="enterprise-intelligence-workspace" data-projection-scope-ready="false"><p role="alert">Private backend detail</p></main>');
+    await assert.rejects(selectAssessTranscriptSources(page, []), error =>
+      error?.message === 'PR_C_SYNTHETIC_BROWSER_ASSESS_PROJECTION_UNAVAILABLE');
   } finally {
     await browser.close();
   }

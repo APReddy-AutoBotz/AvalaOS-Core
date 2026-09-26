@@ -233,6 +233,20 @@ browser-state cleanup succeeded. The focused repair updates the client tip and
 its positive and negative tests. The remaining browser steps were `not run`;
 no complete 84-step PASS exists.
 
+At head `5c19a5f6961fc59210e67cfd0ccc4703768076a5`, all 48 applicable
+exact-head checks and the retried preview passed. Protected run `36248320301`
+prepared the exercise but its first Assess browser step failed; later steps were
+`not run`. The deployed nonproduction Enterprise Intelligence query still
+selected retired
+`created_by`, while this branch and the migrated database require `reviewer_id`.
+Bounded recovery and private-state cleanup passed. The dedicated project query
+function was updated from this branch and read back with the correct selector.
+An exact-head retry (`36249231411`) was rejected during preparation because the
+prior deprovisioned exercise already owns that digest; no live exercise or
+unbanned synthetic user remains. A fresh candidate is required. The browser
+runner now reports an unavailable Assess projection by safe code. No complete
+84-step PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

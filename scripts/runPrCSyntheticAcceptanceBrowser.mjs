@@ -926,6 +926,13 @@ export const selectAssessTranscriptSources = async (page, interactionSequence, n
   sourceSetLabel = 'Synthetic assess transcript set', bundleLabel = 'Synthetic assess transcript selection',
 } = {}) => {
   assert(Array.isArray(names) && names.length === 2 && names.every(name => typeof name === 'string' && name.trim()), 'PR_C_SYNTHETIC_BROWSER_ASSESS_SOURCE_FIXTURE_REJECTED');
+  const workspace = page.getByTestId('enterprise-intelligence-workspace');
+  await page.waitForFunction(() => {
+    const root = document.querySelector('[data-testid="enterprise-intelligence-workspace"]');
+    return root?.getAttribute('data-projection-scope-ready') === 'true' || Boolean(root?.querySelector('[role="alert"]'));
+  }, null, { timeout: 30_000 });
+  if (await workspace.getAttribute('data-projection-scope-ready') !== 'true')
+    throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_PROJECTION_UNAVAILABLE');
   const library = page.locator('section[aria-labelledby="transcript-source-library-title"]');
   await library.waitFor({ state: 'visible' });
   for (const name of names) {
