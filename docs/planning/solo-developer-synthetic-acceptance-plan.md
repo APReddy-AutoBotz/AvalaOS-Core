@@ -281,6 +281,16 @@ selected Assess case and immutable bundle, so a conflict from the separately
 seeded case cannot attach to the browser-created draft. Remaining steps were
 `not run`; no complete 84-step PASS exists.
 
+At head `3bce70ac6738bae793f953fc243cb702323d176b`, the exact preview
+and focused query, synthetic, static, and provenance checks passed. The first
+CI attempt for `synthetic-local-feature` was stopped by a Docker image rate
+limit. Its retry reached the source inventory harness and found that the
+reviewed selected-column hash had not advanced with `source_set_id`; no
+protected synthetic run was dispatched. The inventory was reviewed at 66
+unchanged query sites with only that added column, and the focused harness now
+passes all 78 tests. The full 84-step hosted outcome remains `not run` for
+this head.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for
