@@ -381,7 +381,9 @@ export function deriveContext(env, fixtureState, checkout = checkoutIdentity(), 
   if (values.deployOrigin !== PREVIEW_ORIGIN || values.siteName !== 'avalaos-pilot' || values.netlifyContext !== 'deploy-preview') fail('PR_C_CONTROLLED_HUMAN_PREVIEW_REJECTED');
   if (env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== undefined
     && env.PR_C_CONTROLLED_HUMAN_EXPECTED_EXERCISE_DIGEST !== exerciseBinding.exerciseDigest) fail('PR_C_CONTROLLED_HUMAN_EXERCISE_REJECTED');
-  return Object.freeze({ ...values, ...exerciseBinding, trustedRecoverySha:trustedRecoverySha??null });
+  // The protected ID is a namespace; retained exercises need distinct row IDs per candidate.
+  const exerciseId=deterministicUuid(values.exerciseId,`candidate-${exerciseBinding.exerciseDigest}`);
+  return Object.freeze({ ...values, ...exerciseBinding, exerciseId, trustedRecoverySha:trustedRecoverySha??null });
 }
 
 export function safeResult(phase, status, context, extra = {}) {

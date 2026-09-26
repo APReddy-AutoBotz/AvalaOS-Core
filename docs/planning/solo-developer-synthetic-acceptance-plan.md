@@ -103,6 +103,11 @@ general waiver platform, new business module, or production test bypass.
    contracts, source provenance, and active authority documents together.
    Preserve all earlier failed attempts and historical evidence.
 
+The protected exercise ID is a stable namespace. Derive each candidate's
+database exercise and fixture IDs from that namespace plus its exact exercise
+digest, so a new head can seed alongside immutable deprovisioned history while
+an exact retry addresses the same candidate.
+
 Suggested existing integration points are the preparation, checkpoint, and
 session tools under `scripts/*PrCControlledHuman*`,
 `scripts/prCControlledHumanEvidenceContract.mjs`,

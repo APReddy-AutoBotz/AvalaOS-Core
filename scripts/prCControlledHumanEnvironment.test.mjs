@@ -70,6 +70,12 @@ const activeExercise=()=>({exercise_digest:context.exerciseDigest,release_sha:co
 test('canonical digests and deterministic identifiers are stable and scoped',()=>{
   assert.equal(canonicalJson({b:1,a:[{d:2,c:3}]}),'{"a":[{"c":3,"d":2}],"b":1}');
   assert.match(sha256({b:1,a:2}),/^sha256:[0-9a-f]{64}$/u);
+  assert.notEqual(context.exerciseId,baseEnv.PR_C_CONTROLLED_HUMAN_EXERCISE_ID);
+  assert.equal(context.exerciseId,deriveContext(baseEnv,fixtureState,{head,dirty:''}).exerciseId);
+  const nextHead='d'.repeat(40);
+  const nextContext=deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_RELEASE_SHA:nextHead,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:nextHead},fixtureState,{head:nextHead,dirty:''});
+  assert.notEqual(nextContext.exerciseId,context.exerciseId);
+  assert.notEqual(deterministicUuid(nextContext.exerciseId,'organization-main'),deterministicUuid(context.exerciseId,'organization-main'));
   assert.equal(deterministicUuid(context.exerciseId,'role-requester'),deterministicUuid(context.exerciseId,'role-requester'));
   assert.notEqual(deterministicUuid(context.exerciseId,'role-requester'),deterministicUuid(context.exerciseId,'role-reviewer'));
 });
@@ -205,6 +211,7 @@ test('unbound human/no-effect evidence uses an actor-and-scope absence witness r
 test('one-use exercise identity is deploy-independent while every context retains its exact deployment binding',()=>{
   const redeployed=deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'6b99cc001122334455667788'},fixtureState,{head,dirty:''});
   assert.equal(redeployed.exerciseDigest,context.exerciseDigest);
+  assert.equal(redeployed.exerciseId,context.exerciseId);
   assert.notEqual(redeployed.deployId,context.deployId);
   assert.equal(redeployed.deployOrigin,context.deployOrigin);
   assert.notEqual(deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000265'},fixtureState,{head,dirty:''}).exerciseDigest,context.exerciseDigest);
