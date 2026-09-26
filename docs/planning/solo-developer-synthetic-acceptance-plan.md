@@ -214,6 +214,16 @@ exposed a confirmed source defect: the prior completion function rejected those
 deliberately retained disabled users. The synthetic forward migration narrows completion to
 exactly bound, banned accounts and still rejects surviving partial pre-seed users.
 
+The exact-head attempt after the retained-history repair was deprovisioned when
+its immutable preview served an older browser exercise binding. Retrying the
+preview at the same head did not create a new candidate: protected run
+`36239852053` correctly rejected replay of the already deprovisioned exercise
+before seeding, and recovery found no open apply authority. The browser campaign
+was `not run`; no acceptance PASS exists. The next candidate verifies a
+public-safe hash commitment to the preview's build-time browser binding before
+synthetic preparation. It keeps the stable protected namespace and only a new
+exact head receives a fresh exercise digest and database IDs.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

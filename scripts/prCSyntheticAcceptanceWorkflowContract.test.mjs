@@ -27,6 +27,7 @@ const validate = workflow => {
   const names = job.steps.map(step => step.name ?? '');
   for (const name of [
     'Authorize exact synthetic policy, actor, open PR head, and preview deploy',
+    'Verify exact preview browser binding before synthetic preparation',
     'Apply and verify the exact synthetic acceptance migration',
     'Prepare and independently verify the synthetic exercise',
     'Verify exact preview response identity before browser authentication',
@@ -43,6 +44,7 @@ const validate = workflow => {
   ]) assert.equal(names.filter(value => value === name).length, 1, name);
 
   const ordered = [
+    'Verify exact preview browser binding before synthetic preparation',
     'Apply and verify the exact synthetic acceptance migration',
     'Prepare and independently verify the synthetic exercise',
     'Verify exact preview response identity before browser authentication',
@@ -55,6 +57,7 @@ const validate = workflow => {
     'Recompute acceptance from raw browser and server evidence',
   ].map(name => stepIndex(job, name));
   assert.ok(ordered.every((value, index) => value >= 0 && (index === 0 || value > ordered[index - 1])));
+  assert.equal(job.steps[stepIndex(job, 'Verify exact preview browser binding before synthetic preparation')].run, 'node scripts/verifyPr264ControlledHumanPreview.mjs');
 
   const authority = job.steps[stepIndex(job, 'Authorize exact synthetic policy, actor, open PR head, and preview deploy')].with.script;
   for (const marker of ['trusted(context.actor)', 'pull.head.sha !== process.env.EXPECTED_HEAD', 'listWorkflowRuns', "job.name === 'exact-head-governed-evidence'", "run.conclusion === 'success'"])
@@ -92,6 +95,7 @@ test('workflow provides an explicit two-phase synthetic acceptance path with fai
 test('workflow contract rejects selection, sequence, session binding, and private artifact substitutions', async () => {
   const workflow = await load();
   for (const mutate of [
+    value => { value.jobs.synthetic_role_acceptance.steps = value.jobs.synthetic_role_acceptance.steps.filter(step => step.name !== 'Verify exact preview browser binding before synthetic preparation'); },
     value => { value.jobs.synthetic_role_acceptance.if = '${{ github.event_name == \'workflow_dispatch\' }}'; },
     value => { value.jobs.synthetic_role_acceptance.steps = value.jobs.synthetic_role_acceptance.steps.filter(step => step.name !== 'Bind exact application actors and sessions at the server'); },
     value => { const steps = value.jobs.synthetic_role_acceptance.steps; const left = stepIndex(value.jobs.synthetic_role_acceptance, 'Quiesce before the final read-only browser proof'); const right = stepIndex(value.jobs.synthetic_role_acceptance, 'Run active browser journeys without provider egress'); [steps[left], steps[right]] = [steps[right], steps[left]]; },

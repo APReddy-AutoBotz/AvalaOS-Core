@@ -500,6 +500,12 @@ test('verifies preview headers and rejects substituted release', async () => {
   assert.equal((await verifyPr264DeployPreview({exactHead:head,deployId,fetchImpl:good})).origin,PREVIEW_ORIGIN);
   const wrong=async()=>new Response('<div id="root"></div>',{headers:{'x-avalaos-release':'f'.repeat(40),'x-avalaos-environment':ENVIRONMENT,'x-avalaos-netlify-deploy-id':deployId}});
   await assert.rejects(()=>verifyPr264DeployPreview({exactHead:head,deployId,fetchImpl:wrong}),/PREVIEW_HEADERS/u);
+  const exerciseDigest=`sha256:${'c'.repeat(64)}`;
+  const browserBinding=`sha256:${createHash('sha256').update(`pr-c-preview-binding\0${exerciseDigest}`).digest('hex')}`;
+  const bound=async()=>new Response('<div id="root"></div>',{headers:{'x-avalaos-release':head,'x-avalaos-environment':ENVIRONMENT,'x-avalaos-netlify-deploy-id':deployId,'x-avalaos-preview-binding':browserBinding}});
+  assert.equal((await verifyPr264DeployPreview({exactHead:head,deployId,exerciseDigest,fetchImpl:bound})).origin,PREVIEW_ORIGIN);
+  await assert.rejects(()=>verifyPr264DeployPreview({exactHead:head,deployId,exerciseDigest,fetchImpl:good}),/PREVIEW_BROWSER_BINDING/u);
+  await assert.rejects(()=>verifyPr264DeployPreview({exactHead:head,deployId,exerciseDigest:`sha256:${'d'.repeat(64)}`,fetchImpl:bound}),/PREVIEW_BROWSER_BINDING/u);
 });
 
 test('published schemas are fail-closed and version-aligned', () => {

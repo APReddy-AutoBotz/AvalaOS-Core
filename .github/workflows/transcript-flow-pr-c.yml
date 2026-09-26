@@ -1718,6 +1718,9 @@ jobs:
           install -d -m 700 output/synthetic
           node --input-type=module -e "import {readFile} from 'node:fs/promises'; import {validateSyntheticOwnerPolicy} from './scripts/prCSyntheticAcceptanceEvidence.mjs'; validateSyntheticOwnerPolicy(JSON.parse(await readFile('testing/process-lifecycle/contracts/pr-c-solo-owner-synthetic-policy.json','utf8')))"
 
+      - name: Verify exact preview browser binding before synthetic preparation
+        run: node scripts/verifyPr264ControlledHumanPreview.mjs
+
       - name: Bind Supabase project, API, and database without disclosure
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.PR_C_CONTROLLED_HUMAN_SUPABASE_PROJECT_REF }}

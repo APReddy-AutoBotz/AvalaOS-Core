@@ -13,6 +13,7 @@ const release = 'a'.repeat(40);
 const deployId = 'b'.repeat(24);
 const publicOrigin=`https://${'abcdefghijklmnopqrst'}.supabase.co`;
 const publicTargetDigest=`sha256:${createHash('sha256').update(`pr-c-controlled-human-public-target\0${publicOrigin}`).digest('hex')}`;
+const previewBinding=`sha256:${createHash('sha256').update(`pr-c-preview-binding\0sha256:${'c'.repeat(64)}`).digest('hex')}`;
 const exactPreviewTuple = {
   COMMIT_REF: release,
   DEPLOY_ID: deployId,
@@ -86,6 +87,7 @@ async function expectAccepted(overrides = {}) {
     assert.match(result.headers ?? '', new RegExp(`X-AvalaOS-Release: ${release}`));
     assert.match(result.headers ?? '', /X-AvalaOS-Environment: hosted_nonproduction_pilot/);
     assert.match(result.headers ?? '', new RegExp(`X-AvalaOS-Netlify-Deploy-ID: ${deployId}`));
+    assert.match(result.headers ?? '', new RegExp(`X-AvalaOS-Preview-Binding: ${previewBinding}`));
   } finally { await result.cleanup(); }
 }
 
@@ -169,7 +171,7 @@ test('emits only public-safe exact release and deployment identity headers', asy
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(
       result.headers,
-      `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-AvalaOS-Netlify-Deploy-ID: ${deployId}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`,
+      `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-AvalaOS-Netlify-Deploy-ID: ${deployId}\n  X-AvalaOS-Preview-Binding: ${previewBinding}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`,
     );
     assert.doesNotMatch(result.headers ?? '', /fingerprint|exercise|credential|password|key/i);
   } finally { await result.cleanup(); }

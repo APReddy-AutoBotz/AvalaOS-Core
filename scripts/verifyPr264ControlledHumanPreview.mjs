@@ -7,6 +7,8 @@ export async function main(env = process.env) {
   const result = await verifyPr264DeployPreview({
     exactHead: env.PR_C_CONTROLLED_HUMAN_RELEASE_SHA,
     deployId: env.PR_C_CONTROLLED_HUMAN_DEPLOY_ID,
+    exerciseDigest: env.PR_C_SYNTHETIC_ACCEPTANCE_POLICY === 'solo-owner-synthetic-v1'
+      ? env.PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST : undefined,
   });
   process.stdout.write(`${JSON.stringify({ status: 'verified_exact_preview', releaseSha: result.releaseSha, deployId: result.deployId, environment: result.environment })}\n`);
   return result;

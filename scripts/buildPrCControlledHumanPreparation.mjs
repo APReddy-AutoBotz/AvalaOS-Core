@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,7 +29,7 @@ const writeExclusiveJson = async (file, value) => {
   await writeFile(resolved, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
 };
 
-export const verifyPr264DeployPreview = async ({ exactHead, deployId, fetchImpl = fetch }) => {
+export const verifyPr264DeployPreview = async ({ exactHead, deployId, exerciseDigest, fetchImpl = fetch }) => {
   if (!/^[0-9a-f]{40}$/u.test(exactHead ?? '')) throw new Error('PR_C_CH_PREVIEW_HEAD');
   if (!/^[0-9a-f]{24}$/u.test(deployId ?? '')) throw new Error('PR_C_CH_PREVIEW_DEPLOY_ID');
   const response = await fetchImpl(PREVIEW_ORIGIN, {
@@ -40,6 +41,11 @@ export const verifyPr264DeployPreview = async ({ exactHead, deployId, fetchImpl 
   if (response.headers.get('x-avalaos-release') !== exactHead
     || response.headers.get('x-avalaos-environment') !== ENVIRONMENT
     || response.headers.get('x-avalaos-netlify-deploy-id') !== deployId) throw new Error('PR_C_CH_PREVIEW_HEADERS');
+  if (exerciseDigest !== undefined) {
+    if (!/^sha256:[0-9a-f]{64}$/u.test(exerciseDigest)) throw new Error('PR_C_CH_PREVIEW_BROWSER_BINDING');
+    const expectedBinding = `sha256:${createHash('sha256').update(`pr-c-preview-binding\0${exerciseDigest}`).digest('hex')}`;
+    if (response.headers.get('x-avalaos-preview-binding') !== expectedBinding) throw new Error('PR_C_CH_PREVIEW_BROWSER_BINDING');
+  }
   const body = await response.text();
   if (!body.includes('<div id="root"></div>') || /service[_-]?role|database[_-]?url|production[_-]?authorized/iu.test(body)) throw new Error('PR_C_CH_PREVIEW_BODY');
   return { origin: PREVIEW_ORIGIN, deployId, releaseSha: exactHead, context: 'deploy-preview', reviewId: PR_NUMBER, siteName: 'avalaos-pilot', environment: ENVIRONMENT };

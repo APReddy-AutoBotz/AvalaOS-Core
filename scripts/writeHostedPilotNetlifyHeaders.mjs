@@ -98,6 +98,10 @@ const previewChecks = {
   privateEnvironment: !forbiddenPrivateEnvironmentPresent,
 };
 const exactControlledHumanPreview = Object.values(previewChecks).every(Boolean);
+// Commit the browser's build-time exercise binding without publishing the digest itself.
+const previewBinding = exactControlledHumanPreview
+  ? `sha256:${createHash('sha256').update(`pr-c-preview-binding\0${exerciseDigest}`).digest('hex')}`
+  : null;
 
 // Preserve the permanent stable-host guard that predates PR #264. Netlify's
 // `production` context is a dedicated non-production pilot URL only when every
@@ -167,7 +171,7 @@ if (!exactControlledHumanPreview && !authorizedStablePilotTestingContext) {
 await mkdir('dist', { recursive: true });
 await writeFile(
   'dist/_headers',
-  `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-AvalaOS-Netlify-Deploy-ID: ${deployId}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`,
+  `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-AvalaOS-Netlify-Deploy-ID: ${deployId}\n${previewBinding ? `  X-AvalaOS-Preview-Binding: ${previewBinding}\n` : ''}  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`,
   'utf8',
 );
 
