@@ -584,14 +584,20 @@ test('module import performs no deployment or artifact write', async () => {
     return rows;
   };
   try {
-    // Import reads the server-owned action catalog eagerly. Supply only its exact
-    // canonical bytes in the disposable cwd, never a parallel action definition.
-    const migration = await readFile(path.join(root, CONTROLLED_HUMAN_MIGRATION_PATH));
-    const migrationFile = path.join(directory, CONTROLLED_HUMAN_MIGRATION_PATH);
-    await mkdir(path.dirname(migrationFile), { recursive: true });
-    await writeFile(migrationFile, migration, { flag: 'wx' });
+    // Import reads both server-owned catalog migrations eagerly. Supply only
+    // their exact canonical bytes, never a parallel action definition.
+    const catalogMigrationPaths = [
+      CONTROLLED_HUMAN_MIGRATION_PATH,
+      'supabase/migrations/20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql',
+    ];
+    for (const migrationPath of catalogMigrationPaths) {
+      const migration = await readFile(path.join(root, migrationPath));
+      const migrationFile = path.join(directory, migrationPath);
+      await mkdir(path.dirname(migrationFile), { recursive: true });
+      await writeFile(migrationFile, migration, { flag: 'wx' });
+    }
     const before = await snapshot();
-    assert.deepEqual(before.map(row => row.path), ['supabase', 'supabase/migrations', CONTROLLED_HUMAN_MIGRATION_PATH]);
+    assert.deepEqual(before.map(row => row.path), ['supabase', 'supabase/migrations', ...catalogMigrationPaths]);
     const childEnvironment = Object.fromEntries(
       ['SystemRoot', 'SYSTEMROOT', 'COMSPEC', 'TMP', 'TEMP', 'TMPDIR']
         .filter(name => process.env[name] !== undefined)

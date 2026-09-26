@@ -404,11 +404,17 @@ test('server-observable steps map canonical actions to the exact controlled reso
   assert.deepEqual(controlledHumanStepEvidenceSpec('create-baseline-with-exact-package-selectors').resourceFamilies,['monitor_baseline']);
   const mapped=CONTROLLED_HUMAN_CATALOG.flatMap(checkpoint=>checkpoint.steps.map(step=>({checkpointId:checkpoint.checkpointId,step,...controlledHumanStepEvidenceSpec(step.stepId,step.negative)})))
     .filter(record=>['server_event','negative_attempt'].includes(record.observationKind));
-  assert.equal(mapped.filter(record=>record.observationKind==='server_event').length,34);
+  assert.equal(mapped.filter(record=>record.observationKind==='server_event').length,35);
   assert.equal(mapped.filter(record=>record.observationKind==='negative_attempt').length,8);
   assert.ok(mapped.every(record=>record.expectedActions.length===1),'every controlled server step owns one canonical production action');
-  const sql=await readFile('supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql','utf8');
-  const intentRows=sql.slice(sql.indexOf('INSERT INTO public.pr_c_controlled_human_intent_catalog'),sql.indexOf('CREATE TRIGGER pr_c_controlled_human_intent_catalog_immutable'));
+  const intentRows=(await Promise.all([
+    'supabase/migrations/20260904120000_pr_c_controlled_human_exercise_authority.sql',
+    'supabase/migrations/20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql',
+  ].map(file=>readFile(file,'utf8')))).map(sql=>{
+    const start=sql.indexOf('INSERT INTO public.pr_c_controlled_human_intent_catalog');
+    assert.ok(start>=0);
+    return sql.slice(start,sql.indexOf(';',start));
+  }).join('\n');
   for(const record of mapped){
     const literal=`('${record.checkpointId}','${record.step.stepId}','${record.observationKind}','${record.expectedActions[0]}'`;
     assert.equal(intentRows.split(literal).length-1,1,`${record.step.stepId} must have exactly one server-owned intent row`);
