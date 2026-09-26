@@ -73,6 +73,7 @@ assert.deepEqual(
   controlledAttestation,
 );
 const syntheticAttestation = { ...controlledAttestation, migrationTip: PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP } as const;
+assert.equal(PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP, '20260926053818');
 assert.deepEqual(
   validateControlledHumanBackendAttestation(syntheticAttestation, controlledResolution.binding),
   syntheticAttestation,
@@ -126,6 +127,7 @@ for (const mutation of [
   { personaManifestDigest: 'not-a-digest' },
   { fixtureManifestDigest: 'not-a-digest' },
   { migrationTip: '20260904120001' },
+  { migrationTip: '20260924113000' },
   { migrationTip: '../../secret' },
   { unexpected: 'field' },
 ]) {

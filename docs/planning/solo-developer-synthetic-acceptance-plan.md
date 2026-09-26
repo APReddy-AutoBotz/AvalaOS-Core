@@ -224,6 +224,15 @@ public-safe hash commitment to the preview's build-time browser binding before
 synthetic preparation. It keeps the stable protected namespace and only a new
 exact head receives a fresh exercise digest and database IDs.
 
+At head `908101d338887e6a90876c8b049efd548c8037e0`, exact-head CI and the
+retried preview passed. Protected run `36245370899` prepared the exercise and
+verified preview identity, then stopped before the first browser journey:
+the client attestation still accepted migration tip `20260924113000` while the
+prepared synthetic exercise used `20260926053818`. Bounded recovery and private
+browser-state cleanup succeeded. The focused repair updates the client tip and
+its positive and negative tests. The remaining browser steps were `not run`;
+no complete 84-step PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

@@ -56,7 +56,7 @@ export const isValidServerConfiguration = (url: unknown, anonKey: unknown): bool
 export const PR_C_CONTROLLED_HUMAN_CONTRACT_VERSION = 'pr-c-controlled-human-attestation-1' as const;
 export const PR_C_CONTROLLED_HUMAN_PREVIEW_ORIGIN = 'https://deploy-preview-264--avalaos-pilot.netlify.app' as const;
 export const PR_C_CONTROLLED_HUMAN_MIGRATION_TIP = '20260904120000' as const;
-export const PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260924113000' as const;
+export const PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260926053818' as const;
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const DEPLOY_ID_PATTERN = /^[0-9a-f]{24}$/;

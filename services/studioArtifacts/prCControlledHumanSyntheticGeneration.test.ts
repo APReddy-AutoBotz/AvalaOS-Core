@@ -98,12 +98,12 @@ test('builds the exact attested server command without content, provider, route,
 test('accepts the exact forward synthetic migration tip on the same attested preview', () => {
   const command = buildPrCControlledHumanSyntheticGenerationCommand(
     context, { sourcePackage, template }, 'pr264:synthetic:request:forward', U[10], binding,
-    { ...attestation, migrationTip: '20260924113000' },
+    { ...attestation, migrationTip: '20260926053818' },
   );
   assert.equal(command.exerciseDigest, binding.exerciseDigest);
   assert.throws(() => buildPrCControlledHumanSyntheticGenerationCommand(
     context, { sourcePackage, template }, 'pr264:synthetic:request:wrong', U[10], binding,
-    { ...attestation, migrationTip: '20260924113001' as '20260924113000' },
+    { ...attestation, migrationTip: '20260924113000' as '20260926053818' },
   ), PrCControlledHumanSyntheticGenerationBoundaryError);
 });
 
