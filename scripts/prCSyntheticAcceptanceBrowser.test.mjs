@@ -19,6 +19,7 @@ import {
   deterministicPersonaEmail,
   latestCompletedAt,
   parsePasswordBundle,
+  safeBrowserRoute,
   selectAssessTranscriptSources,
   signIn,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
@@ -30,6 +31,14 @@ import {
 const exerciseDigest = `sha256:${'a'.repeat(64)}`;
 const actorId = '30000001-0000-4000-8000-000000000001';
 const sessionId = '40000001-0000-4000-8000-000000000001';
+
+test('browser evidence route keeps surface navigation without query object identifiers', () => {
+  const route = safeBrowserRoute(`https://synthetic.invalid/?view=process_detail&scope=organization&processId=${actorId}&scopeName=Synthetic+Workspace`);
+  assert.equal(route, '/?view=process_detail&scope=organization');
+  assert(!route.includes(actorId));
+  assert.equal(safeBrowserRoute('https://synthetic.invalid/'), '/');
+  assert.throws(() => safeBrowserRoute('https://synthetic.invalid/?view=Process+Detail'), /NAVIGATION_REJECTED/u);
+});
 
 test('browser execution catalog covers the exact 84 steps and preserves execution order', () => {
   const catalog = buildBrowserExecutionCatalog();

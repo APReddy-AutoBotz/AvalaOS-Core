@@ -169,6 +169,24 @@ const digest = value => sha256Digest(Buffer.from(typeof value === 'string' ? val
 const iso = () => new Date().toISOString();
 const safeLabel = value => String(value).toLowerCase().replace(/[^a-z0-9._:-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 128);
 
+// Product navigation carries process and scope identifiers in the query string.
+// Evidence needs only the non-identifying view and scope to identify the surface.
+export const safeBrowserRoute = pageUrl => {
+  const location = new URL(pageUrl);
+  assert(/^\/[a-z0-9/_-]{0,120}$/u.test(location.pathname), 'PR_C_SYNTHETIC_BROWSER_PATH_REJECTED');
+  const navigation = new URLSearchParams();
+  for (const key of ['view', 'scope']) {
+    const value = location.searchParams.get(key);
+    if (value === null) continue;
+    assert(/^[a-z_]{1,40}$/u.test(value), `PR_C_SYNTHETIC_BROWSER_NAVIGATION_REJECTED:${key}`);
+    navigation.set(key, value);
+  }
+  const search = navigation.toString();
+  const route = `${location.pathname}${search ? `?${search}` : ''}`;
+  assert(/^\/[a-z0-9/_?=&.-]{0,255}$/u.test(route), 'PR_C_SYNTHETIC_BROWSER_ROUTE_REJECTED');
+  return route;
+};
+
 const parseArguments = argv => {
   const parsed = { output: '', input: '', preparation: '', stateDirectory: '', headed: false, phase: '' };
   for (let index = 0; index < argv.length; index += 1) {
@@ -1322,10 +1340,8 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
   } else interactionSequence.push(`observe:${planned.stepId}`);
   const assertions = await stepAssertions({ page, checkpointId: planned.checkpointId, stepId: planned.stepId, providerEgress, state, interactionSequence, proof });
   const completedAt = nextTime();
-  const location = new URL(page.url());
   const viewport = page.viewportSize();
-  const route = `${location.pathname}${location.search}`;
-  assert(/^\/[a-z0-9/_?=&.-]{0,255}$/u.test(route), `PR_C_SYNTHETIC_BROWSER_ROUTE_REJECTED:${planned.checkpointId}:${planned.stepId}`);
+  const route = safeBrowserRoute(page.url());
   return {
     stepId: planned.stepId, personaKey: planned.personaKey, outcome: 'passed', startedAt, completedAt, ...identity,
     browserArtifact: {

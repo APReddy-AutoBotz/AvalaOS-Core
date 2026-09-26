@@ -247,6 +247,17 @@ unbanned synthetic user remains. A fresh candidate is required. The browser
 runner now reports an unavailable Assess projection by safe code. No complete
 84-step PASS exists.
 
+At head `7a8e71fccf174ecde6f53ca791576b57740a12c9`, all 48 exact-head
+checks and its preview passed. Protected run `36252725081` prepared the exercise
+and reached CH-01, then rejected the Assess page route while recording the
+manual-fields browser artifact. The product navigation query includes
+identifier-bearing keys and mixed-case key names; the evidence route admits
+only a safe lowercase route. Bounded recovery and private-state cleanup passed;
+the dedicated target has no live exercise or unbanned synthetic user. The
+focused repair retains only the non-identifying `view` and `scope` navigation
+fields in browser evidence. Later steps were `not run`; no complete 84-step
+PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for
