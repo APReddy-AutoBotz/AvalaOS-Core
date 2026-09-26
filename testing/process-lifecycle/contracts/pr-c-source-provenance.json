@@ -65,7 +65,7 @@
     "docs/planning/creation-access-synthetic-admin-remediation.md": "sha256:7a4b3aa7f4ccbda77c0f38fbe3e45aec19c5e9e8d0e15e7f9f0473bf38f62c23",
     "docs/planning/governed-multisource-transcript-module-handoff-plan.md": "sha256:96171e1daf20ba02e1517b0a656496340d009f1ff2f0d1855bffc2da0b3d3a67",
     "docs/planning/solo-developer-synthetic-acceptance-plan.md": "sha256:e6adae153848a0a7a195766396a64c235c3e4abef7b1a2a81c8b5e3a311d952e",
-    "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:4f0e617d717adbfb177defbf9b135fcd867d9b672de5dc5572a6e6b5f00f81e5",
+    "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:9a3524f9f6707619e872b10dcea5837e537f603d061c8df9abebc1d0661fcdc2",
     "docs/quality/assess-document-mapping-projection-correction-evidence.md": "sha256:211f84b1c1e6b99ca88153a56e2cda246e3ca0d750475b276e064280e328b565",
     "docs/quality/assess-document-mapping-release-evidence.md": "sha256:0a6f9c43b74a56a6e26ffaf139dbdbdc7b86f8e779d09a61bc33ddfef2705ddd",
     "docs/quality/assess-document-xlsx-ingestion-correction-evidence.md": "sha256:30d4cb58c592131e54adcbcab178873c75b18546c05de15ca7ca1c8cec8962ed",
