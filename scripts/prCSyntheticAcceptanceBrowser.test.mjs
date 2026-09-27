@@ -48,6 +48,12 @@ test('browser step failure identifies its catalog step without exposing locator 
   assert(!error.message.includes('Private page text'));
   const specific = safeBrowserStepFailure(planned, new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CANDIDATE_MISSING'));
   assert.equal(specific.message, 'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:PR_C_SYNTHETIC_BROWSER_ASSESS_CANDIDATE_MISSING');
+  let countFailure;
+  try { assert.equal(2, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_CONFLICT_COUNT'); } catch (error) { countFailure = error; }
+  assert.equal(safeBrowserStepFailure(planned, countFailure).message,
+    'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:PR_C_SYNTHETIC_BROWSER_ASSESS_CONFLICT_COUNT');
+  assert.equal(safeBrowserStepFailure(planned, new Error('locator.click: Timeout 30000ms exceeded. Private page text')).message,
+    'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:LOCATOR_TIMEOUT');
 });
 
 test('browser execution catalog covers the exact 84 steps and preserves execution order', () => {

@@ -305,6 +305,19 @@ actions remain separately anchored. Two preliminary browser interactions ran,
 but none of the 84 steps has final verified acceptance evidence. The failed
 third step and 81 later steps remain unverified; no complete 84-step PASS exists.
 
+At head `1ad240bd21b6e63cd38dab903673822db722f619`, all 48 exact-head
+checks and the exact preview passed. Protected run `36291775105` completed
+preparation and reached the same CH-01 step. The Assess preview now reached
+the server and created one preview batch and one exact-case material conflict,
+but the browser stopped before any server action anchor. Its generic
+`BROWSER_ERROR` obscured whether the conflict-count assertion or evidence-panel
+interaction failed. Bounded recovery and deprovisioning passed; read-only
+inspection found zero live exercises, zero unbanned synthetic users, and zero
+observed steps. The focused browser repair preserves safe assertion codes
+through Node's multiline assertion format and opens the evidence panel only
+when closed, with explicit safe arm-stage failures. The full 84-step outcome
+remains `not run` for the repaired head.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

@@ -189,8 +189,8 @@ export const safeBrowserRoute = pageUrl => {
 
 export const safeBrowserStepFailure = (planned, error) => {
   const message = String(error?.message ?? '');
-  const safeCode = /^(PR_C_SYNTHETIC_BROWSER_[A-Z0-9_]+)(?::|$)/u.exec(message)?.[1];
-  const diagnostic = safeCode ?? (/(?:locator\.waitFor|TimeoutError): Timeout [0-9]+ms exceeded/u.test(message) ? 'LOCATOR_TIMEOUT' : 'BROWSER_ERROR');
+  const safeCode = /^(PR_C_SYNTHETIC_BROWSER_[A-Z0-9_]+)(?::|\r?\n|$)/u.exec(message)?.[1];
+  const diagnostic = safeCode ?? (/(?:locator\.[A-Za-z]+|TimeoutError): Timeout [0-9]+ms exceeded/u.test(message) ? 'LOCATOR_TIMEOUT' : 'BROWSER_ERROR');
   return new Error(`PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:${planned.checkpointId}:${planned.stepId}:${diagnostic}`);
 };
 
@@ -864,12 +864,21 @@ const completeVisibleDialog = async (page, stepId, interactionSequence) => {
 
 const armServerStep = async (page, checkpointId, stepId, interactionSequence) => {
   const banner = page.getByTestId('controlled-human-nonproduction-banner');
-  await banner.locator('summary').click();
+  const panel = banner.locator('details');
+  assert.equal(await panel.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ARM_PANEL_COUNT');
+  if (await panel.getAttribute('open') === null) {
+    await panel.locator('summary').click().catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_PANEL_OPEN_FAILED'); });
+  }
   interactionSequence.push('expand:two-phase-evidence');
-  await banner.getByRole('button', { name: 'Refresh evidence steps' }).click();
+  await banner.getByRole('button', { name: 'Refresh evidence steps' }).click()
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_REFRESH_FAILED'); });
   const selector = banner.getByLabel('Controlled-human evidence step');
-  await selector.selectOption(`${checkpointId}:${stepId}`);
-  await banner.getByRole('button', { name: 'Arm before action' }).click();
+  await selector.selectOption(`${checkpointId}:${stepId}`)
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING'); });
+  await banner.getByRole('button', { name: 'Arm before action' }).click()
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_CONTROL_FAILED'); });
+  await banner.getByText('Step armed in this browser tab.', { exact: false }).waitFor({ state: 'visible' })
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_CONFIRMATION_MISSING'); });
   interactionSequence.push(`arm:${checkpointId.toLowerCase()}:${stepId}`);
 };
 
