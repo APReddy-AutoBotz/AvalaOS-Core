@@ -64,6 +64,7 @@ if (mockAssessImportClient) {
     export const isSupabaseConfigured=()=>true;
     export const isControlledHumanRuntimeEnabled=()=>false;
     export const getControlledHumanEvidenceState=()=>({armedStep:null,anchor:null});
+    export const requireControlledHumanBackendAttestation=async()=>null;
     export const beginControlledHumanCommand=async(..._args:any[])=>null;
     export const completeControlledHumanCommand=async(..._args:any[])=>null;
     export const executeControlledHumanDeniedCommand=async(..._args:any[])=>null;
