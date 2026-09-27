@@ -284,3 +284,100 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
     }
   } finally { await browser.close(); }
 });
+
+test('post-Apply authoring links new evidence, persists it, and independently reviews both items', async () => {
+  const { finalizeAssessDraftForReview, prepareAssessReviewApproval, SYNTHETIC_ASSESS_REVIEW_CLAIMS } = await import('./runPrCSyntheticAcceptanceBrowser.mjs');
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<section data-testid="assess-v2-workspace">
+      <p role="status" id="author-status"></p>
+      <details><summary>4. Agent necessity and evidence</summary>
+        <input aria-label="Evidence 1 claim IDs"><input aria-label="Evidence 1 owner" value="Assessment owner">
+        <input aria-label="Evidence 2 claim IDs"><input aria-label="Evidence 2 owner">
+      </details>
+      <button>Reload current draft</button><button>Save V2 draft</button>
+      <button disabled>Finalize reviewer-ready Decision Pack</button>
+    </section>`);
+    await page.evaluate(claims => {
+      const inputs = [...document.querySelectorAll('input')];
+      inputs[0].value = claims.join(', ');
+      let saved = inputs.map(input => input.value);
+      const [reload, save, finalize] = document.querySelectorAll('button');
+      const status = document.querySelector('#author-status');
+      const ready = () => { finalize.disabled = !saved[0] || !saved[2] || inputs.some((input, i) => input.value !== saved[i]); };
+      for (const input of inputs) input.addEventListener('input', ready);
+      reload.addEventListener('click', () => {
+        inputs.forEach((input, i) => { input.value = saved[i]; });
+        status.textContent = 'Current immutable draft projection reloaded.'; ready();
+      });
+      save.addEventListener('click', () => {
+        saved = inputs.map(input => input.value);
+        document.body.dataset.saves = String(Number(document.body.dataset.saves || 0) + 1);
+        status.textContent = 'Draft saved as a new immutable authoring version.'; ready();
+      });
+      finalize.addEventListener('click', () => {
+        const pack = document.createElement('div'); pack.dataset.testid = 'assess-v2-decision-pack'; pack.textContent = 'Reviewer-ready Decision Pack'; document.querySelector('[data-testid="assess-v2-workspace"]').append(pack);
+        const review = document.createElement('section'); review.dataset.testid = 'assess-v2-review-workspace';
+        review.innerHTML = `<section aria-labelledby="evidence-review-title"><h4 id="evidence-review-title">Independent evidence attestation</h4>${[0, 1].map(() => '<article><h5>Evidence submitted</h5><label>Reviewer rationale<textarea></textarea></label><button>Accept evidence</button></article>').join('')}</section><label>Review rationale<textarea></textarea></label><button disabled>Approve reviewed decision</button>`;
+        document.body.append(review);
+        for (const article of review.querySelectorAll('article')) article.querySelector('button').addEventListener('click', () => {
+          if (!article.querySelector('textarea').value.trim()) return;
+          article.querySelector('button').disabled = true;
+          setTimeout(() => {
+            article.querySelector('h5').textContent = 'Evidence accepted'; article.querySelector('button').remove();
+            document.body.dataset.attestations = String(Number(document.body.dataset.attestations || 0) + 1);
+            review.lastElementChild.disabled = review.querySelectorAll('article button').length !== 0;
+          }, 50);
+        });
+      });
+    }, SYNTHETIC_ASSESS_REVIEW_CLAIMS);
+    const interactions = [];
+    assert(await page.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true }).isDisabled());
+    await finalizeAssessDraftForReview(page, interactions);
+    assert.equal(await page.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
+    assert.equal(await page.getByLabel('Evidence 2 claim IDs', { exact: true }).inputValue(), 'primitive.businessDisposition');
+    assert.equal(await page.locator('body').getAttribute('data-saves'), '1');
+    await prepareAssessReviewApproval(page, interactions);
+    assert.equal(await page.locator('body').getAttribute('data-attestations'), '2');
+    assert.equal(await page.getByRole('button', { name: 'Accept evidence', exact: true }).count(), 0);
+    assert(await page.getByRole('button', { name: 'Approve reviewed decision', exact: true }).isEnabled());
+  } finally { await browser.close(); }
+});
+
+test('synthetic authored claims cover the actual scaffold decision trace without promoting unknown facts', async () => {
+  const { build } = await import('vite');
+  const { SYNTHETIC_ASSESS_REVIEW_CLAIMS } = await import('./runPrCSyntheticAcceptanceBrowser.mjs');
+  const workspaceSource = await readFile(new URL('../components/assess-v2/AssessV2Workspace.tsx', import.meta.url), 'utf8');
+  const extract = (start, end) => workspaceSource.slice(workspaceSource.indexOf(start), workspaceSource.indexOf(end));
+  const source = `
+    import { createUnknownAgentNecessityFacts } from './services/assessV2/types';
+    import { evaluateAssessmentV2 } from './services/assessV2/evaluator';
+    import { AP_INVOICE_EXCEPTION_V2_FIXTURE } from './services/assessV2/fixture';
+    ${extract('const unknownInteractionFacts =', 'type InteractionFactKey')}
+    ${extract('const emptyDraft =', 'const toAuthorDraft =')}
+    ${extract('const scaffold =', 'const capabilityCopy:')}
+    export function evaluateFixture(claims) {
+      const draft = scaffold(emptyDraft('synthetic-case', 'Synthetic process', 'Manually reviewed synthetic process'));
+      draft.primitives[0].facts['primitive.rulesStable'] = { fieldId: 'primitive.rulesStable', value: true, status: 'known', source: 'user', evidenceIds: [] };
+      Object.assign(draft.applicationAssets[0], { accountableOwner: 'Synthetic Assess owner', strategicLifespan: 'long' });
+      draft.interactions[0].dataClassification = 'Internal';
+      for (const key of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract']) draft.interactions[0].facts[key] = true;
+      draft.evidenceLinks[0].claimIds = claims;
+      const input = { ...AP_INVOICE_EXCEPTION_V2_FIXTURE, ...draft, assets: draft.applicationAssets, evidence: draft.evidenceLinks, updatedAt: new Date().toISOString() };
+      return { decision: evaluateAssessmentV2(input), agentFacts: input.agentNecessity };
+    }`;
+  const entry = `${process.cwd().replaceAll('\\', '/')}/synthetic-assess-trace-fixture.ts`;
+  const compiled = await build({ configFile: false, envDir: false, logLevel: 'silent',
+    build: { write: false, minify: false, lib: { entry, formats: ['es'] } },
+    plugins: [{ name: 'synthetic-assess-trace-fixture', enforce: 'pre', resolveId: id => id.replaceAll('\\', '/').endsWith('/synthetic-assess-trace-fixture.ts') ? entry : undefined, load: id => id === entry ? source : undefined }],
+  });
+  const { evaluateFixture } = await import(`data:text/javascript;base64,${Buffer.from(compiled[0].output.find(file => file.type === 'chunk').code).toString('base64')}`);
+  const { decision, agentFacts } = evaluateFixture(SYNTHETIC_ASSESS_REVIEW_CLAIMS);
+  const materialClaims = [...new Set(decision.trace.flatMap(item => item.fieldIds))].filter(id => id !== 'evidence.coverage');
+  assert(materialClaims.length > 15);
+  assert.deepEqual(materialClaims.filter(id => !SYNTHETIC_ASSESS_REVIEW_CLAIMS.includes(id)), []);
+  assert(Object.values(agentFacts).every(fact => fact.value === null && fact.status === 'unknown'));
+  assert.equal(decision.candidateEvaluations.find(item => item.component === 'Bounded Agent').fit, 'Weak Fit');
+  assert.equal(decision.confidence, 'Partially Evidenced', 'Authored claim links never grant independent reviewer approval.');
+});

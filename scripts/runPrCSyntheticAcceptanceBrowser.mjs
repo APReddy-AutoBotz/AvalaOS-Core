@@ -1031,6 +1031,16 @@ export const selectStudioTranscriptSources = async (page, interactionSequence, n
   return { sourceCount: names.length, assessSourceCount: 0 };
 };
 
+// Claims covering the synthetic two-primitive/read-interaction decision trace.
+// Evidence confirms the fixture's recorded values, including explicit unknowns;
+// it does not turn unknown facts into known facts or alter deterministic scoring.
+export const SYNTHETIC_ASSESS_REVIEW_CLAIMS = Object.freeze([
+  'primitive.type', 'primitive.businessDisposition', 'primitive.workflowPatternKnown', 'primitive.rulesStable',
+  'agent.irreducibleAmbiguity', 'agent.adaptiveNextStep', 'agent.toolOrPathSelection', 'agent.incrementalValue', 'agent.controllable',
+  'interaction.mode', 'interaction.interfaceAvailable', 'interaction.operationCovered', 'interaction.apiDocumented', 'interaction.errorContract', 'interaction.dataClassified',
+  'asset.strategicLifespan', 'asset.technicalHealth', 'asset.businessCriticality', 'asset.ownershipModel', 'asset.vendorRoadmap', 'asset.operatingStability', 'asset.accountableOwner',
+]);
+
 export const completeAssessDraft = async (page, interactionSequence) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
@@ -1048,6 +1058,9 @@ export const completeAssessDraft = async (page, interactionSequence) => {
   await workspace.getByLabel('Interaction 1 data classification', { exact: true }).selectOption('Internal');
   for (const fact of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'])
     await workspace.getByLabel(`Interaction 1 ${fact}`, { exact: true }).selectOption('true');
+  await workspace.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }).click();
+  await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
+  interactionSequence.push('link:manual-synthetic-decision-claims');
   interactionSequence.push('fill:manual-assess-facts');
   const save = workspace.getByRole('button', { name: 'Save V2 draft', exact: true });
   assert(await save.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_SAVE_DISABLED');
@@ -1066,6 +1079,24 @@ export const finalizeAssessDraftForReview = async (page, interactionSequence) =>
   await workspace.waitFor({ state: 'visible' });
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
   await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
+  const evidencePanel = workspace.locator('details').filter({ has: page.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }) });
+  if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
+  const claims = evidencePanel.getByRole('textbox', { name: /^Evidence \d+ claim IDs$/u });
+  assert.equal(await claims.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
+  let linkedCount = 0;
+  for (let index = 0; index < await claims.count(); index += 1) {
+    if ((await claims.nth(index).inputValue()).trim()) continue;
+    await claims.nth(index).fill('primitive.businessDisposition');
+    await evidencePanel.getByLabel(`Evidence ${index + 1} owner`, { exact: true }).fill('Synthetic Assess owner');
+    linkedCount += 1;
+  }
+  assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
+  await workspace.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+  await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
+  await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
+  await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
+  for (const input of await claims.all()) assert((await input.inputValue()).trim(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
+  interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   const finalize = workspace.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true });
   assert(await finalize.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_FINALIZE_DISABLED');
   await finalize.click();
@@ -1088,11 +1119,16 @@ export const assignAssessReviewer = async (page, interactionSequence) => {
 export const prepareAssessReviewApproval = async (page, interactionSequence) => {
   const review = page.getByTestId('assess-v2-review-workspace');
   await review.waitFor({ state: 'visible' });
-  const evidence = review.getByRole('button', { name: 'Accept evidence', exact: true });
-  assert.equal(await evidence.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_COUNT');
-  await review.getByLabel('Reviewer rationale', { exact: true }).fill('Independent synthetic source and claim check.');
-  await evidence.click();
-  await review.getByText('Evidence attestation committed: Evidence accepted.', { exact: true }).waitFor({ state: 'visible' });
+  const evidence = review.locator('section[aria-labelledby="evidence-review-title"] article');
+  assert.equal(await evidence.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_COUNT');
+  assert.equal(await review.getByRole('button', { name: 'Accept evidence', exact: true }).count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_PENDING_EVIDENCE_COUNT');
+  for (let index = 0; index < 2; index += 1) {
+    const item = evidence.nth(index);
+    await item.getByLabel('Reviewer rationale', { exact: true }).fill('Independent synthetic source check of recorded values and explicit unknowns.');
+    await item.getByRole('button', { name: 'Accept evidence', exact: true }).click();
+    await item.getByRole('heading', { name: 'Evidence accepted', exact: true }).waitFor({ state: 'visible' });
+  }
+  assert.equal(await review.getByRole('button', { name: 'Accept evidence', exact: true }).count(), 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNREVIEWED_EVIDENCE');
   interactionSequence.push('attest:independent-assess-evidence');
   await review.getByLabel('Review rationale', { exact: true }).fill('All material synthetic Assess claims independently checked.');
   assert(await review.getByRole('button', { name: 'Approve reviewed decision', exact: true }).isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPROVAL_DISABLED');
@@ -1372,8 +1408,7 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
       interactionSequence.push('apply:resolved-assess-preview');
       await openSurface(page, 'assess-case', interactionSequence)
         .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CASE_NAVIGATION_FAILED'); });
-      await finalizeAssessDraftForReview(page, interactionSequence)
-        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_FINALIZE_FAILED'); });
+      await finalizeAssessDraftForReview(page, interactionSequence);
       await assignAssessReviewer(page, interactionSequence)
         .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_REVIEWER_ASSIGNMENT_FAILED'); });
     }

@@ -497,3 +497,21 @@ it resolves the recorded click timeout and complete all 84 catalog steps.
 Rollback is the two-class banner change plus its focused test/provenance update.
 While hosted acceptance is incomplete, keep merge blocked; collapsing the evidence
 panel restores workspace space without changing server state or evidence authority.
+
+Run 36316955657 subsequently completed Assess Apply and displayed its confirmation,
+then failed at Decision Pack finalization. Recovery and private-state cleanup both
+succeeded. Read-only inspection of the recovered exercise confirmed the authored
+draft contained two evidence items, one with no claim links, and no finalization
+receipt. The runner had omitted the required authoring of the imported evidence;
+the application's finalization block was correct.
+
+The runner now links the imported evidence, saves a new immutable version, and
+checks the links survive reload before finalizing. The manually authored synthetic
+evidence covers the scaffold's decision trace, including explicitly unknown facts;
+it does not promote unknown values or change scoring. The separate reviewer
+attests both submitted evidence items before attempting approval. The focused local
+suite passes 13/13 checks, covering that sequence; a real evaluator check confirms material claim
+coverage and preserves unknown agent facts and provisional author confidence.
+These are local checks, not a completed hosted campaign. All 84 steps still require
+one passing exact-candidate run. Rollback reverts this runner/test change and its
+provenance entry; retain the merge block and recovered exercise history.
