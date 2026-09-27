@@ -633,3 +633,10 @@ the runner helpers, tests, verification metadata, and provenance together. Keep
 the protected run and merge blocked on any failed prerequisite, ambiguous
 command outcome, proof mismatch, or incomplete campaign; preserve immutable
 exercise history and use the existing recovery/deprovision workflow.
+
+CI additionally caught unclassified dummy hosted-URL and session-storage
+fixtures in the new runner tests. The response-loss tests now use a reserved
+`.invalid` origin, the API shape test derives its dummy project name, and the
+existing exact synthetic-auth storage classification includes that test file.
+The secret-hygiene scan passes with zero forbidden hits; all eight affected
+API/response-loss checks pass. Runtime secret rejection remains unchanged.

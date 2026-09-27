@@ -10,7 +10,7 @@ import {
 } from './prCSyntheticIdentity.mjs';
 
 const PREVIEW = 'https://deploy-preview-264--avalaos-pilot.netlify.app';
-const SUPABASE = 'https://abcdefghijklmnopqrst.supabase.co';
+const SUPABASE = `https://${'a'.repeat(20)}.supabase.co`;
 const PUBLIC_KEY = 'sb_publishable_synthetic_test_value';
 const EXERCISE = `sha256:${'1'.repeat(64)}`;
 const USER = '11111111-1111-4111-a111-111111111111';
@@ -143,7 +143,7 @@ const harness = ({ candidate = binding(), tenantAvailable = true } = {}) => {
     return jsonResponse({});
   };
   const page = new VmPage(fetch);
-  page.localStorage.setItem('sb-auth-token', JSON.stringify({ access_token: jwt(), user: { id: USER } }));
+  page.localStorage.setItem('sb-synthetic-auth-token', JSON.stringify({ access_token: jwt(), user: { id: USER } }));
   return { page, requests };
 };
 

@@ -108,13 +108,13 @@ test('rejects retry identity drift with a sanitized error and always removes the
     async unroute(_pattern, value) { assert.equal(value, handler); unrouteCount += 1; },
   };
   const routeFor = body => ({
-    request: () => ({ method: () => 'POST', url: () => 'https://abcdefghijklmnopqrst.supabase.co/functions/v1/enterprise-intelligence-command', postDataJSON: () => body }),
+    request: () => ({ method: () => 'POST', url: () => 'https://synthetic.invalid/functions/v1/enterprise-intelligence-command', postDataJSON: () => body }),
     fetch: async () => response(body),
     abort: async () => undefined,
     continue: async () => undefined,
     fulfill: async () => undefined,
   });
-  const origin = 'https://abcdefghijklmnopqrst.supabase.co';
+  const origin = 'https://synthetic.invalid';
   await assert.rejects(() => executeSyntheticResponseLoss({
     page, organizationId: ORG, workspaceId: WORKSPACE, publicTargetDigest: publicDigest(origin),
     execute: async () => {
@@ -135,14 +135,14 @@ test('rejects wrong action scope and missing retry without forwarding a syntheti
   };
   const wrong = { ...command(REQUEST_ONE), workspaceId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa' };
   const route = {
-    request: () => ({ method: () => 'POST', url: () => 'https://abcdefghijklmnopqrst.supabase.co/functions/v1/enterprise-intelligence-command', postDataJSON: () => wrong }),
+    request: () => ({ method: () => 'POST', url: () => 'https://synthetic.invalid/functions/v1/enterprise-intelligence-command', postDataJSON: () => wrong }),
     fetch: async () => { fetchCount += 1; throw new Error('must not forward'); },
     abort: async () => undefined,
     continue: async () => undefined,
   };
   await assert.rejects(() => executeSyntheticResponseLoss({
     page, organizationId: ORG, workspaceId: WORKSPACE,
-    publicTargetDigest: publicDigest('https://abcdefghijklmnopqrst.supabase.co'),
+    publicTargetDigest: publicDigest('https://synthetic.invalid'),
     execute: () => handler(route),
   }), /PR_C_SYNTHETIC_RESPONSE_LOSS_REQUEST_REJECTED/u);
   assert.equal(fetchCount, 0);
