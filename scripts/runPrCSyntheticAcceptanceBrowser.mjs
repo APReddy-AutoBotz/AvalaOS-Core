@@ -1636,6 +1636,7 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       const api = await attachSyntheticBrowserApi({ page, personaKey, binding: binding.binding });
       const identity = await signIn({ page, personaKey, password: binding.passwords[personaKey], ...binding });
       await api.setIdentity(identity);
+      if (personaKey === 'requester') await api.verifyStudioTransport();
       personas.set(personaKey, { context, page, identity, api });
     }
     const records = createCheckpointRecords();

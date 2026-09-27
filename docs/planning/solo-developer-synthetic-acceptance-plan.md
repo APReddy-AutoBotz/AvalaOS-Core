@@ -640,3 +640,39 @@ fixtures in the new runner tests. The response-loss tests now use a reserved
 existing exact synthetic-auth storage classification includes that test file.
 The secret-hygiene scan passes with zero forbidden hits; all eight affected
 API/response-loss checks pass. Runtime secret rejection remains unchanged.
+
+Run 36343457705 passed preparation and exact-preview verification, then failed
+at CH-02's edit confirmation. Recovery and private-state cleanup succeeded.
+Bounded read-only inspection confirmed one committed draft revision with valid
+two-section content and no post-command projection reload. The deployed Studio
+handler used bare JSON responses without CORS, while the reviewed candidate
+uses the shared CORS response helper. The browser could send the write but could
+not read its committed response. This is confirmed deployed-source drift; prior
+deployment metadata checks did not prove equality with the candidate source.
+
+The runner now performs an authenticated empty-envelope Studio request before
+any catalog business action. It must receive a readable 400 `INVALID_COMMAND`
+with `failed_before_commit`; network/CORS failures and unexpected success stop
+the campaign immediately. The probe supplies no command selectors and cannot
+be counted as command evidence. A native-browser local check verifies that CORS
+permits the rejected response without exposing the allow-origin header to
+JavaScript, and that missing CORS stops the probe. All 54 feature-owned synthetic
+checks pass, including eight focused API checks. Secret hygiene, AI boundary,
+diff integrity, and the 85-command/241-assertion provenance contract also pass.
+
+Read-only source comparison identified eight stale functions in the existing
+synthetic deployment allowlist; the query function already matches. Their exact
+reviewed import graphs and a bounded replacement plan received AP's explicit
+deployment approval after the initial automatic approval rejection. All eight
+functions were deployed to the approved synthetic project; every downloaded
+source file matches the reviewed graph and all eight retain JWT verification.
+An actual browser on the PR preview read Studio's 401 `AUTHENTICATION_REQUIRED`
+response with `failed_before_commit` using an empty request and the existing
+public anonymous key. This proves cross-origin rejection readability without
+performing a business command. The authenticated 400 preflight and complete
+catalog still require a fresh exact-candidate campaign. Provider settings,
+schema, credentials, and immutable exercise history were not changed.
+Rollback reverts the preflight/test/provenance change together; the
+safe fallback retains the merge block and inactive exercise rather than retrying
+business commands against an unverified backend. Full synthetic acceptance is
+not passed; original `CONTROLLED-HUMAN` remains `not_run`.

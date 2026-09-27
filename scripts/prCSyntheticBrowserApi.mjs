@@ -305,6 +305,25 @@ function installBrowserRuntime(config) {
       persist(); return true;
     },
     async context() { return freshContext(); },
+    async verifyStudioTransport() {
+      await attest();
+      const current = await requireIdentity();
+      let response;
+      try {
+        // An empty envelope is rejected before authority lookup or mutation.
+        // Exercise actual browser CORS before any journey can commit a write.
+        response = await baseFetch(`${state.origin}/functions/v1/studio-artifact-command`, {
+          method: 'POST', headers: { apikey: state.apiKey, authorization: `Bearer ${current.accessToken}`, 'content-type': 'application/json' }, body: '{}',
+        });
+      } catch { error('PR_C_SYNTHETIC_BROWSER_API_STUDIO_TRANSPORT_UNREADABLE'); }
+      // A resolved native fetch with a readable body proves browser CORS. The
+      // allow-origin header itself is not exposed to cross-origin JavaScript.
+      let payload;
+      try { payload = await response.json(); } catch { error('PR_C_SYNTHETIC_BROWSER_API_STUDIO_TRANSPORT_REJECTED'); }
+      if (response.status !== 400 || payload?.ok !== false || payload?.outcome !== 'failed_before_commit' || payload?.error?.code !== 'INVALID_COMMAND')
+        error('PR_C_SYNTHETIC_BROWSER_API_STUDIO_TRANSPORT_REJECTED');
+      return { readable: true, rejectedBeforeCommit: true };
+    },
     async rpc(name, args, controlled) {
       await attest();
       if (name === 'pr_c_controlled_human_public_attestation') return validateAttestation(await fetchJson(`/rest/v1/rpc/${name}`, args));
@@ -374,6 +393,10 @@ export async function attachSyntheticBrowserApi({ page, personaKey, binding, ide
       return expectedIdentity;
     },
     async context() { return evaluate(page, 'context', [], 'PR_C_SYNTHETIC_BROWSER_API_CONTEXT_REJECTED'); },
+    async verifyStudioTransport() {
+      if (personaKey !== 'requester' || activeAnchor) fail('PR_C_SYNTHETIC_BROWSER_API_ACTION_REJECTED');
+      return evaluate(page, 'verifyStudioTransport', [], 'PR_C_SYNTHETIC_BROWSER_API_STUDIO_TRANSPORT_REJECTED');
+    },
     async rpc(name, args) {
       if (!CONTROLLED_RPCS.has(name) && !READ_RPCS.has(name)) fail('PR_C_SYNTHETIC_BROWSER_API_ENDPOINT_REJECTED');
       const input = cloneJson(args);

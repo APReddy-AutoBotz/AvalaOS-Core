@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash, webcrypto } from 'node:crypto';
+import { createServer } from 'node:http';
 import test from 'node:test';
 import vm from 'node:vm';
+import { chromium } from '@playwright/test';
 
 import { attachSyntheticBrowserApi } from './prCSyntheticBrowserApi.mjs';
 import {
@@ -116,13 +118,14 @@ const attestation = candidate => ({
 
 const jsonResponse = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
 
-const harness = ({ candidate = binding(), tenantAvailable = true } = {}) => {
+const harness = ({ candidate = binding(), tenantAvailable = true, studioProbe } = {}) => {
   const requests = [];
   const fetch = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
     let body = null;
     if (typeof init.body === 'string') body = JSON.parse(init.body);
     requests.push({ url: url.href, pathname: url.pathname, body });
+    if (url.pathname === '/functions/v1/studio-artifact-command' && Object.keys(body ?? {}).length === 0 && studioProbe) return studioProbe();
     if (url.pathname.startsWith('/auth/v1/')) return jsonResponse({ user: { id: USER } });
     if (url.pathname.endsWith('/pr_c_controlled_human_public_attestation')) return jsonResponse(attestation(candidate));
     if (url.pathname === '/functions/v1/tenant-session') {
@@ -150,6 +153,80 @@ const harness = ({ candidate = binding(), tenantAvailable = true } = {}) => {
 const observePublicTarget = page => page.evaluate(async ({ origin, apiKey }) => {
   await fetch(`${origin}/auth/v1/user`, { headers: { apikey: apiKey } });
 }, { origin: SUPABASE, apiKey: PUBLIC_KEY });
+
+test('checks readable Studio transport with an empty rejected envelope before business mutations', async () => {
+  const payload = { ok: false, outcome: 'failed_before_commit', error: { code: 'INVALID_COMMAND' } };
+  for (const origin of ['*', PREVIEW]) {
+    const candidate = binding();
+    const { page, requests } = harness({ candidate, studioProbe: () => new Response(JSON.stringify(payload), {
+      status: 400, headers: { 'content-type': 'application/json', 'access-control-allow-origin': origin },
+    }) });
+    const api = await attachSyntheticBrowserApi({ page, personaKey: 'requester', binding: candidate });
+    await observePublicTarget(page); await api.setIdentity(identity('requester'));
+    const result = await api.verifyStudioTransport();
+    assert.equal(result.readable, true); assert.equal(result.rejectedBeforeCommit, true);
+    assert.deepEqual(requests.filter(item => item.pathname === '/functions/v1/studio-artifact-command').map(item => item.body), [{}]);
+    assert.equal(await api.lastCommand(), null, 'invalid-envelope probe is never business-command evidence');
+  }
+});
+
+test('fails Studio transport preflight on unreadable CORS or unexpected success', async () => {
+  const cases = [
+    [() => { throw new TypeError('Failed to fetch private-target'); }, 'UNREADABLE'],
+    [() => new Response(JSON.stringify({ ok: true }), { status: 201, headers: { 'access-control-allow-origin': '*' } }), 'REJECTED'],
+  ];
+  for (const [studioProbe, code] of cases) {
+    const candidate = binding(); const { page } = harness({ candidate, studioProbe });
+    const api = await attachSyntheticBrowserApi({ page, personaKey: 'requester', binding: candidate });
+    await observePublicTarget(page); await api.setIdentity(identity('requester'));
+    await assert.rejects(() => api.verifyStudioTransport(), error => error.message === `PR_C_SYNTHETIC_BROWSER_API_STUDIO_TRANSPORT_${code}`);
+  }
+});
+
+test('native browser CORS permits the rejected probe without exposing allow-origin and blocks missing CORS', async () => {
+  let cors = true;
+  const bodies = [];
+  const server = createServer(async (request, response) => {
+    if (request.url === '/') { response.end('<!doctype html><title>Local transport check</title>'); return; }
+    if (cors) {
+      response.setHeader('access-control-allow-origin', '*');
+      response.setHeader('access-control-allow-headers', 'content-type,apikey,authorization');
+      response.setHeader('access-control-allow-methods', 'POST,OPTIONS');
+    }
+    if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+    let body = ''; for await (const chunk of request) body += chunk;
+    bodies.push(body);
+    response.writeHead(400, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ ok: false, outcome: 'failed_before_commit', error: { code: 'INVALID_COMMAND' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const browserPage = await browser.newPage();
+    const port = server.address().port;
+    await browserPage.goto(`http://localhost:${port}/`);
+    const studioProbe = async () => {
+      const observed = await browserPage.evaluate(async url => {
+        const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', apikey: 'dummy', authorization: 'Bearer dummy' }, body: '{}' });
+        return { status: response.status, body: await response.text(), visibleAllowOrigin: response.headers.get('access-control-allow-origin') };
+      }, `http://127.0.0.1:${port}/probe`);
+      assert.equal(observed.visibleAllowOrigin, null, 'CORS headers are not exposed to page JavaScript');
+      return new Response(observed.body, { status: observed.status });
+    };
+    const candidate = binding(); const { page } = harness({ candidate, studioProbe });
+    const api = await attachSyntheticBrowserApi({ page, personaKey: 'requester', binding: candidate });
+    await observePublicTarget(page); await api.setIdentity(identity('requester'));
+    assert.equal((await api.verifyStudioTransport()).rejectedBeforeCommit, true);
+    cors = false;
+    await assert.rejects(() => api.verifyStudioTransport(), /PR_C_SYNTHETIC_BROWSER_API_STUDIO_TRANSPORT_UNREADABLE/u);
+    assert(bodies.length > 0); assert(bodies.every(body => body === '{}'));
+    assert.equal(await api.lastCommand(), null);
+  } finally {
+    await browser?.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
 
 test('uses the persisted browser identity and fresh tenant context for scoped public reads and prerequisites', async () => {
   const candidate = binding();
