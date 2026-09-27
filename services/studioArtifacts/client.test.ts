@@ -154,6 +154,35 @@ void(async()=>{let envelope:any;
   await executeStudioWorkspaceCommand(context,'studio.source-package.create',0,{sourceMode:'manual_brief',artifactType:'brd',manualBrief:'Controlled brief'},'controlled-manual-brief',workspaceTransport);
   assert.equal(controlledCalls.at(-1).action,'studio.source-package.create');assert.equal(controlledCompletions.length,8);
   delete (globalThis as any).__controlledHumanBegin;delete (globalThis as any).__controlledHumanComplete;
+  // CH-02 edits/submits/assigns before its independently anchored review and approval.
+  const preanchorRequired=new Error('RUNTIME_CONTROLLED_HUMAN_PREANCHOR_REQUIRED');
+  (globalThis as any).__controlledHumanBegin=async()=>{throw preanchorRequired;};
+  const prerequisiteEnvelopes:any[]=[];
+  const prerequisiteTransport:StudioArtifactTransport={...transport,invoke:async(value)=>{prerequisiteEnvelopes.push(value);return response;}};
+  for(const commandType of ['studio.artifact.draft.revise','studio.artifact.review.submit','studio.artifact.review.assign'] as const){
+    const result=await executeStudioArtifactCommand(context,commandType,projection as any,{artifactVersionId:U[7]},`prerequisite-${commandType}`,prerequisiteTransport);
+    assert.equal(result.outcome,'committed');
+    const sent=prerequisiteEnvelopes.at(-1);
+    assert.equal(sent.commandType,commandType);assert.equal(sent.idempotencyKey,`prerequisite-${commandType}`);
+    assert.equal(sent.authorizationVersion,context.authorizationVersion);assert.equal(sent.expectedAggregateVersion,projection.aggregateVersion);assert.equal(sent.expectedArtifactVersion,version.version);
+    await assert.rejects(()=>executeStudioArtifactCommand(context,commandType,projection as any,{},'denied-prerequisite',{...transport,invoke:async()=>{throw{error:{code:'PERMISSION_DENIED'}};}}),error=>error instanceof StudioArtifactBoundaryError&&error.code==='PERMISSION_DENIED');
+  }
+  assert.equal(prerequisiteEnvelopes.length,3);
+  for(const commandType of ['studio.artifact.review.resolve','studio.artifact.approval.resolve','studio.artifact.generation.request'] as const){
+    await assert.rejects(()=>executeStudioArtifactCommand(context,commandType,projection as any,{artifactVersionId:U[7],outcome:'approve',rationale:'Independent decision',conditions:[]},'unarmed-decision',prerequisiteTransport),error=>error===preanchorRequired);
+  }
+  assert.equal(prerequisiteEnvelopes.length,3,'unarmed decisions must not reach the server');
+  const anchoredDecisions:any[]=[];
+  (globalThis as any).__controlledHumanBegin=async(input:any)=>{anchoredDecisions.push(input);return{requestId:U[0],businessIdempotencyKey:'anchored-decision',safeAnchor:input};};
+  (globalThis as any).__controlledHumanComplete=async(anchor:any)=>{assert.equal(anchor.requestId,U[0]);controlledCompletions.push(anchor);};
+  for(const commandType of ['studio.artifact.review.resolve','studio.artifact.approval.resolve'] as const){
+    await executeStudioArtifactCommand(context,commandType,projection as any,{artifactVersionId:U[7],outcome:'approve',rationale:'Independent decision',conditions:[]},'ignored-key',prerequisiteTransport);
+    assert.equal(prerequisiteEnvelopes.at(-1).requestId,U[0]);assert.equal(prerequisiteEnvelopes.at(-1).idempotencyKey,'anchored-decision');
+    assert.equal(anchoredDecisions.at(-1).action,commandType);assert.equal(anchoredDecisions.at(-1).selectorBindings.artifactVersionId,U[7]);
+  }
+  assert.equal(controlledCompletions.length,10);
+  delete (globalThis as any).__controlledHumanBegin;delete (globalThis as any).__controlledHumanComplete;
+  console.log('Studio controlled capture: three prerequisites, denied commands, unarmed decisions and two anchored decisions passed');
   await executeStudioWorkspaceCommand(context,'studio.template.revise',2,{templateVersionId:U[4]},'workspace-revise-key',workspaceTransport);assert.equal(envelope.expectedArtifactVersion,2);
   for(const badVersion of [-1,1.5])await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.source-package.create',badVersion,{},'bad-version',workspaceTransport),StudioArtifactBoundaryError);
   await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.source-package.create',0,{},'missing-invoke',{...transport,invokeWorkspace:undefined}),StudioArtifactBoundaryError);

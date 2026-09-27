@@ -573,3 +573,22 @@ full reload, delayed reviewer discovery, and rejection of genuinely duplicated
 document matches. No application permission, server authority, or acceptance
 rule changes. Rollback reverts these runner/test changes and their provenance;
 the full 84-step exact-candidate hosted campaign and merge remain pending.
+
+Run 36332397332 passed preparation and preview verification, then stopped at
+CH-02's edit confirmation. Recovery and private-state cleanup succeeded. Bounded
+read-only inspection found no draft-revision receipt or Studio command invocation.
+The confirmed source defect was the client's unconditional capture pre-anchor:
+CH-02's browser-only draft preparation has no command anchor, so revision was
+rejected before transport. The client now leaves only draft revision, submission,
+and reviewer assignment on their ordinary server-authorized command path. Review,
+approval, and generation retain their existing capture requirements.
+
+A focused client test first reproduced `RUNTIME_CONTROLLED_HUMAN_PREANCHOR_REQUIRED`
+on the old implementation. It now passes all three prerequisites, preserved server
+permission denials and version/idempotency fields, unarmed decision rejection, and
+anchored independent review/approval completion. Six existing real-component
+desktop/Pixel edit, submission, assignment, reload, and selection scenarios pass;
+TypeScript also passes. These are local executed evidence, not full hosted PASS.
+Rollback reverts the client correction and its focused test/provenance entries;
+retain the failed exercise history and merge block until all 84 steps pass on one
+exact candidate.

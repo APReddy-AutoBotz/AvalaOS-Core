@@ -341,7 +341,9 @@ export const executeStudioArtifactCommand=async(context:TenantContextProjection,
     artifactId,artifactVersionId:payload.artifactVersionId,outcome:payload.outcome,
     rationaleDigest:await digest(payload.rationale),conditionsDigest:await digest(payload.conditions??[]),
   }:{artifactVersionId:typeof payload.artifactVersionId==='string'?payload.artifactVersionId:null};
-  const anchor=await beginControlledHumanCommand({action:commandType,targetFamily:'studio_artifact',targetId:artifactId,expectedVersion:expectedAggregateVersion,selectorBindings:selectors});
+  // CH-02 records draft preparation as browser evidence; its independent decisions have command anchors.
+  const draftPrerequisite=commandType==='studio.artifact.draft.revise'||commandType==='studio.artifact.review.submit'||commandType==='studio.artifact.review.assign';
+  const anchor=draftPrerequisite?null:await beginControlledHumanCommand({action:commandType,targetFamily:'studio_artifact',targetId:artifactId,expectedVersion:expectedAggregateVersion,selectorBindings:selectors});
   const envelope:StudioCommandEnvelope<Record<string,unknown>>={requestId:anchor?.requestId??crypto.randomUUID(),idempotencyKey:anchor?.businessIdempotencyKey??idempotencyKey,commandType,organizationId:context.organizationId,workspaceId:context.workspaceId,authorizationVersion:context.authorizationVersion,expectedAggregateVersion,expectedArtifactVersion:commandType==='studio.artifact.generation.request'?null:projection?.currentVersion.version??null,payload};
   try{const result=decodeStudioCommandResponse(await transport.invoke(envelope));if(anchor)await completeControlledHumanCommand(anchor);return result;}catch(error){if(error instanceof StudioArtifactBoundaryError)throw error;throw decodeStudioSafeError(error);}
 };
