@@ -38,8 +38,9 @@ host.readFile = file => path.resolve(file) === supabaseClient
      export type ControlledHumanCompletedProof={safeAnchor:ControlledHumanSafeStepAnchor;safeBinding:ControlledHumanSafeStepBinding};
      export type ControlledHumanStepBindingOption={checkpointId:string;stepId:string;action:string;observationKind:string;state:string;safeAnchor:ControlledHumanSafeStepAnchor|null;safeBinding:ControlledHumanSafeStepBinding|null};
      export const getRuntimeDataAccess=()=> 'server';export const isSupabaseConfigured=()=>true;
-     export const isControlledHumanRuntimeEnabled=()=>false;
-     export const getControlledHumanEvidenceState=()=>({armedStep:null,anchor:null});
+     export const isControlledHumanRuntimeEnabled=()=>Boolean((globalThis as any).__prCControlledEnabled);
+     export const getControlledHumanEvidenceState=()=>({armedStep:(globalThis as any).__prCArmedStep??null,anchor:null});
+     export const requireControlledHumanBackendAttestation=async()=>{(globalThis as any).__prCAttestationCount=((globalThis as any).__prCAttestationCount??0)+1;return (globalThis as any).__prCAttestationDenied?null:{attested:true}};
      export const beginControlledHumanCommand=async(..._args:any[])=>null;
      export const completeControlledHumanCommand=async(..._args:any[])=>null;
      export const executeControlledHumanDeniedCommand=async(..._args:any[])=>null;

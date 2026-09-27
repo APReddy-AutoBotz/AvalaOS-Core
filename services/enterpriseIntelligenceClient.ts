@@ -6,6 +6,7 @@ import {
   getRuntimeDataAccess,
   isControlledHumanRuntimeEnabled,
   isSupabaseConfigured,
+  requireControlledHumanBackendAttestation,
   supabase,
 } from './supabaseClient';
 import {
@@ -328,6 +329,9 @@ export const controlledHumanTarget = (commandType: string, workspaceId: string, 
   return null;
 };
 
+export const controlledHumanAssessPrerequisite = (commandType: string, hasArmedStep: boolean) =>
+  !hasArmedStep && (commandType === 'transcript.assess.apply.preview' || commandType === 'transcript.assess.apply.commit');
+
 const controlledHumanSelectors = async (commandType: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> => {
   const digest = (key: string) => controlledHumanDigest(payload[key] ?? null);
   switch (commandType) {
@@ -416,8 +420,11 @@ const invokeCommand = async <T>(input: {
   outcomeUnknownCodes?: readonly string[];
 }): Promise<T> => {
   if (!commandEnabled()) throw new Error('Enterprise Intelligence requires server runtime authority.');
-  const controlledTarget = isControlledHumanRuntimeEnabled() ? controlledHumanTarget(input.commandType, input.workspaceId, input.payload) : null;
-  if (isControlledHumanRuntimeEnabled() && !controlledTarget) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+  const controlled = isControlledHumanRuntimeEnabled();
+  const controlledTarget = controlled ? controlledHumanTarget(input.commandType, input.workspaceId, input.payload) : null;
+  const assessPrerequisite = controlled && controlledHumanAssessPrerequisite(input.commandType, Boolean(getControlledHumanEvidenceState().armedStep));
+  if (controlled && !controlledTarget && !assessPrerequisite) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+  if (assessPrerequisite && !await requireControlledHumanBackendAttestation()) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
   const controlledAnchor = controlledTarget ? await beginControlledHumanCommand({ action: input.commandType, ...controlledTarget, selectorBindings: await controlledHumanSelectors(input.commandType, input.controlledSelectorPayload ?? input.payload) }) : null;
   if (controlledAnchor && getControlledHumanEvidenceState().armedStep?.observationKind === 'negative_attempt') {
     await executeControlledHumanDeniedCommand(controlledAnchor);

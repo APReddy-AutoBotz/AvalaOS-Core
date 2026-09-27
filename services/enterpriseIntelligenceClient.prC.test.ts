@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DeliveryMonitorCommandInputError, buildDeliveryMonitorSelectorPayload, type DeliveryMonitorCommandInput } from './deliveryMonitor/commands';
 import { DELIVERY_MONITOR_FIXTURE_IDS as ids } from './deliveryMonitor/fixtures';
-import { controlledHumanTarget, enterpriseIntelligenceClient } from './enterpriseIntelligenceClient';
+import { controlledHumanAssessPrerequisite, controlledHumanTarget, enterpriseIntelligenceClient } from './enterpriseIntelligenceClient';
 import { emitPrCAssertion } from '../supabase/functions/_shared/deliveryMonitorPrCTestEvidence';
 
 type Invocation = {
@@ -125,6 +125,12 @@ const cases: Array<{
 ];
 
 const run = async () => {
+for (const action of ['transcript.assess.apply.preview', 'transcript.assess.apply.commit']) {
+  assert.equal(controlledHumanAssessPrerequisite(action, false), true);
+  assert.equal(controlledHumanAssessPrerequisite(action, true), false);
+}
+assert.equal(controlledHumanAssessPrerequisite('transcript.assess.conflict.resolve', false), false);
+assert.equal(controlledHumanAssessPrerequisite('delivery.package.create.manual', false), false);
 assert.deepEqual(controlledHumanTarget('delivery.package.revision.commit', ids.workspaceId, {
   workPackageId: ids.packageId, expectedPackageVersion: 7, expectedPackageAggregateVersion: 19,
 }), { targetFamily: 'delivery_work_package', targetId: ids.packageId, expectedVersion: 19 });
@@ -133,6 +139,34 @@ for (const action of ['delivery.package.review.resolve', 'delivery.package.appro
     workPackageId: ids.packageId, expectedPackageVersion: 7, expectedPackageAggregateVersion: 19,
   }), { targetFamily: 'delivery_work_package', targetId: ids.packageId, expectedVersion: 7 });
 }
+const controlledState = globalThis as typeof globalThis & { __prCControlledEnabled?: boolean; __prCArmedStep?: object | null; __prCAttestationCount?: number; __prCAttestationDenied?: boolean };
+const assessPreviewInput = {
+  organizationId: ids.organizationId, workspaceId: ids.workspaceId, assessDraftId: ids.packageId,
+  expectedDraftVersion: 2, inputBundleId: ids.artifactId, inputBundleVersionSelector: ids.artifactVersionId,
+  expectedInputBundleVersion: 1,
+  sourceSetVersions: [{ sourceSetId: ids.handoffId, sourceSetVersionSelector: ids.packageVersionId, expectedVersion: 1 }],
+  selections: [{ candidateId: ids.itemAggregateId, candidateVersion: 1, intent: 'set_case_field' as const, target: 'description' }],
+};
+controlledState.__prCControlledEnabled = true;
+controlledState.__prCArmedStep = null;
+controlledState.__prCAttestationCount = 0;
+invocations.length = 0;
+await enterpriseIntelligenceClient.previewTranscriptAssessApply(assessPreviewInput);
+assert.equal(invocations.length, 1, 'unarmed Assess preview prerequisite reaches the server once');
+assert.equal(invocations[0].options.body.commandType, 'transcript.assess.apply.preview');
+await enterpriseIntelligenceClient.applyTranscriptAssessPreview({ ...assessPreviewInput, previewBatchId: ids.baselineId });
+assert.equal(invocations.length, 2, 'unarmed Assess apply prerequisite reaches the server once');
+assert.equal(invocations[1].options.body.commandType, 'transcript.assess.apply.commit');
+assert.equal(controlledState.__prCAttestationCount, 2, 'each prerequisite requires the exact backend attestation');
+controlledState.__prCAttestationDenied = true;
+await assert.rejects(enterpriseIntelligenceClient.previewTranscriptAssessApply(assessPreviewInput), (error: any) => error.code === 'COMMAND_BLOCKED');
+assert.equal(invocations.length, 2, 'missing backend attestation cannot dispatch an Assess prerequisite');
+controlledState.__prCAttestationDenied = false;
+controlledState.__prCArmedStep = { stepId: 'resolve-material-assess-conflict' };
+await assert.rejects(enterpriseIntelligenceClient.previewTranscriptAssessApply(assessPreviewInput), (error: any) => error.code === 'COMMAND_BLOCKED');
+assert.equal(invocations.length, 2, 'an armed observed step cannot dispatch a prerequisite command');
+controlledState.__prCControlledEnabled = false;
+controlledState.__prCArmedStep = null;
 for (const testCase of cases) {
   invocations.length = 0;
   await testCase.invoke();

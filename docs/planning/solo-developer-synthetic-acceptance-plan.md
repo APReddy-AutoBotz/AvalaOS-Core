@@ -291,6 +291,20 @@ unchanged query sites with only that added column, and the focused harness now
 passes all 78 tests. The full 84-step hosted outcome remains `not run` for
 this head.
 
+At head `4a82554dc606dcd6f8cfec33b6e2eee5d32a27f8`, all 48 exact-head
+checks and the exact preview passed. Protected run `36286264339` completed
+preparation and reached the third CH-01 browser step, but no Assess preview or
+material conflict appeared. Bounded recovery and private-state cleanup passed;
+read-only inspection found the exercise deprovisioned, zero unbanned synthetic
+users, zero apply previews, and zero server step observations. Nonproduction
+function metadata showed no preview command request in the failure window. The
+controlled client rejected the prerequisite preview before transport because
+it only admitted anchored observer actions. The focused repair admits only
+unarmed, backend-attested Assess preview and apply prerequisites; observed
+actions remain separately anchored. Two preliminary browser interactions ran,
+but none of the 84 steps has final verified acceptance evidence. The failed
+third step and 81 later steps remain unverified; no complete 84-step PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for

@@ -501,7 +501,7 @@
     },
     "client-transport": {
       "path": "services/enterpriseIntelligenceClient.prC.test.ts",
-      "sha256": "ec674c009b598b9b007e45c21b4cb89879966d3339c98296a9424a3af20474c5"
+      "sha256": "b85da17efe441f7247a447e1876c8d8366c5694057b3cdde1723b9ff298701be"
     },
     "api-command": {
       "path": "supabase/functions/_shared/deliveryMonitorCommand.test.ts",
