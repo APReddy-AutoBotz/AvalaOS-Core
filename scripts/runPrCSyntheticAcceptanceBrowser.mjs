@@ -889,14 +889,28 @@ const armServerStep = async (page, checkpointId, stepId, interactionSequence) =>
   interactionSequence.push(`arm:${checkpointId.toLowerCase()}:${stepId}`);
 };
 
-const collectProof = async (page, checkpointId, stepId, interactionSequence) => {
+export const collectProof = async (page, checkpointId, stepId, interactionSequence) => {
   const banner = page.getByTestId('controlled-human-nonproduction-banner');
-  await banner.getByRole('button', { name: 'Refresh evidence steps' }).click();
-  const completed = banner.getByLabel('Completed controlled-human evidence step');
-  await completed.selectOption(`${checkpointId}:${stepId}`);
+  const panel = banner.locator('details');
+  if (await panel.getAttribute('open') === null) {
+    await panel.locator('summary').click()
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_OPEN_FAILED'); });
+  }
+  await banner.getByRole('button', { name: 'Refresh evidence steps', exact: true }).click()
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_REFRESH_CONTROL_MISSING'); });
+  const completed = banner.getByLabel('Completed controlled-human evidence step', { exact: true });
+  const stepKey = `${checkpointId}:${stepId}`;
+  await completed.selectOption(stepKey, { timeout: 15_000 }).catch(async () => {
+    const rejected = await banner.getByText('Sign in as the assigned synthetic persona, then refresh evidence steps. No evidence was recorded.', { exact: true }).isVisible().catch(() => false);
+    throw new Error(rejected ? 'PR_C_SYNTHETIC_BROWSER_PROOF_REFRESH_REJECTED' : 'PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING');
+  });
   interactionSequence.push(`inspect-proof:${checkpointId.toLowerCase()}:${stepId}`);
-  const anchor = JSON.parse(await banner.getByTestId('controlled-human-safe-anchor').textContent());
-  const binding = JSON.parse(await banner.getByTestId('controlled-human-safe-binding').textContent());
+  const anchorText = await banner.getByTestId('controlled-human-safe-anchor').textContent({ timeout: 10_000 })
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_ANCHOR_MISSING'); });
+  const bindingText = await banner.getByTestId('controlled-human-safe-binding').textContent({ timeout: 10_000 })
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_BINDING_MISSING'); });
+  const anchor = JSON.parse(anchorText);
+  const binding = JSON.parse(bindingText);
   assert.equal(anchor.stepId, stepId, 'PR_C_SYNTHETIC_BROWSER_ANCHOR_STEP_MISMATCH');
   assert.equal(binding.stepId, stepId, 'PR_C_SYNTHETIC_BROWSER_BINDING_STEP_MISMATCH');
   return { serverAnchor: anchor, serverBinding: binding };
@@ -1350,13 +1364,18 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
     proof = await collectProof(page, planned.checkpointId, planned.stepId, interactionSequence);
     if (key === 'CH-01:resolve-material-assess-conflict') {
       const apply = page.getByRole('button', { name: 'Apply batch as one Assess draft version', exact: true });
-      assert(await apply.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLY_DISABLED');
-      await apply.click();
-      await page.getByText('Selected batch applied atomically as one new Assess draft version.', { exact: true }).waitFor({ state: 'visible' });
+      const applyEnabled = await apply.isEnabled().catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_APPLY_CONTROL_MISSING'); });
+      assert(applyEnabled, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLY_DISABLED');
+      await apply.click().catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_APPLY_CONTROL_FAILED'); });
+      await page.getByText('Selected batch applied atomically as one new Assess draft version.', { exact: true }).waitFor({ state: 'visible' })
+        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_APPLY_CONFIRMATION_MISSING'); });
       interactionSequence.push('apply:resolved-assess-preview');
-      await openSurface(page, 'assess-case', interactionSequence);
-      await finalizeAssessDraftForReview(page, interactionSequence);
-      await assignAssessReviewer(page, interactionSequence);
+      await openSurface(page, 'assess-case', interactionSequence)
+        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CASE_NAVIGATION_FAILED'); });
+      await finalizeAssessDraftForReview(page, interactionSequence)
+        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_FINALIZE_FAILED'); });
+      await assignAssessReviewer(page, interactionSequence)
+        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_REVIEWER_ASSIGNMENT_FAILED'); });
     }
     if (key === 'CH-08:create-baseline-with-exact-package-selectors') {
       const count = await baselineCount(page); assert.equal(count, Number(state.get('baseline-before-create')) + 1); state.set('baseline-after-create', count);
