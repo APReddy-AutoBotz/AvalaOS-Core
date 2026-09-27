@@ -66,6 +66,7 @@ const EXPECTED_SUPABASE_CLIENT_IMPORTS = Object.freeze([
   'isControlledHumanRuntimeEnabled',
   'isSupabaseConfigured',
   'prepareControlledHumanOfflineLineage',
+  'requireControlledHumanBackendAttestation',
   'supabase',
 ]);
 const SUPABASE_CLIENT_STUB = `
@@ -79,6 +80,7 @@ export const getRuntimeDataAccess=(): 'server' => 'server';
 export const isSupabaseConfigured=():boolean=>true;
 export const isControlledHumanRuntimeEnabled=():boolean=>false;
 export const getControlledHumanEvidenceState=():{armedStep:ControlledHumanStepBindingOption|null;safeAnchor:ControlledHumanSafeStepAnchor|null}=>({armedStep:null,safeAnchor:null});
+export const requireControlledHumanBackendAttestation=async()=>null;
 export const beginControlledHumanCommand=async(input:{action:string;targetFamily:string;targetId:string;expectedVersion:number;selectorBindings:Record<string,unknown>}):Promise<ControlledHumanCommandAnchor|null>=>{const f=(globalThis as any).__controlledHumanBegin;if(f)return f(input);return isControlledHumanRuntimeEnabled()?rejectControlledHumanCoverageInvocation():null};
 export const completeControlledHumanCommand=async(anchor:ControlledHumanCommandAnchor):Promise<ControlledHumanSafeStepBinding>=>{const f=(globalThis as any).__controlledHumanComplete;if(!f)return rejectControlledHumanCoverageInvocation();return f(anchor)};
 export const executeControlledHumanDeniedCommand=async(_anchor:ControlledHumanCommandAnchor):Promise<ControlledHumanSafeStepBinding>=>rejectControlledHumanCoverageInvocation();
