@@ -405,6 +405,12 @@ export const installEnterpriseFixture = async (page: Page, options: FixtureOptio
     get cloneEvidenceVersionReads(){ return cloneEvidenceVersionReads; },
     setAssessmentStatus(status: string){ if (assessment) assessment={...assessment,status}; },
     setV2CommandFailure(failure: FixtureOptions['failV2Command']){ failV2Command = failure; },
+    commitTranscriptEvidence(evidence: AssessmentCaseV2['evidence'][number]) {
+      if (!v2Case) throw new Error('A V2 draft must exist before transcript Apply.');
+      v2Version += 1;
+      v2HeadEvidence = [...v2HeadEvidence, structuredClone(evidence)];
+      v2Case = { ...v2Case, version: v2Version, evidence: [...v2Case.evidence, structuredClone(evidence)] };
+    },
     commitDocumentMapping(values: { name?: string; description?: string }) {
       if (!v2Case) throw new Error('A V2 case must exist before document mapping can commit.');
       v2Version += 1;

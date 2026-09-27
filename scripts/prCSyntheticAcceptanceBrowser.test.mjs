@@ -334,7 +334,7 @@ test('post-Apply authoring links new evidence, persists it, and independently re
     }, SYNTHETIC_ASSESS_REVIEW_CLAIMS);
     const interactions = [];
     assert(await page.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true }).isDisabled());
-    await finalizeAssessDraftForReview(page, interactions);
+    await finalizeAssessDraftForReview(page, interactions, { afterTranscriptApply: true });
     assert.equal(await page.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
     assert.equal(await page.getByLabel('Evidence 2 claim IDs', { exact: true }).inputValue(), 'primitive.businessDisposition');
     assert.equal(await page.locator('body').getAttribute('data-saves'), '1');

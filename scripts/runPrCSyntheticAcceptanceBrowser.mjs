@@ -1074,29 +1074,31 @@ export const completeAssessDraft = async (page, interactionSequence) => {
   return { createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true };
 };
 
-export const finalizeAssessDraftForReview = async (page, interactionSequence) => {
+export const finalizeAssessDraftForReview = async (page, interactionSequence, { afterTranscriptApply = false } = {}) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
   await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
-  const evidencePanel = workspace.locator('details').filter({ has: page.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }) });
-  if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
-  const claims = evidencePanel.getByRole('textbox', { name: /^Evidence \d+ claim IDs$/u });
-  assert.equal(await claims.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
-  let linkedCount = 0;
-  for (let index = 0; index < await claims.count(); index += 1) {
-    if ((await claims.nth(index).inputValue()).trim()) continue;
-    await claims.nth(index).fill('primitive.businessDisposition');
-    await evidencePanel.getByLabel(`Evidence ${index + 1} owner`, { exact: true }).fill('Synthetic Assess owner');
-    linkedCount += 1;
+  if (afterTranscriptApply) {
+    const evidencePanel = workspace.locator('details').filter({ has: page.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }) });
+    if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
+    const claims = evidencePanel.getByRole('textbox', { name: /^Evidence \d+ claim IDs$/u });
+    assert.equal(await claims.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
+    let linkedCount = 0;
+    for (let index = 0; index < await claims.count(); index += 1) {
+      if ((await claims.nth(index).inputValue()).trim()) continue;
+      await claims.nth(index).fill('primitive.businessDisposition');
+      await evidencePanel.getByLabel(`Evidence ${index + 1} owner`, { exact: true }).fill('Synthetic Assess owner');
+      linkedCount += 1;
+    }
+    assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
+    await workspace.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
+    await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
+    await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
+    for (const input of await claims.all()) assert((await input.inputValue()).trim(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
+    interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   }
-  assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
-  await workspace.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
-  await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
-  await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
-  await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
-  for (const input of await claims.all()) assert((await input.inputValue()).trim(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
-  interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   const finalize = workspace.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true });
   assert(await finalize.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_FINALIZE_DISABLED');
   await finalize.click();
@@ -1408,7 +1410,7 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
       interactionSequence.push('apply:resolved-assess-preview');
       await openSurface(page, 'assess-case', interactionSequence)
         .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CASE_NAVIGATION_FAILED'); });
-      await finalizeAssessDraftForReview(page, interactionSequence);
+      await finalizeAssessDraftForReview(page, interactionSequence, { afterTranscriptApply: true });
       await assignAssessReviewer(page, interactionSequence)
         .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_REVIEWER_ASSIGNMENT_FAILED'); });
     }

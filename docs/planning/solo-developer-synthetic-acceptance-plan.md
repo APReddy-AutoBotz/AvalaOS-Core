@@ -515,3 +515,11 @@ coverage and preserves unknown agent facts and provisional author confidence.
 These are local checks, not a completed hosted campaign. All 84 steps still require
 one passing exact-candidate run. Rollback reverts this runner/test change and its
 provenance entry; retain the merge block and recovered exercise history.
+
+Candidate 26c5ce1's Pilot Acceptance CI caught an overly restrictive shared helper:
+ordinary finalization was incorrectly required to have post-Apply evidence. The
+post-Apply preparation is now explicitly selected by the hosted transcript path;
+ordinary finalization retains its existing behavior. Six focused real-component
+browser scenarios pass across desktop and Pixel 7, including immutable post-Apply
+evidence save/reload and one committed finalization. The runner suite remains
+13/13 passed. No hosted campaign was dispatched for the rejected CI candidate.

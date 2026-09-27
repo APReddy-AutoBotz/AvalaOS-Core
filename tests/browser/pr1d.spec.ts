@@ -51,16 +51,21 @@ test('PR C synthetic runner manually completes and reloads the real Assess V2 dr
   await expect(page.getByLabel('Application 1 accountable owner')).toHaveValue('Synthetic Assess owner');
 });
 
-test('PR C synthetic runner finalizes the manually completed Assess draft for independent review', async ({ page }) => {
+for (const afterTranscriptApply of [false, true]) test(`PR C synthetic runner finalizes the ${afterTranscriptApply ? 'post-Apply' : 'manually completed'} Assess draft for independent review`, async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus: 'Ready for Review' });
   await page.goto('/');
   await expectProcessCatalog(page);
   await page.getByRole('button', { name: 'View' }).first().click();
   const interactions: string[] = [];
   await completeAssessDraft(page, interactions);
-  expect(await finalizeAssessDraftForReview(page, interactions)).toEqual({ finalized: true });
+  if (afterTranscriptApply) fixture.commitTranscriptEvidence({
+    id: '70000000-0000-4000-8000-000000000099', claimIds: [], sourceType: 'document',
+    status: 'submitted', validated: false, owner: 'Transcript importer', capturedAt: new Date().toISOString(),
+  });
+  expect(await finalizeAssessDraftForReview(page, interactions, { afterTranscriptApply })).toEqual({ finalized: true });
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(1);
+  if (afterTranscriptApply) expect(fixture.v2Case!.evidence.find(item => item.id === '70000000-0000-4000-8000-000000000099')?.claimIds).toEqual(['primitive.businessDisposition']);
 });
 
 test('new process form traps keyboard focus and closes with Escape on Desktop and Pixel', async ({ page }) => {
