@@ -59,25 +59,6 @@ test('browser step failure identifies its catalog step without exposing locator 
     'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING_REFRESH_REJECTED_ROOT');
 });
 
-test('proof collection reopens the evidence panel after the application action', async () => {
-  const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(`<section data-testid="controlled-human-nonproduction-banner"><details><summary>Two-phase exact action evidence</summary><button type="button">Refresh evidence steps</button><select aria-label="Completed controlled-human evidence step"><option value="">Select completed proof</option></select><pre data-testid="controlled-human-safe-anchor"></pre><pre data-testid="controlled-human-safe-binding"></pre></details></section>`);
-    await page.locator('button').evaluate(button => button.addEventListener('click', () => {
-      const select = document.querySelector('select');
-      select.add(new Option('CH-01 · resolve-material-assess-conflict', 'CH-01:resolve-material-assess-conflict'));
-      document.querySelector('[data-testid="controlled-human-safe-anchor"]').textContent = JSON.stringify({ stepId: 'resolve-material-assess-conflict' });
-      document.querySelector('[data-testid="controlled-human-safe-binding"]').textContent = JSON.stringify({ stepId: 'resolve-material-assess-conflict' });
-    }));
-    const interactions = [];
-    const proof = await collectProof(page, 'CH-01', 'resolve-material-assess-conflict', interactions);
-    assert.equal(proof.serverBinding.stepId, 'resolve-material-assess-conflict');
-    assert.deepEqual(interactions, ['inspect-proof:ch-01:resolve-material-assess-conflict']);
-    assert.equal(await page.locator('details').getAttribute('open'), '');
-  } finally { await browser.close(); }
-});
-
 test('browser execution catalog covers the exact 84 steps and preserves execution order', () => {
   const catalog = buildBrowserExecutionCatalog();
   assert.equal(catalog.length, 84);
@@ -178,4 +159,23 @@ test('runner is two phase, uses the synthetic migration tip, and contains no agg
   assert.match(source, /PR_C_SYNTHETIC_BROWSER_EPHEMERAL_STATE_REMAINS/u);
   assert.doesNotMatch(source, /controlledProofVisible|assertBodyPattern|suite.*exit.*passed/iu);
   assert.match(source, /requiredSyntheticBrowserAssertionId/u);
+});
+
+test('proof collection reopens the evidence panel after the application action', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<section data-testid="controlled-human-nonproduction-banner"><details><summary>Two-phase exact action evidence</summary><button type="button">Refresh evidence steps</button><select aria-label="Completed controlled-human evidence step"><option value="">Select completed proof</option></select><pre data-testid="controlled-human-safe-anchor"></pre><pre data-testid="controlled-human-safe-binding"></pre></details></section>`);
+    await page.locator('button').evaluate(button => button.addEventListener('click', () => {
+      const select = document.querySelector('select');
+      select.add(new Option('CH-01 · resolve-material-assess-conflict', 'CH-01:resolve-material-assess-conflict'));
+      document.querySelector('[data-testid="controlled-human-safe-anchor"]').textContent = JSON.stringify({ stepId: 'resolve-material-assess-conflict' });
+      document.querySelector('[data-testid="controlled-human-safe-binding"]').textContent = JSON.stringify({ stepId: 'resolve-material-assess-conflict' });
+    }));
+    const interactions = [];
+    const proof = await collectProof(page, 'CH-01', 'resolve-material-assess-conflict', interactions);
+    assert.equal(proof.serverBinding.stepId, 'resolve-material-assess-conflict');
+    assert.deepEqual(interactions, ['inspect-proof:ch-01:resolve-material-assess-conflict']);
+    assert.equal(await page.locator('details').getAttribute('open'), '');
+  } finally { await browser.close(); }
 });
