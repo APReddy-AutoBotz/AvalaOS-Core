@@ -523,3 +523,12 @@ ordinary finalization retains its existing behavior. Six focused real-component
 browser scenarios pass across desktop and Pixel 7, including immutable post-Apply
 evidence save/reload and one committed finalization. The runner suite remains
 13/13 passed. No hosted campaign was dispatched for the rejected CI candidate.
+
+Candidate 9af9131 passed 17 applicable workflows, including Pilot Acceptance, but
+governed CI exposed a pre-existing nondeterministic selector in the disposable
+PostgreSQL test. Ordering all planning artifacts by UUID could select a newly
+created source-only draft with no content version. The test now selects the exact
+seeded planning artifact and source package and asserts its approved content
+exists. The affected PostgreSQL 16 test passes locally, including both complete
+seed/deprovision cycles and retained-history verification. This changes test
+selection only; no application authorization or readiness rule changes.

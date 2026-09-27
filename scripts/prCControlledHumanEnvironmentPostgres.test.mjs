@@ -924,14 +924,18 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       await database.client.query('commit');
     }catch(error){await database.client.query('rollback');throw error}};
 
-    // CH-10 carries a real approved direct-transcript Studio artifact through Delivery while retaining not-assessed lineage.
+    // CH-10 carries the seeded approved planning-only Studio artifact through Delivery.
+    // The newly created source-only draft has no content version and is not eligible.
     await database.client.query('select pg_sleep(0.05)');
     await runDirectSourceSuccess();
     await observationFixture.drainUnboundBeforeMachineStep('CH-10','handoff-direct-studio-plan');
     await database.client.query('begin');try{
       let artifact=(await database.client.query(`select artifact.id,artifact.aggregate_version,artifact.current_version_id,artifact.current_approved_version_id
         from public.studio_artifact_aggregates artifact join public.studio_artifact_source_packages source on source.id=artifact.source_package_id
-        where artifact.org_id=$1 and artifact.workspace_id=$2 and source.planning_only=true order by artifact.id limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];assert.ok(artifact);
+        where artifact.org_id=$1 and artifact.workspace_id=$2 and artifact.id=$3 and source.id=$4
+          and source.source_mode='manual_brief' and source.planning_only=true`,[generationBinding.org_id,generationBinding.workspace_id,
+        deterministicUuid(context.exerciseId,'studio-artifact-direct'),deterministicUuid(context.exerciseId,'studio-source-package-direct')])).rows[0];
+      assert.ok(artifact?.current_version_id && artifact.current_approved_version_id,'The exact seeded planning artifact must retain its approved content version.');
       await prepareStudioReview(artifact.id);
       await invokeStudioPrerequisite('studio_reviewer','studio.artifact.review.resolve',artifact.id,{artifactId:artifact.id,artifactVersionId:(await studioArtifactState(artifact.id)).current_version_id,outcome:'approve',rationale:'Review direct planning Studio artifact.',conditions:[]},'direct-review');
       await invokeStudioPrerequisite('studio_approver','studio.artifact.approval.resolve',artifact.id,{artifactId:artifact.id,artifactVersionId:(await studioArtifactState(artifact.id)).current_version_id,outcome:'approve',rationale:'Approve direct planning Studio artifact.',conditions:[]},'direct-approval');
