@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, selectExactEligibleStudioBundle, selectStudioTranscriptSources } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -51,6 +51,24 @@ test('PR C synthetic runner scopes a Studio handoff action to one exact resource
   await expect(selected.control).toBeEnabled();
   expect(interactions).toEqual(['tab:studio-handoff-inbox']);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('PR C synthetic draft selection waits for the exact loaded document before edit and review', async ({page}) => {
+  await open(page,'?mode=direct&syntheticSelection=1');
+  await expect(page.getByRole('region',{name:'Structured section editor'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.');
+  await selectSyntheticHybridStudioDraft(page,[],'Synthetic Studio source context retained for controlled acceptance editing.');
+  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerLabel:'Independent reviewer'});
+  expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
+  await page.reload({waitUntil:'domcontentloaded'});
+  await selectSyntheticStudioDraft(page,[]);
+  await expect(page.getByLabel('Governed artifact')).toHaveValue('00000038-0000-4000-8000-000000000038');
+  await expect(page.getByRole('region',{name:'Structured section editor'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.\nSynthetic acceptance edit.');
+});
+
+test('PR C synthetic draft selection rejects two loaded documents with the same marker', async ({page}) => {
+  await open(page,'?mode=direct&syntheticSelection=1&duplicateDraft=1');
+  await expect(page.getByRole('region',{name:'Structured section editor'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.');
+  await expect(selectSyntheticStudioDraft(page,[])).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_COUNT:2');
 });
 
 test('PR C synthetic runner selects the only direct-package-eligible bundle from two locked Studio bundles', async ({page}) => {

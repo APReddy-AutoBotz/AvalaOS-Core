@@ -6,7 +6,7 @@ import GovernedTemplateManager from '../../../components/docs/GovernedTemplateMa
 import type { StudioArtifactTransport } from '../../../services/studioArtifacts/client';
 import type { StudioArtifactProjectionDto, StudioArtifactWorkspaceProjectionDto } from '../../../services/studioArtifacts/contracts';
 import type { StudioSourceFlowProjection } from '../../../services/studioArtifacts/workspaceModel';
-
+import syntheticFixture from '../../../testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json';
 const ids=Array.from({length:60},(_,i)=>`${String(i+1).padStart(8,'0')}-0000-4000-8000-${String(i+1).padStart(12,'0')}`);
 const H=(value:string)=>value.repeat(64).slice(0,64);
 const params=new URLSearchParams(location.search);const allCapabilities=['studio.artifacts.approve','studio.artifacts.edit','studio.artifacts.generate','studio.artifacts.read','studio.artifacts.review','studio.handoffs.approve','studio.handoffs.consume','studio.handoffs.read','studio.handoffs.request','studio.handoffs.review','studio.sources.manage','studio.sources.read','studio.templates.approve','studio.templates.manage','studio.templates.read','studio.templates.review'];const isolatedCapabilities:Record<string,string[]>={artifacts:['studio.artifacts.read'],sources:['studio.sources.read'],'manage-sources':['studio.sources.manage'],templates:['studio.templates.read'],handoffs:['studio.handoffs.read']};const harnessCapabilities=params.get('caps')?isolatedCapabilities[params.get('caps')!]??[]:params.get('state')==='unauthorized'?allCapabilities.filter(item=>!['studio.artifacts.generate','studio.sources.manage'].includes(item)):params.get('state')==='template-unauthorized'?allCapabilities.filter(item=>item!=='studio.templates.manage'):params.get('state')==='legacy-read-only'?['studio.artifacts.read']:allCapabilities;
@@ -120,6 +120,34 @@ const sourceFlowTransport={
   extract:async(input:any)=>{(window as any).__studioSourceExtractionCalls+=1;const bundle=studioSourceFlow.inputBundles.find(item=>item.versionSelector===input.inputBundleVersionId)!;const sourceSet=studioSourceFlow.sourceSets.find(item=>item.versionSelector===input.sources[0].sourceSetVersionId)!;const source=studioSourceFlow.sources.find(item=>item.versionSelector===input.sources[0].sourceVersionId)!;const base={candidateVersion:1,inputBundleId:bundle.id,inputBundleVersionId:bundle.versionSelector,inputBundleVersion:bundle.version,extractionBindingId:ids[48],extractionJobId:ids[47],sourceSetId:sourceSet.id,sourceSetVersionId:sourceSet.versionSelector,sourceSetVersion:sourceSet.version,sourceId:source.sourceId,sourceVersionId:source.versionSelector,sourceLabel:source.displayName,sourceVersionLabel:source.versionLabel,sourceLocator:'lines 1-3',confidence:0.91,provenanceState:'anchored' as const,status:'suggested' as const,reviewState:'pending' as const,editCount:0};const candidates=[{...base,id:ids[49],field:'business_requirement',value:'Route invoice exceptions through human review.',safeExcerpt:'invoice exceptions through human review'},{...base,id:ids[50],field:'control_owner',value:'Operations lead',safeExcerpt:'Operations lead owns review'},{...base,id:ids[51],field:'unsupported_assumption',value:'Every exception is low risk',safeExcerpt:'low risk'}];studioSourceFlow={...studioSourceFlow,extractionJobs:[...studioSourceFlow.extractionJobs.filter(item=>item.inputBundleId!==bundle.id),{id:ids[47],inputBundleId:bundle.id,inputBundleVersionId:bundle.versionSelector,inputBundleVersion:bundle.version,status:'succeeded',candidateCount:candidates.length,bindingCount:bundle.sourceCount,createdAt:'2026-09-24T05:03:00.000Z',completedAt:'2026-09-24T05:03:01.000Z'}],candidates:[...studioSourceFlow.candidates.filter(item=>item.inputBundleId!==bundle.id),...candidates]};return response(ids[47]);},
   review:async(input:any)=>{studioSourceFlow={...studioSourceFlow,candidates:studioSourceFlow.candidates.map(candidate=>candidate.id===input.candidateId?{...candidate,candidateVersion:candidate.candidateVersion+1,status:input.status,value:input.status==='edited'?input.value:candidate.value,reviewState:'reviewed_by_you',editCount:candidate.editCount+(input.status==='edited'?1:0),reviewedAt:'2026-09-24T05:04:00.000Z'}:candidate)};return response(input.candidateId);},
 };
+
+// The hosted index uses generic labels and keeps the previous content visible
+// while another exact artifact is loading. Exercise that asynchronous boundary.
+if(params.get('syntheticSelection')==='1'){
+  if(!v2Artifact){
+  exactPackage={sourcePackageId:ids[38],sourceMode:'direct_transcript_bundle',version:1,lineageClassification:'not_assessed',planningOnly:true,hasAssessAncestry:false,hasStudioTranscriptBundle:true,hasManualBrief:false,routePolicyVersion:1,createdAt:'2026-08-28T00:05:30.000Z'};
+  v2Artifact=buildV2Artifact({payload:{template:{version:template.version}}});
+  const draft=syntheticFixture.seed.studioTranscriptDraft;
+  const sections=draft.sections.map(section=>({...section,sourceAnchors:[{sourceVersionId:ids[25],locator:'00:00:00',anchorHash:H('7')}],labels:[]}));
+  v2Artifact={...v2Artifact,sections,currentVersion:{...v2Artifact.currentVersion,content:{title:draft.title,sections}}};
+  v2Artifact.versions=[v2Artifact.currentVersion];
+  }
+  const otherId=ids[43],otherVersionId=ids[44],otherPackageId=ids[45];
+  const other=structuredClone(v2Artifact);
+  other.id=otherId;other.sourcePackage!.id=otherPackageId;
+  Object.assign(other.ancestry,{sourcePackageId:otherPackageId});
+  other.sections=other.sections!.map(section=>({...section,body:params.get('duplicateDraft')==='1'?section.body:'Different committed Studio content.'}));
+  other.currentVersion={...other.currentVersion,id:otherVersionId,content:{title:'Another Studio document',sections:other.sections}};other.versions=[other.currentVersion];
+  const baseWorkspace=transport.readArtifactWorkspace!,baseIdentity=transport.readSourcePackage!;
+  transport.readArtifactSummaries=async(_context,offset,limit)=>{
+    const all=[v2Artifact!,other].map(value=>({id:value.id,artifactType:value.artifactType,aggregateVersion:value.aggregateVersion,lifecycle:value.lifecycle,currentVersionId:value.currentVersion.id,currentApprovedVersionId:value.currentApprovedVersion?.id??null,sourceMode:'direct_transcript_bundle' as const,lineageClassification:'not_assessed' as const,planningOnly:true,displayLabel:'BRD · direct transcript bundle',updatedAt:value.currentVersion.createdAt,actions:[]}));
+    return{contractVersion:'studio-artifact-summary-2',organizationId:context.organizationId,workspaceId:context.workspaceId,items:all.slice(offset,offset+limit),total:all.length,offset,limit,hasMore:false};
+  };
+  transport.readArtifactV2=async(_context,artifactId)=>{await delay(150);return structuredClone(artifactId===otherId?other:v2Artifact!);};
+  transport.readEligibleReviewers=async()=>{await delay(150);return[{actorId:ids[19],displayName:'Independent reviewer'}];};
+  transport.readSourcePackage=async(...args)=>{const value=await baseIdentity(...args) as any;return args[1]===otherId?{...value,artifactId:otherId,sourcePackageId:otherPackageId,currentVersionId:otherVersionId,aggregateVersion:other.aggregateVersion}:value;};
+  transport.readArtifactWorkspace=async(...args)=>{const value=await baseWorkspace(...args) as StudioArtifactWorkspaceProjectionDto;return args[1]===otherId?{...value,artifact:{...value.artifact,id:otherId,aggregateVersion:other.aggregateVersion,lifecycle:other.lifecycle,currentVersionId:otherVersionId,currentApprovedVersionId:null,sections:other.sections!},sourcePackage:{...value.sourcePackage,id:otherPackageId}}:value;};
+}
 
 function Harness(){return <main className="mx-auto max-w-[1600px] p-3 sm:p-6"><h1 className="sr-only">Governed multi-source Studio PR B</h1><StudioArtifactWorkspace context={context} transport={transport} sourceFlowTransport={sourceFlowTransport} online={params.get('state')!=='offline'} /><div className="mt-8"><GovernedTemplateManager context={context} transport={transport} /></div></main>}
 createRoot(document.getElementById('root')!).render(<Harness/>);

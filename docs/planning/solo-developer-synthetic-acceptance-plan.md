@@ -558,3 +558,18 @@ and the deliberate in-interval attempt injection rejection. This is a test-only
 timing correction; production observation and acceptance rules are unchanged.
 Rollback reverts the test and its provenance entry; hosted acceptance and merge
 remain blocked until complete exact-candidate evidence passes.
+
+Run 36326878596 progressed through Assess review and approval, then failed at
+CH-02's structured Studio edit. Recovery and private-state cleanup passed.
+Read-only inspection confirmed one draft with the expected synthetic title and
+two-section content. A real-component reproduction with generic index labels
+and delayed artifact responses confirmed the runner counted retained editor
+content as a match for the next selected document before its reload completed.
+The runner now waits for the exact selected artifact and usable workspace before
+inspecting its content, for both direct and hybrid document selection. It also
+waits for the exact reviewer option before assignment. Six focused desktop and
+Pixel 7 scenarios pass, including immutable edit/submission, selection after a
+full reload, delayed reviewer discovery, and rejection of genuinely duplicated
+document matches. No application permission, server authority, or acceptance
+rule changes. Rollback reverts these runner/test changes and their provenance;
+the full 84-step exact-candidate hosted campaign and merge remain pending.

@@ -497,6 +497,20 @@ const loadCompleteDeliveryItemSet = async (page, interactionSequence) => {
   return complete;
 };
 
+const selectLoadedStudioArtifact = async (page, select, value) => {
+  // Selection reloads asynchronously and retains the previous editor meanwhile.
+  // Read content only after the controlled select and workspace agree on readiness.
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  if (await select.inputValue() === value && await workspace.getAttribute('data-studio-usable') === 'true') return;
+  await select.selectOption(value);
+  await page.waitForFunction(expected => {
+    const workspace = document.querySelector('[data-testid="studio-artifact-workspace"]');
+    const selected = workspace?.querySelector('select[aria-label="Governed artifact"]');
+    return workspace?.getAttribute('data-studio-usable') === 'true'
+      && selected instanceof HTMLSelectElement && selected.value === expected;
+  }, value);
+};
+
 export const selectSyntheticStudioDraft = async (page, interactionSequence, title = SYNTHETIC_STUDIO_DRAFT_TITLE) => {
   const workspace = page.getByTestId('studio-artifact-workspace');
   const select = workspace.getByLabel('Governed artifact', { exact: true });
@@ -507,21 +521,18 @@ export const selectSyntheticStudioDraft = async (page, interactionSequence, titl
     const option = select.locator('option').filter({ hasText: matches[0] });
     const optionValue = await option.getAttribute('value');
     assert(optionValue, 'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_VALUE_MISSING');
-    if (await select.inputValue() !== optionValue) await select.selectOption(optionValue);
+    await selectLoadedStudioArtifact(page, select, optionValue);
   } else {
     assert.equal(title, SYNTHETIC_STUDIO_DRAFT_TITLE, `PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_COUNT:${matches.length}`);
     const candidates = await select.locator('option').evaluateAll(nodes => nodes.map(node => node.value).filter(Boolean));
     const bodyMatches = [];
     for (const value of candidates) {
-      await select.selectOption(value);
-      try {
-        await page.waitForFunction(expected => [...document.querySelectorAll('section[aria-labelledby="structured-editor-title"] textarea')]
-          .some(field => field instanceof HTMLTextAreaElement && expected.some(value => field.value === value)), [SYNTHETIC_STUDIO_DRAFT_INITIAL_BODY, SYNTHETIC_STUDIO_DRAFT_SECTION_BODY], { timeout: 2_000 });
-        bodyMatches.push(value);
-      } catch { /* this exact artifact is not the synthetic transcript draft */ }
+      await selectLoadedStudioArtifact(page, select, value);
+      const bodies = await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').evaluateAll(nodes => nodes.map(node => node.value));
+      if (bodies.some(body => [SYNTHETIC_STUDIO_DRAFT_INITIAL_BODY, SYNTHETIC_STUDIO_DRAFT_SECTION_BODY].includes(body))) bodyMatches.push(value);
     }
     assert.equal(bodyMatches.length, 1, `PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_COUNT:${bodyMatches.length}`);
-    await select.selectOption(bodyMatches[0]);
+    await selectLoadedStudioArtifact(page, select, bodyMatches[0]);
   }
   await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').first().waitFor({ state: 'visible' });
   assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready', 'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
@@ -536,15 +547,12 @@ export const selectSyntheticHybridStudioDraft = async (page, interactionSequence
   const candidates = await select.locator('option').evaluateAll(nodes => nodes.map(node => node.value).filter(Boolean));
   const matches = [];
   for (const value of candidates) {
-    await select.selectOption(value);
-    try {
-      await page.waitForFunction(expected => [...document.querySelectorAll('section[aria-labelledby="structured-editor-title"] textarea')]
-        .some(field => field instanceof HTMLTextAreaElement && field.value === expected), sectionBody, { timeout: 2_000 });
-      matches.push(value);
-    } catch { /* this exact artifact is not the generated hybrid draft */ }
+    await selectLoadedStudioArtifact(page, select, value);
+    const bodies = await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').evaluateAll(nodes => nodes.map(node => node.value));
+    if (bodies.includes(sectionBody)) matches.push(value);
   }
   assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_HYBRID_STUDIO_DRAFT_COUNT:${matches.length}`);
-  await select.selectOption(matches[0]);
+  await selectLoadedStudioArtifact(page, select, matches[0]);
   assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready', 'PR_C_SYNTHETIC_BROWSER_HYBRID_DRAFT_PROJECTION_NOT_READY');
   interactionSequence.push('select:synthetic-source-bound-hybrid-draft');
   return workspace;
@@ -572,6 +580,7 @@ export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequenc
   await submit.click();
   await workspace.getByText('Reviewer ready committed.', { exact: true }).waitFor({ state: 'visible' });
   const reviewer = workspace.getByLabel('Eligible independent reviewer', { exact: true });
+  await reviewer.getByRole('option', { name: reviewerLabel, exact: true }).waitFor({ state: 'attached' });
   const reviewerOptions = await reviewer.locator('option').allTextContents();
   const reviewerMatches = reviewerOptions.filter(value => value === reviewerLabel);
   assert.equal(reviewerMatches.length, 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_COUNT');
