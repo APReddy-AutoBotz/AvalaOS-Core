@@ -78,6 +78,7 @@ const transport:StudioArtifactTransport={
   readArtifactWorkspace:async(_context,_artifactId,offset,limit)=>({...buildArtifactWorkspace(offset,limit),workspaceId:_context.workspaceId}),
   readArtifactSummaries:async(_context,offset,limit)=>{if(!_context.capabilities.includes('studio.artifacts.read'))throw new Error('UNAUTHORIZED_ARTIFACT_SUMMARY_CALLED');const all=exactPackage?[{id:ids[37],artifactType:'brd',aggregateVersion:v2Artifact?.aggregateVersion??0,lifecycle:v2Artifact?.lifecycle??'draft',currentVersionId:v2Artifact?.currentVersion.id??null,currentApprovedVersionId:v2Artifact?.currentApprovedVersion?.id??null,sourceMode:exactPackage.sourceMode,lineageClassification:exactPackage.lineageClassification,planningOnly:exactPackage.planningOnly,displayLabel:`BRD · ${exactPackage.sourceMode.replaceAll('_',' ')}`,updatedAt:v2Artifact?.currentVersion.createdAt??exactPackage.createdAt,actions:v2Artifact?['studio.artifact.draft.revise']:[]}]:[];const items=all.slice(offset,offset+limit);return{contractVersion:'studio-artifact-summary-2',organizationId:ids[1],workspaceId:ids[2],items,total:all.length,offset,limit,hasMore:offset+items.length<all.length};},
   invoke:async(envelope:any)=>{
+    if(envelope.commandType==='studio.artifact.review.assign')((window as any).__studioAssignedReviewerIds??=[]).push(envelope.payload.reviewerId);
     if(fixtureState==='reload-failed')reloadFails=true;
     if(v2Artifact){
       const setLifecycle=(lifecycle:any)=>{const current={...v2Artifact!.currentVersion,lifecycle};v2Artifact={...v2Artifact!,aggregateVersion:v2Artifact!.aggregateVersion+1,lifecycle,currentVersion:current,versions:v2Artifact!.versions.map(item=>item.id===current.id?current:item),currentApprovedVersion:lifecycle==='approved'?current:v2Artifact!.currentApprovedVersion};};
@@ -150,4 +151,14 @@ if(params.get('syntheticSelection')==='1'){
 }
 
 function Harness(){return <main className="mx-auto max-w-[1600px] p-3 sm:p-6"><h1 className="sr-only">Governed multi-source Studio PR B</h1><StudioArtifactWorkspace context={context} transport={transport} sourceFlowTransport={sourceFlowTransport} online={params.get('state')!=='offline'} /><div className="mt-8"><GovernedTemplateManager context={context} transport={transport} /></div></main>}
+if(params.get('reviewerLabels')==='email'){
+  transport.readEligibleReviewers=async()=>{
+    await delay(150);
+    const reviewer={actorId:ids[19],displayName:'prc264.studio_reviewer.synthetic@example.invalid'};
+    const candidates=[{actorId:ids[18],displayName:reviewer.displayName},reviewer];
+    if(params.get('reviewerOptions')==='missing')return candidates.slice(0,1);
+    if(params.get('reviewerOptions')==='duplicate')return [...candidates,{...reviewer,displayName:'reviewer-alias@example.invalid'}];
+    return candidates;
+  };
+}
 createRoot(document.getElementById('root')!).render(<Harness/>);

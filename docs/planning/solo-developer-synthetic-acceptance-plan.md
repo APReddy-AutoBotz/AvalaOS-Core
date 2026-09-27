@@ -676,3 +676,29 @@ Rollback reverts the preflight/test/provenance change together; the
 safe fallback retains the merge block and inactive exercise rather than retrying
 business commands against an unverified backend. Full synthetic acceptance is
 not passed; original `CONTROLLED-HUMAN` remains `not_run`.
+
+Run 36351581753 passed the authenticated Studio transport preflight and committed
+both CH-02 draft revision and review submission. Both projection reloads and
+eligible-reviewer queries succeeded. The next timeout was a confirmed runner
+contract defect: it expected the profile full-name label, while the Studio RPC
+intentionally displays email (actor-ID fallback). Assignment never started.
+Recovery and private-state cleanup passed; no active exercise remains.
+
+The runner now obtains the reviewer actor ID from the authenticated synthetic
+reviewer session, verifies the requester and reviewer share organization and
+workspace and are distinct actors, then selects exactly one eligible option by
+that ID. The ID stays private and is not added to published observations or error
+messages. Missing or duplicate matches fail closed before assignment. The server
+retains its capability, current-authorization, and separation-of-duty checks.
+The separate Assess reviewer-label contract remains unchanged.
+
+A production-shaped email-label browser case reproduced the old selector timeout
+before the correction. All 12 focused real-component scenarios now pass across
+Desktop Chrome and Pixel 7, including duplicate display labels, missing and
+duplicate actor options, edit/submission/assignment, and delayed projection reads.
+All 55 feature-owned synthetic runner checks and the secret/AI boundary scans
+pass. No product SQL, capability, provider, or deployed function change is needed.
+Exact-candidate CI, preview, and the full 84-step hosted campaign remain planned
+verification. Rollback reverts the runner/helper, focused tests, and provenance
+together; keep merge blocked and preserve recovered immutable exercise history
+until the complete campaign and independent cleanup proof pass.

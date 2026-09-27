@@ -8,11 +8,29 @@ import {
   readSyntheticStudioArtifact,
   runSyntheticPrerequisites,
   syntheticCommandResourceId,
+  resolveSyntheticStudioReviewerId,
 } from './prCSyntheticBrowserPrerequisites.mjs';
 
 const uid = number => `40000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const ORG = uid(1); const WORKSPACE = uid(2);
 const PERSONAS = ['requester', 'studio_reviewer', 'delivery_target_acceptor', 'delivery_approver', 'delivery_consumer', 'delivery_author', 'delivery_reviewer'];
+
+test('Studio reviewer identity comes from a fresh distinct same-scope persona context', async () => {
+  const { sessions, calls } = makeHarness();
+  assert.equal(await resolveSyntheticStudioReviewerId(sessions), uid(1001));
+  assert.deepEqual(calls, [], 'identity lookup executes no business commands');
+  for (const [override, code] of [
+    [{ userId: uid(1000) }, 'STUDIO_REVIEWER_NOT_INDEPENDENT'],
+    [{ organizationId: uid(900) }, 'TENANT_SCOPE_MISMATCH'],
+    [{ workspaceId: uid(901) }, 'TENANT_SCOPE_MISMATCH'],
+    [{ userId: 'invalid' }, 'CONTEXT_USER_studio_reviewer'],
+  ]) {
+    const fresh = makeHarness(); const api = fresh.sessions.get('studio_reviewer').api;
+    const original = await api.context(); api.context = async () => ({ ...original, ...override });
+    await assert.rejects(() => resolveSyntheticStudioReviewerId(fresh.sessions), error => error.message.includes(code));
+    assert.deepEqual(fresh.calls, []);
+  }
+});
 
 const makeItem = index => ({
   aggregateId: uid(10_000 + index), currentVersionId: uid(20_000 + index), aggregateVersion: 1, version: 1,

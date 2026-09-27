@@ -53,6 +53,14 @@ const sameScope = (left, right) => {
   if (left.organizationId !== right.organizationId || left.workspaceId !== right.workspaceId) fail('TENANT_SCOPE_MISMATCH');
 };
 
+export const resolveSyntheticStudioReviewerId = async sessions => {
+  const requester = await contextFor(sessionApi(sessions, 'requester'), 'requester');
+  const reviewer = await contextFor(sessionApi(sessions, 'studio_reviewer'), 'studio_reviewer');
+  sameScope(requester, reviewer);
+  if (requester.userId === reviewer.userId) fail('STUDIO_REVIEWER_NOT_INDEPENDENT');
+  return reviewer.userId;
+};
+
 const expectation = (checkpointId, stepId, action) => ({ checkpointId, stepId, action });
 
 export const decodeSyntheticCommandSuccess = (result, { action, resourceId = '' } = {}) => {

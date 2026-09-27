@@ -30,7 +30,7 @@ import {
 import { attachSyntheticBrowserApi } from './prCSyntheticBrowserApi.mjs';
 import {
   runSyntheticPrerequisites, readSyntheticDeliveryWorkspace, readSyntheticDeliveryPackage,
-  readSyntheticStudioArtifact, syntheticCommandResourceId,
+  readSyntheticStudioArtifact, syntheticCommandResourceId, resolveSyntheticStudioReviewerId,
 } from './prCSyntheticBrowserPrerequisites.mjs';
 import {
   prepareSyntheticStudioGeneration, selectSyntheticDeliveryArtifact,
@@ -575,8 +575,10 @@ export const selectSyntheticHybridStudioDraft = async (page, interactionSequence
 };
 
 export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequence, {
-  title = SYNTHETIC_STUDIO_DRAFT_TITLE, reviewerLabel = 'Synthetic studio_reviewer',
+  title = SYNTHETIC_STUDIO_DRAFT_TITLE, reviewerActorId,
 } = {}) => {
+  assert(typeof reviewerActorId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(reviewerActorId),
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_ID_INVALID');
   const workspace = await selectSyntheticStudioDraft(page, interactionSequence, title);
   const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
   await editor.waitFor({ state: 'visible' });
@@ -596,11 +598,12 @@ export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequenc
   await submit.click();
   await workspace.getByText('Reviewer ready committed.', { exact: true }).waitFor({ state: 'visible' });
   const reviewer = workspace.getByLabel('Eligible independent reviewer', { exact: true });
-  await reviewer.getByRole('option', { name: reviewerLabel, exact: true }).waitFor({ state: 'attached' });
-  const reviewerOptions = await reviewer.locator('option').allTextContents();
-  const reviewerMatches = reviewerOptions.filter(value => value === reviewerLabel);
-  assert.equal(reviewerMatches.length, 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_COUNT');
-  await reviewer.selectOption({ label: reviewerMatches[0] });
+  const option = reviewer.locator(`option[value="${reviewerActorId}"]`);
+  try { await option.first().waitFor({ state: 'attached' }); }
+  catch { throw new Error('PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_OPTION_MISSING'); }
+  assert.equal(await option.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_COUNT');
+  await reviewer.selectOption({ value: reviewerActorId });
+  assert(await reviewer.inputValue() === reviewerActorId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_SELECTION_MISMATCH');
   const assign = workspace.getByRole('button', { name: 'Assign reviewer', exact: true });
   assert(await assign.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_STUDIO_ASSIGN_DISABLED');
   await assign.click();
@@ -1237,7 +1240,8 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
   } else if (plan.kind === 'complete-assess-fields') {
     observed = await completeAssessDraft(page, interactionSequence);
   } else if (plan.kind === 'edit-structured-document') {
-    observed = await editAndSubmitSyntheticStudioDraft(page, interactionSequence);
+    const reviewerActorId = await resolveSyntheticStudioReviewerId(state.get('sessions'));
+    observed = await editAndSubmitSyntheticStudioDraft(page, interactionSequence, { reviewerActorId });
   } else if (plan.kind === 'control-absence') {
     const counts = {}; for (const name of plan.names) counts[name] = await page.getByRole(plan.role, { name, exact: true }).count();
     assert(Object.values(counts).every(count => count === 0), `PR_C_SYNTHETIC_BROWSER_CONTROL_PRESENT:${stepId}`); observed = counts;

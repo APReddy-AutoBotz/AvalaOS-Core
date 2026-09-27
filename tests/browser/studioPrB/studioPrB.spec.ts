@@ -35,7 +35,7 @@ test('PR C synthetic runner edits, commits, submits, and assigns one exact sourc
   await page.getByRole('button',{name:'Generate governed package draft'}).click();
   await expect(page.getByText(/Draft committed from exact Studio Source Package v1/)).toBeVisible();
   const interactions:string[]=[];
-  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'BRD · direct transcript bundle',reviewerLabel:'Independent reviewer'});
+  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'BRD · direct transcript bundle',reviewerActorId:'00000020-0000-4000-8000-000000000020'});
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   expect(interactions).toEqual(['select:synthetic-studio-transcript-draft','commit:immutable-structured-studio-revision','submit-and-assign:synthetic-studio-transcript-draft']);
   await expect(page.getByText('In review committed.',{exact:true})).toBeVisible();
@@ -89,7 +89,7 @@ test('PR C synthetic draft selection waits for the exact loaded document before 
   await open(page,'?mode=direct&syntheticSelection=1');
   await expect(page.getByRole('region',{name:'Structured section editor'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.');
   await selectSyntheticHybridStudioDraft(page,[],'Synthetic Studio source context retained for controlled acceptance editing.');
-  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerLabel:'Independent reviewer'});
+  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId:'00000020-0000-4000-8000-000000000020'});
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   await page.reload({waitUntil:'domcontentloaded'});
   await selectSyntheticStudioDraft(page,[]);
@@ -102,6 +102,25 @@ test('PR C synthetic draft selection rejects two loaded documents with the same 
   await expect(page.getByRole('region',{name:'Structured section editor'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.');
   await expect(selectSyntheticStudioDraft(page,[])).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_COUNT:2');
 });
+
+test('PR C synthetic Studio reviewer selection binds the exact actor despite duplicate email labels', async ({page}) => {
+  await open(page,'?mode=direct&syntheticSelection=1&reviewerLabels=email');
+  page.setDefaultTimeout(5000);
+  const reviewerActorId='00000020-0000-4000-8000-000000000020';
+  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId});
+  expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
+  expect(await page.evaluate(()=>(window as any).__studioAssignedReviewerIds)).toEqual([reviewerActorId]);
+});
+
+for(const mode of ['missing','duplicate']){
+  test(`PR C synthetic Studio reviewer selection rejects ${mode} actor options before assignment`, async ({page}) => {
+    await open(page,`?mode=direct&syntheticSelection=1&reviewerLabels=email&reviewerOptions=${mode}`);
+    page.setDefaultTimeout(5000);
+    const result=editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId:'00000020-0000-4000-8000-000000000020'});
+    await expect(result).rejects.toThrow(mode==='missing'?'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_OPTION_MISSING':'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_COUNT');
+    expect(await page.evaluate(()=>(window as any).__studioAssignedReviewerIds??[])).toEqual([]);
+  });
+}
 
 test('PR C synthetic runner selects the only direct-package-eligible bundle from two locked Studio bundles', async ({page}) => {
   await open(page, '?mode=direct&sourceJourney=1');
