@@ -635,7 +635,13 @@ export class PostgresEnvironmentAdapter {
       || Number(row.transcript_source_count)<6 || Number(row.source_set_count)<3 || Number(row.input_bundle_count)<3 || Number(row.candidate_count)<2 || Number(row.conflict_count)<1 || Number(row.tenant_template_count)<1
       || Number(row.pilot_environment_count)!==1 || Number(row.pilot_tenant_count)!==1 || eligibleIds.size<2
       || Number(row.feature_flag_count)!==FEATURE_FLAGS.length) fail('PR_C_CONTROLLED_HUMAN_VERIFY_REJECTED');
-    return { personaCount:Number(row.persona_count), activeMembershipCount:Number(row.active_memberships), studioArtifactCount:Number(row.studio_artifact_count), eligibleStudioArtifactCount:eligibleIds.size, packageCount:Number(row.package_count), baselineCount:Number(row.baseline_count),transcriptSourceCount:Number(row.transcript_source_count),sourceSetCount:Number(row.source_set_count),inputBundleCount:Number(row.input_bundle_count),candidateCount:Number(row.candidate_count),conflictCount:Number(row.conflict_count),tenantTemplateCount:Number(row.tenant_template_count),providerRowCount:0,lifecycle:row.lifecycle,concurrencyVersion:Number(row.concurrency_version),featureFlagCount:Number(row.feature_flag_count) };
+    const personaVersions=(await this.client.query(`select binding.persona_key,authority.version
+      from public.pr_c_controlled_human_persona_bindings binding
+      join public.pr_c_controlled_human_exercises exercise on exercise.id=binding.exercise_id
+      join public.authorization_versions authority on authority.org_id=binding.org_id and authority.user_id=binding.auth_user_id
+      where exercise.exercise_digest=$1 order by binding.persona_key`,[context.exerciseDigest])).rows;
+    const personaAuthorizationVersions=decodeSyntheticPersonaAuthorizationVersions(personaVersions);
+    return { personaCount:Number(row.persona_count), activeMembershipCount:Number(row.active_memberships), studioArtifactCount:Number(row.studio_artifact_count), eligibleStudioArtifactCount:eligibleIds.size, packageCount:Number(row.package_count), baselineCount:Number(row.baseline_count),transcriptSourceCount:Number(row.transcript_source_count),sourceSetCount:Number(row.source_set_count),inputBundleCount:Number(row.input_bundle_count),candidateCount:Number(row.candidate_count),conflictCount:Number(row.conflict_count),tenantTemplateCount:Number(row.tenant_template_count),providerRowCount:0,lifecycle:row.lifecycle,concurrencyVersion:Number(row.concurrency_version),featureFlagCount:Number(row.feature_flag_count),personaAuthorizationVersions };
   }
   async quiesce(context, expectedVersion) {
     const digest = sha256({exerciseDigest:context.exerciseDigest,operation:'quiesce',expectedVersion});
@@ -1402,6 +1408,17 @@ export async function apply(context, fixtureState, database, admin, passwordBund
     return safeResult('apply','passed',context,{...seeded,authUsersCreated:users.length,providerRowCount:0,zeroEgress:true});
   } catch (error) { if (users.length&&!error?.simulatedCrash) await admin.deleteUsers(users.map(user=>user.id)); throw error; }
 }
+// Nonsecret server-read versions let revoked actors preanchor their own denial
+// probes without granting them a tenant projection or privileged database read.
+export function decodeSyntheticPersonaAuthorizationVersions(rows) {
+  const keys=Object.keys(HUMAN_DUTY_BY_PERSONA).sort();
+  if(!Array.isArray(rows)||rows.length!==keys.length||new Set(rows.map(row=>row?.persona_key)).size!==keys.length
+    ||rows.some(row=>!row||Object.keys(row).sort().join(',')!=='persona_key,version'||!keys.includes(row.persona_key)
+      ||!['string','number'].includes(typeof row.version)||!Number.isSafeInteger(Number(row.version))||Number(row.version)<1))
+    fail('PR_C_SYNTHETIC_PERSONA_AUTHORIZATION_VERSIONS_REJECTED');
+  return Object.fromEntries(rows.map(row=>[row.persona_key,Number(row.version)]).sort(([a],[b])=>a<b?-1:a>b?1:0));
+}
+
 export async function verify(context, fixtureState, database) {
   const inventory=await database.inspect(context); assertTargetInventory(inventory,context);
   const verified=await database.verify(context,fixtureState.personas.length);

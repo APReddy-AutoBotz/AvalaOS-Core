@@ -8,6 +8,7 @@ import {MIGRATION_FILE,PostgresEnvironmentMigrationAdapter,deriveMigrationContex
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA,validateControlledHumanObservedDuty,validateControlledHumanProofPairs} from './prCControlledHumanEvidenceContract.mjs';
 import {createControlledHumanObservationFixture} from './prCControlledHumanObservationFixture.mjs';
 import {inspectPreflightTargetReadOnly} from './prCControlledHumanCredentialPreflight.mjs';
+import {runSyntheticPrerequisites,SYNTHETIC_PREREQUISITE_STATE_KEYS} from './prCSyntheticBrowserPrerequisites.mjs';
 
 const {Client}=pg;
 const adminUrl=process.env.PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL;
@@ -136,6 +137,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       select $1,$2,environment_class,pull_request_number,release_sha,review_head_sha,deploy_id,'https://deploy-preview-264--substituted-site.netlify.app',target_fingerprint,public_target_digest,persona_manifest_digest,fixture_manifest_digest,migration_tip,org_id,workspace_id,'deprovisioned',statement_timestamp(),statement_timestamp()
       from public.pr_c_controlled_human_exercises where exercise_digest=$3`,[deterministicUuid(context.exerciseId,'wrong-origin-exercise'),`sha256:${'f'.repeat(64)}`,context.exerciseDigest]),/check constraint/u);
     const verified=await database.verify(context,12);assert.equal(verified.activeMembershipCount,11);assert.equal(verified.studioArtifactCount,3);assert.equal(verified.eligibleStudioArtifactCount,2);assert.equal(verified.packageCount,3);assert.equal(verified.baselineCount,1);assert.equal(verified.providerRowCount,0);
+    assert.deepEqual(Object.keys(verified.personaAuthorizationVersions).sort(),Object.keys(HUMAN_DUTY_BY_PERSONA).sort());assert.equal(Object.keys(verified.personaAuthorizationVersions).length,12);assert.ok(Object.values(verified.personaAuthorizationVersions).every(value=>Number.isSafeInteger(value)&&value>=1));
     const attestation=(await database.client.query(`select public.pr_c_controlled_human_public_attestation($1,$2,$3,$4,$5,$6) result`,[context.releaseSha,context.reviewHeadSha,context.deployId,context.deployOrigin,context.exerciseDigest,context.publicTargetDigest])).rows[0].result;
     assert.equal(attestation.attested,true);assert.equal(attestation.exerciseDigest,context.exerciseDigest);assert.equal(Object.hasOwn(attestation,'organizationId'),false);
     await assert.rejects(database.client.query(`select public.pr_c_controlled_human_public_attestation($1,$2,$3,$4,$5,$6)`,[context.releaseSha,context.reviewHeadSha,context.deployId,'https://avalaos.com',context.exerciseDigest,context.publicTargetDigest]),/PR_C_CONTROLLED_HUMAN_ATTESTATION_MISMATCH/u);
@@ -673,6 +675,69 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       state=await studioArtifactState(artifactId);await invokeStudioPrerequisite('requester','studio.artifact.review.submit',artifactId,{artifactId,artifactVersionId:state.current_version_id},'submit');
       state=await studioArtifactState(artifactId);await invokeStudioPrerequisite('studio_reviewer','studio.artifact.review.assign',artifactId,{artifactId,artifactVersionId:state.current_version_id,reviewerId:handoffActors.studio_reviewer.auth_user_id},'assign');
     };
+
+    // Exercise the Studio prerequisite sequence against the real projection
+    // and command claim. The Edge handler adds only `ok:true` to this exact
+    // public receipt/resource result, which the adapter mirrors below.
+    await database.client.query('begin');try{
+      const artifact=await approvedArtifact();assert.ok(artifact);let artifactState=await studioArtifactState(artifact.id);
+      const priorArtifactState=artifactState;
+      await invokeStudioPrerequisite('requester','studio.artifact.draft.revise',artifact.id,{artifactId:artifact.id,parentVersionId:artifactState.current_version_id,content:{...artifactState.content,title:'Disposable generated-draft prerequisite'}},'pg-generated-draft');
+      artifactState=await studioArtifactState(artifact.id);assert.notEqual(artifactState.current_version_id,priorArtifactState.current_version_id);assert.equal(Number(artifactState.aggregate_version),Number(priorArtifactState.aggregate_version)+1);
+      const studioSessions=new Map();
+      for(const personaKey of ['requester','studio_reviewer']){
+        const actor=handoffActors[personaKey];const authorizationVersion=Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,actor.auth_user_id])).rows[0].version);
+        studioSessions.set(personaKey,{api:{
+          context:async()=>({userId:actor.auth_user_id,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,authorizationVersion}),
+          rpc:async(name,args)=>{assert.equal(name,'studio_artifact_projection_v2');assert.deepEqual(args,{p_org:generationBinding.org_id,p_workspace:generationBinding.workspace_id,p_artifact:artifact.id});await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actor.auth_user_id]);return (await database.client.query(`select public.studio_artifact_projection_v2($1,$2,$3) projection`,[generationBinding.org_id,generationBinding.workspace_id,artifact.id])).rows[0].projection},
+          invoke:async(functionName,body,expectation)=>{assert.equal(functionName,'studio-artifact-command');assert.deepEqual(expectation,{checkpointId:'CH-03',stepId:'generate-source-bound-document',action:body.commandType});assert.equal(body.authorizationVersion,authorizationVersion);const fresh=await studioArtifactState(artifact.id);assert.equal(body.expectedAggregateVersion,Number(fresh.aggregate_version));assert.equal(body.expectedArtifactVersion,Number(fresh.artifact_version));assert.equal(body.payload.artifactId,artifact.id);const result=await invokeStudioPrerequisite(personaKey,body.commandType,artifact.id,body.payload,`pg-helper-${body.commandType}`);return{ok:true,...result}},
+          lastCommand:async()=>null,
+        }});
+      }
+      const state=new Map([[SYNTHETIC_PREREQUISITE_STATE_KEYS.lastCompletedStep,'CH-03:generate-source-bound-document'],[SYNTHETIC_PREREQUISITE_STATE_KEYS.ch03ArtifactId,artifact.id]]);const interactionSequence=[];
+      const result=await runSyntheticPrerequisites({nextStep:{checkpointId:'CH-03',stepId:'approve-hybrid-studio-document'},sessions:studioSessions,state,interactionSequence});
+      assert.deepEqual(result,{applied:true,key:'CH-03:approve-hybrid-studio-document'});assert.equal(interactionSequence.length,3);
+      await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[handoffActors.studio_reviewer.auth_user_id]);
+      const projection=(await database.client.query(`select public.studio_artifact_projection_v2($1,$2,$3) projection`,[generationBinding.org_id,generationBinding.workspace_id,artifact.id])).rows[0].projection;
+      assert.equal(projection.review.outcome,'approved');assert.equal(projection.review.reviewerId,handoffActors.studio_reviewer.auth_user_id);
+      await database.client.query('rollback');
+    }catch(error){await database.client.query('rollback');throw error}
+
+    // Exercise the Delivery prerequisite orchestrator against the real
+    // PostgreSQL command and projection boundaries in a rolled-back package.
+    // The adapter supplies only the same ordinary actor context and public
+    // response shape as the Edge endpoints; no fixture rows escape rollback.
+    await database.client.query('begin');try{
+      const authoredItems=[
+        {clientKey:'item-0001',itemType:'Task',title:'Disposable prerequisite one',description:'Exact synthetic PostgreSQL prerequisite.',acceptanceCriteria:['Accepted by the bound author.'],nonFunctionalRequirements:[]},
+        {clientKey:'item-0002',itemType:'Task',title:'Disposable prerequisite two',description:'Exact synthetic PostgreSQL prerequisite.',acceptanceCriteria:['Accepted by the bound author.'],nonFunctionalRequirements:['No external execution.']},
+      ];
+      const created=await invokeDeliveryPrerequisite('delivery_author','delivery.package.create.manual',{manualBrief:'Disposable prerequisite integration',items:authoredItems},'pg-prerequisite-package');
+      const actor=deliveryActors.delivery_author;const authorizationVersion=Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,actor.auth_user_id])).rows[0].version);
+      let integrationOrdinal=0;
+      const api={
+        context:async()=>({userId:actor.auth_user_id,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,authorizationVersion}),
+        rpc:async()=>assert.fail('CH-11 integration must not invoke a Studio RPC'),
+        invoke:async(functionName,body,expectation)=>{
+          assert.equal(body.organizationId,generationBinding.org_id);assert.equal(body.workspaceId,generationBinding.workspace_id);
+          if(functionName==='enterprise-intelligence-query'){
+            await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actor.auth_user_id]);
+            const page=body.deliveryItemPage;const query={actorId:actor.auth_user_id,authorizationVersion,
+              ...(page?{packageId:page.packageId,itemCursorVersion:page.cursor.version,itemCursorId:page.cursor.id,itemLimit:page.limit}:{})};
+            const deliveryWorkspace=(await database.client.query(`select public.enterprise_delivery_workspace_projection($1,$2,$3::jsonb) projection`,[generationBinding.org_id,generationBinding.workspace_id,JSON.stringify(query)])).rows[0].projection;
+            return{projection:{deliveryWorkspace}};
+          }
+          assert.equal(functionName,'enterprise-intelligence-command');assert.deepEqual(expectation,{checkpointId:'CH-11',stepId:'create-manual-delivery-package',action:'delivery.item.review'});
+          return invokeDeliveryPrerequisite('delivery_author',body.commandType,body.payload,`pg-prerequisite-item-${integrationOrdinal++}`,body.idempotencyKey);
+        },
+        lastCommand:async()=>null,
+      };
+      const state=new Map([[SYNTHETIC_PREREQUISITE_STATE_KEYS.lastCompletedStep,'CH-11:create-manual-delivery-package'],[SYNTHETIC_PREREQUISITE_STATE_KEYS.ch11PackageId,created.resourceId]]);const interactionSequence=[];
+      const result=await runSyntheticPrerequisites({nextStep:{checkpointId:'CH-11',stepId:'review-manual-delivery-package'},sessions:new Map([['delivery_author',{api}]]),state,interactionSequence});
+      assert.deepEqual(result,{applied:true,key:'CH-11:review-manual-delivery-package'});assert.equal(interactionSequence.length,2);
+      assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_item_aggregates aggregate join public.enterprise_delivery_work_item_versions version on version.id=aggregate.current_version_id where aggregate.work_package_id=$1 and version.status='accepted'`,[created.resourceId])).rows[0].count),2);
+      await database.client.query('rollback');
+    }catch(error){await database.client.query('rollback');throw error}
 
     // CH-01 uses the real enterprise-AI conflict receipt/effect journal and the canonical Assess review authority.
     await observationFixture.beforeMachineStep('CH-01','resolve-material-assess-conflict');

@@ -27,6 +27,21 @@ import {
   deriveSyntheticApplicationActorDigest,
   deriveSyntheticApplicationSessionDigest,
 } from './prCSyntheticIdentity.mjs';
+import { attachSyntheticBrowserApi } from './prCSyntheticBrowserApi.mjs';
+import {
+  runSyntheticPrerequisites, readSyntheticDeliveryWorkspace, readSyntheticDeliveryPackage,
+  readSyntheticStudioArtifact, syntheticCommandResourceId,
+} from './prCSyntheticBrowserPrerequisites.mjs';
+import {
+  prepareSyntheticStudioGeneration, selectSyntheticDeliveryArtifact,
+  verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline,
+  verifySyntheticStudioApprovalHasNoDeliveryResource, verifySyntheticAssessHandoffReady,
+  verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticReadOnlyMonitorHistory,
+} from './prCSyntheticBrowserControls.mjs';
+import {
+  isSyntheticApiEvidenceStep, buildSyntheticApiEvidenceDescriptor, executeSyntheticApiEvidenceAction,
+} from './prCSyntheticBrowserEvidenceActions.mjs';
+import { executeSyntheticResponseLoss } from './prCSyntheticBrowserResponseLoss.mjs';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SHA = /^[0-9a-f]{40}$/u;
@@ -121,8 +136,8 @@ const BROWSER_ASSERTION_PLANS = Object.freeze({
   'select-two-different-studio-transcripts': { kind: 'studio-source-selection' },
   'select-custom-template': { kind: 'select', labels: ['Exact approved Studio template'], option: 'Synthetic controlled-human requirements template' },
   'edit-structured-document': { kind: 'edit-structured-document' },
-  'stop-with-no-delivery-resource': { kind: 'text', values: ['No retained Delivery package is visible in this workspace.', 'No Delivery packages are present.'] },
-  'verify-approved-assess-handoff-ready': { kind: 'text', values: ['approved', 'handoff ready'], exact: true },
+  'stop-with-no-delivery-resource': { kind: 'exact-studio-stop' },
+  'verify-approved-assess-handoff-ready': { kind: 'exact-assess-handoff-ready' },
   'add-disjoint-studio-supplements': { kind: 'studio-source-selection' },
   'preview-approved-studio-handoff': { kind: 'activate-text', values: ['Server-derived handoff preview · 250 items'], outcome: ['Server-bound proposal integrity verified.'] },
   'verify-request-creates-no-delivery-package': { kind: 'package-count-unchanged', stateKey: 'before-request' },
@@ -132,7 +147,7 @@ const BROWSER_ASSERTION_PLANS = Object.freeze({
   'inspect-deterministic-item-citations': { kind: 'delivery-citations' },
   'compare-immutable-descendant-history': { kind: 'delivery-item-history', outcome: ['Changed fields: title, description'] },
   'verify-complete-bounded-item-set': { kind: 'delivery-complete-set' },
-  'verify-monitor-unchanged-while-blocked': { kind: 'text-and-control-absence', values: ['No approved canonical baseline is available.'], role: 'button', names: ['Create read-only Monitor baseline'] },
+  'verify-monitor-unchanged-while-blocked': { kind: 'exact-blocked-monitor-boundary' },
   'verify-replay-same-baseline': { kind: 'baseline-count', stateKey: 'baseline-after-create' },
   'verify-replay-created-no-second-baseline': { kind: 'baseline-count', stateKey: 'baseline-after-create' },
   'compare-enterprise-and-primary-monitor': { kind: 'monitor-parity' },
@@ -140,8 +155,8 @@ const BROWSER_ASSERTION_PLANS = Object.freeze({
   'verify-no-hashes-or-approval-identities': { kind: 'privacy' },
   'verify-no-monitor-mutation-controls': { kind: 'monitor-control-absence' },
   'verify-legacy-metrics-non-authoritative': { kind: 'text', values: ['Legacy initiative disposition — non-authoritative'] },
-  'verify-direct-plan-remains-not-assessed': { kind: 'text', values: ['Not assessed · Planning only'] },
-  'verify-manual-path-remains-not-assessed': { kind: 'text', values: ['Manual item · no fabricated Studio or Assess citation', 'Not assessed · Planning only'], all: true },
+  'verify-direct-plan-remains-not-assessed': { kind: 'exact-planning-baseline', manual: false },
+  'verify-manual-path-remains-not-assessed': { kind: 'exact-planning-baseline', manual: true },
   'verify-zero-negative-side-effects': { kind: 'package-count-unchanged', stateKey: 'before-negative-attempts' },
   'reload-and-reconcile-one-effect': { kind: 'control-and-text', role: 'button', names: ['Reload committed state'], values: ['Committed server state loaded.'] },
   'verify-history-readable-and-actions-absent': { kind: 'read-only-history' },
@@ -189,7 +204,7 @@ export const safeBrowserRoute = pageUrl => {
 
 export const safeBrowserStepFailure = (planned, error) => {
   const message = String(error?.message ?? '');
-  const safeCode = /^(PR_C_SYNTHETIC_BROWSER_[A-Z0-9_]+)(?::|\r?\n|$)/u.exec(message)?.[1];
+  const safeCode = /^(PR_C_SYNTHETIC_(?:BROWSER|PREREQUISITE|RESPONSE_LOSS)_[A-Z0-9_]+)(?::|\r?\n|$)/u.exec(message)?.[1];
   const diagnostic = safeCode ?? (/(?:locator\.[A-Za-z]+|TimeoutError): Timeout [0-9]+ms exceeded/u.test(message) ? 'LOCATOR_TIMEOUT' : 'BROWSER_ERROR');
   return new Error(`PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:${planned.checkpointId}:${planned.stepId}:${diagnostic}`);
 };
@@ -271,7 +286,8 @@ const exactEnvironment = (env, preparation) => {
     backend: { exerciseDigest, targetFingerprint, publicTargetDigest, personaManifestDigest, fixtureManifestDigest, migrationTip: '20260926053818' },
     producer: { workflowPath: SYNTHETIC_WORKFLOW_PATH, job: SYNTHETIC_WORKFLOW_JOB, event: 'workflow_dispatch', runId, runAttempt, owner: 'APReddy-AutoBotz' },
   };
-  return { exactHead, exerciseDigest, previewOrigin, passwords: parsePasswordBundle(passwordBundle ?? ''), binding };
+  return { exactHead, exerciseDigest, previewOrigin, passwords: parsePasswordBundle(passwordBundle ?? ''), binding,
+    personaAuthorizationVersions: preparation?.personaAuthorizationVersions };
 };
 
 const waitForUsablePage = async page => {
@@ -603,6 +619,14 @@ const selectedDeliveryPackage = async workspace => {
 };
 
 const selectDeliveryPackageForControl = async (page, label, interactionSequence, expectedPackageId = '') => {
+  if (expectedPackageId) {
+    const { workspace, selected } = await selectDeliveryPackageById(page, expectedPackageId, interactionSequence);
+    const filter = workspace.getByLabel('Filter canonical work items', { exact: true });
+    if (await filter.count()) await filter.fill('');
+    assert(await selected.getByRole('button', { name: label, exact: true }).count() > 0,
+      'PR_C_SYNTHETIC_BROWSER_EXACT_PACKAGE_CONTROL_MISSING');
+    return workspace;
+  }
   const workspace = page.getByTestId('governed-delivery-workspace');
   const packages = workspace.getByRole('list', { name: 'Delivery packages' }).getByRole('button');
   const matches = [];
@@ -723,18 +747,12 @@ const reachControlWithKeyboard = async (page, control, interactionSequence) => {
   throw new Error('PR_C_SYNTHETIC_BROWSER_KEYBOARD_CONTROL_UNREACHABLE');
 };
 
-const prepareKeyboardOnlyHandoff = async (page, interactionSequence) => {
-  const section = page.locator('section[aria-labelledby="delivery-handoffs-title"]');
-  const select = section.getByLabel('Eligible exact Studio artifact', { exact: true });
-  await select.waitFor({ state: 'visible' });
-  const options = await select.locator('option').evaluateAll(nodes => nodes.map(node => ({ value: node.value, label: node.textContent?.trim() ?? '' })).filter(option => option.value));
-  const remaining = options.filter(option => option.label.endsWith('Not assessed · Planning only'));
-  assert.equal(remaining.length, 1, `PR_C_SYNTHETIC_BROWSER_KEYBOARD_HANDOFF_SOURCE_COUNT:${remaining.length}`);
-  await select.selectOption(remaining[0].value);
-  const preview = section.getByText(/^Server-derived handoff preview · [1-9][0-9]* items$/u, { exact: true });
-  assert.equal(await preview.count(), 1, 'PR_C_SYNTHETIC_BROWSER_KEYBOARD_HANDOFF_PREVIEW_COUNT');
-  interactionSequence.push('select:exact-source-bound-keyboard-handoff');
-  return section;
+const prepareKeyboardOnlyHandoff = async (page, interactionSequence, state) => {
+  const candidate = state.get('ch02:approved-candidate');
+  assert(candidate, 'PR_C_SYNTHETIC_BROWSER_KEYBOARD_HANDOFF_SOURCE_MISSING');
+  return (await selectSyntheticDeliveryArtifact(page, interactionSequence, {
+    artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType, planningOnly: true,
+  })).section;
 };
 
 export const selectExactEligibleStudioBundle = async (page, interactionSequence) => {
@@ -786,6 +804,9 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
   if (['CH-02:review-studio-document', 'CH-02:approve-studio-document'].includes(key))
     await selectSyntheticStudioDraft(page, interactionSequence);
   if (key === 'CH-03:approve-hybrid-studio-document') await selectSyntheticHybridStudioDraft(page, interactionSequence);
+  if (key === 'CH-03:generate-source-bound-document') await prepareSyntheticStudioGeneration(page, interactionSequence, {
+    artifactId: state.get('prereq:ch03:artifactId'), templateLabel: 'Synthetic controlled-human requirements template',
+  });
   if (['CH-02:review-studio-document', 'CH-02:approve-studio-document', 'CH-03:approve-hybrid-studio-document'].includes(key))
     assert(await fillIfVisible(page, 'Rationale', `Independent synthetic decision for ${stepId}.`, interactionSequence), 'PR_C_SYNTHETIC_BROWSER_STUDIO_RATIONALE_MISSING');
   if (['CH-04:request-exact-studio-handoff', 'CH-05:request-fresh-exact-handoff'].includes(key)) {
@@ -798,12 +819,11 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
   }
   if (key === 'CH-03:request-studio-handoff') await selectExactEligibleStudioBundle(page, interactionSequence);
   if (key === 'CH-10:handoff-direct-studio-plan') {
-    const select = page.getByLabel('Eligible exact Studio artifact', { exact: true });
-    const options = await select.locator('option').allTextContents();
-    const planning = options.filter(value => value.includes('Not assessed · Planning only'));
-    assert.equal(planning.length, 1, 'PR_C_SYNTHETIC_BROWSER_DIRECT_STUDIO_ARTIFACT_COUNT');
-    await select.selectOption({ label: planning[0] });
-    interactionSequence.push('select:exact-direct-studio-artifact');
+    const candidate = state.get('seed:direct-artifact');
+    assert(candidate, 'PR_C_SYNTHETIC_BROWSER_DIRECT_STUDIO_ARTIFACT_MISSING');
+    await selectSyntheticDeliveryArtifact(page, interactionSequence, {
+      artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType, planningOnly: true,
+    });
   }
   const deliveryControlByKey = {
     'CH-06:edit-one-item-with-rationale': 'Edit immutable descendant',
@@ -816,8 +836,9 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
     'CH-11:approve-manual-delivery-package': 'Final package approval',
   }[key];
   if (deliveryControlByKey) {
-    const expectedPackageId = ['CH-06', 'CH-07'].includes(checkpointId) ? state.get('full-governed-package')?.packageId ?? '' : '';
-    assert(!['CH-06', 'CH-07'].includes(checkpointId) || expectedPackageId, 'PR_C_SYNTHETIC_BROWSER_FULL_GOVERNED_PACKAGE_BINDING_MISSING');
+    const expectedPackageId = ['CH-06', 'CH-07'].includes(checkpointId) ? state.get('full-governed-package')?.packageId
+      : state.get(checkpointId === 'CH-10' ? 'prereq:ch10:packageId' : 'prereq:ch11:packageId');
+    assert(expectedPackageId, 'PR_C_SYNTHETIC_BROWSER_GOVERNED_PACKAGE_BINDING_MISSING');
     await selectDeliveryPackageForControl(page, deliveryControlByKey, interactionSequence, expectedPackageId);
     await loadCompleteDeliveryItemSet(page, interactionSequence);
     if (key === 'CH-06:edit-one-item-with-rationale') await isolateFirstActionableDeliveryItem(page, interactionSequence, expectedPackageId);
@@ -984,7 +1005,12 @@ const namedControl = async (page, role, names) => {
 };
 
 const packageCount = page => page.getByRole('list', { name: 'Delivery packages' }).getByRole('listitem').count();
-const baselineCount = page => page.getByTestId('canonical-monitor-baselines').locator('article').count();
+const baselineCount = async page => {
+  const panel = page.getByTestId('canonical-monitor-baselines');
+  await panel.waitFor({ state: 'visible' });
+  assert.equal(await panel.getAttribute('data-monitor-usable'), 'true', 'PR_C_SYNTHETIC_BROWSER_MONITOR_NOT_USABLE');
+  return panel.getByRole('list', { name: 'Approved Monitor baselines' }).getByRole('button').count();
+};
 
 export const selectAssessTranscriptSources = async (page, interactionSequence, names = SYNTHETIC_TRANSCRIPT_LABELS.assess, {
   sourceSetLabel = 'Synthetic assess transcript set', bundleLabel = 'Synthetic assess transcript selection',
@@ -1176,7 +1202,27 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
   const plan = BROWSER_ASSERTION_PLANS[stepId];
   assert(plan, `PR_C_SYNTHETIC_BROWSER_READ_PLAN_MISSING:${checkpointId}:${stepId}`);
   let observed;
-  if (plan.kind === 'text') observed = { exactText: await exactVisibleText(page, plan.values, plan.all) };
+  if (plan.kind === 'exact-studio-stop') {
+    const candidate = state.get('ch02:approved-candidate');
+    const result = await verifySyntheticStudioApprovalHasNoDeliveryResource(page, interactionSequence, {
+      artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType,
+      expectedPackageIds: state.get('ch02:initial-packageIds'),
+    });
+    observed = { artifactVersionDigest: digest(result.artifactVersionId), packageCount: result.packageCount, handoffCount: result.handoffCount };
+  } else if (plan.kind === 'exact-assess-handoff-ready') {
+    const result = await verifySyntheticAssessHandoffReady(page, interactionSequence, state.get('seed:assess-handoff'));
+    observed = { upstreamDigest: digest(result.upstreamHandoffId), sourceVersion: result.sourceVersion, requestAuthorized: result.requestAuthorized };
+  } else if (plan.kind === 'exact-blocked-monitor-boundary') {
+    const packageId = state.get('full-governed-package').packageId;
+    const result = await verifySyntheticBlockedPackageMonitorUnchanged(page, interactionSequence, { packageId });
+    const after = await readAuthorizedMonitorSnapshot(state.get('sessions').get('monitor_viewer'));
+    assert.deepEqual(after, state.get('monitor:before-blocked'), 'PR_C_SYNTHETIC_BROWSER_BLOCKED_MONITOR_CHANGED');
+    assert(!after.baselines.some(value => value.workPackageId === packageId), 'PR_C_SYNTHETIC_BROWSER_BLOCKED_BASELINE_PRESENT');
+    interactionSequence.push('observe:supplementary-monitor-viewer-session-unchanged');
+    observed = { packageDigest: digest(packageId), baselineControlCount: result.baselineControlCount,
+      monitorProjection: result.monitorProjection, authorizedMonitorSnapshotDigest: digest(after),
+      supplementaryMonitorIdentity: state.get('sessions').get('monitor_viewer').identity };
+  } else if (plan.kind === 'text') observed = { exactText: await exactVisibleText(page, plan.values, plan.all) };
   else if (plan.kind === 'testid') {
     const locator = page.getByTestId(plan.testId); await locator.waitFor({ state: 'visible' });
     observed = { testId: plan.testId, count: await locator.count(), textDigest: digest(await locator.first().innerText()) };
@@ -1217,6 +1263,12 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     assert(option, `PR_C_SYNTHETIC_BROWSER_OPTION_MISSING:${stepId}`); await select.selectOption({ label: option }); interactionSequence.push(`select:${safeLabel(label)}:${safeLabel(option)}`);
     observed = { label, option, valueDigest: digest(await select.inputValue()) };
   } else if (plan.kind === 'activate-text') {
+    if (stepId === 'preview-approved-studio-handoff') {
+      const candidate = state.get('seed:assessed-artifact');
+      await selectSyntheticDeliveryArtifact(page, interactionSequence, {
+        artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType, planningOnly: false,
+      });
+    }
     const trigger = await exactVisibleText(page, plan.values); await page.getByText(trigger[0].value, { exact: true }).first().click(); interactionSequence.push(`activate:${safeLabel(trigger[0].value)}`);
     observed = { trigger, outcome: await exactVisibleText(page, plan.outcome, true) };
   } else if (plan.kind === 'activate-control') {
@@ -1231,7 +1283,7 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     for (const value of plan.outcome) assert(text.includes(value), `PR_C_SYNTHETIC_BROWSER_OUTCOME_MISSING:${stepId}`);
     observed = { control: control.label, exactOutcome: plan.outcome, outcomeDigest: digest(text) };
   } else if (plan.kind === 'delivery-citations') {
-    const workspace = await selectDeliveryPackageForControl(page, 'Edit immutable descendant', interactionSequence);
+    const workspace = await selectDeliveryPackageForControl(page, 'Edit immutable descendant', interactionSequence, state.get('ch05:packageId'));
     const complete = await loadCompleteDeliveryItemSet(page, interactionSequence);
     const metrics = await deliveryCompleteSetMetrics(complete);
     const { selected, packageId } = await selectedDeliveryPackage(workspace);
@@ -1262,8 +1314,17 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     observed = { packageIdDigest: digest(expected.packageId), itemCount: metrics.itemCount, pageCount: metrics.pageCount, complete: true };
   } else if (plan.kind === 'package-count-unchanged') {
     const before = state.get(plan.stateKey); const after = await packageCount(page); assert(Number.isSafeInteger(before), `PR_C_SYNTHETIC_BROWSER_SNAPSHOT_MISSING:${plan.stateKey}`); assert.equal(after, before, `PR_C_SYNTHETIC_BROWSER_PACKAGE_COUNT_CHANGED:${stepId}`); observed = { before, after };
+  } else if (plan.kind === 'exact-planning-baseline') {
+    const prefix = plan.manual ? 'prereq:ch11' : 'prereq:ch10';
+    const { selected, baselineId } = await verifySyntheticMonitorBaseline(page, interactionSequence, {
+      packageId: state.get(`${prefix}:packageId`), baselineId: state.get(`${prefix}:baselineId`),
+    });
+    assert.equal(await selected.locator('dd').getByText('Not assessed · Planning only', { exact: true }).count(), 1,
+      'PR_C_SYNTHETIC_BROWSER_PLANNING_LINEAGE_MISSING');
+    observed = { baselineDigest: digest(baselineId), packageDigest: digest(state.get(`${prefix}:packageId`)),
+      planningOnly: true, manual: plan.manual, exactBaselineTextDigest: digest(await selected.innerText()) };
   } else if (plan.kind === 'baseline-count') {
-    const expected = state.get(plan.stateKey); const actual = await baselineCount(page); assert(Number.isSafeInteger(expected) && actual === expected && actual === 1, `PR_C_SYNTHETIC_BROWSER_BASELINE_COUNT:${stepId}`); observed = { expected, actual };
+    const expected = state.get(plan.stateKey); const actual = await baselineCount(page); assert(Number.isSafeInteger(expected) && actual === expected, `PR_C_SYNTHETIC_BROWSER_BASELINE_COUNT:${stepId}`); observed = { expected, actual };
   } else if (plan.kind === 'text-and-control-absence') {
     const exactText = await exactVisibleText(page, plan.values, true); const counts = {}; for (const name of plan.names) counts[name] = await page.getByRole(plan.role, { name, exact: true }).count(); assert(Object.values(counts).every(count => count === 0)); observed = { exactText, absentControls: counts };
   } else if (plan.kind === 'control-and-text') {
@@ -1274,16 +1335,16 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
   else if (plan.kind === 'viewport') { const viewport = page.viewportSize(); assert.equal(viewport?.width, plan.width); assert.equal(viewport?.height, plan.height); observed = viewport; }
   else if (plan.kind === 'zoom') { const value = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).zoom || '1')); assert.equal(value, plan.value); observed = { zoom: value }; }
   else if (plan.kind === 'keyboard-reachability') {
-    if (stepId === 'keyboard-only-item-edit') await isolateFirstActionableDeliveryItem(page, interactionSequence, '', SYNTHETIC_MANUAL_ITEM_TITLE);
+    if (stepId === 'keyboard-only-item-edit') await isolateFirstActionableDeliveryItem(page, interactionSequence, state.get('seed:manual-packageId'), SYNTHETIC_MANUAL_ITEM_TITLE);
     const root = stepId === 'keyboard-only-handoff'
-      ? await prepareKeyboardOnlyHandoff(page, interactionSequence)
+      ? await prepareKeyboardOnlyHandoff(page, interactionSequence, state)
       : page.getByTestId('governed-delivery-workspace');
     const control = await exactEnabledControl(root, plan.role, plan.names, `${checkpointId}:${stepId}`);
     const tabCount = await reachControlWithKeyboard(page, control.control, interactionSequence);
     observed = { control: control.label, keyboardReachable: true, activated: false, tabCount };
   }
   else if (plan.kind === 'focused-alert') {
-    const { workspace } = await isolateFirstActionableDeliveryItem(page, interactionSequence, '', SYNTHETIC_MANUAL_ITEM_TITLE);
+    const { workspace } = await isolateFirstActionableDeliveryItem(page, interactionSequence, state.get('seed:manual-packageId'), SYNTHETIC_MANUAL_ITEM_TITLE);
     const edit = await exactEnabledControl(workspace, 'button', ['Edit immutable descendant'], `${checkpointId}:${stepId}`);
     await edit.control.click(); interactionSequence.push('activate:edit-dialog-without-domain-command');
     const dialog = page.getByRole('dialog').last(); assert(await dialog.count() && await dialog.isVisible(), 'PR_C_SYNTHETIC_BROWSER_A11Y_DIALOG_MISSING');
@@ -1299,7 +1360,7 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     const control = await exactEnabledControl(page.getByTestId('governed-delivery-workspace'), plan.role, plan.names, `${checkpointId}:${stepId}`);
     assert(await control.control.evaluate(node => node === document.activeElement)); observed = { control: control.label, focused: true };
   }
-  else if (plan.kind === 'read-only-history') { const history = page.getByRole('button', { name: 'Version diff and history', exact: true }); assert(await history.count() > 0); const mutationCount = await page.getByRole('button', { name: /^(?:Edit immutable descendant|Accept proposal|Reject proposal|Submit resolved package|Approve package review|Final package approval)$/u }).count(); assert.equal(mutationCount, 0); observed = { historyControlCount: await history.count(), mutationControlCount: 0 }; }
+  else if (plan.kind === 'read-only-history') observed = await verifySyntheticReadOnlyMonitorHistory(page, interactionSequence, state.get('retained-monitor-history'));
   else if (plan.kind === 'monitor-parity') { const panel = page.getByTestId('canonical-monitor-baselines'); await panel.waitFor({ state: 'visible' }); const enterpriseDigest = digest(await panel.innerText()); await clickFirstLabel(page, ['Monitor'], interactionSequence); await page.getByTestId('canonical-monitor-baselines').waitFor({ state: 'visible' }); const primaryDigest = digest(await page.getByTestId('canonical-monitor-baselines').innerText()); assert.equal(primaryDigest, enterpriseDigest); observed = { enterpriseDigest, primaryDigest }; }
   else throw new Error(`PR_C_SYNTHETIC_BROWSER_PLAN_KIND_REJECTED:${stepId}:${plan.kind}`);
   return digest({ checkpointId, stepId, observed });
@@ -1312,6 +1373,13 @@ const stepAssertions = async ({ page, checkpointId, stepId, providerEgress, stat
   if (SERVER_STEP_KEYS.has(`${checkpointId}:${stepId}`)) {
     assert(proof.serverAnchor && proof.serverBinding, `PR_C_SYNTHETIC_BROWSER_REQUIRED_PROOF_MISSING:${checkpointId}:${stepId}`);
     add(requiredId, 'network', digest({ stepId, action: proof.serverBinding.action, result: proof.serverBinding.result, anchor: proof.serverAnchor, binding: proof.serverBinding }));
+    if (stepId === 'simulate-response-loss') add('ch-13.confirmed-response-loss-and-retry', 'network', digest(state.get('recovery:transport-facts')));
+    if (stepId === 'create-read-only-manual-baseline') {
+      const { selected } = await verifySyntheticDeliveryLineage(page, interactionSequence, { packageId: state.get('prereq:ch11:packageId'), manual: true });
+      const manualCitation = page.getByText('Manual item · no fabricated Studio or Assess citation', { exact: true });
+      assert(await manualCitation.count() > 0, 'PR_C_SYNTHETIC_BROWSER_MANUAL_CITATION_MISSING');
+      add('ch-11.exact-manual-package-lineage', 'dom', digest(await selected.innerText()));
+    }
   } else add(requiredId, stepId.startsWith('keyboard-') || stepId.includes('focus') ? 'accessibility' : stepId.includes('overflow') || stepId.includes('viewport') || stepId.includes('zoom') || stepId.includes('chrome') || stepId.includes('pixel') ? 'layout' : 'dom', await observeBrowserOnlyStep({ page, checkpointId, stepId, state, interactionSequence }));
   assert.equal(providerEgress.length, 0, `PR_C_SYNTHETIC_BROWSER_PROVIDER_EGRESS:${checkpointId}:${stepId}`);
   add(`${checkpointId.toLowerCase()}.${stepId}.zero-provider-egress`, 'network', digest({ providerEgressCount: 0 }));
@@ -1332,8 +1400,10 @@ export const buildBrowserExecutionCatalog = () => CONTROLLED_HUMAN_EXECUTION_ORD
     const serverAction = SERVER_ACTION_BY_STEP.get(key) ?? null;
     if (serverAction) assert((ACTION_LABEL_OVERRIDES[key] ?? ACTION_LABELS[serverAction.action])?.length, `PR_C_SYNTHETIC_BROWSER_ACTION_PLAN_MISSING:${key}`);
     else assert(BROWSER_ASSERTION_PLANS[step.stepId], `PR_C_SYNTHETIC_BROWSER_READ_PLAN_MISSING:${key}`);
-    const surface = checkpointId === 'CH-01' && step.stepId === 'complete-remaining-assess-fields-manually' ? 'assess-case'
+    const surface = step.stepId === 'verify-history-readable-and-actions-absent' ? 'monitor'
+      : checkpointId === 'CH-01' && step.stepId === 'complete-remaining-assess-fields-manually' ? 'assess-case'
       : checkpointId === 'CH-01' && ['approve-assess-result', 'decline-studio-handoff', 'verify-no-studio-resource'].includes(step.stepId) ? 'assess-review'
+      : checkpointId === 'CH-02' && step.stepId === 'stop-with-no-delivery-resource' ? 'delivery'
       : checkpointId === 'CH-02' || checkpointId === 'CH-03' ? 'studio-docs'
       : checkpointId === 'CH-10' && step.stepId === 'create-direct-studio-plan' ? 'studio-docs'
       : checkpointId === 'CH-10' && step.stepId === 'verify-direct-plan-remains-not-assessed' ? 'monitor'
@@ -1386,16 +1456,82 @@ const snapshotBeforeServerAction = async (page, key, state) => {
   if (key === 'CH-08:replay-baseline-creation') state.set('baseline-after-create', await baselineCount(page));
 };
 
-const executePlannedStep = async ({ planned, session, providerEgress, state, nextTime }) => {
+// These selectors are private runner state. Only their digests enter evidence.
+export const retainSyntheticCommandState = async (planned, session, state, proof, observedCommand) => {
+  const key = `${planned.checkpointId}:${planned.stepId}`;
+  const resourceKeys = {
+    'CH-02:approve-studio-document': 'ch02:artifactId',
+    'CH-03:accept-studio-handoff': 'prereq:ch03:artifactId',
+    'CH-05:consume-approved-handoff-once': 'ch05:packageId',
+    'CH-10:handoff-direct-studio-plan': 'prereq:ch10:handoffId',
+    'CH-11:create-manual-delivery-package': 'prereq:ch11:packageId',
+    'CH-11:create-read-only-manual-baseline': 'prereq:ch11:baselineId',
+    'CH-13:simulate-response-loss': 'recovery:packageId',
+  };
+  const replayKeys = {
+    'CH-05:consume-approved-handoff-once': 'replay:delivery.handoff.consume',
+    'CH-08:create-baseline-with-exact-package-selectors': 'replay:monitor.baseline.create',
+  };
+  if (!resourceKeys[key] && !replayKeys[key]
+    && !['CH-04:request-exact-studio-handoff', 'CH-06:edit-one-item-with-rationale'].includes(key)) return;
+  const command = observedCommand ?? await session.api.lastCommand();
+  const expectedAction = planned.serverAction.action.startsWith('handoff.') ? `studio.${planned.serverAction.action}` : planned.serverAction.action;
+  assert(command?.commandType === expectedAction && command.response?.ok === true
+    && digest({ requestId: command.requestId }) === proof.serverAnchor.requestDigest,
+  'PR_C_SYNTHETIC_BROWSER_COMMAND_PROOF_BINDING_MISMATCH');
+  if (resourceKeys[key]) state.set(resourceKeys[key], syntheticCommandResourceId(command.response, expectedAction));
+  if (replayKeys[key]) state.set(replayKeys[key], { body: command.body, resourceDigest: proof.serverBinding.resourceDigest });
+  if (key === 'CH-04:request-exact-studio-handoff') state.set('prereq:ch04:requestSource', command.body.payload);
+  if (key === 'CH-06:edit-one-item-with-rationale') state.set('prereq:ch06:finalItemId', command.body.payload.itemAggregateId);
+};
+
+const prepareApiEvidenceDescriptor = async (planned, sessions, state, binding) => {
+  if (!isSyntheticApiEvidenceStep(planned)) return undefined;
+  const inputs = { workspaceId: state.get('exercise:scope').workspaceId,
+    authorizationVersion: binding.personaAuthorizationVersions[planned.personaKey],
+    replay: state.get(`replay:${planned.serverAction.action}`) };
+  if (planned.stepId === 'reject-stale-authorization') {
+    const snapshot = await readSyntheticDeliveryPackage(sessions.get('delivery_author'), state.get('recovery:packageId'));
+    inputs.deliveryPackage = snapshot.deliveryPackage;
+  }
+  if (planned.stepId === 'reject-stale-source-change')
+    inputs.sourceArtifact = await readSyntheticStudioArtifact(sessions.get('requester'), state.get('seed:assessed-artifact').studioArtifactId);
+  return buildSyntheticApiEvidenceDescriptor(planned, inputs);
+};
+
+const readAuthorizedMonitorSnapshot = async session => {
+  const context = await session.api.context();
+  const response = await session.api.invoke('enterprise-intelligence-query', { organizationId: context.organizationId,
+    workspaceId: context.workspaceId, expectedAuthorizationVersion: context.authorizationVersion });
+  const projection = (response.projection ?? response).monitorApprovedBaselines;
+  assert(projection?.organizationId === context.organizationId && projection.workspaceId === context.workspaceId
+    && Array.isArray(projection.baselines), 'PR_C_SYNTHETIC_BROWSER_AUTHORIZED_MONITOR_SNAPSHOT_MISSING');
+  return projection;
+};
+
+export const summarizePrerequisiteInteractions = values => {
+  const result = [];
+  for (let index = 0; index < values.length;) {
+    const value = values[index]; let end = index + 1;
+    while (end < values.length && values[end] === value) end += 1;
+    result.push(end - index > 1 ? `${value}:count-${end - index}` : value); index = end;
+  }
+  return result;
+};
+
+const executePlannedStep = async ({ planned, session, providerEgress, state, nextTime, apiDescriptor, exerciseDigest, prerequisiteInteractions = [] }) => {
   const { page, identity } = session;
-  const interactionSequence = [];
+  const interactionSequence = summarizePrerequisiteInteractions(prerequisiteInteractions);
   const startedAt = nextTime();
   if (planned.serverAction) {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForUsablePage(page);
     interactionSequence.push('reload:fresh-server-projection');
   }
-  await openSurface(page, planned.surface, interactionSequence, planned.stepId);
+  const apiEvidence = isSyntheticApiEvidenceStep(planned);
+  const dialogContinuation = planned.checkpointId === 'CH-14' && ['preserve-invalid-input', 'logical-focus-return'].includes(planned.stepId);
+  if (!dialogContinuation && !(apiEvidence && planned.serverAction.observationKind === 'negative_attempt'))
+    await openSurface(page, planned.surface, interactionSequence, planned.stepId);
   await performSpecialInteraction(page, planned.stepId, interactionSequence);
   let proof = { serverAnchor: null, serverBinding: null };
   if (planned.serverAction) {
@@ -1411,8 +1547,29 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
     }
     await snapshotBeforeServerAction(page, key, state);
     await armServerStep(page, planned.checkpointId, planned.stepId, interactionSequence);
-    await executeServerAction(page, planned.checkpointId, planned.stepId, interactionSequence, state);
-    proof = await collectProof(page, planned.checkpointId, planned.stepId, interactionSequence);
+    if (apiEvidence) {
+      const completed = await executeSyntheticApiEvidenceAction({ api: session.api, planned, descriptor: apiDescriptor, exerciseDigest, interactionSequence });
+      // Clear the local UI arm after server-owned completion and read back the
+      // durable proof through the same banner used by ordinary browser actions.
+      await page.reload({ waitUntil: 'domcontentloaded' }); await waitForUsablePage(page);
+      proof = await collectProof(page, planned.checkpointId, planned.stepId, interactionSequence);
+      assert.deepEqual(proof, completed, 'PR_C_SYNTHETIC_BROWSER_API_PROOF_READBACK_MISMATCH');
+    } else {
+      let responseLoss;
+      const execute = () => executeServerAction(page, planned.checkpointId, planned.stepId, interactionSequence, state);
+      if (key === 'CH-13:simulate-response-loss') {
+        const scope = state.get('exercise:scope');
+        responseLoss = await executeSyntheticResponseLoss({ page, organizationId: scope.organizationId, workspaceId: scope.workspaceId,
+          publicTargetDigest: state.get('public-target-digest'), execute });
+        interactionSequence.push('transport:drop-first-committed-response', 'transport:confirm-exact-idempotent-retry');
+        state.set('recovery:transport-facts', responseLoss.facts);
+      } else await execute();
+      proof = await collectProof(page, planned.checkpointId, planned.stepId, interactionSequence);
+      const original = responseLoss?.original;
+      await retainSyntheticCommandState(planned, session, state, proof, original ? {
+        commandType: original.body.commandType, requestId: original.body.requestId, body: original.body, response: original.response,
+      } : undefined);
+    }
     if (key === 'CH-01:resolve-material-assess-conflict') {
       const apply = page.getByRole('button', { name: 'Apply batch as one Assess draft version', exact: true });
       const applyEnabled = await apply.isEnabled().catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_APPLY_CONTROL_MISSING'); });
@@ -1460,6 +1617,10 @@ export const latestCompletedAt = checkpoints => {
 
 export const runActiveBrowserPhase = async ({ env = process.env, preparation, headed = false, stateDirectory, browserFactory = () => chromium.launch({ headless: !headed }) } = {}) => {
   const binding = exactEnvironment(env, preparation);
+  assert(binding.personaAuthorizationVersions
+    && canonicalJson(Object.keys(binding.personaAuthorizationVersions).sort()) === canonicalJson([...PERSONA_KEYS].sort())
+    && Object.values(binding.personaAuthorizationVersions).every(value => Number.isSafeInteger(value) && value > 0),
+  'PR_C_SYNTHETIC_BROWSER_PERSONA_AUTHORITY_METADATA_MISSING');
   assert(stateDirectory, 'PR_C_SYNTHETIC_BROWSER_STATE_DIRECTORY_REQUIRED');
   await mkdir(path.dirname(stateDirectory), { recursive: true }); await mkdir(stateDirectory, { recursive: false });
   const browser = await browserFactory();
@@ -1472,11 +1633,28 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       const context = await browser.newContext({ ...device, serviceWorkers: 'block' });
       const page = await context.newPage();
       attachProviderObserver(page, providerEgress);
+      const api = await attachSyntheticBrowserApi({ page, personaKey, binding: binding.binding });
       const identity = await signIn({ page, personaKey, password: binding.passwords[personaKey], ...binding });
-      personas.set(personaKey, { context, page, identity });
+      await api.setIdentity(identity);
+      personas.set(personaKey, { context, page, identity, api });
     }
     const records = createCheckpointRecords();
     const state = new Map(); const nextTime = timestampSequence();
+    state.set('sessions', personas);
+    state.set('public-target-digest', binding.binding.backend.publicTargetDigest);
+    const requester = personas.get('requester');
+    state.set('exercise:scope', await requester.api.context());
+    const initialWorkspace = await readSyntheticDeliveryWorkspace(requester);
+    state.set('ch02:initial-packageIds', initialWorkspace.packages.map(value => value.id).sort());
+    const manual = initialWorkspace.packages.filter(value => value.sourcePackage?.sourceMode === 'manual'
+      && value.items.some(item => item.title === SYNTHETIC_MANUAL_ITEM_TITLE));
+    assert.equal(manual.length, 1, 'PR_C_SYNTHETIC_BROWSER_SEEDED_MANUAL_PACKAGE_AMBIGUOUS');
+    state.set('seed:manual-packageId', manual[0].id);
+    for (const [name, artifactType, planningOnly] of [['direct', 'pdd', true], ['assessed', 'brd', false]]) {
+      const candidates = initialWorkspace.eligibleStudioArtifacts.filter(value => value.artifactType === artifactType && value.planningOnly === planningOnly);
+      assert.equal(candidates.length, 1, 'PR_C_SYNTHETIC_BROWSER_SEEDED_ARTIFACT_AMBIGUOUS');
+      state.set(`seed:${name}-artifact`, candidates[0]);
+    }
     for (const planned of activeSteps()) {
       if (planned.checkpointId === 'CH-12' && planned.stepId === 'revoked-actor-projection-denied') {
         const reviewer = personas.get('delivery_reviewer'); const interactions = []; await openSurface(reviewer.page, 'delivery', interactions);
@@ -1485,12 +1663,36 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       const session = personas.get(planned.personaKey);
       assert(session, `PR_C_SYNTHETIC_BROWSER_CONTEXT_MISSING:${planned.personaKey}`);
       try {
-        records.get(planned.checkpointId).steps.push(await executePlannedStep({ planned, session, providerEgress, state, nextTime }));
+        const prerequisiteInteractions = [];
+        await runSyntheticPrerequisites({ nextStep: planned, sessions: personas, state, interactionSequence: prerequisiteInteractions });
+        if (planned.stepId === 'stop-with-no-delivery-resource') {
+          const workspace = await readSyntheticDeliveryWorkspace(requester);
+          const candidate = workspace.eligibleStudioArtifacts.filter(value => value.studioArtifactId === state.get('ch02:artifactId'));
+          assert.equal(candidate.length, 1, 'PR_C_SYNTHETIC_BROWSER_APPROVED_STUDIO_CANDIDATE_MISSING');
+          state.set('ch02:approved-candidate', candidate[0]);
+        }
+        if (planned.stepId === 'verify-approved-assess-handoff-ready') {
+          const scope = await session.api.context();
+          const sources = await session.api.rpc('enterprise_assess_studio_handoff_projection', { p_org: scope.organizationId, p_workspace: scope.workspaceId });
+          assert.equal(sources.eligibleHandoffs?.length, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_HANDOFF_AMBIGUOUS');
+          state.set('seed:assess-handoff', sources.eligibleHandoffs[0]);
+        }
+        if (planned.stepId === 'request-package-changes') state.set('monitor:before-blocked', await readAuthorizedMonitorSnapshot(personas.get('monitor_viewer')));
+        const apiDescriptor = await prepareApiEvidenceDescriptor(planned, personas, state, binding);
+        records.get(planned.checkpointId).steps.push(await executePlannedStep({ planned, session, providerEgress, state, nextTime,
+          apiDescriptor, exerciseDigest: binding.exerciseDigest, prerequisiteInteractions }));
+        state.set('catalog:lastCompletedStep', `${planned.checkpointId}:${planned.stepId}`);
       } catch (error) {
         throw safeBrowserStepFailure(planned, error);
       }
     }
     assert.equal(providerEgress.length, 0, 'PR_C_SYNTHETIC_BROWSER_PROVIDER_EGRESS');
+    const retainedMonitor = await readAuthorizedMonitorSnapshot(personas.get('monitor_viewer'));
+    const identities = retainedMonitor.baselines.map(value => ({ id: value.id, version: value.version,
+      packageId: value.workPackageId, packageVersion: value.workPackageVersion, acceptedItemCount: value.acceptedItemCount }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    assert.equal(identities.length, 4, 'PR_C_SYNTHETIC_BROWSER_COMPLETE_JOURNEY_BASELINE_COUNT');
+    const retainedMonitorHistory = { baselineCount: identities.length, identityDigest: digest(identities) };
     const storageStateFiles = [];
     for (const personaKey of PERSONA_KEYS) {
       const file = `${personaKey}.json`; await personas.get(personaKey).context.storageState({ path: path.join(stateDirectory, file) }); storageStateFiles.push({ personaKey, file });
@@ -1501,6 +1703,7 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       personas: PERSONA_KEYS.map(personaKey => ({ personaKey, role: HUMAN_DUTY_BY_PERSONA[personaKey], ...personas.get(personaKey).identity })),
       checkpoints: CONTROLLED_HUMAN_CATALOG.map(record => records.get(record.checkpointId)), storageStateFiles,
       providerEgressCount: 0,
+      retainedMonitorHistory,
       lastCompletedAt: latestCompletedAt([...records.values()]),
     };
   } finally {
@@ -1539,7 +1742,8 @@ export const runReadOnlyBrowserPhase = async ({ active, env = process.env, prepa
     }
     const planned = readOnlyStep(); assert(planned, 'PR_C_SYNTHETIC_BROWSER_READ_ONLY_STEP_MISSING');
     const session = personas.get(planned.personaKey); const nextTime = timestampSequence(Date.parse(active.lastCompletedAt));
-    const finalStep = await executePlannedStep({ planned, session, providerEgress, state: new Map(), nextTime });
+    const finalStep = await executePlannedStep({ planned, session, providerEgress,
+      state: new Map([['retained-monitor-history', active.retainedMonitorHistory]]), nextTime });
     const checkpoints = active.checkpoints.map(record => record.checkpointId === planned.checkpointId ? { ...record, steps: [...record.steps, finalStep] } : record);
     const personaEvidence = [];
     for (const record of active.personas) personaEvidence.push({ ...record, ...await signOut(personas.get(record.personaKey).page, record.personaKey) });

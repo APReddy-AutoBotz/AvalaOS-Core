@@ -5,7 +5,7 @@ import test from 'node:test';
 import {
   ATTESTATION_VERSION, EXPECTED_MIGRATION_TIP, apply, assertTargetInventory, canonicalJson,
   checkpointObserve, controlledHumanObserverLifecycleWitness, controlledHumanStepEvidenceSpec, deprovision, deriveBoundNegativeEffectCounts, deriveContext, deriveOperationEventSequence, deriveUnboundAbsenceEffectCounts, deterministicUuid, FEATURE_FLAGS, loadCanonicalCapabilityInventory, loadFixture, plan, quiesce, recoverReset, safeResult, sha256, validateFixtureCapabilities, validateSupabaseTargetTuple, verify,
-  validatePrivilegedPostgresConnectionString,
+  validatePrivilegedPostgresConnectionString, decodeSyntheticPersonaAuthorizationVersions,
 } from './prCControlledHumanEnvironment.mjs';
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA} from './prCControlledHumanEvidenceContract.mjs';
 import {createControlledHumanObservationFixture} from './prCControlledHumanObservationFixture.mjs';
@@ -371,6 +371,15 @@ test('quiesce remains read-only and recovers every post-mutation boundary with o
     await assert.rejects(quiesce(context,database,1,{afterMutation:async name=>{if(!injected&&name===boundary){injected=true;throw crash}}}),new RegExp(`crash-${boundary}`,'u'));
     const recovered=await quiesce(context,database,1);assert.equal(recovered.lifecycle,'read_only');assert.equal(lifecycle,'read_only');assert.equal(quiescedHistoryDigest,frozen);assert.equal(completion,'completed');
   }
+});
+
+test('synthetic probe versions contain exactly the server-read persona versions and no identifiers',()=>{
+  const rows=Object.keys(HUMAN_DUTY_BY_PERSONA).map(persona_key=>({persona_key,version:'3'}));
+  const decoded=decodeSyntheticPersonaAuthorizationVersions(rows);
+  assert.deepEqual(Object.keys(decoded).sort(),Object.keys(HUMAN_DUTY_BY_PERSONA).sort());
+  assert(Object.values(decoded).every(value=>value===3));
+  for(const invalid of [rows.slice(1),[...rows,rows[0]],rows.map((row,index)=>index?row:{...row,version:0}),rows.map((row,index)=>index?row:{...row,user_id:'private'}),rows.map((row,index)=>index?row:{...row,version:true})])
+    assert.throws(()=>decodeSyntheticPersonaAuthorizationVersions(invalid),/PERSONA_AUTHORIZATION_VERSIONS_REJECTED/u);
 });
 
 test('verification binds the exact public attestation and never upgrades authority',async()=>{

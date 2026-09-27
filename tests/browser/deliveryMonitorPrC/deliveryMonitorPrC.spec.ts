@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
-import { selectExactRevisedDeliveryDescendant } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { selectExactRevisedDeliveryDescendant } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { selectSyntheticDeliveryArtifact, verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline, verifySyntheticReadOnlyMonitorHistory, verifySyntheticStudioApprovalHasNoDeliveryResource } from '../../../scripts/prCSyntheticBrowserControls.mjs';import { canonicalDigest } from '../../../scripts/prCControlledHumanEvidenceContract.mjs';
 
 const organizationId = '00000001-0000-4000-8000-000000000001';
 const workspaceId = '00000002-0000-4000-8000-000000000002';
@@ -239,8 +239,15 @@ test('PR C synthetic CH-14 reaches exact handoff and item controls without commi
   await open(page,'?state=planning');
   const handoffSection=page.getByRole('region',{name:'Studio → Delivery handoffs'});
   const eligible=handoffSection.getByLabel('Eligible exact Studio artifact');
-  await expect(eligible.locator('option')).toHaveCount(1);
-  await expect(eligible.locator('option')).toContainText('Not assessed · Planning only');
+  await expect(eligible.locator('option')).toHaveCount(2);
+  expect(await eligible.locator('option').allTextContents()).toEqual([
+    'BRD v4 · 250 server proposals · Not assessed · Planning only',
+    'PDD v2 · 250 server proposals · Not assessed · Planning only',
+  ]);
+  const interactions:string[]=[];
+  const selected=await selectSyntheticDeliveryArtifact(page,interactions,{artifactVersionId,artifactType:'brd',planningOnly:true});
+  await expect(selected.select).toHaveValue(artifactVersionId);
+  expect(interactions).toEqual(['select:exact-eligible-studio-artifact-version']);
   await expect(handoffSection.getByText(/^Server-derived handoff preview · [1-9][0-9]* items$/)).toHaveCount(1);
   const request=handoffSection.getByRole('button',{name:'Request handoff',exact:true});
   expect(await tabTo(page,request)).toBeGreaterThan(0);
@@ -260,6 +267,61 @@ test('PR C synthetic CH-14 reaches exact handoff and item controls without commi
   await expect(edit).toBeFocused();
   await expect(item.getByRole('heading',{name:'Canonical work item 001',exact:true})).toBeVisible();
   await expect(item.getByText(/^Decision:/)).toHaveCount(0);
+});
+
+test('PR C synthetic observations bind exact Delivery lineage and Monitor baseline by package identity', async ({page}) => {
+  const interactions:string[]=[];
+  await open(page,'?state=approved');
+  const delivery=await verifySyntheticDeliveryLineage(page,interactions,{packageId,manual:false});
+  await expect(delivery.selected.getByText('Assessed lineage',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Create read-only Monitor baseline',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  const monitor=await verifySyntheticMonitorBaseline(page,interactions,{packageId,baselineId});
+  await expect(monitor.selected).toHaveAttribute('data-package-id',packageId);
+  await open(page);
+  await page.getByLabel('Package title').fill('Synthetic manual identity check');
+  await page.getByLabel('First item title').fill('Verify exact manual lineage');
+  await page.getByLabel('Description').fill('Planning-only package without fabricated upstream ancestry.');
+  await page.getByRole('button',{name:'Create manual planning package',exact:true}).click();
+  const manual=await verifySyntheticDeliveryLineage(page,interactions,{packageId:'00000050-0000-4000-8000-000000000050',manual:true});
+  await expect(manual.selected.getByText('Not assessed · Planning only',{exact:true})).toBeVisible();
+  expect(interactions).toEqual(['observe:exact-studio-delivery-package-lineage','observe:exact-package-bound-monitor-baseline','observe:exact-manual-delivery-package-lineage']);
+});
+
+test('PR C synthetic Studio-only stop preserves seeded Delivery resources without creating a downstream resource', async ({page}) => {
+  await open(page,'?state=approved-studio-no-delivery');
+  const interactions:string[]=[];
+  const observed=await verifySyntheticStudioApprovalHasNoDeliveryResource(page,interactions,{artifactVersionId,artifactType:'brd',expectedPackageIds:['00000061-0000-4000-8000-000000000061']});
+  expect(observed).toMatchObject({artifactVersionId,visibleIdentity:'BRD v4',packageCount:1,handoffCount:0});
+  await expect(page.getByTestId('delivery-package-00000061-0000-4000-8000-000000000061').getByText('Manual Delivery entry',{exact:true})).toBeVisible();
+  expect(interactions).toEqual(['select:exact-eligible-studio-artifact-version','observe:exact-studio-artifact-has-no-downstream-resource']);
+});
+
+test('PR C synthetic blocked package leaves unrelated Monitor baseline unchanged', async ({page}) => {
+  await open(page,'?state=blocked-seeded-baseline');
+  const interactions:string[]=[];
+  const observed=await verifySyntheticBlockedPackageMonitorUnchanged(page,interactions,{packageId});
+  expect(observed).toEqual({packageId,baselineControlCount:0,baselineEligibilityCount:0,monitorProjection:'unavailable'});
+  await expect(page.getByTestId('monitor-baseline-00000091-0000-4000-8000-000000000091')).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Monitor unavailable'})).toContainText('No empty, complete, or legacy Monitor state is inferred.');
+  expect(interactions).toEqual(['observe:exact-blocked-package-monitor-unchanged']);
+});
+
+test('PR C synthetic monitor viewer reads exact retained baseline history without mutation authority', async ({page}) => {
+  await page.goto('/tests/browser/deliveryMonitorPrC/harness.html?state=monitor-history-readonly&view=enterprise-monitor',{waitUntil:'domcontentloaded'});
+  await expect(page.getByTestId('canonical-monitor-baselines')).toHaveAttribute('data-monitor-usable','true');
+  const expectedIdentities=[
+    {id:'00000091-0000-4000-8000-000000000091',version:1,packageId:'00000060-0000-4000-8000-000000000060',packageVersion:1,acceptedItemCount:1},
+    {id:'00000092-0000-4000-8000-000000000092',version:3,packageId,packageVersion:2,acceptedItemCount:2},
+  ];
+  const identityDigest=canonicalDigest(expectedIdentities);
+  const interactions:string[]=[];
+  const observed=await verifySyntheticReadOnlyMonitorHistory(page,interactions,{baselineCount:2,identityDigest});
+  expect(observed).toEqual({baselineCount:2,identityDigest,readOnly:true,creationDisabled:true,mutationControlCount:0});
+  await page.getByRole('button',{name:/^Baseline v3 · approved\b/u}).click();
+  await expect(page.getByText('Retained milestone',{exact:true})).toBeVisible();
+  await expect(page.getByText('Retained risk',{exact:true})).toBeVisible();
+  expect(interactions).toEqual(['observe:retained-read-only-monitor-history']);
 });
 
 test('PR C synthetic CH-07 scopes the revised descendant decision to the exact governed package and child', async ({page}) => {

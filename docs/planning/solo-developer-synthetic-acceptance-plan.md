@@ -592,3 +592,44 @@ TypeScript also passes. These are local executed evidence, not full hosted PASS.
 Rollback reverts the client correction and its focused test/provenance entries;
 retain the failed exercise history and merge block until all 84 steps pass on one
 exact candidate.
+
+The next protected dispatch is held while the remaining runner sequence is
+repaired as one implementation change. Read-only architecture, security, and
+quality findings confirmed missing generation selection, independent lifecycle
+prerequisites, complete-set decisions, unavailable replay/denial controls, and
+observations that incorrectly assumed an empty seeded workspace. The approved
+catalog remains 84 steps with 43 server-bound actions.
+
+The runner uses exact captured command identities and ordinary authenticated
+public APIs for the approved prerequisites between catalog observations. It
+retains final positive catalog decisions in the UI and uses the existing server
+anchor/completion protocol for replay and negative attempts. CH-10 still creates
+a source-only draft separately from the canonical seeded approved PDD handoff;
+its planning package receives an ordinary, independently authorized Monitor
+baseline before the exact Monitor observation. No catalog, persona capability,
+production authorization, migration, score, or provider permission is changed.
+
+CH-07's Delivery reviewer observes the blocked package and unavailable Monitor
+boundary; a separately identified authorized Monitor session provides the
+supplementary unchanged-baseline read. CH-11's approver verifies manual Delivery
+lineage, and its Monitor-only viewer observes that exact package's baseline.
+After quiescence, the Monitor-only viewer verifies retained immutable baseline
+versions and absent mutation authority without requesting Delivery privileges.
+The recovery step drops one confirmed committed response and checks the normal
+client's same-idempotency retry, rather than labeling an ordinary success as
+response loss. Opaque selectors and response bodies stay in private runner
+memory; published observations contain bounded labels, counts, and digests.
+
+Executed local evidence: all 51 feature-owned synthetic acceptance checks pass,
+including the real-browser response-loss route; all 14 affected real-component
+scenarios pass across Desktop Chrome and Pixel 7. The disposable PostgreSQL 16
+test passes both full seed/deprovision cycles, the 12-persona authority-version
+map, and the actual Studio/Delivery prerequisite command/projection paths. Its
+raw handoff, item-version, review-state, and pre-approval count mismatches were
+corrected in the runner adapter. The 29 focused environment checks, TypeScript,
+AI boundary scan, and diff checks also pass. The full protected exact-candidate
+campaign remains pending. Rollback reverts
+the runner helpers, tests, verification metadata, and provenance together. Keep
+the protected run and merge blocked on any failed prerequisite, ambiguous
+command outcome, proof mismatch, or incomplete campaign; preserve immutable
+exercise history and use the existing recovery/deprovision workflow.

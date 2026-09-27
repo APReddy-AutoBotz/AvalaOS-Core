@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -41,6 +41,27 @@ test('PR C synthetic runner edits, commits, submits, and assigns one exact sourc
   await expect(page.getByText('In review committed.',{exact:true})).toBeVisible();
 });
 
+test('PR C synthetic generation binds the exact source-only hybrid artifact and approved tenant template after reload', async ({page}) => {
+  await open(page,'?mode=direct&syntheticHybrid=1');
+  await page.reload({waitUntil:'domcontentloaded'});
+  const interactions:string[]=[];
+  const prepared=await prepareSyntheticStudioGeneration(page,interactions,{artifactId:'00000038-0000-4000-8000-000000000038',templateLabel:'Tenant approved replacement'});
+  expect(prepared.templateVersionId).toBe('00000022-0000-4000-8000-000000000022');
+  await prepared.generate.click();
+  await expect(page.getByText(/Draft committed from exact Studio Source Package v1/)).toBeVisible();
+  await page.getByRole('button',{name:'Submit for review',exact:true}).click();
+  await expect(page.getByText('Reviewer ready committed.',{exact:true})).toBeVisible();
+  await page.getByLabel('Eligible independent reviewer',{exact:true}).selectOption('00000020-0000-4000-8000-000000000020');
+  await page.getByRole('button',{name:'Assign reviewer',exact:true}).click();
+  await expect(page.getByText('In review committed.',{exact:true})).toBeVisible();
+  await page.getByLabel('Rationale',{exact:true}).fill('Independent review confirms the exact hybrid source package and tenant template.');
+  await page.getByRole('button',{name:'Approve review',exact:true}).click();
+  await expect(page.getByText('Approval ready committed.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Final approve',exact:true}).click();
+  await expect(page.getByText('Approved committed.',{exact:true})).toBeVisible();
+  expect(interactions).toEqual(['select:exact-source-only-studio-artifact','select:exact-approved-studio-template']);
+});
+
 test('PR C synthetic runner scopes a Studio handoff action to one exact resource and state', async ({page}) => {
   await open(page, '?multiEligible=1');
   const interactions:string[]=[];
@@ -50,6 +71,17 @@ test('PR C synthetic runner scopes a Studio handoff action to one exact resource
   await expect(selected.card.getByText('Approved AP assessment v3 · v2',{exact:true})).toBeVisible();
   await expect(selected.control).toBeEnabled();
   expect(interactions).toEqual(['tab:studio-handoff-inbox']);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('PR C synthetic readiness binds the exact eligible approved Assess snapshot', async ({page}) => {
+  await open(page,'?multiEligible=1&caps=handoff-approver');
+  const interactions:string[]=[];
+  const ready=await verifySyntheticAssessHandoffReady(page,interactions,{upstreamHandoffId:'00000033-0000-4000-8000-000000000033',sourceVersion:3,resourceLabel:'Eligible approved Assess result'});
+  await expect(ready.request).toBeDisabled();
+  expect(ready.requestAuthorized).toBe(false);
+  await expect(ready.card).toContainText('eligible Assess source');
+  expect(interactions).toEqual(['observe:exact-approved-assess-handoff-ready']);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 

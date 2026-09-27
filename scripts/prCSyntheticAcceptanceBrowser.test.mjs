@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import './prCSyntheticBrowserApi.test.mjs';
+import './prCSyntheticBrowserPrerequisites.test.mjs';
+import './prCSyntheticBrowserEvidenceActions.test.mjs';
+import './prCSyntheticBrowserResponseLoss.test.mjs';
 import { chromium } from '@playwright/test';
 
 import {
@@ -24,6 +28,8 @@ import {
   safeBrowserStepFailure,
   selectAssessTranscriptSources,
   signIn,
+  retainSyntheticCommandState,
+  summarizePrerequisiteInteractions,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
 import {
   deriveSyntheticApplicationActorDigest,
@@ -33,6 +39,46 @@ import {
 const exerciseDigest = `sha256:${'a'.repeat(64)}`;
 const actorId = '30000001-0000-4000-8000-000000000001';
 const sessionId = '40000001-0000-4000-8000-000000000001';
+
+test('runner retains exact successful command selectors for prerequisites and replay, rejecting stale captures', async () => {
+  const { canonicalDigest } = await import('./prCControlledHumanEvidenceContract.mjs');
+  const cases = [
+    ['CH-02', 'approve-studio-document', 'ch02:artifactId'],
+    ['CH-03', 'accept-studio-handoff', 'prereq:ch03:artifactId'],
+    ['CH-10', 'handoff-direct-studio-plan', 'prereq:ch10:handoffId'],
+    ['CH-11', 'create-manual-delivery-package', 'prereq:ch11:packageId'],
+    ['CH-11', 'create-read-only-manual-baseline', 'prereq:ch11:baselineId'],
+    ['CH-13', 'simulate-response-loss', 'recovery:packageId'],
+    ['CH-05', 'consume-approved-handoff-once', 'replay:delivery.handoff.consume'],
+    ['CH-08', 'create-baseline-with-exact-package-selectors', 'replay:monitor.baseline.create'],
+    ['CH-04', 'request-exact-studio-handoff', 'prereq:ch04:requestSource'],
+    ['CH-06', 'edit-one-item-with-rationale', 'prereq:ch06:finalItemId'],
+  ];
+  for (const [checkpointId, stepId, stateKey] of cases) {
+    const planned = buildBrowserExecutionCatalog().find(value => value.checkpointId === checkpointId && value.stepId === stepId);
+    assert(planned?.serverAction, `${checkpointId}:${stepId}`);
+    const action = planned.serverAction.action.startsWith('handoff.') ? `studio.${planned.serverAction.action}` : planned.serverAction.action;
+    const body = { commandType: action, requestId: sessionId, payload: { itemAggregateId: actorId } };
+    const command = { commandType: action, requestId: sessionId, body,
+      response: { ok: true, outcome: 'committed', receiptId: sessionId, resourceId: actorId } };
+    const proof = { serverAnchor: { requestDigest: canonicalDigest({ requestId: sessionId }) }, serverBinding: { resourceDigest: exerciseDigest } };
+    const state = new Map(); const session = { api: { lastCommand: async () => command } };
+    await retainSyntheticCommandState(planned, session, state, proof);
+    assert(state.has(stateKey), `${checkpointId}:${stepId} must bind downstream state`);
+    if (stateKey.startsWith('replay:')) assert.deepEqual(state.get(stateKey), { body, resourceDigest: exerciseDigest });
+    else if (stateKey.endsWith('requestSource')) assert.deepEqual(state.get(stateKey), body.payload);
+    else assert.equal(state.get(stateKey), actorId);
+    command.requestId = actorId;
+    await assert.rejects(retainSyntheticCommandState(planned, session, new Map(), proof), /COMMAND_PROOF_BINDING_MISMATCH/u);
+  }
+});
+
+test('complete-set prerequisite evidence retains actual command counts within the artifact limit', () => {
+  const label = 'prerequisite:ch-06:accept-current-proposal';
+  assert.deepEqual(summarizePrerequisiteInteractions([label, label, 'verify:accepted']), [`${label}:count-2`, 'verify:accepted']);
+  assert.deepEqual(summarizePrerequisiteInteractions(Array(249).fill(label)), [`${label}:count-249`]);
+  assert.deepEqual(summarizePrerequisiteInteractions([]), []);
+});
 
 test('browser evidence route keeps surface navigation without query object identifiers', () => {
   const route = safeBrowserRoute(`https://synthetic.invalid/?view=process_detail&scope=organization&processId=${actorId}&scopeName=Synthetic+Workspace`);
