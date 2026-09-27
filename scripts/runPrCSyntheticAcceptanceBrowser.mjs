@@ -872,7 +872,7 @@ const armServerStep = async (page, checkpointId, stepId, interactionSequence) =>
   interactionSequence.push('expand:two-phase-evidence');
   await banner.getByRole('button', { name: 'Refresh evidence steps' }).click()
     .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_REFRESH_FAILED'); });
-  const selector = banner.getByLabel('Controlled-human evidence step');
+  const selector = banner.getByLabel('Controlled-human evidence step', { exact: true });
   const stepKey = `${checkpointId}:${stepId}`;
   await selector.selectOption(stepKey).catch(async () => {
     const refreshRejected = await banner.getByText('Sign in as the assigned synthetic persona, then refresh evidence steps. No evidence was recorded.', { exact: true }).isVisible().catch(() => false);

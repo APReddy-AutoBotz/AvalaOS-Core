@@ -333,6 +333,20 @@ deprovisioning passed: zero live exercises and zero unbanned synthetic users
 remain. No full 84-step PASS exists; the new head needs exact-head CI, preview,
 and a fresh protected retest.
 
+At head `ef4b7594110ce8c4603ffde187f0e249b2823fbc`, exact-head governed CI
+and the matching preview passed. Protected run `36301856823` completed
+preparation and reached the third CH-01 browser step, then reported
+`PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING_OPTION_ABSENT_SIGN_IN`. The retained
+exercise has the exact requester step contract, requester persona binding, and
+eight eligible requester options, but no action anchor or observed step. A
+focused local Playwright check confirmed that the runner's non-exact
+`getByLabel('Controlled-human evidence step')` matches both the next-step and
+completed-step selects. The runner now selects the exact next-step label;
+rollback is the one-line locator revert. Recovery and private-state cleanup
+passed, leaving zero live exercises and zero unbanned synthetic users. The
+repaired head still needs exact-head CI, preview, and the full protected retest;
+no 84-step PASS exists.
+
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other
 developers. The controller should prepare each concrete run before asking for
