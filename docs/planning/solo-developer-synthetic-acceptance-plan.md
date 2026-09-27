@@ -478,3 +478,22 @@ AP's involvement is limited to approving this plan, any protected Environment
 approval that actually appears, supplying/replacing an unavailable credential only
 if needed, and final merge confirmation. Personal usability testing is optional.
 No invitation of other developers or sharing of repository access is required.
+
+## 11. Current repair evidence (2026-09-27)
+
+Run 36313110606 passed preparation and preview verification, then failed at the
+enabled Assess apply control after conflict resolution and proof collection.
+Recovery and private-state cleanup succeeded. The complete synthetic result is
+still not passed; later catalog steps remain unverified.
+
+A focused local test using the real evidence banner, Assess candidate component,
+and application CSS confirmed that expanded proof blocks reduced usable workspace
+height to zero. The correction bounds the evidence panel to 40% of viewport height
+with its own scrollbar. The focused browser-runner suite passes 11/11, including
+proof collection and ordinary Assess apply clicks on desktop and mobile. This is
+local layout evidence; the exact-candidate hosted journey must still verify whether
+it resolves the recorded click timeout and complete all 84 catalog steps.
+
+Rollback is the two-class banner change plus its focused test/provenance update.
+While hosted acceptance is incomplete, keep merge blocked; collapsing the evidence
+panel restores workspace space without changing server state or evidence authority.

@@ -179,3 +179,108 @@ test('proof collection reopens the evidence panel after the application action',
     assert.equal(await page.locator('details').getAttribute('open'), '');
   } finally { await browser.close(); }
 });
+
+test('completed evidence leaves workspace actions clickable in the fixed-height app shell', async () => {
+  const { build } = await import('vite');
+  const { default: postcss } = await import('postcss');
+  const { default: tailwindcss } = await import('tailwindcss');
+  const { default: tailwindConfig } = await import('../tailwind.config.js');
+  const stepId = 'resolve-material-assess-conflict';
+  const safeAnchor = { stepId, ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`anchorField${i}`, exerciseDigest])) };
+  const safeBinding = { stepId, ...Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`bindingField${i}`, exerciseDigest])) };
+  const records = [{ checkpointId: 'CH-01', stepId, state: 'completed', safeAnchor, safeBinding },
+    ...buildBrowserExecutionCatalog().filter(step => step.personaKey === 'requester' && step.serverAction && step.stepId !== stepId)
+      .map(step => ({ checkpointId: step.checkpointId, stepId: step.stepId, action: step.serverAction.action, state: 'unanchored', safeAnchor: null, safeBinding: null })),
+  ];
+  const lineage = [{ sourceSetId: 'set', sourceSetVersionSelector: 'set-v1', sourceSetVersion: 1, ordinal: 1 }];
+  const candidate = { id: 'candidate', candidateVersion: 1, inputBundleId: 'bundle', inputBundleVersionSelector: 'bundle-v1',
+    extractionBindingId: 'extraction-binding', extractionJobId: 'extraction-job', sourceSetId: 'set', sourceSetVersionSelector: 'set-v1',
+    sourceSetVersion: 1, sourceVersionSelector: 'source-v1', sourceLabel: 'Synthetic transcript', sourceVersionLabel: 'Source version 1',
+    field: 'process_objective', value: 'Reviewed synthetic description', sourceLocator: 'Synthetic excerpt', safeExcerpt: 'Synthetic evidence',
+    status: 'accepted', relationship: 'supporting', provenanceState: 'anchored', applicationIntent: 'set_case_field', applyTarget: 'description' };
+  const projection = {
+    features: { assessMultisourceApplyEnabled: true },
+    inputBundles: [{ id: 'bundle', versionSelector: 'bundle-v1', version: 1, label: 'Synthetic assess transcript selection', versionLabel: 'Input-bundle version 1', status: 'locked', sourceSetIds: ['set'], sourceSetVersions: lineage, sourceVersionSelectors: ['source-v1'], sourceCount: 2 }],
+    assessRuns: [{ inputBundleId: 'bundle', inputBundleVersionSelector: 'bundle-v1', sourceSetVersions: lineage, extractionBindings: [candidate], extractionJobIds: ['extraction-job'] }],
+    assessCandidates: [candidate, { ...candidate, id: 'candidate-two' }],
+    assessApplyPreviews: [{ id: 'preview', assessDraftId: 'draft', expectedDraftVersion: 1, inputBundleId: 'bundle', inputBundleVersionSelector: 'bundle-v1', inputBundleVersion: 1, status: 'ready',
+      changes: [{ candidateId: 'candidate', target: 'description', summary: 'Reviewed description', conflictState: 'resolved' }],
+      conflicts: [{ id: 'conflict', field: 'description', material: true, resolution: 'choose_candidate', resolutionVersion: 1, candidateSummaries: ['Synthetic candidate'], rationale: 'Synthetic resolved conflict.' }],
+    }],
+  };
+  const source = `import React from 'react';
+    import { createRoot } from 'react-dom/client';
+    import Banner from './components/auth/ControlledHumanNonProductionBanner';
+    import { AssessTranscriptCandidateReview } from './components/enterprise/AssessTranscriptCandidateReview';
+    createRoot(document.getElementById('root')).render(<div className="app-shell flex h-screen">
+      <aside className="hidden lg:block w-60 shrink-0">Navigation</aside>
+      <div className="flex flex-col flex-1 overflow-hidden relative">
+        <Banner />
+        <header className="header glass sticky top-0 z-10 flex h-16 items-center">Workspace</header>
+        <section className="border-b px-4 py-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          {['Organization', 'Workspace'].map(label => <label key={label} className="flex-1 text-[11px]">{label}<select className="mt-1 block w-full px-3 py-2 text-sm"><option>Synthetic workspace</option></select></label>)}
+          <div className="px-4 py-2 text-xs">Server context active</div>
+        </div></section>
+        <main id="app-main" className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+          <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+          <header className="rounded-3xl border p-5"><h1>Enterprise Intelligence</h1><nav className="mt-5 flex gap-2 overflow-x-auto pb-1">Candidate Review</nav><p className="mt-4">Conflict resolved with immutable history.</p></header>
+          <AssessTranscriptCandidateReview projection={${JSON.stringify(projection)}} assessDrafts={[{ id: 'draft', label: 'Synthetic draft', versionLabel: 'Draft version 1' }]} locked={false}
+            onApply={() => { document.getElementById('app-main').dataset.applied = 'true'; }} />
+          </div>
+        </main>
+      </div>
+    </div>);`;
+  const entry = `${process.cwd().replaceAll('\\', '/')}/synthetic-banner-layout-fixture.tsx`;
+  const compiled = await build({
+    configFile: false, envDir: false, logLevel: 'silent',
+    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+    build: { write: false, minify: false, lib: { entry, name: 'SyntheticBannerLayout', formats: ['iife'] } },
+    plugins: [{ name: 'inert-synthetic-banner-backend', enforce: 'pre',
+      resolveId(id) {
+        if (id.replaceAll('\\', '/').endsWith('/synthetic-banner-layout-fixture.tsx')) return entry;
+        if (/services\/supabaseClient$/u.test(id)) return '\0inert-synthetic-backend';
+      },
+      load(id) {
+        if (id === entry) return source;
+        if (id === '\0inert-synthetic-backend') return `
+        export const getControlledHumanBrowserBinding = () => ({ status: 'authorized' });
+        export const listControlledHumanStepBindings = async () => ${JSON.stringify(records)};
+        export const getLastCompletedControlledHumanProof = () => null;
+        export const armControlledHumanStep = () => { throw new Error('unexpected arm'); };
+      `;
+      },
+    }],
+  });
+  const css = await postcss([tailwindcss({ ...tailwindConfig, content: [
+    { raw: source, extension: 'tsx' },
+    { raw: await readFile(new URL('../components/auth/ControlledHumanNonProductionBanner.tsx', import.meta.url), 'utf8'), extension: 'tsx' },
+    { raw: await readFile(new URL('../components/enterprise/AssessTranscriptCandidateReview.tsx', import.meta.url), 'utf8'), extension: 'tsx' },
+  ] })]).process(await readFile(new URL('../index.css', import.meta.url), 'utf8'), { from: undefined });
+  const browser = await chromium.launch();
+  try {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 412, height: 915 }]) {
+      const page = await browser.newPage({ viewport });
+      const pageErrors = [];
+      page.on('pageerror', error => pageErrors.push(error.message));
+      await page.route('**/*', route => route.abort());
+      await page.setContent('<div id="root"></div>');
+      await page.addStyleTag({ content: css.css });
+      await page.addScriptTag({ content: compiled[0].output.find(file => file.type === 'chunk').code });
+      assert.deepEqual(pageErrors, []);
+      await page.getByLabel('Locked input bundle').selectOption('bundle:bundle-v1');
+      await page.getByLabel('Editable Assess draft').selectOption('draft');
+      const proof = await collectProof(page, 'CH-01', stepId, []);
+      assert.deepEqual(proof, { serverAnchor: safeAnchor, serverBinding: safeBinding });
+      const apply = page.getByRole('button', { name: 'Apply batch as one Assess draft version', exact: true });
+      assert(await apply.isEnabled());
+      const workspaceHeight = await page.locator('#app-main').evaluate(node => {
+        const style = getComputedStyle(node);
+        return node.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      });
+      assert(workspaceHeight >= 120, 'The expanded evidence panel must leave usable workspace height.');
+      await apply.click({ timeout: 3000 });
+      assert.equal(await page.locator('#app-main').getAttribute('data-applied'), 'true');
+      await page.close();
+    }
+  } finally { await browser.close(); }
+});

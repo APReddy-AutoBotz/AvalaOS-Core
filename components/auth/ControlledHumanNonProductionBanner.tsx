@@ -70,9 +70,9 @@ const ControlledHumanNonProductionBanner: React.FC = () => {
   const completed = completedControlledHumanOptions(options);
   const chooseCompleted=(key:string)=>{setSelectedCompleted(key);const proof=selectControlledHumanProof(options,key,null);setSafeAnchor(proof?.proof.safeAnchor??null);setSafeBinding(proof?.proof.safeBinding??null);};
   return <section data-testid="controlled-human-nonproduction-banner" role="status"
-    className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+    className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
     <p className="text-center">Controlled human test · synthetic non-production data only · no customer data or real provider calls</p>
-    <details className="mx-auto mt-2 max-w-5xl text-left">
+    <details className="mx-auto mt-2 max-h-[40vh] max-w-5xl overflow-y-auto text-left">
       <summary className="cursor-pointer text-center">Two-phase exact action evidence</summary>
       <p className="mt-2 text-xs font-semibold">{message}</p>
       <div className="mt-2 flex flex-wrap gap-2">
