@@ -83,7 +83,7 @@
     {
       "pattern": "localStorage",
       "path": "scripts/prCSyntheticAcceptanceBrowser.test.mjs",
-      "lines": [115, 124],
+      "lines": [117, 126],
       "reason": "test/control documentation",
       "futureAction": "Keep synthetic browser session setup and storage-state verification in this test only; never use browser storage as server authorization."
     },

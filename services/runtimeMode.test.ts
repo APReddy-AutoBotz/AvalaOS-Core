@@ -48,8 +48,6 @@ const controlledInput = {
 const controlledResolution = resolveControlledHumanBrowserBinding(controlledInput);
 assert.equal(controlledResolution.status, 'ready');
 if (controlledResolution.status !== 'ready') throw new Error('controlled browser binding unexpectedly blocked');
-assert.equal(resolveControlledHumanBrowserBinding({ ...controlledInput, pathname: '/' }).status, 'ready');
-assert.equal(resolveControlledHumanBrowserBinding({ ...controlledInput, pathname: '/', locationOrigin: 'https://avalaos-pilot.netlify.app' }).status, 'blocked');
 
 const controlledAttestation = {
   attested: true,
@@ -100,7 +98,7 @@ for (const override of [
   { locationOrigin: 'https://test.avalaos.com' },
   { pathname: '/sandbox' },
   { pathname: '/sandbox/sign-in' },
-  { pathname: '/platform' },
+  { pathname: '/' },
   { exerciseDigest: `sha256:${'c'.repeat(63)}` },
   { targetFingerprint: `sha256:${'D'.repeat(64)}` },
   { publicTargetDigest: `sha256:${'D'.repeat(64)}` },

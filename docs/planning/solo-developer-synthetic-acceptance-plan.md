@@ -323,13 +323,15 @@ checks and the matching preview passed. Protected run `36296808203` again
 reached CH-01 after preparation and the exact Assess preview, then reported
 `PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING` before any server action anchor.
 The requester contract exists in the seeded exercise, but the browser sent no
-step-list RPC after preview. The app can navigate from `/sign-in` to `/` during
-the authenticated product flow while the controlled browser binding rejects
-`/`; the binding is checked again when evidence refresh runs. The focused
-repair admits only those two exact paths on the already pinned nonproduction
-preview origin. Bounded recovery and deprovisioning passed: zero live
-exercises and zero unbanned synthetic users remain. No full 84-step PASS exists;
-the new head needs exact-head CI, preview, and a fresh protected retest.
+step-list RPC after preview. A root-path binding hypothesis was tested at head
+`66266d8322fe675dfdf45018265fbabfdb8c236c`; preview browser QA rejected
+it because the unauthenticated public CTA made one attestation request. The
+root allowance is reverted. The next candidate reports only safe route and
+refresh/option failure classes at this step, so the cause can be identified
+without page text, raw requests, or identifiers. Bounded recovery and
+deprovisioning passed: zero live exercises and zero unbanned synthetic users
+remain. No full 84-step PASS exists; the new head needs exact-head CI, preview,
+and a fresh protected retest.
 
 Protected GitHub Environment approvals may still require AP's own approval click.
 That is an existing platform access control, not a requirement to invite other

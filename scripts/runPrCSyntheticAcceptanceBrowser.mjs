@@ -873,8 +873,15 @@ const armServerStep = async (page, checkpointId, stepId, interactionSequence) =>
   await banner.getByRole('button', { name: 'Refresh evidence steps' }).click()
     .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_REFRESH_FAILED'); });
   const selector = banner.getByLabel('Controlled-human evidence step');
-  await selector.selectOption(`${checkpointId}:${stepId}`)
-    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING'); });
+  const stepKey = `${checkpointId}:${stepId}`;
+  await selector.selectOption(stepKey).catch(async () => {
+    const refreshRejected = await banner.getByText('Sign in as the assigned synthetic persona, then refresh evidence steps. No evidence was recorded.', { exact: true }).isVisible().catch(() => false);
+    const optionPresent = await selector.locator('option').evaluateAll((options, expected) => options.some(option => option.value === expected), stepKey).catch(() => false);
+    const pathname = new URL(page.url()).pathname;
+    const route = pathname === '/sign-in' ? 'SIGN_IN' : pathname === '/' ? 'ROOT' : 'OTHER';
+    const reason = refreshRejected ? 'REFRESH_REJECTED' : optionPresent ? 'CONTROL_REJECTED' : 'OPTION_ABSENT';
+    throw new Error(`PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING_${reason}_${route}`);
+  });
   await banner.getByRole('button', { name: 'Arm before action' }).click()
     .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_CONTROL_FAILED'); });
   await banner.getByText('Step armed in this browser tab.', { exact: false }).waitFor({ state: 'visible' })
