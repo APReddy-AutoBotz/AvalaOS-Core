@@ -702,3 +702,9 @@ Exact-candidate CI, preview, and the full 84-step hosted campaign remain planned
 verification. Rollback reverts the runner/helper, focused tests, and provenance
 together; keep merge blocked and preserve recovered immutable exercise history
 until the complete campaign and independent cleanup proof pass.
+
+CI rejected intermediate candidate 874d429 because TypeScript did not infer the
+new JavaScript destructured reviewer option without a default. An empty-string
+default restores the caller type while the existing UUID guard still rejects
+omitted identities before any action. The repository typecheck passes. Obsolete
+unfinished CI runs were cancelled; no protected campaign ran for that candidate.

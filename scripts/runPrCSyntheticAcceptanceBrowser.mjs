@@ -575,7 +575,7 @@ export const selectSyntheticHybridStudioDraft = async (page, interactionSequence
 };
 
 export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequence, {
-  title = SYNTHETIC_STUDIO_DRAFT_TITLE, reviewerActorId,
+  title = SYNTHETIC_STUDIO_DRAFT_TITLE, reviewerActorId = '',
 } = {}) => {
   assert(typeof reviewerActorId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(reviewerActorId),
     'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_ID_INVALID');
