@@ -545,3 +545,16 @@ including the exact requester denial and reviewer assignment-to-approval path.
 All 13 focused runner checks and the AI boundary scan pass. Full exact-candidate
 hosted acceptance remains pending. Rollback reverts the orchestration/test change
 and its provenance entries, retaining immutable history and the merge block.
+
+Candidate a7f0e53 passed 17 applicable workflows and its bound preview, but
+governed CI rejected the disposable PostgreSQL observation fixture before any
+hosted run was dispatched. A freshly committed Studio setup write could share
+the observation start's millisecond: PostgreSQL preserves microseconds while
+the JavaScript driver truncates them. The test now observes the current server
+clock and waits beyond that millisecond before starting the inclusive absence
+interval. It still queries and rejects actual interval activity. The focused
+PostgreSQL 16 test passes both complete seed/deprovision cycles, retained history,
+and the deliberate in-interval attempt injection rejection. This is a test-only
+timing correction; production observation and acceptance rules are unchanged.
+Rollback reverts the test and its provenance entry; hosted acceptance and merge
+remain blocked until complete exact-candidate evidence passes.

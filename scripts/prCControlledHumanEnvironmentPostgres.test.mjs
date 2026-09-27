@@ -192,7 +192,11 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       assert.fail('server clock did not advance for an authentic controlled-human observation boundary');
     };
     const buildCaptureAbsence=(insideInterval=null)=>async({checkpointId,stepId,after,expectedPhase})=>{
-      const startedAt=(await waitForServerTimeAfter(after)).serverObservedAt;
+      // pg timestamps retain microseconds, while the JS driver rounds down to
+      // milliseconds. Advance beyond the current server millisecond so a prior
+      // setup write cannot be counted inside this new inclusive interval.
+      const boundaryFloor=new Date((await database.client.query('select clock_timestamp() observed_at')).rows[0].observed_at).getTime();
+      const startedAt=(await waitForServerTimeAfter(Math.max(after,boundaryFloor))).serverObservedAt;
       if(insideInterval)await insideInterval({checkpointId,stepId,startedAt});
       const stateBefore=(await database.client.query(`select exercise.exercise_digest,exercise.org_id,exercise.workspace_id,exercise.lifecycle,exercise.concurrency_version from public.pr_c_controlled_human_exercises exercise where exercise.exercise_digest=$1`,[context.exerciseDigest])).rows[0];
       const activityBefore=await readBlockedObservationActivity();
