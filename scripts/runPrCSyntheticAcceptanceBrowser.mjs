@@ -1395,7 +1395,11 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
       const prepared = await prepareAssessConflictPreview(page, interactionSequence);
       assert.equal(prepared.materialConflictCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_CONFLICT_COUNT');
     }
-    if (key === 'CH-01:approve-assess-result') await prepareAssessReviewApproval(page, interactionSequence);
+    if (key === 'CH-01:approve-assess-result') {
+      assert.equal(planned.personaKey, 'studio_reviewer', 'PR_C_SYNTHETIC_BROWSER_ASSESS_REVIEW_ACTOR_REQUIRED');
+      await assignAssessReviewer(page, interactionSequence);
+      await prepareAssessReviewApproval(page, interactionSequence);
+    }
     await snapshotBeforeServerAction(page, key, state);
     await armServerStep(page, planned.checkpointId, planned.stepId, interactionSequence);
     await executeServerAction(page, planned.checkpointId, planned.stepId, interactionSequence, state);
@@ -1411,8 +1415,6 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
       await openSurface(page, 'assess-case', interactionSequence)
         .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_CASE_NAVIGATION_FAILED'); });
       await finalizeAssessDraftForReview(page, interactionSequence, { afterTranscriptApply: true });
-      await assignAssessReviewer(page, interactionSequence)
-        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ASSESS_REVIEWER_ASSIGNMENT_FAILED'); });
     }
     if (key === 'CH-08:create-baseline-with-exact-package-selectors') {
       const count = await baselineCount(page); assert.equal(count, Number(state.get('baseline-before-create')) + 1); state.set('baseline-after-create', count);

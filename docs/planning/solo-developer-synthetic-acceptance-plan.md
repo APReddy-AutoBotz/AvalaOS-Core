@@ -532,3 +532,16 @@ seeded planning artifact and source package and asserts its approved content
 exists. The affected PostgreSQL 16 test passes locally, including both complete
 seed/deprovision cycles and retained-history verification. This changes test
 selection only; no application authorization or readiness rule changes.
+
+Run 36322582266 completed transcript Apply, claim-linked authoring, and Decision
+Pack finalization, then failed at reviewer assignment. The recovered database
+contained the new reviewer-ready decision and no assignment for that case.
+Recovery and private-state cleanup passed. The runner incorrectly attempted
+assignment in the requester session, which has no `assess.v2.review` capability.
+Assignment now runs in the existing independent `studio_reviewer` session before
+its evidence attestations and approval; persona capabilities and server rules are
+unchanged. Six real-component review scenarios pass across desktop and Pixel 7,
+including the exact requester denial and reviewer assignment-to-approval path.
+All 13 focused runner checks and the AI boundary scan pass. Full exact-candidate
+hosted acceptance remains pending. Rollback reverts the orchestration/test change
+and its provenance entries, retaining immutable history and the merge block.
