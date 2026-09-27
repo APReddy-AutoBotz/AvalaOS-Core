@@ -123,7 +123,7 @@ export const resolveControlledHumanBrowserBinding = (
     && DEPLOY_ID_PATTERN.test(input.deployId ?? '')
     && input.deployOrigin === PR_C_CONTROLLED_HUMAN_PREVIEW_ORIGIN
     && input.locationOrigin === PR_C_CONTROLLED_HUMAN_PREVIEW_ORIGIN
-    && input.pathname === '/sign-in'
+    && (input.pathname === '/sign-in' || input.pathname === '/')
     && DIGEST_PATTERN.test(input.exerciseDigest ?? '')
     && DIGEST_PATTERN.test(input.targetFingerprint ?? '')
     && DIGEST_PATTERN.test(input.publicTargetDigest ?? '');
