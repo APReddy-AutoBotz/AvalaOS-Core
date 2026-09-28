@@ -1004,3 +1004,28 @@ This is a runner-only correction. No product, schema, function deployment, scori
 or authorization change is needed. Current-head CI, preview and all 84 hosted steps
 remain required. Rollback reverts the helper, focused fixture/tests and provenance
 together and keeps acceptance blocked; retain the recovered exercise history.
+
+Before another protected campaign, focused real-component checks reproduced two
+adjacent runner defects: exact handoff cards and baseline selectors were counted
+before their delayed projection rendered. Both now await their exact visible bound
+element before retaining the existing uniqueness checks. Missing or duplicate
+handoff targets still reject. No timeout or authorization boundary changes.
+
+The actual handoff executor also skipped the rationale textarea because its label
+includes validation help text. The application correctly preserved the draft and
+rejected the empty rationale. The runner now matches that field including its help
+text, retaining dialog scope and strict locator uniqueness. The first attempted
+regex still missed the concatenated label text; it was corrected and verified
+before commit. Other field selectors remain exact.
+
+Final focused verification: 16/16 Desktop/Pixel cases and 54/54 runner contracts
+passed with zero skips. The actual executor completes review, approval, consumption, changes and
+rejection, with unchanged package counts for the negative decisions. Delayed
+baseline creation and all preceding preview/absence cases pass. No broad local
+regression was run. The obsolete 6b8f841 governed CI run 36468951172 was cancelled
+after these adjacent defects were reproduced; its other 17 workflows passed,
+including Native Assess attempt 2 after an image-registry rate-limit failure.
+Those results are prior-head evidence only. The combined candidate still requires
+its own CI, preview and complete protected campaign. No schema or function
+deployment is needed. Rollback reverts the runner, focused tests and provenance
+together, preserves retained exercise history, and leaves acceptance blocked.

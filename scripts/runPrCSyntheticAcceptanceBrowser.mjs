@@ -921,7 +921,8 @@ const completeVisibleDialog = async (page, stepId, interactionSequence) => {
     interactionSequence.push('fill:item-title-material-revision');
   }
   for (const [label, value] of values) {
-    const input = dialog.getByLabel(label, { exact: true });
+    // Delivery's rationale label includes its validation help text.
+    const input = dialog.getByLabel(label, { exact: label !== 'Decision rationale' });
     if (await input.count() && await input.isVisible() && !(await input.isDisabled()) && !(await input.inputValue()).trim()) {
       await input.fill(value); interactionSequence.push(`fill:${safeLabel(label)}`);
     }
@@ -984,7 +985,7 @@ export const collectProof = async (page, checkpointId, stepId, interactionSequen
   return { serverAnchor: anchor, serverBinding: binding };
 };
 
-const executeServerAction = async (page, checkpointId, stepId, interactionSequence, state) => {
+export const executeServerAction = async (page, checkpointId, stepId, interactionSequence, state) => {
   const key = `${checkpointId}:${stepId}`;
   const contract = SERVER_ACTION_BY_STEP.get(key);
   assert(contract, `PR_C_SYNTHETIC_BROWSER_SERVER_CONTRACT_MISSING:${key}`);
@@ -1004,12 +1005,14 @@ const executeServerAction = async (page, checkpointId, stepId, interactionSequen
     const packageId = checkpointId === 'CH-08' ? state.get('full-governed-package')?.packageId : state.get('prereq:ch11:packageId');
     assert(packageId, 'PR_C_SYNTHETIC_BROWSER_BASELINE_PACKAGE_BINDING_MISSING');
     root = root.getByTestId('baseline-eligibility-selectors').locator(`[data-package-id="${packageId}"]`);
+    await root.waitFor({ state: 'visible' });
     assert.equal(await root.count(), 1, 'PR_C_SYNTHETIC_BROWSER_BASELINE_SELECTOR_COUNT');
   }
   if (deliveryHandoffKey) {
     const handoffId = state.get(deliveryHandoffKey);
     assert(handoffId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_BINDING_MISSING');
     root = root.locator(`[data-handoff-id="${handoffId}"]`);
+    await root.waitFor({ state: 'visible' });
     assert.equal(await root.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_ID_COUNT');
   }
   if (handoffTarget && key !== 'CH-03:request-studio-handoff')

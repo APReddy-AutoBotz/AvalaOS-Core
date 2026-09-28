@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
-import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant, observeBrowserOnlyStep, snapshotBeforeServerAction, packageCount } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant, observeBrowserOnlyStep, snapshotBeforeServerAction, packageCount, executeServerAction } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 import { selectSyntheticDeliveryArtifact, verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline, verifySyntheticReadOnlyMonitorHistory, verifySyntheticStudioApprovalHasNoDeliveryResource } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 import { canonicalDigest } from '../../../scripts/prCControlledHumanEvidenceContract.mjs';
 
@@ -164,6 +164,56 @@ test('PR C package absence rejects actual changes and missing projections while 
   await page.setContent('<p>Projection unavailable</p>');
   page.setDefaultTimeout(300);
   await expect(packageCount(page)).rejects.toThrow();
+});
+
+test('PR C exact handoff decision waits for the delayed bound card', async ({ page }) => {
+  await page.goto('/tests/browser/deliveryMonitorPrC/harness.html?delayed-projection');
+  await expect(page.getByTestId('resolve-delayed-projection')).toBeVisible();
+  const interactions: string[] = [];
+  const pending = executeServerAction(page, 'CH-05', 'review-handoff-independently', interactions, new Map([['ch05:handoffId', handoffId]]))
+    .then(() => null, (error: Error) => error);
+  await page.getByTestId('resolve-delayed-projection').click();
+  expect(await pending).toBeNull();
+  expect(interactions).toContain('fill:decision-rationale');
+  await expect(page.getByText('approval ready', { exact: true })).toBeVisible();
+  await executeServerAction(page, 'CH-05', 'approve-handoff-independently', interactions, new Map([['ch05:handoffId', handoffId]]));
+  await expect(page.locator(`[data-handoff-id="${handoffId}"]`).getByText('approved', { exact: true })).toBeVisible();
+  await executeServerAction(page, 'CH-05', 'consume-approved-handoff-once', interactions, new Map([['ch05:handoffId', handoffId]]));
+  await expect(page.getByText('consumed', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('PR C exact handoff changes and rejection complete with rationale and no package creation', async ({ page }) => {
+  for (const [stepId, stateKey, outcome] of [
+    ['request-handoff-changes', 'ch04:handoffId', 'changes requested'],
+    ['reject-new-exact-handoff-request', 'prereq:ch04:replacementHandoffId', 'rejected'],
+  ]) {
+    await open(page);
+    const before = await packageCount(page);
+    await executeServerAction(page, 'CH-04', stepId, [], new Map([[stateKey, handoffId]]));
+    await expect(page.locator(`[data-handoff-id="${handoffId}"]`).getByText(outcome, { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(await packageCount(page)).toBe(before);
+  }
+});
+
+test('PR C exact baseline action waits for the delayed bound selector', async ({ page }) => {
+  await page.goto('/tests/browser/deliveryMonitorPrC/harness.html?state=approved&delayed-projection');
+  await expect(page.getByTestId('resolve-delayed-projection')).toBeVisible();
+  const pending = executeServerAction(page, 'CH-08', 'create-baseline-with-exact-package-selectors', [], new Map([['full-governed-package', { packageId }]]))
+    .then(() => null, (error: Error) => error);
+  await page.getByTestId('resolve-delayed-projection').click();
+  expect(await pending).toBeNull();
+  await expect(page.getByTestId('canonical-monitor-baselines').getByRole('list', { name: 'Approved Monitor baselines', exact: true }).getByRole('button')).toHaveCount(1);
+});
+
+test('PR C exact handoff action rejects missing and duplicate bound cards', async ({ page }) => {
+  await open(page);
+  page.setDefaultTimeout(300);
+  await expect(executeServerAction(page, 'CH-05', 'review-handoff-independently', [], new Map([['ch05:handoffId', baselineId]]))).rejects.toThrow();
+  await page.locator(`[data-handoff-id="${handoffId}"]`).evaluate(node => node.parentElement!.append(node.cloneNode(true)));
+  await expect(executeServerAction(page, 'CH-05', 'review-handoff-independently', [], new Map([['ch05:handoffId', handoffId]]))).rejects.toThrow();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('deterministic Studio proposal is cited and handoff request never auto-creates a target', async ({ page }, info) => {
