@@ -898,3 +898,32 @@ The already approved generation function remains byte-verified; this controller-
 fix needs no further function deployment or schema change. Corrected-head CI,
 preview, and all 84 hosted steps remain required. Rollback reverts the controller
 allowlist, regression, and provenance together and leaves the campaign blocked.
+
+Run 36440207222 on 1ed4ec0 passed preparation and independent exercise verification,
+then failed at CH-03 `request-studio-handoff` with
+`PR_C_SYNTHETIC_BROWSER_EXACT_ENABLED_CONTROL_COUNT`. Recovery and private-state
+cleanup passed; a bounded read confirms the exercise is deprovisioned and its
+session-revocation event is retained. Full synthetic acceptance remains failed.
+
+A focused browser reproduction confirms a source timing defect: the workspace
+and exact bundle selector can render while the independent retained-artifact read
+is pending. The handoff card is already present, but its request control remains
+disabled. The former runner immediately counted enabled controls and reproduced
+the hosted error with zero matches. The runner now requires exactly one button on
+the exact bound handoff, waits at most 20 seconds for that button to become enabled,
+then rechecks uniqueness before clicking. Missing, duplicate, and persistently
+disabled controls still fail closed; no capability, server action, or product
+authorization changes. The new error codes distinguish missing/ambiguous controls
+from controls that never become ready without exposing page content.
+
+Executed focused verification: 54/54 synthetic browser contract tests passed with
+zero skips. All eight selected desktop/Pixel browser cases passed across the final
+runs, including delayed-artifact request completion, missing/duplicate control
+rejection, and requester authority. Two desktop attempts timed out in local Vite
+navigation before feature execution; starting and warming the same existing harness
+separately allowed the isolated desktop case to pass in 4.8 seconds. These startup
+failures are retained as failed attempts, not passing evidence. No broad local
+regression was run. Exact-head CI, preview, and the complete 84-step hosted campaign
+remain required. No migration or function deployment is needed. Rollback reverts
+the runner readiness change, its fixture/regressions, and provenance together and
+leaves the campaign blocked; retained exercise history must not be deleted.

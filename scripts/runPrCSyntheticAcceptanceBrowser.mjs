@@ -371,6 +371,14 @@ export const exactStudioHandoffAction = async (page, interactionSequence, { tab,
     if (resourceMatches && stateMatches) matches.push(card);
   }
   assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_RESOURCE_COUNT:${safeLabel(button)}:${matches.length}`);
+  const control = matches[0].getByRole('button', { name: button, exact: true });
+  assert.equal(await control.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_CONTROL_COUNT');
+  // The workspace and bundle selector render before the retained artifact read
+  // finishes. Wait for this exact authorized control, without choosing another
+  // handoff or treating a disabled/missing action as successful.
+  await matches[0].getByRole('button', { name: button, exact: true, disabled: false })
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_CONTROL_NOT_READY'); });
   const exact = await exactEnabledControl(matches[0], 'button', [button], `studio-handoff:${safeLabel(button)}`);
   return { card: matches[0], control: exact.control, label: exact.label };
 };

@@ -74,6 +74,44 @@ test('PR C synthetic runner scopes a Studio handoff action to one exact resource
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('PR C exact handoff action waits for the retained artifact projection after selecting its bundle', async ({page}) => {
+  await open(page,'?multiEligible=1&syntheticSelection=1&delayedHandoffArtifact=1');
+  const center=page.getByRole('region',{name:'Assess → Studio handoffs'});
+  const card=center.locator('[data-upstream-handoff-id="00000033-0000-4000-8000-000000000033"]').filter({hasText:'Eligible approved Assess result · source v3'});
+  await expect(card.getByRole('button',{name:'Request handoff',exact:true})).toBeDisabled();
+  const interactions:string[]=[];
+  await selectExactEligibleStudioBundle(page,interactions,{versionId:'00000032-0000-4000-8000-000000000032'});
+  // Bundle selection is usable while the independent artifact read is pending.
+  await expect(card.getByRole('button',{name:'Request handoff',exact:true})).toBeDisabled();
+  await page.evaluate(()=>{setTimeout(()=>(window as any).__releaseHandoffArtifact(),1000);});
+  const selected=await exactStudioHandoffAction(page,interactions,{
+    tab:'Inbox',resource:/^Eligible approved Assess result · source v3$/u,state:'eligible',button:'Request handoff',
+    upstreamHandoffId:'00000033-0000-4000-8000-000000000033',
+  });
+  await expect(selected.control).toBeEnabled();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await selected.control.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await center.getByRole('tab',{name:/^Outbox \(/u}).click();
+  await expect(center.getByText('reviewer ready',{exact:true})).toBeVisible();
+});
+
+for(const invalid of ['missing','duplicate']){
+  test(`PR C exact handoff action rejects a ${invalid} request control`, async ({page}) => {
+    await open(page,'?multiEligible=1&caps=handoff-requester');
+    const card=page.locator('[data-upstream-handoff-id="00000033-0000-4000-8000-000000000033"]').filter({hasText:'Eligible approved Assess result · source v3'});
+    const request=card.getByRole('button',{name:'Request handoff',exact:true});
+    await expect(request).toBeEnabled();
+    await request.evaluate((button,kind)=>{if(kind==='missing')button.remove();else button.after(button.cloneNode(true));},invalid);
+    await expect(exactStudioHandoffAction(page,[],{
+      tab:'Inbox',resource:/^Eligible approved Assess result · source v3$/u,state:'eligible',button:'Request handoff',
+      upstreamHandoffId:'00000033-0000-4000-8000-000000000033',
+    })).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_CONTROL_COUNT');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+}
+
 test('PR C synthetic readiness binds the exact eligible approved Assess snapshot', async ({page}) => {
   await open(page,'?multiEligible=1&caps=handoff-approver');
   const interactions:string[]=[];

@@ -161,4 +161,9 @@ if(params.get('reviewerLabels')==='email'){
     return candidates;
   };
 }
+if(params.get('delayedHandoffArtifact')==='1'){
+  const readArtifact=transport.readArtifactV2!;
+  const ready=new Promise<void>(resolve=>{(window as any).__releaseHandoffArtifact=resolve;});
+  transport.readArtifactV2=async(...args)=>{await ready;return readArtifact(...args);};
+}
 createRoot(document.getElementById('root')!).render(<Harness/>);
