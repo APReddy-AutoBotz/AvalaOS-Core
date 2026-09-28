@@ -134,7 +134,10 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
         [scope.mainOrg,scope.deliveryWorkspace,JSON.stringify({packageId:consumed.resourceId,itemLimit:100})])).rows[0].projection;
       assert.equal(packageProjection.packages.length,1);assert.equal(packageProjection.packages[0].items.length,3);
       assert.deepEqual(packageProjection.packages[0].itemPage,{limit:100,hasMore:false,nextCursor:null,cursorApplied:false,isComplete:true});
-      assert.deepEqual(packageProjection.packages[0].items.map(item=>({title:item.title,description:item.description,sourceSectionLocator:item.sourceCitation.sectionLocator})),
+      // Public pagination orders aggregate identities, not source section labels.
+      // Compare complete content membership while preserving the strict count and identity checks above.
+      assert.deepEqual(packageProjection.packages[0].items.map(item=>({title:item.title,description:item.description,sourceSectionLocator:item.sourceCitation.sectionLocator}))
+        .sort((left,right)=>left.sourceSectionLocator.localeCompare(right.sourceSectionLocator)),
         consumedItems.map(item=>({title:item.title,description:item.description,sourceSectionLocator:item.source_section_locator})));
       await database.client.query('rollback');
     }catch(error){await database.client.query('rollback');throw error}

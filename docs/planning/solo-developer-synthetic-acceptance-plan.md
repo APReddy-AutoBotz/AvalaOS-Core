@@ -858,3 +858,19 @@ network-failure outcome; its exact malformed-attestation scenario passed
 unchanged on Desktop and Pixel against the canonical hosted preview (2/2).
 No preview assertion, network guard, or timeout was weakened. The remaining
 15 applicable c29baf2 workflows passed; new-head CI still governs acceptance.
+
+On 8102294, all 17 other applicable workflows passed, including preview QA and
+creation access. PR C failed the new three-item PostgreSQL projection assertion:
+public pagination orders aggregate identities while the expected rows were
+ordered by source-section locator. The assertion now compares complete content
+membership in the same locator order, retaining all exact count, identity, and
+complete-page checks. The local controlled-human source gate passed 150/150
+tests without skips, including real PostgreSQL; generation checks passed 16/16
+and coverage-runner checks 11/11. Banner and workflow checks also passed.
+
+The later instrumented local coverage stage did not pass: 220/237 tests passed,
+with 17 blocked by the shared Git-fixture startup hook. A bounded setup-only
+reproduction identified Git's temporary pack-file rename error, `Improper link`,
+on this Windows filesystem. No fixture or coverage guard was weakened. This is
+not passing coverage evidence; corrected-head CI must execute and verify the
+complete gate. No hosted synthetic campaign ran for these candidates.
