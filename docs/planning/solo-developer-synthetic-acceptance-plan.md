@@ -950,11 +950,30 @@ tests pass without skips, including native-browser success, replay, authenticati
 denial, and invalid-envelope responses. The import boundary check and Edge
 type-check pass. No broad local regression was run.
 
-The current deployed function still contains the old handler. Prepare the exact
-candidate and four-file deployment manifest, verify current-head CI and preview,
-then obtain the source-specific function refresh approval before deployment. Read
-back every deployed file and verify JWT enforcement before dispatching the next
-full synthetic campaign. Do not replay or rewrite the recovered exercise. Rollback
-restores the prior exact function bundle, leaves the campaign blocked, and preserves
-all committed history. Full 84-step acceptance remains failed pending a complete
-new-candidate run and verified cleanup.
+AP approved the exact d489a79 four-file function bundle after its 18 applicable
+CI workflows and preview passed. Deployment readback matched all four Git blobs
+byte for byte, with ACTIVE status and JWT verification enabled. No other function,
+migration, or settings were changed by that deployment.
+
+Run 36458157715 passed the repaired generation step and its CH-03 successors,
+then failed at CH-04 `preview-approved-studio-handoff` with
+`PR_C_SYNTHETIC_BROWSER_EXACT_TEXT_MISSING`. Recovery and private-state cleanup
+passed. This is a confirmed runner defect: the preview locator still expected
+250 items after the hosted fixture changed to three. The product derives the
+visible count from its selected server-authored candidate.
+
+The runner now derives the exact expected count from the canonical hosted fixture
+and scopes the observation and activation to the exact selected artifact's handoff
+region. The preview must remain unique and its integrity text visible after opening.
+A real-component desktop reproduction failed with the old 250-item locator. After
+correction, all four focused desktop/Pixel cases pass, including rejection of the
+250-item stress fixture and unrelated matching page text. All 54 focused synthetic
+runner contract tests pass without skips. Remaining runtime 250-item references are
+capacity bounds; the separate 250-item stress coverage is unchanged. No broad local
+regression was run, and all 84 catalog steps remain required.
+
+No schema or function deployment is needed for this runner-only correction. Verify
+new-head CI and preview before dispatching the full protected campaign. Rollback
+reverts the preview observer, focused fixture/tests, and provenance together, leaves
+the campaign blocked, and preserves all retained history. Full synthetic acceptance
+remains failed pending a complete new-candidate run and verified cleanup.

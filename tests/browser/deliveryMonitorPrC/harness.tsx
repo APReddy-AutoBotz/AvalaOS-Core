@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import '../../../index.css';
 import GovernedDeliveryWorkspace, { MonitorApprovedBaselinePanel } from '../../../components/delivery/GovernedDeliveryWorkspace';
 import PortfolioView from '../../../components/shared/PortfolioView';
+import controlledHumanFixture from '../../../testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json';
 import {
   createDeliveryItemPageFixture,
   decodeDeliveryWorkspaceProjection,
@@ -95,6 +96,7 @@ function Harness() {
   const fixtureState = params.get('state') ?? '';
   const [view, setView] = useState<'delivery' | 'enterprise-monitor' | 'primary-monitor' | 'context-monitor'>((params.get('view') as 'delivery' | 'enterprise-monitor' | 'primary-monitor' | 'context-monitor') ?? 'delivery');
   const [delivery, setDelivery] = useState<DeliveryWorkspaceProjection>(() => {
+    if (fixtureState === 'synthetic-preview') return { ...initialDelivery, eligibleStudioArtifacts: [{ ...candidate, proposalItems: candidate.proposalItems.slice(0, controlledHumanFixture.seed.assessedStudioArtifact.sectionCount) }] };
     if (fixtureState === 'revoked') return { ...initialDelivery, readOnly: true, inbox: initialDelivery.inbox.map(value => ({ ...value, actions: [] })), packages: initialDelivery.packages.map(value => ({ ...value, actions: [], items: value.items.map(entry => ({ ...entry, actions: [] })) })), actions: [] };
     if (fixtureState === 'stale') return { ...initialDelivery, inbox: [{ ...initialHandoff, status: 'stale', actions: [] }] };
     if (fixtureState === 'wrong-workspace' || fixtureState === 'cross-org') return { ...initialDelivery, eligibleStudioArtifacts: [], inbox: [], outbox: [], packages: [] };

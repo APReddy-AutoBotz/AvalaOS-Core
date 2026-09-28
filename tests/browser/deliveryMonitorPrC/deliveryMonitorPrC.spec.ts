@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
-import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant, observeBrowserOnlyStep } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 import { selectSyntheticDeliveryArtifact, verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline, verifySyntheticReadOnlyMonitorHistory, verifySyntheticStudioApprovalHasNoDeliveryResource } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 import { canonicalDigest } from '../../../scripts/prCControlledHumanEvidenceContract.mjs';
 
@@ -108,6 +108,30 @@ const tabTo = async (page: Page, control: ReturnType<Page['getByRole']>) => {
   }
   throw new Error('focused control was not keyboard reachable');
 };
+
+test('PR C synthetic CH-04 opens the exact hosted fixture preview through the campaign observer', async ({ page }) => {
+  await open(page, '?state=synthetic-preview');
+  const interactions: string[] = [];
+  const proof = await observeBrowserOnlyStep({ page, checkpointId: 'CH-04', stepId: 'preview-approved-studio-handoff',
+    state: new Map([['seed:assessed-artifact', { studioArtifactVersionId: artifactVersionId, artifactType: 'brd' }]]), interactionSequence: interactions });
+  expect(proof).toMatch(/^sha256:[0-9a-f]{64}$/);
+  await expect(page.getByText('Server-bound proposal integrity verified.', { exact: true })).toBeVisible();
+  expect(interactions).toContain('select:exact-eligible-studio-artifact-version');
+  await expect(page.getByRole('tab', { name: 'Outbox (0)', exact: true })).toBeVisible();
+});
+
+test('PR C synthetic CH-04 rejects the stress fixture and unrelated matching preview text', async ({ page }) => {
+  await open(page);
+  const run = () => observeBrowserOnlyStep({ page, checkpointId: 'CH-04', stepId: 'preview-approved-studio-handoff',
+    state: new Map([['seed:assessed-artifact', { studioArtifactVersionId: artifactVersionId, artifactType: 'brd' }]]), interactionSequence: [] });
+  await expect(run()).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_EXACT_TEXT_MISSING');
+  await page.evaluate(() => {
+    const unrelated = document.createElement('div');
+    unrelated.textContent = 'Server-derived handoff preview · 3 items';
+    document.body.append(unrelated);
+  });
+  await expect(run()).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_EXACT_TEXT_MISSING');
+});
 
 test('deterministic Studio proposal is cited and handoff request never auto-creates a target', async ({ page }, info) => {
   await open(page);

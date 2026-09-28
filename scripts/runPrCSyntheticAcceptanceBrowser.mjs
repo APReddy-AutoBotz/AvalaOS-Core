@@ -142,7 +142,7 @@ const BROWSER_ASSERTION_PLANS = Object.freeze({
   'stop-with-no-delivery-resource': { kind: 'exact-studio-stop' },
   'verify-approved-assess-handoff-ready': { kind: 'exact-assess-handoff-ready' },
   'add-disjoint-studio-supplements': { kind: 'studio-source-selection' },
-  'preview-approved-studio-handoff': { kind: 'activate-text', values: ['Server-derived handoff preview · 250 items'], outcome: ['Server-bound proposal integrity verified.'] },
+  'preview-approved-studio-handoff': { kind: 'activate-text', values: [`Server-derived handoff preview · ${SYNTHETIC_GOVERNED_ITEM_COUNT} items`], outcome: ['Server-bound proposal integrity verified.'] },
   'verify-request-creates-no-delivery-package': { kind: 'package-count-unchanged', stateKey: 'before-request' },
   'verify-changes-create-no-target-draft': { kind: 'package-count-unchanged', stateKey: 'before-changes' },
   'verify-rejection-creates-no-target-draft': { kind: 'package-count-unchanged', stateKey: 'before-rejection' },
@@ -1265,7 +1265,7 @@ export const prepareAssessConflictPreview = async (page, interactionSequence, bu
   return { selectedDraft: true, reviewedCandidate: true, materialConflictCount: await review.locator('article[aria-labelledby^="conflict-"]').count() };
 };
 
-const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, interactionSequence }) => {
+export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, interactionSequence }) => {
   const plan = BROWSER_ASSERTION_PLANS[stepId];
   assert(plan, `PR_C_SYNTHETIC_BROWSER_READ_PLAN_MISSING:${checkpointId}:${stepId}`);
   let observed;
@@ -1360,14 +1360,18 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     assert(option, `PR_C_SYNTHETIC_BROWSER_OPTION_MISSING:${stepId}`); await select.selectOption({ label: option }); interactionSequence.push(`select:${safeLabel(label)}:${safeLabel(option)}`);
     observed = { label, option, valueDigest: digest(await select.inputValue()) };
   } else if (plan.kind === 'activate-text') {
+    let previewScope = page;
     if (stepId === 'preview-approved-studio-handoff') {
       const candidate = state.get('seed:assessed-artifact');
-      await selectSyntheticDeliveryArtifact(page, interactionSequence, {
+      const selected = await selectSyntheticDeliveryArtifact(page, interactionSequence, {
         artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType, planningOnly: false,
       });
+      previewScope = selected.section;
     }
-    const trigger = await exactVisibleText(page, plan.values); await page.getByText(trigger[0].value, { exact: true }).first().click(); interactionSequence.push(`activate:${safeLabel(trigger[0].value)}`);
-    observed = { trigger, outcome: await exactVisibleText(page, plan.outcome, true) };
+    const trigger = await exactVisibleText(previewScope, plan.values);
+    assert.equal(trigger[0].count, 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PREVIEW_AMBIGUOUS');
+    await previewScope.getByText(trigger[0].value, { exact: true }).click(); interactionSequence.push(`activate:${safeLabel(trigger[0].value)}`);
+    observed = { trigger, outcome: await exactVisibleText(previewScope, plan.outcome, true) };
   } else if (plan.kind === 'activate-control') {
     const control = await namedControl(page, plan.role, plan.names); await control.locator.click(); interactionSequence.push(`activate:${safeLabel(control.name)}`);
     const text = await page.locator('body').innerText(); for (const value of plan.outcome) assert(text.includes(value), `PR_C_SYNTHETIC_BROWSER_OUTCOME_MISSING:${stepId}`);
