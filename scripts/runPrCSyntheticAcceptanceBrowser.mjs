@@ -30,7 +30,7 @@ import {
 import { attachSyntheticBrowserApi } from './prCSyntheticBrowserApi.mjs';
 import {
   runSyntheticPrerequisites, readSyntheticDeliveryWorkspace, readSyntheticDeliveryPackage,
-  readSyntheticStudioArtifact, syntheticCommandResourceId, resolveSyntheticStudioReviewerId,
+  readSyntheticStudioArtifact, readSyntheticStudioBundleBinding, syntheticCommandResourceId, resolveSyntheticStudioReviewerId,
 } from './prCSyntheticBrowserPrerequisites.mjs';
 import {
   prepareSyntheticStudioGeneration, selectSyntheticDeliveryArtifact,
@@ -49,7 +49,10 @@ const PERSONA_KEYS = Object.freeze([...SYNTHETIC_PERSONA_ORDER]);
 const SERVER_STEP_KEYS = new Set(CONTROLLED_HUMAN_SERVER_ACTIONS.map(record => `${record.checkpointId}:${record.stepId}`));
 const CATALOG_BY_CHECKPOINT = new Map(CONTROLLED_HUMAN_CATALOG.map(record => [record.checkpointId, record]));
 const SERVER_ACTION_BY_STEP = new Map(CONTROLLED_HUMAN_SERVER_ACTIONS.map(record => [`${record.checkpointId}:${record.stepId}`, record]));
-const SYNTHETIC_TRANSCRIPT_LABELS = JSON.parse(readFileSync(new URL('../testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json', import.meta.url), 'utf8')).seed.transcriptSets;
+const SYNTHETIC_SEED = JSON.parse(readFileSync(new URL('../testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json', import.meta.url), 'utf8')).seed;
+const SYNTHETIC_TRANSCRIPT_LABELS = SYNTHETIC_SEED.transcriptSets;
+const SYNTHETIC_GOVERNED_ITEM_COUNT = SYNTHETIC_SEED.assessedStudioArtifact.sectionCount;
+assert(Number.isSafeInteger(SYNTHETIC_GOVERNED_ITEM_COUNT) && SYNTHETIC_GOVERNED_ITEM_COUNT > 1 && SYNTHETIC_GOVERNED_ITEM_COUNT <= 100, 'PR_C_SYNTHETIC_BROWSER_GOVERNED_FIXTURE_COUNT');
 const SYNTHETIC_STUDIO_DRAFT_TITLE = 'Synthetic Studio transcript draft';
 const SYNTHETIC_STUDIO_DRAFT_INITIAL_BODY = 'Synthetic Studio source context retained for controlled acceptance editing.';
 const SYNTHETIC_STUDIO_DRAFT_SECTION_BODY = `${SYNTHETIC_STUDIO_DRAFT_INITIAL_BODY}\nSynthetic acceptance edit.`;
@@ -154,7 +157,7 @@ const BROWSER_ASSERTION_PLANS = Object.freeze({
   'verify-minimized-baseline-parity': { kind: 'testid', testId: 'canonical-monitor-baselines' },
   'verify-no-hashes-or-approval-identities': { kind: 'privacy' },
   'verify-no-monitor-mutation-controls': { kind: 'monitor-control-absence' },
-  'verify-legacy-metrics-non-authoritative': { kind: 'text', values: ['Legacy initiative disposition — non-authoritative'] },
+  'verify-legacy-metrics-non-authoritative': { kind: 'primary-monitor-legacy' },
   'verify-direct-plan-remains-not-assessed': { kind: 'exact-planning-baseline', manual: false },
   'verify-manual-path-remains-not-assessed': { kind: 'exact-planning-baseline', manual: true },
   'verify-zero-negative-side-effects': { kind: 'package-count-unchanged', stateKey: 'before-negative-attempts' },
@@ -168,7 +171,7 @@ const BROWSER_ASSERTION_PLANS = Object.freeze({
   'focused-rationale-error-summary': { kind: 'focused-alert' },
   'preserve-invalid-input': { kind: 'preserved-input', label: 'Item title' },
   'logical-focus-return': { kind: 'focus-return', role: 'button', names: ['Edit immutable descendant'] },
-  'non-color-status-and-citation-cues': { kind: 'testid-text', testId: 'governed-delivery-workspace', values: ['Decision:', 'Source citation'], all: true },
+  'non-color-status-and-citation-cues': { kind: 'authorized-status-and-citation' },
   'verify-no-horizontal-overflow': { kind: 'layout' },
 });
 
@@ -277,13 +280,13 @@ const exactEnvironment = (env, preparation) => {
   if (preparation) {
     assert(verified.releaseSha === exactHead && verified.reviewHeadSha === exactHead && verified.deployId === deployId && verified.deployOrigin === previewOrigin
       && verified.exerciseDigest === exerciseDigest && verified.targetFingerprint === targetFingerprint && verified.publicTargetDigest === publicTargetDigest
-      && verified.migrationTip === '20260926053818' && verified.productionAuthorized === false && verified.customerDataAuthorized === false
+      && verified.migrationTip === '20260928060000' && verified.productionAuthorized === false && verified.customerDataAuthorized === false
       && verified.realProviderCallsAuthorized === false, 'PR_C_SYNTHETIC_BROWSER_PREPARATION_BINDING_REJECTED');
   }
   const binding = {
     repository: 'APReddy-AutoBotz/AvalaOS-Core', prNumber: 264, branch: PR_BRANCH, exactHead,
     preview: { origin: previewOrigin, deployId, releaseSha: exactHead, environment: 'hosted_nonproduction_pilot', context: 'deploy-preview', reviewId: 264, siteName: 'avalaos-pilot' },
-    backend: { exerciseDigest, targetFingerprint, publicTargetDigest, personaManifestDigest, fixtureManifestDigest, migrationTip: '20260926053818' },
+    backend: { exerciseDigest, targetFingerprint, publicTargetDigest, personaManifestDigest, fixtureManifestDigest, migrationTip: '20260928060000' },
     producer: { workflowPath: SYNTHETIC_WORKFLOW_PATH, job: SYNTHETIC_WORKFLOW_JOB, event: 'workflow_dispatch', runId, runAttempt, owner: 'APReddy-AutoBotz' },
   };
   return { exactHead, exerciseDigest, previewOrigin, passwords: parsePasswordBundle(passwordBundle ?? ''), binding,
@@ -350,7 +353,7 @@ const STUDIO_HANDOFF_STEP_TARGETS = Object.freeze({
   'CH-03:accept-studio-handoff': { tab: 'Outbox', resource: /^Assess BRD handoff v3 · v3$/u, state: 'approved' },
 });
 
-export const exactStudioHandoffAction = async (page, interactionSequence, { tab, resource, state, button }) => {
+export const exactStudioHandoffAction = async (page, interactionSequence, { tab, resource, state, button, handoffId = '', upstreamHandoffId = '' }) => {
   const center = page.locator('section[aria-labelledby="studio-handoff-title"]');
   await center.waitFor({ state: 'visible' });
   const tabControl = center.getByRole('tab', { name: new RegExp(`^${tab} \\([0-9]+\\)$`, 'u') });
@@ -361,6 +364,8 @@ export const exactStudioHandoffAction = async (page, interactionSequence, { tab,
   const matches = [];
   for (let index = 0; index < await cards.count(); index += 1) {
     const card = cards.nth(index);
+    if (handoffId && await card.getAttribute('data-handoff-id') !== handoffId) continue;
+    if (upstreamHandoffId && await card.getAttribute('data-upstream-handoff-id') !== upstreamHandoffId) continue;
     const resourceMatches = await card.getByText(resource, { exact: true }).count() === 1;
     const stateMatches = await card.getByText(state, { exact: true }).count() === 1;
     if (resourceMatches && stateMatches) matches.push(card);
@@ -501,12 +506,17 @@ const deliveryCompleteSetMetrics = async complete => {
 
 const loadCompleteDeliveryItemSet = async (page, interactionSequence) => {
   const workspace = page.getByTestId('governed-delivery-workspace');
+  let requests = 0;
   while (await workspace.getByRole('button', { name: 'Load next bounded page', exact: true }).count()) {
     const load = workspace.getByRole('button', { name: 'Load next bounded page', exact: true });
-    if (!(await load.isVisible()) || !(await load.isEnabled())) break;
+    assert(requests++ < 3, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PAGE_LIMIT');
     await load.click();
     interactionSequence.push('load:next-bounded-delivery-page');
-    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
+    await page.waitForFunction(() => {
+      const root = document.querySelector('[data-testid="governed-delivery-workspace"]');
+      return Boolean(root?.querySelector('[data-testid="delivery-item-pagination-complete"]'))
+        || [...(root?.querySelectorAll('button') ?? [])].some(button => button.textContent?.trim() === 'Load next bounded page' && !button.disabled);
+    });
   }
   const complete = workspace.getByTestId('delivery-item-pagination-complete');
   await complete.waitFor({ state: 'visible' });
@@ -556,13 +566,14 @@ export const selectSyntheticStudioDraft = async (page, interactionSequence, titl
   return workspace;
 };
 
-export const selectSyntheticHybridStudioDraft = async (page, interactionSequence, sectionBody = SYNTHETIC_HYBRID_SECTION_BODY) => {
+export const selectSyntheticHybridStudioDraft = async (page, interactionSequence, sectionBody = SYNTHETIC_HYBRID_SECTION_BODY, artifactId = '') => {
   const workspace = page.getByTestId('studio-artifact-workspace');
   const select = workspace.getByLabel('Governed artifact', { exact: true });
   await select.waitFor({ state: 'visible' });
   const candidates = await select.locator('option').evaluateAll(nodes => nodes.map(node => node.value).filter(Boolean));
+  if (artifactId) assert.equal(candidates.filter(value => value === artifactId).length, 1, 'PR_C_SYNTHETIC_BROWSER_HYBRID_ARTIFACT_ID_MISSING');
   const matches = [];
-  for (const value of candidates) {
+  for (const value of candidates.filter(value => !artifactId || value === artifactId)) {
     await selectLoadedStudioArtifact(page, select, value);
     const bodies = await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').evaluateAll(nodes => nodes.map(node => node.value));
     if (bodies.includes(sectionBody)) matches.push(value);
@@ -665,16 +676,12 @@ const selectDeliveryPackageByLabel = async (page, label, interactionSequence) =>
 };
 
 const selectDeliveryPackageById = async (page, packageId, interactionSequence) => {
+  assert(typeof packageId === 'string' && /^[0-9a-f-]{36}$/u.test(packageId), 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_INVALID');
   const workspace = page.getByTestId('governed-delivery-workspace');
-  const packages = workspace.getByRole('list', { name: 'Delivery packages' }).getByRole('button');
-  const matches = [];
-  for (let index = 0; index < await packages.count(); index += 1) {
-    await packages.nth(index).click();
-    const current = await selectedDeliveryPackage(workspace);
-    if (current.packageId === packageId) matches.push(packages.nth(index));
-  }
-  assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_COUNT:${matches.length}`);
-  await matches[0].click();
+  const choice = workspace.getByRole('list', { name: 'Delivery packages' }).locator(`button[data-package-id="${packageId}"]`);
+  assert.equal(await choice.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_COUNT');
+  await choice.click();
+  await page.waitForFunction(expected => document.querySelector('article[data-testid^="delivery-package-"]')?.getAttribute('data-package-id') === expected, packageId);
   interactionSequence.push('select:exact-bound-delivery-package');
   return { workspace, selected: (await selectedDeliveryPackage(workspace)).selected };
 };
@@ -689,21 +696,27 @@ const filterOneDeliveryItem = async (page, interactionSequence, query) => {
   interactionSequence.push(`filter:delivery-item-${safeLabel(query)}`);
 };
 
-export const selectExactRevisedDeliveryDescendant = async (page, interactionSequence, expectedPackageId) => {
+export const selectExactRevisedDeliveryDescendant = async (page, interactionSequence, expectedPackageId, expectedItemId, expectedItemCount) => {
   assert(expectedPackageId, 'PR_C_SYNTHETIC_BROWSER_FULL_GOVERNED_PACKAGE_BINDING_MISSING');
+  assert(expectedItemId, 'PR_C_SYNTHETIC_BROWSER_REVISED_ITEM_BINDING_MISSING');
   const { workspace, selected } = await selectDeliveryPackageById(page, expectedPackageId, interactionSequence);
   assert.equal(await selected.getByText('Studio handoff', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_SOURCE_MODE_MISMATCH');
   assert.equal(await selected.getByText('Assessed lineage', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_ANCESTRY_MISMATCH');
   assert.equal(await selected.getByText('draft', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_STATUS_MISMATCH');
   assert.equal(await selected.getByText('Review not requested', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_REVIEW_STATE_MISMATCH');
   const metrics = await deliveryCompleteSetMetrics(await loadCompleteDeliveryItemSet(page, interactionSequence));
-  assert.equal(metrics.itemCount, 1, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_ITEM_COUNT');
-  assert.equal(metrics.pageCount, 1, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_PAGE_COUNT');
+  assert(Number.isSafeInteger(expectedItemCount) && expectedItemCount > 0 && expectedItemCount <= 250, 'PR_C_SYNTHETIC_BROWSER_REVISED_EXPECTED_COUNT');
+  assert.equal(metrics.itemCount, expectedItemCount, 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_ITEM_COUNT');
+  assert.equal(metrics.pageCount, Math.ceil(expectedItemCount / 100), 'PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_PAGE_COUNT');
+  await filterOneDeliveryItem(page, interactionSequence, 'edited');
+  assert.equal(await workspace.locator('article[data-testid^="delivery-item-"][data-item-status="edited"]').count(), 1,
+    'PR_C_SYNTHETIC_BROWSER_REVISED_EDITED_ITEM_COUNT');
   await filterOneDeliveryItem(page, interactionSequence, SYNTHETIC_REVISED_ITEM_TITLE);
   const cards = workspace.locator('article[data-testid^="delivery-item-"]');
   const matches = [];
   for (let index = 0; index < await cards.count(); index += 1) {
     const card = cards.nth(index);
+    if (await card.getAttribute('data-testid') !== `delivery-item-${expectedItemId}`) continue;
     if (await card.getAttribute('data-item-title') !== SYNTHETIC_REVISED_ITEM_TITLE) continue;
     if (await card.getAttribute('data-item-status') !== 'edited') continue;
     if (await card.getByRole('button', { name: 'Accept proposal', exact: true }).count() !== 1) continue;
@@ -718,15 +731,18 @@ export const selectExactRevisedDeliveryDescendant = async (page, interactionSequ
   return { card, control, title: SYNTHETIC_REVISED_ITEM_TITLE, status: 'edited', itemCount: metrics.itemCount, pageCount: metrics.pageCount };
 };
 
-const isolateFirstActionableDeliveryItem = async (page, interactionSequence, expectedPackageId = '', exactItemTitle = '') => {
+export const isolateFirstActionableDeliveryItem = async (page, interactionSequence, expectedPackageId = '', exactItemTitle = '', expectedItemId = '') => {
+  assert(expectedItemId || exactItemTitle, 'PR_C_SYNTHETIC_BROWSER_EXACT_ITEM_BINDING_MISSING');
   const workspace = await selectDeliveryPackageForControl(page, 'Edit immutable descendant', interactionSequence, expectedPackageId);
   const packageText = await (await selectedDeliveryPackage(workspace)).selected.innerText();
-  if (exactItemTitle) assert(packageText.includes('Manual Delivery entry') && packageText.includes('Not assessed · Planning only'), 'PR_C_SYNTHETIC_BROWSER_MANUAL_DRAFT_PACKAGE_REQUIRED');
+  if (exactItemTitle && !expectedItemId) assert(packageText.includes('Manual Delivery entry') && packageText.includes('Not assessed · Planning only'), 'PR_C_SYNTHETIC_BROWSER_MANUAL_DRAFT_PACKAGE_REQUIRED');
   await loadCompleteDeliveryItemSet(page, interactionSequence);
+  if (exactItemTitle) await filterOneDeliveryItem(page, interactionSequence, exactItemTitle);
   const cards = workspace.locator('article[data-testid^="delivery-item-"]');
   const matches = [];
   for (let index = 0; index < await cards.count(); index += 1) {
     const candidate = cards.nth(index);
+    if (expectedItemId && await candidate.getAttribute('data-testid') !== `delivery-item-${expectedItemId}`) continue;
     const title = await candidate.getAttribute('data-item-title');
     if ((!exactItemTitle || title === exactItemTitle) && await candidate.getByRole('button', { name: 'Edit immutable descendant', exact: true }).count() === 1) matches.push(candidate);
   }
@@ -735,6 +751,7 @@ const isolateFirstActionableDeliveryItem = async (page, interactionSequence, exp
   const title = await card.getAttribute('data-item-title');
   assert(title, 'PR_C_SYNTHETIC_BROWSER_ACTIONABLE_DELIVERY_ITEM_TITLE_MISSING');
   await filterOneDeliveryItem(page, interactionSequence, title);
+  if (expectedItemId) assert.equal(await workspace.getByTestId(`delivery-item-${expectedItemId}`).count(), 1, 'PR_C_SYNTHETIC_BROWSER_EXACT_ITEM_FILTER_MISMATCH');
   return { workspace, title };
 };
 
@@ -758,29 +775,40 @@ const prepareKeyboardOnlyHandoff = async (page, interactionSequence, state) => {
   })).section;
 };
 
-export const selectExactEligibleStudioBundle = async (page, interactionSequence) => {
+export const selectExactEligibleStudioBundle = async (page, interactionSequence, { versionId = '', requireDirectCreation = false } = {}) => {
+  assert(typeof versionId === 'string' && /^[0-9a-f-]{36}$/u.test(versionId), 'PR_C_SYNTHETIC_BROWSER_STUDIO_BUNDLE_BINDING_MISSING');
   const builder = page.getByRole('region', { name: 'Studio Source Package builder' });
   const select = builder.getByLabel('Exact locked Studio bundle', { exact: true });
   const createControl = builder.getByRole('button', { name: 'Create direct planning package', exact: true });
   await select.waitFor({ state: 'visible' });
   const options = await select.locator('option').evaluateAll(nodes => nodes.map(node => ({ value: node.value, label: node.textContent?.trim() ?? '' })).filter(option => option.value));
-  assert(options.length > 0, 'PR_C_SYNTHETIC_BROWSER_STUDIO_BUNDLE_MISSING');
-  const eligible = [];
-  for (const option of options) {
-    await select.selectOption(option.value);
-    if (await createControl.isEnabled()) eligible.push(option);
+  assert.equal(options.filter(option => option.value === versionId).length, 1, 'PR_C_SYNTHETIC_BROWSER_EXACT_STUDIO_BUNDLE_COUNT');
+  await select.selectOption(versionId);
+  await page.waitForFunction(expected => document.querySelector('select[aria-label="Exact locked Studio bundle"]')?.value === expected, versionId);
+  assert.equal(await select.inputValue(), versionId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_BUNDLE_SELECTION_MISMATCH');
+  if (requireDirectCreation) {
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Create direct planning package' && !button.disabled));
+    assert(await createControl.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_DIRECT_PACKAGE_DISABLED');
   }
-  assert.equal(eligible.length, 1, `PR_C_SYNTHETIC_BROWSER_ELIGIBLE_STUDIO_BUNDLE_COUNT:${eligible.length}`);
-  await select.selectOption(eligible[0].value);
-  assert(await createControl.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ELIGIBLE_STUDIO_BUNDLE_NOT_SELECTED');
-  interactionSequence.push('select:exact-eligible-studio-bundle');
-  return { optionCount: options.length, eligibleCount: eligible.length };
+  interactionSequence.push('select:exact-bound-studio-bundle');
+  return { optionCount: options.length, exactMatchCount: 1, directCreationRequired: requireDirectCreation };
+};
+
+export const prepareSyntheticDirectPdd = async (page, interactionSequence, bundle) => {
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  await workspace.getByLabel('Artifact type', { exact: true }).selectOption('pdd');
+  await page.waitForLoadState('networkidle');
+  await page.waitForFunction(() => {
+    const root = document.querySelector('[data-testid="studio-artifact-workspace"]');
+    return root?.getAttribute('data-studio-usable') === 'true' && root.querySelector('select[aria-label="Artifact type"]')?.value === 'pdd';
+  });
+  interactionSequence.push('select:direct-pdd-artifact-type');
+  return selectExactEligibleStudioBundle(page, interactionSequence, { ...bundle, requireDirectCreation: true });
 };
 
 const prepareBlockedPackageRecovery = async (page, interactionSequence, { packageId = '', recoveryFixture = false } = {}) => {
-  const { workspace, selected } = recoveryFixture
-    ? await selectDeliveryPackageByLabel(page, SYNTHETIC_RECOVERY_PACKAGE_LABEL, interactionSequence)
-    : await selectDeliveryPackageById(page, packageId, interactionSequence);
+  assert(packageId, 'PR_C_SYNTHETIC_BROWSER_RECOVERY_PACKAGE_BINDING_MISSING');
+  const { workspace, selected } = await selectDeliveryPackageById(page, packageId, interactionSequence);
   const selectedText = await selected.innerText();
   const expectedState = recoveryFixture
     ? ['blocked', 'Manual Delivery entry', 'Not assessed · Planning only', 'Review changes requested']
@@ -806,23 +834,22 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
   if (key === 'CH-01:resolve-material-assess-conflict') assert(await fillIfVisible(page, 'Resolution rationale', 'Synthetic conflict resolved against the reviewed source set.', interactionSequence));
   if (['CH-02:review-studio-document', 'CH-02:approve-studio-document'].includes(key))
     await selectSyntheticStudioDraft(page, interactionSequence);
-  if (key === 'CH-03:approve-hybrid-studio-document') await selectSyntheticHybridStudioDraft(page, interactionSequence);
+  if (key === 'CH-03:approve-hybrid-studio-document') await selectSyntheticHybridStudioDraft(page, interactionSequence, SYNTHETIC_HYBRID_SECTION_BODY, state.get('prereq:ch03:artifactId'));
   if (key === 'CH-03:generate-source-bound-document') await prepareSyntheticStudioGeneration(page, interactionSequence, {
     artifactId: state.get('prereq:ch03:artifactId'), templateLabel: 'Synthetic controlled-human requirements template',
   });
   if (['CH-02:review-studio-document', 'CH-02:approve-studio-document', 'CH-03:approve-hybrid-studio-document'].includes(key))
     assert(await fillIfVisible(page, 'Rationale', `Independent synthetic decision for ${stepId}.`, interactionSequence), 'PR_C_SYNTHETIC_BROWSER_STUDIO_RATIONALE_MISSING');
   if (['CH-04:request-exact-studio-handoff', 'CH-05:request-fresh-exact-handoff'].includes(key)) {
-    const select = page.getByLabel('Eligible exact Studio artifact', { exact: true });
-    const options = await select.locator('option').allTextContents();
-    const assessed = options.filter(value => value.includes('Assessed lineage'));
-    assert.equal(assessed.length, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESSED_STUDIO_ARTIFACT_COUNT');
-    await select.selectOption({ label: assessed[0] });
-    interactionSequence.push('select:exact-assessed-studio-artifact');
+    const candidate = state.get('seed:assessed-artifact');
+    assert(candidate, 'PR_C_SYNTHETIC_BROWSER_ASSESSED_STUDIO_ARTIFACT_MISSING');
+    await selectSyntheticDeliveryArtifact(page, interactionSequence, {
+      artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType, planningOnly: false,
+    });
   }
-  if (key === 'CH-03:request-studio-handoff') await selectExactEligibleStudioBundle(page, interactionSequence);
+  if (key === 'CH-03:request-studio-handoff') await selectExactEligibleStudioBundle(page, interactionSequence, state.get('ch03:bundleBinding')?.inputBundle);
   if (key === 'CH-10:handoff-direct-studio-plan') {
-    const candidate = state.get('seed:direct-artifact');
+    const candidate = state.get('prereq:ch10:approvedCandidate');
     assert(candidate, 'PR_C_SYNTHETIC_BROWSER_DIRECT_STUDIO_ARTIFACT_MISSING');
     await selectSyntheticDeliveryArtifact(page, interactionSequence, {
       artifactVersionId: candidate.studioArtifactVersionId, artifactType: candidate.artifactType, planningOnly: true,
@@ -844,7 +871,7 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
     assert(expectedPackageId, 'PR_C_SYNTHETIC_BROWSER_GOVERNED_PACKAGE_BINDING_MISSING');
     await selectDeliveryPackageForControl(page, deliveryControlByKey, interactionSequence, expectedPackageId);
     await loadCompleteDeliveryItemSet(page, interactionSequence);
-    if (key === 'CH-06:edit-one-item-with-rationale') await isolateFirstActionableDeliveryItem(page, interactionSequence, expectedPackageId);
+    if (key === 'CH-06:edit-one-item-with-rationale') await isolateFirstActionableDeliveryItem(page, interactionSequence, expectedPackageId, state.get('ch06:selectedItemTitle'), state.get('ch06:selectedItemId'));
     if (key === 'CH-06:decide-every-current-proposal') await filterOneDeliveryItem(page, interactionSequence, 'Synthetic governed work item revision');
   }
   if (key === 'CH-07:commit-only-explicitly-edited-descendants') {
@@ -854,11 +881,11 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
   }
   if (key === 'CH-07:decide-revised-descendant') {
     const packageId = state.get('full-governed-package')?.packageId;
-    await selectExactRevisedDeliveryDescendant(page, interactionSequence, packageId);
+    await selectExactRevisedDeliveryDescendant(page, interactionSequence, packageId, state.get('prereq:ch06:finalItemId'), state.get('full-governed-package').itemCount);
   }
-  if (key === 'CH-13:simulate-response-loss') await prepareBlockedPackageRecovery(page, interactionSequence, { recoveryFixture: true });
+  if (key === 'CH-13:simulate-response-loss') await prepareBlockedPackageRecovery(page, interactionSequence, { packageId: state.get('seed:recovery-packageId'), recoveryFixture: true });
   if (key === 'CH-10:create-direct-studio-plan') {
-    await selectExactEligibleStudioBundle(page, interactionSequence);
+    await prepareSyntheticDirectPdd(page, interactionSequence, state.get('ch03:bundleBinding')?.inputBundle);
   }
   if (key === 'CH-11:create-manual-delivery-package') {
     assert(await fillIfVisible(page, 'Package title', 'Synthetic manual continuity plan', interactionSequence));
@@ -957,9 +984,33 @@ const executeServerAction = async (page, checkpointId, stepId, interactionSequen
   assert(labels?.length, `PR_C_SYNTHETIC_BROWSER_ACTION_PLAN_MISSING:${key}`);
   await prepareServerAction(page, checkpointId, stepId, interactionSequence, state);
   const handoffTarget = STUDIO_HANDOFF_STEP_TARGETS[key];
+  const deliveryHandoffKey = {
+    'CH-04:request-handoff-changes': 'ch04:handoffId',
+    'CH-04:reject-new-exact-handoff-request': 'prereq:ch04:replacementHandoffId',
+    'CH-05:review-handoff-independently': 'ch05:handoffId',
+    'CH-05:approve-handoff-independently': 'ch05:handoffId',
+    'CH-05:consume-approved-handoff-once': 'ch05:handoffId',
+  }[key];
+  let root = actionRoot(page, contract.action);
+  if (key === 'CH-08:create-baseline-with-exact-package-selectors' || key === 'CH-11:create-read-only-manual-baseline') {
+    const packageId = checkpointId === 'CH-08' ? state.get('full-governed-package')?.packageId : state.get('prereq:ch11:packageId');
+    assert(packageId, 'PR_C_SYNTHETIC_BROWSER_BASELINE_PACKAGE_BINDING_MISSING');
+    root = root.getByTestId('baseline-eligibility-selectors').locator(`[data-package-id="${packageId}"]`);
+    assert.equal(await root.count(), 1, 'PR_C_SYNTHETIC_BROWSER_BASELINE_SELECTOR_COUNT');
+  }
+  if (deliveryHandoffKey) {
+    const handoffId = state.get(deliveryHandoffKey);
+    assert(handoffId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_BINDING_MISSING');
+    root = root.locator(`[data-handoff-id="${handoffId}"]`);
+    assert.equal(await root.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_ID_COUNT');
+  }
+  if (handoffTarget && key !== 'CH-03:request-studio-handoff')
+    assert(state.get('ch03:handoffId'), 'PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_BINDING_MISSING');
   const { control, label } = handoffTarget
-    ? await exactStudioHandoffAction(page, interactionSequence, { ...handoffTarget, button: labels[0] })
-    : await exactEnabledControl(actionRoot(page, contract.action), 'button', labels, key);
+    ? await exactStudioHandoffAction(page, interactionSequence, { ...handoffTarget, button: labels[0],
+      ...(key === 'CH-03:request-studio-handoff' ? { upstreamHandoffId: state.get('seed:assess-handoff')?.upstreamHandoffId }
+        : { handoffId: state.get('ch03:handoffId') }) })
+    : await exactEnabledControl(root, 'button', labels, key);
   await control.click();
   interactionSequence.push(`activate:${safeLabel(label)}`);
   await completeVisibleDialog(page, stepId, interactionSequence);
@@ -1051,7 +1102,7 @@ export const selectAssessTranscriptSources = async (page, interactionSequence, n
   return { sourceCount: names.length, committedSourceSet: true, lockedInputBundle: true };
 };
 
-export const selectStudioTranscriptSources = async (page, interactionSequence, names = SYNTHETIC_TRANSCRIPT_LABELS.studio) => {
+export const selectStudioTranscriptSources = async (page, interactionSequence, names = SYNTHETIC_TRANSCRIPT_LABELS.studioDraft, exactSources) => {
   assert(Array.isArray(names) && names.length === 2 && names.every(name => typeof name === 'string' && name.trim()), 'PR_C_SYNTHETIC_BROWSER_STUDIO_SOURCE_FIXTURE_REJECTED');
   const builder = page.locator('section[aria-labelledby="studio-source-package-builder-title"]');
   await builder.waitFor({ state: 'visible' });
@@ -1059,6 +1110,11 @@ export const selectStudioTranscriptSources = async (page, interactionSequence, n
   for (const name of names) {
     const source = sourceList.locator('li').filter({ hasText: name });
     assert.equal(await source.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_SOURCE_MISSING');
+    if (exactSources) {
+      const exact = exactSources.filter(value => value.label === name);
+      assert.equal(exact.length, 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_SOURCE_BINDING_COUNT');
+      assert((await source.innerText()).includes(`exact version ${exact[0].sourceVersionId}`), 'PR_C_SYNTHETIC_BROWSER_STUDIO_SOURCE_VERSION_MISMATCH');
+    }
     const use = source.getByRole('button', { name: 'Use in Studio', exact: true });
     if (await use.count()) { await use.click(); interactionSequence.push(`select:${safeLabel(name)}`); }
     assert.equal(await source.getByRole('button', { name: 'Remove', exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_SOURCE_NOT_SELECTED');
@@ -1225,6 +1281,31 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     observed = { packageDigest: digest(packageId), baselineControlCount: result.baselineControlCount,
       monitorProjection: result.monitorProjection, authorizedMonitorSnapshotDigest: digest(after),
       supplementaryMonitorIdentity: state.get('sessions').get('monitor_viewer').identity };
+  } else if (plan.kind === 'primary-monitor-legacy') {
+    await clickFirstLabel(page, ['Monitor'], interactionSequence);
+    await verifySyntheticMonitorBaseline(page, interactionSequence, {
+      packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
+    });
+    observed = { exactText: await exactVisibleText(page, ['Legacy initiative disposition — non-authoritative'], true) };
+  } else if (plan.kind === 'authorized-status-and-citation') {
+    const packageId = state.get('full-governed-package')?.packageId;
+    const { selected } = await verifySyntheticMonitorBaseline(page, interactionSequence, { packageId, baselineId: state.get('ch08:baselineId') });
+    assert.equal(await selected.getByText('approved', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_MONITOR_TEXT_STATUS_MISSING');
+    assert.equal(await selected.locator('dd').getByText('Assessed lineage', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_MONITOR_TEXT_LINEAGE_MISSING');
+    const author = state.get('sessions').get('delivery_author');
+    await openSurface(author.page, 'delivery', interactionSequence);
+    const authorWorkspace = (await selectDeliveryPackageById(author.page, packageId, interactionSequence)).workspace;
+    await loadCompleteDeliveryItemSet(author.page, interactionSequence);
+    await filterOneDeliveryItem(author.page, interactionSequence, SYNTHETIC_REVISED_ITEM_TITLE);
+    const item = authorWorkspace.getByTestId(`delivery-item-${state.get('prereq:ch06:finalItemId')}`);
+    assert.equal(await item.count(), 1, 'PR_C_SYNTHETIC_BROWSER_CITATION_ITEM_BINDING_MISSING');
+    assert((await item.innerText()).includes('Decision: accepted'), 'PR_C_SYNTHETIC_BROWSER_TEXT_DECISION_MISSING');
+    const citation = item.getByLabel('Exact source citation', { exact: true });
+    assert.equal(await citation.count(), 1, 'PR_C_SYNTHETIC_BROWSER_TEXT_CITATION_MISSING');
+    assert.match(await citation.innerText(), /^Source citation: BRD artifact v[1-9][0-9]* · /u);
+    interactionSequence.push('observe:supplementary-author-exact-item-citation');
+    observed = { packageDigest: digest(packageId), baselineDigest: digest(state.get('ch08:baselineId')),
+      monitorTextDigest: digest(await selected.innerText()), citationDigest: digest(await citation.innerText()), supplementaryAuthorIdentity: author.identity };
   } else if (plan.kind === 'text') observed = { exactText: await exactVisibleText(page, plan.values, plan.all) };
   else if (plan.kind === 'testid') {
     const locator = page.getByTestId(plan.testId); await locator.waitFor({ state: 'visible' });
@@ -1250,7 +1331,11 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     assert(!(await control.locator.isEnabled()), `PR_C_SYNTHETIC_BROWSER_CONTROL_ENABLED:${stepId}`);
     observed = { control: control.name, disabled: true };
   } else if (plan.kind === 'assess-source-selection') observed = await selectAssessTranscriptSources(page, interactionSequence);
-  else if (plan.kind === 'studio-source-selection') observed = await selectStudioTranscriptSources(page, interactionSequence);
+  else if (plan.kind === 'studio-source-selection') {
+    const binding = checkpointId === 'CH-03' ? state.get('ch03:bundleBinding') : null;
+    if (checkpointId === 'CH-03') assert(binding, 'PR_C_SYNTHETIC_BROWSER_STUDIO_SOURCE_BINDING_MISSING');
+    observed = await selectStudioTranscriptSources(page, interactionSequence, SYNTHETIC_TRANSCRIPT_LABELS.studioDraft, binding?.sources);
+  }
   else if (plan.kind === 'control-count') {
     let controls = null; let name = '';
     for (const candidate of plan.names) { const locator = page.getByRole(plan.role, { name: candidate, exact: true }); if (await locator.count() >= plan.minimum) { controls = locator; name = candidate; break; } }
@@ -1307,6 +1392,14 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     assert.equal(citationIdentities.size, 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_CITATION_VERSION_DRIFT');
     const citationIdentity = [...citationIdentities][0];
     state.set('full-governed-package', { packageId, itemCount: metrics.itemCount, pageCount: metrics.pageCount, citationIdentity });
+    const snapshot = await readSyntheticDeliveryPackage(state.get('sessions').get('delivery_author'), packageId);
+    assert.equal(snapshot.items.length, SYNTHETIC_GOVERNED_ITEM_COUNT, 'PR_C_SYNTHETIC_BROWSER_CANONICAL_ITEM_COUNT');
+    assert.equal(metrics.itemCount, snapshot.items.length, 'PR_C_SYNTHETIC_BROWSER_PUBLIC_ITEM_COUNT_MISMATCH');
+    const canonicalIds = snapshot.items.map(item => item.aggregateId).sort();
+    assert.equal(new Set(canonicalIds).size, snapshot.items.length, 'PR_C_SYNTHETIC_BROWSER_CANONICAL_ITEM_DUPLICATE');
+    state.set('full-governed-package', { ...state.get('full-governed-package'), itemIds: canonicalIds });
+    state.set('ch06:selectedItemId', canonicalIds[0]);
+    state.set('ch06:selectedItemTitle', snapshot.items.find(item => item.aggregateId === canonicalIds[0]).title);
     observed = { packageIdDigest: digest(packageId), itemCount: metrics.itemCount, pageCount: metrics.pageCount, citationIdentity };
   } else if (plan.kind === 'delivery-complete-set') {
     const expected = state.get('full-governed-package');
@@ -1365,7 +1458,16 @@ const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state, inter
     assert(await control.control.evaluate(node => node === document.activeElement)); observed = { control: control.label, focused: true };
   }
   else if (plan.kind === 'read-only-history') observed = await verifySyntheticReadOnlyMonitorHistory(page, interactionSequence, state.get('retained-monitor-history'));
-  else if (plan.kind === 'monitor-parity') { const panel = page.getByTestId('canonical-monitor-baselines'); await panel.waitFor({ state: 'visible' }); const enterpriseDigest = digest(await panel.innerText()); await clickFirstLabel(page, ['Monitor'], interactionSequence); await page.getByTestId('canonical-monitor-baselines').waitFor({ state: 'visible' }); const primaryDigest = digest(await page.getByTestId('canonical-monitor-baselines').innerText()); assert.equal(primaryDigest, enterpriseDigest); observed = { enterpriseDigest, primaryDigest }; }
+  else if (plan.kind === 'monitor-parity') {
+    const panel = page.getByTestId('canonical-monitor-baselines'); await panel.waitFor({ state: 'visible' });
+    const enterpriseDigest = digest(await panel.innerText());
+    await clickFirstLabel(page, ['Monitor'], interactionSequence);
+    await verifySyntheticMonitorBaseline(page, interactionSequence, {
+      packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
+    });
+    const primaryDigest = digest(await page.getByTestId('canonical-monitor-baselines').innerText());
+    assert.equal(primaryDigest, enterpriseDigest); observed = { enterpriseDigest, primaryDigest };
+  }
   else throw new Error(`PR_C_SYNTHETIC_BROWSER_PLAN_KIND_REJECTED:${stepId}:${plan.kind}`);
   return digest({ checkpointId, stepId, observed });
 };
@@ -1404,7 +1506,7 @@ export const buildBrowserExecutionCatalog = () => CONTROLLED_HUMAN_EXECUTION_ORD
     const serverAction = SERVER_ACTION_BY_STEP.get(key) ?? null;
     if (serverAction) assert((ACTION_LABEL_OVERRIDES[key] ?? ACTION_LABELS[serverAction.action])?.length, `PR_C_SYNTHETIC_BROWSER_ACTION_PLAN_MISSING:${key}`);
     else assert(BROWSER_ASSERTION_PLANS[step.stepId], `PR_C_SYNTHETIC_BROWSER_READ_PLAN_MISSING:${key}`);
-    const surface = step.stepId === 'verify-history-readable-and-actions-absent' ? 'monitor'
+    const surface = step.stepId === 'verify-history-readable-and-actions-absent' || (checkpointId === 'CH-14' && step.personaKey === 'monitor_viewer') ? 'monitor'
       : checkpointId === 'CH-01' && step.stepId === 'complete-remaining-assess-fields-manually' ? 'assess-case'
       : checkpointId === 'CH-01' && ['approve-assess-result', 'decline-studio-handoff', 'verify-no-studio-resource'].includes(step.stepId) ? 'assess-review'
       : checkpointId === 'CH-02' && step.stepId === 'stop-with-no-delivery-resource' ? 'delivery'
@@ -1460,13 +1562,57 @@ const snapshotBeforeServerAction = async (page, key, state) => {
   if (key === 'CH-08:replay-baseline-creation') state.set('baseline-after-create', await baselineCount(page));
 };
 
+export const assertSyntheticCommandContinuity = (planned, command, state) => {
+  const key = `${planned.checkpointId}:${planned.stepId}`;
+  const payload = command.body?.payload;
+  const exact = (actual, expected, code) => {
+    assert(expected, `PR_C_SYNTHETIC_BROWSER_${code}_BINDING_MISSING`);
+    assert.deepEqual(actual, expected, `PR_C_SYNTHETIC_BROWSER_${code}_MISMATCH`);
+  };
+  if (key === 'CH-03:request-studio-handoff') {
+    exact(payload?.targetInputBundle, state.get('ch03:bundleBinding')?.inputBundle, 'STUDIO_REQUEST_BUNDLE');
+    exact(payload?.upstreamHandoffId, state.get('seed:assess-handoff')?.upstreamHandoffId, 'STUDIO_REQUEST_UPSTREAM');
+  }
+  if (['CH-03:review-studio-handoff', 'CH-03:approve-studio-handoff', 'CH-03:accept-studio-handoff'].includes(key))
+    exact(payload?.handoffId, state.get('ch03:handoffId'), 'STUDIO_REQUEST_ID');
+  if (key === 'CH-03:approve-hybrid-studio-document') exact(payload?.artifactId, state.get('prereq:ch03:artifactId'), 'HYBRID_ARTIFACT');
+  if (['CH-04:request-exact-studio-handoff', 'CH-05:request-fresh-exact-handoff', 'CH-10:handoff-direct-studio-plan'].includes(key)) {
+    const candidate = state.get(planned.checkpointId === 'CH-10' ? 'prereq:ch10:approvedCandidate' : 'seed:assessed-artifact');
+    exact(payload?.studioArtifactId, candidate?.studioArtifactId, 'DELIVERY_SOURCE_ARTIFACT');
+    exact(payload?.studioArtifactVersionId, candidate?.studioArtifactVersionId, 'DELIVERY_SOURCE_VERSION');
+  }
+  const handoffKey = {
+    'CH-04:request-handoff-changes': 'ch04:handoffId', 'CH-04:reject-new-exact-handoff-request': 'prereq:ch04:replacementHandoffId',
+    'CH-05:review-handoff-independently': 'ch05:handoffId', 'CH-05:approve-handoff-independently': 'ch05:handoffId',
+    'CH-05:consume-approved-handoff-once': 'ch05:handoffId',
+  }[key];
+  if (handoffKey) exact(payload?.handoffId, state.get(handoffKey), 'DELIVERY_HANDOFF');
+  if (key === 'CH-06:edit-one-item-with-rationale') exact(payload?.itemAggregateId, state.get('ch06:selectedItemId'), 'DELIVERY_EDIT_ITEM');
+  if (['CH-06:decide-every-current-proposal', 'CH-07:decide-revised-descendant'].includes(key))
+    exact(payload?.itemAggregateId, state.get('prereq:ch06:finalItemId'), 'DELIVERY_DECISION_ITEM');
+  if (key === 'CH-10:create-direct-studio-plan') {
+    exact(payload?.artifactType, 'pdd', 'DIRECT_ARTIFACT_TYPE');
+    exact(payload?.sourceMode, 'direct_transcript_bundle', 'DIRECT_SOURCE_MODE');
+    exact(payload?.studioInputBundle, state.get('ch03:bundleBinding')?.inputBundle, 'DIRECT_SOURCE_BUNDLE');
+  }
+  if (key === 'CH-08:create-baseline-with-exact-package-selectors') exact(payload?.workPackageId, state.get('full-governed-package')?.packageId, 'BASELINE_PACKAGE');
+  if (planned.checkpointId === 'CH-07' && planned.serverAction.action.startsWith('delivery.package.'))
+    exact(payload?.workPackageId, state.get('full-governed-package')?.packageId, 'REVISED_PACKAGE');
+  if (key === 'CH-13:simulate-response-loss') exact(payload?.workPackageId, state.get('seed:recovery-packageId'), 'RECOVERY_PACKAGE');
+};
+
 // These selectors are private runner state. Only their digests enter evidence.
 export const retainSyntheticCommandState = async (planned, session, state, proof, observedCommand) => {
   const key = `${planned.checkpointId}:${planned.stepId}`;
   const resourceKeys = {
     'CH-02:approve-studio-document': 'ch02:artifactId',
+    'CH-03:request-studio-handoff': 'ch03:handoffId',
     'CH-03:accept-studio-handoff': 'prereq:ch03:artifactId',
+    'CH-04:request-exact-studio-handoff': 'ch04:handoffId',
+    'CH-05:request-fresh-exact-handoff': 'ch05:handoffId',
     'CH-05:consume-approved-handoff-once': 'ch05:packageId',
+    'CH-08:create-baseline-with-exact-package-selectors': 'ch08:baselineId',
+    'CH-10:create-direct-studio-plan': 'prereq:ch10:artifactId',
     'CH-10:handoff-direct-studio-plan': 'prereq:ch10:handoffId',
     'CH-11:create-manual-delivery-package': 'prereq:ch11:packageId',
     'CH-11:create-read-only-manual-baseline': 'prereq:ch11:baselineId',
@@ -1476,15 +1622,18 @@ export const retainSyntheticCommandState = async (planned, session, state, proof
     'CH-05:consume-approved-handoff-once': 'replay:delivery.handoff.consume',
     'CH-08:create-baseline-with-exact-package-selectors': 'replay:monitor.baseline.create',
   };
-  if (!resourceKeys[key] && !replayKeys[key]
-    && !['CH-04:request-exact-studio-handoff', 'CH-06:edit-one-item-with-rationale'].includes(key)) return;
+  if (!resourceKeys[key] && !replayKeys[key] && !(
+    ['CH-03', 'CH-04', 'CH-05', 'CH-06', 'CH-07'].includes(planned.checkpointId)
+    && key !== 'CH-03:generate-source-bound-document')) return;
   const command = observedCommand ?? await session.api.lastCommand();
   const expectedAction = planned.serverAction.action.startsWith('handoff.') ? `studio.${planned.serverAction.action}` : planned.serverAction.action;
   assert(command?.commandType === expectedAction && command.response?.ok === true
     && digest({ requestId: command.requestId }) === proof.serverAnchor.requestDigest,
   'PR_C_SYNTHETIC_BROWSER_COMMAND_PROOF_BINDING_MISMATCH');
+  assertSyntheticCommandContinuity(planned, command, state);
   if (resourceKeys[key]) state.set(resourceKeys[key], syntheticCommandResourceId(command.response, expectedAction));
   if (replayKeys[key]) state.set(replayKeys[key], { body: command.body, resourceDigest: proof.serverBinding.resourceDigest });
+  if (key === 'CH-10:create-direct-studio-plan') state.set('prereq:ch10:catalogBindingToken', proof.serverBinding.bindingToken);
   if (key === 'CH-04:request-exact-studio-handoff') state.set('prereq:ch04:requestSource', command.body.payload);
   if (key === 'CH-06:edit-one-item-with-rationale') state.set('prereq:ch06:finalItemId', command.body.payload.itemAggregateId);
 };
@@ -1536,6 +1685,9 @@ const executePlannedStep = async ({ planned, session, providerEgress, state, nex
   const dialogContinuation = planned.checkpointId === 'CH-14' && ['preserve-invalid-input', 'logical-focus-return'].includes(planned.stepId);
   if (!dialogContinuation && !(apiEvidence && planned.serverAction.observationKind === 'negative_attempt'))
     await openSurface(page, planned.surface, interactionSequence, planned.stepId);
+  if (planned.checkpointId === 'CH-09') await verifySyntheticMonitorBaseline(page, interactionSequence, {
+    packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
+  });
   await performSpecialInteraction(page, planned.stepId, interactionSequence);
   let proof = { serverAnchor: null, serverBinding: null };
   if (planned.serverAction) {
@@ -1655,6 +1807,10 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       && value.items.some(item => item.title === SYNTHETIC_MANUAL_ITEM_TITLE));
     assert.equal(manual.length, 1, 'PR_C_SYNTHETIC_BROWSER_SEEDED_MANUAL_PACKAGE_AMBIGUOUS');
     state.set('seed:manual-packageId', manual[0].id);
+    const recovery = initialWorkspace.packages.filter(value => value.sourcePackage?.sourceMode === 'manual'
+      && value.status === 'blocked' && value.items.some(item => item.title === SYNTHETIC_RECOVERY_ITEM_TITLE));
+    assert.equal(recovery.length, 1, 'PR_C_SYNTHETIC_BROWSER_SEEDED_RECOVERY_PACKAGE_AMBIGUOUS');
+    state.set('seed:recovery-packageId', recovery[0].id);
     for (const [name, artifactType, planningOnly] of [['direct', 'pdd', true], ['assessed', 'brd', false]]) {
       const candidates = initialWorkspace.eligibleStudioArtifacts.filter(value => value.artifactType === artifactType && value.planningOnly === planningOnly);
       assert.equal(candidates.length, 1, 'PR_C_SYNTHETIC_BROWSER_SEEDED_ARTIFACT_AMBIGUOUS');
@@ -1675,6 +1831,7 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
           const candidate = workspace.eligibleStudioArtifacts.filter(value => value.studioArtifactId === state.get('ch02:artifactId'));
           assert.equal(candidate.length, 1, 'PR_C_SYNTHETIC_BROWSER_APPROVED_STUDIO_CANDIDATE_MISSING');
           state.set('ch02:approved-candidate', candidate[0]);
+          state.set('ch03:bundleBinding', await readSyntheticStudioBundleBinding(requester, state.get('ch02:artifactId')));
         }
         if (planned.stepId === 'verify-approved-assess-handoff-ready') {
           const scope = await session.api.context();

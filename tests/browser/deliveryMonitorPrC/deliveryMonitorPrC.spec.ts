@@ -1,7 +1,9 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
-import { selectExactRevisedDeliveryDescendant } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { selectSyntheticDeliveryArtifact, verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline, verifySyntheticReadOnlyMonitorHistory, verifySyntheticStudioApprovalHasNoDeliveryResource } from '../../../scripts/prCSyntheticBrowserControls.mjs';import { canonicalDigest } from '../../../scripts/prCControlledHumanEvidenceContract.mjs';
+import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { selectSyntheticDeliveryArtifact, verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline, verifySyntheticReadOnlyMonitorHistory, verifySyntheticStudioApprovalHasNoDeliveryResource } from '../../../scripts/prCSyntheticBrowserControls.mjs';
+import { canonicalDigest } from '../../../scripts/prCControlledHumanEvidenceContract.mjs';
 
 const organizationId = '00000001-0000-4000-8000-000000000001';
 const workspaceId = '00000002-0000-4000-8000-000000000002';
@@ -11,6 +13,9 @@ const artifactId = '00000003-0000-4000-8000-000000000003';
 const artifactVersionId = '00000004-0000-4000-8000-000000000004';
 const handoffId = '00000008-0000-4000-8000-000000000008';
 const baselineId = '00000090-0000-4000-8000-000000000090';
+const revisedTargetItemId = '00001001-0000-4000-8000-000000001001';
+const sequenceTargetItemId = '00001230-0000-4000-8000-000000001230';
+const revisedSequenceTitle = 'Synthetic governed work item revision · synthetic blocker resolved';
 const enterpriseFixturePackageId = '10000000-0000-4000-8000-000000000009';
 
 const personas = {
@@ -307,9 +312,11 @@ test('PR C synthetic blocked package leaves unrelated Monitor baseline unchanged
   expect(interactions).toEqual(['observe:exact-blocked-package-monitor-unchanged']);
 });
 
-test('PR C synthetic monitor viewer reads exact retained baseline history without mutation authority', async ({page}) => {
+test('PR C synthetic CH-09 and CH-14 monitor viewer reaches exact retained history without Delivery authority', async ({page}) => {
   await page.goto('/tests/browser/deliveryMonitorPrC/harness.html?state=monitor-history-readonly&view=enterprise-monitor',{waitUntil:'domcontentloaded'});
+  await expect(page).toHaveURL(/\bview=enterprise-monitor\b/u);
   await expect(page.getByTestId('canonical-monitor-baselines')).toHaveAttribute('data-monitor-usable','true');
+  await expect(page.getByTestId('governed-delivery-workspace')).toHaveCount(0);
   const expectedIdentities=[
     {id:'00000091-0000-4000-8000-000000000091',version:1,packageId:'00000060-0000-4000-8000-000000000060',packageVersion:1,acceptedItemCount:1},
     {id:'00000092-0000-4000-8000-000000000092',version:3,packageId,packageVersion:2,acceptedItemCount:2},
@@ -319,26 +326,105 @@ test('PR C synthetic monitor viewer reads exact retained baseline history withou
   const observed=await verifySyntheticReadOnlyMonitorHistory(page,interactions,{baselineCount:2,identityDigest});
   expect(observed).toEqual({baselineCount:2,identityDigest,readOnly:true,creationDisabled:true,mutationControlCount:0});
   await page.getByRole('button',{name:/^Baseline v3 · approved\b/u}).click();
+  await expect(page.getByRole('list',{name:'Approved Monitor baselines'}).locator('button[data-baseline-id="00000092-0000-4000-8000-000000000092"]')).toHaveCount(1);
   await expect(page.getByText('Retained milestone',{exact:true})).toBeVisible();
   await expect(page.getByText('Retained risk',{exact:true})).toBeVisible();
+  for (const name of ['Edit immutable descendant','Accept proposal','Reject proposal','Create read-only Monitor baseline']) await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0);
   expect(interactions).toEqual(['observe:retained-read-only-monitor-history']);
 });
 
 test('PR C synthetic CH-07 scopes the revised descendant decision to the exact governed package and child', async ({page}) => {
-  await open(page,'?state=blocked-small');
+  await open(page,'?state=blocked');
+  await loadAllCanonicalItems(page);
   await page.getByRole('button',{name:'Prepare blocked package recovery',exact:true}).click();
   await page.getByLabel('Select Canonical work item 001 for recovery',{exact:true}).check();
-  await page.getByLabel('Recovery title for Canonical work item 001',{exact:true}).fill('Synthetic governed work item revision · synthetic blocker resolved');
+  await page.getByLabel('Recovery title for Canonical work item 001',{exact:true}).fill(revisedSequenceTitle);
   await page.getByLabel('Recovery rationale for Canonical work item 001',{exact:true}).fill('Resolve the exact independent synthetic review request.');
   await page.getByRole('button',{name:'Submit resolved package',exact:true}).click();
   const interactions:string[]=[];
-  const selected=await selectExactRevisedDeliveryDescendant(page,interactions,packageId);
+  const selected=await selectExactRevisedDeliveryDescendant(page,interactions,packageId,revisedTargetItemId,250);
   await expect(selected.card).toHaveAttribute('data-item-title',selected.title);
   await expect(selected.card).toHaveAttribute('data-item-status','edited');
   await expect(selected.control).toBeEnabled();
-  expect(selected).toMatchObject({itemCount:1,pageCount:1});
+  expect(selected).toMatchObject({itemCount:250,pageCount:3});
   await expect(page.getByTestId('governed-delivery-workspace').getByRole('button',{name:'Accept proposal',exact:true})).toHaveCount(1);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(interactions).toContain('select:exact-bound-delivery-package');
+  expect(interactions).toContain('select:exact-current-revised-delivery-descendant');
+
+  await open(page,'?state=blocked-small');
+  await page.getByRole('button',{name:'Prepare blocked package recovery',exact:true}).click();
+  await page.getByLabel('Select Canonical work item 001 for recovery',{exact:true}).check();
+  await page.getByLabel('Recovery title for Canonical work item 001',{exact:true}).fill(revisedSequenceTitle);
+  await page.getByLabel('Recovery rationale for Canonical work item 001',{exact:true}).fill('Exercise incomplete projection rejection.');
+  await page.getByRole('button',{name:'Submit resolved package',exact:true}).click();
+  await expect(selectExactRevisedDeliveryDescendant(page,[],packageId,revisedTargetItemId,250)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_ITEM_COUNT');
+});
+
+test('PR C synthetic Delivery sequence binds one aggregate through the full 250-item revised package and baseline', async ({page}) => {
+  test.setTimeout(120_000);
+  await open(page,'?state=full-sequence');
+  const interactions:string[]=[];
+  const selected=await isolateFirstActionableDeliveryItem(page,interactions,packageId,'Canonical work item 230',sequenceTargetItemId);
+  expect(selected.title).toBe('Canonical work item 230');
+  await expect(page.getByRole('list',{name:'Delivery packages'}).locator(`button[data-package-id="${packageId}"]`)).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator(`article[data-handoff-id="${handoffId}"]`)).toHaveCount(1);
+
+  const target=page.getByTestId(`delivery-item-${sequenceTargetItemId}`);
+  await target.getByRole('button',{name:'Edit immutable descendant',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Item title',{exact:true}).fill('Synthetic first-pass governed item edit');
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Exercise an immutable descendant before complete review.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await page.getByLabel('Filter canonical work items',{exact:true}).fill('');
+  await expect(page.getByText('250 work item decisions unresolved.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Request package changes',exact:true})).toHaveCount(0);
+
+  await page.getByTestId('accept-sequence-prerequisites').click();
+  await expect(page.getByText('1 work item decision unresolved.',{exact:true})).toBeVisible();
+  await page.getByLabel('Filter canonical work items',{exact:true}).fill('Synthetic first-pass governed item edit');
+  await page.getByTestId(`delivery-item-${sequenceTargetItemId}`).getByRole('button',{name:'Accept proposal',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the exact edited target after all other current proposals.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await expect(page.getByText('Approved identity: 250 server-counted items.',{exact:true})).toBeVisible();
+
+  await page.getByRole('button',{name:'Request package changes',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent review requests one exact governed revision.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await expect(page.getByText('Independent review requested changes.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Create read-only Monitor baseline',exact:true})).toHaveCount(0);
+
+  await page.getByRole('button',{name:'Prepare blocked package recovery',exact:true}).click();
+  await page.getByLabel('Select Synthetic first-pass governed item edit for recovery',{exact:true}).check();
+  await page.getByLabel('Recovery title for Synthetic first-pass governed item edit',{exact:true}).fill(revisedSequenceTitle);
+  await page.getByLabel('Recovery rationale for Synthetic first-pass governed item edit',{exact:true}).fill('Resolve the exact independent review request.');
+  await page.getByRole('button',{name:'Submit resolved package',exact:true}).click();
+  await page.getByLabel('Filter canonical work items',{exact:true}).fill('edited');
+  await expect(page.getByTestId('delivery-item-filter-result')).toHaveText('1 matching items across 250 loaded');
+  await page.getByLabel('Filter canonical work items',{exact:true}).fill('proposed');
+  await expect(page.getByTestId('delivery-item-filter-result')).toHaveText('249 matching items across 250 loaded');
+
+  const revised=await selectExactRevisedDeliveryDescendant(page,interactions,packageId,sequenceTargetItemId,250);
+  await revised.control.click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the exact revised descendant before deciding the 249 carried proposals.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await expect(page.getByText('249 work item decisions unresolved.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Approve package review',exact:true})).toHaveCount(0);
+  await page.getByTestId('accept-sequence-prerequisites').click();
+  await expect(page.getByText('Approved identity: 250 server-counted items.',{exact:true})).toBeVisible();
+
+  await page.getByRole('button',{name:'Approve package review',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent review confirms all 250 current decisions.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await page.getByRole('button',{name:'Final package approval',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent approval binds the complete revised package.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  const baselineSelector=page.getByTestId('baseline-eligibility-selectors').locator(`li[data-package-id="${packageId}"]`);
+  await expect(baselineSelector).toHaveCount(1);
+  await baselineSelector.getByRole('button',{name:'Create read-only Monitor baseline',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await expect(page.getByRole('list',{name:'Approved Monitor baselines'}).locator(`button[data-baseline-id="${baselineId}"]`)).toHaveCount(1);
+  await expect(page.getByTestId(`monitor-baseline-${baselineId}`)).toHaveAttribute('data-package-id',packageId);
+  await expect(page.getByTestId(`monitor-baseline-${baselineId}`)).toHaveAttribute('data-accepted-item-count','250');
   expect(interactions).toContain('select:exact-bound-delivery-package');
   expect(interactions).toContain('select:exact-current-revised-delivery-descendant');
 });

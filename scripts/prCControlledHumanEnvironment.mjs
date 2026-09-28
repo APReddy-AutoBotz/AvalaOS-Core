@@ -17,7 +17,7 @@ export const CONTROLLER_VERSION = 'pr-c-controlled-human-controller-1';
 export const ATTESTATION_VERSION = 'pr-c-controlled-human-attestation-1';
 export const FIXTURE_PATH = 'testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json';
 export const EXPECTED_MIGRATION_TIP = '20260904120000';
-export const SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260926053818';
+export const SYNTHETIC_ACCEPTANCE_MIGRATION_TIP = '20260928060000';
 const RETAINED_SYNTHETIC_ACCEPTANCE_MIGRATION_TIPS = Object.freeze(['20260924113000']);
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -289,6 +289,7 @@ export async function loadFixture(path = FIXTURE_PATH, root = process.cwd()) {
     || !Array.isArray(fixture.personas) || fixture.personas.length !== 12
     || new Set(fixture.personas.map(persona => persona.key)).size !== fixture.personas.length
     || !Array.isArray(fixture.journeyCapabilityContract) || fixture.journeyCapabilityContract.length !== 13
+    || fixture.seed?.assessedStudioArtifact?.sectionCount !== 3
     || JSON.stringify([...(fixture.featureFlags??[])].sort()) !== JSON.stringify([...FEATURE_FLAGS].sort())) fail('PR_C_CONTROLLED_HUMAN_FIXTURE_INVALID');
   const personas = fixture.personas.map(persona => ({ ...persona, capabilities: [...persona.capabilities].sort() }));
   const personasByKey = new Map(personas.map(persona => [persona.key, persona]));
@@ -1308,7 +1309,12 @@ async function seedStudioJourneyFixtures(db,context,fixtureState,ids,actors,auth
   const assessedArtifactId=consumed.resourceId;const assessedSourcePackageId=consumed.sourcePackageId;
   if(!UUID.test(assessedArtifactId??'')||!UUID.test(assessedSourcePackageId??'')) fail('PR_C_CONTROLLED_HUMAN_ASSESSED_STUDIO_BINDING_REJECTED');
   const assessedFixture=fixtureState.fixture.seed.assessedStudioArtifact;const assessedAnchor={sourceVersionId:journey.assessSourceVersion,locator:'assess:accepted-handoff',anchorHash:packageHash};
-  const assessedContent={contractVersion:'studio-artifact-2',title:assessedFixture.title,summary:assessedFixture.summary,sections:[{...assessedFixture.section,sourceAnchors:[assessedAnchor],labels:['human_authored']}],coverage:{selectedSourceVersionIds:[journey.assessSourceVersion],coveredSourceVersionIds:[journey.assessSourceVersion],complete:true}};
+  const assessedSections=Array.from({length:assessedFixture.sectionCount},(_,index)=>{
+    const ordinal=String(index+1).padStart(3,'0');
+    return {...assessedFixture.section,id:`${assessedFixture.section.id}-${ordinal}`,title:`${assessedFixture.section.title} ${ordinal}`,
+      body:`${assessedFixture.section.body} Bounded proposal ${ordinal}.`,sourceAnchors:[assessedAnchor],labels:['human_authored']};
+  });
+  const assessedContent={contractVersion:'studio-artifact-2',title:assessedFixture.title,summary:assessedFixture.summary,sections:assessedSections,coverage:{selectedSourceVersionIds:[journey.assessSourceVersion],coveredSourceVersionIds:[journey.assessSourceVersion],complete:true}};
   const assessedTemplate=await insertHumanStudioVersion(db,context,ids,{artifactId:assessedArtifactId,sourcePackageId:assessedSourcePackageId,versionId:journey.assessedVersion,artifactType:assessedFixture.artifactType,content:assessedContent,actorId:actors.requester.id,authorizationVersion:authorizationVersions.requester});
   const assessed=await approveStudioArtifact(db,context,ids,actors,authorizationVersions,{artifactId:assessedArtifactId,versionId:journey.assessedVersion});
   const directFixture=fixtureState.fixture.seed.directStudioArtifact;

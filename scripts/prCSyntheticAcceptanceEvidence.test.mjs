@@ -63,7 +63,7 @@ const personas = SYNTHETIC_PERSONA_ORDER.map((personaKey, index) => ({
 const binding = {
   repository: 'APReddy-AutoBotz/AvalaOS-Core', prNumber: 264, branch: 'controller/governed-delivery-monitor-pr-c-20260831', exactHead: 'a'.repeat(40),
   preview: { origin: 'https://deploy-preview-264--avalaos-pilot.netlify.app', deployId: 'b'.repeat(24), releaseSha: 'a'.repeat(40), environment: 'hosted_nonproduction_pilot', context: 'deploy-preview', reviewId: 264, siteName: 'avalaos-pilot' },
-  backend: { exerciseDigest: digest(1), targetFingerprint: digest(2), publicTargetDigest: digest(3), personaManifestDigest: digest(4), fixtureManifestDigest: digest(5), migrationTip: '20260926053818' },
+  backend: { exerciseDigest: digest(1), targetFingerprint: digest(2), publicTargetDigest: digest(3), personaManifestDigest: digest(4), fixtureManifestDigest: digest(5), migrationTip: '20260928060000' },
   producer: { workflowPath: '.github/workflows/transcript-flow-pr-c.yml', job: 'synthetic_role_acceptance', event: 'workflow_dispatch', runId: '1001', runAttempt: 1, owner: 'APReddy-AutoBotz' },
 };
 

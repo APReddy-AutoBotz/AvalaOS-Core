@@ -87,7 +87,7 @@ const binding = (publicTargetDigest = sha256(`pr-c-controlled-human-public-targe
     publicTargetDigest,
     personaManifestDigest: `sha256:${'3'.repeat(64)}`,
     fixtureManifestDigest: `sha256:${'4'.repeat(64)}`,
-    migrationTip: '20260926053818',
+    migrationTip: '20260928060000',
   },
 });
 
@@ -257,6 +257,57 @@ test('uses the persisted browser identity and fresh tenant context for scoped pu
   const assignment = { ...body, commandType: 'studio.artifact.review.assign', idempotencyKey: 'synthetic-studio-assign-0001' };
   await reviewerApi.invoke('studio-artifact-command', assignment, { checkpointId: 'CH-03', stepId: 'generate-source-bound-document', action: assignment.commandType });
   assert.deepEqual(reviewerHarness.requests.filter(item => item.pathname === '/functions/v1/studio-artifact-command').at(-1).body, assignment);
+});
+
+test('allows only the CH-10 requester to invoke the exact candidate-bound direct synthetic generation contract', async () => {
+  const candidate = binding(); const { page, requests } = harness({ candidate });
+  const api = await attachSyntheticBrowserApi({ page, personaKey: 'requester', binding: candidate });
+  await observePublicTarget(page); await api.setIdentity(identity('requester'));
+  const body = {
+    requestId: REQUEST, idempotencyKey: 'synthetic-direct-generate-0001', organizationId: ORG, workspaceId: WORKSPACE, authorizationVersion: 7,
+    artifactId: RESOURCE, sourcePackageId: '88888888-8888-4888-a888-888888888888', sourcePackageVersion: 1, sourcePackageHash: '5'.repeat(64),
+    expectedAggregateVersion: 0, expectedCurrentVersionId: null, expectedApprovedVersionId: null,
+    template: { kind: 'tenant', templateId: '99999999-9999-4999-a999-999999999999', versionId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', version: 1, hash: '6'.repeat(64) },
+    catalogBindingToken: `sha256:${'7'.repeat(64)}`,
+  };
+  const expectation = { checkpointId: 'CH-10', stepId: 'create-direct-studio-plan', action: 'pr_c.controlled_human.synthetic_studio_generate' };
+  await api.invoke('pr-c-controlled-human-synthetic-generation', body, expectation);
+  const sent = requests.filter(item => item.pathname === '/functions/v1/pr-c-controlled-human-synthetic-generation').at(-1).body;
+  assert.equal(sent.contractVersion, 'pr-c-controlled-human-synthetic-studio-direct-generation-1');
+  assert.equal(sent.releaseSha, candidate.exactHead); assert.equal(sent.reviewHeadSha, candidate.exactHead);
+  assert.equal(sent.deployId, candidate.preview.deployId); assert.equal(sent.exerciseDigest, candidate.backend.exerciseDigest);
+  assert.equal(sent.targetFingerprint, candidate.backend.targetFingerprint); assert.equal(sent.catalogBindingToken, body.catalogBindingToken);
+  assert.equal(sent.artifactId, body.artifactId); assert.equal(sent.sourcePackageId, body.sourcePackageId); assert.deepEqual(sent.template, body.template);
+  assert.equal(Object.hasOwn(sent, 'commandType'), false);
+
+  await assert.rejects(() => api.invoke('pr-c-controlled-human-synthetic-generation', { ...body, catalogBindingToken: `sha256:${'8'.repeat(64)}` }, {
+    ...expectation, stepId: 'handoff-direct-studio-plan',
+  }), /PR_C_SYNTHETIC_BROWSER_API_ACTION_REJECTED/u);
+  const reviewerHarness = harness({ candidate });
+  const reviewerApi = await attachSyntheticBrowserApi({ page: reviewerHarness.page, personaKey: 'studio_reviewer', binding: candidate });
+  await observePublicTarget(reviewerHarness.page); await reviewerApi.setIdentity(identity('studio_reviewer'));
+  await assert.rejects(() => reviewerApi.invoke('pr-c-controlled-human-synthetic-generation', body, expectation), /PR_C_SYNTHETIC_BROWSER_API_ACTION_REJECTED/u);
+  assert.equal(reviewerHarness.requests.some(item => item.pathname === '/functions/v1/pr-c-controlled-human-synthetic-generation'), false);
+});
+
+test('allows only the exact CH-07 and CH-10 prerequisite role-action pairs', async () => {
+  const candidate = binding();
+  const cases = [
+    ['requester', 'studio.artifact.review.submit', 'studio-artifact-command', 'CH-10', 'create-direct-studio-plan'],
+    ['studio_reviewer', 'studio.artifact.review.assign', 'studio-artifact-command', 'CH-10', 'create-direct-studio-plan'],
+    ['studio_reviewer', 'studio.artifact.review.resolve', 'studio-artifact-command', 'CH-10', 'create-direct-studio-plan'],
+    ['studio_approver', 'studio.artifact.approval.resolve', 'studio-artifact-command', 'CH-10', 'create-direct-studio-plan'],
+    ['delivery_author', 'delivery.item.review', 'enterprise-intelligence-command', 'CH-07', 'decide-revised-descendant'],
+  ];
+  for (const [personaKey, action, functionName, checkpointId, stepId] of cases) {
+    const current = harness({ candidate });
+    const api = await attachSyntheticBrowserApi({ page: current.page, personaKey, binding: candidate });
+    await observePublicTarget(current.page); await api.setIdentity(identity(personaKey));
+    const body = { commandType: action, requestId: REQUEST, idempotencyKey: `synthetic-prerequisite-${personaKey}-${action}`,
+      organizationId: ORG, workspaceId: WORKSPACE, authorizationVersion: 7, payload: { artifactId: RESOURCE } };
+    await api.invoke(functionName, body, { checkpointId, stepId, action });
+    assert.deepEqual(current.requests.filter(item => item.pathname === `/functions/v1/${functionName}`).at(-1).body, body);
+  }
 });
 
 test('observes only successful UI commands and retains their private request and response bodies', async () => {

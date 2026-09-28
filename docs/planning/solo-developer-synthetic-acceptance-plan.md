@@ -730,3 +730,100 @@ deployed-function change is needed. Current-candidate CI, preview, and the full
 84-step protected campaign remain planned verification. Rollback reverts the
 helper, fixture, focused cases, and provenance together; retain the merge block
 and recovered immutable history until the complete campaign and cleanup verify.
+
+### Remaining-sequence repair after run 36367630313 (2026-09-28)
+
+Run 36367630313 on head 0ac2b59 passed the prior CH-02/CH-03 corrections,
+then failed at CH-03 bundle selection. The runner inferred bundle identity by
+sampling an unrelated Create-package button while changing a controlled select.
+The sanitized failure does not establish whether it counted zero or multiple
+eligible options. Bounded recovery and private-state cleanup passed; the current
+exercise is deprovisioned and no active exercise remains.
+
+The read-only architecture, security, and quality reviewers completed before
+implementation resumed. Their remaining-sequence audit established additional
+runner defects: the supplemental source labels did not identify the covered
+CH-02 bundle; CH-06/07 did not bind every actionable item to the complete
+canonical package; CH-09's legacy observation opened the wrong Monitor surface;
+and two CH-14 observations used a Monitor-only actor on Delivery. CH-10 created
+a fresh BRD package, then handed off a different preseeded PDD, which could not
+prove the intended direct Studio → Delivery → Monitor path.
+
+The coherent repair binds source selection to the authenticated workspace-v2
+projection of the approved CH-02 artifact, carries exact handoff/artifact/item/
+baseline identities between steps, explicitly creates a PDD, and generates,
+independently reviews, and independently approves that same new PDD before
+handoff. The full governed journey retains its separately seeded exact assessed
+BRD; it is not represented as a continuation of the hybrid journey. CH-07 accepts
+the carried proposals only after the real UI accepts the exact revised item.
+The catalog remains 84 steps and 43 server-bound actions. Monitor observations
+use the authorized Monitor surface; a separately identified Delivery-author read
+proves the exact item's textual decision and citation.
+
+Forward migration `20260928060000_pr_c_synthetic_direct_planning_generation.sql`
+adds a provider-free CH-10 generation contract bound to the completed exact
+source-package catalog action. It requires the active exercise, requester,
+current source-only direct PDD, exact bundle and source manifests, and no Assess
+ancestry. It preserves the existing CH-03 generation contract and normal
+independent approval commands. The exact synthetic migration tip advances with
+its preflight, evidence, and fresh-chain consumers. No scoring or production
+approval rule changes. Component changes expose existing resource identities
+as DOM attributes for exact control selection.
+
+Focused verification covers multiple locked bundles, disabled unrelated create
+controls, wrong immutable source versions, fresh BRD-to-PDD selection, full
+250-item/three-page editing and recovery, retained resource mismatches, distinct
+review/approval actors, and exact migration-state admission. The larger fixture
+also exposed and corrected a pagination readiness race and a retained-filter
+error before another hosted attempt. Executed results are recorded below after
+the checks finish; hosted acceptance remains `not_run` for this new candidate.
+
+Rollback/read-only fallback: revert the runner, helper, fixture, and evidence
+changes together before deployment. After migration, retain immutable history
+and use a forward correction; disable synthetic generation or Studio mutations
+if its verification fails. Do not downgrade the migration identity or substitute
+the seeded PDD. Refresh only the changed synthetic-generation Edge bundle from
+the verified candidate before exercising the new contract. Keep provider calls
+off, merge blocked, and original `CONTROLLED-HUMAN` at `not_run` until full
+same-candidate acceptance and cleanup pass.
+
+Executed local evidence for this repair: 63/63 synthetic acceptance checks,
+16/16 generation-boundary checks, 11/11 migration/tail checks, 6/6 focused Studio
+Desktop/Pixel cases, and 8/8 focused Delivery/Monitor Desktop/Pixel cases passed.
+The disposable PostgreSQL 16 migration/lifecycle test passed without a skip:
+the new PDD followed submit, independent assignment/review/approval, and Delivery
+consumption with the same artifact/version/source-package identities. Wrong
+scope, stale state, wrong catalog binding, wrong created identity, and Assess
+ancestry substitutions were rejected. TypeScript passed. No broad local
+regression run was used; required exact-candidate CI remains separate evidence.
+
+Final seed reconciliation found that the earlier runner hardcoded the separate
+250-item stress fixture into the hosted journey, while the actual seeded BRD
+had one section. The catalog and controlled walkthrough require the complete
+bounded set, without a 250-item hosted minimum. Canonical Studio content allows
+at most 100 sections, and Delivery derives one proposal per section. Expanding
+that product limit solely for the runner would be an unnecessary scope change.
+The hosted fixture now declares three distinct assessed sections, and the runner
+requires exact equality between that manifest count, the public complete package,
+and every fresh item-decision transition. The existing 250-item/three-page stress
+cases remain intact. All 84 steps and 43 catalog actions are retained.
+
+AP explicitly approved the count correction after automatic approval review
+interpreted the old hardcoded 250 as a required gate. The prerequisite must bind
+the retained canonical count to the complete package and every state transition;
+the separate 250-item stress cases remain required. The latest focused rerun passed all
+63 synthetic checks, all four affected Desktop/Pixel 250-item cases, and
+TypeScript. The new three-item public seed/handoff proof passed its focused PostgreSQL 16
+run without skips (1/1, 84.37 seconds): initial public eligibility, independent
+review/approval/consumption, exact three-item content and source identity, and
+complete public package projection all matched. The direct PDD remained one
+section. This closes the seed-to-public-handoff proof gap; hosted acceptance
+remains planned verification until the complete new-candidate campaign passes.
+
+Final approved integration: CH-06/07 retain the complete canonical aggregate-ID
+set and require exact membership before and after decisions, as well as the
+manifest-bound item count. Missing, duplicate, substituted, or count-mismatched
+sets fail before any item decision. The focused prerequisite checks pass 19/19,
+including three-item hosted cases, retained 250-item cases, and pre-write count
+and identity denials. The integrated synthetic suite passes 69/69 and TypeScript
+passes. All 84 catalog steps and 43 server-bound actions remain unchanged.

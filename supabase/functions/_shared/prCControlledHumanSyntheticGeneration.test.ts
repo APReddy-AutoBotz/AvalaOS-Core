@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   handlePrCControlledHumanSyntheticGeneration,
   parsePrCControlledHumanSyntheticGenerationCommand,
+  PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION,
   PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION,
   type PrCControlledHumanSyntheticGenerationCommand,
 } from './prCControlledHumanSyntheticGeneration.ts';
@@ -53,6 +54,12 @@ const result = {
   },
 };
 
+const directBody = {
+  ...body,
+  contractVersion: PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION,
+  catalogBindingToken: `sha256:${'1'.repeat(64)}`,
+};
+
 const request = (value: unknown, method = 'POST') => new Request('https://function.invalid', {
   method,
   headers: { 'content-type': 'application/json', authorization: 'Bearer redacted-test-token' },
@@ -65,6 +72,22 @@ test('parses only the exact PR 264 synthetic generation envelope and server acto
   assert.equal(parsed.environmentClass, 'hosted_nonproduction_pilot');
   assert.equal(parsed.prNumber, 264);
   assert.deepEqual(parsed.template, body.template);
+});
+
+test('parses the exact direct PDD generation envelope with its completed catalog binding', () => {
+  const parsed = parsePrCControlledHumanSyntheticGenerationCommand(directBody, U[0]);
+  assert.equal(parsed.contractVersion, PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION);
+  assert.equal(parsed.actorId, U[0]);
+  assert.equal(parsed.artifactId, body.artifactId);
+  assert.equal(parsed.catalogBindingToken, directBody.catalogBindingToken);
+});
+
+test('direct generation requires the exact binding token and rejects it on the original contract', () => {
+  const missing = structuredClone(directBody) as Record<string, unknown>;
+  delete missing.catalogBindingToken;
+  assert.throws(() => parsePrCControlledHumanSyntheticGenerationCommand(missing, U[0]));
+  assert.throws(() => parsePrCControlledHumanSyntheticGenerationCommand({ ...body, catalogBindingToken: directBody.catalogBindingToken }, U[0]));
+  assert.throws(() => parsePrCControlledHumanSyntheticGenerationCommand({ ...directBody, catalogBindingToken: '1'.repeat(64) }, U[0]));
 });
 
 test('commits and returns only the exact synthetic result', async () => {

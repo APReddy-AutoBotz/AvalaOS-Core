@@ -155,7 +155,9 @@ export const verifySyntheticMonitorBaseline = async (page, interactionSequence, 
   const choices = panel.getByRole('list', { name: 'Approved Monitor baselines' }).getByRole('button');
   const matches = [];
   for (let index = 0; index < await choices.count(); index += 1) {
+    if (baselineId && await choices.nth(index).getAttribute('data-baseline-id') !== baselineId) continue;
     await choices.nth(index).click();
+    if (baselineId) await page.waitForFunction(expected => document.querySelector('article[data-testid^="monitor-baseline-"]')?.getAttribute('data-baseline-id') === expected, baselineId);
     const selected = panel.locator('article[data-baseline-id]');
     if (await selected.getAttribute('data-package-id') !== packageId) continue;
     if (baselineId && await selected.getAttribute('data-baseline-id') !== baselineId) continue;

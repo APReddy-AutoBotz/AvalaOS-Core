@@ -7,11 +7,11 @@ import { sha256 } from './prCControlledHumanEnvironment.mjs';
 import { createControlledHumanPostgresClientConfig } from './prCControlledHumanPostgresTls.mjs';
 
 const { Client } = pg;
-export const SYNTHETIC_MIGRATION_FILE = 'supabase/migrations/20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql';
-export const SYNTHETIC_MIGRATION_VERSION = '20260926053818';
-export const SYNTHETIC_MIGRATION_NAME = 'pr_c_synthetic_studio_provider_free_fixture';
-export const SYNTHETIC_PRIOR_VERSION = '20260924113000';
-export const SYNTHETIC_PRIOR_NAME = 'pr_c_synthetic_acceptance_execution_kind';
+export const SYNTHETIC_MIGRATION_FILE = 'supabase/migrations/20260928060000_pr_c_synthetic_direct_planning_generation.sql';
+export const SYNTHETIC_MIGRATION_VERSION = '20260928060000';
+export const SYNTHETIC_MIGRATION_NAME = 'pr_c_synthetic_direct_planning_generation';
+export const SYNTHETIC_PRIOR_VERSION = '20260926053818';
+export const SYNTHETIC_PRIOR_NAME = 'pr_c_synthetic_studio_provider_free_fixture';
 export const SYNTHETIC_CHAIN_START_VERSION = '20260904120000';
 export const SYNTHETIC_CHAIN_START_NAME = 'pr_c_controlled_human_exercise_authority';
 export const SYNTHETIC_INTERRUPTED_VERSION = '20260916083814';
@@ -49,7 +49,7 @@ export function classifySyntheticMigrationChain(state, remote, local, targetFing
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_STATE_REJECTED');
   const boundary = local.findIndex(row => row.version === SYNTHETIC_CHAIN_START_VERSION);
   if (boundary < 0 || local.at(-1)?.version !== SYNTHETIC_MIGRATION_VERSION
-    || local.length - boundary - 1 !== 20
+    || local.length - boundary - 1 !== 21
     || remote.some((row, index) => row.version !== local[index]?.version || row.name !== local[index]?.name))
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_HISTORY_REJECTED');
   if (remote.length === local.length && classifySyntheticMigrationState(state) === 'current')
@@ -70,7 +70,7 @@ export function classifySyntheticMigrationChain(state, remote, local, targetFing
     || state.latestVersion !== SYNTHETIC_CHAIN_START_VERSION || state.latestName !== SYNTHETIC_CHAIN_START_NAME
     || state.executionKindColumn !== false || state.sessionBindingTable !== false || state.retainedAuthRecoveryAccepted !== false)
     fail('PR_C_SYNTHETIC_MIGRATION_CHAIN_STATE_REJECTED');
-  return { pendingMigrationCount: 20, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
+  return { pendingMigrationCount: 21, priorVersion: SYNTHETIC_CHAIN_START_VERSION, targetVersion: SYNTHETIC_MIGRATION_VERSION };
 }
 
 export class SyntheticAcceptanceMigrationAdapter {
@@ -92,7 +92,7 @@ export class SyntheticAcceptanceMigrationAdapter {
     const fixtureExerciseTipAccepted = exerciseTipExpression.includes(SYNTHETIC_MIGRATION_VERSION);
     const markerDefinition = (await this.client.query(`select pg_get_functiondef('public.pr_c_controlled_human_assert_marker()'::regprocedure) definition`)).rows[0].definition;
     const markerAssertionTip = markerDefinition.includes(`marker.migration_tip = '${SYNTHETIC_MIGRATION_VERSION}'`) ? SYNTHETIC_MIGRATION_VERSION
-      : markerDefinition.includes("marker.migration_tip = '20260924113000'") ? SYNTHETIC_PRIOR_VERSION
+      : markerDefinition.includes("marker.migration_tip = '20260926053818'") ? SYNTHETIC_PRIOR_VERSION
       : markerDefinition.includes("marker.migration_tip = '20260904120000'") ? '20260904120000' : null;
     const recoveryDefinition = (await this.client.query(`select pg_get_functiondef('public.pr_c_controlled_human_complete_recovery(text,text,text)'::regprocedure) definition`)).rows[0].definition;
     const retainedAuthRecoveryAccepted = recoveryDefinition.includes('user_record.banned_until');

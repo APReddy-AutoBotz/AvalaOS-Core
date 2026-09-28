@@ -8,7 +8,11 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const DEPLOY_ID = /^[0-9a-f]{24}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SAFE_IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/u;
+const HASH = /^[0-9a-f]{64}$/u;
 const BROWSER_API_GLOBAL = '__prCSyntheticBrowserApiV1';
+const DIRECT_GENERATION_FUNCTION = 'pr-c-controlled-human-synthetic-generation';
+const DIRECT_GENERATION_ACTION = 'pr_c.controlled_human.synthetic_studio_generate';
+const DIRECT_GENERATION_CONTRACT = 'pr-c-controlled-human-synthetic-studio-direct-generation-1';
 
 const CONTROLLED_RPCS = new Set([
   'pr_c_controlled_human_public_attestation',
@@ -36,6 +40,7 @@ const FUNCTION_ALLOWLIST = new Set([
   'enterprise-intelligence-query',
   'enterprise-intelligence-command',
   'studio-artifact-command',
+  DIRECT_GENERATION_FUNCTION,
 ]);
 
 const EXPECTED_PERSONA = new Map();
@@ -54,6 +59,12 @@ const PREREQUISITES = Object.freeze([
   prerequisite('CH-03', 'generate-source-bound-document', 'studio_reviewer', 'studio.artifact.review.resolve', 'studio-artifact-command'),
   prerequisite('CH-04', 'verify-changes-create-no-target-draft', 'requester', 'delivery.handoff.request', 'enterprise-intelligence-command'),
   prerequisite('CH-06', 'compare-immutable-descendant-history', 'delivery_author', 'delivery.item.review', 'enterprise-intelligence-command'),
+  prerequisite('CH-07', 'decide-revised-descendant', 'delivery_author', 'delivery.item.review', 'enterprise-intelligence-command'),
+  prerequisite('CH-10', 'create-direct-studio-plan', 'requester', DIRECT_GENERATION_ACTION, DIRECT_GENERATION_FUNCTION),
+  prerequisite('CH-10', 'create-direct-studio-plan', 'requester', 'studio.artifact.review.submit', 'studio-artifact-command'),
+  prerequisite('CH-10', 'create-direct-studio-plan', 'studio_reviewer', 'studio.artifact.review.assign', 'studio-artifact-command'),
+  prerequisite('CH-10', 'create-direct-studio-plan', 'studio_reviewer', 'studio.artifact.review.resolve', 'studio-artifact-command'),
+  prerequisite('CH-10', 'create-direct-studio-plan', 'studio_approver', 'studio.artifact.approval.resolve', 'studio-artifact-command'),
   prerequisite('CH-10', 'handoff-direct-studio-plan', 'delivery_target_acceptor', 'delivery.handoff.review.resolve', 'enterprise-intelligence-command'),
   prerequisite('CH-10', 'handoff-direct-studio-plan', 'delivery_approver', 'delivery.handoff.approval.resolve', 'enterprise-intelligence-command'),
   prerequisite('CH-10', 'handoff-direct-studio-plan', 'delivery_consumer', 'delivery.handoff.consume', 'enterprise-intelligence-command'),
@@ -71,6 +82,32 @@ const cloneJson = value => {
   try { return JSON.parse(JSON.stringify(value)); } catch { fail('PR_C_SYNTHETIC_BROWSER_API_REQUEST_REJECTED'); }
 };
 
+const directGenerationBody = (input, binding) => {
+  const keys = ['requestId','idempotencyKey','organizationId','workspaceId','authorizationVersion','artifactId','sourcePackageId',
+    'sourcePackageVersion','sourcePackageHash','expectedAggregateVersion','expectedCurrentVersionId','expectedApprovedVersionId','template','catalogBindingToken'];
+  if (!exactKeys(input, keys) || !UUID.test(input.requestId ?? '') || !SAFE_IDEMPOTENCY_KEY.test(input.idempotencyKey ?? '')
+    || !UUID.test(input.organizationId ?? '') || !UUID.test(input.workspaceId ?? '') || !Number.isSafeInteger(input.authorizationVersion) || input.authorizationVersion < 1
+    || !UUID.test(input.artifactId ?? '') || !UUID.test(input.sourcePackageId ?? '') || !Number.isSafeInteger(input.sourcePackageVersion) || input.sourcePackageVersion < 1
+    || !HASH.test(input.sourcePackageHash ?? '') || !Number.isSafeInteger(input.expectedAggregateVersion) || input.expectedAggregateVersion < 0
+    || !(input.expectedCurrentVersionId === null || UUID.test(input.expectedCurrentVersionId ?? ''))
+    || !(input.expectedApprovedVersionId === null || UUID.test(input.expectedApprovedVersionId ?? '')) || !DIGEST.test(input.catalogBindingToken ?? '')
+    || !record(input.template)) fail('PR_C_SYNTHETIC_BROWSER_API_REQUEST_REJECTED');
+  const template = input.template;
+  if (!exactKeys(template, ['kind','templateId','versionId','version','hash']) || template.kind !== 'tenant'
+    || !UUID.test(template.templateId ?? '') || !UUID.test(template.versionId ?? '') || !Number.isSafeInteger(template.version) || template.version < 1
+    || !HASH.test(template.hash ?? '')) fail('PR_C_SYNTHETIC_BROWSER_API_REQUEST_REJECTED');
+  return {
+    contractVersion: DIRECT_GENERATION_CONTRACT, requestId: input.requestId, idempotencyKey: input.idempotencyKey,
+    organizationId: input.organizationId, workspaceId: input.workspaceId, authorizationVersion: input.authorizationVersion,
+    environmentClass: 'hosted_nonproduction_pilot', prNumber: 264, releaseSha: binding.releaseSha, reviewHeadSha: binding.reviewHeadSha,
+    deployId: binding.deployId, deployOrigin: binding.deployOrigin, exerciseDigest: binding.exerciseDigest,
+    targetFingerprint: binding.targetFingerprint, artifactId: input.artifactId, sourcePackageId: input.sourcePackageId,
+    sourcePackageVersion: input.sourcePackageVersion, sourcePackageHash: input.sourcePackageHash,
+    expectedAggregateVersion: input.expectedAggregateVersion, expectedCurrentVersionId: input.expectedCurrentVersionId,
+    expectedApprovedVersionId: input.expectedApprovedVersionId, template: cloneJson(template), catalogBindingToken: input.catalogBindingToken,
+  };
+};
+
 const normalizeBinding = binding => {
   if (!record(binding) || !record(binding.preview) || !record(binding.backend)
     || binding.repository !== 'APReddy-AutoBotz/AvalaOS-Core' || Number(binding.prNumber) !== 264
@@ -80,7 +117,7 @@ const normalizeBinding = binding => {
     || binding.preview.environment !== 'hosted_nonproduction_pilot'
     || !DIGEST.test(binding.backend.exerciseDigest ?? '') || !DIGEST.test(binding.backend.targetFingerprint ?? '')
     || !DIGEST.test(binding.backend.publicTargetDigest ?? '') || !DIGEST.test(binding.backend.personaManifestDigest ?? '')
-    || !DIGEST.test(binding.backend.fixtureManifestDigest ?? '') || binding.backend.migrationTip !== '20260926053818') {
+    || !DIGEST.test(binding.backend.fixtureManifestDigest ?? '') || binding.backend.migrationTip !== '20260928060000') {
     fail('PR_C_SYNTHETIC_BROWSER_API_BINDING_REJECTED');
   }
   return Object.freeze({
@@ -427,13 +464,13 @@ export async function attachSyntheticBrowserApi({ page, personaKey, binding, ide
     },
     async invoke(functionName, body, expectation) {
       if (!FUNCTION_ALLOWLIST.has(functionName)) fail('PR_C_SYNTHETIC_BROWSER_API_ENDPOINT_REJECTED');
-      const input = cloneJson(body);
+      let input = cloneJson(body);
       if (!record(input)) fail('PR_C_SYNTHETIC_BROWSER_API_REQUEST_REJECTED');
       if (functionName === 'tenant-session') {
         if (Object.keys(input).length !== 0 || expectation !== undefined) fail('PR_C_SYNTHETIC_BROWSER_API_REQUEST_REJECTED');
         return evaluate(page, 'invoke', [functionName, input], 'PR_C_SYNTHETIC_BROWSER_API_CONTEXT_REJECTED');
       }
-      const action = input.commandType;
+      const action = functionName === DIRECT_GENERATION_FUNCTION ? DIRECT_GENERATION_ACTION : input.commandType;
       if (functionName === 'enterprise-intelligence-query') {
         if (expectation !== undefined || typeof action === 'string') fail('PR_C_SYNTHETIC_BROWSER_API_ACTION_REJECTED');
       } else {
@@ -450,6 +487,7 @@ export async function attachSyntheticBrowserApi({ page, personaKey, binding, ide
             || functionName !== 'enterprise-intelligence-command') fail('PR_C_SYNTHETIC_BROWSER_API_ACTION_REJECTED');
         } else validateExpectation(expectation, personaKey, functionName, action);
       }
+      if (functionName === DIRECT_GENERATION_FUNCTION) input = directGenerationBody(input, normalizedBinding);
       const value = await evaluate(page, 'invoke', [functionName, input], 'PR_C_SYNTHETIC_BROWSER_API_OUTCOME_UNKNOWN');
       if (activeAnchor) activeAnchor.commandSucceeded = true;
       return value;

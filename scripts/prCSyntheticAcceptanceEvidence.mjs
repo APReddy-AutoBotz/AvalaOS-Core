@@ -79,7 +79,7 @@ const validateBinding = binding => {
     && binding.preview.siteName === 'avalaos-pilot', 'PR_C_SYNTHETIC_PREVIEW_IDENTITY');
   exactKeys(binding.backend, ['exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'personaManifestDigest', 'fixtureManifestDigest', 'migrationTip'], 'PR_C_SYNTHETIC_BACKEND');
   for (const field of ['exerciseDigest', 'targetFingerprint', 'publicTargetDigest', 'personaManifestDigest', 'fixtureManifestDigest']) digest(binding.backend[field], `PR_C_SYNTHETIC_BACKEND_${field}`);
-  assert(binding.backend.migrationTip === '20260926053818', 'PR_C_SYNTHETIC_BACKEND_MIGRATION_TIP');
+  assert(binding.backend.migrationTip === '20260928060000', 'PR_C_SYNTHETIC_BACKEND_MIGRATION_TIP');
   exactKeys(binding.producer, ['workflowPath', 'job', 'event', 'runId', 'runAttempt', 'owner'], 'PR_C_SYNTHETIC_PRODUCER');
   assert(binding.producer.workflowPath === SYNTHETIC_WORKFLOW_PATH && binding.producer.job === SYNTHETIC_WORKFLOW_JOB
     && binding.producer.event === 'workflow_dispatch' && RUN_ID.test(String(binding.producer.runId))

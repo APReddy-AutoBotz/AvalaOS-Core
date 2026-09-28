@@ -6,6 +6,7 @@ import {
   readSyntheticDeliveryPackage,
   readSyntheticDeliveryWorkspace,
   readSyntheticStudioArtifact,
+  readSyntheticStudioBundleBinding,
   runSyntheticPrerequisites,
   syntheticCommandResourceId,
   resolveSyntheticStudioReviewerId,
@@ -13,7 +14,9 @@ import {
 
 const uid = number => `40000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const ORG = uid(1); const WORKSPACE = uid(2);
-const PERSONAS = ['requester', 'studio_reviewer', 'delivery_target_acceptor', 'delivery_approver', 'delivery_consumer', 'delivery_author', 'delivery_reviewer'];
+const PERSONAS = ['requester', 'studio_reviewer', 'studio_approver', 'delivery_target_acceptor', 'delivery_approver', 'delivery_consumer', 'delivery_author', 'delivery_reviewer'];
+const HASH = 'a'.repeat(64);
+const BINDING_TOKEN = `sha256:${'b'.repeat(64)}`;
 
 test('Studio reviewer identity comes from a fresh distinct same-scope persona context', async () => {
   const { sessions, calls } = makeHarness();
@@ -38,14 +41,18 @@ const makeItem = index => ({
   acceptanceCriteria: ['Reviewed.'], nonFunctionalRequirements: [], history: [], diffs: [], actions: ['delivery.item.review'],
 });
 
-const makePackage = ({ id = uid(100), count = 2, sourceMode = 'manual', lineageClassification = 'not_assessed', planningOnly = true } = {}) => ({
+const makePackage = ({ id = uid(100), count = 2, sourceMode = 'manual', lineageClassification = 'not_assessed', planningOnly = true,
+  studioArtifactType, studioArtifactVersion } = {}) => ({
   id, currentVersionId: uid(Number(id.slice(-6)) + 1_000), currentVersion: 1, aggregateVersion: 1, status: 'draft', label: 'Synthetic package',
-  sourcePackage: { version: 1, sourceMode, lineageClassification, planningOnly }, items: Array.from({ length: count }, (_, index) => makeItem(index + Number(id.slice(-4)))),
+  sourcePackage: { version: 1, sourceMode, lineageClassification, planningOnly,
+    ...(studioArtifactType ? { studioArtifactType } : {}), ...(studioArtifactVersion ? { studioArtifactVersion } : {}) },
+  items: Array.from({ length: count }, (_, index) => makeItem(index + Number(id.slice(-4)))),
   reviewState: 'not_requested', approvalState: 'not_requested', blockers: [], blockerCount: 0, actions: ['delivery.item.review', 'delivery.package.review.resolve'],
 });
 
-const makeHarness = ({ packages = [], handoffs = [], studio, rejectAction = '', staleStudio = false } = {}) => {
+const makeHarness = ({ packages = [], handoffs = [], studio, studioWorkspace, templates = [], rejectAction = '', staleStudio = false } = {}) => {
   const calls = []; const baselines = []; let receipt = 80_000;
+  const projectedStudioWorkspace = () => typeof studioWorkspace === 'function' ? studioWorkspace() : studioWorkspace;
   const contextByPersona = Object.fromEntries(PERSONAS.map((persona, index) => [persona, {
     userId: uid(1_000 + index), organizationId: ORG, workspaceId: WORKSPACE, authorizationVersion: 1, capabilities: [],
   }]));
@@ -73,21 +80,43 @@ const makeHarness = ({ packages = [], handoffs = [], studio, rejectAction = '', 
     context: async () => ({ ...contextByPersona[persona] }),
     rpc: async (name, args) => {
       calls.push({ persona, kind: 'rpc', name });
-      assert.equal(name, 'studio_artifact_projection_v2'); assert.equal(args.p_org, ORG); assert.equal(args.p_workspace, WORKSPACE);
-      return structuredClone(studio);
+      assert.equal(args.p_org, ORG); assert.equal(args.p_workspace, WORKSPACE);
+      if (name === 'studio_artifact_projection_v2') return structuredClone(studio);
+      if (name === 'studio_artifact_workspace_projection_v2') {
+        return structuredClone(projectedStudioWorkspace());
+      }
+      if (name === 'studio_tenant_template_projection') return { organizationId: ORG, workspaceId: WORKSPACE, templates: structuredClone(templates) };
+      assert.fail(`unexpected rpc ${name}`);
     },
     invoke: async (name, body, expectation) => {
       if (name === 'enterprise-intelligence-query') return { projection: { deliveryWorkspace: workspace(body), monitorApprovedBaselines: {
         organizationId: ORG, workspaceId: WORKSPACE, baselines: baselines.map(value => ({ ...value })),
       } } };
-      const action = body.commandType; calls.push({ persona, kind: 'command', action, expectation, body });
+      const action = name === 'pr-c-controlled-human-synthetic-generation' ? 'pr_c.controlled_human.synthetic_studio_generate' : body.commandType;
+      calls.push({ persona, kind: 'command', action, expectation, body });
       if (action === rejectAction) throw new Error('PERMISSION_DENIED');
       const result = { ok: true, outcome: 'committed', receiptId: uid(receipt++), action };
+      if (name === 'pr-c-controlled-human-synthetic-generation') {
+        assert.equal(body.artifactId, studio.id); assert.equal(body.sourcePackageId, projectedStudioWorkspace().sourcePackage.id);
+        const versionId = uid(75_000); studio.aggregateVersion = 1; studio.lifecycle = 'draft';
+        studio.currentVersion = { id: versionId, version: 1 }; studio.currentApprovedVersion = null;
+        return { ok: true, outcome: 'generation_completed', commandOutcome: 'committed', receiptId: result.receiptId, resourceId: studio.id,
+          resource: { artifactId: studio.id, versionId, version: 1, sourcePackageId: body.sourcePackageId,
+            sourcePackageVersion: body.sourcePackageVersion, sourcePackageHash: body.sourcePackageHash,
+            templateVersionId: body.template.versionId, templateVersion: body.template.version, templateHash: body.template.hash,
+            generationKind: 'synthetic_controlled_human', synthetic: true } };
+      }
       if (name === 'studio-artifact-command') {
         if (staleStudio || body.expectedAggregateVersion !== studio.aggregateVersion || body.expectedArtifactVersion !== studio.currentVersion.version) throw new Error('RESOURCE_STALE');
         assert.equal(body.payload.artifactId, studio.id);
-        if (action === 'studio.artifact.review.assign') studio.review = { reviewerId: body.payload.reviewerId, outcome: null };
-        if (action === 'studio.artifact.review.resolve') studio.review = { reviewerId: contextByPersona[persona].userId, outcome: 'approved' };
+        studio.aggregateVersion += 1;
+        if (action === 'studio.artifact.review.submit') studio.lifecycle = 'reviewer_ready';
+        if (action === 'studio.artifact.review.assign') { studio.lifecycle = 'in_review'; studio.review = { reviewerId: body.payload.reviewerId, outcome: null }; }
+        if (action === 'studio.artifact.review.resolve') { studio.lifecycle = 'approval_ready'; studio.review = { reviewerId: contextByPersona[persona].userId, outcome: 'approved' }; }
+        if (action === 'studio.artifact.approval.resolve') {
+          studio.lifecycle = 'approved'; studio.currentApprovedVersion = { ...studio.currentVersion };
+          studio.approval = { approverId: contextByPersona[persona].userId, outcome: 'approved' };
+        }
         return { ...result, resourceId: studio.id, resource: {} };
       }
       if (action === 'delivery.handoff.request') {
@@ -101,7 +130,8 @@ const makeHarness = ({ packages = [], handoffs = [], studio, rejectAction = '', 
         if (action === 'delivery.handoff.approval.resolve') { handoff.version = 3; handoff.status = 'approved'; }
         if (action === 'delivery.handoff.consume') {
           handoff.version = 4; handoff.status = 'consumed';
-          const pkg = makePackage({ id: uid(500 + packages.length), sourceMode: 'studio_handoff' }); packages.push(pkg);
+          const pkg = makePackage({ id: uid(500 + packages.length), sourceMode: 'studio_handoff', studioArtifactType: handoff.preview.artifactType,
+            studioArtifactVersion: handoff.sourceArtifactVersion }); packages.push(pkg);
           return { ...result, resourceId: pkg.id, resourceVersion: 1 };
         }
         return { ...result, resourceId: handoff.id, resourceVersion: handoff.version };
@@ -127,6 +157,30 @@ const makeHarness = ({ packages = [], handoffs = [], studio, rejectAction = '', 
     lastCommand: async () => null,
   });
   return { calls, packages, handoffs, baselines, studio, sessions: new Map(PERSONAS.map(persona => [persona, { api: makeApi(persona) }])) };
+};
+
+const makeDirectStudioHarness = () => {
+  const artifactId = uid(510); const versionId = uid(511); const packageId = uid(512); const bundleId = uid(513); const bundleVersionId = uid(514);
+  const sourceVersions = [uid(515), uid(516)];
+  const studio = { id: artifactId, artifactType: 'pdd', aggregateVersion: 0, lifecycle: 'draft', currentVersion: null,
+    currentApprovedVersion: null, review: null, approval: null };
+  const studioWorkspace = () => ({
+    contractVersion: 'studio-workspace-2', organizationId: ORG, workspaceId: WORKSPACE,
+    artifact: { id: artifactId, artifactType: 'pdd', aggregateVersion: studio.aggregateVersion, lifecycle: studio.lifecycle,
+      currentVersionId: studio.currentVersion?.id ?? null, currentApprovedVersionId: studio.currentApprovedVersion?.id ?? null, sections: [] },
+    sourcePackage: { id: packageId, version: 1, hash: HASH, mode: 'direct_transcript_bundle', lineageClassification: 'not_assessed',
+      planningOnly: true, inputBundle: { id: bundleId, versionId: bundleVersionId, version: 1 } },
+    selectedSources: { items: sourceVersions.map((sourceVersionId, index) => ({ sourceId: uid(520 + index), sourceVersionId, sourceVersion: 1,
+      label: `Synthetic direct source ${index + 1}`, sourceKind: 'pasted_text', semanticRoles: ['primary'] })), total: 2, offset: 0, limit: 20, hasMore: false },
+    coverage: { selectedSourceVersionIds: sourceVersions, coveredSourceVersionIds: studio.currentVersion ? sourceVersions : [],
+      uncoveredSourceVersionIds: studio.currentVersion ? [] : sourceVersions, complete: Boolean(studio.currentVersion), citations: [], conflicts: [] },
+    providerAvailability: { available: false, reason: 'route_unavailable' }, actions: [],
+  });
+  const template = { ownership: 'tenant', templateId: uid(530), templateVersionId: uid(531), version: 1,
+    name: 'Synthetic controlled-human requirements template', description: 'Synthetic.', artifactClass: 'custom', lifecycle: 'approved',
+    templateHash: 'c'.repeat(64), rendererVersion: 'studio-renderer-2', contentSchemaVersion: 'studio-artifact-2', sections: [], replacement: null,
+    actions: ['studio.generation.request'] };
+  return makeHarness({ studio, studioWorkspace, templates: [template] });
 };
 
 const run = (harness, checkpointId, stepId, lastCompletedStep, stateEntries = []) => {
@@ -176,7 +230,7 @@ test('CH-06 decides all other members of the exact 250-item set and leaves the e
   const finalItem = pkg.items[137]; finalItem.aggregateVersion = 2; finalItem.version = 2; finalItem.currentVersionId = uid(70_000); finalItem.status = 'edited';
   const harness = makeHarness({ packages: [pkg] });
   const execution = run(harness, 'CH-06', 'decide-every-current-proposal', 'CH-06:compare-immutable-descendant-history', [
-    ['full-governed-package', { packageId: pkg.id, itemCount: 250 }], [K.ch06FinalItemId, finalItem.aggregateId],
+    ['full-governed-package', { packageId: pkg.id, itemCount: 250, itemIds: pkg.items.map(item => item.aggregateId) }], [K.ch06FinalItemId, finalItem.aggregateId],
   ]);
   await execution.result;
   assert.equal(pkg.items.filter(item => item.status === 'accepted').length, 249); assert.equal(finalItem.status, 'edited');
@@ -186,11 +240,112 @@ test('CH-06 decides all other members of the exact 250-item set and leaves the e
   const complete = await readSyntheticDeliveryPackage(harness.sessions.get('delivery_author'), pkg.id); assert.equal(complete.items.length, 250);
 });
 
+test('CH-07 accepts exactly the 249 carried proposals after the revised descendant UI decision', async () => {
+  const pkg = makePackage({ id: uid(450), count: 250, sourceMode: 'studio_handoff', lineageClassification: 'assessed', planningOnly: false });
+  const revisedItem = pkg.items[137]; revisedItem.aggregateVersion = 3; revisedItem.version = 3; revisedItem.currentVersionId = uid(70_100); revisedItem.status = 'accepted';
+  const harness = makeHarness({ packages: [pkg] });
+  const execution = run(harness, 'CH-07', 'review-complete-revised-package', 'CH-07:decide-revised-descendant', [
+    ['full-governed-package', { packageId: pkg.id, itemCount: 250, itemIds: pkg.items.map(item => item.aggregateId) }], [K.ch06FinalItemId, revisedItem.aggregateId],
+  ]);
+  await execution.result;
+  assert.equal(pkg.items.length, 250); assert.equal(pkg.items.every(item => item.status === 'accepted'), true);
+  const commands = harness.calls.filter(call => call.kind === 'command'); assert.equal(commands.length, 249);
+  assert.equal(commands.every(call => call.persona === 'delivery_author' && call.action === 'delivery.item.review'), true);
+  assert.equal(commands.every(call => call.expectation.checkpointId === 'CH-07' && call.expectation.stepId === 'decide-revised-descendant'), true);
+  assert.equal(commands.some(call => call.body.payload.itemAggregateId === revisedItem.aggregateId), false, 'the already accepted exact revised descendant is left to the UI decision');
+});
+
+test('CH-07 rejects an incomplete or wrongly decided 250-item revision before any write', async () => {
+  const pkg = makePackage({ id: uid(451), count: 250, sourceMode: 'studio_handoff', lineageClassification: 'assessed', planningOnly: false });
+  const revisedItem = pkg.items[90]; revisedItem.status = 'edited';
+  const harness = makeHarness({ packages: [pkg] });
+  const execution = run(harness, 'CH-07', 'review-complete-revised-package', 'CH-07:decide-revised-descendant', [
+    ['full-governed-package', { packageId: pkg.id, itemCount: 250, itemIds: pkg.items.map(item => item.aggregateId) }], [K.ch06FinalItemId, revisedItem.aggregateId],
+  ]);
+  await assert.rejects(execution.result, /:CH07_PRECONDITION_STATE$/u);
+  assert.equal(harness.calls.some(call => call.kind === 'command'), false);
+});
+
+for (const checkpoint of ['CH-06', 'CH-07']) {
+  test(`${checkpoint} decides the complete three-item hosted fixture and preserves the exact UI target`, async () => {
+    const pkg = makePackage({ id: uid(460), count: 3, sourceMode: 'studio_handoff', lineageClassification: 'assessed', planningOnly: false });
+    const target = pkg.items[1]; target.status = checkpoint === 'CH-06' ? 'edited' : 'accepted';
+    const harness = makeHarness({ packages: [pkg] });
+    const execution = run(harness, checkpoint, checkpoint === 'CH-06' ? 'decide-every-current-proposal' : 'review-complete-revised-package',
+      checkpoint === 'CH-06' ? 'CH-06:compare-immutable-descendant-history' : 'CH-07:decide-revised-descendant', [
+        ['full-governed-package', { packageId: pkg.id, itemCount: 3, itemIds: pkg.items.map(item => item.aggregateId) }], [K.ch06FinalItemId, target.aggregateId],
+      ]);
+    await execution.result;
+    assert.equal(pkg.items.filter(item => item.status === 'accepted').length, checkpoint === 'CH-06' ? 2 : 3);
+    const commands = harness.calls.filter(call => call.kind === 'command');
+    assert.equal(commands.length, 2);
+    assert.equal(commands.some(call => call.body.payload.itemAggregateId === target.aggregateId), false);
+  });
+  for (const mismatch of ['count', 'identity']) {
+    test(`${checkpoint} rejects a ${mismatch} mismatch before writing any item decision`, async () => {
+      const pkg = makePackage({ id: uid(461), count: 3, sourceMode: 'studio_handoff', lineageClassification: 'assessed', planningOnly: false });
+      const target = pkg.items[1]; target.status = checkpoint === 'CH-06' ? 'edited' : 'accepted';
+      const harness = makeHarness({ packages: [pkg] });
+      const itemIds = pkg.items.map(item => item.aggregateId);
+      if (mismatch === 'identity') itemIds[0] = uid(999_991);
+      const execution = run(harness, checkpoint, checkpoint === 'CH-06' ? 'decide-every-current-proposal' : 'review-complete-revised-package',
+        checkpoint === 'CH-06' ? 'CH-06:compare-immutable-descendant-history' : 'CH-07:decide-revised-descendant', [
+          ['full-governed-package', { packageId: pkg.id, itemCount: mismatch === 'count' ? 2 : 3, itemIds }], [K.ch06FinalItemId, target.aggregateId],
+        ]);
+      await assert.rejects(execution.result, /:(?:CATALOG_ITEM_SET|COMPLETE_ITEM_SET_MISMATCH)$/u);
+      assert.equal(harness.calls.some(call => call.kind === 'command'), false);
+    });
+  }
+}
+
+test('CH-10 generates, independently reviews, and approves the exact newly created direct PDD', async () => {
+  const harness = makeDirectStudioHarness();
+  const execution = run(harness, 'CH-10', 'handoff-direct-studio-plan', 'CH-10:create-direct-studio-plan', [
+    [K.ch10ArtifactId, harness.studio.id], [K.ch10CatalogBindingToken, BINDING_TOKEN],
+  ]);
+  await execution.result;
+  assert.deepEqual(harness.calls.filter(call => call.kind === 'command').map(call => [call.persona, call.action]), [
+    ['requester', 'pr_c.controlled_human.synthetic_studio_generate'], ['requester', 'studio.artifact.review.submit'],
+    ['studio_reviewer', 'studio.artifact.review.assign'], ['studio_reviewer', 'studio.artifact.review.resolve'],
+    ['studio_approver', 'studio.artifact.approval.resolve'],
+  ]);
+  const candidate = execution.state.get(K.ch10ApprovedCandidate);
+  assert.equal(candidate.studioArtifactId, harness.studio.id); assert.equal(candidate.artifactType, 'pdd');
+  assert.equal(candidate.studioArtifactVersionId, harness.studio.currentApprovedVersion.id);
+  const bundle = await readSyntheticStudioBundleBinding(harness.sessions.get('requester'), harness.studio.id);
+  assert.equal(bundle.sources.length, 2); assert.equal(bundle.inputBundle.version, 1);
+  assert.equal(execution.interactionSequence.every(value => !UUID_VALUE.test(value)), true);
+});
+
+test('direct Studio bundle binding rejects wrong identity, mode, and incomplete coverage', async () => {
+  for (const mutate of [
+    value => { value.organizationId = uid(990); },
+    value => { value.sourcePackage.mode = 'manual_brief'; value.sourcePackage.inputBundle = null; },
+    value => { value.coverage.complete = false; value.coverage.coveredSourceVersionIds = []; value.coverage.uncoveredSourceVersionIds = [...value.coverage.selectedSourceVersionIds]; },
+  ]) {
+    const harness = makeDirectStudioHarness();
+    harness.studio.aggregateVersion = 5; harness.studio.lifecycle = 'approved'; harness.studio.currentVersion = { id: uid(75_001), version: 1 };
+    harness.studio.currentApprovedVersion = { ...harness.studio.currentVersion };
+    const api = harness.sessions.get('requester').api; const original = api.rpc;
+    api.rpc = async (name, args) => {
+      const value = await original(name, args);
+      if (name === 'studio_artifact_workspace_projection_v2') mutate(value);
+      return value;
+    };
+    await assert.rejects(() => readSyntheticStudioBundleBinding(harness.sessions.get('requester'), harness.studio.id), /PR_C_SYNTHETIC_PREREQUISITE_REJECTED/u);
+  }
+});
+
 test('CH-10 preserves exact role order through handoff, consume, item decisions, and package review', async () => {
   const handoff = { id: uid(500), version: 1, status: 'requested', lineageClassification: 'not_assessed', planningOnly: true,
-    preview: { artifactType: 'pdd', proposedItemCount: 2 }, history: [], reviewHistory: [], approvalHistory: [], targetItems: [] };
+    sourceArtifactVersion: 1, preview: { artifactType: 'pdd', proposedItemCount: 2 }, history: [], reviewHistory: [], approvalHistory: [], targetItems: [] };
   const harness = makeHarness({ handoffs: [handoff] });
-  const execution = run(harness, 'CH-10', 'approve-direct-planning-package', 'CH-10:handoff-direct-studio-plan', [[K.ch10HandoffId, handoff.id]]);
+  const artifactId = uid(501);
+  const candidate = { studioArtifactId: artifactId, studioArtifactVersionId: uid(502), studioArtifactVersion: 1, aggregateVersion: 5,
+    artifactType: 'pdd', lineageClassification: 'not_assessed', planningOnly: true };
+  const execution = run(harness, 'CH-10', 'approve-direct-planning-package', 'CH-10:handoff-direct-studio-plan', [
+    [K.ch10ArtifactId, artifactId], [K.ch10ApprovedCandidate, candidate], [K.ch10HandoffId, handoff.id],
+  ]);
   await execution.result;
   assert.deepEqual(harness.calls.filter(call => call.kind === 'command').map(call => [call.persona, call.action]), [
     ['delivery_target_acceptor', 'delivery.handoff.review.resolve'], ['delivery_approver', 'delivery.handoff.approval.resolve'],

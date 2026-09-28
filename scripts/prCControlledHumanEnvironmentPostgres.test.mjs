@@ -85,6 +85,59 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     for(const user of users)await database.client.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3::jsonb)',[user.id,user.email,JSON.stringify({synthetic:true,exerciseDigest:context.exerciseDigest,personaKey:user.key})]);
     for(const user of users)await database.recordAuthUser(context,user.id);
     const seeded=await database.seed(context,fixtureState,users);assert.deepEqual(seeded,{replayed:false,personaCount:12,studioArtifactCount:3,eligibleStudioArtifactCount:2,packageCount:3,baselineCount:1,transcriptSourceCount:6,sourceSetCount:3,inputBundleCount:3,candidateCount:4,conflictCount:1,tenantTemplateCount:1,lifecycle:'active',concurrencyVersion:1});
+    // Prove the exact freshly seeded public Studio-to-Delivery contract before
+    // later adversarial exercises intentionally advance upstream Assess state.
+    await database.client.query('begin');try{
+      const scope=buildIdentifiers(context,fixtureState);const assessedVersionId=deterministicUuid(context.exerciseId,'studio-version-assessed');
+      const directVersionId=deterministicUuid(context.exerciseId,'studio-version-direct');
+      const assessedArtifact=(await database.client.query(`select artifact.id,artifact.aggregate_version,artifact.current_version_id,artifact.current_approved_version_id,
+        version.content,version.source_package_id from public.studio_artifact_aggregates artifact join public.studio_artifact_versions version
+        on version.id=artifact.current_approved_version_id and version.artifact_id=artifact.id where version.id=$1`,[assessedVersionId])).rows[0];
+      assert.ok(assessedArtifact);assert.equal(assessedArtifact.content.sections.length,fixtureState.fixture.seed.assessedStudioArtifact.sectionCount);
+      assert.equal(new Set(assessedArtifact.content.sections.map(section=>section.id)).size,3);
+      assert.equal(new Set(assessedArtifact.content.sections.map(section=>section.title)).size,3);
+      assert.ok(assessedArtifact.content.sections.every(section=>section.sourceAnchors.length===1&&section.sourceAnchors[0].locator==='assess:accepted-handoff'));
+      assert.equal(Number((await database.client.query(`select jsonb_array_length(content->'sections') count from public.studio_artifact_versions where id=$1`,[directVersionId])).rows[0].count),1,
+        'the direct PDD must remain a one-section planning artifact');
+      const actorByKey=Object.fromEntries(users.map(user=>[user.key,user]));let publicCommandOrdinal=800;
+      const invokePublic=async(personaKey,action,payload,label)=>{
+        const actor=actorByKey[personaKey];const authorizationVersion=Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[scope.mainOrg,actor.id])).rows[0].version);
+        const ordinal=publicCommandOrdinal++;await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actor.id]);
+        const result=(await database.client.query(`select public.enterprise_delivery_monitor_command($1::jsonb) result`,[JSON.stringify({action,actorId:actor.id,organizationId:scope.mainOrg,workspaceId:scope.deliveryWorkspace,
+          authorizationVersion,receiptId:deterministicUuid(context.exerciseId,`seed-public-receipt-${ordinal}`),requestId:deterministicUuid(context.exerciseId,`seed-public-request-${ordinal}`),
+          idempotencyKey:`pr264-seed-public-${label}`,executionToken:deterministicUuid(context.exerciseId,`seed-public-token-${ordinal}`),executionFence:ordinal,...payload})])).rows[0].result;
+        await database.client.query('set constraints all deferred');return result;
+      };
+      await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actorByKey.requester.id]);
+      const eligibleProjection=(await database.client.query(`select public.enterprise_delivery_workspace_projection($1,$2,'{}'::jsonb) projection`,[scope.mainOrg,scope.deliveryWorkspace])).rows[0].projection;
+      const eligible=eligibleProjection.eligibleStudioArtifacts.find(candidate=>candidate.studioArtifactVersionId===assessedVersionId);
+      assert.ok(eligible,'the initial public projection must expose the exact assessed seed');
+      const expectedProposals=assessedArtifact.content.sections.map(section=>({clientKey:`studio-section-${section.id}`,title:section.title,
+        description:section.body,sourceSectionLocator:`brd.sections.${section.id}`}));
+      assert.deepEqual(eligible.proposalItems.map(({clientKey,title,description,sourceSectionLocator})=>({clientKey,title,description,sourceSectionLocator})),expectedProposals);
+      const request={targetWorkspaceId:scope.deliveryWorkspace,studioArtifactId:assessedArtifact.id,studioArtifactVersionId:assessedArtifact.current_approved_version_id,
+        expectedAggregateVersion:Number(assessedArtifact.aggregate_version),expectedCurrentVersionId:assessedArtifact.current_version_id,expectedApprovedVersionId:assessedArtifact.current_approved_version_id};
+      const created=await invokePublic('requester','delivery.handoff.request',request,'three-proposal-handoff');
+      await invokePublic('delivery_target_acceptor','delivery.handoff.review.resolve',{handoffId:created.resourceId,expectedHandoffVersion:1,outcome:'approved',rationale:'Review exact bounded three-proposal handoff.'},'three-proposal-review');
+      await invokePublic('delivery_approver','delivery.handoff.approval.resolve',{handoffId:created.resourceId,expectedHandoffVersion:2,outcome:'approved',rationale:'Approve exact bounded three-proposal handoff.'},'three-proposal-approval');
+      const consumed=await invokePublic('delivery_consumer','delivery.handoff.consume',{handoffId:created.resourceId,expectedHandoffVersion:3},'three-proposal-consume');
+      const consumedItems=(await database.client.query(`select version.title,version.description,version.source_section_locator,version.source_artifact_id,
+        version.source_artifact_version_id,version.studio_source_package_id from public.enterprise_delivery_work_item_aggregates aggregate
+        join public.enterprise_delivery_work_item_versions version on version.id=aggregate.current_version_id
+        where aggregate.work_package_id=$1 order by version.source_section_locator`,[consumed.resourceId])).rows;
+      assert.equal(consumedItems.length,3);
+      assert.deepEqual(consumedItems.map(item=>({title:item.title,description:item.description,sourceSectionLocator:item.source_section_locator})),
+        [...expectedProposals].sort((left,right)=>left.sourceSectionLocator.localeCompare(right.sourceSectionLocator)).map(({title,description,sourceSectionLocator})=>({title,description,sourceSectionLocator})));
+      assert.ok(consumedItems.every(item=>item.source_artifact_id===assessedArtifact.id&&item.source_artifact_version_id===assessedVersionId&&item.studio_source_package_id===assessedArtifact.source_package_id));
+      await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actorByKey.requester.id]);
+      const packageProjection=(await database.client.query(`select public.enterprise_delivery_workspace_projection($1,$2,$3::jsonb) projection`,
+        [scope.mainOrg,scope.deliveryWorkspace,JSON.stringify({packageId:consumed.resourceId,itemLimit:100})])).rows[0].projection;
+      assert.equal(packageProjection.packages.length,1);assert.equal(packageProjection.packages[0].items.length,3);
+      assert.deepEqual(packageProjection.packages[0].itemPage,{limit:100,hasMore:false,nextCursor:null,cursorApplied:false,isComplete:true});
+      assert.deepEqual(packageProjection.packages[0].items.map(item=>({title:item.title,description:item.description,sourceSectionLocator:item.sourceCitation.sectionLocator})),
+        consumedItems.map(item=>({title:item.title,description:item.description,sourceSectionLocator:item.source_section_locator})));
+      await database.client.query('rollback');
+    }catch(error){await database.client.query('rollback');throw error}
     const assessBrowserPrerequisite=(await database.client.query(`select
       (select count(*)::int from public.assess_processes process where process.org_id=exercise.org_id and process.workspace_id=exercise.workspace_id and process.name='Synthetic PR C Assess draft') process_count,
       (select count(*)::int from public.enterprise_transcript_extraction_bindings binding join public.enterprise_module_input_bundles bundle on bundle.id=binding.input_bundle_id where bundle.org_id=exercise.org_id and bundle.workspace_id=exercise.workspace_id and bundle.owner_module='assess') bound_source_count,
@@ -531,26 +584,76 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       await database.client.query(`select public.studio_artifact_source_package_create($1::jsonb)`,[JSON.stringify(directCommand)]);
       await assert.rejects(database.client.query(`select public.pr_c_controlled_human_complete_step($1,$2)`,[context.exerciseDigest,directAnchor.safeAnchor.challengeToken]),/INTENT_REJECTED/u);
     }finally{await database.client.query('rollback')}
+    let directGenerationFixture;
     const runDirectSourceSuccess=async()=>{await observationFixture.beforeMachineStep('CH-10','create-direct-studio-plan');await database.client.query('begin');try{
     await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
     const directBundle=hybridTargetBundle;
     const directManifest=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,directBundle.version_id])).rows[0].value;
     const directManifestReplay=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,directBundle.version_id])).rows[0].value;
     assert.equal(directManifest.length,2);assert.deepEqual(directManifestReplay,directManifest);
-    const directSelectors={sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:directBundle.id,studioInputBundleVersionId:directBundle.version_id,studioInputBundleVersion:Number(directBundle.version)};
+    const directSelectors={sourceMode:'direct_transcript_bundle',artifactType:'pdd',studioInputBundleId:directBundle.id,studioInputBundleVersionId:directBundle.version_id,studioInputBundleVersion:Number(directBundle.version)};
     const sourcePackageAnchor=(await database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-10','create-direct-studio-plan','input_bundle',$2,$3,$4::jsonb) result`,[
       context.exerciseDigest,directBundle.id,Number(directBundle.version),JSON.stringify(directSelectors)])).rows[0].result;
     const createdArtifactId=deterministicUuid(context.exerciseId,'anchored-source-package-artifact');
     const createdSourcePackageId=deterministicUuid(context.exerciseId,'anchored-source-package');
     const sourcePackageCommand={actorId:generationBinding.actor_id,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,artifactId:createdArtifactId,sourcePackageId:createdSourcePackageId,
-      requestId:sourcePackageAnchor.execution.requestId,idempotencyKey:'anchored-source-package-create',authorizationVersion:requesterAuthorizationVersion,payload:{sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundleId:directBundle.id,studioInputBundleVersionId:directBundle.version_id,studioInputBundleVersion:Number(directBundle.version)}};
+      requestId:sourcePackageAnchor.execution.requestId,idempotencyKey:'anchored-source-package-create',authorizationVersion:requesterAuthorizationVersion,payload:directSelectors};
     const createdSourcePackage=(await database.client.query(`select public.studio_artifact_source_package_create($1::jsonb) result`,[JSON.stringify(sourcePackageCommand)])).rows[0].result;
     assert.equal(createdSourcePackage.resourceId,createdArtifactId);assert.equal(createdSourcePackage.sourcePackageId,createdSourcePackageId);
     const sourcePackageBinding=await recordPositiveBinding((await database.client.query(`select public.pr_c_controlled_human_complete_step($1,$2) result`,[context.exerciseDigest,sourcePackageAnchor.safeAnchor.challengeToken])).rows[0].result,sourcePackageAnchor.safeAnchor);
     assert.equal(sourcePackageBinding.action,'studio.source-package.create');assert.equal(sourcePackageBinding.resourceFamily,'studio_source_package');assert.equal(sourcePackageBinding.observedVersion,1);
     assert.notEqual(sourcePackageBinding.resourceDigest,sourcePackageAnchor.safeAnchor.targetDigest,'created-target proof must differ from its exact pre-action parent anchor');
+    directGenerationFixture={artifactId:createdArtifactId,sourcePackageId:createdSourcePackageId,sourcePackageHash:createdSourcePackage.sourcePackageHash,bindingToken:sourcePackageBinding.bindingToken};
       await database.client.query('commit');
     }catch(error){await database.client.query('rollback');throw error}};
+    const runDirectGenerationProof=async()=>{
+      assert.ok(directGenerationFixture,'direct generation requires the exact completed CH-10 source-package binding');
+      await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
+      const command={
+        contractVersion:'pr-c-controlled-human-synthetic-studio-direct-generation-1',actorId:generationBinding.actor_id,
+        requestId:deterministicUuid(context.exerciseId,'synthetic-direct-generation-request'),idempotencyKey:'synthetic-direct-generation-exact',
+        organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,authorizationVersion:Number(generationBinding.authorization_version),
+        environmentClass:'hosted_nonproduction_pilot',prNumber:264,releaseSha:context.releaseSha,reviewHeadSha:context.reviewHeadSha,
+        deployId:context.deployId,deployOrigin:context.deployOrigin,exerciseDigest:context.exerciseDigest,targetFingerprint:context.targetFingerprint,
+        artifactId:directGenerationFixture.artifactId,sourcePackageId:directGenerationFixture.sourcePackageId,sourcePackageVersion:1,
+        sourcePackageHash:directGenerationFixture.sourcePackageHash,expectedAggregateVersion:0,expectedCurrentVersionId:null,expectedApprovedVersionId:null,
+        catalogBindingToken:directGenerationFixture.bindingToken,
+        template:{kind:'tenant',templateId:generationBinding.template_id,versionId:generationBinding.template_version_id,version:Number(generationBinding.template_version),hash:generationBinding.template_hash},
+      };
+      const reject=async(label,candidate)=>assert.rejects(
+        database.client.query(`select public.pr_c_controlled_human_synthetic_studio_generate($1::jsonb)`,[JSON.stringify(candidate)]),
+        /SYNTHETIC_GENERATION|AUTHORITY|SOURCE_PACKAGE|REJECTED/u,label,
+      );
+      await reject('wrong active exercise scope must fail',{...command,workspaceId:deterministicUuid(context.exerciseId,'direct-generation-wrong-workspace')});
+      await reject('stale created aggregate must fail',{...command,expectedAggregateVersion:1});
+      await reject('wrong completed catalog binding must fail',{...command,catalogBindingToken:`sha256:${'9'.repeat(64)}`});
+      await reject('wrong created identity must fail',{...command,artifactId:deterministicUuid(context.exerciseId,'direct-generation-wrong-artifact')});
+      await reject('Assess-derived ancestry cannot substitute for the direct PDD',{...command,artifactId:generationBinding.artifact_id,sourcePackageId:generationBinding.source_package_id,sourcePackageHash:generationBinding.package_hash});
+      const generated=(await database.client.query(`select public.pr_c_controlled_human_synthetic_studio_generate($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result;
+      assert.equal(generated.outcome,'committed');assert.equal(generated.resourceId,directGenerationFixture.artifactId);
+      assert.equal(generated.resource.artifactId,directGenerationFixture.artifactId);assert.equal(generated.resource.sourcePackageId,directGenerationFixture.sourcePackageId);
+      assert.equal(generated.resource.generationKind,'synthetic_controlled_human');assert.equal(generated.resource.synthetic,true);
+      const replayed=(await database.client.query(`select public.pr_c_controlled_human_synthetic_studio_generate($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result;
+      assert.equal(replayed.outcome,'replayed');assert.equal(replayed.resource.versionId,generated.resource.versionId);
+      await reject('direct generation idempotency substitution must fail',{...command,sourcePackageHash:'8'.repeat(64)});
+      const stored=(await database.client.query(`select artifact.artifact_type,artifact.source_mode,artifact.lineage_classification,artifact.planning_only,
+        artifact.aggregate_version,artifact.current_version_id,artifact.current_approved_version_id,package.assess_handoff_id,package.assess_package_hash,
+        package.candidate_manifest=public.studio_pr_b_candidate_manifest(package.org_id,package.workspace_id,package.studio_input_bundle_version_id) candidate_manifest_current,
+        package.anchor_manifest=public.studio_pr_b_anchor_manifest(package.candidate_manifest,null,null) anchor_manifest_current,
+        version.id version_id,version.lifecycle,version.source_package_id,version.source_package_hash,
+        (version.content#>>'{coverage,complete}')::boolean coverage_complete,
+        (select count(*)::int from public.studio_artifact_generation_attempts attempt where attempt.artifact_id=artifact.id) provider_attempts
+        from public.studio_artifact_aggregates artifact join public.studio_artifact_source_packages package on package.id=artifact.source_package_id
+        join public.studio_artifact_versions version on version.id=artifact.current_version_id where artifact.id=$1`,[directGenerationFixture.artifactId])).rows[0];
+      assert.deepEqual({artifactType:stored.artifact_type,sourceMode:stored.source_mode,lineage:stored.lineage_classification,planningOnly:stored.planning_only},
+        {artifactType:'pdd',sourceMode:'direct_transcript_bundle',lineage:'not_assessed',planningOnly:true});
+      assert.equal(Number(stored.aggregate_version),1);assert.equal(stored.current_version_id,generated.resource.versionId);assert.equal(stored.current_approved_version_id,null);
+      assert.equal(stored.assess_handoff_id,null);assert.equal(stored.assess_package_hash,null);assert.equal(stored.candidate_manifest_current,true);assert.equal(stored.anchor_manifest_current,true);
+      assert.equal(stored.version_id,generated.resource.versionId);assert.equal(stored.lifecycle,'draft');assert.equal(stored.source_package_id,directGenerationFixture.sourcePackageId);
+      assert.equal(stored.source_package_hash,directGenerationFixture.sourcePackageHash);assert.equal(stored.coverage_complete,true);assert.equal(Number(stored.provider_attempts),0);
+      assert.deepEqual((await database.client.query('select public.pr_c_controlled_human_provider_state() value')).rows[0].value,{unsafeRows:0,providerEgress:0,providerCalls:0});
+      return {...directGenerationFixture,versionId:generated.resource.versionId,version:Number(generated.resource.version)};
+    };
     await database.client.query('begin');try{
       const executedArtifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where org_id=$1 and workspace_id=$2 and lifecycle='approved' order by id limit 1`,[generationBinding.org_id,generationBinding.workspace_id])).rows[0];
       const anchoredArtifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where org_id=$1 and workspace_id=$2 and current_approved_version_id is not null and id<>$3 order by id limit 1`,[generationBinding.org_id,generationBinding.workspace_id,executedArtifact.id])).rows[0];assert.ok(anchoredArtifact&&executedArtifact);
@@ -993,27 +1096,41 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       await database.client.query('commit');
     }catch(error){await database.client.query('rollback');throw error}};
 
-    // CH-10 carries the seeded approved planning-only Studio artifact through Delivery.
-    // The newly created source-only draft has no content version and is not eligible.
+    // CH-10 carries the exact provider-free PDD generated from the newly created
+    // direct Studio source package through independent approval and Delivery.
     await database.client.query('select pg_sleep(0.05)');
     await runDirectSourceSuccess();
+    const directPdd=await runDirectGenerationProof();
     await observationFixture.drainUnboundBeforeMachineStep('CH-10','handoff-direct-studio-plan');
     await database.client.query('begin');try{
       let artifact=(await database.client.query(`select artifact.id,artifact.aggregate_version,artifact.current_version_id,artifact.current_approved_version_id
         from public.studio_artifact_aggregates artifact join public.studio_artifact_source_packages source on source.id=artifact.source_package_id
         where artifact.org_id=$1 and artifact.workspace_id=$2 and artifact.id=$3 and source.id=$4
-          and source.source_mode='manual_brief' and source.planning_only=true`,[generationBinding.org_id,generationBinding.workspace_id,
-        deterministicUuid(context.exerciseId,'studio-artifact-direct'),deterministicUuid(context.exerciseId,'studio-source-package-direct')])).rows[0];
-      assert.ok(artifact?.current_version_id && artifact.current_approved_version_id,'The exact seeded planning artifact must retain its approved content version.');
-      await prepareStudioReview(artifact.id);
+          and artifact.artifact_type='pdd' and source.source_mode='direct_transcript_bundle' and source.lineage_classification='not_assessed'
+          and source.planning_only=true`,[generationBinding.org_id,generationBinding.workspace_id,directPdd.artifactId,directPdd.sourcePackageId])).rows[0];
+      assert.equal(artifact?.current_version_id,directPdd.versionId,'The exact generated direct PDD must enter independent review.');
+      assert.equal(artifact.current_approved_version_id,null);
+      let directState=await studioArtifactState(artifact.id);
+      await invokeStudioPrerequisite('requester','studio.artifact.review.submit',artifact.id,{artifactId:artifact.id,artifactVersionId:directState.current_version_id},'direct-submit');
+      directState=await studioArtifactState(artifact.id);
+      await invokeStudioPrerequisite('studio_reviewer','studio.artifact.review.assign',artifact.id,{artifactId:artifact.id,artifactVersionId:directState.current_version_id,reviewerId:handoffActors.studio_reviewer.auth_user_id},'direct-assign');
       await invokeStudioPrerequisite('studio_reviewer','studio.artifact.review.resolve',artifact.id,{artifactId:artifact.id,artifactVersionId:(await studioArtifactState(artifact.id)).current_version_id,outcome:'approve',rationale:'Review direct planning Studio artifact.',conditions:[]},'direct-review');
       await invokeStudioPrerequisite('studio_approver','studio.artifact.approval.resolve',artifact.id,{artifactId:artifact.id,artifactVersionId:(await studioArtifactState(artifact.id)).current_version_id,outcome:'approve',rationale:'Approve direct planning Studio artifact.',conditions:[]},'direct-approval');
       artifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where id=$1`,[artifact.id])).rows[0];
+      assert.equal(artifact.current_version_id,directPdd.versionId);assert.equal(artifact.current_approved_version_id,directPdd.versionId);
       const request=handoffRequestDescriptor(artifact);
       const created=await invokeControlledDelivery({checkpointId:'CH-10',stepId:'handoff-direct-studio-plan',personaKey:'requester',targetFamily:'studio_artifact',targetId:artifact.id,expectedVersion:Number(artifact.aggregate_version),selectors:request,action:'delivery.handoff.request',payload:request});
+      const exactHandoff=(await database.client.query(`select studio_artifact_id,studio_artifact_version_id,studio_source_package_id,lineage_classification,planning_only
+        from public.enterprise_delivery_handoffs where id=$1`,[created.result.resourceId])).rows[0];
+      assert.deepEqual(exactHandoff,{studio_artifact_id:directPdd.artifactId,studio_artifact_version_id:directPdd.versionId,
+        studio_source_package_id:directPdd.sourcePackageId,lineage_classification:'not_assessed',planning_only:true});
       await invokeDeliveryPrerequisite('delivery_target_acceptor','delivery.handoff.review.resolve',{handoffId:created.result.resourceId,expectedHandoffVersion:1,outcome:'approved',rationale:'Review direct planning handoff.'},'direct-handoff-review');
       await invokeDeliveryPrerequisite('delivery_approver','delivery.handoff.approval.resolve',{handoffId:created.result.resourceId,expectedHandoffVersion:2,outcome:'approved',rationale:'Approve direct planning handoff.'},'direct-handoff-approval');
       const consumed=await invokeDeliveryPrerequisite('delivery_consumer','delivery.handoff.consume',{handoffId:created.result.resourceId,expectedHandoffVersion:3},'direct-handoff-consume');
+      const exactDeliverySource=(await database.client.query(`select source.studio_artifact_id,source.studio_artifact_version_id,source.studio_source_package_id,
+        source.lineage_classification,source.planning_only from public.enterprise_delivery_source_packages source where source.work_package_id=$1`,[consumed.resourceId])).rows[0];
+      assert.deepEqual(exactDeliverySource,{studio_artifact_id:directPdd.artifactId,studio_artifact_version_id:directPdd.versionId,
+        studio_source_package_id:directPdd.sourcePackageId,lineage_classification:'not_assessed',planning_only:true});
       for(const [index,item] of (await packageItems(consumed.resourceId)).entries())await invokeDeliveryPrerequisite('delivery_author','delivery.item.review',{itemAggregateId:item.item_aggregate_id,expectedAggregateVersion:Number(item.aggregate_version),expectedItemVersionId:item.current_version_id,outcome:'accepted',rationale:`Accept direct planning item ${index+1}.`},`direct-item-${index}`);
       const pkg=await packageState(consumed.resourceId);
       await invokeDeliveryPrerequisite('delivery_reviewer','delivery.package.review.resolve',{workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),outcome:'approved',rationale:'Review direct planning package.'},'direct-package-review');

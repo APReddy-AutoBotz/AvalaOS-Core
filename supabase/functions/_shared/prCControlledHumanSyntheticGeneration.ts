@@ -8,6 +8,9 @@
 export const PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION =
   'pr-c-controlled-human-synthetic-studio-generation-1' as const;
 
+export const PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION =
+  'pr-c-controlled-human-synthetic-studio-direct-generation-1' as const;
+
 export const PR_C_SYNTHETIC_GENERATION_KIND = 'synthetic_controlled_human' as const;
 
 type JsonObject = Record<string, unknown>;
@@ -16,8 +19,7 @@ export type PrCControlledHumanTemplateSelector =
   | { kind: 'system'; versionId: string; version: string; hash: string }
   | { kind: 'tenant'; templateId: string; versionId: string; version: number; hash: string };
 
-export type PrCControlledHumanSyntheticGenerationCommand = Readonly<{
-  contractVersion: typeof PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION;
+type PrCControlledHumanSyntheticGenerationBaseCommand = Readonly<{
   actorId: string;
   requestId: string;
   idempotencyKey: string;
@@ -41,6 +43,15 @@ export type PrCControlledHumanSyntheticGenerationCommand = Readonly<{
   expectedApprovedVersionId: string | null;
   template: PrCControlledHumanTemplateSelector;
 }>;
+
+export type PrCControlledHumanSyntheticGenerationCommand =
+  | (PrCControlledHumanSyntheticGenerationBaseCommand & Readonly<{
+    contractVersion: typeof PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION;
+  }>)
+  | (PrCControlledHumanSyntheticGenerationBaseCommand & Readonly<{
+    contractVersion: typeof PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION;
+    catalogBindingToken: string;
+  }>);
 
 export type PrCControlledHumanSyntheticGenerationResult = Readonly<{
   outcome: 'committed' | 'replayed';
@@ -154,13 +165,16 @@ const BODY_KEYS = [
   'expectedCurrentVersionId', 'expectedApprovedVersionId', 'template',
 ] as const;
 
+const DIRECT_BODY_KEYS = [...BODY_KEYS, 'catalogBindingToken'] as const;
+
 export const parsePrCControlledHumanSyntheticGenerationCommand = (
   value: unknown,
   actorId: string,
 ): PrCControlledHumanSyntheticGenerationCommand => {
   const item = object(value);
-  exact(item, BODY_KEYS);
-  if (item.contractVersion !== PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION
+  const direct = item.contractVersion === PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION;
+  exact(item, direct ? DIRECT_BODY_KEYS : BODY_KEYS);
+  if ((!direct && item.contractVersion !== PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION)
     || item.environmentClass !== 'hosted_nonproduction_pilot'
     || item.prNumber !== 264
     || item.deployOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app') invalid();
@@ -168,8 +182,7 @@ export const parsePrCControlledHumanSyntheticGenerationCommand = (
   const reviewHeadSha = matching(item.reviewHeadSha, SHA);
   if (releaseSha !== reviewHeadSha || typeof item.idempotencyKey !== 'string' || !IDEMPOTENCY_KEY.test(item.idempotencyKey)) invalid();
   const idempotencyKey = item.idempotencyKey as string;
-  return {
-    contractVersion: PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION,
+  const base = {
     actorId: uuid(actorId),
     requestId: uuid(item.requestId),
     idempotencyKey,
@@ -193,6 +206,9 @@ export const parsePrCControlledHumanSyntheticGenerationCommand = (
     expectedApprovedVersionId: nullableUuid(item.expectedApprovedVersionId),
     template: parseTemplate(item.template),
   };
+  return direct
+    ? { ...base, contractVersion: PR_C_SYNTHETIC_DIRECT_GENERATION_CONTRACT_VERSION, catalogBindingToken: matching(item.catalogBindingToken, DIGEST) }
+    : { ...base, contractVersion: PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION };
 };
 
 const RESULT_KEYS = ['outcome', 'receiptId', 'resourceId', 'resource'] as const;

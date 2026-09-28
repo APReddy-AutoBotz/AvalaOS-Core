@@ -477,7 +477,7 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "f9a529dcc974443afe77d0c0b154c7f1c1b88397891dd6c683742415098b245a"
+      "sha256": "2449a3a2ada62224253811436f1f2f283dc1ffd31162f5598183f59de293519f"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
@@ -513,7 +513,7 @@
     },
     "browser": {
       "path": "tests/browser/deliveryMonitorPrC/deliveryMonitorPrC.spec.ts",
-      "sha256": "9286ca2bdb9cf0abd24656f3e8b826da370ee4493d5af4272481bb3646904ae5"
+      "sha256": "b09394d220491defdf8adedf8648ad59344e0f20815ca58031d37c554af5389e"
     },
     "browser-scope": {
       "path": "tests/browser/enterpriseIntelligencePrCScope.spec.ts",
@@ -529,11 +529,11 @@
     },
     "studio-source-postgres": {
       "path": "scripts/testStudioSourceIntegrationPostgres.mjs",
-      "sha256": "661c943bde1badc38044c0b7e764b9de786a707ecdcd31d6e3f27ced3b84525a"
+      "sha256": "dcc92e414774d9d53b3dce63232cb9c74ef638c87fc33bdab7b16676434907d0"
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
-      "sha256": "3d43091f2e659d816f9bf982fc70267e2de4d6eff3b25f4062f31fa2f6641973"
+      "sha256": "06c5b6e196d4efb1d6df2103c22c586395472de2353f0536fc74347c608f0d2d"
     }
   },
   "assertions": [
@@ -2181,7 +2181,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20260926053818",
+        "migrationTip": "20260928060000",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -2257,7 +2257,7 @@
         },
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
-        "migrationTip": "20260926053818",
+        "migrationTip": "20260928060000",
         "roleBoundary": {
           "executionRole": "service_role",
           "directSourceSelect": false,

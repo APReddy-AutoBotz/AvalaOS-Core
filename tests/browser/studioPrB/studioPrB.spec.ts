@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
+import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, prepareSyntheticDirectPdd, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -159,7 +159,7 @@ for(const mode of ['missing','duplicate']){
   });
 }
 
-test('PR C synthetic runner selects the only direct-package-eligible bundle from two locked Studio bundles', async ({page}) => {
+test('PR C exact bundle selection retains canonical identity across two locked bundles and unrelated disabled creation', async ({page}) => {
   await open(page, '?mode=direct&sourceJourney=1');
   const builder=page.getByRole('region',{name:'Studio Source Package builder'});
   await builder.locator('label').filter({hasText:'Existing Studio exact set'}).getByRole('checkbox').check();
@@ -168,10 +168,33 @@ test('PR C synthetic runner selects the only direct-package-eligible bundle from
   const select=builder.getByLabel('Exact locked Studio bundle',{exact:true});
   await expect(select.locator('option')).toHaveCount(3);
   const interactions:string[]=[];
-  expect(await selectExactEligibleStudioBundle(page,interactions)).toEqual({optionCount:2,eligibleCount:1});
+  expect(await selectExactEligibleStudioBundle(page,interactions,{versionId:'00000032-0000-4000-8000-000000000032',requireDirectCreation:true})).toEqual({optionCount:2,exactMatchCount:1,directCreationRequired:true});
   await expect(select).toHaveValue('00000032-0000-4000-8000-000000000032');
   await expect(builder.getByRole('button',{name:'Create direct planning package',exact:true})).toBeEnabled();
-  expect(interactions).toEqual(['select:exact-eligible-studio-bundle']);
+  expect(interactions).toEqual(['select:exact-bound-studio-bundle']);
+  await open(page,'?mode=direct&sourceJourney=1&state=unauthorized');
+  await expect(builder.getByRole('button',{name:'Create direct planning package',exact:true})).toBeDisabled();
+  expect(await selectExactEligibleStudioBundle(page,[],{versionId:'00000032-0000-4000-8000-000000000032'})).toMatchObject({exactMatchCount:1,directCreationRequired:false});
+  await expect(selectExactEligibleStudioBundle(page,[],{versionId:'00000099-0000-4000-8000-000000000099'})).rejects.toThrow('EXACT_STUDIO_BUNDLE_COUNT');
+});
+
+test('PR C direct planning explicitly selects PDD after a fresh BRD workspace', async ({page}) => {
+  await open(page,'?mode=direct&sourceJourney=1');
+  await expect(page.getByLabel('Artifact type',{exact:true})).toHaveValue('brd');
+  await prepareSyntheticDirectPdd(page,[],{versionId:'00000032-0000-4000-8000-000000000032'});
+  await expect(page.getByLabel('Artifact type',{exact:true})).toHaveValue('pdd');
+  await expect(page.getByLabel('Exact locked Studio bundle',{exact:true})).toHaveValue('00000032-0000-4000-8000-000000000032');
+  await expect(page.getByRole('button',{name:'Create direct planning package',exact:true})).toBeEnabled();
+});
+
+test('PR C Studio selection rejects a source label attached to the wrong immutable version',async({page})=>{
+  await open(page,'?mode=direct&sourceJourney=1');
+  const names=['Studio workshop transcript','Studio correction notes'];
+  await expect(selectStudioTranscriptSources(page,[],names,[
+    {label:names[0],sourceVersionId:'00000099-0000-4000-8000-000000000099'},
+    {label:names[1],sourceVersionId:'00000028-0000-4000-8000-000000000028'},
+  ])).rejects.toThrow('STUDIO_SOURCE_VERSION_MISMATCH');
+  expect(await page.getByRole('button',{name:'Remove',exact:true}).count()).toBe(0);
 });
 
 test('Studio-owned pasted source is exactly bundled, extracted, reviewed, and packaged',async({page},info)=>{const assessRequests:string[]=[];page.on('request',request=>{if(/\/(?:rest|functions)\/v1\/.*(?:assess|transcript)/i.test(request.url()))assessRequests.push(request.url());});await open(page,'?mode=direct&sourceJourney=1');const intake=page.getByRole('region',{name:'Upload, extract, and review Studio sources'});const builder=page.getByRole('region',{name:'Studio Source Package builder'});const rawToken='RAW-ONLY-DO-NOT-PROJECT-9001';await intake.getByLabel('Pasted source name').fill('Studio incident workshop');await intake.getByLabel('Pasted Studio text').fill(`Operations must route every invoice exception to a human reviewer. The operations lead owns the control. ${rawToken}`);await intake.getByRole('button',{name:'Store pasted Studio source'}).click();await expect(intake.getByText('Private pasted Studio source stored and reloaded.')).toBeVisible();const rawProjectionMatches=await page.getByText(rawToken,{exact:false}).count();expect(rawProjectionMatches).toBe(0);const uploaded=builder.locator('li').filter({hasText:'Studio incident workshop · v1'});await uploaded.getByRole('button',{name:'Use in Studio'}).click();await builder.getByLabel('Source-set label').fill('Uploaded Studio evidence');await builder.getByRole('button',{name:'Commit Studio source set'}).click();await expect(builder.getByText('Immutable Studio source-set version committed and reloaded.')).toBeVisible();await builder.locator('label').filter({hasText:'Uploaded Studio evidence'}).getByRole('checkbox').check();await builder.getByRole('button',{name:'Lock Studio input bundle'}).click();await expect(builder.getByText('Exact Studio input bundle locked and reloaded.')).toBeVisible();await intake.getByLabel('Exact Studio bundle for extraction').selectOption('00000037-0000-4000-8000-000000000037');await expect(builder.getByRole('button',{name:'Create direct planning package'})).toBeDisabled();await intake.getByRole('button',{name:'Run governed Studio extraction'}).click();await expect(intake.getByText('Latest extraction: succeeded · 1 exact source bindings · 3 candidates.')).toBeVisible();markerC(info,'STUDIO-TR-001','pasted-source-exact-bundle-extraction',{sourceId:'00000041-0000-4000-8000-000000000041',sourceVersionId:'00000042-0000-4000-8000-000000000042',sourceSetId:'00000034-0000-4000-8000-000000000034',sourceSetVersionId:'00000035-0000-4000-8000-000000000035',inputBundleId:'00000036-0000-4000-8000-000000000036',inputBundleVersionId:'00000037-0000-4000-8000-000000000037',extractionJobId:'00000048-0000-4000-8000-000000000048',bindingCount:1,candidateCount:3,rawProjectionMatches});const requirement=intake.locator('article').filter({hasText:'business_requirement'});await requirement.getByRole('button',{name:'Accept'}).click();await expect(requirement.getByText('accepted',{exact:true})).toBeVisible();const owner=intake.locator('article').filter({hasText:'control_owner'});await owner.getByRole('button',{name:'Edit'}).click();await owner.getByLabel('Reviewed value').fill('Senior operations lead');const editCommit=owner.getByRole('button',{name:'Commit reviewed edit'});await expect(editCommit).toBeDisabled();await owner.getByLabel('Review rationale').fill('Clarifies accountable control ownership.');await expect(editCommit).toBeEnabled();await editCommit.click();await expect(owner.getByText('edited',{exact:true})).toBeVisible();const unsupported=intake.locator('article').filter({hasText:'unsupported_assumption'});await unsupported.getByRole('button',{name:'Reject'}).click();const rejectCommit=unsupported.getByRole('button',{name:'Commit rejection'});await expect(rejectCommit).toBeDisabled();await unsupported.getByLabel('Review rationale').fill('The source does not support this risk claim.');await expect(rejectCommit).toBeEnabled();await rejectCommit.click();await expect(unsupported.getByText('rejected',{exact:true})).toBeVisible();await expect(intake.getByText('Every exact selected source has reviewed, accepted grounded coverage.')).toBeVisible();await expect(builder.getByRole('button',{name:'Create direct planning package'})).toBeEnabled();await builder.getByRole('button',{name:'Create direct planning package'}).click();await expect(builder.getByText(/Direct BRD source package committed and reloaded/)).toBeVisible();await expect(page.getByText(/00000039-0000-4000-8000-000000000039 · v1/)).toBeVisible();expect(assessRequests).toEqual([]);const severe=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations.filter(item=>item.impact==='serious'||item.impact==='critical');expect(severe).toEqual([]);markerC(info,'STUDIO-TR-003','bound-candidate-review-direct-package',{inputBundleVersionId:'00000037-0000-4000-8000-000000000037',candidateStatuses:['accepted','edited','rejected'],rationaleGateAssertions:4,acceptedGroundedCoverage:1,sourcePackageId:'00000039-0000-4000-8000-000000000039',sourcePackageVersion:1,artifactId:'00000038-0000-4000-8000-000000000038',assessApiRequestCount:assessRequests.length,seriousCriticalA11yFindings:severe.length});});

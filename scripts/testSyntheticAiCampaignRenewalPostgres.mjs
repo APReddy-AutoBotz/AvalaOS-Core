@@ -25,7 +25,7 @@ assert.equal(migrations.at(-5),'20260923151115_studio_handoff_receipt_binding.sq
 assert.equal(migrations.at(-4),'20260923190853_pr_c_deferred_binding_authority.sql');
 assert.equal(migrations.at(-3),'20260924052038_studio_independent_source_integration.sql');
 assert.equal(migrations.at(-2),'20260924113000_pr_c_synthetic_acceptance_execution_kind.sql');
-assert.equal(migrations.at(-1),'20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql');
+assert.equal(migrations.at(-1),'20260928060000_pr_c_synthetic_direct_planning_generation.sql');
 const migrationSql=await readFile(join('supabase/migrations',migrationName),'utf8');
 const {Client}=pg;
 const names=[`ai_renewal_fresh_${process.pid}_${Date.now()}`,`ai_renewal_upgrade_${process.pid}_${Date.now()}`];

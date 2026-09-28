@@ -22,6 +22,7 @@ const artifactVersionId = uuid(4);
 const deliveryPackageId = uuid(6);
 const deliveryPackageVersionId = uuid(7);
 const handoffId = uuid(8);
+const sequenceTargetItemId = uuid(1_230);
 const itemTypes = ['milestone', 'dependency', 'risk', 'story', 'epic', 'task'] as const;
 
 const item = (index: number) => ({
@@ -118,6 +119,26 @@ function Harness() {
   const [pageBusy, setPageBusy] = useState(false);
   const pageLoadAttempts = useRef(0);
 
+  const acceptOtherSequenceItems = () => {
+    setDelivery(current => ({ ...current, packages: current.packages.map(pkg => {
+      if (pkg.id !== deliveryPackageId || !pkg.itemPage.isComplete || pkg.items.length !== 250) return pkg;
+      let acceptedNow = 0;
+      const items = pkg.items.map(entry => {
+        if (entry.aggregateId === sequenceTargetItemId || ['accepted', 'rejected'].includes(entry.status)) return entry;
+        acceptedNow += 1;
+        return { ...entry, aggregateVersion: entry.aggregateVersion + 1, status: 'accepted' as const,
+          decision: { outcome: 'accepted' as const, rationale: 'Authorized synthetic prerequisite accepted the exact current proposal.' }, actions: [] };
+      });
+      const unresolved = items.filter(entry => !['accepted', 'rejected'].includes(entry.status)).length;
+      const acceptedItemCount = items.filter(entry => entry.status === 'accepted').length;
+      return { ...pkg, aggregateVersion: pkg.aggregateVersion + acceptedNow, items,
+        blockers: unresolved ? [`${unresolved} work item decision${unresolved === 1 ? '' : 's'} unresolved.`] : [], blockerCount: unresolved,
+        acceptedItemCount: unresolved ? undefined : acceptedItemCount,
+        actions: unresolved ? ['delivery.item.review'] : ['delivery.package.review.resolve'] };
+    }) }));
+    setStatus('Authorized synthetic prerequisites accepted every non-target current proposal.');
+  };
+
   const loadProductionDeliveryPage = async (input: {
     organizationId: string;
     workspaceId: string;
@@ -189,9 +210,13 @@ function Harness() {
       }
       if (command.action === 'delivery.item.review') return { ...current, packages: current.packages.map(pkg => {
         if (!pkg.items.some(entry => entry.aggregateId === command.itemAggregateId)) return pkg;
-        const remaining = pkg.items.filter(entry => entry.aggregateId !== command.itemAggregateId && !entry.decision).length;
-        const acceptedItemCount = pkg.items.filter(entry => entry.aggregateId === command.itemAggregateId ? command.outcome === 'accepted' : entry.decision?.outcome === 'accepted').length;
-        return { ...pkg, aggregateVersion: pkg.aggregateVersion + 1, items: pkg.items.map(entry => entry.aggregateId !== command.itemAggregateId ? entry : command.outcome === 'edited' ? { ...entry, aggregateVersion: entry.aggregateVersion + 1, version: entry.version + 1, currentVersionId: uuid(5_000 + entry.version), status: 'edited', title: command.authored.title, description: command.authored.description, acceptanceCriteria: command.authored.acceptanceCriteria, nonFunctionalRequirements: command.authored.nonFunctionalRequirements, history: [...entry.history.filter(history => history.version !== entry.version), { version: entry.version, status: entry.status, title: entry.title, description: entry.description, acceptanceCriteria: entry.acceptanceCriteria, nonFunctionalRequirements: entry.nonFunctionalRequirements, createdAt: '2026-08-31T06:00:00.000Z' }], diffs: [...entry.diffs, { fromVersion: entry.version, toVersion: entry.version + 1, changedFields: ['title', 'description'] }] } : { ...entry, aggregateVersion: entry.aggregateVersion + 1, status: command.outcome, decision: { outcome: command.outcome, rationale: command.rationale }, actions: [] } as typeof entry), blockers: remaining ? [`${remaining} work item decisions unresolved.`] : [], blockerCount: remaining, acceptedItemCount: remaining ? undefined : acceptedItemCount, actions: ['delivery.package.review.resolve'] };
+        const items = pkg.items.map(entry => entry.aggregateId !== command.itemAggregateId ? entry : command.outcome === 'edited' ? { ...entry, aggregateVersion: entry.aggregateVersion + 1, version: entry.version + 1, currentVersionId: uuid(5_000 + entry.version), status: 'edited' as const, title: command.authored.title, description: command.authored.description, acceptanceCriteria: command.authored.acceptanceCriteria, nonFunctionalRequirements: command.authored.nonFunctionalRequirements, decision: undefined, actions: ['delivery.item.review' as const], history: [...entry.history.filter(history => history.version !== entry.version), { version: entry.version, status: entry.status, title: entry.title, description: entry.description, acceptanceCriteria: entry.acceptanceCriteria, nonFunctionalRequirements: entry.nonFunctionalRequirements, createdAt: '2026-08-31T06:00:00.000Z' }], diffs: [...entry.diffs, { fromVersion: entry.version, toVersion: entry.version + 1, changedFields: ['title', 'description'] }] } : { ...entry, aggregateVersion: entry.aggregateVersion + 1, status: command.outcome, decision: { outcome: command.outcome, rationale: command.rationale }, actions: [] } as typeof entry);
+        const unresolved = items.filter(entry => !['accepted', 'rejected'].includes(entry.status)).length;
+        const acceptedItemCount = items.filter(entry => entry.status === 'accepted').length;
+        return { ...pkg, aggregateVersion: pkg.aggregateVersion + 1, items,
+          blockers: unresolved ? [`${unresolved} work item decision${unresolved === 1 ? '' : 's'} unresolved.`] : [], blockerCount: unresolved,
+          acceptedItemCount: unresolved ? undefined : acceptedItemCount,
+          actions: unresolved ? ['delivery.item.review'] : ['delivery.package.review.resolve'] };
       }) };
       if (command.action === 'delivery.package.revision.commit') return { ...current, packages: current.packages.map(pkg => {
         if (pkg.id !== command.workPackageId) return pkg;
@@ -214,24 +239,32 @@ function Harness() {
               decision: undefined, actions: ['delivery.item.review' as const] };
           }) };
       }) };
-      if (command.action === 'delivery.package.review.resolve') return { ...current, packages: current.packages.map(pkg => pkg.id !== command.workPackageId ? pkg : command.outcome === 'approved'
-        ? { ...pkg, status: 'review', reviewState: 'approved', blockers: [], blockerCount: 0, actions: ['delivery.package.approval.resolve'] }
-        : command.outcome === 'changes_requested'
-          ? { ...pkg, status: 'blocked', reviewState: 'changes_requested', blockers: ['Independent review requested changes.'], blockerCount: 1, actions: ['delivery.package.revision.commit'] }
-          : { ...pkg, status: 'rejected', reviewState: 'rejected', blockers: [], blockerCount: 0, actions: [] }) };
+      if (command.action === 'delivery.package.review.resolve') return { ...current, packages: current.packages.map(pkg => {
+        if (pkg.id !== command.workPackageId) return pkg;
+        if (!pkg.itemPage.isComplete || pkg.items.some(entry => !['accepted', 'rejected'].includes(entry.status))) return pkg;
+        return command.outcome === 'approved'
+          ? { ...pkg, status: 'review' as const, reviewState: 'approved' as const, blockers: [], blockerCount: 0, actions: ['delivery.package.approval.resolve' as const] }
+          : command.outcome === 'changes_requested'
+            ? { ...pkg, status: 'blocked' as const, reviewState: 'changes_requested' as const, blockers: ['Independent review requested changes.'], blockerCount: 1, actions: ['delivery.package.revision.commit' as const] }
+            : { ...pkg, status: 'rejected' as const, reviewState: 'rejected' as const, blockers: [], blockerCount: 0, actions: [] };
+      }) };
       if (command.action === 'delivery.package.approval.resolve') {
         const approved = command.outcome === 'approved';
-        return { ...current, packages: current.packages.map(pkg => pkg.id !== command.workPackageId ? pkg : { ...pkg, status: command.outcome, approvalState: command.outcome, actions: [] }),
+        return { ...current, packages: current.packages.map(pkg => pkg.id !== command.workPackageId || pkg.reviewState !== 'approved' ? pkg : { ...pkg, status: command.outcome, approvalState: command.outcome, actions: [] }),
           baselineEligibility: approved ? [{ workPackageId: command.workPackageId, workPackageVersionId: command.expectedPackageVersionId, workPackageVersion: command.expectedPackageVersion,
-            acceptedItemCount: current.packages.find(pkg => pkg.id === command.workPackageId)?.acceptedItemCount ?? 1, lineageClassification: 'assessed', planningOnly: false, action: 'monitor.baseline.create' }] : [] };
+            acceptedItemCount: current.packages.find(pkg => pkg.id === command.workPackageId)?.acceptedItemCount ?? 0, lineageClassification: 'assessed', planningOnly: false, action: 'monitor.baseline.create' }] : [] };
       }
       return current;
     });
-    if (command.action === 'monitor.baseline.create') setMonitor(current => current.baselines.length ? current : { ...current, baselines: [{ id: uuid(90), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false, workPackageId: command.workPackageId, workPackageVersion: command.expectedPackageVersion, acceptedItemCount: 1, acceptedItems: [{ version: 2, type: 'milestone', title: 'Canonical work item 001', status: 'accepted' }], milestones: ['Canonical work item 001'], dependencies: [], blockers: [], risks: [] }] });
+    if (command.action === 'monitor.baseline.create') {
+      const deliveryPackage = delivery.packages.find(pkg => pkg.id === command.workPackageId && pkg.status === 'approved');
+      const acceptedItems = deliveryPackage?.items.filter(entry => entry.status === 'accepted') ?? [];
+      if (deliveryPackage && deliveryPackage.itemPage.isComplete && acceptedItems.length === deliveryPackage.acceptedItemCount) setMonitor(current => current.baselines.length ? current : { ...current, baselines: [{ id: uuid(90), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false, workPackageId: command.workPackageId, workPackageVersion: command.expectedPackageVersion, acceptedItemCount: acceptedItems.length, acceptedItems: acceptedItems.map(entry => ({ version: entry.version, type: entry.type, title: entry.title, status: 'accepted' })), milestones: acceptedItems.filter(entry => entry.type === 'milestone').map(entry => entry.title), dependencies: acceptedItems.filter(entry => entry.type === 'dependency').map(entry => entry.title), blockers: [], risks: acceptedItems.filter(entry => entry.type === 'risk').map(entry => entry.title) }] });
+    }
     setStatus(`${command.action} committed and exact projection reloaded.`);
   };
 
-  return <main className="min-h-screen bg-[var(--av-color-bg-subtle)] p-4 text-[var(--av-color-text)] sm:p-6"><nav aria-label="Harness views" className="mx-auto mb-4 flex max-w-7xl flex-wrap gap-2">{(['delivery', 'enterprise-monitor', 'primary-monitor', 'context-monitor'] as const).map(value => <button key={value} type="button" onClick={() => setView(value)} className="min-h-10 rounded-xl border px-3 font-black">{value.replace('-', ' ')}</button>)}</nav><div className="mx-auto max-w-7xl">{view === 'delivery' ? <GovernedDeliveryWorkspace projection={delivery} monitorProjection={['no-monitor','blocked-seeded-baseline'].includes(fixtureState) ? undefined : monitor} busy={pageBusy} status={status} error={error} onAction={act} onLoadNextPage={loadNextPage}/> : view === 'enterprise-monitor' ? <MonitorApprovedBaselinePanel projection={monitor} heading="Enterprise Intelligence canonical baseline"/> : view === 'primary-monitor' ? <PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => undefined} onScopeChange={() => undefined} onViewChange={() => undefined} canonicalMonitorProjection={monitor}/> : <ContextMonitorHarness/>}</div></main>;
+  return <main className="min-h-screen bg-[var(--av-color-bg-subtle)] p-4 text-[var(--av-color-text)] sm:p-6"><nav aria-label="Harness views" className="mx-auto mb-4 flex max-w-7xl flex-wrap gap-2">{(['delivery', 'enterprise-monitor', 'primary-monitor', 'context-monitor'] as const).map(value => <button key={value} type="button" onClick={() => setView(value)} className="min-h-10 rounded-xl border px-3 font-black">{value.replace('-', ' ')}</button>)}{fixtureState === 'full-sequence' && <button type="button" data-testid="accept-sequence-prerequisites" onClick={acceptOtherSequenceItems} className="min-h-10 rounded-xl border px-3 font-black">Apply authorized acceptance prerequisites</button>}</nav><div className="mx-auto max-w-7xl">{view === 'delivery' ? <GovernedDeliveryWorkspace projection={delivery} monitorProjection={['no-monitor','blocked-seeded-baseline'].includes(fixtureState) ? undefined : monitor} busy={pageBusy} status={status} error={error} onAction={act} onLoadNextPage={loadNextPage}/> : view === 'enterprise-monitor' ? <MonitorApprovedBaselinePanel projection={monitor} heading="Enterprise Intelligence canonical baseline"/> : view === 'primary-monitor' ? <PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => undefined} onScopeChange={() => undefined} onViewChange={() => undefined} canonicalMonitorProjection={monitor}/> : <ContextMonitorHarness/>}</div></main>;
 }
 
 const contextProjection = (targetWorkspaceId: string, targetBaselineId: string): MonitorApprovedBaselinesProjection => ({

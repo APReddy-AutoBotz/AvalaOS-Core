@@ -29,6 +29,7 @@ import {
   selectAssessTranscriptSources,
   signIn,
   retainSyntheticCommandState,
+  assertSyntheticCommandContinuity,
   summarizePrerequisiteInteractions,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
 import {
@@ -45,6 +46,9 @@ test('runner retains exact successful command selectors for prerequisites and re
   const cases = [
     ['CH-02', 'approve-studio-document', 'ch02:artifactId'],
     ['CH-03', 'accept-studio-handoff', 'prereq:ch03:artifactId'],
+    ['CH-03', 'request-studio-handoff', 'ch03:handoffId'],
+    ['CH-05', 'request-fresh-exact-handoff', 'ch05:handoffId'],
+    ['CH-10', 'create-direct-studio-plan', 'prereq:ch10:artifactId'],
     ['CH-10', 'handoff-direct-studio-plan', 'prereq:ch10:handoffId'],
     ['CH-11', 'create-manual-delivery-package', 'prereq:ch11:packageId'],
     ['CH-11', 'create-read-only-manual-baseline', 'prereq:ch11:baselineId'],
@@ -58,11 +62,20 @@ test('runner retains exact successful command selectors for prerequisites and re
     const planned = buildBrowserExecutionCatalog().find(value => value.checkpointId === checkpointId && value.stepId === stepId);
     assert(planned?.serverAction, `${checkpointId}:${stepId}`);
     const action = planned.serverAction.action.startsWith('handoff.') ? `studio.${planned.serverAction.action}` : planned.serverAction.action;
-    const body = { commandType: action, requestId: sessionId, payload: { itemAggregateId: actorId } };
+    const bundle = { id: actorId, versionId: sessionId, version: 1 };
+    const body = { commandType: action, requestId: sessionId, payload: { itemAggregateId: actorId, handoffId: actorId,
+      workPackageId: actorId, studioArtifactId: actorId, studioArtifactVersionId: sessionId,
+      targetInputBundle: bundle, studioInputBundle: bundle, upstreamHandoffId: actorId, artifactType: 'pdd', sourceMode: 'direct_transcript_bundle' } };
     const command = { commandType: action, requestId: sessionId, body,
       response: { ok: true, outcome: 'committed', receiptId: sessionId, resourceId: actorId } };
     const proof = { serverAnchor: { requestDigest: canonicalDigest({ requestId: sessionId }) }, serverBinding: { resourceDigest: exerciseDigest } };
-    const state = new Map(); const session = { api: { lastCommand: async () => command } };
+    const candidate = { studioArtifactId: actorId, studioArtifactVersionId: sessionId };
+    const state = new Map([
+      ['ch03:bundleBinding', { inputBundle: bundle }], ['seed:assess-handoff', { upstreamHandoffId: actorId }],
+      ['ch03:handoffId', actorId], ['ch05:handoffId', actorId], ['seed:assessed-artifact', candidate],
+      ['prereq:ch10:approvedCandidate', candidate], ['ch06:selectedItemId', actorId],
+      ['full-governed-package', { packageId: actorId }], ['seed:recovery-packageId', actorId],
+    ]); const session = { api: { lastCommand: async () => command } };
     await retainSyntheticCommandState(planned, session, state, proof);
     assert(state.has(stateKey), `${checkpointId}:${stepId} must bind downstream state`);
     if (stateKey.startsWith('replay:')) assert.deepEqual(state.get(stateKey), { body, resourceDigest: exerciseDigest });
@@ -71,6 +84,30 @@ test('runner retains exact successful command selectors for prerequisites and re
     command.requestId = actorId;
     await assert.rejects(retainSyntheticCommandState(planned, session, new Map(), proof), /COMMAND_PROOF_BINDING_MISMATCH/u);
   }
+});
+
+test('causal proof rejects a different artifact, bundle, handoff or item even after a successful command', () => {
+  const candidate = { studioArtifactId: actorId, studioArtifactVersionId: sessionId };
+  const cases = [
+    ['CH-10', 'handoff-direct-studio-plan', { studioArtifactId: actorId, studioArtifactVersionId: sessionId }, 'prereq:ch10:approvedCandidate', candidate, 'studioArtifactId'],
+    ['CH-05', 'consume-approved-handoff-once', { handoffId: actorId }, 'ch05:handoffId', actorId, 'handoffId'],
+    ['CH-06', 'edit-one-item-with-rationale', { itemAggregateId: actorId }, 'ch06:selectedItemId', actorId, 'itemAggregateId'],
+    ['CH-08', 'create-baseline-with-exact-package-selectors', { workPackageId: actorId }, 'full-governed-package', { packageId: actorId }, 'workPackageId'],
+  ];
+  for (const [checkpointId, stepId, payload, stateKey, expected, changed] of cases) {
+    const planned = buildBrowserExecutionCatalog().find(step => step.checkpointId === checkpointId && step.stepId === stepId);
+    const state = new Map([[stateKey, expected]]);
+    assertSyntheticCommandContinuity(planned, { body: { payload } }, state);
+    assert.throws(() => assertSyntheticCommandContinuity(planned, { body: { payload: { ...payload, [changed]: sessionId } } }, state), /MISMATCH/u);
+  }
+  const planned = buildBrowserExecutionCatalog().find(step => step.checkpointId === 'CH-10' && step.stepId === 'create-direct-studio-plan');
+  assert.throws(() => assertSyntheticCommandContinuity(planned, { body: { payload: { artifactType: 'brd' } } }, new Map()), /DIRECT_ARTIFACT_TYPE_MISMATCH/u);
+});
+
+test('monitor-only accessibility observations route to their authorized surface', () => {
+  const steps = buildBrowserExecutionCatalog().filter(step => step.checkpointId === 'CH-14' && step.personaKey === 'monitor_viewer');
+  assert.equal(steps.length, 2);
+  assert(steps.every(step => step.surface === 'monitor'));
 });
 
 test('complete-set prerequisite evidence retains actual command counts within the artifact limit', () => {
@@ -201,7 +238,7 @@ test('runner is two phase, uses the synthetic migration tip, and contains no agg
   const source = await readFile(new URL('./runPrCSyntheticAcceptanceBrowser.mjs', import.meta.url), 'utf8');
   assert.match(source, /--phase/u);
   assert.match(source, /\['active', 'read-only'\]/u);
-  assert.match(source, /20260926053818/u);
+  assert.match(source, /20260928060000/u);
   assert.match(source, /PR_C_SYNTHETIC_BROWSER_EPHEMERAL_STATE_REMAINS/u);
   assert.doesNotMatch(source, /controlledProofVisible|assertBodyPattern|suite.*exit.*passed/iu);
   assert.match(source, /requiredSyntheticBrowserAssertionId/u);

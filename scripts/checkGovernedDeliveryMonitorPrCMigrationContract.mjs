@@ -28,8 +28,9 @@ assert.equal(migrations.filter(name=>name===studioSourceMigrationName).length,1)
 assert.equal(migrations.filter(name=>name===syntheticAcceptanceMigrationName).length,1);
 assert.equal(migrations.filter(name=>name===syntheticStudioFixtureMigrationName).length,1);
 assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
-assert.equal(migrations.at(-2),syntheticAcceptanceMigrationName);
-assert.equal(migrations.at(-1),syntheticStudioFixtureMigrationName);
+assert.equal(migrations.at(-3),syntheticAcceptanceMigrationName);
+assert.equal(migrations.at(-2),syntheticStudioFixtureMigrationName);
+assert.equal(migrations.at(-1),'20260928060000_pr_c_synthetic_direct_planning_generation.sql');
 assertPrCMigrationTail(migrations);
 assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
 assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);

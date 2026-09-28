@@ -86,7 +86,7 @@
           "properties": {
             "exerciseDigest": { "$ref": "#/$defs/digest" }, "targetFingerprint": { "$ref": "#/$defs/digest" },
             "publicTargetDigest": { "$ref": "#/$defs/digest" }, "personaManifestDigest": { "$ref": "#/$defs/digest" },
-            "fixtureManifestDigest": { "$ref": "#/$defs/digest" }, "migrationTip": { "const": "20260926053818" }
+            "fixtureManifestDigest": { "$ref": "#/$defs/digest" }, "migrationTip": { "const": "20260928060000" }
           }
         },
         "producer": {

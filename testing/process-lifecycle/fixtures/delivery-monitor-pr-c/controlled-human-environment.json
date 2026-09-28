@@ -82,6 +82,7 @@
     },
     "assessedStudioArtifact": {
       "artifactType": "brd",
+      "sectionCount": 3,
       "title": "Synthetic assessed Studio artifact",
       "summary": "Approved synthetic Assess lineage for the controlled-human Studio-to-Delivery journey.",
       "section": { "id": "assessed-scope", "title": "Assessed scope", "body": "Governed synthetic scope approved through Assess and Studio." }

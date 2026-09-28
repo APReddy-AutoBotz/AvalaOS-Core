@@ -73,7 +73,7 @@ assert.deepEqual(
   controlledAttestation,
 );
 const syntheticAttestation = { ...controlledAttestation, migrationTip: PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP } as const;
-assert.equal(PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP, '20260926053818');
+assert.equal(PR_C_SYNTHETIC_ACCEPTANCE_MIGRATION_TIP, '20260928060000');
 assert.deepEqual(
   validateControlledHumanBackendAttestation(syntheticAttestation, controlledResolution.binding),
   syntheticAttestation,
