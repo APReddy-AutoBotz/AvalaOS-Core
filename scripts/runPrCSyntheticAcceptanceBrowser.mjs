@@ -1066,7 +1066,16 @@ const namedControl = async (page, role, names) => {
   throw new Error(`PR_C_SYNTHETIC_BROWSER_EXACT_CONTROL_MISSING:${names.map(safeLabel).join('|')}`);
 };
 
-const packageCount = page => page.getByRole('list', { name: 'Delivery packages' }).getByRole('listitem').count();
+export const packageCount = async page => {
+  const workspace = page.getByTestId('governed-delivery-workspace');
+  await workspace.waitFor({ state: 'visible' });
+  assert.equal(await workspace.getAttribute('data-delivery-usable'), 'true', 'PR_C_SYNTHETIC_BROWSER_DELIVERY_NOT_USABLE');
+  const packages = workspace.getByRole('list', { name: 'Delivery packages', exact: true });
+  // The authorized empty list has zero height on narrow layouts; its parent
+  // must be visible and usable, but list presence is the loaded-state boundary.
+  await packages.waitFor({ state: 'attached' });
+  return packages.getByRole('listitem').count();
+};
 const baselineCount = async page => {
   const panel = page.getByTestId('canonical-monitor-baselines');
   await panel.waitFor({ state: 'visible' });
@@ -1565,7 +1574,7 @@ const attachProviderObserver = (page, providerEgress) => page.on('request', requ
   if (SAFE_PROVIDER_HOSTS.some(pattern => pattern.test(host))) providerEgress.push(digest({ host, method: request.method() }));
 });
 
-const snapshotBeforeServerAction = async (page, key, state) => {
+export const snapshotBeforeServerAction = async (page, key, state) => {
   if (key === 'CH-04:request-exact-studio-handoff') state.set('before-request', await packageCount(page));
   if (key === 'CH-04:request-handoff-changes') state.set('before-changes', await packageCount(page));
   if (key === 'CH-04:reject-new-exact-handoff-request') state.set('before-rejection', await packageCount(page));

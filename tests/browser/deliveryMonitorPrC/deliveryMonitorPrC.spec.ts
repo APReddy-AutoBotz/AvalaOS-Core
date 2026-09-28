@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
-import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant, observeBrowserOnlyStep } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant, observeBrowserOnlyStep, snapshotBeforeServerAction, packageCount } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 import { selectSyntheticDeliveryArtifact, verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline, verifySyntheticReadOnlyMonitorHistory, verifySyntheticStudioApprovalHasNoDeliveryResource } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 import { canonicalDigest } from '../../../scripts/prCControlledHumanEvidenceContract.mjs';
 
@@ -131,6 +131,39 @@ test('PR C synthetic CH-04 rejects the stress fixture and unrelated matching pre
     document.body.append(unrelated);
   });
   await expect(run()).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_EXACT_TEXT_MISSING');
+});
+
+test('PR C package absence snapshot waits for the committed Delivery projection', async ({ page }) => {
+  for (const [key, stepId, stateKey] of [
+    ['CH-04:request-exact-studio-handoff', 'verify-request-creates-no-delivery-package', 'before-request'],
+    ['CH-04:request-handoff-changes', 'verify-changes-create-no-target-draft', 'before-changes'],
+    ['CH-04:reject-new-exact-handoff-request', 'verify-rejection-creates-no-target-draft', 'before-rejection'],
+    ['CH-05:replay-consumption-same-target', 'verify-replay-created-no-second-package', 'before-consumption-replay'],
+  ]) {
+    await page.goto('/tests/browser/deliveryMonitorPrC/harness.html?delayed-projection');
+    await expect(page.getByTestId('resolve-delayed-projection')).toBeVisible();
+    const state = new Map();
+    const pending = snapshotBeforeServerAction(page, key, state);
+    await page.getByTestId('resolve-delayed-projection').click();
+    await pending;
+    await observeBrowserOnlyStep({ page, checkpointId: key.split(':')[0], stepId, state, interactionSequence: [] });
+    expect(state.get(stateKey)).toBe(1);
+  }
+});
+
+test('PR C package absence rejects actual changes and missing projections while retaining a rendered empty list', async ({ page }) => {
+  await open(page);
+  const state = new Map([['before-negative-attempts', await packageCount(page)]]);
+  await observeBrowserOnlyStep({ page, checkpointId: 'CH-12', stepId: 'verify-zero-negative-side-effects', state, interactionSequence: [] });
+  await page.getByRole('list', { name: 'Delivery packages', exact: true }).evaluate(list => list.append(document.createElement('li')));
+  await expect(observeBrowserOnlyStep({ page, checkpointId: 'CH-12', stepId: 'verify-zero-negative-side-effects', state, interactionSequence: [] })).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_PACKAGE_COUNT_CHANGED');
+  await open(page, '?state=wrong-workspace');
+  expect(await packageCount(page)).toBe(0);
+  await page.getByTestId('governed-delivery-workspace').evaluate(node => node.setAttribute('data-delivery-usable', 'false'));
+  await expect(packageCount(page)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_DELIVERY_NOT_USABLE');
+  await page.setContent('<p>Projection unavailable</p>');
+  page.setDefaultTimeout(300);
+  await expect(packageCount(page)).rejects.toThrow();
 });
 
 test('deterministic Studio proposal is cited and handoff request never auto-creates a target', async ({ page }, info) => {

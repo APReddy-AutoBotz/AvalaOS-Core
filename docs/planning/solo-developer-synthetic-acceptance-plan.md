@@ -977,3 +977,30 @@ new-head CI and preview before dispatching the full protected campaign. Rollback
 reverts the preview observer, focused fixture/tests, and provenance together, leaves
 the campaign blocked, and preserves all retained history. Full synthetic acceptance
 remains failed pending a complete new-candidate run and verified cleanup.
+
+Run 36465762984 passed the repaired CH-04 preview and handoff request, then
+failed `verify-request-creates-no-delivery-package` with
+`PR_C_SYNTHETIC_BROWSER_PACKAGE_COUNT_CHANGED`. Recovery and private-state cleanup
+passed. Bounded retained-state reads confirm one deprovisioned candidate exercise,
+three retained packages, one completed request at unconsumed version 1, and zero
+packages created in its target workspace after that request.
+
+The package-count helper immediately counted DOM nodes after navigation, treating
+an unloaded workspace as zero. A real-component regression through the actual
+snapshot and observer reproduced the hosted failure (one loaded package versus a
+zero snapshot). All five count-based absence checks now await the visible, usable
+Delivery workspace and its attached exact package list before counting. A rendered
+empty list remains valid even when it has zero height on mobile; missing or unusable
+projections reject rather than proving absence. Actual count changes still reject.
+
+The initial visibility-only list wait failed the mobile empty-list case; the final
+presence boundary corrects that without extending timeouts. Final focused results:
+8/8 desktop/Pixel cases and 54/54 runner contract tests pass without skips. Tests
+cover delayed snapshots for request, changes, rejection and consumption replay,
+negative-side-effect checks, real count changes, empty/missing/unusable projections,
+and the preceding preview correction. No broad local regression was run.
+
+This is a runner-only correction. No product, schema, function deployment, scoring,
+or authorization change is needed. Current-head CI, preview and all 84 hosted steps
+remain required. Rollback reverts the helper, focused fixture/tests and provenance
+together and keeps acceptance blocked; retain the recovered exercise history.

@@ -301,4 +301,9 @@ function ContextMonitorHarness() {
   return <><div className="mb-3 flex flex-wrap gap-2"><button type="button" onClick={() => setSelectedWorkspaceId(otherWorkspaceId)} className="min-h-10 rounded-xl border px-3 font-black">Switch workspace context</button><button type="button" onClick={() => setSelectedActorId(delayedContextActorId)} className="min-h-10 rounded-xl border px-3 font-black">Start delayed actor context</button><button type="button" onClick={() => setSelectedActorId(finalContextActorId)} className="min-h-10 rounded-xl border px-3 font-black">Switch to final actor context</button></div><PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => undefined} onScopeChange={() => undefined} onViewChange={() => undefined} canonicalMonitorContext={{ actorId: selectedActorId, organizationId, workspaceId: selectedWorkspaceId, expectedAuthorizationVersion: 9 }} loadCanonicalMonitorProjection={loadContextProjection}/></>;
 }
 
-createRoot(document.getElementById('root')!).render(<Harness/>);
+function DelayedProjectionHarness() {
+  const [ready, setReady] = useState(false);
+  return ready ? <Harness/> : <button data-testid="resolve-delayed-projection" onClick={() => setReady(true)}>Load committed projection</button>;
+}
+
+createRoot(document.getElementById('root')!).render(new URLSearchParams(location.search).has('delayed-projection') ? <DelayedProjectionHarness/> : <Harness/>);
