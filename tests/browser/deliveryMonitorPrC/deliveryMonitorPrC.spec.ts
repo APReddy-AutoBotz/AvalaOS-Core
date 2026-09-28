@@ -197,6 +197,33 @@ test('PR C exact handoff changes and rejection complete with rationale and no pa
   }
 });
 
+test('PR C exact Outbox handoff decisions ignore an unrelated actionable Inbox handoff', async ({ page }) => {
+  for (const [stepId, stateKey, outcome] of [
+    ['request-handoff-changes', 'ch04:handoffId', 'changes requested'],
+    ['reject-new-exact-handoff-request', 'prereq:ch04:replacementHandoffId', 'rejected'],
+    ['review-handoff-independently', 'ch05:handoffId', 'approval ready'],
+  ]) {
+    await open(page, '?state=handoff-outbox');
+    page.setDefaultTimeout(1_000);
+    const checkpoint = stateKey.startsWith('ch05:') ? 'CH-05' : 'CH-04';
+    const state = new Map([[stateKey, handoffId]]);
+    const interactions: string[] = [];
+    const before = await packageCount(page);
+    await executeServerAction(page, checkpoint, stepId, interactions, state);
+    await expect(page.getByRole('tab', { name: 'Outbox (1)', selected: true })).toBeVisible();
+    await expect(page.locator(`[data-handoff-id="${handoffId}"]`).getByText(outcome, { exact: true })).toBeVisible();
+    expect(await packageCount(page)).toBe(before);
+    if (checkpoint === 'CH-05') {
+      await executeServerAction(page, checkpoint, 'approve-handoff-independently', interactions, state);
+      await executeServerAction(page, checkpoint, 'consume-approved-handoff-once', interactions, state);
+      await expect(page.locator(`[data-handoff-id="${handoffId}"]`).getByText('consumed', { exact: true })).toBeVisible();
+    }
+    await page.getByRole('tab', { name: 'Inbox (1)' }).click();
+    await expect(page.getByText('target review', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Request changes', exact: true })).toBeEnabled();
+  }
+});
+
 test('PR C exact baseline action waits for the delayed bound selector', async ({ page }) => {
   await page.goto('/tests/browser/deliveryMonitorPrC/harness.html?state=approved&delayed-projection');
   await expect(page.getByTestId('resolve-delayed-projection')).toBeVisible();
@@ -208,12 +235,13 @@ test('PR C exact baseline action waits for the delayed bound selector', async ({
 });
 
 test('PR C exact handoff action rejects missing and duplicate bound cards', async ({ page }) => {
-  await open(page);
-  page.setDefaultTimeout(300);
-  await expect(executeServerAction(page, 'CH-05', 'review-handoff-independently', [], new Map([['ch05:handoffId', baselineId]]))).rejects.toThrow();
-  await page.locator(`[data-handoff-id="${handoffId}"]`).evaluate(node => node.parentElement!.append(node.cloneNode(true)));
-  await expect(executeServerAction(page, 'CH-05', 'review-handoff-independently', [], new Map([['ch05:handoffId', handoffId]]))).rejects.toThrow();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  for (const query of ['', '?state=handoff-outbox']) {
+    await open(page, query);
+    await expect(executeServerAction(page, 'CH-05', 'review-handoff-independently', [], new Map([['ch05:handoffId', baselineId]]))).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_NOT_IN_PROJECTION');
+    await open(page, `${query || '?'}${query ? '&' : ''}duplicate-handoff`);
+    await expect(executeServerAction(page, 'CH-05', 'review-handoff-independently', [], new Map([['ch05:handoffId', handoffId]]))).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_ID_COUNT');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
 });
 
 test('deterministic Studio proposal is cited and handoff request never auto-creates a target', async ({ page }, info) => {

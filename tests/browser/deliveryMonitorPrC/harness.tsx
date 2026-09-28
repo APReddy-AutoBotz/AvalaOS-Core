@@ -96,6 +96,11 @@ function Harness() {
   const fixtureState = params.get('state') ?? '';
   const [view, setView] = useState<'delivery' | 'enterprise-monitor' | 'primary-monitor' | 'context-monitor'>((params.get('view') as 'delivery' | 'enterprise-monitor' | 'primary-monitor' | 'context-monitor') ?? 'delivery');
   const [delivery, setDelivery] = useState<DeliveryWorkspaceProjection>(() => {
+    if (fixtureState === 'handoff-outbox') {
+      const handoff: DeliveryWorkspaceProjection['outbox'][number] = { ...initialHandoff, direction: 'outbox', status: 'requested' };
+      return { ...initialDelivery, inbox: [{ ...initialHandoff, id: uuid(12) }], outbox: params.has('duplicate-handoff') ? [handoff, handoff] : [handoff] };
+    }
+    if (params.has('duplicate-handoff')) return { ...initialDelivery, inbox: [initialHandoff, initialHandoff] };
     if (fixtureState === 'synthetic-preview') return { ...initialDelivery, eligibleStudioArtifacts: [{ ...candidate, proposalItems: candidate.proposalItems.slice(0, controlledHumanFixture.seed.assessedStudioArtifact.sectionCount) }] };
     if (fixtureState === 'revoked') return { ...initialDelivery, readOnly: true, inbox: initialDelivery.inbox.map(value => ({ ...value, actions: [] })), packages: initialDelivery.packages.map(value => ({ ...value, actions: [], items: value.items.map(entry => ({ ...entry, actions: [] })) })), actions: [] };
     if (fixtureState === 'stale') return { ...initialDelivery, inbox: [{ ...initialHandoff, status: 'stale', actions: [] }] };

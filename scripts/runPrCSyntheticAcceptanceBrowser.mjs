@@ -1011,9 +1011,25 @@ export const executeServerAction = async (page, checkpointId, stepId, interactio
   if (deliveryHandoffKey) {
     const handoffId = state.get(deliveryHandoffKey);
     assert(handoffId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_BINDING_MISSING');
-    root = root.locator(`[data-handoff-id="${handoffId}"]`);
     await root.waitFor({ state: 'visible' });
-    assert.equal(await root.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_ID_COUNT');
+    assert.equal(await root.getAttribute('data-delivery-usable'), 'true', 'PR_C_SYNTHETIC_BROWSER_DELIVERY_NOT_USABLE');
+    const handoff = root.locator(`[data-handoff-id="${handoffId}"]`);
+    let found = false;
+    // Same-workspace target actions are server-projected in Outbox.
+    for (const direction of ['Inbox', 'Outbox']) {
+      const name = new RegExp(`^${direction} \\([0-9]+\\)$`, 'u');
+      await root.getByRole('tab', { name }).click();
+      await root.getByRole('tab', { name, selected: true }).waitFor({ state: 'visible' });
+      interactionSequence.push(`select:delivery-handoff-${direction.toLowerCase()}`);
+      const count = await handoff.count();
+      if (count === 0) continue;
+      assert.equal(count, 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_ID_COUNT');
+      await handoff.waitFor({ state: 'visible' });
+      root = handoff;
+      found = true;
+      break;
+    }
+    assert(found, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_HANDOFF_NOT_IN_PROJECTION');
   }
   if (handoffTarget && key !== 'CH-03:request-studio-handoff')
     assert(state.get('ch03:handoffId'), 'PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_BINDING_MISSING');

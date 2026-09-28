@@ -1029,3 +1029,33 @@ Those results are prior-head evidence only. The combined candidate still require
 its own CI, preview and complete protected campaign. No schema or function
 deployment is needed. Rollback reverts the runner, focused tests and provenance
 together, preserves retained exercise history, and leaves acceptance blocked.
+
+Run 36477112679 on 5eacf6a passed the corrected package-absence observation,
+then timed out at CH-04 `request-handoff-changes`. Recovery and private-state
+cleanup passed. A bounded retained-state query confirms exactly one requested,
+unconsumed version-1 handoff in the exact target workspace and a deprovisioned
+exercise. Its source and target workspace are the same. The authoritative
+projection assigns such handoffs to Outbox; target review authority is independent
+of that direction. The runner searched only the default Inbox. This is a confirmed
+runner source defect, not a missing request or authorization-grant defect.
+
+A real-component fixture with the bound requested handoff in Outbox and an
+unrelated actionable Inbox handoff reproduced the exact locator timeout before
+the correction. The runner now waits for the usable projection, selects each
+named direction tab, waits for its selected state, and finds the exact bound
+handoff before activating its authorized control. Missing and duplicate targets
+reject with explicit safe codes. No first-record fallback, API mutation bypass,
+timeout extension, product behavior or permission change was introduced.
+
+Final focused verification: 18/18 Desktop/Pixel browser cases and 54/54 runner
+contracts passed with zero skips. The actual runner completes changes, rejection,
+review, approval and consumption from Outbox without acting on the unrelated
+Inbox handoff. Negative coverage rejects absent and duplicate records in both
+directions. Its duplicate fixture now supplies persistent projection records;
+the earlier DOM-clone setup was removed by normal tab rendering and was corrected
+before commit. Prior preview, count-absence and delayed-selector cases still pass.
+No broad local regression was run. All 84 catalog steps and 43 server actions
+remain required. Verify the corrected candidate's CI and preview before its full
+protected campaign. No schema or function deployment is needed. Rollback reverts
+this runner selection, focused fixture/tests and provenance together and leaves
+acceptance blocked while retaining the recovered exercise history.
