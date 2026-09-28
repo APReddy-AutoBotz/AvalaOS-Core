@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createServer } from 'node:http';
+import { chromium } from '@playwright/test';
+import { handleOptions } from './http.ts';
 import {
   handlePrCControlledHumanSyntheticGeneration,
   parsePrCControlledHumanSyntheticGenerationCommand,
@@ -110,6 +113,63 @@ test('replay is represented without a second effect', async () => {
   assert.equal(response.status, 200);
   assert.equal(calls, 1);
   assert.equal((await response.json()).commandOutcome, 'replayed');
+});
+
+test('native browser reads synthetic generation success, replay, and denied responses after preflight', async () => {
+  let commits = 0;
+  let preflights = 0;
+  const origin = createServer((_request, response) => { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><title>Synthetic preview</title>'); });
+  const api = createServer(async (incoming, outgoing) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
+    const nativeRequest = new Request(`http://127.0.0.1${incoming.url}`, {
+      method: incoming.method, headers: incoming.headers as Record<string, string>,
+      ...(incoming.method === 'POST' ? { body: Buffer.concat(chunks).toString() } : {}),
+    });
+    if (incoming.method === 'OPTIONS') preflights += 1;
+    const response = handleOptions(nativeRequest) ?? await handlePrCControlledHumanSyntheticGeneration(nativeRequest, {
+      authenticate: async () => { if (incoming.url === '/denied') throw new Error('No synthetic session'); return { id: U[0] }; },
+      execute: async () => { const outcome = commits ? 'replayed' : 'committed'; if (!commits) commits += 1; return { ...result, outcome }; },
+    });
+    outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+    outgoing.end(await response.text());
+  });
+  await new Promise<void>(resolve => origin.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>(resolve => api.listen(0, '127.0.0.1', resolve));
+  const port = (server: typeof api) => (server.address() as { port: number }).port;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${port(origin)}`);
+    const fetchGeneration = (path: string, payload: unknown) => page.evaluate(async ({ url, payload }) => {
+      try {
+        const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer synthetic-test-token', apikey: 'synthetic-public-key', 'x-client-info': 'synthetic-test' }, body: JSON.stringify(payload) });
+        return { readable: true, status: response.status, body: await response.json() };
+      } catch { return { readable: false }; }
+    }, { url: `http://127.0.0.1:${port(api)}${path}`, payload });
+    const committed = await fetchGeneration('/generation', body);
+    assert.equal(commits, 1, 'the authenticated synthetic command committed');
+    assert.equal(committed.readable, true, 'a committed response must remain readable across the preview origin');
+    assert.equal(committed.status, 201);
+    assert.equal(committed.body.commandOutcome, 'committed');
+    const replay = await fetchGeneration('/generation', body);
+    assert.equal(replay.readable, true);
+    assert.equal(replay.status, 200);
+    assert.equal(replay.body.commandOutcome, 'replayed');
+    const denied = await fetchGeneration('/denied', body);
+    assert.equal(denied.readable, true);
+    assert.equal(denied.status, 401);
+    assert.equal(denied.body.ok, false);
+    const malformed = await fetchGeneration('/invalid', {});
+    assert.equal(malformed.readable, true);
+    assert.equal(malformed.status, 400);
+    assert.equal(malformed.body.ok, false);
+    assert.equal(commits, 1, 'replay and rejected requests add no committed effect');
+    assert(preflights > 0, 'native browser exercised the deployed preflight policy');
+  } finally {
+    await browser.close();
+    await Promise.all([origin, api].map(server => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))));
+  }
 });
 
 test('authentication and method failures stop before execution', async () => {

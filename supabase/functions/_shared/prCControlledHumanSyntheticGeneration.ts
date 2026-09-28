@@ -5,6 +5,8 @@
  * source-fetch, or arbitrary output dependency. PostgreSQL owns the synthetic
  * document, receipt, immutable version, lineage, audit, and replay transaction.
  */
+import { jsonResponse } from './http.ts';
+
 export const PR_C_SYNTHETIC_GENERATION_CONTRACT_VERSION =
   'pr-c-controlled-human-synthetic-studio-generation-1' as const;
 
@@ -270,11 +272,11 @@ const safeError = (error: unknown): PrCControlledHumanSyntheticGenerationError =
   return new PrCControlledHumanSyntheticGenerationError('COMMAND_UNAVAILABLE');
 };
 
-const failure = (error: PrCControlledHumanSyntheticGenerationError) => Response.json({
+const failure = (error: PrCControlledHumanSyntheticGenerationError) => jsonResponse({
   ok: false,
   outcome: 'failed_before_commit',
   error: { code: error.code, message: 'The synthetic controlled-human command could not be completed.' },
-}, { status: error.status });
+}, error.status);
 
 export const handlePrCControlledHumanSyntheticGeneration = async (
   request: Request,
@@ -288,14 +290,14 @@ export const handlePrCControlledHumanSyntheticGeneration = async (
     try { body = await request.json(); } catch { throw new PrCControlledHumanSyntheticGenerationError('INVALID_COMMAND'); }
     const command = parsePrCControlledHumanSyntheticGenerationCommand(body, actor.id);
     const result = decodePrCControlledHumanSyntheticGenerationResult(await dependencies.execute(command));
-    return Response.json({
+    return jsonResponse({
       ok: true,
       outcome: 'generation_completed',
       commandOutcome: result.outcome,
       receiptId: result.receiptId,
       resourceId: result.resourceId,
       resource: result.resource,
-    }, { status: result.outcome === 'replayed' ? 200 : 201 });
+    }, result.outcome === 'replayed' ? 200 : 201);
   } catch (error) {
     return failure(safeError(error));
   }

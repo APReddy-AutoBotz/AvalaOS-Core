@@ -927,3 +927,34 @@ regression was run. Exact-head CI, preview, and the complete 84-step hosted camp
 remain required. No migration or function deployment is needed. Rollback reverts
 the runner readiness change, its fixture/regressions, and provenance together and
 leaves the campaign blocked; retained exercise history must not be deleted.
+
+Run 36449569898 on 5058d66 passed the repaired CH-03 handoff request and its
+independent review, approval, and consumption. It then stopped at
+`generate-source-bound-document` with `PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING`.
+Recovery and private-state cleanup passed, leaving the exercise deprovisioned.
+The retained generation receipt is committed and has one immutable output version;
+the generation anchor exists but its completion binding does not. Bounded request
+logs show the function returned HTTP 201; no rejected completion RPC appears in
+the failure window. Nine read-only checks against the retained receipt, output,
+template, audit, source package, and consumed handoff predicates all pass.
+
+The synthetic-generation handler used `Response.json` for actual success and
+error responses, while only its OPTIONS response carried CORS headers. This is
+a confirmed source defect: a native two-origin browser regression against the
+actual handler reproduced one committed effect followed by an unreadable response.
+The correction uses the existing shared `jsonResponse` helper for both outcomes,
+preserving the existing preflight origin/header policy, status codes, actor checks,
+receipt/idempotency semantics, and four-file deployment graph. No migration,
+provider behavior, or authorization change is required. All 17 focused generation
+tests pass without skips, including native-browser success, replay, authentication
+denial, and invalid-envelope responses. The import boundary check and Edge
+type-check pass. No broad local regression was run.
+
+The current deployed function still contains the old handler. Prepare the exact
+candidate and four-file deployment manifest, verify current-head CI and preview,
+then obtain the source-specific function refresh approval before deployment. Read
+back every deployed file and verify JWT enforcement before dispatching the next
+full synthetic campaign. Do not replay or rewrite the recovered exercise. Rollback
+restores the prior exact function bundle, leaves the campaign blocked, and preserves
+all committed history. Full 84-step acceptance remains failed pending a complete
+new-candidate run and verified cleanup.
