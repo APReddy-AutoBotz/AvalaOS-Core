@@ -836,3 +836,13 @@ PostgreSQL test passes all eight causal assertions. PR C CI separately stopped
 on Docker Hub `toomanyrequests: Data limit exceeded` before executing its suite.
 No hosted synthetic campaign ran for this candidate. Corrected-candidate CI
 and preview remain required.
+
+The subsequent PR C gate on f104127 exposed the same tail-offset issue in the
+Studio populated-upgrade fixture: its fixed slice applied the Studio migration
+before inserting legacy bindings, correctly triggering the new owner guard.
+The harness now locates the named feature migration, seeds legacy data before
+that boundary, and applies every canonical successor afterward. The isolated
+PostgreSQL reproduction failed with the old ordering and passes both causal
+Studio assertions after correction. Preview QA separately passed 11/12 cases
+but timed out in the Desktop malformed-attestation case; no assertion was
+weakened or timeout increased. Corrected-head preview QA remains required.
