@@ -708,3 +708,25 @@ new JavaScript destructured reviewer option without a default. An empty-string
 default restores the caller type while the existing UUID guard still rejects
 omitted identities before any action. The repository typecheck passes. Obsolete
 unfinished CI runs were cancelled; no protected campaign ran for that candidate.
+
+Run 36358818202 on head 064bb76 passed CH-02 and reached CH-03's exact approved
+Assess handoff observation. Its identity, source version, label, and eligible
+state checks passed. The runner then incorrectly required a disabled request
+button. Canonical server projection omits that action for the Studio approver,
+and the component correctly renders no request control. This is a confirmed
+runner/fixture contract defect, not a missing handoff or authorization defect.
+Recovery and private-state cleanup passed; a bounded read confirmed zero active
+exercises and the current candidate's exercise deprovisioned.
+
+The helper now requires zero request controls while retaining every exact
+handoff/card/version/state check. The local component fixture derives eligible
+request actions from the actor's capability, matching the server contract. The
+production-shaped fixture reproduced the original failure before correction.
+All 14 focused Desktop/Pixel scenarios pass: approver observation, authorized
+requester action, rejection of enabled or disabled leaked controls, and rejection
+of wrong identities, wrong versions, and duplicate exact cards. All 55 synthetic
+runner checks and TypeScript pass. No schema, capability, component, provider, or
+deployed-function change is needed. Current-candidate CI, preview, and the full
+84-step protected campaign remain planned verification. Rollback reverts the
+helper, fixture, focused cases, and provenance together; retain the merge block
+and recovered immutable history until the complete campaign and cleanup verify.

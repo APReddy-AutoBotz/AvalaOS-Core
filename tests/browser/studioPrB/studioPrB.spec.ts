@@ -78,12 +78,49 @@ test('PR C synthetic readiness binds the exact eligible approved Assess snapshot
   await open(page,'?multiEligible=1&caps=handoff-approver');
   const interactions:string[]=[];
   const ready=await verifySyntheticAssessHandoffReady(page,interactions,{upstreamHandoffId:'00000033-0000-4000-8000-000000000033',sourceVersion:3,resourceLabel:'Eligible approved Assess result'});
-  await expect(ready.request).toBeDisabled();
+  await expect(ready.card.getByRole('button',{name:'Request handoff',exact:true})).toHaveCount(0);
   expect(ready.requestAuthorized).toBe(false);
   await expect(ready.card).toContainText('eligible Assess source');
   expect(interactions).toEqual(['observe:exact-approved-assess-handoff-ready']);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('PR C synthetic readiness preserves the requester action on the same eligible Assess snapshot', async ({page}) => {
+  await open(page,'?multiEligible=1&caps=handoff-requester');
+  const center=page.getByRole('region',{name:'Assess → Studio handoffs'});
+  await center.getByRole('tab',{name:/^Inbox \(/u}).click();
+  const card=center.getByRole('listitem').filter({hasText:'00000033-0000-4000-8000-000000000033'}).filter({hasText:'Eligible approved Assess result · source v3'});
+  await expect(card).toHaveCount(1);
+  await expect(card.getByText('eligible',{exact:true})).toBeVisible();
+  const request=card.getByRole('button',{name:'Request handoff',exact:true});
+  await expect(request).toHaveCount(1);
+  await expect(request).toBeEnabled();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+for(const state of ['disabled','enabled']){
+  test(`PR C synthetic readiness rejects a leaked ${state} request control`, async ({page}) => {
+    await open(page,`?multiEligible=1&eligibleActionLeak=1&caps=${state==='disabled'?'handoff-approver':'handoff-requester'}`);
+    const interactions:string[]=[];
+    await expect(verifySyntheticAssessHandoffReady(page,interactions,{upstreamHandoffId:'00000033-0000-4000-8000-000000000033',sourceVersion:3,resourceLabel:'Eligible approved Assess result'})).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_APPROVER_REQUEST_AUTHORITY_LEAK');
+    expect(interactions).toEqual([]);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+}
+
+for(const mismatch of ['identity','version','duplicate']){
+  test(`PR C synthetic readiness rejects ${mismatch} exact handoff cards`, async ({page}) => {
+    await open(page,'?multiEligible=1&caps=handoff-approver');
+    if(mismatch==='duplicate'){
+      const card=page.getByRole('region',{name:'Assess → Studio handoffs'}).getByRole('listitem').filter({hasText:'00000033-0000-4000-8000-000000000033'}).filter({hasText:'Eligible approved Assess result · source v3'});
+      await card.evaluate(node=>node.parentElement?.appendChild(node.cloneNode(true)));
+    }
+    const interactions:string[]=[];
+    await expect(verifySyntheticAssessHandoffReady(page,interactions,{upstreamHandoffId:mismatch==='identity'?'00000059-0000-4000-8000-000000000059':'00000033-0000-4000-8000-000000000033',sourceVersion:mismatch==='version'?4:3,resourceLabel:'Eligible approved Assess result'})).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_HANDOFF_COUNT');
+    expect(interactions).toEqual([]);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+}
 
 test('PR C synthetic draft selection waits for the exact loaded document before edit and review', async ({page}) => {
   await open(page,'?mode=direct&syntheticSelection=1');

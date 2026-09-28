@@ -115,10 +115,9 @@ export const verifySyntheticAssessHandoffReady = async (page, interactionSequenc
   assert.equal(await card.getByText('eligible Assess source', { exact: false }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_HANDOFF_LINEAGE_MISMATCH');
   assert.equal(await card.getByText(`${resourceLabel} · source v${sourceVersion}`, { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_HANDOFF_VERSION_MISMATCH');
   const request = card.getByRole('button', { name: 'Request handoff', exact: true });
-  assert.equal(await request.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_HANDOFF_REQUEST_COUNT');
-  assert(!(await request.isEnabled()), 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPROVER_REQUEST_AUTHORITY_LEAK');
+  assert.equal(await request.count(), 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPROVER_REQUEST_AUTHORITY_LEAK');
   interactionSequence.push('observe:exact-approved-assess-handoff-ready');
-  return { center, card, request, upstreamHandoffId, sourceVersion, requestAuthorized: false };
+  return { center, card, upstreamHandoffId, sourceVersion, requestAuthorized: false };
 };
 
 const selectDeliveryPackage = async (page, packageId) => {
