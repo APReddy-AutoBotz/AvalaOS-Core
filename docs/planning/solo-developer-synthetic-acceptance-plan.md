@@ -846,3 +846,15 @@ PostgreSQL reproduction failed with the old ordering and passes both causal
 Studio assertions after correction. Preview QA separately passed 11/12 cases
 but timed out in the Desktop malformed-attestation case; no assertion was
 weakened or timeout increased. Corrected-head preview QA remains required.
+
+On c29baf2, governed and creation-access browser CI exposed an inconsistent
+approved test fixture: it advertised one accepted item while retaining an
+incomplete page of proposed items. The new fail-closed baseline builder
+correctly rejected that fixture. The approved fixture now contains its complete
+one-item accepted milestone DTO. All four failed Desktop/Pixel cases were
+reproduced and then passed, together with both full 250-item sequence cases
+(6/6). Preview QA's read-only fetch timeout was separately reproduced as a
+network-failure outcome; its exact malformed-attestation scenario passed
+unchanged on Desktop and Pixel against the canonical hosted preview (2/2).
+No preview assertion, network guard, or timeout was weakened. The remaining
+15 applicable c29baf2 workflows passed; new-head CI still governs acceptance.
