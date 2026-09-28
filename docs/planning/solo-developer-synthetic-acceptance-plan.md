@@ -874,3 +874,27 @@ reproduction identified Git's temporary pack-file rename error, `Improper link`,
 on this Windows filesystem. No fixture or coverage guard was weakened. This is
 not passing coverage evidence; corrected-head CI must execute and verify the
 complete gate. No hosted synthetic campaign ran for these candidates.
+
+Run 36391979894 on a36361d passed the exact preview and migration gates but
+stopped before exercise preparation with `PR_C_CONTROLLED_HUMAN_HISTORY_REJECTED`.
+The current tip advanced to 20260928060000 while the controller's retained-history
+allowlist omitted its predecessor, 20260926053818. Twenty deprovisioned exercises
+still correctly retain that predecessor. This is a confirmed source compatibility
+defect; fresh-chain CI had not covered that historical transition.
+
+The controller now explicitly accepts that predecessor only as retained history.
+The focused regression uses the migration adapter's declared predecessor and
+current version alongside older supported history, and still rejects unknown
+tips, nonterminal history, substituted identities, and a stale current marker.
+It reproduced the original failure before correction. All 33 focused controller
+and migration tests pass without skips. No broader local regression was run.
+
+Bounded hosted reads confirm zero active exercises, zero candidate exercises or
+recovery authorities, zero unbound Auth users or sessions, and zero unsafe provider
+rows, calls, or egress. Recovery rejected the absent authority because preparation
+failed before its first mutation; private runner-state erasure passed. The canonical
+new migration is installed. Do not delete retained history or rerun recovery.
+The already approved generation function remains byte-verified; this controller-only
+fix needs no further function deployment or schema change. Corrected-head CI,
+preview, and all 84 hosted steps remain required. Rollback reverts the controller
+allowlist, regression, and provenance together and leaves the campaign blocked.

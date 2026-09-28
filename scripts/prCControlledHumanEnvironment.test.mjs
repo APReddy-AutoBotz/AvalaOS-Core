@@ -9,6 +9,7 @@ import {
 } from './prCControlledHumanEnvironment.mjs';
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA} from './prCControlledHumanEvidenceContract.mjs';
 import {createControlledHumanObservationFixture} from './prCControlledHumanObservationFixture.mjs';
+import {SYNTHETIC_MIGRATION_VERSION,SYNTHETIC_PRIOR_VERSION} from './prCSyntheticAcceptanceMigration.mjs';
 
 const head='83cab00bee481df22351302cc8c1c00bda3f1664';
 const baseEnv={
@@ -325,6 +326,32 @@ test('target inventory rejects marker drift, fingerprints, provider state, unexp
   const newHead='d'.repeat(40);const newContext=deriveContext({...baseEnv,PR_C_CONTROLLED_HUMAN_RELEASE_SHA:newHead,PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA:newHead,PR_C_CONTROLLED_HUMAN_DEPLOY_ID:'dddddddddddddddddddddddd',PR_C_CONTROLLED_HUMAN_EXERCISE_ID:'40000000-0000-4000-8000-000000000266'},fixtureState,{head:newHead,dirty:''});
   retained.priorExercises[0]={...activeExercise(),lifecycle:'deprovisioned',persona_manifest_digest:`sha256:${'b'.repeat(64)}`,fixture_manifest_digest:`sha256:${'c'.repeat(64)}`};assert.equal(assertTargetInventory(retained,newContext),true);
   retained.priorExercises[0].release_sha='not-a-sha';assert.throws(()=>assertTargetInventory(retained,newContext),/HISTORY_REJECTED/u);
+});
+
+test('current synthetic preparation admits deprovisioned history across the canonical migration transition',()=>{
+  const syntheticContext=deriveContext({...baseEnv,PR_C_SYNTHETIC_ACCEPTANCE_POLICY:'solo-owner-synthetic-v1'},fixtureState,{head,dirty:''});
+  assert.equal(syntheticContext.migrationTip,SYNTHETIC_MIGRATION_VERSION);
+  const tips=[EXPECTED_MIGRATION_TIP,'20260924113000',SYNTHETIC_PRIOR_VERSION,SYNTHETIC_MIGRATION_VERSION];
+  const retained=emptyInventory();retained.marker.migration_tip=syntheticContext.migrationTip;
+  retained.priorExercises=tips.map((migration_tip,index)=>({...activeExercise(),exercise_digest:sha256(`retained-transition-${index}`),migration_tip,lifecycle:'deprovisioned'}));
+  retained.counts={auth_users:12*tips.length,profiles:12*tips.length,organizations:2*tips.length,workspaces:3*tips.length,exercises:tips.length};
+  retained.domainCounts=domainCounts(tips.length);retained.ownedResourceCounts=ownedCounts(tips.length);
+  assert.equal(assertTargetInventory(retained,syntheticContext),true);
+  for(const mutate of [
+    prior=>{prior.migration_tip='20260927000000'},
+    prior=>{prior.migration_tip='20990101000000'},
+    prior=>{prior.lifecycle='active'},
+    prior=>{prior.lifecycle='read_only'},
+    prior=>{prior.target_fingerprint=sha256('different-target')},
+    prior=>{prior.review_head_sha='f'.repeat(40)},
+    prior=>{prior.exercise_digest=syntheticContext.exerciseDigest},
+    prior=>{prior.exercise_digest=retained.priorExercises[0].exercise_digest},
+  ]){
+    const invalid=structuredClone(retained);mutate(invalid.priorExercises[2]);
+    assert.throws(()=>assertTargetInventory(invalid,syntheticContext),/HISTORY_REJECTED/u);
+  }
+  const staleMarker=structuredClone(retained);staleMarker.marker.migration_tip=SYNTHETIC_PRIOR_VERSION;
+  assert.throws(()=>assertTargetInventory(staleMarker,syntheticContext),/MARKER_MISMATCH/u);
 });
 
 test('plan and evidence remain public-safe and contain no credentials or raw tenant identifiers',()=>{
