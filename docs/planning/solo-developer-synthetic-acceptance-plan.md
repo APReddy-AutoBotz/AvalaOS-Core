@@ -827,3 +827,12 @@ sets fail before any item decision. The focused prerequisite checks pass 19/19,
 including three-item hosted cases, retained 250-item cases, and pre-write count
 and identity denials. The integrated synthetic suite passes 69/69 and TypeScript
 passes. All 84 catalog steps and 43 server-bound actions remain unchanged.
+
+Exact-candidate CI for d6ba755 found an Edge-only TypeScript literal widening
+and a renewal-test tail assertion that omitted the preceding synthetic fixture
+migration. The shared base command now has its explicit type, and the tail lists
+both canonical migrations. Edge TypeScript passes; the isolated renewal
+PostgreSQL test passes all eight causal assertions. PR C CI separately stopped
+on Docker Hub `toomanyrequests: Data limit exceeded` before executing its suite.
+No hosted synthetic campaign ran for this candidate. Corrected-candidate CI
+and preview remain required.

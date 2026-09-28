@@ -182,7 +182,7 @@ export const parsePrCControlledHumanSyntheticGenerationCommand = (
   const reviewHeadSha = matching(item.reviewHeadSha, SHA);
   if (releaseSha !== reviewHeadSha || typeof item.idempotencyKey !== 'string' || !IDEMPOTENCY_KEY.test(item.idempotencyKey)) invalid();
   const idempotencyKey = item.idempotencyKey as string;
-  const base = {
+  const base: PrCControlledHumanSyntheticGenerationBaseCommand = {
     actorId: uuid(actorId),
     requestId: uuid(item.requestId),
     idempotencyKey,
