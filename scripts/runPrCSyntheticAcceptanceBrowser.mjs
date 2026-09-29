@@ -1740,11 +1740,13 @@ export const summarizePrerequisiteInteractions = values => {
   return result;
 };
 
-const executePlannedStep = async ({ planned, session, providerEgress, state, nextTime, apiDescriptor, exerciseDigest, prerequisiteInteractions = [] }) => {
+export const executePlannedStep = async ({ planned, session, providerEgress, state, nextTime, apiDescriptor, exerciseDigest, prerequisiteInteractions = [] }) => {
   const { page, identity } = session;
   const interactionSequence = summarizePrerequisiteInteractions(prerequisiteInteractions);
   const startedAt = nextTime();
-  if (planned.serverAction) {
+  // Monitor is read-only and may retain a projection loaded before another
+  // persona committed the baseline. Refresh it at each catalog observation.
+  if (planned.serverAction || planned.surface === 'monitor') {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForUsablePage(page);
     interactionSequence.push('reload:fresh-server-projection');

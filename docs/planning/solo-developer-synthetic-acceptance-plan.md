@@ -1107,3 +1107,23 @@ Native Assess attempt 1 separately failed before feature execution on an image
 registry rate limit. These attempts remain retained; superseded running checks
 may be cancelled before validating the corrected commit. Final-source runner
 contracts and the static/evidence guards must pass before that push.
+
+Before dispatching 12b3c49, inspection found a further confirmed runner defect:
+the Monitor viewer retains its already-loaded projection when another actor
+creates the next baseline. An actual-step reproduction rejected the new bound
+baseline with `PR_C_SYNTHETIC_BROWSER_MONITOR_BASELINE_COUNT:0`. The runner now
+uses its existing fresh-page boundary for read-only Monitor steps as well as
+server actions; authoring/dialog continuations remain unchanged. The fixture
+serves inert UTF-8 pages so a real reload obtains the changed projection without
+network access. Its initial missing charset caused two local text-boundary failures
+and was corrected before commit. No product refresh or authorization change follows.
+
+The superseded candidate passed 17 workflows, with independently verified Native
+Assess evidence (27 commands, 1,145 source files) and its exact preview. Only its
+still-running governed workflow was cancelled. Those results do not substitute
+for final-source CI. The combined runner correction requires its own complete
+exact-head checks and protected campaign, with all 84 steps retained.
+
+Final local evidence for this combined correction: 57/57 focused runner tests
+passed with zero skips, including Desktop/Pixel stale-baseline refresh through
+the real step executor. The unchanged static AI-boundary guard also passed.

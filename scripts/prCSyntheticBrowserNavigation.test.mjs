@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium } from '@playwright/test';
-import { openSurface, observeBrowserOnlyStep } from './runPrCSyntheticAcceptanceBrowser.mjs';
+import { openSurface, observeBrowserOnlyStep, executePlannedStep, buildBrowserExecutionCatalog } from './runPrCSyntheticAcceptanceBrowser.mjs';
 
 // Real sidebar, authorization guard, route resolver, Delivery and both Monitor
 // components. Only authentication and server projections are inert fixtures.
@@ -26,7 +26,7 @@ const fixture = () => fixturePromise ??= (async () => {
     const organization = { id: 'synthetic-org', name: 'Synthetic organization', subscriptionTier: 'Enterprise', members: [], enabledModules: ['assess','docs','delivery','monitor'] };
     window.fixtureAuth = { user, loading: false, signOut: () => {} };
     window.fixtureOrganization = { currentOrganization: organization, loading: false };
-    const baseline = { id: 'synthetic-baseline', version: 1, workPackageId: 'synthetic-package', workPackageVersion: 2,
+    const baseline = { id: window.fixtureSnapshot.id ?? 'synthetic-baseline', version: window.fixtureSnapshot.version ?? 1, workPackageId: 'synthetic-package', workPackageVersion: 2,
       status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false,
       acceptedItemCount: 1, acceptedItems: [{ version: 1, type: 'milestone', title: 'Reviewed milestone', status: 'accepted' }],
       milestones: ['Reviewed milestone'], dependencies: [], blockers: [], risks: [] };
@@ -86,15 +86,15 @@ const fixture = () => fixturePromise ??= (async () => {
   return { css: css.css, code: compiled[0].output.find(file => file.type === 'chunk').code };
 })();
 
-const mount = async (browser, persona, viewport) => {
+const mount = async (browser, persona, viewport, snapshot = {}) => {
   const built = await fixture();
   const page = await browser.newPage({ viewport });
   page.setDefaultTimeout(2500);
   await page.route('**/*', route => route.abort());
-  await page.setContent('<div id="root"></div>');
-  await page.evaluate(value => { window.fixturePersona = value; }, persona);
-  await page.addStyleTag({ content: built.css });
-  await page.addScriptTag({ content: built.code });
+  const origin = 'http://127.0.0.1:19364/';
+  await page.route(origin, route => route.fulfill({ contentType: 'text/html; charset=utf-8', body:
+    `<html><head><style>${built.css}</style></head><body><div id="root"></div><script>window.fixturePersona=${JSON.stringify(persona)};window.fixtureSnapshot=${JSON.stringify(snapshot)};</script><script>${built.code.replaceAll('</script>', '<\\/script>')}</script></body></html>` }));
+  await page.goto(origin);
   await page.getByTestId('fixture-ready').waitFor({ state: 'attached' });
   return page;
 };
@@ -117,6 +117,29 @@ test('actual sidebar routes Delivery and Monitor personas without Assess authori
         assert.deepEqual(interactions, monitor ? ['navigate:monitor'] : ['navigate:delivery', 'tab:work-package']);
         await page.close();
       }
+    }
+  } finally { await browser.close(); }
+});
+
+test('read-only Monitor step refreshes a baseline created in another actor session', async () => {
+  const browser = await chromium.launch();
+  try {
+    for (const viewport of viewports) {
+      const snapshot = {};
+      const page = await mount(browser, 'monitor_viewer', viewport, snapshot);
+      await openSurface(page, 'monitor', []);
+      assert.equal(await page.locator('article[data-baseline-id]').getAttribute('data-baseline-id'), 'synthetic-baseline');
+      // A different session commits a new immutable baseline. Existing DOM stays
+      // old until the real step refreshes its read-only projection.
+      Object.assign(snapshot, { id: 'synthetic-next-baseline', version: 2 });
+      const planned = buildBrowserExecutionCatalog().find(step => step.stepId === 'verify-minimized-baseline-parity');
+      const state = new Map([['full-governed-package', { packageId: 'synthetic-package' }], ['ch08:baselineId', snapshot.id]]);
+      const proof = await executePlannedStep({ planned, session: { page, identity: {} }, providerEgress: [], state, nextTime: () => new Date().toISOString() });
+      assert.equal(proof.outcome, 'passed');
+      assert(proof.browserArtifact.interactionSequence.includes('reload:fresh-server-projection'));
+      assert.equal(await page.locator('article[data-baseline-id]').getAttribute('data-baseline-id'), snapshot.id);
+      assert.equal(await page.locator('article[data-baseline-id]').getAttribute('data-baseline-version'), '2');
+      await page.close();
     }
   } finally { await browser.close(); }
 });
