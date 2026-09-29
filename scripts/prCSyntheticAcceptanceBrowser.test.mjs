@@ -5,7 +5,6 @@ import './prCSyntheticBrowserApi.test.mjs';
 import './prCSyntheticBrowserPrerequisites.test.mjs';
 import './prCSyntheticBrowserEvidenceActions.test.mjs';
 import './prCSyntheticBrowserResponseLoss.test.mjs';
-import './prCSyntheticBrowserNavigation.test.mjs';
 import { chromium } from '@playwright/test';
 
 import {
@@ -465,3 +464,6 @@ test('synthetic authored claims cover the actual scaffold decision trace without
   assert.equal(decision.candidateEvaluations.find(item => item.component === 'Bounded Agent').fit, 'Weak Fit');
   assert.equal(decision.confidence, 'Partially Evidenced', 'Authored claim links never grant independent reviewer approval.');
 });
+
+// Preserve the existing line-bound static evidence for the session fixture above.
+import './prCSyntheticBrowserNavigation.test.mjs';

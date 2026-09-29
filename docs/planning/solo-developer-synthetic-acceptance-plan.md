@@ -1098,3 +1098,12 @@ No schema or Edge Function deployment is needed. Rollback reverts this runner,
 focused test import/fixture and provenance together, retains recovered history and
 leaves acceptance blocked. Original CONTROLLED-HUMAN remains `not_run`; no merge
 or production-readiness claim follows.
+
+Candidate c175fea's CI exposed a line-bound static-scan bookkeeping failure:
+the new test import shifted two previously allowed synthetic session-fixture
+lines. Moving that import after the existing tests preserves their original
+locations. The unchanged static guard now passes without adding an allowance.
+Native Assess attempt 1 separately failed before feature execution on an image
+registry rate limit. These attempts remain retained; superseded running checks
+may be cancelled before validating the corrected commit. Final-source runner
+contracts and the static/evidence guards must pass before that push.
