@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { chromium } from '@playwright/test';
-import { openSurface, observeBrowserOnlyStep, executePlannedStep, buildBrowserExecutionCatalog } from './runPrCSyntheticAcceptanceBrowser.mjs';
+import { chromium, devices } from '@playwright/test';
+import { openSurface, observeBrowserOnlyStep, executePlannedStep, buildBrowserExecutionCatalog, collectProof } from './runPrCSyntheticAcceptanceBrowser.mjs';
 
 // Real sidebar, authorization guard, route resolver, Delivery and both Monitor
 // components. Only authentication and server projections are inert fixtures.
@@ -12,11 +12,14 @@ const fixture = () => fixturePromise ??= (async () => {
   const { default: postcss } = await import('postcss');
   const { default: tailwindcss } = await import('tailwindcss');
   const { default: tailwindConfig } = await import('../tailwind.config.js');
-  const source = `import React, { useState } from 'react';
+  const source = `import React, { useEffect, useState } from 'react';
     import { createRoot } from 'react-dom/client';
     import Sidebar from './components/shared/Sidebar';
+    import Header from './components/shared/Header';
+    import { EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
     import PortfolioView from './components/shared/PortfolioView';
-    import GovernedDeliveryWorkspace, { MonitorApprovedBaselinePanel } from './components/delivery/GovernedDeliveryWorkspace';
+    import EnterpriseIntelligenceView from './components/enterprise/EnterpriseIntelligenceView';
+    import Banner from './components/auth/ControlledHumanNonProductionBanner';
     import { View, ScopeType } from './types';
     import { resolveViewAccess } from './services/viewAccessGuard';
     import { resolveGovernedCreationSurface } from './services/governedCreationNavigation';
@@ -25,7 +28,7 @@ const fixture = () => fixturePromise ??= (async () => {
     const user = { id: 'synthetic-user', name: 'Synthetic actor', email: 'synthetic@example.invalid', orgRole: 'Contributor', permissions: [] };
     const organization = { id: 'synthetic-org', name: 'Synthetic organization', subscriptionTier: 'Enterprise', members: [], enabledModules: ['assess','docs','delivery','monitor'] };
     window.fixtureAuth = { user, loading: false, signOut: () => {} };
-    window.fixtureOrganization = { currentOrganization: organization, loading: false };
+    window.fixtureOrganization = { currentOrganization: organization, organizations: [organization], currentWorkspace: { id: 'synthetic-workspace', name: 'Synthetic workspace' }, workspaces: [{ id: 'synthetic-workspace', name: 'Synthetic workspace' }], loading: false, sessionState: 'active', selectOrganization: () => {}, selectWorkspace: () => {} };
     const baseline = { id: window.fixtureSnapshot.id ?? 'synthetic-baseline', version: window.fixtureSnapshot.version ?? 1, workPackageId: 'synthetic-package', workPackageVersion: 2,
       status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false,
       acceptedItemCount: 1, acceptedItems: [{ version: 1, type: 'milestone', title: 'Reviewed milestone', status: 'accepted' }],
@@ -37,28 +40,31 @@ const fixture = () => fixturePromise ??= (async () => {
       readOnly: false, page: { packageLimit: 100, packageHasMore: false, handoffLimit: 100, handoffHasMore: false, itemHistoryLimit: 250, eventHistoryLimit: 50,
       handoffTargetItemLimit: 250, baselineEligibilityLimit: 100, baselineEligibilityHasMore: false, baselineEligibilityCursorApplied: false },
       eligibleStudioArtifacts: [], baselineEligibility: [], inbox: [], outbox: [], packages: [], actions: [] };
+    window.fixtureProjection = { organizationId: organization.id, workspaceId: 'synthetic-workspace', authorizationVersion: 1,
+      availability: 'available', providers: [], evidenceCandidates: [], applications: [], evidenceSources: [], assessDrafts: [], modernizationDecisions: [],
+      transcriptFlow: { features: { assessMultisourceApplyEnabled: false } }, deliveryWorkspace: delivery, monitorApprovedBaselines: monitor };
     function Shell() {
+      const [shellReady, setShellReady] = useState(false);
+      useEffect(() => { const timer = setTimeout(() => setShellReady(true), 150); return () => clearTimeout(timer); }, []);
       const [view, setView] = useState(View.PROCESS_CATALOG);
       const [mobileOpen, setMobileOpen] = useState(false);
-      const [tab, setTab] = useState('Work Package');
       const access = resolveViewAccess({ user, authLoading: false, organization, enabledModules: organization.enabledModules,
         authoritativeCapabilities: persona.capabilities, view, scope: { type: ScopeType.MY_WORK } });
       const isDelivery = access.allowed && resolveGovernedCreationSurface('server', view) === 'delivery';
-      return <div className="flex h-screen">
+      if (!shellReady) return <p>Loading authenticated workspace</p>;
+      return <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans">
         <Sidebar currentScope={{ type: ScopeType.MY_WORK }} currentView={view} onViewChange={setView}
           onAdminNavigate={() => {}} collapsed={false} onToggleCollapse={() => {}} canAccessAdmin={false} canAccessGovern={false}
           authoritativeViewCapabilities={persona.capabilities} onOpenGovern={() => {}} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
-        <main className="flex-1 min-w-0 overflow-auto p-4">
-          <button className="lg:hidden" onClick={() => setMobileOpen(true)}>Open navigation</button>
+        <div className="flex flex-col flex-1 overflow-hidden relative"><Banner />
+          <Header theme="light" toggleTheme={() => {}} currentScope={{ type: ScopeType.MY_WORK }} currentView={view}
+            onScopeChange={() => {}} currentUser={user} teams={[]} projects={[]} mobileNavigationOpen={mobileOpen} onToggleNavigation={() => setMobileOpen(value => !value)} />
+          <EnterpriseSessionToolbar />
+          <main id="app-main" tabIndex={0} className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
           <div data-testid="fixture-ready" data-route={view} />
-          {isDelivery ? <section data-testid="enterprise-intelligence-workspace">
-            <nav aria-label="Enterprise Intelligence surfaces">{['Work Package', 'Monitor Baseline'].map(label =>
-              <button key={label} onClick={() => setTab(label)}>{label}</button>)}</nav>
-            {tab === 'Work Package' ? <GovernedDeliveryWorkspace projection={delivery} onAction={() => { throw new Error('unexpected mutation'); }} />
-              : persona.capabilities.includes('monitor.read') && <MonitorApprovedBaselinePanel projection={monitor} heading="Enterprise Intelligence canonical baseline" />}
-          </section> : access.allowed && view === View.PORTFOLIO ? <PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => {}}
-            onScopeChange={() => {}} onViewChange={setView} canonicalMonitorProjection={monitor} /> : <p>Authorized navigation required</p>}
-        </main>
+          {isDelivery ? <EnterpriseIntelligenceView organization={organization} workspace={{ id: 'synthetic-workspace' }} currentUser={user} initialTab="delivery" /> : access.allowed && view === View.PORTFOLIO ? <PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => {}}
+            onScopeChange={() => {}} onViewChange={setView} canonicalMonitorContext={{ actorId: user.id, organizationId: organization.id, workspaceId: 'synthetic-workspace', expectedAuthorizationVersion: 1 }} /> : <p>Authorized navigation required</p>}
+        </main></div>
       </div>;
     }
     createRoot(document.getElementById('root')).render(<Shell />);`;
@@ -68,19 +74,37 @@ const fixture = () => fixturePromise ??= (async () => {
     build: { write: false, minify: false, lib: { entry, name: 'SyntheticNavigation', formats: ['iife'] } },
     plugins: [{ name: 'inert-navigation-context', enforce: 'pre', resolveId(id) {
       if (id.replaceAll('\\', '/').endsWith('/synthetic-navigation-fixture.tsx')) return entry;
-      if (/auth\/AuthProvider$/u.test(id)) return '\0fixture-auth';
-      if (/auth\/OrganizationProvider$/u.test(id)) return '\0fixture-organization';
+      if (/AuthProvider$/u.test(id)) return '\0fixture-auth';
+      if (/OrganizationProvider$/u.test(id)) return '\0fixture-organization';
       if (/services\/supabaseClient$/u.test(id)) return '\0fixture-backend';
       if (/services\/enterpriseIntelligenceClient$/u.test(id)) return '\0fixture-enterprise';
     }, load(id) {
       if (id === entry) return source;
       if (id === '\0fixture-auth') return 'export const useAuth = () => window.fixtureAuth;';
       if (id === '\0fixture-organization') return 'export const useOrganizationContext = () => window.fixtureOrganization;';
-      if (id === '\0fixture-backend') return 'export const getControlledHumanEvidenceState = () => null; export const isControlledHumanRuntimeEnabled = () => false;';
-      if (id === '\0fixture-enterprise') return 'export const enterpriseIntelligenceClient = new Proxy({}, { get() { throw new Error("unexpected server read"); } });';
+      if (id === '\0fixture-backend') return `
+        export const getRuntimeDataAccess = () => 'server';
+        export const getControlledHumanEvidenceState = () => null;
+        export const isControlledHumanRuntimeEnabled = () => false;
+        export const getControlledHumanBrowserBinding = () => ({ status: 'authorized' });
+        export const getLastCompletedControlledHumanProof = () => null;
+        export const armControlledHumanStep = () => { throw new Error('unexpected mutation'); };
+        export const listControlledHumanStepBindings = async () => [{ checkpointId: 'CH-08', stepId: 'replay-baseline-creation', state: 'completed',
+          safeAnchor: { stepId: 'replay-baseline-creation', ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => ['anchorField'+i, 'sha256:'+'a'.repeat(64)])) }, safeBinding: { stepId: 'replay-baseline-creation', ...Object.fromEntries(Array.from({ length: 19 }, (_, i) => ['bindingField'+i, 'sha256:'+'a'.repeat(64)])) } }];
+      `;
+      if (id === '\0fixture-enterprise') return `
+        export const bytesToBase64 = () => { throw new Error('unexpected upload'); };
+        export class EnterpriseIntelligenceClientError extends Error {};
+        export const getProviderLifecycleAuthorizationVersion = () => 1;
+        export const enterpriseIntelligenceClient = new Proxy({}, { get(_, key) {
+          if (key === 'loadMonitorApprovedBaselines') return async () => { await new Promise(resolve => setTimeout(resolve, 40)); return window.fixtureProjection.monitorApprovedBaselines; };
+          if (key === 'loadProjection') return async () => { await new Promise(resolve => setTimeout(resolve, 40)); return window.fixtureProjection; };
+          return () => { window.fixtureMutationCalls = (window.fixtureMutationCalls || 0) + 1; throw new Error('unexpected server action'); };
+        } });
+      `;
     } }],
   });
-  const files = ['components/shared/Sidebar.tsx', 'components/shared/PortfolioView.tsx', 'components/delivery/GovernedDeliveryWorkspace.tsx'];
+  const files = ['components/shared/Sidebar.tsx', 'components/shared/Header.tsx', 'components/auth/EnterpriseSessionBoundary.tsx', 'components/shared/PortfolioView.tsx', 'components/delivery/GovernedDeliveryWorkspace.tsx', 'components/enterprise/EnterpriseIntelligenceView.tsx', 'components/auth/ControlledHumanNonProductionBanner.tsx'];
   const content = [{ raw: source, extension: 'tsx' }, ...await Promise.all(files.map(async file => ({ raw: await readFile(new URL(`../${file}`, import.meta.url), 'utf8'), extension: 'tsx' })))];
   const css = await postcss([tailwindcss({ ...tailwindConfig, content })]).process(await readFile(new URL('../index.css', import.meta.url), 'utf8'), { from: undefined });
   return { css: css.css, code: compiled[0].output.find(file => file.type === 'chunk').code };
@@ -88,13 +112,13 @@ const fixture = () => fixturePromise ??= (async () => {
 
 const mount = async (browser, persona, viewport, snapshot = {}) => {
   const built = await fixture();
-  const page = await browser.newPage({ viewport });
+  const page = await browser.newPage({ ...(viewport.width === 412 ? devices['Pixel 7'] : devices['Desktop Chrome']), viewport });
   page.setDefaultTimeout(2500);
   await page.route('**/*', route => route.abort());
   const origin = 'http://127.0.0.1:19364/';
   await page.route(origin, route => route.fulfill({ contentType: 'text/html; charset=utf-8', body:
-    `<html><head><style>${built.css}</style></head><body><div id="root"></div><script>window.fixturePersona=${JSON.stringify(persona)};window.fixtureSnapshot=${JSON.stringify(snapshot)};</script><script>${built.code.replaceAll('</script>', '<\\/script>')}</script></body></html>` }));
-  await page.goto(origin);
+    `<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${built.css}</style></head><body><div id="root"></div><script>window.fixturePersona=${JSON.stringify(persona)};window.fixtureSnapshot=${JSON.stringify(snapshot)};</script><script>${built.code.replaceAll('</script>', '<\\/script>')}</script></body></html>` }));
+  await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 15_000 });
   await page.getByTestId('fixture-ready').waitFor({ state: 'attached' });
   return page;
 };
@@ -149,13 +173,19 @@ test('Monitor parity uses two authorized actors and rejects exact baseline data 
   try {
     for (const viewport of viewports) {
       const viewer = await mount(browser, 'monitor_viewer', viewport);
-      const approver = await mount(browser, 'delivery_approver', viewport);
+      const approver = await mount(browser, 'delivery_approver', devices['Desktop Chrome'].viewport);
       const state = new Map([
         ['full-governed-package', { packageId: 'synthetic-package' }], ['ch08:baselineId', 'synthetic-baseline'],
         ['sessions', new Map([['delivery_approver', { page: approver, identity: { applicationActorDigest: `sha256:${'a'.repeat(64)}`, applicationSessionDigest: `sha256:${'b'.repeat(64)}` } }]])],
       ]);
       const observe = () => observeBrowserOnlyStep({ page: viewer, checkpointId: 'CH-09', stepId: 'compare-enterprise-and-primary-monitor', state, interactionSequence: [] });
-      await openSurface(viewer, 'monitor', []);
+      await openSurface(approver, 'delivery', []);
+      await collectProof(approver, 'CH-08', 'replay-baseline-creation', []);
+      const planned = buildBrowserExecutionCatalog().find(step => step.stepId === 'compare-enterprise-and-primary-monitor');
+      const proof = await executePlannedStep({ planned, session: { page: viewer, identity: {} }, providerEgress: [], state, nextTime: () => new Date().toISOString() });
+      assert.equal(proof.outcome, 'passed');
+      assert(proof.browserArtifact.interactionSequence.includes('reload:fresh-server-projection'));
+      assert(proof.browserArtifact.interactionSequence.includes('observe:supplementary-approver-enterprise-monitor'));
       assert.match(await observe(), /^sha256:[a-f0-9]{64}$/u);
       assert.notEqual(await viewer.locator('#canonical-monitor-title').innerText(), await approver.locator('#canonical-monitor-title').innerText());
       assert.equal(await viewer.getByTestId('enterprise-intelligence-workspace').count(), 0);
@@ -168,6 +198,8 @@ test('Monitor parity uses two authorized actors and rejects exact baseline data 
       }
       await viewer.getByRole('region', { name: 'Milestones', exact: true }).locator('li').evaluate(node => { node.textContent = 'Different milestone'; });
       await assert.rejects(observe, /MONITOR_PARITY_MISMATCH/u);
+      assert.equal(await viewer.evaluate(() => window.fixtureMutationCalls || 0), 0);
+      assert.equal(await approver.evaluate(() => window.fixtureMutationCalls || 0), 0);
       await viewer.close(); await approver.close();
     }
   } finally { await browser.close(); }

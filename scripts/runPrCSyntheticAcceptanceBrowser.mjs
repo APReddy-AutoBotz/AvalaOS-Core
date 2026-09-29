@@ -449,6 +449,11 @@ const readCurrentIdentity = async (page, personaKey, exerciseDigest) => {
 };
 
 const openProductNavigation = async page => {
+  // After reload the authenticated shell can mount after DOMContentLoaded.
+  // Mobile navigation is inert until its opener is activated, so wait for the
+  // shell element before probing the opener, not for its hidden ARIA subtree.
+  await page.locator('#primary-navigation').waitFor({ state: 'attached', timeout: 20_000 })
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_NAVIGATION_SHELL_MISSING'); });
   const opener = page.getByRole('button', { name: 'Open navigation', exact: true });
   if (await opener.count() && await opener.isVisible()) await opener.click();
   const sidebar = page.getByRole('navigation', { name: 'Product lifecycle' });

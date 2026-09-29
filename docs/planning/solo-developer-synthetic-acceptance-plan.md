@@ -1356,3 +1356,46 @@ Rollback reverts this runner, fixture, test and provenance repair together.
 No product, schema, Edge function, permission or provider change is required.
 Original CONTROLLED-HUMAN remains `not_run`; synthetic acceptance and merge
 remain NO-GO until the complete exact-candidate campaign verifies.
+
+### CH-09 mobile navigation startup repair
+
+Run `36586037056` at `18c669c0913caf83e0969e91da23429fd8997624`
+passed CH-08 creation and replay, then failed at
+`CH-09:compare-enterprise-and-primary-monitor` with `LOCATOR_TIMEOUT`.
+Read-only server checks confirm creation and replay bound the same baseline.
+Bounded recovery and private-state erasure passed; the exercise is deprovisioned.
+Final observers and acceptance recomputation did not run. During the bounded
+replay-to-failure log window, Enterprise queries returned HTTP 200, but none was
+identified as a Monitor-viewer request. No raw logs or actor identifiers are retained.
+
+Three read-only reviewers closed before writes. The original navigation fixture
+used the real Sidebar and Monitor panels but a handwritten two-tab Enterprise
+header, synchronous shell mounting, and viewport dimensions without full device
+emulation. Its parity case called the observer directly, bypassing the actual
+step's page reload. Those differences concealed the failed startup sequence.
+
+The existing fixture now uses the production Header, session toolbar, evidence
+banner, Enterprise Intelligence view and primary Monitor loading path. It runs
+the actual CH-09 step with a separate Desktop approver and Desktop/Pixel viewer,
+expanded proof panel, inert read projections and delayed authenticated shell
+mounting. Before repair this reproduced the locator timeout: the runner probed
+the mobile menu opener before the shell existed, then waited for navigation
+that remained inert until that missing opener action occurred.
+
+The five-line runner repair waits for the existing `primary-navigation` shell
+element to be attached before checking and activating the normal mobile opener.
+It keeps the existing authorized route, ordinary clicks and exact baseline
+comparison. It adds no forced click, capability grant, data fallback, command
+replay or product change. The shell wait is bounded and emits a sanitized error.
+
+Executed focused navigation verification: all three cases pass, covering six
+authorized personas on Desktop and Pixel, read-only baseline refresh, the full
+two-persona CH-09 step and retained attribute/text drift rejection. Neither
+persona issues a business command. All 58 shared runner tests passed with zero
+skips; source/evidence and whitespace checks passed. Exact-head CI, preview and
+the protected campaign remain planned verification. All 84 steps and 43 server
+actions remain required; this local reproduction is not full hosted acceptance.
+
+Rollback reverts the runner, focused fixture and provenance together. No schema,
+Edge function, permission or provider change is needed. CONTROLLED-HUMAN remains
+`not_run`; synthetic acceptance and merge remain NO-GO pending complete evidence.
