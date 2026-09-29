@@ -240,6 +240,25 @@ test('CH-06 decides all other members of the exact 250-item set and leaves the e
   const complete = await readSyntheticDeliveryPackage(harness.sessions.get('delivery_author'), pkg.id); assert.equal(complete.items.length, 250);
 });
 
+test('raw revised package retains history without inheriting prior-version decision state', async () => {
+  const pkg = makePackage();
+  delete pkg.reviewState; delete pkg.approvalState;
+  pkg.currentVersion = 2;
+  pkg.reviewHistory = [{ packageVersion: 1, outcome: 'changes_requested' }];
+  pkg.approvalHistory = [{ packageVersion: 1, outcome: 'approved' }];
+  const harness = makeHarness({ packages: [pkg] });
+  const read = async () => (await readSyntheticDeliveryPackage(harness.sessions.get('delivery_author'), pkg.id)).deliveryPackage;
+  let decoded = await read();
+  assert.equal(decoded.reviewState, 'not_requested'); assert.equal(decoded.approvalState, 'not_requested');
+  assert.deepEqual(decoded.reviewHistory, pkg.reviewHistory); assert.deepEqual(decoded.approvalHistory, pkg.approvalHistory);
+  pkg.status = 'review'; pkg.reviewHistory.unshift({ packageVersion: 2, outcome: 'approved' });
+  decoded = await read();
+  assert.equal(decoded.reviewState, 'approved'); assert.equal(decoded.approvalState, 'pending');
+  pkg.approvalHistory.unshift({ packageVersion: 2, outcome: 'rejected' });
+  assert.equal((await read()).approvalState, 'rejected');
+  assert.deepEqual(harness.calls, [], 'projection reads execute no business commands');
+});
+
 test('CH-07 accepts exactly the 249 carried proposals after the revised descendant UI decision', async () => {
   const pkg = makePackage({ id: uid(450), count: 250, sourceMode: 'studio_handoff', lineageClassification: 'assessed', planningOnly: false });
   const revisedItem = pkg.items[137]; revisedItem.aggregateVersion = 3; revisedItem.version = 3; revisedItem.currentVersionId = uid(70_100); revisedItem.status = 'accepted';

@@ -203,7 +203,8 @@ const normalizeDeliveryPackage = pkg => {
   if (!isRecord(pkg) || !Array.isArray(pkg.items)) return pkg;
   const reviewHistory = Array.isArray(pkg.reviewHistory) ? pkg.reviewHistory : [];
   const approvalHistory = Array.isArray(pkg.approvalHistory) ? pkg.approvalHistory : [];
-  const reviewOutcome = reviewHistory.at(-1)?.outcome; const approvalOutcome = approvalHistory.at(-1)?.outcome;
+  const reviewOutcome = reviewHistory.filter(event => event.packageVersion === pkg.currentVersion).at(-1)?.outcome;
+  const approvalOutcome = approvalHistory.filter(event => event.packageVersion === pkg.currentVersion).at(-1)?.outcome;
   return {
     ...pkg, items: pkg.items.map(normalizeDeliveryItem),
     ...(pkg.reviewState === undefined ? { reviewState: reviewOutcome === 'changes_requested' ? 'changes_requested' : reviewOutcome ?? 'not_requested' } : {}),

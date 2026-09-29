@@ -67,6 +67,15 @@ const productionDeliveryPage = (start: number, count: number): DeliveryWorkspace
 };
 const initialPackage: DeliveryPackageProjection = productionDeliveryPage(1, 100).packages[0];
 
+// Exercise the SQL-to-canonical decoder with retained, versioned decision history.
+const decodePackageDecisionState = (pkg: DeliveryPackageProjection): DeliveryPackageProjection => {
+  const raw = createDeliveryItemPageFixture({ start: 1, count: 1, total: 1 });
+  Object.assign(raw.packages[0], { currentVersion: pkg.currentVersion, status: pkg.status,
+    reviewHistory: pkg.reviewHistory, approvalHistory: pkg.approvalHistory });
+  const decoded = decodeDeliveryWorkspaceProjection(raw).packages[0];
+  return { ...pkg, reviewState: decoded.reviewState, approvalState: decoded.approvalState };
+};
+
 const initialHandoff = {
   id: handoffId, version: 1, direction: 'inbox' as const, status: 'target_review' as const,
   sourceArtifactVersion: 4,
@@ -240,26 +249,30 @@ function Harness() {
           return identity?.expectedAggregateVersion === entry.expectedAggregateVersion && identity.expectedItemVersionId === entry.expectedItemVersionId;
         });
         if (!exactDescendants || !exactSelected || command.expectedPackageAggregateVersion !== pkg.aggregateVersion) return pkg;
-        return { ...pkg, currentVersion: pkg.currentVersion + 1, currentVersionId: uuid(70 + pkg.currentVersion), aggregateVersion: pkg.aggregateVersion + 1, status: 'draft', reviewState: 'not_requested', approvalState: 'not_requested',
+        return decodePackageDecisionState({ ...pkg, currentVersion: pkg.currentVersion + 1, currentVersionId: uuid(70 + pkg.currentVersion), aggregateVersion: pkg.aggregateVersion + 1, status: 'draft',
           blockers: [`${pkg.items.length} work item decisions unresolved.`], blockerCount: pkg.items.length, acceptedItemCount: undefined, actions: ['delivery.item.review'], items: pkg.items.map((entry, index) => {
             const revision = revisions.get(entry.aggregateId);
             return { ...entry, currentVersionId: uuid(6_000 + index), aggregateVersion: entry.aggregateVersion + 1, version: entry.version + 1, status: revision ? 'edited' as const : 'proposed' as const,
               ...(revision ? { title: revision.authored.title, description: revision.authored.description, acceptanceCriteria: revision.authored.acceptanceCriteria, nonFunctionalRequirements: revision.authored.nonFunctionalRequirements } : {}),
               decision: undefined, actions: ['delivery.item.review' as const] };
-          }) };
+          }) });
       }) };
       if (command.action === 'delivery.package.review.resolve') return { ...current, packages: current.packages.map(pkg => {
         if (pkg.id !== command.workPackageId) return pkg;
         if (!pkg.itemPage.isComplete || pkg.items.some(entry => !['accepted', 'rejected'].includes(entry.status))) return pkg;
-        return command.outcome === 'approved'
-          ? { ...pkg, status: 'review' as const, reviewState: 'approved' as const, blockers: [], blockerCount: 0, actions: ['delivery.package.approval.resolve' as const] }
+        const reviewed = { ...pkg, reviewHistory: [...pkg.reviewHistory, { packageVersion: pkg.currentVersion,
+          acceptedItemCount: pkg.acceptedItemCount ?? 0, outcome: command.outcome, rationale: command.rationale, createdAt: '2026-08-31T06:10:00.000Z' }] };
+        return decodePackageDecisionState(command.outcome === 'approved'
+          ? { ...reviewed, status: 'review' as const, blockers: [], blockerCount: 0, actions: ['delivery.package.approval.resolve' as const] }
           : command.outcome === 'changes_requested'
-            ? { ...pkg, status: 'blocked' as const, reviewState: 'changes_requested' as const, blockers: ['Independent review requested changes.'], blockerCount: 1, actions: ['delivery.package.revision.commit' as const] }
-            : { ...pkg, status: 'rejected' as const, reviewState: 'rejected' as const, blockers: [], blockerCount: 0, actions: [] };
+            ? { ...reviewed, status: 'blocked' as const, blockers: ['Independent review requested changes.'], blockerCount: 1, actions: ['delivery.package.revision.commit' as const] }
+            : { ...reviewed, status: 'rejected' as const, blockers: [], blockerCount: 0, actions: [] });
       }) };
       if (command.action === 'delivery.package.approval.resolve') {
         const approved = command.outcome === 'approved';
-        return { ...current, packages: current.packages.map(pkg => pkg.id !== command.workPackageId || pkg.reviewState !== 'approved' ? pkg : { ...pkg, status: command.outcome, approvalState: command.outcome, actions: [] }),
+        return { ...current, packages: current.packages.map(pkg => pkg.id !== command.workPackageId || pkg.reviewState !== 'approved' ? pkg : decodePackageDecisionState({ ...pkg, status: command.outcome, actions: [],
+          approvalHistory: [...pkg.approvalHistory, { packageVersion: pkg.currentVersion, acceptedItemCount: pkg.acceptedItemCount ?? 0,
+            outcome: command.outcome, rationale: command.rationale, createdAt: '2026-08-31T06:11:00.000Z' }] })),
           baselineEligibility: approved ? [{ workPackageId: command.workPackageId, workPackageVersionId: command.expectedPackageVersionId, workPackageVersion: command.expectedPackageVersion,
             acceptedItemCount: current.packages.find(pkg => pkg.id === command.workPackageId)?.acceptedItemCount ?? 0, lineageClassification: 'assessed', planningOnly: false, action: 'monitor.baseline.create' }] : [] };
       }

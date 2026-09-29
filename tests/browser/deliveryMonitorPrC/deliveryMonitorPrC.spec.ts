@@ -533,6 +533,11 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   await executeServerAction(page, 'CH-07', 'commit-only-explicitly-edited-descendants', interactions,
     new Map([['full-governed-package', { packageId, itemCount: 250 }]]));
   expect(interactions).toContain('prepare:one-explicit-blocked-descendant');
+  const rebuiltPackage = page.getByTestId(`delivery-package-${packageId}`);
+  await expect(rebuiltPackage.getByText('Review not requested', {exact:true})).toBeVisible();
+  await expect(rebuiltPackage.getByText('Approval not requested', {exact:true})).toBeVisible();
+  await rebuiltPackage.getByText('Package review and approval history', {exact:true}).click();
+  await expect(rebuiltPackage.getByText(/^Review v1: changes_requested/)).toBeVisible();
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('edited');
   await expect(page.getByTestId('delivery-item-filter-result')).toHaveText('1 matching items across 250 loaded');
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('proposed');
@@ -545,7 +550,9 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   await expect(page.getByText('Approved identity: 250 server-counted items.',{exact:true})).toBeVisible();
 
   await executeServerAction(page, 'CH-07', 'review-complete-revised-package', interactions, state);
+  await expect(rebuiltPackage.getByText('Approval pending', {exact:true})).toBeVisible();
   await executeServerAction(page, 'CH-07', 'approve-exact-revised-package', interactions, state);
+  await expect(rebuiltPackage.getByText('Approval approved', {exact:true})).toBeVisible();
   const baselineSelector=page.getByTestId('baseline-eligibility-selectors').locator(`li[data-package-id="${packageId}"]`);
   await expect(baselineSelector).toHaveCount(1);
   await baselineSelector.getByRole('button',{name:'Create read-only Monitor baseline',exact:true}).click();

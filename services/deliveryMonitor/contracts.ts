@@ -538,6 +538,9 @@ export const decodeDeliveryWorkspaceProjection = (value: unknown): DeliveryWorks
       const packageActions = actions(pkg.actions);
       const reviewHistory = array(pkg.reviewHistory, 50).map(entry => { const event = exact(record(entry), ['packageVersion', 'acceptedItemCount', 'outcome', 'rationale', 'createdAt']); return { packageVersion: integer(event.packageVersion), acceptedItemCount: integer(event.acceptedItemCount, 0, 250), outcome: literal(event.outcome, ['approved', 'changes_requested', 'rejected'] as const), rationale: string(event.rationale, 4_000), createdAt: timestamp(event.createdAt) }; });
       const approvalHistory = array(pkg.approvalHistory, 50).map(entry => { const event = exact(record(entry), ['packageVersion', 'acceptedItemCount', 'outcome', 'rationale', 'createdAt']); return { packageVersion: integer(event.packageVersion), acceptedItemCount: integer(event.acceptedItemCount, 0, 250), outcome: literal(event.outcome, ['approved', 'rejected'] as const), rationale: string(event.rationale, 4_000), createdAt: timestamp(event.createdAt) }; });
+      const currentVersion = integer(pkg.currentVersion);
+      const currentReview = reviewHistory.filter(event => event.packageVersion === currentVersion).at(-1);
+      const currentApproval = approvalHistory.filter(event => event.packageVersion === currentVersion).at(-1);
       const historyPage = exact(record(pkg.historyPage), ['limit', 'reviewHasMore', 'approvalHasMore']);
       const acceptedItemCount = pkg.acceptedItemCount === null || pkg.acceptedItemCount === undefined ? undefined : integer(pkg.acceptedItemCount, 1, 250);
       const status = literal(pkg.status, ['draft', 'review', 'approved', 'rejected', 'stale', 'blocked'] as const);
@@ -545,14 +548,14 @@ export const decodeDeliveryWorkspaceProjection = (value: unknown): DeliveryWorks
       const blockerCount = integer(pkg.blockerCount, 0);
       if (blockerCount < blockers.length || (blockerCount === 0) !== (blockers.length === 0)) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
       return {
-        id: id(pkg.id), currentVersionId: id(pkg.currentVersionId), currentVersion: integer(pkg.currentVersion), aggregateVersion, status,
-        label: `Delivery package v${integer(pkg.currentVersion)}`, sourcePackage: decodeSourcePackage(pkg.sourcePackage),
+        id: id(pkg.id), currentVersionId: id(pkg.currentVersionId), currentVersion, aggregateVersion, status,
+        label: `Delivery package v${currentVersion}`, sourcePackage: decodeSourcePackage(pkg.sourcePackage),
         items: array(pkg.items, DELIVERY_ITEM_PAGE_MAX).map(decodeItem).map(item => ({ ...item, actions: packageActions.includes('delivery.item.review') ? ['delivery.item.review'] : [] })),
         itemPage: { limit: integer(page.limit, 1, DELIVERY_ITEM_PAGE_MAX), hasMore, cursorApplied, isComplete, ...(next ? { nextCursor: { version: integer(next.version), id: id(next.itemId) } } : {}) },
         ...(acceptedItemCount === undefined ? {} : { acceptedItemCount }), historyPage: { limit: integer(historyPage.limit, 1, 250), reviewHasMore: boolean(historyPage.reviewHasMore), approvalHasMore: boolean(historyPage.approvalHasMore) },
-        reviewState: reviewHistory.length ? (reviewHistory.at(-1)?.outcome === 'changes_requested' ? 'changes_requested' : reviewHistory.at(-1)?.outcome) : 'not_requested',
-        approvalState: approvalHistory.length ? approvalHistory.at(-1)?.outcome
-          : status === 'review' && reviewHistory.at(-1)?.outcome === 'approved' ? 'pending' : 'not_requested',
+        reviewState: currentReview?.outcome ?? 'not_requested',
+        approvalState: currentApproval?.outcome
+          ?? (status === 'review' && currentReview?.outcome === 'approved' ? 'pending' : 'not_requested'),
         blockers, blockerCount, reviewHistory, approvalHistory, actions: packageActions,
       };
     }),

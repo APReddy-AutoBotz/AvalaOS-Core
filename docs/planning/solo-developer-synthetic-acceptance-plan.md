@@ -1233,3 +1233,47 @@ Rollback reverts the runner, connected test and provenance together and leaves
 acceptance blocked. This repair changes no product code, schema, provider path,
 permissions or deployed Edge function. Original CONTROLLED-HUMAN remains
 `not_run`; merge remains NO-GO until the full required evidence is verified.
+
+### CH-07 current-version review state repair
+
+Run `36554585742` at `d27b34234e699457e7c9ff34acf4d1979c601c8b`
+failed at `CH-07:decide-revised-descendant` with
+`PR_C_SYNTHETIC_BROWSER_REVISED_PACKAGE_REVIEW_STATE_MISMATCH`.
+Read-only server receipts confirm CH-06 edit and acceptance and CH-07 requested
+changes and rebuild succeeded. Bounded recovery and private-state erasure passed;
+normal final observers, normal deprovision verification and acceptance recomputation
+did not run. This remains a failed campaign, not synthetic acceptance evidence.
+
+Three read-only reviewers completed before writes. The confirmed source defect
+is the SQL-to-canonical decoder deriving current review/approval state from all
+package versions. Rebuild correctly creates a new draft and preserves old events;
+the decoder incorrectly presents the prior version's changes-requested review.
+The prerequisite normalizer repeats this defect. The connected fixture concealed
+it by assigning the expected state directly and omitting review history.
+
+Both decoders now select current-version events while preserving complete history
+and server-supplied actions. The existing connected fixture appends real-shaped
+versioned decisions and uses the production decoder for review, rebuild and
+approval transitions. The runner still requires the exact rebuilt package and
+descendant, draft state, and `Review not requested`; no assertion is relaxed.
+
+Executed evidence: before the repair, the focused decoder and prerequisite cases
+and both connected desktop/mobile cases reproduced stale review state. After the
+repair, decoder contracts, all 20 prerequisite cases, the two connected 250-item
+desktop/mobile cases, affected Edge query tests and TypeScript passed. Tests also
+retain prior review/approval history and verify current review, pending approval,
+approval and rejection without inheriting older-version events. These local
+fixtures do not prove hosted acceptance.
+
+Deployment boundary: only `enterprise-intelligence-query` needs refreshing on the
+already approved synthetic project because it imports the repaired decoder.
+Comparison against the currently deployed 12-file source set found only
+`services/deliveryMonitor/contracts.ts` changed. JWT verification remains enabled.
+No schema, command authorization, provider execution or scoring change is required.
+Exact-head CI, source readback, preview binding and the full protected campaign
+remain planned verification. All 84 steps and 43 server actions remain required.
+
+Rollback restores the preceding query source set and reverts the decoder,
+normalizer, focused tests and provenance together. Keep acceptance blocked and
+the preview read-only if any binding or verification fails. Original
+CONTROLLED-HUMAN remains `not_run`; final merge remains NO-GO.

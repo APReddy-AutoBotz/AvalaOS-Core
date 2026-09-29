@@ -20,6 +20,34 @@ const monitorMarker = (testId: string, assertionId: string) => emitPrCAssertion(
 const workspace = decodeDeliveryWorkspaceProjection(createDeliveryWorkspaceFixture());
 assert.equal(workspace.packages[0].currentVersionId, DELIVERY_MONITOR_FIXTURE_IDS.packageVersionId);
 assert.equal(workspace.packages[0].items[0].sourceCitation?.sectionLocator, 'brd.sections.1');
+
+// Rebuilding retains immutable decisions without carrying their state into the new version.
+const revisedWorkspace = createDeliveryWorkspaceFixture();
+const revisedPackage = revisedWorkspace.packages[0];
+revisedPackage.currentVersion = 2;
+revisedPackage.status = 'draft';
+revisedPackage.reviewHistory[0].outcome = 'changes_requested';
+const assertDecisionState = (review: string, approval: string) => {
+  const decoded = decodeDeliveryWorkspaceProjection(revisedWorkspace).packages[0];
+  assert.equal(decoded.reviewState, review);
+  assert.equal(decoded.approvalState, approval);
+  assert.deepEqual(decoded.reviewHistory, revisedPackage.reviewHistory);
+  assert.deepEqual(decoded.approvalHistory, revisedPackage.approvalHistory);
+  assert.deepEqual(decoded.actions, revisedPackage.actions);
+};
+assertDecisionState('not_requested', 'not_requested');
+revisedPackage.status = 'review';
+revisedPackage.reviewHistory.unshift({ ...revisedPackage.reviewHistory[0], packageVersion: 2, outcome: 'approved' });
+assertDecisionState('approved', 'pending');
+revisedPackage.status = 'approved';
+revisedPackage.approvalHistory.unshift({ ...revisedPackage.approvalHistory[0], packageVersion: 2 });
+assertDecisionState('approved', 'approved');
+revisedPackage.status = 'rejected';
+revisedPackage.approvalHistory[0].outcome = 'rejected';
+assertDecisionState('approved', 'rejected');
+revisedPackage.approvalHistory.shift();
+revisedPackage.reviewHistory[0].outcome = 'rejected';
+assertDecisionState('rejected', 'not_requested');
 marker('DELIVERY-TR-001', 'domain-exact-current-package-version');
 marker('DELIVERY-TR-002', 'domain-item-citation-exact-artifact-version-locator');
 
