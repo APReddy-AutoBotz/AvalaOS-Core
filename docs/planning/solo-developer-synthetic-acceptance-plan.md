@@ -1059,3 +1059,42 @@ remain required. Verify the corrected candidate's CI and preview before its full
 protected campaign. No schema or function deployment is needed. Rollback reverts
 this runner selection, focused fixture/tests and provenance together and leaves
 acceptance blocked while retaining the recovered exercise history.
+
+Run 36485116066 on 8b543bf again timed out at CH-04
+`request-handoff-changes`; bounded recovery and private-state erasure passed.
+Read-only retained-state aggregates for this and the preceding 5eacf6a candidate
+show zero anchors and zero bindings for that action. Neither run reached the
+arming boundary. This corrects the preceding timeout attribution: Outbox-only
+lookup was a real adjacent runner defect, but it did not explain the observed
+pre-arm failure. Prior component-only action tests omitted application navigation.
+
+The confirmed source defect is the runner's Assess route for Delivery personas
+whose authoritative capability set intentionally excludes `assess.read`.
+An executable reproduction using the real Sidebar, view-access guard and governed
+route resolver failed while waiting for the absent Assess button. The runner now
+uses the primary Delivery entry, which already mounts governed Delivery. The
+initial local attempt via Delivery Pack also correctly rejected the current My
+Work scope; that unnecessary subroute was removed before commit. No permission or
+scope change is made. Missing navigation now reports a safe route-specific code.
+
+Monitor-only actors likewise enter through primary Monitor. Cross-surface parity
+uses the existing independently authenticated Delivery approver for a supplementary
+read-only Enterprise Monitor observation; the catalog step remains owned by the
+Monitor viewer. It compares the exact bound baseline article, versions, package,
+accepted counts/type counts and displayed content. It excludes only the intentionally
+different surface headings and records the supplementary actor/session identity.
+No API mutation substitutes for a browser action or approval.
+
+Executed focused verification: 56/56 synthetic runner tests pass, zero skips,
+including twelve real-sidebar persona/viewport routes and Desktop/Pixel Monitor
+parity. Ten deliberate version, count/type-count and displayed-content drifts
+reject. The fixture retains real Delivery and both Monitor components, with inert
+authentication and server projections and all network requests blocked. No broad
+local regression was run. All 84 catalog steps and 43 server actions remain required.
+
+This runner-only correction requires new-head CI, exact preview and the complete
+protected campaign; full synthetic acceptance remains failed pending that evidence.
+No schema or Edge Function deployment is needed. Rollback reverts this runner,
+focused test import/fixture and provenance together, retains recovered history and
+leaves acceptance blocked. Original CONTROLLED-HUMAN remains `not_run`; no merge
+or production-readiness claim follows.

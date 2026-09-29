@@ -5,6 +5,7 @@ import './prCSyntheticBrowserApi.test.mjs';
 import './prCSyntheticBrowserPrerequisites.test.mjs';
 import './prCSyntheticBrowserEvidenceActions.test.mjs';
 import './prCSyntheticBrowserResponseLoss.test.mjs';
+import './prCSyntheticBrowserNavigation.test.mjs';
 import { chromium } from '@playwright/test';
 
 import {

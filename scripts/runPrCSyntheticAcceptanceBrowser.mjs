@@ -75,8 +75,8 @@ const NAVIGATION_PATHS = Object.freeze({
   'assess-review': ['Assess'],
   studio: ['Studio', 'Create / Governed Sources'],
   'studio-docs': ['Studio', 'Create / Governed Sources'],
-  delivery: ['Assess', 'Enterprise Intelligence'],
-  monitor: ['Assess', 'Enterprise Intelligence'],
+  delivery: ['Delivery'],
+  monitor: ['Monitor'],
 });
 
 const TAB_LABELS = Object.freeze({
@@ -459,7 +459,7 @@ const navigateProductPath = async (page, labels, interactionSequence) => {
   for (const label of labels) {
     const sidebar = await openProductNavigation(page);
     const control = sidebar.getByRole('button', { name: label, exact: true });
-    await control.waitFor({ state: 'visible' });
+    await control.waitFor({ state: 'visible' }).catch(() => { throw new Error(`PR_C_SYNTHETIC_BROWSER_NAVIGATION_MISSING:${safeLabel(label)}`); });
     assert(await control.isEnabled(), `PR_C_SYNTHETIC_BROWSER_NAVIGATION_DISABLED:${safeLabel(label)}`);
     await control.click();
     interactionSequence.push(`navigate:${safeLabel(label)}`);
@@ -467,7 +467,16 @@ const navigateProductPath = async (page, labels, interactionSequence) => {
   }
 };
 
-const openSurface = async (page, surface, interactionSequence, stepId = '') => {
+export const openSurface = async (page, surface, interactionSequence, stepId = '') => {
+  if (surface === 'monitor') {
+    if (!(await page.getByTestId('monitor-overview').count())) {
+      await navigateProductPath(page, NAVIGATION_PATHS.monitor, interactionSequence);
+    }
+    await page.getByTestId('monitor-overview').waitFor({ state: 'visible' });
+    await page.getByTestId('canonical-monitor-baselines').waitFor({ state: 'visible' });
+    await waitForUsablePage(page);
+    return;
+  }
   if (surface === 'assess-case' || surface === 'assess-review') {
     if (!(await page.getByTestId('assess-v2-workspace').count())) {
       await navigateProductPath(page, NAVIGATION_PATHS[surface], interactionSequence);
@@ -480,7 +489,7 @@ const openSurface = async (page, surface, interactionSequence, stepId = '') => {
     if (surface === 'assess-review') await page.getByTestId('assess-v2-review-workspace').waitFor({ state: 'visible' });
     return;
   }
-  const enterprise = ['assess', 'delivery', 'monitor'].includes(surface);
+  const enterprise = ['assess', 'delivery'].includes(surface);
   const ready = enterprise
     ? await page.getByTestId('enterprise-intelligence-workspace').count() > 0
     : await page.getByTestId('governed-studio-creation-route').count() > 0;
@@ -1318,7 +1327,7 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
       monitorProjection: result.monitorProjection, authorizedMonitorSnapshotDigest: digest(after),
       supplementaryMonitorIdentity: state.get('sessions').get('monitor_viewer').identity };
   } else if (plan.kind === 'primary-monitor-legacy') {
-    await clickFirstLabel(page, ['Monitor'], interactionSequence);
+    await openSurface(page, 'monitor', interactionSequence);
     await verifySyntheticMonitorBaseline(page, interactionSequence, {
       packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
     });
@@ -1499,14 +1508,33 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
   }
   else if (plan.kind === 'read-only-history') observed = await verifySyntheticReadOnlyMonitorHistory(page, interactionSequence, state.get('retained-monitor-history'));
   else if (plan.kind === 'monitor-parity') {
-    const panel = page.getByTestId('canonical-monitor-baselines'); await panel.waitFor({ state: 'visible' });
-    const enterpriseDigest = digest(await panel.innerText());
-    await clickFirstLabel(page, ['Monitor'], interactionSequence);
-    await verifySyntheticMonitorBaseline(page, interactionSequence, {
-      packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
-    });
-    const primaryDigest = digest(await page.getByTestId('canonical-monitor-baselines').innerText());
-    assert.equal(primaryDigest, enterpriseDigest); observed = { enterpriseDigest, primaryDigest };
+    // The Monitor-only actor cannot enter Assess or Delivery. Use the existing
+    // independently authenticated approver for the supplementary read-only view.
+    const approver = state.get('sessions')?.get('delivery_approver');
+    assert(approver?.page && approver.page !== page && approver.identity,
+      'PR_C_SYNTHETIC_BROWSER_MONITOR_PARITY_SESSION_MISSING');
+    await openSurface(approver.page, 'delivery', interactionSequence);
+    await approver.page.getByTestId('enterprise-intelligence-workspace')
+      .getByRole('navigation', { name: 'Enterprise Intelligence surfaces' })
+      .getByRole('button', { name: 'Monitor Baseline', exact: true }).click();
+    interactionSequence.push('observe:supplementary-approver-enterprise-monitor');
+    await openSurface(page, 'monitor', interactionSequence);
+    const readBaseline = async target => {
+      const { selected } = await verifySyntheticMonitorBaseline(target, interactionSequence, {
+        packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
+      });
+      const attributes = {};
+      for (const name of ['data-baseline-id', 'data-baseline-version', 'data-package-id', 'data-package-version', 'data-accepted-item-count', 'data-accepted-type-counts']) {
+        attributes[name] = await selected.getAttribute(name);
+        assert(attributes[name], 'PR_C_SYNTHETIC_BROWSER_MONITOR_PARITY_FACT_MISSING');
+      }
+      // Surface headings differ by design; the exact baseline article must agree.
+      return digest({ attributes, text: await selected.innerText() });
+    };
+    const enterpriseDigest = await readBaseline(approver.page);
+    const primaryDigest = await readBaseline(page);
+    assert.equal(primaryDigest, enterpriseDigest, 'PR_C_SYNTHETIC_BROWSER_MONITOR_PARITY_MISMATCH');
+    observed = { enterpriseDigest, primaryDigest, supplementaryApproverIdentity: approver.identity };
   }
   else throw new Error(`PR_C_SYNTHETIC_BROWSER_PLAN_KIND_REJECTED:${stepId}:${plan.kind}`);
   return digest({ checkpointId, stepId, observed });
