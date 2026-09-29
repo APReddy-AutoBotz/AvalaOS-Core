@@ -8,7 +8,7 @@ const visibleOptions = select => select.locator('option').evaluateAll(nodes => n
 export const waitForSyntheticDeliveryWorkspace = async page => {
   const workspace = page.getByTestId('governed-delivery-workspace');
   await workspace.waitFor({ state: 'visible' });
-  await page.locator('[data-testid="governed-delivery-workspace"][data-delivery-usable="true"]').waitFor({ state: 'visible' });
+  assert.equal(await workspace.getAttribute('data-delivery-usable'), 'true', 'PR_C_SYNTHETIC_BROWSER_DELIVERY_NOT_USABLE');
   // An authorized empty list can have zero height; attachment proves it loaded.
   await workspace.getByRole('list', { name: 'Delivery packages', exact: true }).waitFor({ state: 'attached' });
   return workspace;

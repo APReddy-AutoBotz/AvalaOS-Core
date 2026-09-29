@@ -1180,3 +1180,15 @@ retained-history cases also passed during the bounded rehearsal. TypeScript,
 the unchanged static AI-boundary guard, source/evidence contract and whitespace
 checks passed. Failed local attempts above remain diagnostic history, not passing
 evidence. No broad local regression suite was run.
+
+Candidate fc31237's governed CI run 36524295287 caught a helper regression in the
+existing Desktop/Pixel package-absence negative check: an explicitly false usable
+marker timed out instead of returning `PR_C_SYNTHETIC_BROWSER_DELIVERY_NOT_USABLE`.
+The shared helper now waits for the mounted workspace and retains the existing
+explicit usable-marker assertion. All 12 affected delayed/stale CH-06, absence,
+dialog and connected recovery browser cases pass with zero skips. Subsequent
+registry commands did not run after that browser failure; no additional governed
+infrastructure failure is established. Native Assess run 36524295136 attempt 1
+separately failed at image-cache setup on a pull rate limit; attempt 2 passed and
+its five-group, 27-command, 1,145-source-file artifact independently verified.
+That earlier-head evidence is retained and does not replace final-head CI.
