@@ -1127,3 +1127,56 @@ exact-head checks and protected campaign, with all 84 steps retained.
 Final local evidence for this combined correction: 57/57 focused runner tests
 passed with zero skips, including Desktop/Pixel stale-baseline refresh through
 the real step executor. The unchanged static AI-boundary guard also passed.
+
+Run 36518999850 on d274876 passed CH-04 and CH-05 but rejected
+`CH-06:inspect-deterministic-item-citations` with the safe exact-package-count
+code. Bounded recovery and private-state erasure passed; the normal successful
+campaign read-only proof and deprovision-verification steps were not run. No
+failed-run browser artifact was retained, so its precise DOM/timing is unknown.
+Candidate-scoped read-only aggregates confirm one consumed package, three items,
+the correct author scope and capabilities, matching consume/replay bindings, and
+no CH-06 server binding. Package creation or broader role grants are not indicated.
+
+The next approved repair began with three read-only architecture, authority and
+rehearsal reviews. All reviewers closed before root implementation. Confirmed
+source defects are a Delivery shell considered ready before its async projection,
+preloaded actor pages reused across CH-06 cross-actor commits, and incomplete
+exact-member/citation proof. A shared usable-workspace wait and exact package
+selection now serve the runner and observation helpers. Only the two cross-actor
+CH-06 reads gain a fresh-page boundary; CH-13 reconciliation and CH-14 dialog
+continuations retain their state. Complete canonical member identities and every
+source citation are checked, with the three hosted members also matched in the UI.
+
+The actual Enterprise screen rehearsal additionally reproduced two adjacent
+selector defects before publication: a generic package article selector also
+matched its Monitor baseline, and `innerText` uppercased status pills through CSS.
+Selection now requires the Delivery article marker, and exact status-label
+locators replace CSS-sensitive comparisons in citations, manual selection and
+blocked recovery. The existing connected 250-item sequence now invokes the real
+runner recovery action instead of separately scripted recovery clicks.
+That action reproduced an additional invalid `region` selector for a labeled
+recovery `div`; it now targets the exact existing label without changing markup.
+During rehearsal, an invalid fixture action name and a `.html` fixture path were
+also corrected to the existing action contract and a sanitized local route; no
+runtime decoder or evidence route restriction was relaxed.
+
+The local rehearsal uses actual Enterprise/Delivery components and the step
+executor with inert authenticated-query fixtures. It proves delayed mounting,
+stale actor projections, exact-member rejection and adjacent UI continuity; it
+does not prove real Auth/RLS/Edge or the full hosted campaign. No complete local
+84-step equivalent exists, and building a second protected-environment bootstrap
+is outside this bounded repair. All 84 steps and 43 server actions remain required.
+New-head CI, preview, protected campaign, independent observers and cleanup remain
+planned verification. Original CONTROLLED-HUMAN remains `not_run`; merge stays NO-GO.
+
+Rollback reverts this runner/helper repair, focused fixtures/tests and provenance
+together, retains recovered exercise history, and leaves acceptance blocked. No
+schema, product permission or Edge deployment changes are required.
+
+Executed focused verification for this repair: 57/57 runner contracts, six
+Desktop/Pixel CH-06 and CH-14 cases, and two final connected 250-item recovery
+sequence cases passed, zero skips. Eight adjacent lineage, blocked-Monitor and
+retained-history cases also passed during the bounded rehearsal. TypeScript,
+the unchanged static AI-boundary guard, source/evidence contract and whitespace
+checks passed. Failed local attempts above remain diagnostic history, not passing
+evidence. No broad local regression suite was run.

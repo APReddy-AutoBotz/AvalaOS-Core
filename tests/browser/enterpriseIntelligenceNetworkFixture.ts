@@ -950,6 +950,10 @@ export const installEnterpriseIntelligenceFixture = async (page: Page, options: 
 
   return {
     operations,
+    setDeliveryWorkspace(value: DeliveryWorkspaceProjection) {
+      if (value.organizationId !== projection.organizationId || value.workspaceId !== projection.workspaceId) throw new Error('FIXTURE_DELIVERY_SCOPE_MISMATCH');
+      projection.deliveryWorkspace = structuredClone(value);
+    },
     commandPayloads,
     authorityRecheckPayloads,
     recoveryPayloads,

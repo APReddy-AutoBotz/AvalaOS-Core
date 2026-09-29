@@ -37,6 +37,7 @@ import {
   verifySyntheticDeliveryLineage, verifySyntheticMonitorBaseline,
   verifySyntheticStudioApprovalHasNoDeliveryResource, verifySyntheticAssessHandoffReady,
   verifySyntheticBlockedPackageMonitorUnchanged, verifySyntheticReadOnlyMonitorHistory,
+  waitForSyntheticDeliveryWorkspace, selectSyntheticDeliveryPackage,
 } from './prCSyntheticBrowserControls.mjs';
 import {
   isSyntheticApiEvidenceStep, buildSyntheticApiEvidenceDescriptor, executeSyntheticApiEvidenceAction,
@@ -502,6 +503,7 @@ export const openSurface = async (page, surface, interactionSequence, stepId = '
     await control.click();
     interactionSequence.push(`tab:${safeLabel(tab)}`);
   }
+  if (surface === 'delivery' && tab === 'Work Package') await waitForSyntheticDeliveryWorkspace(page);
   await waitForUsablePage(page);
 };
 
@@ -640,6 +642,15 @@ export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequenc
   return { priorDigest: digest(prior), savedDigest: digest(appended), changed: appended !== prior, submitted: true, assigned: true };
 };
 
+const verifyRenderedDeliveryItemIds = async (selected, expectedIds) => {
+  // The hosted fixture has three items, so all canonical members must be visible.
+  // Larger component fixtures intentionally render only the first 25 matches.
+  if (expectedIds.length > 25) return;
+  const renderedIds = await selected.locator('article[data-testid^="delivery-item-"]').evaluateAll(nodes =>
+    nodes.map(node => node.getAttribute('data-testid').slice('delivery-item-'.length)).sort());
+  assert.deepEqual(renderedIds, expectedIds, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_RENDERED_ITEM_SET_DRIFT');
+};
+
 const selectedDeliveryPackage = async workspace => {
   const selected = workspace.locator('article[data-testid^="delivery-package-"]');
   assert.equal(await selected.count(), 1, 'PR_C_SYNTHETIC_BROWSER_SELECTED_DELIVERY_PACKAGE_COUNT');
@@ -693,14 +704,9 @@ const selectDeliveryPackageByLabel = async (page, label, interactionSequence) =>
 };
 
 const selectDeliveryPackageById = async (page, packageId, interactionSequence) => {
-  assert(typeof packageId === 'string' && /^[0-9a-f-]{36}$/u.test(packageId), 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_INVALID');
-  const workspace = page.getByTestId('governed-delivery-workspace');
-  const choice = workspace.getByRole('list', { name: 'Delivery packages' }).locator(`button[data-package-id="${packageId}"]`);
-  assert.equal(await choice.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_COUNT');
-  await choice.click();
-  await page.waitForFunction(expected => document.querySelector('article[data-testid^="delivery-package-"]')?.getAttribute('data-package-id') === expected, packageId);
+  const { workspace, selected } = await selectSyntheticDeliveryPackage(page, packageId);
   interactionSequence.push('select:exact-bound-delivery-package');
-  return { workspace, selected: (await selectedDeliveryPackage(workspace)).selected };
+  return { workspace, selected };
 };
 
 const filterOneDeliveryItem = async (page, interactionSequence, query) => {
@@ -751,8 +757,11 @@ export const selectExactRevisedDeliveryDescendant = async (page, interactionSequ
 export const isolateFirstActionableDeliveryItem = async (page, interactionSequence, expectedPackageId = '', exactItemTitle = '', expectedItemId = '') => {
   assert(expectedItemId || exactItemTitle, 'PR_C_SYNTHETIC_BROWSER_EXACT_ITEM_BINDING_MISSING');
   const workspace = await selectDeliveryPackageForControl(page, 'Edit immutable descendant', interactionSequence, expectedPackageId);
-  const packageText = await (await selectedDeliveryPackage(workspace)).selected.innerText();
-  if (exactItemTitle && !expectedItemId) assert(packageText.includes('Manual Delivery entry') && packageText.includes('Not assessed · Planning only'), 'PR_C_SYNTHETIC_BROWSER_MANUAL_DRAFT_PACKAGE_REQUIRED');
+  if (exactItemTitle && !expectedItemId) {
+    const { selected } = await selectedDeliveryPackage(workspace);
+    for (const label of ['Manual Delivery entry', 'Not assessed · Planning only'])
+      assert.equal(await selected.getByText(label, { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_MANUAL_DRAFT_PACKAGE_REQUIRED');
+  }
   await loadCompleteDeliveryItemSet(page, interactionSequence);
   if (exactItemTitle) await filterOneDeliveryItem(page, interactionSequence, exactItemTitle);
   const cards = workspace.locator('article[data-testid^="delivery-item-"]');
@@ -826,16 +835,15 @@ export const prepareSyntheticDirectPdd = async (page, interactionSequence, bundl
 const prepareBlockedPackageRecovery = async (page, interactionSequence, { packageId = '', recoveryFixture = false } = {}) => {
   assert(packageId, 'PR_C_SYNTHETIC_BROWSER_RECOVERY_PACKAGE_BINDING_MISSING');
   const { workspace, selected } = await selectDeliveryPackageById(page, packageId, interactionSequence);
-  const selectedText = await selected.innerText();
   const expectedState = recoveryFixture
     ? ['blocked', 'Manual Delivery entry', 'Not assessed · Planning only', 'Review changes requested']
     : ['blocked', 'Studio handoff', 'Assessed lineage', 'Review changes requested'];
-  for (const expected of expectedState) assert(selectedText.includes(expected), `PR_C_SYNTHETIC_BROWSER_RECOVERY_PACKAGE_STATE_MISSING:${safeLabel(expected)}`);
+  for (const expected of expectedState) assert.equal(await selected.getByText(expected, { exact: true }).count(), 1, `PR_C_SYNTHETIC_BROWSER_RECOVERY_PACKAGE_STATE_MISSING:${safeLabel(expected)}`);
   await loadCompleteDeliveryItemSet(page, interactionSequence);
   const prepare = workspace.getByRole('button', { name: 'Prepare blocked package recovery', exact: true });
   assert(await prepare.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_RECOVERY_PREPARE_DISABLED');
   await prepare.click();
-  const available = workspace.getByRole('region', { name: 'Canonical descendants available for recovery' });
+  const available = workspace.locator('[aria-label="Canonical descendants available for recovery"]');
   await available.waitFor({ state: 'visible' });
   const itemName = recoveryFixture ? SYNTHETIC_RECOVERY_ITEM_TITLE : 'Synthetic governed work item revision';
   const selection = available.getByRole('checkbox', { name: `Select ${itemName} for recovery`, exact: true });
@@ -1095,9 +1103,7 @@ const namedControl = async (page, role, names) => {
 };
 
 export const packageCount = async page => {
-  const workspace = page.getByTestId('governed-delivery-workspace');
-  await workspace.waitFor({ state: 'visible' });
-  assert.equal(await workspace.getAttribute('data-delivery-usable'), 'true', 'PR_C_SYNTHETIC_BROWSER_DELIVERY_NOT_USABLE');
+  const workspace = await waitForSyntheticDeliveryWorkspace(page);
   const packages = workspace.getByRole('list', { name: 'Delivery packages', exact: true });
   // The authorized empty list has zero height on narrow layouts; its parent
   // must be visible and usable, but list presence is the loaded-state boundary.
@@ -1425,12 +1431,12 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
     const complete = await loadCompleteDeliveryItemSet(page, interactionSequence);
     const metrics = await deliveryCompleteSetMetrics(complete);
     const { selected, packageId } = await selectedDeliveryPackage(workspace);
-    const packageText = await selected.innerText();
-    assert(packageText.includes('Studio handoff') && packageText.includes('Assessed lineage'), 'PR_C_SYNTHETIC_BROWSER_ASSESSED_DELIVERY_PACKAGE_REQUIRED');
+    assert.equal(await selected.getByText('Studio handoff', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESSED_DELIVERY_PACKAGE_REQUIRED');
+    assert.equal(await selected.getByText('Assessed lineage', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESSED_DELIVERY_PACKAGE_REQUIRED');
     const filterResult = await workspace.getByTestId('delivery-item-filter-result').innerText();
     assert.equal(filterResult, `${metrics.itemCount} matching items across ${metrics.itemCount} loaded`, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_LOADED_ITEM_COUNT_MISMATCH');
     const citations = workspace.getByLabel('Exact source citation');
-    assert(await citations.count() > 0, 'PR_C_SYNTHETIC_BROWSER_DETERMINISTIC_CITATION_MISSING');
+    assert.equal(await citations.count(), Math.min(metrics.itemCount, 25), 'PR_C_SYNTHETIC_BROWSER_DETERMINISTIC_CITATION_MISSING');
     const citationIdentities = new Set();
     for (let index = 0; index < await citations.count(); index += 1) {
       const citation = (await citations.nth(index).innerText()).trim();
@@ -1446,6 +1452,15 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
     assert.equal(metrics.itemCount, snapshot.items.length, 'PR_C_SYNTHETIC_BROWSER_PUBLIC_ITEM_COUNT_MISMATCH');
     const canonicalIds = snapshot.items.map(item => item.aggregateId).sort();
     assert.equal(new Set(canonicalIds).size, snapshot.items.length, 'PR_C_SYNTHETIC_BROWSER_CANONICAL_ITEM_DUPLICATE');
+    const citationLocators = new Set();
+    for (const item of snapshot.items) {
+      const citation = item.sourceCitation;
+      assert(citation && `${String(citation.artifactType).toUpperCase()} artifact v${citation.artifactVersion}` === citationIdentity
+        && typeof citation.sectionLocator === 'string' && citation.sectionLocator.trim(), 'PR_C_SYNTHETIC_BROWSER_CANONICAL_CITATION_MISMATCH');
+      citationLocators.add(citation.sectionLocator);
+    }
+    assert.equal(citationLocators.size, snapshot.items.length, 'PR_C_SYNTHETIC_BROWSER_CANONICAL_CITATION_DUPLICATE');
+    await verifyRenderedDeliveryItemIds(selected, canonicalIds);
     state.set('full-governed-package', { ...state.get('full-governed-package'), itemIds: canonicalIds });
     state.set('ch06:selectedItemId', canonicalIds[0]);
     state.set('ch06:selectedItemTitle', snapshot.items.find(item => item.aggregateId === canonicalIds[0]).title);
@@ -1457,6 +1472,9 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
     const metrics = await deliveryCompleteSetMetrics(await loadCompleteDeliveryItemSet(page, interactionSequence));
     assert.equal(metrics.itemCount, expected.itemCount, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_COMPLETE_ITEM_COUNT_DRIFT');
     assert.equal(metrics.pageCount, expected.pageCount, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_COMPLETE_PAGE_COUNT_DRIFT');
+    const snapshot = await readSyntheticDeliveryPackage(state.get('sessions').get('delivery_reviewer'), expected.packageId);
+    assert.deepEqual(snapshot.items.map(item => item.aggregateId).sort(), expected.itemIds, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_COMPLETE_ITEM_SET_DRIFT');
+    await verifyRenderedDeliveryItemIds((await selectedDeliveryPackage(workspace)).selected, expected.itemIds);
     observed = { packageIdDigest: digest(expected.packageId), itemCount: metrics.itemCount, pageCount: metrics.pageCount, complete: true };
   } else if (plan.kind === 'package-count-unchanged') {
     const before = state.get(plan.stateKey); const after = await packageCount(page); assert(Number.isSafeInteger(before), `PR_C_SYNTHETIC_BROWSER_SNAPSHOT_MISSING:${plan.stateKey}`); assert.equal(after, before, `PR_C_SYNTHETIC_BROWSER_PACKAGE_COUNT_CHANGED:${stepId}`); observed = { before, after };
@@ -1744,9 +1762,12 @@ export const executePlannedStep = async ({ planned, session, providerEgress, sta
   const { page, identity } = session;
   const interactionSequence = summarizePrerequisiteInteractions(prerequisiteInteractions);
   const startedAt = nextTime();
-  // Monitor is read-only and may retain a projection loaded before another
-  // persona committed the baseline. Refresh it at each catalog observation.
-  if (planned.serverAction || planned.surface === 'monitor') {
+  // Each persona signs in before the campaign. These cross-actor observations
+  // must fetch committed state, even when their existing shell is already usable.
+  // Preserve CH-13 reconciliation and CH-14 open-dialog continuations.
+  const crossActorDeliveryRead = planned.checkpointId === 'CH-06'
+    && ['inspect-deterministic-item-citations', 'verify-complete-bounded-item-set'].includes(planned.stepId);
+  if (planned.serverAction || planned.surface === 'monitor' || crossActorDeliveryRead) {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForUsablePage(page);
     interactionSequence.push('reload:fresh-server-projection');

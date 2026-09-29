@@ -513,11 +513,11 @@
     },
     "browser": {
       "path": "tests/browser/deliveryMonitorPrC/deliveryMonitorPrC.spec.ts",
-      "sha256": "4fdaeb2be6015eab39b680534cdabc31cd1af7d63785ffa43f6e7613fb76fe40"
+      "sha256": "61bfc839584f377a231fd2df076e74ee51b244d198603aa309a4592ee35d84ae"
     },
     "browser-scope": {
       "path": "tests/browser/enterpriseIntelligencePrCScope.spec.ts",
-      "sha256": "2684648c1f834b72dfa716650abb27286eef0765814151b2e7f02f22e39fd11f"
+      "sha256": "8b21b16fd37861675bacb240de81a340eab8c17d2cfa6c64f9485606fd4f8a5d"
     },
     "boundary": {
       "path": "docs/quality/governed-delivery-monitor-pr-c-evidence.md",

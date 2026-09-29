@@ -5,6 +5,26 @@ const visibleOptions = select => select.locator('option').evaluateAll(nodes => n
   .map(node => ({ value: node.value, label: node.textContent?.trim() ?? '' }))
   .filter(option => option.value));
 
+export const waitForSyntheticDeliveryWorkspace = async page => {
+  const workspace = page.getByTestId('governed-delivery-workspace');
+  await workspace.waitFor({ state: 'visible' });
+  await page.locator('[data-testid="governed-delivery-workspace"][data-delivery-usable="true"]').waitFor({ state: 'visible' });
+  // An authorized empty list can have zero height; attachment proves it loaded.
+  await workspace.getByRole('list', { name: 'Delivery packages', exact: true }).waitFor({ state: 'attached' });
+  return workspace;
+};
+
+export const selectSyntheticDeliveryPackage = async (page, packageId) => {
+  assert(typeof packageId === 'string' && /^[0-9a-f-]{36}$/u.test(packageId), 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_INVALID');
+  const workspace = await waitForSyntheticDeliveryWorkspace(page);
+  const choice = workspace.getByRole('list', { name: 'Delivery packages' }).locator(`button[data-package-id="${packageId}"]`);
+  assert.equal(await choice.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_COUNT');
+  await choice.click();
+  const selected = workspace.locator(`article[data-testid^="delivery-package-"][data-package-id="${packageId}"]`);
+  await selected.waitFor({ state: 'visible' });
+  return { workspace, selected };
+};
+
 export const prepareSyntheticStudioGeneration = async (page, interactionSequence, { artifactId, templateLabel }) => {
   assert(artifactId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_GENERATION_ARTIFACT_ID_MISSING');
   assert(templateLabel, 'PR_C_SYNTHETIC_BROWSER_STUDIO_GENERATION_TEMPLATE_LABEL_MISSING');
@@ -64,13 +84,11 @@ export const selectSyntheticDeliveryArtifact = async (page, interactionSequence,
 };
 
 const deliveryPackageIds = async page => {
-  const workspace = page.getByTestId('governed-delivery-workspace');
+  const workspace = await waitForSyntheticDeliveryWorkspace(page);
   const choices = workspace.getByRole('list', { name: 'Delivery packages' }).getByRole('button');
   const packageIds = [];
   for (let index = 0; index < await choices.count(); index += 1) {
-    await choices.nth(index).click();
-    const selected = workspace.locator('article[data-package-id]');
-    const packageId = await selected.getAttribute('data-package-id');
+    const packageId = await choices.nth(index).getAttribute('data-package-id');
     assert(packageId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_MISSING');
     packageIds.push(packageId);
   }
@@ -120,25 +138,9 @@ export const verifySyntheticAssessHandoffReady = async (page, interactionSequenc
   return { center, card, upstreamHandoffId, sourceVersion, requestAuthorized: false };
 };
 
-const selectDeliveryPackage = async (page, packageId) => {
-  const workspace = page.getByTestId('governed-delivery-workspace');
-  const choices = workspace.getByRole('list', { name: 'Delivery packages' }).getByRole('button');
-  const matches = [];
-  for (let index = 0; index < await choices.count(); index += 1) {
-    await choices.nth(index).click();
-    const selected = workspace.locator(`article[data-package-id="${packageId}"]`);
-    if (await selected.count()) matches.push(index);
-  }
-  assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_COUNT:${matches.length}`);
-  await choices.nth(matches[0]).click();
-  const selected = workspace.locator(`article[data-package-id="${packageId}"]`);
-  await selected.waitFor({ state: 'visible' });
-  return { workspace, selected };
-};
-
 export const verifySyntheticDeliveryLineage = async (page, interactionSequence, { packageId, manual }) => {
   assert(packageId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_ID_MISSING');
-  const { workspace, selected } = await selectDeliveryPackage(page, packageId);
+  const { workspace, selected } = await selectSyntheticDeliveryPackage(page, packageId);
   assert.equal(await selected.getAttribute('data-package-id'), packageId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_PACKAGE_BINDING_MISMATCH');
   const sourceLabel = manual ? 'Manual Delivery entry' : 'Studio handoff';
   assert.equal(await selected.getByText(sourceLabel, { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_SOURCE_MODE_MISMATCH');
@@ -175,7 +177,7 @@ export const verifySyntheticMonitorBaseline = async (page, interactionSequence, 
 
 export const verifySyntheticBlockedPackageMonitorUnchanged = async (page, interactionSequence, { packageId }) => {
   assert(packageId, 'PR_C_SYNTHETIC_BROWSER_BLOCKED_PACKAGE_ID_MISSING');
-  const { selected } = await selectDeliveryPackage(page, packageId);
+  const { selected } = await selectSyntheticDeliveryPackage(page, packageId);
   assert.equal(await selected.getByText('blocked', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_BLOCKED_PACKAGE_STATUS_MISMATCH');
   assert.equal(await selected.getByText('Review changes requested', { exact: true }).count(), 1, 'PR_C_SYNTHETIC_BROWSER_BLOCKED_PACKAGE_REVIEW_MISMATCH');
   assert.equal(await page.getByRole('button', { name: 'Create read-only Monitor baseline', exact: true }).count(), 0, 'PR_C_SYNTHETIC_BROWSER_BLOCKED_PACKAGE_BASELINE_CONTROL_PRESENT');
@@ -202,8 +204,10 @@ export const verifySyntheticReadOnlyMonitorHistory = async (page, interactionSeq
 
   const identities = [];
   for (let index = 0; index < baselineCount; index += 1) {
+    const baselineId = await choices.nth(index).getAttribute('data-baseline-id');
     await choices.nth(index).click();
-    const selected = panel.locator('article[data-baseline-id]');
+    const selected = panel.locator(`article[data-baseline-id="${baselineId}"]`);
+    await selected.waitFor({ state: 'visible' });
     const identity = await selected.evaluate(node => ({
       id: node.getAttribute('data-baseline-id'),
       version: Number(node.getAttribute('data-baseline-version')),

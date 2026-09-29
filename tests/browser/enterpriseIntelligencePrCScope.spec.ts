@@ -1,5 +1,9 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { IDS, installEnterpriseIntelligenceFixture } from './enterpriseIntelligenceNetworkFixture';
+import { createDeliveryItemPageFixture } from '../../services/deliveryMonitor/fixtures';
+import { decodeDeliveryWorkspaceProjection } from '../../services/deliveryMonitor/contracts';
+import { buildBrowserExecutionCatalog, executePlannedStep, openSurface, observeBrowserOnlyStep } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { selectSyntheticDeliveryPackage } from '../../scripts/prCSyntheticBrowserControls.mjs';
 
 const harnessUrl = '/tests/browser/enterpriseIntelligenceHarness.html?delivery-monitor=1&scope-switch=1';
 const scopeAKey = 'scope-a-key-material-123456';
@@ -31,6 +35,109 @@ const marker = (info: TestInfo, assertionId: string, context: Record<string, unk
 };
 
 const workspace = (page: Page) => page.getByTestId('enterprise-intelligence-workspace');
+
+const ch06Projection = () => {
+  const projection = decodeDeliveryWorkspaceProjection(createDeliveryItemPageFixture({ start: 1, count: 3, total: 3 }));
+  Object.assign(projection.packages[0].sourcePackage, { lineageClassification: 'assessed', planningOnly: false, studioArtifactType: 'brd', studioArtifactVersion: 4 });
+  return projection;
+};
+
+test('PR C CH06 waits for the actual Enterprise Delivery projection before exact selection', async ({ page }) => {
+  const fixture = await installEnterpriseIntelligenceFixture(page, { deliveryMonitor: true });
+  const projection = ch06Projection();
+  fixture.setDeliveryWorkspace(projection);
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/enterprise-intelligence-query', async route => {
+    if (route.request().method() === 'POST') await pending;
+    await route.fallback();
+  });
+  await page.goto('/tests/browser/enterpriseIntelligenceHarness.html?delivery-monitor=1');
+  await expect(workspace(page)).toHaveAttribute('data-projection-scope-ready', 'false');
+  let settled = false;
+  const selection = (async () => {
+    await openSurface(page, 'delivery', []);
+    return selectSyntheticDeliveryPackage(page, projection.packages[0].id);
+  })().finally(() => { settled = true; });
+  // Flush a real render with the network response still withheld.
+  await expect(workspace(page).getByRole('button', { name: 'Work Package', exact: true })).toBeVisible();
+  await expect(page.getByTestId('governed-delivery-workspace')).toHaveCount(0);
+  expect(settled).toBe(false);
+  release();
+  const { selected } = await selection;
+  await expect(selected.getByLabel('Exact source citation')).toHaveCount(3);
+  await expect(workspace(page)).toHaveAttribute('data-projection-scope-ready', 'true');
+  await expect(selectSyntheticDeliveryPackage(page, '99999999-0000-4000-8000-000000000009')).rejects.toThrow('DELIVERY_PACKAGE_ID_COUNT');
+  expect(fixture.unexpectedRequests).toEqual([]);
+});
+
+test('PR C CH06 refreshes stale actor screens and rejects substituted members or missing citations', async ({ page, context }) => {
+  const reviewerPage = await context.newPage();
+  const authorFixture = await installEnterpriseIntelligenceFixture(page, { deliveryMonitor: true });
+  const reviewerFixture = await installEnterpriseIntelligenceFixture(reviewerPage, { deliveryMonitor: true });
+  let current = ch06Projection();
+  const empty = { ...current, packages: [] };
+  authorFixture.setDeliveryWorkspace(empty);
+  reviewerFixture.setDeliveryWorkspace(empty);
+  const harnessResponse = await context.request.get('/tests/browser/enterpriseIntelligenceHarness.html');
+  const harnessHtml = await harnessResponse.text();
+  for (const actorPage of [page, reviewerPage]) {
+    // Keep the production route sanitizer intact while serving the real harness.
+    await actorPage.route('**/synthetic-ch06?delivery-monitor=1', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: harnessHtml }));
+    await actorPage.goto('/synthetic-ch06?delivery-monitor=1');
+    await openSurface(actorPage, 'delivery', []);
+    await expect(actorPage.getByRole('list', { name: 'Delivery packages' }).getByRole('button')).toHaveCount(0);
+  }
+  const api = {
+    context: async () => ({ userId: evidencePersona.id, organizationId: current.organizationId, workspaceId: current.workspaceId, authorizationVersion: 1 }),
+    invoke: async (name: string) => {
+      expect(name).toBe('enterprise-intelligence-query');
+      return { projection: { deliveryWorkspace: structuredClone(current) } };
+    },
+  };
+  const author = { page, api, identity: {} };
+  const reviewer = { page: reviewerPage, api, identity: {} };
+  const state = new Map<string, unknown>([['ch05:packageId', current.packages[0].id], ['sessions', new Map([['delivery_author', author], ['delivery_reviewer', reviewer]])]]);
+  const run = (stepId: string, session: typeof author) => executePlannedStep({
+    planned: buildBrowserExecutionCatalog().find((step: { stepId: string }) => step.stepId === stepId),
+    session, state, providerEgress: [], nextTime: () => new Date().toISOString(), apiDescriptor: undefined, exerciseDigest: undefined,
+  });
+  // The consumer commits a package after both actor screens were loaded.
+  authorFixture.setDeliveryWorkspace(current);
+  const citations = await run('inspect-deterministic-item-citations', author);
+  expect(citations.outcome).toBe('passed');
+  expect(citations.browserArtifact.interactionSequence).toContain('reload:fresh-server-projection');
+  // Author decisions are committed while the reviewer's mounted screen stays old.
+  current = structuredClone(current);
+  current.packages[0].actions = ['delivery.package.review.resolve'];
+  for (const item of current.packages[0].items) { item.status = 'accepted'; item.actions = []; }
+  reviewerFixture.setDeliveryWorkspace(current);
+  const complete = await run('verify-complete-bounded-item-set', reviewer);
+  expect(complete.outcome).toBe('passed');
+  expect(complete.browserArtifact.interactionSequence).toContain('reload:fresh-server-projection');
+  // Same count is insufficient: a different aggregate must still fail.
+  current.packages[0].items[0].aggregateId = '99999999-0000-4000-8000-000000000009';
+  reviewerFixture.setDeliveryWorkspace(current);
+  await expect(run('verify-complete-bounded-item-set', reviewer)).rejects.toThrow('DELIVERY_COMPLETE_ITEM_SET_DRIFT');
+  current = ch06Projection();
+  delete current.packages[0].items[1].sourceCitation;
+  authorFixture.setDeliveryWorkspace(current);
+  await expect(run('inspect-deterministic-item-citations', author)).rejects.toThrow('DETERMINISTIC_CITATION_MISSING');
+  // A complete UI cannot hide an incomplete independent canonical snapshot.
+  authorFixture.setDeliveryWorkspace(ch06Projection());
+  await expect(run('inspect-deterministic-item-citations', author)).rejects.toThrow('CANONICAL_CITATION_MISMATCH');
+  current = ch06Projection();
+  current.packages[0].items[1].sourceCitation!.sectionLocator = current.packages[0].items[0].sourceCitation!.sectionLocator;
+  await expect(observeBrowserOnlyStep({ page, checkpointId: 'CH-06', stepId: 'inspect-deterministic-item-citations', interactionSequence: [], state })).rejects.toThrow('CANONICAL_CITATION_DUPLICATE');
+  const duplicate = ch06Projection();
+  duplicate.packages.push(structuredClone(duplicate.packages[0]));
+  authorFixture.setDeliveryWorkspace(duplicate);
+  await page.reload();
+  await openSurface(page, 'delivery', []);
+  await expect(selectSyntheticDeliveryPackage(page, duplicate.packages[0].id)).rejects.toThrow('DELIVERY_PACKAGE_ID_COUNT');
+  expect(authorFixture.unexpectedRequests).toEqual([]);
+  expect(reviewerFixture.unexpectedRequests).toEqual([]);
+});
 
 const waitForProjection = async (page: Page) => {
   await expect(workspace(page)).toHaveAttribute('data-projection-scope-ready', 'true');

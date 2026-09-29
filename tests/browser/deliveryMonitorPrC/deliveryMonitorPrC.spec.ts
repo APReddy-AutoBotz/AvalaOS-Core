@@ -507,7 +507,7 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
 
   const target=page.getByTestId(`delivery-item-${sequenceTargetItemId}`);
   await target.getByRole('button',{name:'Edit immutable descendant',exact:true}).click();
-  await page.getByRole('dialog').getByLabel('Item title',{exact:true}).fill('Synthetic first-pass governed item edit');
+  await page.getByRole('dialog').getByLabel('Item title',{exact:true}).fill('Synthetic governed work item revision');
   await page.getByRole('dialog').getByLabel('Decision rationale').fill('Exercise an immutable descendant before complete review.');
   await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('');
@@ -516,7 +516,7 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
 
   await page.getByTestId('accept-sequence-prerequisites').click();
   await expect(page.getByText('1 work item decision unresolved.',{exact:true})).toBeVisible();
-  await page.getByLabel('Filter canonical work items',{exact:true}).fill('Synthetic first-pass governed item edit');
+  await page.getByLabel('Filter canonical work items',{exact:true}).fill('Synthetic governed work item revision');
   await page.getByTestId(`delivery-item-${sequenceTargetItemId}`).getByRole('button',{name:'Accept proposal',exact:true}).click();
   await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the exact edited target after all other current proposals.');
   await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
@@ -528,11 +528,9 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   await expect(page.getByText('Independent review requested changes.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Create read-only Monitor baseline',exact:true})).toHaveCount(0);
 
-  await page.getByRole('button',{name:'Prepare blocked package recovery',exact:true}).click();
-  await page.getByLabel('Select Synthetic first-pass governed item edit for recovery',{exact:true}).check();
-  await page.getByLabel('Recovery title for Synthetic first-pass governed item edit',{exact:true}).fill(revisedSequenceTitle);
-  await page.getByLabel('Recovery rationale for Synthetic first-pass governed item edit',{exact:true}).fill('Resolve the exact independent review request.');
-  await page.getByRole('button',{name:'Submit resolved package',exact:true}).click();
+  await executeServerAction(page, 'CH-07', 'commit-only-explicitly-edited-descendants', interactions,
+    new Map([['full-governed-package', { packageId, itemCount: 250 }]]));
+  expect(interactions).toContain('prepare:one-explicit-blocked-descendant');
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('edited');
   await expect(page.getByTestId('delivery-item-filter-result')).toHaveText('1 matching items across 250 loaded');
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('proposed');
