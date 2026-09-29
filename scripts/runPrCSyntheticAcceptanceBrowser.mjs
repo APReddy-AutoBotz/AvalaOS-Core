@@ -5,7 +5,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { chromium, devices } from '@playwright/test';
+import { chromium, devices, expect } from '@playwright/test';
 
 import {
   CONTROLLED_HUMAN_CATALOG,
@@ -1002,21 +1002,40 @@ const armServerStep = async (page, checkpointId, stepId, interactionSequence) =>
   interactionSequence.push(`arm:${checkpointId.toLowerCase()}:${stepId}`);
 };
 
-export const collectProof = async (page, checkpointId, stepId, interactionSequence) => {
+export const collectProof = async (page, checkpointId, stepId, interactionSequence, { timeoutMs = 15_000 } = {}) => {
   const banner = page.getByTestId('controlled-human-nonproduction-banner');
   const panel = banner.locator('details');
   if (await panel.getAttribute('open') === null) {
     await panel.locator('summary').click()
       .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_OPEN_FAILED'); });
   }
-  await banner.getByRole('button', { name: 'Refresh evidence steps', exact: true }).click()
-    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_REFRESH_CONTROL_MISSING'); });
+  const refresh = banner.getByRole('button', { name: 'Refresh evidence steps', exact: true });
   const completed = banner.getByLabel('Completed controlled-human evidence step', { exact: true });
   const stepKey = `${checkpointId}:${stepId}`;
-  await completed.selectOption(stepKey, { timeout: 15_000 }).catch(async () => {
+  const deadline = Date.now() + timeoutMs;
+  const remaining = () => Math.max(1, deadline - Date.now());
+  let found = false;
+  // A completed action can outlive the click handler. Refresh durable proof;
+  // waiting on one anchored DOM snapshot cannot observe its later completion.
+  while (Date.now() < deadline) {
+    try {
+      await refresh.click({ timeout: remaining() });
+      await expect(refresh).toBeEnabled({ timeout: remaining() });
+    } catch {
+      throw new Error(Date.now() >= deadline ? 'PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING'
+        : 'PR_C_SYNTHETIC_BROWSER_PROOF_REFRESH_CONTROL_MISSING');
+    }
     const rejected = await banner.getByText('Sign in as the assigned synthetic persona, then refresh evidence steps. No evidence was recorded.', { exact: true }).isVisible().catch(() => false);
-    throw new Error(rejected ? 'PR_C_SYNTHETIC_BROWSER_PROOF_REFRESH_REJECTED' : 'PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING');
-  });
+    if (rejected) throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_REFRESH_REJECTED');
+    found = await completed.locator('option').evaluateAll((options, key) => options.some(option => option.value === key), stepKey);
+    if (found) {
+      await completed.selectOption(stepKey, { timeout: remaining() })
+        .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING'); });
+      break;
+    }
+    await page.waitForTimeout(Math.min(250, Math.max(0, deadline - Date.now())));
+  }
+  assert(found, 'PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING');
   interactionSequence.push(`inspect-proof:${checkpointId.toLowerCase()}:${stepId}`);
   const anchorText = await banner.getByTestId('controlled-human-safe-anchor').textContent({ timeout: 10_000 })
     .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_ANCHOR_MISSING'); });

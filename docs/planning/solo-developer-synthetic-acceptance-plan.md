@@ -1277,3 +1277,40 @@ Rollback restores the preceding query source set and reverts the decoder,
 normalizer, focused tests and provenance together. Keep acceptance blocked and
 the preview read-only if any binding or verification fails. Original
 CONTROLLED-HUMAN remains `not_run`; final merge remains NO-GO.
+
+### CH-07 durable-proof refresh race
+
+Run `36564147350` at `34176b13e83ba295d1459bc920cd4e704cbf5d98`
+failed at `CH-07:commit-only-explicitly-edited-descendants` with
+`PR_C_SYNTHETIC_BROWSER_COMPLETED_STEP_MISSING`. The revision itself succeeded:
+read-only server checks found the exact matching actor/step anchor and completed
+binding, with completion about 5.4 seconds after anchoring. The package is version
+2 in draft. Bounded recovery and private-state erasure passed; the exercise is
+deprovisioned. Normal final observers and acceptance recomputation did not run.
+
+Three read-only reviewers completed before writes. Confirmed source defect:
+the runner refreshed the evidence list once, then waited on that static DOM
+snapshot. An asynchronous application command can finish after that refresh;
+`networkidle` does not establish its durable completion. The prior real-banner
+fixture supplied completed proof on its first read, and the connected business
+flow bypassed proof collection, so neither exercised this race.
+
+The collector now refreshes only the existing authenticated read-only list within
+its existing 15-second deadline. Each refresh must settle before the next read.
+It explicitly selects the requested checkpoint/step and preserves the exact
+anchor/binding checks. A rejected refresh fails immediately; a permanently absent
+proof still fails. It never re-arms, replays the business action, invokes completion
+directly, or accepts the banner's fallback proof.
+
+Executed evidence: extending the existing production-banner fixture reproduced
+the same missing-step failure before the repair. Afterward, Desktop and Pixel
+cases passed for an initially anchored then completed step, permanent absence,
+and rejected refresh, with an unrelated completed proof present and zero arm or
+business-action calls. All 58 focused runner tests passed with zero skips.
+No product, schema or Edge function refresh is needed. Exact-head CI, preview
+binding and the full protected campaign remain planned verification; all 84 steps
+and 43 server actions remain required. These inert tests are not hosted acceptance.
+
+Rollback reverts the collector, focused fixture and provenance together. Keep
+acceptance blocked; no database rollback or action replay follows. Original
+CONTROLLED-HUMAN remains `not_run`; final merge remains NO-GO.

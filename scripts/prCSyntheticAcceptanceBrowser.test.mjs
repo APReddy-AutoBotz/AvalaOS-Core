@@ -271,6 +271,10 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
   const stepId = 'resolve-material-assess-conflict';
   const safeAnchor = { stepId, ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`anchorField${i}`, exerciseDigest])) };
   const safeBinding = { stepId, ...Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`bindingField${i}`, exerciseDigest])) };
+  const revisionStepId = 'commit-only-explicitly-edited-descendants';
+  const revisionAnchor = { ...safeAnchor, stepId: revisionStepId };
+  const revisionBinding = { ...safeBinding, stepId: revisionStepId };
+  const revisionRecord = { checkpointId: 'CH-07', stepId: revisionStepId, state: 'completed', safeAnchor: revisionAnchor, safeBinding: revisionBinding };
   const records = [{ checkpointId: 'CH-01', stepId, state: 'completed', safeAnchor, safeBinding },
     ...buildBrowserExecutionCatalog().filter(step => step.personaKey === 'requester' && step.serverAction && step.stepId !== stepId)
       .map(step => ({ checkpointId: step.checkpointId, stepId: step.stepId, action: step.serverAction.action, state: 'unanchored', safeAnchor: null, safeBinding: null })),
@@ -327,9 +331,21 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
         if (id === entry) return source;
         if (id === '\0inert-synthetic-backend') return `
         export const getControlledHumanBrowserBinding = () => ({ status: 'authorized' });
-        export const listControlledHumanStepBindings = async () => ${JSON.stringify(records)};
+        export const listControlledHumanStepBindings = async () => {
+          window.proofReads = (window.proofReads || 0) + 1;
+          const records = ${JSON.stringify(records)};
+          if (!window.proofMode) return records;
+          if (window.proofMode === 'rejected') throw new Error('fixture-only rejection');
+          const revision = ${JSON.stringify(revisionRecord)};
+          // A list request observes the receipt state when that request starts.
+          if (window.proofMode === 'missing' || window.proofReads === 1) {
+            revision.state = 'anchored'; revision.safeBinding = null;
+          }
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return [...records, revision];
+        };
         export const getLastCompletedControlledHumanProof = () => null;
-        export const armControlledHumanStep = () => { throw new Error('unexpected arm'); };
+        export const armControlledHumanStep = () => { window.proofArms = (window.proofArms || 0) + 1; throw new Error('unexpected arm'); };
       `;
       },
     }],
@@ -364,6 +380,29 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
       await apply.click({ timeout: 3000 });
       assert.equal(await page.locator('#app-main').getAttribute('data-applied'), 'true');
       await page.close();
+      for (const mode of ['delayed', 'missing', 'rejected']) {
+        const proofPage = await browser.newPage({ viewport });
+        await proofPage.route('**/*', route => route.abort());
+        await proofPage.setContent('<div id="root"></div>');
+        await proofPage.evaluate(mode => { window.proofMode = mode; }, mode);
+        await proofPage.addStyleTag({ content: css.css });
+        await proofPage.addScriptTag({ content: compiled[0].output.find(file => file.type === 'chunk').code });
+        const interactions = [];
+        if (mode === 'delayed') {
+          const proof = await collectProof(proofPage, 'CH-07', revisionStepId, interactions);
+          assert.deepEqual(proof, { serverAnchor: revisionAnchor, serverBinding: revisionBinding });
+          assert.deepEqual(interactions, [`inspect-proof:ch-07:${revisionStepId}`]);
+          assert.equal(await proofPage.evaluate(() => window.proofReads), 2);
+        } else {
+          await assert.rejects(collectProof(proofPage, 'CH-07', revisionStepId, interactions, { timeoutMs: 650 }),
+            new RegExp(mode === 'missing' ? 'COMPLETED_STEP_MISSING' : 'PROOF_REFRESH_REJECTED', 'u'));
+          assert.deepEqual(interactions, []);
+          if (mode === 'rejected') assert.equal(await proofPage.evaluate(() => window.proofReads), 1);
+        }
+        assert.equal(await proofPage.evaluate(() => window.proofArms || 0), 0);
+        assert.equal(await proofPage.locator('#app-main').getAttribute('data-applied'), null);
+        await proofPage.close();
+      }
     }
   } finally { await browser.close(); }
 });
