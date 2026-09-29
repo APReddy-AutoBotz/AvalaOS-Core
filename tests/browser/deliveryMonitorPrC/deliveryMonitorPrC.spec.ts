@@ -500,31 +500,33 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   test.setTimeout(120_000);
   await open(page,'?state=full-sequence');
   const interactions:string[]=[];
-  const selected=await isolateFirstActionableDeliveryItem(page,interactions,packageId,'Canonical work item 230',sequenceTargetItemId);
-  expect(selected.title).toBe('Canonical work item 230');
+  const state = new Map<string, unknown>([
+    ['full-governed-package', { packageId, itemCount: 250 }],
+    ['ch06:selectedItemTitle', 'Canonical work item 230'],
+    ['ch06:selectedItemId', sequenceTargetItemId],
+    ['prereq:ch06:finalItemId', sequenceTargetItemId],
+  ]);
+  await executeServerAction(page, 'CH-06', 'edit-one-item-with-rationale', interactions, state);
   await expect(page.getByRole('list',{name:'Delivery packages'}).locator(`button[data-package-id="${packageId}"]`)).toHaveAttribute('aria-pressed','true');
   await expect(page.locator(`article[data-handoff-id="${handoffId}"]`)).toHaveCount(1);
 
-  const target=page.getByTestId(`delivery-item-${sequenceTargetItemId}`);
-  await target.getByRole('button',{name:'Edit immutable descendant',exact:true}).click();
-  await page.getByRole('dialog').getByLabel('Item title',{exact:true}).fill('Synthetic governed work item revision');
-  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Exercise an immutable descendant before complete review.');
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  expect(interactions).toContain('fill:item-title-material-revision');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByLabel('Filter canonical work items',{exact:true}).fill('Synthetic governed work item revision');
+  const edited = page.getByTestId(`delivery-item-${sequenceTargetItemId}`);
+  await expect(edited).toHaveAttribute('data-item-status', 'edited');
+  await expect(edited.getByText('Version 2', { exact: true })).toBeVisible();
+  await expect(edited.getByText('Synthetic revision bound to the reviewed source and exact package.', { exact: true })).toBeVisible();
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('');
   await expect(page.getByText('250 work item decisions unresolved.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Request package changes',exact:true})).toHaveCount(0);
 
   await page.getByTestId('accept-sequence-prerequisites').click();
   await expect(page.getByText('1 work item decision unresolved.',{exact:true})).toBeVisible();
-  await page.getByLabel('Filter canonical work items',{exact:true}).fill('Synthetic governed work item revision');
-  await page.getByTestId(`delivery-item-${sequenceTargetItemId}`).getByRole('button',{name:'Accept proposal',exact:true}).click();
-  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the exact edited target after all other current proposals.');
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await executeServerAction(page, 'CH-06', 'decide-every-current-proposal', interactions, state);
   await expect(page.getByText('Approved identity: 250 server-counted items.',{exact:true})).toBeVisible();
 
-  await page.getByRole('button',{name:'Request package changes',exact:true}).click();
-  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent review requests one exact governed revision.');
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await executeServerAction(page, 'CH-07', 'request-package-changes', interactions, state);
   await expect(page.getByText('Independent review requested changes.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Create read-only Monitor baseline',exact:true})).toHaveCount(0);
 
@@ -536,21 +538,14 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   await page.getByLabel('Filter canonical work items',{exact:true}).fill('proposed');
   await expect(page.getByTestId('delivery-item-filter-result')).toHaveText('249 matching items across 250 loaded');
 
-  const revised=await selectExactRevisedDeliveryDescendant(page,interactions,packageId,sequenceTargetItemId,250);
-  await revised.control.click();
-  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the exact revised descendant before deciding the 249 carried proposals.');
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await executeServerAction(page, 'CH-07', 'decide-revised-descendant', interactions, state);
   await expect(page.getByText('249 work item decisions unresolved.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Approve package review',exact:true})).toHaveCount(0);
   await page.getByTestId('accept-sequence-prerequisites').click();
   await expect(page.getByText('Approved identity: 250 server-counted items.',{exact:true})).toBeVisible();
 
-  await page.getByRole('button',{name:'Approve package review',exact:true}).click();
-  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent review confirms all 250 current decisions.');
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
-  await page.getByRole('button',{name:'Final package approval',exact:true}).click();
-  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent approval binds the complete revised package.');
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await executeServerAction(page, 'CH-07', 'review-complete-revised-package', interactions, state);
+  await executeServerAction(page, 'CH-07', 'approve-exact-revised-package', interactions, state);
   const baselineSelector=page.getByTestId('baseline-eligibility-selectors').locator(`li[data-package-id="${packageId}"]`);
   await expect(baselineSelector).toHaveCount(1);
   await baselineSelector.getByRole('button',{name:'Create read-only Monitor baseline',exact:true}).click();

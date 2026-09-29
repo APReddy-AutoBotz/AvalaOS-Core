@@ -778,7 +778,7 @@ export const isolateFirstActionableDeliveryItem = async (page, interactionSequen
   assert(title, 'PR_C_SYNTHETIC_BROWSER_ACTIONABLE_DELIVERY_ITEM_TITLE_MISSING');
   await filterOneDeliveryItem(page, interactionSequence, title);
   if (expectedItemId) assert.equal(await workspace.getByTestId(`delivery-item-${expectedItemId}`).count(), 1, 'PR_C_SYNTHETIC_BROWSER_EXACT_ITEM_FILTER_MISMATCH');
-  return { workspace, title };
+  return { workspace, title, ...await exactEnabledControl(card, 'button', ['Edit immutable descendant'], 'CH-06:edit-one-item-with-rationale') };
 };
 
 const reachControlWithKeyboard = async (page, control, interactionSequence) => {
@@ -894,10 +894,23 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
     const expectedPackageId = ['CH-06', 'CH-07'].includes(checkpointId) ? state.get('full-governed-package')?.packageId
       : state.get(checkpointId === 'CH-10' ? 'prereq:ch10:packageId' : 'prereq:ch11:packageId');
     assert(expectedPackageId, 'PR_C_SYNTHETIC_BROWSER_GOVERNED_PACKAGE_BINDING_MISSING');
-    await selectDeliveryPackageForControl(page, deliveryControlByKey, interactionSequence, expectedPackageId);
+    if (key === 'CH-06:edit-one-item-with-rationale')
+      return isolateFirstActionableDeliveryItem(page, interactionSequence, expectedPackageId, state.get('ch06:selectedItemTitle'), state.get('ch06:selectedItemId'));
+    if (key === 'CH-06:decide-every-current-proposal') {
+      const itemId = state.get('prereq:ch06:finalItemId');
+      assert(itemId, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_DECISION_ITEM_BINDING_MISSING');
+      const { workspace } = await selectDeliveryPackageById(page, expectedPackageId, interactionSequence);
+      await loadCompleteDeliveryItemSet(page, interactionSequence);
+      // The remaining proposal can be outside the first 25 rendered members.
+      await filterOneDeliveryItem(page, interactionSequence, 'Synthetic governed work item revision');
+      const card = workspace.getByTestId(`delivery-item-${itemId}`);
+      assert.equal(await card.count(), 1, 'PR_C_SYNTHETIC_BROWSER_DELIVERY_DECISION_ITEM_MISMATCH');
+      return exactEnabledControl(card, 'button', ['Accept proposal'], key);
+    }
+    const workspace = await selectDeliveryPackageForControl(page, deliveryControlByKey, interactionSequence, expectedPackageId);
     await loadCompleteDeliveryItemSet(page, interactionSequence);
-    if (key === 'CH-06:edit-one-item-with-rationale') await isolateFirstActionableDeliveryItem(page, interactionSequence, expectedPackageId, state.get('ch06:selectedItemTitle'), state.get('ch06:selectedItemId'));
-    if (key === 'CH-06:decide-every-current-proposal') await filterOneDeliveryItem(page, interactionSequence, 'Synthetic governed work item revision');
+    const { selected } = await selectedDeliveryPackage(workspace);
+    return exactEnabledControl(selected, 'button', [deliveryControlByKey], key);
   }
   if (key === 'CH-07:commit-only-explicitly-edited-descendants') {
     const packageId = state.get('full-governed-package')?.packageId;
@@ -906,7 +919,7 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
   }
   if (key === 'CH-07:decide-revised-descendant') {
     const packageId = state.get('full-governed-package')?.packageId;
-    await selectExactRevisedDeliveryDescendant(page, interactionSequence, packageId, state.get('prereq:ch06:finalItemId'), state.get('full-governed-package').itemCount);
+    return { ...await selectExactRevisedDeliveryDescendant(page, interactionSequence, packageId, state.get('prereq:ch06:finalItemId'), state.get('full-governed-package').itemCount), label: 'Accept proposal' };
   }
   if (key === 'CH-13:simulate-response-loss') await prepareBlockedPackageRecovery(page, interactionSequence, { packageId: state.get('seed:recovery-packageId'), recoveryFixture: true });
   if (key === 'CH-10:create-direct-studio-plan') {
@@ -920,6 +933,27 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
 };
 
 const completeVisibleDialog = async (page, stepId, interactionSequence) => {
+  if (stepId === 'edit-one-item-with-rationale') {
+    const dialog = page.getByRole('dialog', { name: 'Confirm governed decision', exact: true });
+    await dialog.waitFor({ state: 'visible' })
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_EDIT_DIALOG_MISSING'); });
+    // Role names exclude a textarea's existing text, unlike the label-text selector.
+    for (const [name, value, phase] of [
+      ['Item title', 'Synthetic governed work item revision', 'TITLE'],
+      ['Description', 'Synthetic revision bound to the reviewed source and exact package.', 'DESCRIPTION'],
+      [/^Decision rationale\b/u, `Synthetic acceptance rationale for ${stepId}.`, 'RATIONALE'],
+    ]) {
+      await dialog.getByRole('textbox', { name, exact: true }).fill(value)
+        .catch(() => { throw new Error(`PR_C_SYNTHETIC_BROWSER_EDIT_${phase}_FAILED`); });
+    }
+    interactionSequence.push('fill:item-title-material-revision', 'fill:decision-rationale');
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click()
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_EDIT_CONFIRM_FAILED'); });
+    await dialog.waitFor({ state: 'hidden' })
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_EDIT_NOT_COMMITTED'); });
+    interactionSequence.push('activate:dialog-confirm');
+    return;
+  }
   const dialog = page.getByRole('dialog').last();
   if (!(await dialog.count()) || !(await dialog.isVisible())) return;
   const values = new Map([
@@ -930,13 +964,6 @@ const completeVisibleDialog = async (page, stepId, interactionSequence) => {
     ['Acceptance criteria', 'The governed synthetic observation is retained.'],
     ['Non-functional requirements', 'Preserve authority, audit, and bounded response behavior.'],
   ]);
-  if (stepId === 'edit-one-item-with-rationale') {
-    const title = dialog.getByLabel('Item title', { exact: true });
-    assert.equal(await title.count(), 1, 'PR_C_SYNTHETIC_BROWSER_EDIT_ITEM_TITLE_COUNT');
-    await title.fill('Synthetic governed work item revision');
-    await dialog.getByLabel('Description', { exact: true }).fill('Synthetic revision bound to the reviewed source and exact package.');
-    interactionSequence.push('fill:item-title-material-revision');
-  }
   for (const [label, value] of values) {
     // Delivery's rationale label includes its validation help text.
     const input = dialog.getByLabel(label, { exact: label !== 'Decision rationale' });
@@ -1008,7 +1035,7 @@ export const executeServerAction = async (page, checkpointId, stepId, interactio
   assert(contract, `PR_C_SYNTHETIC_BROWSER_SERVER_CONTRACT_MISSING:${key}`);
   const labels = ACTION_LABEL_OVERRIDES[key] ?? ACTION_LABELS[contract.action];
   assert(labels?.length, `PR_C_SYNTHETIC_BROWSER_ACTION_PLAN_MISSING:${key}`);
-  await prepareServerAction(page, checkpointId, stepId, interactionSequence, state);
+  const preparedControl = await prepareServerAction(page, checkpointId, stepId, interactionSequence, state);
   const handoffTarget = STUDIO_HANDOFF_STEP_TARGETS[key];
   const deliveryHandoffKey = {
     'CH-04:request-handoff-changes': 'ch04:handoffId',
@@ -1050,11 +1077,11 @@ export const executeServerAction = async (page, checkpointId, stepId, interactio
   }
   if (handoffTarget && key !== 'CH-03:request-studio-handoff')
     assert(state.get('ch03:handoffId'), 'PR_C_SYNTHETIC_BROWSER_STUDIO_HANDOFF_BINDING_MISSING');
-  const { control, label } = handoffTarget
+  const { control, label } = preparedControl ?? (handoffTarget
     ? await exactStudioHandoffAction(page, interactionSequence, { ...handoffTarget, button: labels[0],
       ...(key === 'CH-03:request-studio-handoff' ? { upstreamHandoffId: state.get('seed:assess-handoff')?.upstreamHandoffId }
         : { handoffId: state.get('ch03:handoffId') }) })
-    : await exactEnabledControl(root, 'button', labels, key);
+    : await exactEnabledControl(root, 'button', labels, key));
   await control.click();
   interactionSequence.push(`activate:${safeLabel(label)}`);
   await completeVisibleDialog(page, stepId, interactionSequence);

@@ -1192,3 +1192,44 @@ infrastructure failure is established. Native Assess run 36524295136 attempt 1
 separately failed at image-cache setup on a pull rate limit; attempt 2 passed and
 its five-group, 27-command, 1,145-source-file artifact independently verified.
 That earlier-head evidence is retained and does not replace final-head CI.
+
+### CH-06 edit runner reproduction and connected action repair
+
+Run `36528574360` at `54ec73d0bc7b9a3498541d3fc7e97e67df9980f3`
+passed preparation and the preceding CH-06 observations, then rejected
+`CH-06:edit-one-item-with-rationale` with `LOCATOR_TIMEOUT`. Bounded recovery
+and private-state erasure passed; the recovered exercise is deprovisioned with
+zero edit anchors and bindings. Normal observers, deprovision verification and
+acceptance recomputation did not run. No acceptance artifact was produced.
+
+Read-only architecture, security and quality reviewers completed before writes.
+The controller reproduced the failure on Desktop Chrome and Pixel 7 by replacing
+the existing connected test's manually scripted edit with the actual runner:
+the populated Description textarea is present, but the exact label-text locator
+does not resolve it. The prior test only filled title and rationale, bypassing
+that failing path. This is a confirmed source defect in the runner and its coverage.
+
+The CH-06 edit now requires the named decision dialog, fills its textboxes by
+accessible role/name, confirms, and waits for dismissal. Failures expose only
+bounded phase codes. Existing acceptance criteria and non-functional requirements
+remain intact. The connected test also uses the real runner for subsequent item
+decisions and package review/approval. That rehearsal reproduced two adjacent
+selector defects before publication: the remaining item beyond the first 25
+rendered members was checked before filtering, and a package action lookup also
+matched a handoff action. Preparation now filters the exact bound item before
+resolving its button and returns the selected item/package control for activation.
+It never chooses an arbitrary first enabled action or broadens authorization.
+
+Executed evidence: the connected 250-item sequence passes on Desktop Chrome and
+Pixel 7 with zero skips, including edit, current decision, requested changes,
+recovery, revised decision, independent review, approval and baseline creation.
+Six affected CH-06 projection and CH-14 dialog-continuity cases also passed.
+The final 57/57 focused runner contracts, TypeScript, evidence contract and
+whitespace checks passed. These inert local fixtures do not prove hosted Auth/RLS/Edge.
+All 84 synthetic steps and 43 server actions remain required; the protected
+campaign and independent final observers remain planned verification.
+
+Rollback reverts the runner, connected test and provenance together and leaves
+acceptance blocked. This repair changes no product code, schema, provider path,
+permissions or deployed Edge function. Original CONTROLLED-HUMAN remains
+`not_run`; merge remains NO-GO until the full required evidence is verified.
