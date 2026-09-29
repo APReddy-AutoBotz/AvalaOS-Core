@@ -234,6 +234,47 @@ test('PR C exact baseline action waits for the delayed bound selector', async ({
   await expect(page.getByTestId('canonical-monitor-baselines').getByRole('list', { name: 'Approved Monitor baselines', exact: true }).getByRole('button')).toHaveCount(1);
 });
 
+test('PR C exact baseline action waits for committed projection and preserves failed reload', async ({ page }) => {
+  for (const [checkpoint, stepId, stateKey, stateValue] of [
+    ['CH-08', 'create-baseline-with-exact-package-selectors', 'full-governed-package', { packageId }],
+    ['CH-11', 'create-read-only-manual-baseline', 'prereq:ch11:packageId', packageId],
+  ] as const) {
+    await open(page, '?state=approved&baseline-reload=delayed');
+    const state = new Map<string, unknown>([[stateKey, stateValue]]);
+    await snapshotBeforeServerAction(page, `${checkpoint}:${stepId}`, state);
+    let settled = false;
+    const pending = executeServerAction(page, checkpoint, stepId, [], state)
+      .then(() => { settled = true; return null; }, (error: Error) => { settled = true; return error; });
+    const release = page.getByTestId('resolve-baseline-reload');
+    await expect(release).toHaveAttribute('data-phase', 'committed');
+    await expect(release).toHaveAttribute('data-command-count', '1');
+    await expect(page.getByRole('dialog', { name: 'Confirm governed decision', exact: true })).toBeVisible();
+    await expect(page.getByTestId(`monitor-baseline-${baselineId}`)).toHaveCount(0);
+    // Longer than networkidle: no network request represents the pending reload.
+    await page.waitForTimeout(900);
+    const returnedBeforeProjection = settled;
+    await release.click();
+    expect(await pending).toBeNull();
+    expect(returnedBeforeProjection).toBe(false);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await verifySyntheticMonitorBaseline(page, [], { packageId, baselineId });
+    await expect(page.getByRole('list', { name: 'Approved Monitor baselines' }).getByRole('button')).toHaveCount(1);
+    await expect(release).toHaveAttribute('data-command-count', '1');
+  }
+
+  await open(page, '?state=approved&baseline-reload=failed');
+  const pending = executeServerAction(page, 'CH-08', 'create-baseline-with-exact-package-selectors', [], new Map([['full-governed-package', { packageId }]]))
+    .then(() => null, (error: Error) => error);
+  const release = page.getByTestId('resolve-baseline-reload');
+  await expect(release).toHaveAttribute('data-phase', 'committed');
+  await release.click();
+  expect((await pending)?.message).toContain('PR_C_SYNTHETIC_BROWSER_BASELINE_PROJECTION_NOT_CONFIRMED');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('The command was not confirmed');
+  await expect(page.getByTestId(`monitor-baseline-${baselineId}`)).toHaveCount(0);
+  await expect(release).toHaveAttribute('data-command-count', '1');
+});
+
 test('PR C exact handoff action rejects missing and duplicate bound cards', async ({ page }) => {
   for (const query of ['', '?state=handoff-outbox']) {
     await open(page, query);
@@ -555,8 +596,9 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   await expect(rebuiltPackage.getByText('Approval approved', {exact:true})).toBeVisible();
   const baselineSelector=page.getByTestId('baseline-eligibility-selectors').locator(`li[data-package-id="${packageId}"]`);
   await expect(baselineSelector).toHaveCount(1);
-  await baselineSelector.getByRole('button',{name:'Create read-only Monitor baseline',exact:true}).click();
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await snapshotBeforeServerAction(page, 'CH-08:create-baseline-with-exact-package-selectors', state);
+  await executeServerAction(page, 'CH-08', 'create-baseline-with-exact-package-selectors', interactions, state);
+  await verifySyntheticMonitorBaseline(page, interactions, { packageId, baselineId });
   await expect(page.getByRole('list',{name:'Approved Monitor baselines'}).locator(`button[data-baseline-id="${baselineId}"]`)).toHaveCount(1);
   await expect(page.getByTestId(`monitor-baseline-${baselineId}`)).toHaveAttribute('data-package-id',packageId);
   await expect(page.getByTestId(`monitor-baseline-${baselineId}`)).toHaveAttribute('data-accepted-item-count','250');

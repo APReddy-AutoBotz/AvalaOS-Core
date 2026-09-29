@@ -933,6 +933,18 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
 };
 
 const completeVisibleDialog = async (page, stepId, interactionSequence) => {
+  if (['create-baseline-with-exact-package-selectors', 'create-read-only-manual-baseline'].includes(stepId)) {
+    const dialog = page.getByRole('dialog', { name: 'Confirm governed decision', exact: true });
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click()
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_BASELINE_CONFIRM_FAILED'); });
+    interactionSequence.push('activate:dialog-confirm');
+    // Production closes only after the command AND its projection reload succeed.
+    // Durable evidence can appear earlier; networkidle is not this completion signal.
+    await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_BASELINE_PROJECTION_NOT_CONFIRMED'); });
+    interactionSequence.push('observe:baseline-projection-confirmed');
+    return;
+  }
   if (stepId === 'edit-one-item-with-rationale') {
     const dialog = page.getByRole('dialog', { name: 'Confirm governed decision', exact: true });
     await dialog.waitFor({ state: 'visible' })
@@ -1876,7 +1888,14 @@ export const executePlannedStep = async ({ planned, session, providerEgress, sta
       await finalizeAssessDraftForReview(page, interactionSequence, { afterTranscriptApply: true });
     }
     if (key === 'CH-08:create-baseline-with-exact-package-selectors') {
-      const count = await baselineCount(page); assert.equal(count, Number(state.get('baseline-before-create')) + 1); state.set('baseline-after-create', count);
+      const baselineId = state.get('ch08:baselineId');
+      assert(baselineId, 'PR_C_SYNTHETIC_BROWSER_CREATED_BASELINE_BINDING_MISSING');
+      await verifySyntheticMonitorBaseline(page, interactionSequence, {
+        packageId: state.get('full-governed-package')?.packageId, baselineId,
+      });
+      const count = await baselineCount(page);
+      assert.equal(count, Number(state.get('baseline-before-create')) + 1, 'PR_C_SYNTHETIC_BROWSER_CREATED_BASELINE_COUNT_MISMATCH');
+      state.set('baseline-after-create', count);
     }
   } else interactionSequence.push(`observe:${planned.stepId}`);
   const assertions = await stepAssertions({ page, checkpointId: planned.checkpointId, stepId: planned.stepId, providerEgress, state, interactionSequence, proof });

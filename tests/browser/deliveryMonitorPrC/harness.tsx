@@ -136,6 +136,9 @@ function Harness() {
   const [error, setError] = useState('');
   const [pageBusy, setPageBusy] = useState(false);
   const pageLoadAttempts = useRef(0);
+  const baselineReload = useRef<(() => void) | null>(null);
+  const baselineCommandCount = useRef(0);
+  const [baselinePhase, setBaselinePhase] = useState('idle');
 
   const acceptOtherSequenceItems = () => {
     setDelivery(current => ({ ...current, packages: current.packages.map(pkg => {
@@ -279,6 +282,13 @@ function Harness() {
       return current;
     });
     if (command.action === 'monitor.baseline.create') {
+      baselineCommandCount.current += 1;
+      if (params.has('baseline-reload')) {
+        // Production confirms the command before awaiting its projection reload.
+        setBaselinePhase('committed');
+        await new Promise<void>(resolve => { baselineReload.current = resolve; });
+        if (params.get('baseline-reload') === 'failed') return false;
+      }
       const deliveryPackage = delivery.packages.find(pkg => pkg.id === command.workPackageId && pkg.status === 'approved');
       const acceptedItems = deliveryPackage?.items.filter(entry => entry.status === 'accepted') ?? [];
       if (deliveryPackage && deliveryPackage.itemPage.isComplete && acceptedItems.length === deliveryPackage.acceptedItemCount) setMonitor(current => current.baselines.length ? current : { ...current, baselines: [{ id: uuid(90), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false, workPackageId: command.workPackageId, workPackageVersion: command.expectedPackageVersion, acceptedItemCount: acceptedItems.length, acceptedItems: acceptedItems.map(entry => ({ version: entry.version, type: entry.type, title: entry.title, status: 'accepted' })), milestones: acceptedItems.filter(entry => entry.type === 'milestone').map(entry => entry.title), dependencies: acceptedItems.filter(entry => entry.type === 'dependency').map(entry => entry.title), blockers: [], risks: acceptedItems.filter(entry => entry.type === 'risk').map(entry => entry.title) }] });
@@ -286,7 +296,7 @@ function Harness() {
     setStatus(`${command.action} committed and exact projection reloaded.`);
   };
 
-  return <main className="min-h-screen bg-[var(--av-color-bg-subtle)] p-4 text-[var(--av-color-text)] sm:p-6"><nav aria-label="Harness views" className="mx-auto mb-4 flex max-w-7xl flex-wrap gap-2">{(['delivery', 'enterprise-monitor', 'primary-monitor', 'context-monitor'] as const).map(value => <button key={value} type="button" onClick={() => setView(value)} className="min-h-10 rounded-xl border px-3 font-black">{value.replace('-', ' ')}</button>)}{fixtureState === 'full-sequence' && <button type="button" data-testid="accept-sequence-prerequisites" onClick={acceptOtherSequenceItems} className="min-h-10 rounded-xl border px-3 font-black">Apply authorized acceptance prerequisites</button>}</nav><div className="mx-auto max-w-7xl">{view === 'delivery' ? <GovernedDeliveryWorkspace projection={delivery} monitorProjection={['no-monitor','blocked-seeded-baseline'].includes(fixtureState) ? undefined : monitor} busy={pageBusy} status={status} error={error} onAction={act} onLoadNextPage={loadNextPage}/> : view === 'enterprise-monitor' ? <MonitorApprovedBaselinePanel projection={monitor} heading="Enterprise Intelligence canonical baseline"/> : view === 'primary-monitor' ? <PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => undefined} onScopeChange={() => undefined} onViewChange={() => undefined} canonicalMonitorProjection={monitor}/> : <ContextMonitorHarness/>}</div></main>;
+  return <main className="min-h-screen bg-[var(--av-color-bg-subtle)] p-4 text-[var(--av-color-text)] sm:p-6"><nav aria-label="Harness views" className="mx-auto mb-4 flex max-w-7xl flex-wrap gap-2">{(['delivery', 'enterprise-monitor', 'primary-monitor', 'context-monitor'] as const).map(value => <button key={value} type="button" onClick={() => setView(value)} className="min-h-10 rounded-xl border px-3 font-black">{value.replace('-', ' ')}</button>)}{fixtureState === 'full-sequence' && <button type="button" data-testid="accept-sequence-prerequisites" onClick={acceptOtherSequenceItems} className="min-h-10 rounded-xl border px-3 font-black">Apply authorized acceptance prerequisites</button>}{params.has('baseline-reload') && <button type="button" data-testid="resolve-baseline-reload" data-command-count={baselineCommandCount.current} data-phase={baselinePhase} disabled={baselinePhase !== 'committed'} onClick={() => { baselineReload.current?.(); baselineReload.current = null; }}>Resolve committed baseline projection</button>}</nav><div className="mx-auto max-w-7xl">{view === 'delivery' ? <GovernedDeliveryWorkspace projection={delivery} monitorProjection={['no-monitor','blocked-seeded-baseline'].includes(fixtureState) ? undefined : monitor} busy={pageBusy} status={status} error={error} onAction={act} onLoadNextPage={loadNextPage}/> : view === 'enterprise-monitor' ? <MonitorApprovedBaselinePanel projection={monitor} heading="Enterprise Intelligence canonical baseline"/> : view === 'primary-monitor' ? <PortfolioView projects={[]} tasks={[]} users={[]} onUpdateProjectStage={() => undefined} onScopeChange={() => undefined} onViewChange={() => undefined} canonicalMonitorProjection={monitor}/> : <ContextMonitorHarness/>}</div></main>;
 }
 
 const contextProjection = (targetWorkspaceId: string, targetBaselineId: string): MonitorApprovedBaselinesProjection => ({

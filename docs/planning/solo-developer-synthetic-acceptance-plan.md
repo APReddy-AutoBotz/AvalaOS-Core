@@ -1314,3 +1314,45 @@ and 43 server actions remain required. These inert tests are not hosted acceptan
 Rollback reverts the collector, focused fixture and provenance together. Keep
 acceptance blocked; no database rollback or action replay follows. Original
 CONTROLLED-HUMAN remains `not_run`; final merge remains NO-GO.
+
+### CH-08 baseline projection completion repair
+
+Run `36576036099` at `cc39542f3ca3e592780141fadcb8e6169184b705`
+passed the five CH-07 server actions and failed at
+`CH-08:create-baseline-with-exact-package-selectors` with `BROWSER_ERROR`.
+Read-only server verification found a succeeded exact actor/request binding,
+the correct approved package version, three accepted items and exactly one
+baseline for that version. Bounded recovery and private-state erasure passed;
+the exercise is deprovisioned. Final observers, normal cleanup verification and
+acceptance recomputation did not run.
+
+Three read-only reviewers closed before writes. Confirmed source defect:
+the runner could return from baseline confirmation before the application's
+post-command projection reload. It then asserted the rendered count immediately
+after collecting durable proof. That unnamed assertion explains the generic
+failure, although the old run did not retain the exact assertion location.
+The previous proof-refresh fix addressed the earlier durable-binding race;
+it did not cover this later screen refresh. The existing connected test used
+manual baseline clicks and auto-waiting assertions, concealing this runner gap.
+
+The existing real-component harness now separates committed baseline action
+from delayed or failed projection reload. Before repair, the focused Desktop
+case reproduced the runner returning while the confirmation dialog remained
+open and the baseline remained absent. The runner now waits at most 15 seconds
+for that exact dialog to close, the production signal that command and projection
+reload succeeded. Both CH-08 and CH-11 baseline actions use this gate. CH-08 then
+verifies the exact returned baseline/package and requires exactly one added
+baseline with a named error. No command retry or inferred completion is added.
+
+Focused verification covers Desktop and Pixel delayed completion, failed reload
+with preserved dialog, a single command invocation, the actual runner in the
+connected 250-item sequence, and the existing Enterprise/primary Monitor parity
+case. All eight selected Desktop/Pixel browser cases, all 58 runner contracts
+and TypeScript passed with zero skips. All 84 steps and 43 server actions remain
+required; local fixtures are not hosted acceptance. New-head CI, preview and the
+protected campaign remain planned verification.
+
+Rollback reverts this runner, fixture, test and provenance repair together.
+No product, schema, Edge function, permission or provider change is required.
+Original CONTROLLED-HUMAN remains `not_run`; synthetic acceptance and merge
+remain NO-GO until the complete exact-candidate campaign verifies.
