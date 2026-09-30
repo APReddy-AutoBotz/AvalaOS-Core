@@ -1585,3 +1585,17 @@ the pinned-image registry returned `toomanyrequests: Data limit exceeded`.
 No image or gate substitution was made. Those results are prior-candidate
 evidence; corrected-head CI, preview and full synthetic acceptance remain
 planned verification.
+
+Faster CI on `e1bb935` subsequently caught the same retained scale at the new
+assertion despite the reordered operations; the local timing result was not
+sufficient. The final fixture therefore follows the hosted page boundary:
+separate desktop requester and zoomed Pixel observation pages receive only the
+preceding commands' actual committed projections. Every CH-14 observation remains
+required, with exact 1280-by-720 and 412-by-915 viewports. Both observation pages
+must leave those projections unchanged, and CH-11 continues on the original
+page with its real reload, unchanged package/baseline checks, scale assertion,
+and ordinary pointer confirmations. No page-scale override or forced control is
+used. Final isolated-page verification passed all six Linux executions (three
+Desktop and three Pixel); TypeScript passed. The published prior head reached
+17/18 green workflows; its negative sign-in boundary timeout passed on the
+unchanged fresh-runner retry. Final-head CI and hosted acceptance remain pending.

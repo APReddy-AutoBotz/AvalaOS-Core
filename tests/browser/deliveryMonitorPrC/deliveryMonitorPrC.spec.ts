@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { devices, expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { IDS, installEnterpriseIntelligenceFixture } from '../enterpriseIntelligenceNetworkFixture';
 import { isolateFirstActionableDeliveryItem, selectExactRevisedDeliveryDescendant, observeBrowserOnlyStep, snapshotBeforeServerAction, packageCount, executeServerAction } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
@@ -606,7 +606,7 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   expect(interactions).toContain('select:exact-current-revised-delivery-descendant');
 });
 
-test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility, and manual Delivery on retained rendered state', async ({page}) => {
+test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility, and manual Delivery on retained rendered state', async ({page,browser}) => {
   test.setTimeout(120_000);
   page.setDefaultTimeout(10_000);
   const interactions:string[]=[];
@@ -655,31 +655,44 @@ test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility
   await expect(page.getByTestId(`monitor-baseline-${directBaselineId}`).getByRole('definition')
     .filter({hasText:'Not assessed · Planning only'})).toHaveText('Not assessed · Planning only');
 
-  await page.setViewportSize({width:1280,height:720});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'desktop-chrome-journey',state,interactionSequence:interactions});
-  await page.setViewportSize({width:412,height:915});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'pixel-7-journey',state,interactionSequence:interactions});
-  await page.evaluate(()=>{document.documentElement.style.zoom='2';});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'zoom-200-percent',state,interactionSequence:interactions});
-  // The requester has a separate desktop page; clear author document zoom
-  // before changing this fixture page's viewport, avoiding retained mobile scale.
-  await page.evaluate(()=>{document.documentElement.style.zoom='1';});
-  await page.setViewportSize({width:1280,height:720});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'keyboard-only-handoff',state,interactionSequence:interactions});
-  await page.setViewportSize({width:412,height:915});
-  await page.evaluate(()=>{document.documentElement.style.zoom='2';});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'keyboard-only-item-edit',state,interactionSequence:interactions});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'focused-rationale-error-summary',state,interactionSequence:interactions});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'preserve-invalid-input',state,interactionSequence:interactions});
-  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'logical-focus-return',state,interactionSequence:interactions});
-  // Monitor uses its own unzoomed viewer page. CH-11 reloads the author page,
-  // clearing document zoom while retaining the server's committed packages.
-  await page.evaluate(()=>{document.documentElement.style.zoom='1';});
+  // The hosted campaign keeps requester, zoomed author and Monitor pages
+  // separate. Copy only the preceding commands' actual committed projections;
+  // these accessibility observations must not commit new business state.
+  const committedSnapshot = await page.evaluate(() => window.__prCConnectedSnapshot);
+  const baseURL = new URL(page.url()).origin;
+  const desktopContext = await browser.newContext({...devices['Desktop Chrome'],viewport:{width:1280,height:720},baseURL});
+  const pixelContext = await browser.newContext({...devices['Pixel 7'],viewport:{width:412,height:915},baseURL});
+  try {
+    const desktopPage = await desktopContext.newPage();
+    const pixelPage = await pixelContext.newPage();
+    for (const observationPage of [desktopPage,pixelPage]) {
+      observationPage.setDefaultTimeout(10_000);
+      await observationPage.addInitScript(snapshot => { window.__prCConnectedSnapshot = snapshot; }, committedSnapshot);
+      await open(observationPage,'?state=connected-remaining');
+      expect(await observationPage.evaluate(() => window.__prCConnectedSnapshot)).toEqual(committedSnapshot);
+    }
+    await observeBrowserOnlyStep({page:desktopPage,checkpointId:'CH-14',stepId:'desktop-chrome-journey',state,interactionSequence:interactions});
+    await observeBrowserOnlyStep({page:pixelPage,checkpointId:'CH-14',stepId:'pixel-7-journey',state,interactionSequence:interactions});
+    await pixelPage.evaluate(()=>{document.documentElement.style.zoom='2';});
+    await observeBrowserOnlyStep({page:pixelPage,checkpointId:'CH-14',stepId:'zoom-200-percent',state,interactionSequence:interactions});
+    await observeBrowserOnlyStep({page:desktopPage,checkpointId:'CH-14',stepId:'keyboard-only-handoff',state,interactionSequence:interactions});
+    await observeBrowserOnlyStep({page:pixelPage,checkpointId:'CH-14',stepId:'keyboard-only-item-edit',state,interactionSequence:interactions});
+    await observeBrowserOnlyStep({page:pixelPage,checkpointId:'CH-14',stepId:'focused-rationale-error-summary',state,interactionSequence:interactions});
+    await observeBrowserOnlyStep({page:pixelPage,checkpointId:'CH-14',stepId:'preserve-invalid-input',state,interactionSequence:interactions});
+    await observeBrowserOnlyStep({page:pixelPage,checkpointId:'CH-14',stepId:'logical-focus-return',state,interactionSequence:interactions});
+    for (const observationPage of [desktopPage,pixelPage]) {
+      expect(await observationPage.evaluate(() => window.__prCConnectedSnapshot)).toEqual(committedSnapshot);
+    }
+  } finally {
+    await desktopContext.close();
+    await pixelContext.close();
+  }
+  expect(await page.evaluate(() => window.__prCConnectedSnapshot)).toEqual(committedSnapshot);
   await page.getByRole('navigation',{name:'Harness views'}).getByRole('button',{name:'enterprise monitor',exact:true}).click();
   await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'verify-no-horizontal-overflow',state,interactionSequence:interactions});
   await page.getByRole('navigation',{name:'Harness views'}).getByRole('button',{name:'delivery',exact:true}).click();
 
-  const committedSnapshot = await page.evaluate(() => window.__prCConnectedSnapshot);
+
   expect(committedSnapshot?.delivery.packages.find(pkg => pkg.id === directPackageId)?.status).toBe('approved');
   expect(committedSnapshot?.monitor.baselines.map(baseline => baseline.id)).toEqual([directBaselineId]);
   await page.addInitScript(snapshot => { window.__prCConnectedSnapshot = snapshot; }, committedSnapshot);
