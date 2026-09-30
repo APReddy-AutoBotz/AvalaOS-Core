@@ -1686,3 +1686,19 @@ required.
 Rollback reverts the client correction and its focused tests together, retaining
 immutable exercise history and the acceptance/merge block. `CONTROLLED-HUMAN`
 remains `not_run`; final merge requires AP confirmation.
+
+The first published correction, `d3c52a8`, reached a verified exact preview,
+but CI identified two omitted integration updates: the protected `invokeCommand`
+AST fingerprint and a coverage stub whose return type incorrectly excluded
+`local` after the client imported the existing session loader. The PR C and
+retained PR B coverage stubs now express the compatible union, and PR C exposes
+the same explicitly installed anchor-test hook as the focused client compiler.
+Unmocked controlled calls still reject. The reviewed fingerprint retains the
+unchanged request/idempotency binding, command sinks and same-body retry; four
+new mutations verify removal or substitution of the fresh scope/version checks
+is rejected. Source-boundary validation and all 15 idempotency mutation tests
+passed. The exact failed PR C coverage gate passed (6 governed and 9 integration
+test files; governed lines 97.09%, branches 86.00%, functions 96.79%), with no
+threshold change. PR B compile-only validation passed without running its broad
+suite. Separate container-registry and preview-network failures on that candidate
+did not exercise this repair. The final candidate still requires all hosted gates.

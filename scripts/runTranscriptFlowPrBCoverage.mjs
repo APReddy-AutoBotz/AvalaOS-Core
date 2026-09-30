@@ -75,7 +75,7 @@ interface ControlledHumanSafeStepAnchor{contractVersion:'pr-c-controlled-human-s
 interface ControlledHumanSafeStepBinding{contractVersion:'pr-c-controlled-human-step-binding-3';stepId:string;action:string;result:'succeeded'|'denied';resourceFamily:string;resourceDigest:string;expectedVersion:number;observedVersion:number;requestDigest:string;receiptDigest:string;auditDigest:string;intentDigest:string;denialCodeDigest:string;bindingToken:string;anchorToken:string;causalParentBindingToken:string;causalParentResourceDigest:string;causalLineageDigest:string;issuedAt:string}
 interface ControlledHumanCommandAnchor{safeAnchor:ControlledHumanSafeStepAnchor;requestId:string;businessIdempotencyKey?:string}
 const rejectControlledHumanCoverageInvocation=():never=>{throw new Error('UNEXPECTED_CONTROLLED_HUMAN_COVERAGE_STUB_INVOCATION')};
-export const getRuntimeDataAccess=(): 'server' => 'server';
+export const getRuntimeDataAccess=(): 'local'|'server' => 'server';
 export const isSupabaseConfigured=():boolean=>true;
 export const isControlledHumanRuntimeEnabled=():boolean=>false;
 export const getControlledHumanEvidenceState=():{armedStep:ControlledHumanStepBindingOption|null;safeAnchor:ControlledHumanSafeStepAnchor|null}=>({armedStep:null,safeAnchor:null});

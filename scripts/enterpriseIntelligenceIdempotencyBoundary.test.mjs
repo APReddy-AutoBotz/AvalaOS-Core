@@ -29,6 +29,15 @@ test('scoped Assess query validation remains protected against removed checks an
   ]) rejects(replaceOnce(source, before, after));
 });
 
+test('manual package anchor retains fresh exact-scope authorization before dispatch', () => {
+  for (const [before, after] of [
+    ['await loadEnterpriseSessionContexts()', 'Promise.resolve([])'],
+    ['context.organizationId === input.organizationId && context.workspaceId === input.workspaceId', 'true'],
+    ['if (contexts.length !== 1)', 'if (false)'],
+    ['workspaceAuthorizationVersion = contexts[0].authorizationVersion;', 'workspaceAuthorizationVersion = 1;'],
+  ]) rejects(replaceOnce(source, before, after));
+});
+
 test('rejects deterministic action-key generators and weakened cryptographic UUID sources', () => {
   rejects(replaceOnce(
     source,

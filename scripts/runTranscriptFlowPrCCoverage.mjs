@@ -72,12 +72,12 @@ interface ControlledHumanSafeStepAnchor{contractVersion:'pr-c-controlled-human-s
 interface ControlledHumanSafeStepBinding{contractVersion:'pr-c-controlled-human-step-binding-3';stepId:string;action:string;result:'succeeded'|'denied';resourceFamily:string;resourceDigest:string;expectedVersion:number;observedVersion:number;requestDigest:string;receiptDigest:string;auditDigest:string;intentDigest:string;denialCodeDigest:string;bindingToken:string;anchorToken:string;causalParentBindingToken:string;causalParentResourceDigest:string;causalLineageDigest:string;issuedAt:string}
 interface ControlledHumanCommandAnchor{safeAnchor:ControlledHumanSafeStepAnchor;requestId:string;businessIdempotencyKey?:string}
 const rejectControlledHumanCoverageInvocation=():never=>{throw new Error('UNEXPECTED_CONTROLLED_HUMAN_COVERAGE_STUB_INVOCATION')};
-export const getRuntimeDataAccess=(): 'server' => 'server';
+export const getRuntimeDataAccess=(): 'local'|'server' => 'server';
 export const isSupabaseConfigured=():boolean=>true;
 export const isControlledHumanRuntimeEnabled=():boolean=>Boolean((globalThis as any).__prCControlledEnabled);
 export const getControlledHumanEvidenceState=():{armedStep:ControlledHumanStepBindingOption|null;safeAnchor:ControlledHumanSafeStepAnchor|null}=>({armedStep:(globalThis as any).__prCArmedStep??null,safeAnchor:null});
 export const requireControlledHumanBackendAttestation=async()=>{(globalThis as any).__prCAttestationCount=((globalThis as any).__prCAttestationCount??0)+1;return (globalThis as any).__prCAttestationDenied?null:{attested:true}};
-export const beginControlledHumanCommand=async(_input:{action:string;targetFamily:string;targetId:string;expectedVersion:number;selectorBindings:Record<string,unknown>}):Promise<ControlledHumanCommandAnchor|null>=>rejectControlledHumanCoverageInvocation();
+export const beginControlledHumanCommand=async(input:{action:string;targetFamily:string;targetId:string;expectedVersion:number;selectorBindings:Record<string,unknown>}):Promise<ControlledHumanCommandAnchor|null>=>{const f=(globalThis as any).__prCBegin;return f?f(input):rejectControlledHumanCoverageInvocation()};
 export const completeControlledHumanCommand=async(_anchor:ControlledHumanCommandAnchor):Promise<ControlledHumanSafeStepBinding>=>rejectControlledHumanCoverageInvocation();
 export const executeControlledHumanDeniedCommand=async(_anchor:ControlledHumanCommandAnchor):Promise<ControlledHumanSafeStepBinding>=>rejectControlledHumanCoverageInvocation();
 export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__prCInvoke||(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},rpc:async(...args:any[])=>{const f=(globalThis as any).__prCRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}};

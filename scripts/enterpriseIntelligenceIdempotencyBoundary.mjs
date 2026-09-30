@@ -4,7 +4,9 @@ import ts from 'typescript';
 const PROTECTED_AST_FINGERPRINTS = Object.freeze({
   createCryptographicUuid: 'bdbc40e5a8b02530c3546e2c68f5948e53d6ed987e5200baba7c6cd97c009eda',
   createEnterpriseActionIdempotencyKey: '255a3ecd055f9d1bd0a0f6a1bd38693aeada246ebc39dc40b94bf30467e62982',
-  invokeCommand: '866329d268c7166afbf0839883565526e809e5fa69a10afd24c273640b8359f7',
+  // Reviewed fresh exact-scope manual anchor authority. Command keys, anchored
+  // request identity, command sinks and same-body transport retry are unchanged.
+  invokeCommand: '4f586ff7711c85701e7dfeab9c3aec9e43067526bef9421cc2dce311ee7f1b1c',
   invokeProviderLifecycle: '6074bbf27ffc6f98284dd51876da54d0a18e743e2d4105873002156f962c5cb1',
   // Reviewed scoped Assess input validation; query sink, tenant binding and
   // response validation remain inside the complete protected function.
