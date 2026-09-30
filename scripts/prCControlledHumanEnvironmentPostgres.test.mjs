@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import pg from 'pg';
+import ts from 'typescript';
 import { PostgresEnvironmentAdapter, assertTargetInventory, buildIdentifiers, controlledHumanStepEvidenceSpec, deriveContext, deterministicUuid, loadFixture, postDeprovisionVerify, seedAssessUpstream, sha256, validateControlledHumanObserverEnvelopeBridge } from './prCControlledHumanEnvironment.mjs';
 import {MIGRATION_FILE,PostgresEnvironmentMigrationAdapter,deriveMigrationContext,loadMigration,migrationApply,migrationPreflight,migrationVerify} from './prCControlledHumanEnvironmentMigration.mjs';
 import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA,validateControlledHumanObservedDuty,validateControlledHumanProofPairs} from './prCControlledHumanEvidenceContract.mjs';
@@ -18,6 +19,8 @@ const denialManualSelectors={manualBriefDigest:sha256('Synthetic controlled-huma
 
 test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprovision cycles with retained history',{skip:!adminUrl},async()=>{
   const suffix=`${process.pid}_${Date.now()}`;const databaseName=`pr_c_controlled_human_${suffix}`;
+  const deliveryContracts=ts.transpileModule(await readFile('services/deliveryMonitor/contracts.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+  const {decodeDeliveryWorkspaceProjection}=await import(`data:text/javascript;base64,${Buffer.from(deliveryContracts).toString('base64')}`);
   const url=new URL(adminUrl);const databaseUrl=new URL(adminUrl);databaseUrl.pathname=`/${databaseName}`;
   const admin=new Client({connectionString:url.toString()});await admin.connect();let database;let migrationAdapter;
   try{
@@ -1142,6 +1145,7 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       await invokeStudioPrerequisite('studio_reviewer','studio.artifact.review.resolve',artifact.id,{artifactId:artifact.id,artifactVersionId:(await studioArtifactState(artifact.id)).current_version_id,outcome:'approve',rationale:'Review direct planning Studio artifact.',conditions:[]},'direct-review');
       await invokeStudioPrerequisite('studio_approver','studio.artifact.approval.resolve',artifact.id,{artifactId:artifact.id,artifactVersionId:(await studioArtifactState(artifact.id)).current_version_id,outcome:'approve',rationale:'Approve direct planning Studio artifact.',conditions:[]},'direct-approval');
       artifact=(await database.client.query(`select id,aggregate_version,current_version_id,current_approved_version_id from public.studio_artifact_aggregates where id=$1`,[artifact.id])).rows[0];
+      const approvedDirectState=await studioArtifactState(artifact.id);
       assert.equal(artifact.current_version_id,directPdd.versionId);assert.equal(artifact.current_approved_version_id,directPdd.versionId);
       const request=handoffRequestDescriptor(artifact);
       const created=await invokeControlledDelivery({checkpointId:'CH-10',stepId:'handoff-direct-studio-plan',personaKey:'requester',targetFamily:'studio_artifact',targetId:artifact.id,expectedVersion:Number(artifact.aggregate_version),selectors:request,action:'delivery.handoff.request',payload:request});
@@ -1149,16 +1153,55 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
         from public.enterprise_delivery_handoffs where id=$1`,[created.result.resourceId])).rows[0];
       assert.deepEqual(exactHandoff,{studio_artifact_id:directPdd.artifactId,studio_artifact_version_id:directPdd.versionId,
         studio_source_package_id:directPdd.sourcePackageId,lineage_classification:'not_assessed',planning_only:true});
-      await invokeDeliveryPrerequisite('delivery_target_acceptor','delivery.handoff.review.resolve',{handoffId:created.result.resourceId,expectedHandoffVersion:1,outcome:'approved',rationale:'Review direct planning handoff.'},'direct-handoff-review');
-      await invokeDeliveryPrerequisite('delivery_approver','delivery.handoff.approval.resolve',{handoffId:created.result.resourceId,expectedHandoffVersion:2,outcome:'approved',rationale:'Approve direct planning handoff.'},'direct-handoff-approval');
-      const consumed=await invokeDeliveryPrerequisite('delivery_consumer','delivery.handoff.consume',{handoffId:created.result.resourceId,expectedHandoffVersion:3},'direct-handoff-consume');
+      const prerequisiteResponses=[];let prerequisiteOrdinal=0;
+      const deliveryPrerequisiteSessions=new Map(['delivery_target_acceptor','delivery_approver','delivery_consumer','delivery_author','delivery_reviewer'].map(personaKey=>{
+        const actor=deliveryActors[personaKey];
+        const currentContext=async()=>({userId:actor.auth_user_id,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,
+          authorizationVersion:Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,actor.auth_user_id])).rows[0].version)});
+        const api={
+          context:currentContext,
+          rpc:async()=>assert.fail('CH-10 Delivery prerequisites must not invoke a Studio RPC'),
+          invoke:async(functionName,body,expectation)=>{
+            const freshContext=await currentContext();assert.equal(body.organizationId,freshContext.organizationId);assert.equal(body.workspaceId,freshContext.workspaceId);
+            if(functionName==='enterprise-intelligence-query'){
+              assert.equal(body.expectedAuthorizationVersion,freshContext.authorizationVersion);
+              await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[freshContext.userId]);
+              const page=body.deliveryItemPage;const query={actorId:freshContext.userId,authorizationVersion:freshContext.authorizationVersion,
+                ...(page?{packageId:page.packageId,itemCursorVersion:page.cursor.version,itemCursorId:page.cursor.id,itemLimit:page.limit}:{})};
+              const deliveryWorkspace=decodeDeliveryWorkspaceProjection((await database.client.query(`select public.enterprise_delivery_workspace_projection($1,$2,$3::jsonb) projection`,[freshContext.organizationId,freshContext.workspaceId,JSON.stringify(query)])).rows[0].projection);
+              return{projection:{deliveryWorkspace}};
+            }
+            assert.equal(functionName,'enterprise-intelligence-command');assert.deepEqual(expectation,{checkpointId:'CH-10',stepId:'handoff-direct-studio-plan',action:body.commandType});
+            const response=await invokeDeliveryPrerequisite(personaKey,body.commandType,body.payload,`pg-ch10-prerequisite-${prerequisiteOrdinal++}`,body.idempotencyKey);
+            prerequisiteResponses.push({personaKey,action:body.commandType,response});return response;
+          },
+          lastCommand:async()=>null,
+        };
+        return[personaKey,{api}];
+      }));
+      const prerequisiteState=new Map([
+        [SYNTHETIC_PREREQUISITE_STATE_KEYS.lastCompletedStep,'CH-10:handoff-direct-studio-plan'],
+        [SYNTHETIC_PREREQUISITE_STATE_KEYS.ch10ArtifactId,artifact.id],
+        [SYNTHETIC_PREREQUISITE_STATE_KEYS.ch10HandoffId,created.result.resourceId],
+        [SYNTHETIC_PREREQUISITE_STATE_KEYS.ch10ApprovedCandidate,Object.freeze({studioArtifactId:artifact.id,studioArtifactVersionId:directPdd.versionId,
+          studioArtifactVersion:Number(approvedDirectState.artifact_version),aggregateVersion:Number(artifact.aggregate_version),artifactType:'pdd',lineageClassification:'not_assessed',planningOnly:true})],
+      ]);const interactionSequence=[];
+      const prerequisiteResult=await runSyntheticPrerequisites({nextStep:{checkpointId:'CH-10',stepId:'approve-direct-planning-package'},sessions:deliveryPrerequisiteSessions,state:prerequisiteState,interactionSequence});
+      assert.deepEqual(prerequisiteResult,{applied:true,key:'CH-10:approve-direct-planning-package'});assert.equal(interactionSequence.length,prerequisiteResponses.length);
+      const prerequisiteActions=prerequisiteResponses.map(entry=>entry.action);assert.deepEqual(prerequisiteActions.slice(0,3),['delivery.handoff.review.resolve','delivery.handoff.approval.resolve','delivery.handoff.consume']);
+      assert.ok(prerequisiteActions.slice(3,-1).length>=1&&prerequisiteActions.slice(3,-1).every(action=>action==='delivery.item.review'));assert.equal(prerequisiteActions.at(-1),'delivery.package.review.resolve');
+      const consumed=prerequisiteResponses.find(entry=>entry.action==='delivery.handoff.consume')?.response;
+      const reviewed=prerequisiteResponses.find(entry=>entry.action==='delivery.package.review.resolve')?.response;
+      assert.ok(consumed&&reviewed,'The real prerequisite runner must consume the handoff and review its resulting package.');
+      const prerequisitePackageId=prerequisiteState.get(SYNTHETIC_PREREQUISITE_STATE_KEYS.ch10PackageId);
+      assert.equal(consumed.resourceId,prerequisitePackageId);assert.equal(reviewed.workPackageId,prerequisitePackageId);
+      assert.match(reviewed.resourceId,/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+      assert.notEqual(reviewed.resourceId,prerequisitePackageId,'Package review must return its actual event resource, distinct from the package binding.');
       const exactDeliverySource=(await database.client.query(`select source.studio_artifact_id,source.studio_artifact_version_id,source.studio_source_package_id,
-        source.lineage_classification,source.planning_only from public.enterprise_delivery_source_packages source where source.work_package_id=$1`,[consumed.resourceId])).rows[0];
+        source.lineage_classification,source.planning_only from public.enterprise_delivery_source_packages source where source.work_package_id=$1`,[prerequisitePackageId])).rows[0];
       assert.deepEqual(exactDeliverySource,{studio_artifact_id:directPdd.artifactId,studio_artifact_version_id:directPdd.versionId,
         studio_source_package_id:directPdd.sourcePackageId,lineage_classification:'not_assessed',planning_only:true});
-      for(const [index,item] of (await packageItems(consumed.resourceId)).entries())await invokeDeliveryPrerequisite('delivery_author','delivery.item.review',{itemAggregateId:item.item_aggregate_id,expectedAggregateVersion:Number(item.aggregate_version),expectedItemVersionId:item.current_version_id,outcome:'accepted',rationale:`Accept direct planning item ${index+1}.`},`direct-item-${index}`);
-      const pkg=await packageState(consumed.resourceId);
-      await invokeDeliveryPrerequisite('delivery_reviewer','delivery.package.review.resolve',{workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),outcome:'approved',rationale:'Review direct planning package.'},'direct-package-review');
+      const pkg=await packageState(prerequisitePackageId);
       const rationale='Approve direct planning package without assessed classification.';const selectors=packageDecisionDescriptor(pkg,'approved',rationale);
       await invokeControlledDelivery({checkpointId:'CH-10',stepId:'approve-direct-planning-package',personaKey:'delivery_approver',targetFamily:'delivery_work_package',targetId:pkg.id,expectedVersion:Number(pkg.current_version),selectors,action:'delivery.package.approval.resolve',payload:{workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),outcome:'approved',rationale}});
       await database.client.query('commit');

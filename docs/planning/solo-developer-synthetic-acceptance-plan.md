@@ -1599,3 +1599,46 @@ used. Final isolated-page verification passed all six Linux executions (three
 Desktop and three Pixel); TypeScript passed. The published prior head reached
 17/18 green workflows; its negative sign-in boundary timeout passed on the
 unchanged fresh-runner retry. Final-head CI and hosted acceptance remain pending.
+
+### CH-10 package-review response binding correction (2026-09-30)
+
+Candidate `89f2b3dc90dd92055f83f84d92ee806a3ffcf68d` passed all 18
+applicable CI workflows on their first attempts and exact-preview verification.
+Native Assess and governed artifacts were independently verified. Protected run
+`36696796888` then completed direct Studio creation, generation, independent
+Studio decisions, Delivery handoff review/approval/consumption, item acceptance,
+and package review before its prerequisite decoder rejected the review response.
+Recovery and private-state erasure succeeded; bounded read-only inspection
+confirmed a deprovisioned exercise with 29 anchors, including two CH-10 anchors.
+
+Confirmed source defect: a package review returns its immutable review-event ID
+as `resourceId` and the reviewed package ID as `workPackageId`. The runner instead
+required `resourceId` to equal the package ID. The retained committed response
+and HTTP 200 established this mismatch without another diagnostic campaign.
+The unit mock had incorrectly returned a package ID as the event resource, while
+the PostgreSQL CH-10 proof manually duplicated commands and bypassed the runner.
+All three read-only reviewers closed before this bounded implementation began.
+
+The runner now validates the exact `workPackageId`, a valid distinct review-event
+resource, and the existing authoritative post-review projection. Actor, tenant,
+version, lineage, accepted-item, and independent-review checks remain intact.
+The PostgreSQL proof executes the actual CH-10 prerequisite with real command
+responses and the production projection decoder, then retains controlled package
+approval and subsequent checks. No schema, Edge, permission, UI, provider, or
+catalog change is required. The other prerequisite response identities were
+audited against their command contracts; no equivalent mismatch was found.
+
+Executed verification: the faithful response fixture failed before the fix with
+`COMMAND_RESULT_delivery.package.review.resolve`; all 21 focused prerequisite
+tests passed afterward, including six missing/substituted-identity cases.
+The strengthened PostgreSQL 16 integration passed with zero skips (1/1, 40.90
+seconds), including the actual CH-10 prerequisite, subsequent controlled approval,
+and both seed/deprovision cycles. Its initial adapter wiring was corrected to use
+the production decoder and the canonical consumption response field before the
+passing run. No broad local regression or browser rerun was needed for this
+response-only correction. Final exact-head CI, preview and hosted acceptance
+remain planned verification; all 84 steps and 43 server actions are required.
+
+Rollback reverts the runner and its focused tests together, retaining immutable
+exercise and command history. Keep the acceptance/merge block if rolled back.
+`CONTROLLED-HUMAN` remains `not_run`; final merge still requires AP confirmation.

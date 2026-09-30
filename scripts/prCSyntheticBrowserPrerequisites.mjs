@@ -547,8 +547,13 @@ const runCh10 = async ({ sessions, state, interactionSequence }) => {
   const payload = { workPackageId: packageId, expectedPackageVersion: positive(reviewed.currentVersion, 'CH10_PACKAGE_VERSION'),
     expectedPackageVersionId: id(reviewed.currentVersionId, 'CH10_PACKAGE_VERSION_ID'), expectedPackageAggregateVersion: positive(reviewed.aggregateVersion, 'CH10_PACKAGE_AGGREGATE_VERSION'),
     outcome: 'approved', rationale: 'Independent review of the complete direct planning package.' };
-  await deliveryCommand({ api: packageReviewerApi, context: packageReviewer, checkpointId: 'CH-10', stepId: 'handoff-direct-studio-plan', action: 'delivery.package.review.resolve',
-    payload, label: 'review-direct-package', interactionSequence, resourceId: packageId });
+  const review = await deliveryCommand({ api: packageReviewerApi, context: packageReviewer, checkpointId: 'CH-10', stepId: 'handoff-direct-studio-plan', action: 'delivery.package.review.resolve',
+    payload, label: 'review-direct-package', interactionSequence });
+  // Package decisions return the immutable decision event as resourceId.
+  // The separate workPackageId must bind that event to this exact package.
+  if (id(review.workPackageId, 'CH10_PACKAGE_REVIEW_PACKAGE_ID') !== packageId
+    || id(review.resourceId, 'CH10_PACKAGE_REVIEW_EVENT_ID') === packageId
+    || review.resourceId.toLowerCase() === review.receiptId.toLowerCase()) fail('CH10_PACKAGE_REVIEW_BINDING');
   const post = (await completePackage(packageReviewerApi, packageReviewer, packageId)).deliveryPackage;
   if (post.reviewState !== 'approved') fail('CH10_PACKAGE_REVIEW_POST_STATE');
 };

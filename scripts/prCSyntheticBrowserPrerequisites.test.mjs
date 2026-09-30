@@ -145,7 +145,7 @@ const makeHarness = ({ packages = [], handoffs = [], studio, studioWorkspace, te
       if (action === 'delivery.package.review.resolve') {
         const pkg = packages.find(value => value.id === body.payload.workPackageId); assert.ok(pkg); assert.equal(body.payload.expectedPackageVersion, pkg.currentVersion);
         assert.equal(pkg.items.every(item => item.status === 'accepted'), true); pkg.reviewState = 'approved';
-        return { ...result, resourceId: pkg.id, resourceVersion: pkg.currentVersion };
+        return { ...result, resourceId: uid(receipt++), workPackageId: pkg.id, resourceVersion: pkg.currentVersion };
       }
       if (action === 'monitor.baseline.create') {
         const pkg = packages.find(value => value.id === body.payload.workPackageId); assert.ok(pkg); assert.equal(pkg.status, 'approved');
@@ -373,6 +373,36 @@ test('CH-10 preserves exact role order through handoff, consume, item decisions,
   ]);
   const packageId = execution.state.get(K.ch10PackageId); const pkg = harness.packages.find(value => value.id === packageId);
   assert.equal(pkg.reviewState, 'approved'); assert.equal(pkg.items.every(item => item.status === 'accepted'), true);
+});
+
+test('CH-10 rejects missing or substituted review-event and package identities', async () => {
+  for (const mutate of [
+    result => { delete result.workPackageId; },
+    result => { result.workPackageId = uid(999); },
+    result => { result.workPackageId = 'invalid'; },
+    result => { result.resourceId = 'invalid'; },
+    result => { result.resourceId = result.workPackageId; },
+    result => { result.resourceId = result.receiptId; },
+  ]) {
+    const handoff = { id: uid(500), version: 1, status: 'requested', lineageClassification: 'not_assessed', planningOnly: true,
+      sourceArtifactVersion: 1, preview: { artifactType: 'pdd', proposedItemCount: 2 }, history: [], reviewHistory: [], approvalHistory: [], targetItems: [] };
+    const harness = makeHarness({ handoffs: [handoff] });
+    const api = harness.sessions.get('delivery_reviewer').api; const invoke = api.invoke;
+    api.invoke = async (...args) => {
+      const result = await invoke(...args);
+      if (args[1].commandType === 'delivery.package.review.resolve') mutate(result);
+      return result;
+    };
+    const artifactId = uid(501);
+    const candidate = { studioArtifactId: artifactId, studioArtifactVersionId: uid(502), studioArtifactVersion: 1, aggregateVersion: 5,
+      artifactType: 'pdd', lineageClassification: 'not_assessed', planningOnly: true };
+    const execution = run(harness, 'CH-10', 'approve-direct-planning-package', 'CH-10:handoff-direct-studio-plan', [
+      [K.ch10ArtifactId, artifactId], [K.ch10ApprovedCandidate, candidate], [K.ch10HandoffId, handoff.id],
+    ]);
+    await assert.rejects(execution.result, /PR_C_SYNTHETIC_PREREQUISITE_REJECTED/u);
+    assert.equal(execution.state.has('prereq:completed:CH-10:approve-direct-planning-package'), false);
+    assert.equal(harness.calls.at(-1).action, 'delivery.package.review.resolve');
+  }
 });
 
 test('CH-10 creates and verifies one exact planning-only Monitor baseline after anchored approval', async () => {
