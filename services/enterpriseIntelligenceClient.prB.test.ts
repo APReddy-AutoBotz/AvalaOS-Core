@@ -405,4 +405,34 @@ await (async () => {
   }), (error: unknown) => error instanceof EnterpriseIntelligenceClientError && error.code === 'PERMISSION_DENIED');
 })();
 
-console.log('ok - PR B Enterprise client Studio source ownership and validation');
+await (async () => {
+  resetTransport({ data: { projection: emptyProjection }, error: null });
+  const sourceFlow = await enterpriseIntelligenceClient.loadStudioSourceFlow({
+    organizationId, workspaceId, expectedAuthorizationVersion: 9,
+  });
+  assert.deepEqual(sourceFlow, {
+    authorizationVersion: 9, studioSourceFlow: emptyStudioSourceFlowProjection(),
+  });
+  assert.deepEqual(invocations, [{
+    name: 'enterprise-intelligence-query',
+    options: { body: { organizationId, workspaceId, expectedAuthorizationVersion: 9, projectionScope: 'studio_source_flow' } },
+  }]);
+  const invalidResponses = [
+    { data: null, error: new Error('query unavailable') },
+    { data: {}, error: null },
+    { data: { projection: { ...emptyProjection, organizationId: sourceId } }, error: null },
+    { data: { projection: { ...emptyProjection, workspaceId: sourceId } }, error: null },
+    { data: { projection: { ...emptyProjection, authorizationVersion: 8 } }, error: null },
+    { data: { projection: { ...emptyProjection, studioSourceFlow: null } }, error: null },
+    { data: { projection: { ...emptyProjection, studioSourceFlow: { ...emptyProjection.studioSourceFlow, candidates: [{}] } } }, error: null },
+  ];
+  for (const response of invalidResponses) {
+    resetTransport(response);
+    await assert.rejects(() => enterpriseIntelligenceClient.loadStudioSourceFlow({
+      organizationId, workspaceId, expectedAuthorizationVersion: 9,
+    }));
+    assert.equal(invocations.length, 1, 'Rejected scoped reads must not fall back to the full query');
+  }
+})();
+
+console.log('ok - PR B Enterprise client Studio source ownership, scoped reads and validation');

@@ -1003,6 +1003,54 @@ assert.ok(scopedMappingPaths.every(path => path.includes(`catalog_id=eq.${mappin
   || path.includes(`preview_batch_id=eq.${mappingPreview}`) || path.startsWith('enterprise_assess_document_mapping_catalogs?')),
 'case/head/bundle scoped child queries stay usable after unrelated workspace history exceeds the former global limits');
 
+const studioScopeRequests: string[] = [];
+let scopedDeliveryLoads = 0;let scopedMonitorLoads = 0;
+const studioScopeQuery = async <T>(path: string): Promise<T> => {
+  studioScopeRequests.push(path);
+  if (path.startsWith('enterprise_transcript_workspace_flags?')) return studioLibraryRows.studioSourceFlags as T;
+  if (path.startsWith('studio_source_version_ownerships?')) return studioLibraryRows.studioSourceOwnerships as T;
+  if (path.startsWith('enterprise_evidence_sources?')) return studioLibraryRows.studioSources as T;
+  if (path.startsWith('enterprise_evidence_source_versions?')) return studioLibraryRows.studioSourceVersions as T;
+  if (path.startsWith('enterprise_evidence_candidates?')) return [] as T;
+  if (path.startsWith('enterprise_ai_capability_routes?')) return studioLibraryRows.studioProviderRoutes as T;
+  return [] as T;
+};
+const studioScopeDatabase = createEnterpriseIntelligenceQueryDatabase(studioScopeQuery, {
+  execute: async () => ({}),
+  loadDeliveryProjection: async () => { scopedDeliveryLoads += 1;return { ...createDeliveryWorkspaceFixture(), organizationId: ORG, workspaceId: WORKSPACE }; },
+  loadMonitorProjection: async () => { scopedMonitorLoads += 1;return { ...createMonitorBaselinesFixture(), organizationId: ORG, workspaceId: WORKSPACE }; },
+});
+const allCapabilityAuthority = { ...authority(), capabilities: [...authority().capabilities, 'studio.sources.manage', 'assess.v2.read', 'transcript.sources.read'] };
+const scopedStudioRows = await studioScopeDatabase.loadProjectionRows(allCapabilityAuthority,{projectionScope:'studio_source_flow'});
+const scopedStudioFlow = buildEnterpriseIntelligenceProjection(allCapabilityAuthority,scopedStudioRows,new Date('2026-09-24T06:00:00.000Z')).studioSourceFlow;
+assert.deepEqual({scopedDeliveryLoads,scopedMonitorLoads},{scopedDeliveryLoads:0,scopedMonitorLoads:0},
+  'an all-capability scoped Studio source read never enters Delivery or Monitor loaders');
+assert.equal(studioScopeRequests.length,15,'the scoped read loads only the complete Studio source-flow dependency set');
+assert.ok(studioScopeRequests.every(path=>[
+  'enterprise_transcript_workspace_flags','studio_source_version_ownerships','enterprise_evidence_sources','enterprise_evidence_source_versions',
+  'enterprise_evidence_candidates','enterprise_source_sets','enterprise_source_set_versions','enterprise_source_set_version_items',
+  'enterprise_module_input_bundles','enterprise_module_input_bundle_versions','enterprise_module_input_bundle_items','studio_source_extraction_runs',
+  'studio_source_extraction_bindings','enterprise_evidence_candidate_edits','enterprise_ai_capability_routes',
+].some(table=>path.startsWith(`${table}?`))), 'the scoped read contains no general evidence, Assess, approval, or activity query');
+studioScopeRequests.length=0;
+const fullStudioRows = await studioScopeDatabase.loadProjectionRows(allCapabilityAuthority);
+const fullStudioFlow = buildEnterpriseIntelligenceProjection(allCapabilityAuthority,fullStudioRows,new Date('2026-09-24T06:00:00.000Z')).studioSourceFlow;
+assert.deepEqual(scopedStudioFlow,fullStudioFlow,'scoped and default loaders feed the same Studio source-flow DTO builder');
+assert.equal(scopedDeliveryLoads,1);assert.equal(scopedMonitorLoads,1);
+
+let unauthorizedScopedQueryCalls=0;let unauthorizedScopedDeliveryCalls=0;let unauthorizedScopedMonitorCalls=0;
+const unauthorizedScopedDatabase=createEnterpriseIntelligenceQueryDatabase(async<T>():Promise<T>=>{unauthorizedScopedQueryCalls+=1;return[] as T},{
+  execute:async()=>({}),
+  loadDeliveryProjection:async()=>{unauthorizedScopedDeliveryCalls+=1;return{};},
+  loadMonitorProjection:async()=>{unauthorizedScopedMonitorCalls+=1;return{};},
+});
+const unauthorizedStudioAuthority={...authority(),capabilities:['project.read']};
+const unauthorizedStudioRows=await unauthorizedScopedDatabase.loadProjectionRows(unauthorizedStudioAuthority,{projectionScope:'studio_source_flow'});
+const unauthorizedStudioProjection=buildEnterpriseIntelligenceProjection(unauthorizedStudioAuthority,unauthorizedStudioRows,new Date('2026-09-24T06:00:00.000Z'));
+assert.deepEqual({unauthorizedScopedQueryCalls,unauthorizedScopedDeliveryCalls,unauthorizedScopedMonitorCalls},{unauthorizedScopedQueryCalls:0,unauthorizedScopedDeliveryCalls:0,unauthorizedScopedMonitorCalls:0},
+  'an actor without Studio source capability receives no scoped database disclosure or mutation opportunity');
+assert.deepEqual(unauthorizedStudioProjection.studioSourceFlow.sources,[]);assert.ok(!JSON.stringify(unauthorizedStudioProjection).includes('Private Studio source'));
+
 const deliveryProjectionQueries: Array<Record<string, unknown>> = [];
 const boundedDeliveryDatabase = createEnterpriseIntelligenceQueryDatabase(
   async <T>() => [] as T,
@@ -1316,6 +1364,29 @@ const allowed = await invoke({ organizationId: ORG, workspaceId: WORKSPACE, expe
 assert.equal(allowed.response.status, 200);
 assert.equal(allowed.response.headers.get('cache-control'), 'no-store');
 assert.ok(isProjectionBody(allowed.body));
+
+let defaultQueryOptions:unknown;let scopedQueryOptions:unknown;
+await invoke({organizationId:ORG,workspaceId:WORKSPACE,expectedAuthorizationVersion:9},{queryDatabase:{loadProjectionRows:async(_authority,options)=>{defaultQueryOptions=options;return raw();}}});
+const scopedAllowed=await invoke({organizationId:ORG,workspaceId:WORKSPACE,expectedAuthorizationVersion:9,projectionScope:'studio_source_flow'},{queryDatabase:{loadProjectionRows:async(_authority,options)=>{scopedQueryOptions=options;return raw();}}});
+assert.deepEqual(defaultQueryOptions,{},'omitting projectionScope preserves the complete default query contract');
+assert.deepEqual(scopedQueryOptions,{projectionScope:'studio_source_flow'},'the strict Studio scope reaches the database only after authority resolution');
+assert.equal(scopedAllowed.response.status,200);assert.ok(isProjectionBody(scopedAllowed.body));
+
+let invalidScopedQueryCalls=0;
+const invalidScopedDatabase:EnterpriseIntelligenceQueryDatabase={loadProjectionRows:async()=>{invalidScopedQueryCalls+=1;return raw();}};
+for(const body of [
+  {organizationId:ORG,workspaceId:WORKSPACE,projectionScope:'unknown'},
+  {organizationId:ORG,workspaceId:WORKSPACE,projectionScope:'studio_source_flow',deliveryItemPage:{packageId:PACKAGE,cursor:{version:2,id:CANDIDATE},limit:100}},
+  {organizationId:ORG,workspaceId:WORKSPACE,projectionScope:'studio_source_flow',deliveryBaselineEligibilityPage:{cursor:{updatedAt:'2026-08-31T06:30:00.000Z',workPackageId:PACKAGE},limit:100}},
+  {organizationId:ORG,workspaceId:WORKSPACE,projectionScope:'studio_source_flow',assessDocumentMappingScope:{caseId:ASSESS_DRAFT,caseVersion:2}},
+]){
+  const rejected=await invoke(body,{queryDatabase:invalidScopedDatabase});assert.deepEqual({status:rejected.response.status,body:rejected.body},{status:400,body:{code:'INVALID_REQUEST'}});
+}
+assert.equal(invalidScopedQueryCalls,0,'unknown or mixed scoped modes fail before tenant database reads');
+const scopedDenied=await invoke({organizationId:ORG,workspaceId:WORKSPACE,projectionScope:'studio_source_flow'},{authorityDatabase:authorityDatabase(null)});
+assert.deepEqual({status:scopedDenied.response.status,body:scopedDenied.body},{status:403,body:{code:'TENANT_ACCESS_DENIED'}});
+const scopedStale=await invoke({organizationId:ORG,workspaceId:WORKSPACE,expectedAuthorizationVersion:8,projectionScope:'studio_source_flow'});
+assert.deepEqual({status:scopedStale.response.status,body:scopedStale.body},{status:409,body:{code:'AUTHORIZATION_STALE'}});
 
 const foreignNestedRows = raw();
 foreignNestedRows.deliveryWorkspace = {

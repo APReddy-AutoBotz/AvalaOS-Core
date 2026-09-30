@@ -642,6 +642,7 @@ export type EnterpriseIntelligenceProjectionRequest = {
   organizationId: string;
   workspaceId: string;
   expectedAuthorizationVersion?: number;
+  projectionScope?: 'studio_source_flow';
   deliveryItemPage?: DeliveryItemPageRequest;
   deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
   assessDocumentMappingScope?: { caseId: string; caseVersion: number; inputBundleId?: string; inputBundleVersionId?: string };
@@ -685,6 +686,20 @@ const loadProjection = async (input: EnterpriseIntelligenceProjectionRequest): P
 
 export const enterpriseIntelligenceClient = {
   loadProjection,
+
+  async loadStudioSourceFlow(input: Pick<EnterpriseIntelligenceProjectionRequest, 'organizationId' | 'workspaceId' | 'expectedAuthorizationVersion'>) {
+    const projection = await loadProjection({
+      organizationId: input.organizationId,
+      workspaceId: input.workspaceId,
+      expectedAuthorizationVersion: input.expectedAuthorizationVersion,
+      projectionScope: 'studio_source_flow',
+    });
+    if (input.expectedAuthorizationVersion !== undefined
+      && projection.authorizationVersion !== input.expectedAuthorizationVersion) {
+      throw new EnterpriseIntelligenceClientError('ENTERPRISE_PROJECTION_UNAVAILABLE');
+    }
+    return { authorizationVersion: projection.authorizationVersion, studioSourceFlow: projection.studioSourceFlow };
+  },
 
   async loadDeliveryWorkspace(input: Parameters<typeof loadProjection>[0]): Promise<DeliveryWorkspaceProjection> {
     const projection = await loadProjection(input);

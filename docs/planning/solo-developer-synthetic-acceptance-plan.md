@@ -1702,3 +1702,51 @@ test files; governed lines 97.09%, branches 86.00%, functions 96.79%), with no
 threshold change. PR B compile-only validation passed without running its broad
 suite. Separate container-registry and preview-network failures on that candidate
 did not exercise this repair. The final candidate still requires all hosted gates.
+
+### CH-10 Studio source-read isolation (2026-09-30)
+
+Protected run `36721430815` at `4d2dbe6` passed preparation but stopped at
+`CH-10:create-direct-studio-plan` with `DIRECT_PACKAGE_CONTROL_NOT_READY`.
+Bounded read-only evidence showed the unrelated Delivery workspace projection
+timing out (SQLSTATE 57014), causing the full Enterprise query to return 503,
+while the independent Studio workspace reads succeeded. No CH-10 package
+command was issued. Recovery and private-state erasure succeeded; the exercise
+was deprovisioned with 27 anchors and 27 bindings.
+
+Confirmed source defect: Studio obtained its source eligibility through the full
+Enterprise projection. An actor with Delivery capabilities therefore depended on
+Delivery read availability before creating a Studio package. The component
+correctly failed closed when that combined read failed. All three read-only
+reviewers closed before implementation under the existing fixed workspace-write
+profile.
+
+The existing query now accepts the explicit `studio_source_flow` scope and
+loads only the complete Studio source-flow dependency set. Studio uses that scope
+on initial load and after a source commit. The default full query is unchanged.
+Fresh tenant authority, expected authorization version, the full DTO decoder,
+organization/workspace response binding, source ownership, exact locked bundle,
+succeeded extraction, reviewed/anchored candidates and complete source coverage
+remain required. Unknown or mixed scopes reject; there is no broad-query fallback.
+No schema, scoring, permission, provider call, timeout or retry change is needed.
+
+Executed verification: the focused client suite passed scoped serialization and
+seven unavailable, mismatched, stale or malformed response cases with no fallback.
+The real CH-10 component/runner action passed on Desktop Chrome and Pixel 7 with
+the full-query method forced to fail. The source-read failure case kept creation
+disabled and enabled it only after an exact successful read on both profiles.
+Its first fixture incorrectly expected a reload button in a state without that
+control; using the existing artifact-type selector corrected the fixture, and
+both cases passed. Client source boundaries and Edge import resolution passed.
+The focused Enterprise query suite passed: scoped reads skip Delivery/Monitor
+and unrelated rows, produce the same Studio source DTO as the default query,
+disclose no source rows without capability, and reject invalid/mixed scope,
+stale authority and foreign scope. The default full query remains covered.
+New exact-head CI, deployment source readback, preview verification and the full
+protected campaign remain planned verification.
+
+Deployment boundary: refresh only `enterprise-intelligence-query` on the already
+approved synthetic project, retaining JWT verification. Rollback restores the
+previous query source set and reverts the scoped client/component change with
+its tests and provenance. Preserve immutable exercise history and keep acceptance
+blocked if any binding fails. All 84 steps and 43 server actions remain required;
+`CONTROLLED-HUMAN` remains `not_run`, and merge still requires AP confirmation.

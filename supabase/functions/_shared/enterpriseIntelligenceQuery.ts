@@ -157,6 +157,7 @@ export type EnterpriseIntelligenceQueryDatabase = {
 };
 
 export type EnterpriseIntelligenceQueryOptions = {
+  projectionScope?: 'studio_source_flow';
   deliveryItemPage?: DeliveryItemPageRequest;
   deliveryBaselineEligibilityPage?: DeliveryBaselineEligibilityPageRequest;
   assessDocumentMappingScope?: { caseId: string; caseVersion: number; inputBundleId?: string; inputBundleVersionId?: string };
@@ -188,7 +189,7 @@ const assertEmbeddedProjectionScope = (
     throw new Error('ENTERPRISE_PROJECTION_SCOPE_MISMATCH');
   }
 };
-const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion', 'deliveryItemPage', 'deliveryBaselineEligibilityPage', 'assessDocumentMappingScope'];
+const requestKeys = ['organizationId', 'workspaceId', 'expectedAuthorizationVersion', 'projectionScope', 'deliveryItemPage', 'deliveryBaselineEligibilityPage', 'assessDocumentMappingScope'];
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
   status,
@@ -419,6 +420,29 @@ export const createEnterpriseIntelligenceQueryDatabase = (
         (rows as unknown as Record<string, Row[]>)[target] = result;
       }));
     };
+    const loadStudioSourceFlowRows = () => {
+      load('studioSourceFlags', `enterprise_transcript_workspace_flags?select=studio_multisource_enabled,unified_byok_gateway_enabled,studio_source_integration_enabled,version,updated_at&${scope}&limit=1`);
+      load('studioSourceOwnerships', `studio_source_version_ownerships?select=source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=2000`);
+      load('studioSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,deleted_at,created_at&${scope}&order=created_at.desc&limit=2000`);
+      load('studioSourceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,extraction_status,extraction_failure_code,created_at&${scope}&order=created_at.desc&limit=2000`);
+      load('studioSourceCandidates', `enterprise_evidence_candidates?select=id,ai_job_id,source_id,source_version_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,source_locator,confidence,suggestion_status,version,created_by,reviewed_by,reviewed_at,updated_at&${scope}&order=updated_at.desc&limit=2000`);
+      load('studioSourceSets', `enterprise_source_sets?select=id,owner_module,display_label,description,current_version,lifecycle_version,status,created_at,updated_at&${scope}&owner_module=eq.studio&order=updated_at.desc&limit=400`);
+      load('studioSourceSetVersions', `enterprise_source_set_versions?select=id,source_set_id,version,purpose,source_count,extracted_character_count,status,created_at&${scope}&order=created_at.desc&limit=400`);
+      load('studioSourceSetItems', `enterprise_source_set_version_items?select=source_set_version_id,source_set_id,source_version_id,source_id,ordinal,semantic_role,user_note,extracted_character_count&${scope}&order=ordinal.asc&limit=4000`);
+      load('studioInputBundles', `enterprise_module_input_bundles?select=id,owner_module,current_version,created_at,updated_at&${scope}&owner_module=eq.studio&order=updated_at.desc&limit=400`);
+      load('studioInputBundleVersions', `enterprise_module_input_bundle_versions?select=id,input_bundle_id,version,status,created_at&${scope}&order=created_at.desc&limit=400`);
+      load('studioInputBundleItems', `enterprise_module_input_bundle_items?select=input_bundle_version_id,input_bundle_id,ordinal,source_set_version_id,source_set_id,declared_purpose&${scope}&order=ordinal.asc&limit=4000`);
+      load('studioExtractionRuns', `studio_source_extraction_runs?select=job_id,input_bundle_id,input_bundle_version_id,input_bundle_version,status,candidate_count,created_at,completed_at&${scope}&order=created_at.desc&limit=400`);
+      load('studioExtractionBindings', `studio_source_extraction_bindings?select=id,job_id,input_bundle_id,input_bundle_version_id,input_bundle_version,source_set_id,source_set_version_id,source_set_version,source_id,source_version_id,ordinal,created_at&${scope}&order=created_at.desc&limit=2000`);
+      load('studioCandidateEdits', `enterprise_evidence_candidate_edits?select=candidate_id,created_at&${scope}&order=created_at.desc&limit=4000`);
+      load('studioProviderRoutes', `enterprise_ai_capability_routes?select=id,enabled,deleted_at&${scope}&capability=eq.studio.evidence.extract&order=updated_at.desc&limit=20`);
+    };
+
+    if (options.projectionScope === 'studio_source_flow') {
+      if (studioSourcesVisible) loadStudioSourceFlowRows();
+      await Promise.all(tasks);
+      return rows;
+    }
 
     if (providerVisible) {
       load('providerConfigs', `ai_provider_configs?select=id,provider,display_name,default_model,status,key_ref_id,budget_policy,last_validated_at,created_at&org_id=eq.${encodeURIComponent(authority.organizationId)}&deleted_at=is.null&order=created_at.desc&limit=100`);
@@ -486,12 +510,7 @@ export const createEnterpriseIntelligenceQueryDatabase = (
       load('reviewEvents', `enterprise_high_impact_review_events?select=id,resource_type,resource_id,reviewer_id,created_at&${scope}&order=created_at.desc&limit=400`);
       load('approvals', `enterprise_high_impact_approvals?select=id,resource_type,resource_id,outcome,created_at&${scope}&order=created_at.desc&limit=400`);
     }
-    if (studioSourcesVisible) {
-      load('studioSourceOwnerships', `studio_source_version_ownerships?select=source_id,source_version_id,created_at&${scope}&order=created_at.desc&limit=2000`);
-    }
-    if (studioSourcesVisible) {
-      load('studioExtractionBindings', `studio_source_extraction_bindings?select=id,job_id,input_bundle_id,input_bundle_version_id,input_bundle_version,source_set_id,source_set_version_id,source_set_version,source_id,source_version_id,ordinal,created_at&${scope}&order=created_at.desc&limit=2000`);
-    }
+    if (studioSourcesVisible) loadStudioSourceFlowRows();
     if (transcriptLineageRequired) {
       load('transcriptFlags', `enterprise_transcript_workspace_flags?select=transcript_source_sets_enabled,assess_multisource_apply_enabled,assess_document_mapping_enabled,governed_journeys_enabled,version,updated_at&${scope}&limit=1`);
       load('transcriptSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,created_at&${scope}&deleted_at=is.null&order=created_at.desc&limit=500`);
@@ -544,21 +563,6 @@ export const createEnterpriseIntelligenceQueryDatabase = (
           rows.mappingApplications = await query<Row[]>(`enterprise_assess_document_mapping_applications?select=preview_batch_id,proposal_id,target_selector_id,assess_case_id,assess_case_version,outcome,applied_at&${scope}&preview_batch_id=eq.${encodeURIComponent(previewBatchId)}&order=applied_at.desc&limit=100`, { method: 'GET', headers: { 'Cache-Control': 'no-store' } });
         }
       }
-    }
-    if (studioSourcesVisible) {
-      load('studioSourceFlags', `enterprise_transcript_workspace_flags?select=studio_multisource_enabled,unified_byok_gateway_enabled,studio_source_integration_enabled,version,updated_at&${scope}&limit=1`);
-      load('studioSources', `enterprise_evidence_sources?select=id,display_name,mime_type,current_version,status,deleted_at,created_at&${scope}&order=created_at.desc&limit=2000`);
-      load('studioSourceVersions', `enterprise_evidence_source_versions?select=id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,extraction_status,extraction_failure_code,created_at&${scope}&order=created_at.desc&limit=2000`);
-      load('studioSourceCandidates', `enterprise_evidence_candidates?select=id,ai_job_id,source_id,source_version_id,field_key,value,safe_excerpt,excerpt_hash,provenance_hash,source_locator,confidence,suggestion_status,version,created_by,reviewed_by,reviewed_at,updated_at&${scope}&order=updated_at.desc&limit=2000`);
-      load('studioSourceSets', `enterprise_source_sets?select=id,owner_module,display_label,description,current_version,lifecycle_version,status,created_at,updated_at&${scope}&owner_module=eq.studio&order=updated_at.desc&limit=400`);
-      load('studioSourceSetVersions', `enterprise_source_set_versions?select=id,source_set_id,version,purpose,source_count,extracted_character_count,status,created_at&${scope}&order=created_at.desc&limit=400`);
-      load('studioSourceSetItems', `enterprise_source_set_version_items?select=source_set_version_id,source_set_id,source_version_id,source_id,ordinal,semantic_role,user_note,extracted_character_count&${scope}&order=ordinal.asc&limit=4000`);
-      load('studioInputBundles', `enterprise_module_input_bundles?select=id,owner_module,current_version,created_at,updated_at&${scope}&owner_module=eq.studio&order=updated_at.desc&limit=400`);
-      load('studioInputBundleVersions', `enterprise_module_input_bundle_versions?select=id,input_bundle_id,version,status,created_at&${scope}&order=created_at.desc&limit=400`);
-      load('studioInputBundleItems', `enterprise_module_input_bundle_items?select=input_bundle_version_id,input_bundle_id,ordinal,source_set_version_id,source_set_id,declared_purpose&${scope}&order=ordinal.asc&limit=4000`);
-      load('studioExtractionRuns', `studio_source_extraction_runs?select=job_id,input_bundle_id,input_bundle_version_id,input_bundle_version,status,candidate_count,created_at,completed_at&${scope}&order=created_at.desc&limit=400`);
-      load('studioCandidateEdits', `enterprise_evidence_candidate_edits?select=candidate_id,created_at&${scope}&order=created_at.desc&limit=4000`);
-      load('studioProviderRoutes', `enterprise_ai_capability_routes?select=id,enabled,deleted_at&${scope}&capability=eq.studio.evidence.extract&order=updated_at.desc&limit=20`);
     }
     await Promise.all(tasks);
     if (evidenceVisible || transcriptLineageRequired) {
@@ -1710,6 +1714,9 @@ const parseRequest = (value: unknown) => {
   if (!isRow(value) || Object.keys(value).some(key => !requestKeys.includes(key))) return null;
   if (typeof value.organizationId !== 'string' || !uuid.test(value.organizationId) || typeof value.workspaceId !== 'string' || !uuid.test(value.workspaceId)) return null;
   if (value.expectedAuthorizationVersion !== undefined && (!Number.isSafeInteger(value.expectedAuthorizationVersion) || number(value.expectedAuthorizationVersion) < 1)) return null;
+  const projectionScope: EnterpriseIntelligenceQueryOptions['projectionScope'] | null = value.projectionScope === undefined ? undefined
+    : value.projectionScope === 'studio_source_flow' ? value.projectionScope : null;
+  if (projectionScope === null) return null;
   let deliveryItemPage: DeliveryItemPageRequest | undefined;
   if (value.deliveryItemPage !== undefined) {
     if (!isRow(value.deliveryItemPage)
@@ -1763,10 +1770,12 @@ const parseRequest = (value: unknown) => {
     assessDocumentMappingScope = { caseId: scope.caseId, caseVersion: number(scope.caseVersion),
       ...(typeof scope.inputBundleId === 'string' ? { inputBundleId: scope.inputBundleId, inputBundleVersionId: String(scope.inputBundleVersionId) } : {}) };
   }
+  if (projectionScope && (deliveryItemPage || deliveryBaselineEligibilityPage || assessDocumentMappingScope)) return null;
   return {
     organizationId: value.organizationId,
     workspaceId: value.workspaceId,
     expectedAuthorizationVersion: value.expectedAuthorizationVersion as number | undefined,
+    ...(projectionScope ? { projectionScope } : {}),
     ...(deliveryItemPage ? { deliveryItemPage } : {}),
     ...(deliveryBaselineEligibilityPage ? { deliveryBaselineEligibilityPage } : {}),
     ...(assessDocumentMappingScope ? { assessDocumentMappingScope } : {}),
@@ -1792,6 +1801,7 @@ export const handleEnterpriseIntelligenceQuery = async (request: Request, depend
   try {
     const authority = await resolveTenantAuthority(user.id, parsed, dependencies.authorityDatabase);
     const raw = await dependencies.queryDatabase.loadProjectionRows(authority, {
+      ...(parsed.projectionScope ? { projectionScope: parsed.projectionScope } : {}),
       ...(parsed.deliveryItemPage ? { deliveryItemPage: parsed.deliveryItemPage } : {}),
       ...(parsed.deliveryBaselineEligibilityPage ? { deliveryBaselineEligibilityPage: parsed.deliveryBaselineEligibilityPage } : {}),
       ...(parsed.assessDocumentMappingScope ? { assessDocumentMappingScope: parsed.assessDocumentMappingScope } : {}),

@@ -25,7 +25,7 @@ test('PR C synthetic CH-10 executes the full direct Studio PDD catalog action th
   });
   const providerEgress:string[]=[];
   page.on('request',request=>{if(isSourceProviderTraffic(request))providerEgress.push(request.url());});
-  await navigate(page,'/synthetic-studio?mode=direct&syntheticSelection=1&ch10Connected=1',async()=>{
+  await navigate(page,'/synthetic-studio?mode=direct&syntheticSelection=1&ch10Connected=1&scopedSourceRead=1',async()=>{
     await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible({timeout:15_000});
   });
   const planned=buildBrowserExecutionCatalog().find(step=>step.checkpointId==='CH-10'&&step.stepId==='create-direct-studio-plan')!;
@@ -45,7 +45,31 @@ test('PR C synthetic CH-10 executes the full direct Studio PDD catalog action th
   expect(state.get('prereq:ch10:artifactId')).toBe('00000038-0000-4000-8000-000000000038');
   expect(state.get('prereq:ch10:catalogBindingToken')).toMatch(/^sha256:[0-9a-f]{64}$/u);
   await expect(page.getByText('Exact Studio Source Package committed and verified · Not assessed · planning only.',{exact:true})).toBeVisible();
+  const sourceReads=await page.evaluate(()=>({
+    full:(window as any).__studioFullReadCalls,
+    scoped:(window as any).__studioScopedReadCalls,
+  }));
+  expect(sourceReads.full).toBe(0);
+  expect(sourceReads.scoped.length).toBeGreaterThanOrEqual(2);
+  expect(sourceReads.scoped.every((input:any)=>input.organizationId===organizationId&&input.workspaceId===workspaceId&&input.expectedAuthorizationVersion===7)).toBe(true);
   expect(providerEgress).toEqual([]);
+});
+
+test('Studio scoped source read failure disables direct creation until an exact read succeeds', async ({page}) => {
+  page.setDefaultTimeout(5_000);
+  await open(page,'?mode=direct&scopedSourceRead=1&sourceFailure=1');
+  await expect(page.getByRole('heading',{name:'Studio source intake unavailable'})).toBeVisible();
+  const builder=page.getByRole('region',{name:'Studio Source Package builder'});
+  const create=builder.getByRole('button',{name:'Create direct planning package'});
+  await expect(create).toBeDisabled();
+  expect(await page.evaluate(()=>(window as any).__studioFullReadCalls)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).__studioCommandCalls)).toEqual([]);
+  await page.evaluate(()=>{(window as any).__studioScopedReadFailure=false;});
+  await page.getByLabel('Artifact type',{exact:true}).selectOption('pdd');
+  await expect(page.getByRole('heading',{name:'Studio source intake unavailable'})).toHaveCount(0);
+  await selectExactEligibleStudioBundle(page,[],{versionId:'00000032-0000-4000-8000-000000000032',requireDirectCreation:true});
+  await expect(create).toBeEnabled();
+  expect(await page.evaluate(()=>(window as any).__studioFullReadCalls)).toBe(0);
 });
 
 test('PR C synthetic runner selects two exact Studio sources without selecting Assess sources', async ({page}) => {

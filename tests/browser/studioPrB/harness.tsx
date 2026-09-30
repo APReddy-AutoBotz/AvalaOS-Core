@@ -7,6 +7,7 @@ import ControlledHumanNonProductionBanner from '../../../components/auth/Control
 import type { StudioArtifactTransport } from '../../../services/studioArtifacts/client';
 import type { StudioArtifactProjectionDto, StudioArtifactWorkspaceProjectionDto } from '../../../services/studioArtifacts/contracts';
 import type { StudioSourceFlowProjection } from '../../../services/studioArtifacts/workspaceModel';
+import { enterpriseIntelligenceClient } from '../../../services/enterpriseIntelligenceClient';
 import syntheticFixture from '../../../testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json';
 const ids=Array.from({length:60},(_,i)=>`${String(i+1).padStart(8,'0')}-0000-4000-8000-${String(i+1).padStart(12,'0')}`);
 const H=(value:string)=>value.repeat(64).slice(0,64);
@@ -136,6 +137,25 @@ const sourceFlowTransport={
   review:async(input:any)=>{studioSourceFlow={...studioSourceFlow,candidates:studioSourceFlow.candidates.map(candidate=>candidate.id===input.candidateId?{...candidate,candidateVersion:candidate.candidateVersion+1,status:input.status,value:input.status==='edited'?input.value:candidate.value,reviewState:'reviewed_by_you',editCount:candidate.editCount+(input.status==='edited'?1:0),reviewedAt:'2026-09-24T05:04:00.000Z'}:candidate)};return response(input.candidateId);},
 };
 
+// Exercise the component's production read selection, independently of the
+// source-intake transport fixture. The scoped client's wire contract is tested
+// in enterpriseIntelligenceClient.prB.test.ts.
+const scopedSourceRead = params.get('scopedSourceRead') === '1';
+if (scopedSourceRead) {
+  (window as any).__studioScopedReadCalls = [];
+  (window as any).__studioFullReadCalls = 0;
+  (window as any).__studioScopedReadFailure = params.get('sourceFailure') === '1';
+  enterpriseIntelligenceClient.loadProjection = async () => {
+    (window as any).__studioFullReadCalls += 1;
+    throw new Error('Unrelated Delivery projection timeout');
+  };
+  enterpriseIntelligenceClient.loadStudioSourceFlow = async input => {
+    (window as any).__studioScopedReadCalls.push(input);
+    if ((window as any).__studioScopedReadFailure) throw new Error('Studio source read unavailable');
+    return sourceFlowTransport.load();
+  };
+}
+
 // The hosted index uses generic labels and keeps the previous content visible
 // while another exact artifact is loading. Exercise that asynchronous boundary.
 if(params.get('syntheticSelection')==='1'){
@@ -165,7 +185,7 @@ if(params.get('syntheticSelection')==='1'){
   transport.readArtifactWorkspace=async(...args)=>{const value=await baseWorkspace(...args) as StudioArtifactWorkspaceProjectionDto;return args[1]===otherId?{...value,artifact:{...value.artifact,id:otherId,aggregateVersion:other.aggregateVersion,lifecycle:other.lifecycle,currentVersionId:otherVersionId,currentApprovedVersionId:null,sections:other.sections!},sourcePackage:{...value.sourcePackage,id:otherPackageId}}:value;};
 }
 
-function Harness(){const content=<><StudioArtifactWorkspace context={context} transport={transport} sourceFlowTransport={sourceFlowTransport} online={params.get('state')!=='offline'} /><div className="mt-8"><GovernedTemplateManager context={context} transport={transport} /></div></>;return <main className="mx-auto max-w-[1600px] p-3 sm:p-6"><h1 className="sr-only">Governed multi-source Studio PR B</h1>{ch10Connected?<section data-testid="governed-studio-creation-route"><ControlledHumanNonProductionBanner/>{content}</section>:content}</main>}
+function Harness(){const content=<><StudioArtifactWorkspace context={context} transport={transport} sourceFlowTransport={scopedSourceRead ? undefined : sourceFlowTransport} online={params.get('state')!=='offline'} /><div className="mt-8"><GovernedTemplateManager context={context} transport={transport} /></div></>;return <main className="mx-auto max-w-[1600px] p-3 sm:p-6"><h1 className="sr-only">Governed multi-source Studio PR B</h1>{ch10Connected?<section data-testid="governed-studio-creation-route"><ControlledHumanNonProductionBanner/>{content}</section>:content}</main>}
 if(params.get('reviewerLabels')==='email'){
   transport.readEligibleReviewers=async()=>{
     await delay(150);
