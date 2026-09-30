@@ -789,8 +789,8 @@ export const isolateFirstActionableDeliveryItem = async (page, interactionSequen
   return { workspace, title, ...await exactEnabledControl(card, 'button', ['Edit immutable descendant'], 'CH-06:edit-one-item-with-rationale') };
 };
 
-const reachControlWithKeyboard = async (page, control, interactionSequence) => {
-  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+const reachControlWithKeyboard = async (page, control, interactionSequence, { resetFocus = true } = {}) => {
+  if (resetFocus) await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
   for (let index = 1; index <= 300; index += 1) {
     await page.keyboard.press('Tab');
     if (await control.evaluate(node => node === document.activeElement)) {
@@ -1580,18 +1580,26 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
   else if (plan.kind === 'focused-alert') {
     const { workspace } = await isolateFirstActionableDeliveryItem(page, interactionSequence, state.get('seed:manual-packageId'), SYNTHETIC_MANUAL_ITEM_TITLE);
     const edit = await exactEnabledControl(workspace, 'button', ['Edit immutable descendant'], `${checkpointId}:${stepId}`);
-    await edit.control.click(); interactionSequence.push('activate:edit-dialog-without-domain-command');
+    await reachControlWithKeyboard(page, edit.control, interactionSequence, { resetFocus: false });
+    await page.keyboard.press('Enter'); interactionSequence.push('activate:edit-dialog-without-domain-command');
     const dialog = page.getByRole('dialog').last(); assert(await dialog.count() && await dialog.isVisible(), 'PR_C_SYNTHETIC_BROWSER_A11Y_DIALOG_MISSING');
     const title = dialog.getByLabel('Item title', { exact: true }); assert(await title.count(), 'PR_C_SYNTHETIC_BROWSER_A11Y_ITEM_TITLE_MISSING'); await title.fill('Preserved synthetic invalid input'); interactionSequence.push('fill:item-title');
-    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click(); interactionSequence.push('activate:dialog-confirm-without-rationale');
-    const alert = dialog.getByRole('alert').last(); assert(await alert.count() && await alert.isVisible(), 'PR_C_SYNTHETIC_BROWSER_A11Y_ALERT_MISSING'); assert(await alert.evaluate(node => node === document.activeElement), 'PR_C_SYNTHETIC_BROWSER_A11Y_ALERT_NOT_FOCUSED'); observed = { role: 'alert', focused: true, textDigest: digest(await alert.innerText()) };
+    await reachControlWithKeyboard(page, dialog.getByRole('button', { name: 'Confirm', exact: true }), interactionSequence, { resetFocus: false });
+    await page.keyboard.press('Enter'); interactionSequence.push('activate:dialog-confirm-without-rationale');
+    const alert = dialog.getByRole('alert').last(); await alert.waitFor({ state: 'visible' });
+    // React schedules focus after committing the validation summary. Observe that
+    // transition without assigning focus from the acceptance runner.
+    await page.waitForFunction(node => node === document.activeElement, await alert.elementHandle()).catch(() => assert.fail('PR_C_SYNTHETIC_BROWSER_A11Y_ALERT_NOT_FOCUSED'));
+    assert(await alert.evaluate(node => node === document.activeElement), 'PR_C_SYNTHETIC_BROWSER_A11Y_ALERT_NOT_FOCUSED'); observed = { role: 'alert', focused: true, textDigest: digest(await alert.innerText()) };
   }
   else if (plan.kind === 'preserved-input') { const input = page.getByLabel(plan.label, { exact: true }).last(); const value = await input.inputValue(); assert(value.trim().length > 0, 'PR_C_SYNTHETIC_BROWSER_A11Y_INPUT_NOT_PRESERVED'); observed = { label: plan.label, valueDigest: digest(value) }; }
   else if (plan.kind === 'focus-return') {
     const dialog = page.getByRole('dialog').last();
     assert(await dialog.count() && await dialog.isVisible(), 'PR_C_SYNTHETIC_BROWSER_FOCUS_DIALOG_MISSING');
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click(); interactionSequence.push('activate:dialog-cancel');
+    await reachControlWithKeyboard(page, dialog.getByRole('button', { name: 'Cancel', exact: true }), interactionSequence, { resetFocus: false });
+    await page.keyboard.press('Enter'); interactionSequence.push('activate:dialog-cancel');
     const control = await exactEnabledControl(page.getByTestId('governed-delivery-workspace'), plan.role, plan.names, `${checkpointId}:${stepId}`);
+    await page.waitForFunction(node => node === document.activeElement, await control.control.elementHandle()).catch(() => assert.fail('PR_C_SYNTHETIC_BROWSER_A11Y_FOCUS_NOT_RETURNED'));
     assert(await control.control.evaluate(node => node === document.activeElement), 'PR_C_SYNTHETIC_BROWSER_A11Y_FOCUS_NOT_RETURNED'); observed = { control: control.label, focused: true };
   }
   else if (plan.kind === 'read-only-history') observed = await verifySyntheticReadOnlyMonitorHistory(page, interactionSequence, state.get('retained-monitor-history'));

@@ -1464,6 +1464,37 @@ concurrent local builds. That exact case passed in isolation. The final isolated
 `npm run test:pr-c-synthetic-acceptance` gate passed all 73 tests with zero skips;
 `npm run typecheck` passed after the final fixture and dialog changes.
 
+The first exact-head CI attempt on `eb49690` exposed stale static-scan line
+references after the five-line diagnostic test addition. The same two existing
+authentication-fixture exceptions now reference lines 206 and 215; no exception
+scope was added or broadened. The affected static gate passes locally. Native
+run `36672649379` separately stopped before tests when its pinned container pull
+received a registry data-limit response; no image substitution is authorized.
+
+The same CI attempt exposed two CH-14 runner issues in the new connected
+fixture. Focus was sampled before the component's scheduled focus update, and
+mobile emulation at 200 percent document zoom reported an intercepted pointer
+hit despite the visible button's DOM center resolving to that button. The
+pointer failure reproduced in three consecutive local attempts. Alternative
+scroll-container and input-size changes did not resolve it and were removed;
+no additional product layout change is retained. This is not a claim that all
+mobile pointer behavior has been proved.
+
+The keyboard-accessibility sequence now reaches Edit, Confirm and Cancel with
+actual Tab navigation and Enter activation, without assigning focus or forcing
+controls. Validation and return-focus observations wait for the application's
+scheduled focus and still require the exact expected element. The connected
+CH-10/CH-14/CH-11 fixture then passed six of six executions: three Desktop and
+three Pixel. The final owned synthetic contract gate passed 73/73 with zero
+skips; TypeScript and the exact-line static check passed. The normal
+pointer-operated lifecycle actions remain in this same
+fixture. No catalog step, zoom, profile or assertion was removed.
+
+Core CI also encountered newly published fast-uri advisory
+GHSA-hrr3-gc8f-f4qj. The lockfile alone advances the existing compatible
+transitive dependency from 3.1.7 to patched 3.1.8; npm reported zero
+vulnerabilities after that update. No direct dependency or range changed.
+
 Planned verification: refresh provenance and verify the final exact
 candidate before another protected full campaign. Do not weaken eligibility,
 skip steps, grant permissions, force controls, or replay business actions to make
