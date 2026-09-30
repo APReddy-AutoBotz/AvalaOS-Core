@@ -41,7 +41,7 @@ host.readFile = file => path.resolve(file) === supabaseClient
      export const isControlledHumanRuntimeEnabled=()=>Boolean((globalThis as any).__prCControlledEnabled);
      export const getControlledHumanEvidenceState=()=>({armedStep:(globalThis as any).__prCArmedStep??null,anchor:null});
      export const requireControlledHumanBackendAttestation=async()=>{(globalThis as any).__prCAttestationCount=((globalThis as any).__prCAttestationCount??0)+1;return (globalThis as any).__prCAttestationDenied?null:{attested:true}};
-     export const beginControlledHumanCommand=async(..._args:any[])=>null;
+     export const beginControlledHumanCommand=async(...args:any[])=>{const f=(globalThis as any).__prCBegin;return f?f(...args):null};
      export const completeControlledHumanCommand=async(..._args:any[])=>null;
      export const executeControlledHumanDeniedCommand=async(..._args:any[])=>null;
      export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__prCInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}}};`

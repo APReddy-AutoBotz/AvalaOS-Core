@@ -1642,3 +1642,47 @@ remain planned verification; all 84 steps and 43 server actions are required.
 Rollback reverts the runner and its focused tests together, retaining immutable
 exercise and command history. Keep the acceptance/merge block if rolled back.
 `CONTROLLED-HUMAN` remains `not_run`; final merge still requires AP confirmation.
+
+### CH-11 manual-package authorization version correction (2026-09-30)
+
+Candidate `e404fb830c679c8bc7f45cb949fde945a0541e4a` passed all 18
+applicable workflows, independently verified Native Assess and governed
+artifacts, and exact-preview verification. Protected run `36707407549` passed
+the repaired CH-10 path, then failed before CH-11 manual creation. Recovery and
+private-state erasure succeeded. Bounded read-only inspection confirmed a
+deprovisioned exercise with 30 anchors and 30 bindings, no CH-11 anchor, and
+an anchor rejection at the server's exact-version check before command dispatch.
+
+Confirmed source defect: the browser hardcoded workspace target version `1`
+for manual creation, although the catalog requires the actor authorization
+version. The current retained actor version was greater than one. The ordinary
+client transport tests disabled controlled mode, while the PostgreSQL test
+manually supplied the correct version; both bypassed this defective derivation.
+All three read-only reviewers closed before implementation began under the
+existing fixed workspace-write profile.
+
+The manual-create client now obtains a fresh authenticated tenant session,
+requires exactly one matching organization/workspace context, and uses its
+positive integer authorization version for the anchor. Missing, ambiguous,
+malformed, mismatched and stale authority fail closed. The server still checks
+the version itself. Other target dimensions, business payloads, selector hashes,
+lineage, permissions and completion rules are unchanged. No schema, Edge,
+provider, UI or catalog change is needed.
+
+Executed verification: the new focused client case failed before the fix because
+no tenant-session read occurred. It passed after the fix, including version 4,
+nine invalid-context cases and a stale-anchor rejection without dispatch/retry.
+The PostgreSQL 16 integration now loads the actual production client and its
+decoders, replacing only its Supabase transport with real SQL calls. It proves
+that version 1 is rejected, the live version completes manual creation, and the
+manual review, approval, baseline and both cleanup cycles still pass. The first
+adapter attempt incorrectly assumed an initial anchor supplied the client's
+business idempotency key; correcting that adapter to accept the existing client
+key contract produced a pass (1/1, zero skips, 36.06 seconds). No broad local
+regression was run. New exact-head CI, preview and the full protected synthetic
+campaign remain planned verification; all 84 steps and 43 server actions remain
+required.
+
+Rollback reverts the client correction and its focused tests together, retaining
+immutable exercise history and the acceptance/merge block. `CONTROLLED-HUMAN`
+remains `not_run`; final merge requires AP confirmation.

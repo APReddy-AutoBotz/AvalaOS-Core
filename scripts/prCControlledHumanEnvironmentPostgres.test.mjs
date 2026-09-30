@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import pg from 'pg';
 import ts from 'typescript';
@@ -16,6 +17,25 @@ const adminUrl=process.env.PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL;
 const jsonTextSha=value=>sha256(JSON.stringify(value));
 const denialManualItems=[{clientKey:'item-0001',itemType:'Task',title:'Synthetic denial probe',description:'Synthetic non-production authorization denial probe.',acceptanceCriteria:['The real production authority rejects this request.'],nonFunctionalRequirements:['No side effect is committed.']}];
 const denialManualSelectors={manualBriefDigest:sha256('Synthetic controlled-human denial probe'),orderedItemsDigest:sha256(denialManualItems),itemCount:1};
+
+// Load the real client and its decoders; replace only the Supabase boundary.
+// This keeps browser target/selector derivation in the PostgreSQL proof.
+const loadProductionDeliveryClient=transport=>{
+  const modules=new Map([[resolve('services/supabaseClient.ts'),transport]]);
+  const load=file=>{
+    if(modules.has(file))return modules.get(file);
+    const module={exports:{}};modules.set(file,module.exports);
+    const source=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+    const require=specifier=>{
+      assert.ok(specifier.startsWith('.'),'only local client dependencies are permitted');
+      const dependency=resolve(dirname(file),specifier);
+      return load(dependency.endsWith('.ts')?dependency:`${dependency}.ts`);
+    };
+    new Function('require','module','exports',source)(require,module,module.exports);
+    return module.exports;
+  };
+  return load(resolve('services/enterpriseIntelligenceClient.ts')).enterpriseIntelligenceClient;
+};
 
 test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprovision cycles with retained history',{skip:!adminUrl},async()=>{
   const suffix=`${process.pid}_${Date.now()}`;const databaseName=`pr_c_controlled_human_${suffix}`;
@@ -1111,9 +1131,45 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       await assert.rejects(invokeControlledDelivery({checkpointId:'CH-11',stepId:'create-manual-delivery-package',personaKey:'delivery_author',targetFamily:'workspace',targetId:generationBinding.workspace_id,expectedVersion:authorizationVersion,selectors,action:'delivery.package.create.manual',payload:{manualBrief:brief,items:manualItems},observe:false}),/INTENT_REJECTED/u);
     }finally{await database.client.query('rollback')}
     const runManualDeliverySuccess=async()=>{await observationFixture.drainUnboundBeforeMachineStep('CH-11','create-manual-delivery-package');await database.client.query('begin');try{
-      const brief='Controlled direct Delivery package';const selectors=manualSelectors(brief,manualItems);
-      const manual=await invokeControlledDelivery({checkpointId:'CH-11',stepId:'create-manual-delivery-package',personaKey:'delivery_author',targetFamily:'workspace',targetId:generationBinding.workspace_id,
-        expectedVersion:Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,deliveryActors.delivery_author.auth_user_id])).rows[0].version),selectors,action:'delivery.package.create.manual',payload:{manualBrief:brief,items:manualItems}});
+      const actor=deliveryActors.delivery_author;let liveVersion;let anchor;let committed;const calls=[];
+      const client=loadProductionDeliveryClient({
+        getRuntimeDataAccess:()=> 'server',isSupabaseConfigured:()=>true,isControlledHumanRuntimeEnabled:()=>true,
+        getControlledHumanEvidenceState:()=>({armedStep:{checkpointId:'CH-11',stepId:'create-manual-delivery-package',observationKind:'server_action'}}),
+        beginControlledHumanCommand:async input=>{
+          calls.push('anchor');assert.equal(input.expectedVersion,liveVersion);assert.ok(liveVersion>1);
+          assert.equal(input.targetFamily,'workspace');assert.equal(input.targetId,generationBinding.workspace_id);
+          await observationFixture.beforeMachineStep('CH-11','create-manual-delivery-package');
+          await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actor.auth_user_id]);
+          // Reproduce the original stale constant at the real server boundary.
+          await database.client.query('savepoint stale_manual_anchor');
+          await assert.rejects(database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-11','create-manual-delivery-package',$2,$3,1,$4::jsonb)`,[context.exerciseDigest,input.targetFamily,input.targetId,JSON.stringify(input.selectorBindings)]),/ANCHOR_VERSION_REJECTED/u);
+          await database.client.query('rollback to savepoint stale_manual_anchor');
+          anchor=(await database.client.query(`select public.pr_c_controlled_human_anchor_step($1,'CH-11','create-manual-delivery-package',$2,$3,$4,$5::jsonb) result`,[context.exerciseDigest,input.targetFamily,input.targetId,input.expectedVersion,JSON.stringify(input.selectorBindings)])).rows[0].result;
+          return {requestId:anchor.execution.requestId,businessIdempotencyKey:anchor.execution.businessIdempotencyKey};
+        },
+        completeControlledHumanCommand:async()=>{
+          calls.push('complete');assert.ok(committed);
+          await database.client.query('set constraints all deferred');
+          const binding=await recordPositiveBinding((await database.client.query(`select public.pr_c_controlled_human_complete_step($1,$2) result`,[context.exerciseDigest,anchor.safeAnchor.challengeToken])).rows[0].result,anchor.safeAnchor);
+          assert.equal(binding.stepId,'create-manual-delivery-package');assert.equal(binding.action,'delivery.package.create.manual');
+        },
+        supabase:{functions:{invoke:async(name,{body})=>{
+          calls.push(name);
+          if(name==='tenant-session'){
+            liveVersion=Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,actor.auth_user_id])).rows[0].version);
+            return {data:{contexts:[{userId:actor.auth_user_id,organizationId:generationBinding.org_id,organizationName:'Synthetic',workspaceId:generationBinding.workspace_id,workspaceName:'Synthetic',authorizationVersion:liveVersion,capabilities:[]}]},error:null};
+          }
+          assert.equal(name,'enterprise-intelligence-command');assert.ok(anchor);
+          assert.equal(body.commandType,'delivery.package.create.manual');assert.equal(body.organizationId,generationBinding.org_id);assert.equal(body.workspaceId,generationBinding.workspace_id);
+          assert.equal(body.requestId,anchor.execution.requestId);
+          assert.match(body.idempotencyKey,/^ei:delivery\.package\.create\.manual:[0-9a-f-]{36}$/u);
+          const ordinal=controlledOrdinal++;
+          committed=(await database.client.query(`select public.enterprise_delivery_monitor_command($1::jsonb) result`,[JSON.stringify({action:body.commandType,actorId:actor.auth_user_id,organizationId:body.organizationId,workspaceId:body.workspaceId,authorizationVersion:liveVersion,receiptId:deterministicUuid(context.exerciseId,`controlled-receipt-${ordinal}`),requestId:body.requestId,idempotencyKey:body.idempotencyKey,executionToken:deterministicUuid(context.exerciseId,`controlled-token-${ordinal}`),executionFence:ordinal,...body.payload})])).rows[0].result;
+          return {data:{ok:true,...committed},error:null};
+        }}},
+      });
+      const manual={result:await client.createManualDeliveryPackage({organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,manualBrief:'Controlled direct Delivery package',items:manualItems.map((item,index)=>({type:item.itemType.toLowerCase(),title:item.title,description:item.description,acceptanceCriteria:item.acceptanceCriteria,nonFunctionalRequirements:item.nonFunctionalRequirements,...(index===1?{parentOrdinal:1}:{})}))})};
+      assert.deepEqual(calls,['tenant-session','anchor','enterprise-intelligence-command','complete']);
       for(const [index,item] of manual.result.items.entries())await invokeDeliveryPrerequisite('delivery_author','delivery.item.review',{itemAggregateId:item.aggregateId,expectedAggregateVersion:1,expectedItemVersionId:item.versionId,outcome:'accepted',rationale:`Accept manual item ${index+1}.`},`accept-manual-${index}`);
       const pkg=await packageState(manual.result.resourceId);const reviewRationale='Review complete manual package independently.';const reviewSelectors=packageDecisionDescriptor(pkg,'approved',reviewRationale);
       await invokeControlledDelivery({checkpointId:'CH-11',stepId:'review-manual-delivery-package',personaKey:'delivery_reviewer',targetFamily:'delivery_work_package',targetId:pkg.id,expectedVersion:Number(pkg.current_version),selectors:reviewSelectors,action:'delivery.package.review.resolve',payload:{workPackageId:pkg.id,expectedPackageVersion:Number(pkg.current_version),expectedPackageVersionId:pkg.current_version_id,expectedPackageAggregateVersion:Number(pkg.aggregate_version),outcome:'approved',rationale:reviewRationale}});

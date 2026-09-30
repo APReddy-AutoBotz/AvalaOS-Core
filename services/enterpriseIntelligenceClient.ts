@@ -19,6 +19,7 @@ import {
   type EnterpriseIntelligenceProjection,
 } from './enterpriseIntelligence';
 import type { TranscriptAssessApplicationIntent } from './transcriptFlow/contracts';
+import { loadEnterpriseSessionContexts } from './enterpriseAssess';
 import {
   ASSESS_DOCUMENT_MAPPING_MAX_PROPOSALS,
   isAssessMappingJsonValue,
@@ -311,7 +312,7 @@ const controlledHumanTextDigest = async (value: unknown) => {
   return `sha256:${Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')}`;
 };
 
-export const controlledHumanTarget = (commandType: string, workspaceId: string, payload: Record<string, unknown>) => {
+export const controlledHumanTarget = (commandType: string, workspaceId: string, payload: Record<string, unknown>, authorizationVersion?: number) => {
   const id = (key: string) => typeof payload[key] === 'string' ? String(payload[key]) : '';
   const version = (...keys: string[]) => {
     const value = keys.map(key => payload[key]).find(candidate => Number.isSafeInteger(candidate) && Number(candidate) >= 0);
@@ -323,7 +324,10 @@ export const controlledHumanTarget = (commandType: string, workspaceId: string, 
   if (commandType === 'delivery.package.revision.commit') return { targetFamily: 'delivery_work_package', targetId: id('workPackageId'), expectedVersion: version('expectedPackageAggregateVersion') };
   if (commandType === 'delivery.package.review.resolve' || commandType === 'delivery.package.approval.resolve') return { targetFamily: 'delivery_work_package', targetId: id('workPackageId'), expectedVersion: version('expectedPackageVersion') };
   if (commandType === 'monitor.baseline.create') return { targetFamily: 'delivery_work_package', targetId: id('workPackageId'), expectedVersion: version('expectedPackageVersion') };
-  if (commandType === 'delivery.package.create.manual') return { targetFamily: 'workspace', targetId: workspaceId, expectedVersion: 1 };
+  if (commandType === 'delivery.package.create.manual') {
+    if (!Number.isSafeInteger(authorizationVersion) || Number(authorizationVersion) < 1) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+    return { targetFamily: 'workspace', targetId: workspaceId, expectedVersion: Number(authorizationVersion) };
+  }
   if (commandType === 'assessment_v2.review.resolve') return { targetFamily: 'assess_case', targetId: id('caseId'), expectedVersion: version('expectedVersion') };
   if (commandType === 'transcript.assess.conflict.resolve') return { targetFamily: 'assess_conflict', targetId: id('conflictId'), expectedVersion: version('resolutionVersion') };
   return null;
@@ -421,7 +425,14 @@ const invokeCommand = async <T>(input: {
 }): Promise<T> => {
   if (!commandEnabled()) throw new Error('Enterprise Intelligence requires server runtime authority.');
   const controlled = isControlledHumanRuntimeEnabled();
-  const controlledTarget = controlled ? controlledHumanTarget(input.commandType, input.workspaceId, input.payload) : null;
+  let workspaceAuthorizationVersion: number | undefined;
+  if (controlled && input.commandType === 'delivery.package.create.manual') {
+    const contexts = (await loadEnterpriseSessionContexts()).filter(context =>
+      context.organizationId === input.organizationId && context.workspaceId === input.workspaceId);
+    if (contexts.length !== 1) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
+    workspaceAuthorizationVersion = contexts[0].authorizationVersion;
+  }
+  const controlledTarget = controlled ? controlledHumanTarget(input.commandType, input.workspaceId, input.payload, workspaceAuthorizationVersion) : null;
   const assessPrerequisite = controlled && controlledHumanAssessPrerequisite(input.commandType, Boolean(getControlledHumanEvidenceState().armedStep));
   if (controlled && !controlledTarget && !assessPrerequisite) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');
   if (assessPrerequisite && !await requireControlledHumanBackendAttestation()) throw new EnterpriseIntelligenceClientError('COMMAND_BLOCKED');

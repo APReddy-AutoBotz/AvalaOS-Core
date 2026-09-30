@@ -167,6 +167,43 @@ await assert.rejects(enterpriseIntelligenceClient.previewTranscriptAssessApply(a
 assert.equal(invocations.length, 2, 'an armed observed step cannot dispatch a prerequisite command');
 controlledState.__prCControlledEnabled = false;
 controlledState.__prCArmedStep = null;
+// Exercise the actual controlled client path; ordinary transport cases below
+// deliberately have controlled mode off and cannot prove anchor authority.
+const transport = globalThis as typeof globalThis & { __prCInvoke?: any; __prCBegin?: any };
+const ordinaryInvoke = transport.__prCInvoke;
+const manualCase = cases.find(value => value.method === 'createManualDeliveryPackage')!;
+const session = { userId: ids.itemAggregateId, organizationId: ids.organizationId, organizationName: 'Synthetic',
+  workspaceId: ids.workspaceId, workspaceName: 'Synthetic', authorizationVersion: 4, capabilities: [] };
+let contexts: unknown = [session];
+const anchors: Array<Record<string, unknown>> = [];
+const calls: string[] = [];
+let rejectAnchor = false;
+transport.__prCInvoke = async (name: string, options: Invocation['options']) => {
+  calls.push(name);
+  return name === 'tenant-session' ? { data: { contexts }, error: null } : ordinaryInvoke(name, options);
+};
+transport.__prCBegin = async (anchor: Record<string, unknown>) => {
+  calls.push('anchor'); anchors.push(anchor);
+  if (rejectAnchor) throw new Error('PR_C_CONTROLLED_HUMAN_ANCHOR_VERSION_REJECTED');
+  return null;
+};
+controlledState.__prCControlledEnabled = true;
+await manualCase.invoke();
+assert.deepEqual(calls, ['tenant-session', 'anchor', 'enterprise-intelligence-command']);
+assert.equal(anchors[0].expectedVersion, 4);
+assert.equal(anchors[0].targetId, ids.workspaceId);
+for (const invalidContexts of [[], [session, session], [{ ...session, organizationId: ids.packageId }],
+  [{ ...session, workspaceId: ids.packageId }], ...[undefined, 0, -1, 1.5, '4'].map(authorizationVersion => [{ ...session, authorizationVersion }])]) {
+  contexts = invalidContexts; calls.length = 0; anchors.length = 0;
+  await assert.rejects(manualCase.invoke());
+  assert.deepEqual(calls, ['tenant-session']);
+  assert.equal(anchors.length, 0);
+}
+contexts = [session]; rejectAnchor = true; calls.length = 0;
+await assert.rejects(manualCase.invoke(), /ANCHOR_VERSION_REJECTED/);
+assert.deepEqual(calls, ['tenant-session', 'anchor'], 'stale authority cannot retry or dispatch');
+transport.__prCInvoke = ordinaryInvoke; delete transport.__prCBegin;
+controlledState.__prCControlledEnabled = false;
 for (const testCase of cases) {
   invocations.length = 0;
   await testCase.invoke();
