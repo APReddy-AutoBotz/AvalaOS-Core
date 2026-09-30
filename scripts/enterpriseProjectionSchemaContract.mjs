@@ -9,7 +9,10 @@ export const RELATIONSHIP_REVIEW_TABLE = 'enterprise_evidence_candidate_relation
 // Reviewed target -> call-kind -> table -> ordered-column inventory. This is
 // independent of both the source being extracted and the database catalog.
 // A legitimate projection change requires explicit review of this binding.
-export const ENTERPRISE_PROJECTION_INVENTORY_SHA256 = 'f795943a8c72cbef08559d8c58d85ae539e56732cdcba97dc070177d46a9ee4e';
+// Studio source reads now appear together before the scoped early return.
+// Review against 4d2dbe6 confirmed all 66 targets, call kinds, tables and ordered
+// columns are unchanged; only their source traversal ordinals moved.
+export const ENTERPRISE_PROJECTION_INVENTORY_SHA256 = 'adb727e78c04f4277f2b96c018b47e32daeb86003f8efeb950721fd7845a825b';
 
 const fail = (code, detail = '') => {
   throw new Error(`ENTERPRISE_PROJECTION_SCHEMA_${code}${detail ? `:${detail}` : ''}`);

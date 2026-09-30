@@ -1750,3 +1750,13 @@ previous query source set and reverts the scoped client/component change with
 its tests and provenance. Preserve immutable exercise history and keep acceptance
 blocked if any binding fails. All 84 steps and 43 server actions remain required;
 `CONTROLLED-HUMAN` remains `not_run`, and merge still requires AP confirmation.
+
+Candidate `5b84524` reached a verified exact preview and deployed query source
+readback, but Native Assess CI caught an omitted inventory-binding update.
+Grouping the Studio loaders changed traversal ordinals in the reviewed projection
+inventory. Independent comparison with `4d2dbe6` confirmed all 66 targets,
+call kinds, tables and ordered columns are identical. Only the reviewed
+fingerprint changes; the extractor, count, database-column checks and negative
+mutation guards remain unchanged. All 13 focused inventory contract tests passed,
+including the retained negative mutations, before publishing the reconciled
+candidate. No further runtime source change or Edge deployment is required.
