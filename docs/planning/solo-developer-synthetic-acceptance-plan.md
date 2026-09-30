@@ -1557,3 +1557,31 @@ Rollback reverts the client and associated tests/import bindings together;
 disable new exercise commands if rollback restores the known legacy failure.
 Retain immutable exercises and SQL history. CONTROLLED-HUMAN remains `not_run`;
 SYNTHETIC-ROLE-ACCEPTANCE and merge remain NO-GO until complete verified evidence.
+
+### Linux connected-fixture viewport correction (2026-09-30)
+
+Creation Access run `36687415600` passed 73/74 Delivery browser cases but failed
+the connected Pixel scenario at its CH-11 manual-item Confirm click. Five local
+Windows repetitions passed; Linux Chromium reproduced the same interception
+in all three repetitions. Viewport diagnostics traced the failure to the fixture
+switching from Pixel to desktop dimensions while document zoom remained 200%.
+Linux retained a 1.279 page scale, shrinking the 412-pixel visual viewport to
+322 pixels even after reload. This combined-page transition is absent from the
+hosted runner's separately maintained persona pages. A mobile font-size
+experiment did not change the failure and was fully removed.
+
+The fixture now clears document zoom before switching to desktop dimensions,
+and explicitly asserts an unscaled visual viewport after its real CH-11 reload.
+The correction preserves every interaction, committed-state check and ordinary
+pointer click. No application or acceptance-runner behavior changes. Executed
+verification: the corrected case first passed on Linux Pixel, then all six
+Linux repetitions passed (three Desktop and three Pixel); TypeScript passed.
+Rollback reverts the fixture ordering and added viewport assertion together.
+
+Prior candidate `d5de258` also passed 16 applicable workflows and exact-preview
+verification, including independently verified Native Assess evidence. Its
+required Delivery/Monitor job stopped before tests in three attempts because
+the pinned-image registry returned `toomanyrequests: Data limit exceeded`.
+No image or gate substitution was made. Those results are prior-candidate
+evidence; corrected-head CI, preview and full synthetic acceptance remain
+planned verification.

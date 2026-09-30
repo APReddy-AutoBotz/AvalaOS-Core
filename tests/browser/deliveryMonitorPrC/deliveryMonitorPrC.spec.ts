@@ -661,9 +661,10 @@ test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility
   await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'pixel-7-journey',state,interactionSequence:interactions});
   await page.evaluate(()=>{document.documentElement.style.zoom='2';});
   await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'zoom-200-percent',state,interactionSequence:interactions});
-  // The requester has a separate desktop page; zoom belongs to the author page.
-  await page.setViewportSize({width:1280,height:720});
+  // The requester has a separate desktop page; clear author document zoom
+  // before changing this fixture page's viewport, avoiding retained mobile scale.
   await page.evaluate(()=>{document.documentElement.style.zoom='1';});
+  await page.setViewportSize({width:1280,height:720});
   await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'keyboard-only-handoff',state,interactionSequence:interactions});
   await page.setViewportSize({width:412,height:915});
   await page.evaluate(()=>{document.documentElement.style.zoom='2';});
@@ -686,6 +687,7 @@ test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility
   await page.getByRole('list',{name:'Delivery packages',exact:true}).locator(`button[data-package-id="${directPackageId}"]`).click();
   await expect(page.getByTestId(`delivery-package-${directPackageId}`)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.style.zoom)).toBe('');
+  expect(await page.evaluate(() => window.visualViewport?.scale)).toBe(1);
   expect(await page.evaluate(() => window.__prCConnectedSnapshot)).toEqual(committedSnapshot);
   await executeServerAction(page,'CH-11','create-manual-delivery-package',interactions,state);
   state.set('prereq:ch11:packageId',manualPackageId);
