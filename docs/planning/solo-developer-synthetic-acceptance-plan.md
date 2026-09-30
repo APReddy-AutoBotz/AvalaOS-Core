@@ -1399,3 +1399,74 @@ actions remain required; this local reproduction is not full hosted acceptance.
 Rollback reverts the runner, focused fixture and provenance together. No schema,
 Edge function, permission or provider change is needed. CONTROLLED-HUMAN remains
 `not_run`; synthetic acceptance and merge remain NO-GO pending complete evidence.
+
+### Connected remaining-path repair after CH-10 failure
+
+Run `36602319176` at `bff80d45bdc875b12fd9616851e9d60d79c9452c`
+advanced beyond CH-09 and stopped at `CH-10:create-direct-studio-plan` with
+`BROWSER_ERROR`. Bounded recovery and private-state erasure succeeded. Read-only
+inspection of the exact synthetic exercise found it deprovisioned, with 27
+earlier server bindings and no CH-10 anchor or binding. Its seeded extraction
+remained succeeded with two bindings and two reviewed, accepted candidates.
+Bounded Studio projection requests near failure returned HTTP 200; successful
+transport does not establish a valid or usable client projection. No raw logs,
+actor identifiers, or backend identifiers are retained here.
+
+AP approved replacing the repeated isolated-fix/retry cycle with a focused
+connected-path investigation. All three read-only architecture, security and
+quality reviewers closed before writes. Under the fixed managed workspace-write
+profile, the controller owns runner changes, integration, evidence and the same
+PR; two implementation workers own the existing Studio and Delivery browser
+fixtures exclusively. No nested delegation, new framework or authority change
+is authorized by this repair.
+
+Confirmed coverage gap: the prior direct-PDD test selected a type and bundle but
+did not execute the complete catalog action with arming, command, proof and
+retained state. Remaining hosted work is 31 steps: CH-10 (4), CH-14 (10), CH-11
+(5), CH-12 (7), and CH-13 (5), including 16 server actions. Local connected
+fixtures remain separate from hosted identity, authorization and cleanup proof.
+
+Confirmed diagnostic defect: the sanitizer reduced page load-state and predicate
+timeouts to `BROWSER_ERROR`. The existing focused test reproduced that loss and
+now passes with distinct fixed timeout codes while excluding private text. The
+specific hosted CH-10 runtime cause remains unconfirmed because the retained
+error omitted its phase. The full-step local reproduction nevertheless confirms
+a runner defect: with unrelated background requests, the original helper waits
+for global network idleness while the actual PDD workspace and source-package
+builder are ready. It never selects the exact available bundle or issues the
+create command. The correction removes that global wait and retains the usable
+PDD projection, exact bundle selection and enabled create-control checks, with
+fixed safe phase failures. No artifact filtering or product eligibility changes
+are needed for this reproduced defect.
+
+The connected production-component fixture also reproduced a later CH-14
+usability defect: at the author's 412-by-915 viewport and 200 percent document
+zoom, the decision dialog's `90vh` maximum exceeded its actual overlay, leaving
+Confirm outside the reachable viewport. Replacing that maximum with the parent
+overlay's full height preserves ordinary clicks, scrolling, validation focus,
+input retention and focus return. No permission or decision rule changes.
+
+Executed focused browser verification: the complete CH-10 catalog action passes
+on Desktop and Pixel, with one exact PDD/direct-bundle command, matching proof,
+retained state, planning-only lineage and zero provider traffic. The connected
+Delivery fixture also passes both profiles through CH-10 handoff, review,
+approval, consumption and baseline; nine CH-14 observations; and CH-11 manual
+create, item acceptance, review, approval and baseline. It retains committed
+fixture state while mirroring the catalog's separate persona viewports and the
+document-zoom reset caused by CH-11's reload. Fixture actor labels are not
+authorization proof. The existing CH-12/CH-13 API and response-loss contracts
+remain the local evidence for those handlers; their exact hosted steps and the
+full campaign remain `not run` successfully on the repair candidate.
+
+The first combined owned-contract run passed 112 of 114 executions; both failures
+were duplicate executions of the same navigation fixture startup timeout under
+concurrent local builds. That exact case passed in isolation. The final isolated
+`npm run test:pr-c-synthetic-acceptance` gate passed all 73 tests with zero skips;
+`npm run typecheck` passed after the final fixture and dialog changes.
+
+Planned verification: refresh provenance and verify the final exact
+candidate before another protected full campaign. Do not weaken eligibility,
+skip steps, grant permissions, force controls, or replay business actions to make
+the campaign pass. Rollback reverts the bounded repair and its fixture/evidence
+changes together, including the dialog sizing rule; retained immutable exercises
+remain unchanged. No database or Edge deployment change is required.

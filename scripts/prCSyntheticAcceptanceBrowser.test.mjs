@@ -138,6 +138,11 @@ test('browser step failure identifies its catalog step without exposing locator 
     'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:PR_C_SYNTHETIC_BROWSER_ASSESS_CONFLICT_COUNT');
   assert.equal(safeBrowserStepFailure(planned, new Error('locator.click: Timeout 30000ms exceeded. Private page text')).message,
     'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:LOCATOR_TIMEOUT');
+  for (const [operation, diagnostic] of [['page.waitForLoadState', 'LOAD_STATE_TIMEOUT'], ['page.waitForFunction', 'PREDICATE_TIMEOUT']]) {
+    const privateText = 'Bearer secret-token https://private.invalid/object/00000001-0000-4000-8000-000000000001';
+    assert.equal(safeBrowserStepFailure(planned, new Error(`${operation}: Timeout 30000ms exceeded. ${privateText}`)).message,
+      `PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:${diagnostic}`);
+  }
   assert.equal(safeBrowserStepFailure(planned, new Error('PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING_REFRESH_REJECTED_ROOT')).message,
     'PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:CH-01:resolve-material-assess-conflict:PR_C_SYNTHETIC_BROWSER_ARM_STEP_MISSING_REFRESH_REJECTED_ROOT');
 });

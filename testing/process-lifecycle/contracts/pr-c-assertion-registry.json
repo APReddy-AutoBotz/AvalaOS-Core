@@ -513,7 +513,7 @@
     },
     "browser": {
       "path": "tests/browser/deliveryMonitorPrC/deliveryMonitorPrC.spec.ts",
-      "sha256": "1f1943ef5deab9a7857750057afb80c0dfdcca4f6b8dfe80c504b254f8fc578a"
+      "sha256": "e7604ed5c70b52cb9025b73cd489a6da9b4804b4c51e0d321b402140831eba92"
     },
     "browser-scope": {
       "path": "tests/browser/enterpriseIntelligencePrCScope.spec.ts",
@@ -533,7 +533,7 @@
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
-      "sha256": "245e4853d693ee975ae13430522c561523d646f41a1012bca1595d5812b650fb"
+      "sha256": "1d69dc1b6e94838d61050c2ff4627aa7cd688b9f6aa9914547cf17f4d3da8ee0"
     }
   },
   "assertions": [

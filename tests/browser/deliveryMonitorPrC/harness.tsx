@@ -23,6 +23,11 @@ const artifactVersionId = uuid(4);
 const deliveryPackageId = uuid(6);
 const deliveryPackageVersionId = uuid(7);
 const handoffId = uuid(8);
+const directArtifactId = uuid(55);
+const directArtifactVersionId = uuid(56);
+const directPackageId = uuid(57);
+const directPackageVersionId = uuid(58);
+const accessibilityPackageId = uuid(60);
 const sequenceTargetItemId = uuid(1_230);
 const itemTypes = ['milestone', 'dependency', 'risk', 'story', 'epic', 'task'] as const;
 
@@ -95,6 +100,42 @@ const candidate: DeliveryWorkspaceProjection['eligibleStudioArtifacts'][number] 
   lineageClassification: 'assessed', planningOnly: false,
   proposalItems: initialItems.map((value, index) => ({ clientKey: `proposal-${String(index + 1).padStart(3, '0')}`, type: value.type, title: value.title, description: value.description, acceptanceCriteria: value.acceptanceCriteria, nonFunctionalRequirements: value.nonFunctionalRequirements, sourceSectionLocator: value.sourceCitation!.sectionLocator })),
 };
+const directPlanningCandidate: DeliveryWorkspaceProjection['eligibleStudioArtifacts'][number] = {
+  ...candidate,
+  studioArtifactId: directArtifactId,
+  studioArtifactVersionId: directArtifactVersionId,
+  studioArtifactVersion: 1,
+  artifactType: 'pdd',
+  aggregateVersion: 1,
+  lineageClassification: 'not_assessed',
+  planningOnly: true,
+  proposalItems: [{
+    ...candidate.proposalItems[0],
+    clientKey: 'synthetic-direct-pdd-item',
+    type: 'task',
+    title: 'Synthetic direct PDD planning item',
+    description: 'Provider-free planning output from the deterministic CH-10 PDD fixture.',
+    sourceSectionLocator: 'pdd.sections.planning-scope',
+  }],
+};
+const accessibilityPackage: DeliveryPackageProjection = {
+  ...initialPackage,
+  id: accessibilityPackageId,
+  currentVersionId: uuid(61),
+  label: controlledHumanFixture.seed.manualPlanningPackage.brief,
+  sourcePackage: { version: 1, sourceMode: 'manual', lineageClassification: 'not_assessed', planningOnly: true },
+  items: [{
+    ...item(252), aggregateId: uuid(62), currentVersionId: uuid(63),
+    title: controlledHumanFixture.seed.manualPlanningPackage.items[0].title,
+    description: controlledHumanFixture.seed.manualPlanningPackage.items[0].description,
+    acceptanceCriteria: controlledHumanFixture.seed.manualPlanningPackage.items[0].acceptanceCriteria,
+    nonFunctionalRequirements: controlledHumanFixture.seed.manualPlanningPackage.items[0].nonFunctionalRequirements,
+    sourceCitation: undefined,
+  }],
+  blockers: ['1 work item decision unresolved.'], blockerCount: 1,
+  acceptedItemCount: undefined,
+  itemPage: { limit: 100, hasMore: false, cursorApplied: false, isComplete: true },
+};
 const initialDelivery: DeliveryWorkspaceProjection = { contractVersion: 'enterprise-delivery-workspace-2', organizationId, workspaceId, featureFlags: flags, readOnly: false, page: { packageLimit: 100, packageHasMore: false, handoffLimit: 100, handoffHasMore: false, itemHistoryLimit: 250, eventHistoryLimit: 50, handoffTargetItemLimit: 250, baselineEligibilityLimit: 100, baselineEligibilityHasMore: false, baselineEligibilityCursorApplied: false }, eligibleStudioArtifacts: [candidate], baselineEligibility: [], inbox: [initialHandoff], outbox: [], packages: [initialPackage], actions: ['delivery.handoff.request', 'delivery.package.create.manual'] };
 const initialMonitor: MonitorApprovedBaselinesProjection = { contractVersion: 'enterprise-monitor-approved-baselines-2', organizationId, workspaceId, featureFlags: { monitorApprovedBaselineEnabled: true }, readOnly: true, liveTelemetryConnected: false, baselines: [], actions: [] };
 const unrelatedMonitorBaseline: MonitorApprovedBaselinesProjection['baselines'][number] = { id: uuid(91), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: 'not_assessed', planningOnly: true, workPackageId: uuid(60), workPackageVersion: 1, acceptedItemCount: 1, acceptedItems: [{ version: 1, type: 'task', title: 'Seeded unrelated planning item', status: 'accepted' }], milestones: [], dependencies: [], blockers: [], risks: [] };
@@ -116,6 +157,7 @@ function Harness() {
     if (fixtureState === 'wrong-workspace' || fixtureState === 'cross-org') return { ...initialDelivery, eligibleStudioArtifacts: [], inbox: [], outbox: [], packages: [] };
     if (fixtureState === 'consumed') return { ...initialDelivery, inbox: [{ ...initialHandoff, status: 'consumed', version: 4, actions: [] }] };
     if (fixtureState === 'planning') return { ...initialDelivery, eligibleStudioArtifacts: [{ ...candidate, lineageClassification: 'not_assessed', planningOnly: true }, { ...candidate, studioArtifactId: uuid(55), studioArtifactVersionId: uuid(56), studioArtifactVersion: 2, artifactType: 'pdd', aggregateVersion: 2, lineageClassification: 'not_assessed', planningOnly: true }], inbox: [{ ...initialHandoff, lineageClassification: 'not_assessed', planningOnly: true }] };
+    if (fixtureState === 'connected-remaining') return { ...initialDelivery, eligibleStudioArtifacts: [directPlanningCandidate], inbox: [], outbox: [], packages: [accessibilityPackage] };
     if (fixtureState === 'approved-studio-no-delivery') return { ...initialDelivery, eligibleStudioArtifacts: [{ ...candidate, lineageClassification: 'not_assessed', planningOnly: true }], inbox: [], outbox: [], packages: [{ ...initialPackage, id: uuid(61), currentVersionId: uuid(62), label: 'Seeded manual PDD planning package', sourcePackage: { version: 1, sourceMode: 'manual', lineageClassification: 'not_assessed', planningOnly: true }, items: [{ ...item(252), sourceCitation: undefined }], actions: [] }] };
     if (fixtureState === 'approval-ready') return { ...initialDelivery, packages: [{ ...initialPackage, status: 'review', reviewState: 'approved', approvalState: 'pending', blockers: [], blockerCount: 0, actions: ['delivery.package.approval.resolve'] }] };
     if (fixtureState === 'approved') return { ...initialDelivery, baselineEligibility: [{ workPackageId: deliveryPackageId, workPackageVersionId: deliveryPackageVersionId, workPackageVersion: 1, acceptedItemCount: 1, lineageClassification: 'assessed', planningOnly: false, action: 'monitor.baseline.create' }], packages: [{ ...initialPackage, status: 'approved', reviewState: 'approved', approvalState: 'approved', acceptedItemCount: 1, blockers: [], blockerCount: 0, actions: [],
@@ -212,7 +254,20 @@ function Harness() {
       if (command.action === 'delivery.handoff.request') {
         const existing = current.outbox.length > 0;
         if (existing) return current;
-        return { ...current, outbox: [...current.outbox, { ...initialHandoff, id: uuid(10), direction: 'outbox', status: 'requested', actions: ['delivery.handoff.withdraw'] }] };
+        const selected = current.eligibleStudioArtifacts.find(value => value.studioArtifactId === command.studioArtifactId
+          && value.studioArtifactVersionId === command.studioArtifactVersionId);
+        if (!selected) return current;
+        const requested = {
+          ...initialHandoff, id: uuid(10), direction: 'outbox' as const, status: 'requested' as const,
+          sourceArtifactVersion: selected.studioArtifactVersion, lineageClassification: selected.lineageClassification,
+          planningOnly: selected.planningOnly,
+          preview: { artifactType: selected.artifactType, proposedItemCount: selected.proposalItems.length,
+            sourceCoverageLabel: `${selected.proposalItems.length}/${selected.proposalItems.length} exact cited proposals`, blockers: [] },
+          targetItems: selected.proposalItems.map((value, index) => ({ ...value, ordinal: index + 1 })),
+          history: [{ version: 1, status: 'requested' as const, createdAt: '2026-08-31T06:00:00.000Z' }],
+          actions: fixtureState === 'connected-remaining' ? ['delivery.handoff.review.resolve' as const] : ['delivery.handoff.withdraw' as const],
+        };
+        return { ...current, outbox: [...current.outbox, requested] };
       }
       if (command.action === 'delivery.handoff.review.resolve' || command.action === 'delivery.handoff.approval.resolve' || command.action === 'delivery.handoff.withdraw' || command.action === 'delivery.handoff.consume') {
         const update = (value: typeof initialHandoff) => {
@@ -222,12 +277,30 @@ function Harness() {
           if (command.action === 'delivery.handoff.withdraw') return { ...value, version: value.version + 1, status: 'withdrawn' as const, actions: [] };
           return { ...value, version: value.version + 1, status: 'consumed' as const, actions: [] };
         };
-        return { ...current, inbox: current.inbox.map(value => update(value as typeof initialHandoff)), outbox: current.outbox.map(value => update(value as typeof initialHandoff)) };
+        const selected = [...current.inbox, ...current.outbox].find(value => value.id === command.handoffId);
+        const consumedPackage = fixtureState === 'connected-remaining' && command.action === 'delivery.handoff.consume' && selected
+          ? {
+              ...initialPackage, id: directPackageId, currentVersionId: directPackageVersionId,
+              label: controlledHumanFixture.seed.directStudioArtifact.title,
+              sourcePackage: { version: 1, sourceMode: 'studio_handoff' as const, lineageClassification: 'not_assessed' as const,
+                planningOnly: true, studioArtifactType: 'pdd' as const, studioArtifactVersion: selected.sourceArtifactVersion },
+              items: selected.targetItems.map((value, index) => ({ ...item(270 + index), aggregateId: uuid(270 + index), currentVersionId: uuid(370 + index),
+                type: value.type, title: value.title, description: value.description, acceptanceCriteria: value.acceptanceCriteria,
+                nonFunctionalRequirements: value.nonFunctionalRequirements,
+                sourceCitation: { artifactVersion: selected.sourceArtifactVersion, artifactType: 'pdd' as const, sectionLocator: value.sourceSectionLocator } })),
+              blockers: [`${selected.targetItems.length} work item decision${selected.targetItems.length === 1 ? '' : 's'} unresolved.`],
+              blockerCount: selected.targetItems.length,
+              acceptedItemCount: undefined,
+              itemPage: { limit: 100, hasMore: false, cursorApplied: false, isComplete: true },
+            }
+          : undefined;
+        return { ...current, inbox: current.inbox.map(value => update(value as typeof initialHandoff)), outbox: current.outbox.map(value => update(value as typeof initialHandoff)),
+          packages: consumedPackage && !current.packages.some(value => value.id === directPackageId) ? [...current.packages, consumedPackage] : current.packages };
       }
       if (command.action === 'delivery.package.create.manual') {
         const manualId = uuid(50);
         const manualItem = item(251);
-        return { ...current, packages: [...current.packages, { ...initialPackage, id: manualId, currentVersionId: uuid(51), label: command.manualBrief, sourcePackage: { version: 1, sourceMode: 'manual', lineageClassification: 'not_assessed', planningOnly: true }, items: [{ ...manualItem, aggregateId: uuid(53), currentVersionId: uuid(54), title: command.items[0].title, description: command.items[0].description, sourceCitation: undefined }], blockers: ['1 work item decision unresolved.'], blockerCount: 1 }] };
+        return { ...current, packages: [...current.packages, { ...initialPackage, id: manualId, currentVersionId: uuid(51), label: command.manualBrief, sourcePackage: { version: 1, sourceMode: 'manual', lineageClassification: 'not_assessed', planningOnly: true }, items: [{ ...manualItem, aggregateId: uuid(53), currentVersionId: uuid(54), title: command.items[0].title, description: command.items[0].description, sourceCitation: undefined }], blockers: ['1 work item decision unresolved.'], blockerCount: 1, acceptedItemCount: undefined, itemPage: { limit: 100, hasMore: false, cursorApplied: false, isComplete: true } }] };
       }
       if (command.action === 'delivery.item.review') return { ...current, packages: current.packages.map(pkg => {
         if (!pkg.items.some(entry => entry.aggregateId === command.itemAggregateId)) return pkg;
@@ -273,11 +346,15 @@ function Harness() {
       }) };
       if (command.action === 'delivery.package.approval.resolve') {
         const approved = command.outcome === 'approved';
+        const selectedPackage = current.packages.find(pkg => pkg.id === command.workPackageId);
+        const selector = selectedPackage && approved ? { workPackageId: command.workPackageId, workPackageVersionId: command.expectedPackageVersionId,
+          workPackageVersion: command.expectedPackageVersion, acceptedItemCount: selectedPackage.acceptedItemCount ?? 0,
+          lineageClassification: selectedPackage.sourcePackage.lineageClassification, planningOnly: selectedPackage.sourcePackage.planningOnly,
+          action: 'monitor.baseline.create' as const } : undefined;
         return { ...current, packages: current.packages.map(pkg => pkg.id !== command.workPackageId || pkg.reviewState !== 'approved' ? pkg : decodePackageDecisionState({ ...pkg, status: command.outcome, actions: [],
           approvalHistory: [...pkg.approvalHistory, { packageVersion: pkg.currentVersion, acceptedItemCount: pkg.acceptedItemCount ?? 0,
             outcome: command.outcome, rationale: command.rationale, createdAt: '2026-08-31T06:11:00.000Z' }] })),
-          baselineEligibility: approved ? [{ workPackageId: command.workPackageId, workPackageVersionId: command.expectedPackageVersionId, workPackageVersion: command.expectedPackageVersion,
-            acceptedItemCount: current.packages.find(pkg => pkg.id === command.workPackageId)?.acceptedItemCount ?? 0, lineageClassification: 'assessed', planningOnly: false, action: 'monitor.baseline.create' }] : [] };
+          baselineEligibility: selector ? [...current.baselineEligibility.filter(value => value.workPackageId !== selector.workPackageId), selector] : current.baselineEligibility };
       }
       return current;
     });
@@ -291,7 +368,7 @@ function Harness() {
       }
       const deliveryPackage = delivery.packages.find(pkg => pkg.id === command.workPackageId && pkg.status === 'approved');
       const acceptedItems = deliveryPackage?.items.filter(entry => entry.status === 'accepted') ?? [];
-      if (deliveryPackage && deliveryPackage.itemPage.isComplete && acceptedItems.length === deliveryPackage.acceptedItemCount) setMonitor(current => current.baselines.length ? current : { ...current, baselines: [{ id: uuid(90), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false, workPackageId: command.workPackageId, workPackageVersion: command.expectedPackageVersion, acceptedItemCount: acceptedItems.length, acceptedItems: acceptedItems.map(entry => ({ version: entry.version, type: entry.type, title: entry.title, status: 'accepted' })), milestones: acceptedItems.filter(entry => entry.type === 'milestone').map(entry => entry.title), dependencies: acceptedItems.filter(entry => entry.type === 'dependency').map(entry => entry.title), blockers: [], risks: acceptedItems.filter(entry => entry.type === 'risk').map(entry => entry.title) }] });
+      if (deliveryPackage && deliveryPackage.itemPage.isComplete && acceptedItems.length === deliveryPackage.acceptedItemCount) setMonitor(current => current.baselines.some(value => value.workPackageId === command.workPackageId) ? current : { ...current, baselines: [...current.baselines, { id: fixtureState === 'connected-remaining' && command.workPackageId !== directPackageId ? uuid(95) : uuid(90), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: deliveryPackage.sourcePackage.lineageClassification, planningOnly: deliveryPackage.sourcePackage.planningOnly, workPackageId: command.workPackageId, workPackageVersion: command.expectedPackageVersion, acceptedItemCount: acceptedItems.length, acceptedItems: acceptedItems.map(entry => ({ version: entry.version, type: entry.type, title: entry.title, status: 'accepted' })), milestones: acceptedItems.filter(entry => entry.type === 'milestone').map(entry => entry.title), dependencies: acceptedItems.filter(entry => entry.type === 'dependency').map(entry => entry.title), blockers: [], risks: acceptedItems.filter(entry => entry.type === 'risk').map(entry => entry.title) }] });
     }
     setStatus(`${command.action} committed and exact projection reloaded.`);
   };

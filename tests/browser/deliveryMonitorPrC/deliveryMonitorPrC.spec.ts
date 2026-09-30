@@ -606,6 +606,92 @@ test('PR C synthetic Delivery sequence binds one aggregate through the full 250-
   expect(interactions).toContain('select:exact-current-revised-delivery-descendant');
 });
 
+test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility, and manual Delivery on retained rendered state', async ({page}) => {
+  test.setTimeout(120_000);
+  page.setDefaultTimeout(10_000);
+  const interactions:string[]=[];
+  const directArtifact={
+    studioArtifactId:'00000055-0000-4000-8000-000000000055',
+    studioArtifactVersionId:'00000056-0000-4000-8000-000000000056',
+    studioArtifactVersion:1,artifactType:'pdd',aggregateVersion:1,
+    lineageClassification:'not_assessed',planningOnly:true,
+  };
+  const directPackageId='00000057-0000-4000-8000-000000000057';
+  const seededManualPackageId='00000060-0000-4000-8000-000000000060';
+  const manualPackageId='00000050-0000-4000-8000-000000000050';
+  const state=new Map<string,unknown>([
+    ['prereq:ch10:approvedCandidate',directArtifact],
+    ['ch02:approved-candidate',directArtifact],
+    ['seed:manual-packageId',seededManualPackageId],
+  ]);
+
+  await open(page,'?state=connected-remaining');
+  const pddOption=page.getByRole('combobox',{name:'Eligible exact Studio artifact',exact:true}).locator('option');
+  await expect(pddOption).toHaveText(['PDD v1 · 1 server proposals · Not assessed · Planning only']);
+  await executeServerAction(page,'CH-10','handoff-direct-studio-plan',interactions,state);
+  await expect(page.getByRole('tab',{name:'Outbox (1)',exact:true})).toBeVisible();
+  const directHandoffId='00000010-0000-4000-8000-000000000010';
+  state.set('ch05:handoffId',directHandoffId);
+  await executeServerAction(page,'CH-05','review-handoff-independently',interactions,state);
+  await executeServerAction(page,'CH-05','approve-handoff-independently',interactions,state);
+  await executeServerAction(page,'CH-05','consume-approved-handoff-once',interactions,state);
+  await page.getByRole('list',{name:'Delivery packages',exact:true}).locator(`button[data-package-id="${directPackageId}"]`).click();
+  const directPackage=page.getByTestId(`delivery-package-${directPackageId}`);
+  await expect(directPackage.getByText('Studio handoff',{exact:true})).toBeVisible();
+  await expect(directPackage.getByText('Not assessed · Planning only',{exact:true})).toBeVisible();
+  await directPackage.getByRole('button',{name:'Accept proposal',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the deterministic direct PDD proposal for planning only.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  state.set('prereq:ch10:packageId',directPackageId);
+  await directPackage.getByRole('button',{name:'Approve package review',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Independent review of the complete direct PDD package.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await executeServerAction(page,'CH-10','approve-direct-planning-package',interactions,state);
+  await page.getByTestId('baseline-eligibility-selectors').locator(`li[data-package-id="${directPackageId}"]`)
+    .getByRole('button',{name:'Create read-only Monitor baseline',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  const directBaselineId='00000090-0000-4000-8000-000000000090';
+  await verifySyntheticMonitorBaseline(page,interactions,{packageId:directPackageId,baselineId:directBaselineId});
+  await expect(page.getByTestId(`monitor-baseline-${directBaselineId}`).getByRole('definition')
+    .filter({hasText:'Not assessed · Planning only'})).toHaveText('Not assessed · Planning only');
+
+  await page.setViewportSize({width:1280,height:720});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'desktop-chrome-journey',state,interactionSequence:interactions});
+  await page.setViewportSize({width:412,height:915});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'pixel-7-journey',state,interactionSequence:interactions});
+  await page.evaluate(()=>{document.documentElement.style.zoom='2';});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'zoom-200-percent',state,interactionSequence:interactions});
+  // The requester has a separate desktop page; zoom belongs to the author page.
+  await page.setViewportSize({width:1280,height:720});
+  await page.evaluate(()=>{document.documentElement.style.zoom='1';});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'keyboard-only-handoff',state,interactionSequence:interactions});
+  await page.setViewportSize({width:412,height:915});
+  await page.evaluate(()=>{document.documentElement.style.zoom='2';});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'keyboard-only-item-edit',state,interactionSequence:interactions});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'focused-rationale-error-summary',state,interactionSequence:interactions});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'preserve-invalid-input',state,interactionSequence:interactions});
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'logical-focus-return',state,interactionSequence:interactions});
+  // Monitor uses its own unzoomed viewer page. CH-11 reloads the author page,
+  // clearing document zoom while retaining the server's committed packages.
+  await page.evaluate(()=>{document.documentElement.style.zoom='1';});
+  await page.getByRole('navigation',{name:'Harness views'}).getByRole('button',{name:'enterprise monitor',exact:true}).click();
+  await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'verify-no-horizontal-overflow',state,interactionSequence:interactions});
+  await page.getByRole('navigation',{name:'Harness views'}).getByRole('button',{name:'delivery',exact:true}).click();
+
+  await executeServerAction(page,'CH-11','create-manual-delivery-package',interactions,state);
+  state.set('prereq:ch11:packageId',manualPackageId);
+  await isolateFirstActionableDeliveryItem(page,interactions,manualPackageId,'Verify synthetic recovery checkpoint');
+  await page.getByTestId('delivery-item-00000053-0000-4000-8000-000000000053').getByRole('button',{name:'Accept proposal',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Decision rationale').fill('Accept the exact manual planning proposal.');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await executeServerAction(page,'CH-11','review-manual-delivery-package',interactions,state);
+  await executeServerAction(page,'CH-11','approve-manual-delivery-package',interactions,state);
+  await executeServerAction(page,'CH-11','create-read-only-manual-baseline',interactions,state);
+  const manualBaselineId='00000095-0000-4000-8000-000000000095';
+  await verifySyntheticDeliveryLineage(page,interactions,{packageId:manualPackageId,manual:true});
+  await verifySyntheticMonitorBaseline(page,interactions,{packageId:manualPackageId,baselineId:manualBaselineId});
+});
+
 test('blocked package cannot affect Monitor and manual Delivery has no fabricated ancestry', async ({ page }, info) => {
   await open(page, '?state=blocked');
   await expect(page.getByText('Independent review requested changes.')).toBeVisible();

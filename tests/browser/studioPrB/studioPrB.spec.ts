@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, prepareSyntheticDirectPdd, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
+import { buildBrowserExecutionCatalog, editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, executePlannedStep, prepareSyntheticDirectPdd, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -14,6 +14,39 @@ const markerC=(info:TestInfo,testId:'STUDIO-TR-001'|'STUDIO-TR-003',assertionId:
 const isSourceProviderTraffic=(request:Request)=>{const url=request.url();if(/https:\/\/(?:api\.openai\.com|api\.groq\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com)(?:\/|$)/i.test(url))return true;if(!/\/functions\/v1\/enterprise-intelligence(?:[/?]|$)/i.test(url))return false;return /studio\.(?:evidence|bundle)\.extract/i.test(`${url}\n${request.postData()??''}`);};
 const navigate=async(page:Page,url:string,ready?:()=>Promise<void>)=>{let lastError:unknown;for(let attempt=1;attempt<=2;attempt+=1){try{await page.goto(url,{waitUntil:'commit',timeout:60_000});if(ready)await ready();return;}catch(error){lastError=error;if(attempt<2)await page.goto('about:blank',{waitUntil:'load',timeout:5_000}).catch(()=>undefined);}}throw lastError;};
 const open=async(page:Page,query='')=>navigate(page,`/tests/browser/studioPrB/harness.html${query}`,async()=>{await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible({timeout:15_000});});
+
+test('PR C synthetic CH-10 executes the full direct Studio PDD catalog action through retained asynchronous state', async ({page}) => {
+  page.setDefaultTimeout(3_000);
+  page.setDefaultNavigationTimeout(10_000);
+  await page.route('**/__studio_pr_b_background*',route=>route.fulfill({status:204}));
+  await page.route('**/synthetic-studio?*',async route=>{
+    const url=new URL(route.request().url());
+    await route.fulfill({response:await route.fetch({url:new URL(`/tests/browser/studioPrB/harness.html${url.search}`,url).href})});
+  });
+  const providerEgress:string[]=[];
+  page.on('request',request=>{if(isSourceProviderTraffic(request))providerEgress.push(request.url());});
+  await navigate(page,'/synthetic-studio?mode=direct&syntheticSelection=1&ch10Connected=1',async()=>{
+    await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible({timeout:15_000});
+  });
+  const planned=buildBrowserExecutionCatalog().find(step=>step.checkpointId==='CH-10'&&step.stepId==='create-direct-studio-plan')!;
+  const inputBundle={id:'00000031-0000-4000-8000-000000000031',versionId:'00000032-0000-4000-8000-000000000032',version:1};
+  const state=new Map<string,any>([['ch03:bundleBinding',{inputBundle}]]);
+  const identity={applicationActorDigest:`sha256:${'a'.repeat(64)}`,applicationSessionDigest:`sha256:${'b'.repeat(64)}`};
+  const api={lastCommand:()=>page.evaluate(()=>(window as any).__studioCommandCalls.at(-1)??null)};
+  const proof=await executePlannedStep({planned,session:{page,identity,api},providerEgress,state,nextTime:()=>new Date().toISOString(),apiDescriptor:undefined,exerciseDigest:undefined});
+  const commands=await page.evaluate(()=>(window as any).__studioCommandCalls);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toMatchObject({
+    commandType:'studio.source-package.create',
+    body:{commandType:'studio.source-package.create',payload:{artifactType:'pdd',sourceMode:'direct_transcript_bundle',studioInputBundle:inputBundle,manualBrief:null}},
+    response:{ok:true,outcome:'committed',receiptId:'00000020-0000-4000-8000-000000000020',resourceId:'00000038-0000-4000-8000-000000000038',resource:{artifactId:'00000038-0000-4000-8000-000000000038',sourcePackageId:'00000039-0000-4000-8000-000000000039',sourceMode:'direct_transcript_bundle',lineageClassification:'not_assessed',planningOnly:true}},
+  });
+  expect(proof).toMatchObject({outcome:'passed',browserArtifact:{serverAnchor:{stepId:'create-direct-studio-plan'},serverBinding:{stepId:'create-direct-studio-plan',action:'studio.source-package.create',result:'committed'}}});
+  expect(state.get('prereq:ch10:artifactId')).toBe('00000038-0000-4000-8000-000000000038');
+  expect(state.get('prereq:ch10:catalogBindingToken')).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  await expect(page.getByText('Exact Studio Source Package committed and verified · Not assessed · planning only.',{exact:true})).toBeVisible();
+  expect(providerEgress).toEqual([]);
+});
 
 test('PR C synthetic runner selects two exact Studio sources without selecting Assess sources', async ({page}) => {
   await open(page, '?mode=direct');

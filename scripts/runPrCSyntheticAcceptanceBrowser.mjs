@@ -209,7 +209,10 @@ export const safeBrowserRoute = pageUrl => {
 export const safeBrowserStepFailure = (planned, error) => {
   const message = String(error?.message ?? '');
   const safeCode = /^(PR_C_SYNTHETIC_(?:BROWSER|PREREQUISITE|RESPONSE_LOSS)_[A-Z0-9_]+)(?::|\r?\n|$)/u.exec(message)?.[1];
-  const diagnostic = safeCode ?? (/(?:locator\.[A-Za-z]+|TimeoutError): Timeout [0-9]+ms exceeded/u.test(message) ? 'LOCATOR_TIMEOUT' : 'BROWSER_ERROR');
+  const timeoutKind = /page\.waitForLoadState: Timeout [0-9]+ms exceeded/u.test(message) ? 'LOAD_STATE_TIMEOUT'
+    : /page\.waitForFunction: Timeout [0-9]+ms exceeded/u.test(message) ? 'PREDICATE_TIMEOUT'
+      : /(?:locator\.[A-Za-z]+|TimeoutError): Timeout [0-9]+ms exceeded/u.test(message) ? 'LOCATOR_TIMEOUT' : 'BROWSER_ERROR';
+  const diagnostic = safeCode ?? timeoutKind;
   return new Error(`PR_C_SYNTHETIC_BROWSER_STEP_REJECTED:${planned.checkpointId}:${planned.stepId}:${diagnostic}`);
 };
 
@@ -811,14 +814,16 @@ export const selectExactEligibleStudioBundle = async (page, interactionSequence,
   const builder = page.getByRole('region', { name: 'Studio Source Package builder' });
   const select = builder.getByLabel('Exact locked Studio bundle', { exact: true });
   const createControl = builder.getByRole('button', { name: 'Create direct planning package', exact: true });
-  await select.waitFor({ state: 'visible' });
+  await select.waitFor({ state: 'visible' }).catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_STUDIO_BUNDLE_CONTROL_NOT_READY'); });
   const options = await select.locator('option').evaluateAll(nodes => nodes.map(node => ({ value: node.value, label: node.textContent?.trim() ?? '' })).filter(option => option.value));
   assert.equal(options.filter(option => option.value === versionId).length, 1, 'PR_C_SYNTHETIC_BROWSER_EXACT_STUDIO_BUNDLE_COUNT');
   await select.selectOption(versionId);
-  await page.waitForFunction(expected => document.querySelector('select[aria-label="Exact locked Studio bundle"]')?.value === expected, versionId);
+  await page.waitForFunction(expected => document.querySelector('select[aria-label="Exact locked Studio bundle"]')?.value === expected, versionId)
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_STUDIO_BUNDLE_SELECTION_NOT_RETAINED'); });
   assert.equal(await select.inputValue(), versionId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_BUNDLE_SELECTION_MISMATCH');
   if (requireDirectCreation) {
-    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Create direct planning package' && !button.disabled));
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Create direct planning package' && !button.disabled))
+      .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_DIRECT_PACKAGE_CONTROL_NOT_READY'); });
     assert(await createControl.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_DIRECT_PACKAGE_DISABLED');
   }
   interactionSequence.push('select:exact-bound-studio-bundle');
@@ -827,12 +832,14 @@ export const selectExactEligibleStudioBundle = async (page, interactionSequence,
 
 export const prepareSyntheticDirectPdd = async (page, interactionSequence, bundle) => {
   const workspace = page.getByTestId('studio-artifact-workspace');
-  await workspace.getByLabel('Artifact type', { exact: true }).selectOption('pdd');
-  await page.waitForLoadState('networkidle');
+  await workspace.getByLabel('Artifact type', { exact: true }).selectOption('pdd')
+    .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_CH10_ARTIFACT_TYPE_SELECT_FAILED'); });
+  // Studio projections and the exact builder controls determine readiness;
+  // unrelated page traffic must not prevent an otherwise eligible creation.
   await page.waitForFunction(() => {
     const root = document.querySelector('[data-testid="studio-artifact-workspace"]');
     return root?.getAttribute('data-studio-usable') === 'true' && root.querySelector('select[aria-label="Artifact type"]')?.value === 'pdd';
-  });
+  }).catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_CH10_WORKSPACE_NOT_READY'); });
   interactionSequence.push('select:direct-pdd-artifact-type');
   return selectExactEligibleStudioBundle(page, interactionSequence, { ...bundle, requireDirectCreation: true });
 };
@@ -931,9 +938,9 @@ const prepareServerAction = async (page, checkpointId, stepId, interactionSequen
     await prepareSyntheticDirectPdd(page, interactionSequence, state.get('ch03:bundleBinding')?.inputBundle);
   }
   if (key === 'CH-11:create-manual-delivery-package') {
-    assert(await fillIfVisible(page, 'Package title', 'Synthetic manual continuity plan', interactionSequence));
-    assert(await fillIfVisible(page, 'First item title', 'Verify synthetic recovery checkpoint', interactionSequence));
-    assert(await fillIfVisible(page, 'Description', 'Synthetic planning item without upstream ancestry.', interactionSequence));
+    assert(await fillIfVisible(page, 'Package title', 'Synthetic manual continuity plan', interactionSequence), 'PR_C_SYNTHETIC_BROWSER_MANUAL_PACKAGE_TITLE_MISSING');
+    assert(await fillIfVisible(page, 'First item title', 'Verify synthetic recovery checkpoint', interactionSequence), 'PR_C_SYNTHETIC_BROWSER_MANUAL_ITEM_TITLE_MISSING');
+    assert(await fillIfVisible(page, 'Description', 'Synthetic planning item without upstream ancestry.', interactionSequence), 'PR_C_SYNTHETIC_BROWSER_MANUAL_DESCRIPTION_MISSING');
   }
 };
 
@@ -1559,8 +1566,8 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
   } else if (plan.kind === 'privacy') observed = { privacyDigest: await assertNoRawHashesOrApprovalIdentities(page) };
   else if (plan.kind === 'monitor-control-absence') observed = { absenceDigest: await assertNoMonitorMutationControls(page) };
   else if (plan.kind === 'layout') observed = { layoutDigest: await assertLayout(page) };
-  else if (plan.kind === 'viewport') { const viewport = page.viewportSize(); assert.equal(viewport?.width, plan.width); assert.equal(viewport?.height, plan.height); observed = viewport; }
-  else if (plan.kind === 'zoom') { const value = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).zoom || '1')); assert.equal(value, plan.value); observed = { zoom: value }; }
+  else if (plan.kind === 'viewport') { const viewport = page.viewportSize(); assert.equal(viewport?.width, plan.width, 'PR_C_SYNTHETIC_BROWSER_VIEWPORT_WIDTH_MISMATCH'); assert.equal(viewport?.height, plan.height, 'PR_C_SYNTHETIC_BROWSER_VIEWPORT_HEIGHT_MISMATCH'); observed = viewport; }
+  else if (plan.kind === 'zoom') { const value = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).zoom || '1')); assert.equal(value, plan.value, 'PR_C_SYNTHETIC_BROWSER_ZOOM_MISMATCH'); observed = { zoom: value }; }
   else if (plan.kind === 'keyboard-reachability') {
     if (stepId === 'keyboard-only-item-edit') await isolateFirstActionableDeliveryItem(page, interactionSequence, state.get('seed:manual-packageId'), SYNTHETIC_MANUAL_ITEM_TITLE);
     const root = stepId === 'keyboard-only-handoff'
@@ -1575,17 +1582,17 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
     const edit = await exactEnabledControl(workspace, 'button', ['Edit immutable descendant'], `${checkpointId}:${stepId}`);
     await edit.control.click(); interactionSequence.push('activate:edit-dialog-without-domain-command');
     const dialog = page.getByRole('dialog').last(); assert(await dialog.count() && await dialog.isVisible(), 'PR_C_SYNTHETIC_BROWSER_A11Y_DIALOG_MISSING');
-    const title = dialog.getByLabel('Item title', { exact: true }); assert(await title.count()); await title.fill('Preserved synthetic invalid input'); interactionSequence.push('fill:item-title');
+    const title = dialog.getByLabel('Item title', { exact: true }); assert(await title.count(), 'PR_C_SYNTHETIC_BROWSER_A11Y_ITEM_TITLE_MISSING'); await title.fill('Preserved synthetic invalid input'); interactionSequence.push('fill:item-title');
     await dialog.getByRole('button', { name: 'Confirm', exact: true }).click(); interactionSequence.push('activate:dialog-confirm-without-rationale');
-    const alert = dialog.getByRole('alert').last(); assert(await alert.count() && await alert.isVisible()); assert(await alert.evaluate(node => node === document.activeElement)); observed = { role: 'alert', focused: true, textDigest: digest(await alert.innerText()) };
+    const alert = dialog.getByRole('alert').last(); assert(await alert.count() && await alert.isVisible(), 'PR_C_SYNTHETIC_BROWSER_A11Y_ALERT_MISSING'); assert(await alert.evaluate(node => node === document.activeElement), 'PR_C_SYNTHETIC_BROWSER_A11Y_ALERT_NOT_FOCUSED'); observed = { role: 'alert', focused: true, textDigest: digest(await alert.innerText()) };
   }
-  else if (plan.kind === 'preserved-input') { const input = page.getByLabel(plan.label, { exact: true }).last(); const value = await input.inputValue(); assert(value.trim().length > 0); observed = { label: plan.label, valueDigest: digest(value) }; }
+  else if (plan.kind === 'preserved-input') { const input = page.getByLabel(plan.label, { exact: true }).last(); const value = await input.inputValue(); assert(value.trim().length > 0, 'PR_C_SYNTHETIC_BROWSER_A11Y_INPUT_NOT_PRESERVED'); observed = { label: plan.label, valueDigest: digest(value) }; }
   else if (plan.kind === 'focus-return') {
     const dialog = page.getByRole('dialog').last();
     assert(await dialog.count() && await dialog.isVisible(), 'PR_C_SYNTHETIC_BROWSER_FOCUS_DIALOG_MISSING');
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click(); interactionSequence.push('activate:dialog-cancel');
     const control = await exactEnabledControl(page.getByTestId('governed-delivery-workspace'), plan.role, plan.names, `${checkpointId}:${stepId}`);
-    assert(await control.control.evaluate(node => node === document.activeElement)); observed = { control: control.label, focused: true };
+    assert(await control.control.evaluate(node => node === document.activeElement), 'PR_C_SYNTHETIC_BROWSER_A11Y_FOCUS_NOT_RETURNED'); observed = { control: control.label, focused: true };
   }
   else if (plan.kind === 'read-only-history') observed = await verifySyntheticReadOnlyMonitorHistory(page, interactionSequence, state.get('retained-monitor-history'));
   else if (plan.kind === 'monitor-parity') {
