@@ -144,9 +144,11 @@ void(async()=>{let envelope:any;
   assert.equal(controlledCalls.at(-1).expectedVersion,7);
   await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.handoff.request',0,{upstreamHandoffId:U[2],artifactType:'brd'},'bad-source-v0',workspaceTransport,{handoffSourceVersion:0}),StudioArtifactBoundaryError);
   await assert.rejects(()=>executeStudioWorkspaceCommand(context,'studio.handoff.review.resolve',1,{handoffId:U[3],outcome:'approve',rationale:'review'},'wrong-control-axis',workspaceTransport,{handoffSourceVersion:7}),StudioArtifactBoundaryError);
-  const offlineLineageCalls:any[]=[];(globalThis as any).__controlledHumanOfflineLineage=async(...args:any[])=>{offlineLineageCalls.push(args)};
+  // Studio lineage is already authoritative. The obsolete Assess preparer must
+  // never run before the normal anchored command, even if it would reject.
+  const offlineLineageCalls:any[]=[];(globalThis as any).__controlledHumanOfflineLineage=async(...args:any[])=>{offlineLineageCalls.push(args);throw new Error('ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND')};
   await executeStudioWorkspaceCommand(context,'studio.source-package.create',0,{sourceMode:'direct_transcript_bundle',artifactType:'brd',studioInputBundle:{id:U[4],versionId:U[5],version:1},manualBrief:null},'workspace-command-key',workspaceTransport);
-  assert.deepEqual(offlineLineageCalls,[[U[4],1]]);delete (globalThis as any).__controlledHumanOfflineLineage;
+  assert.deepEqual(offlineLineageCalls,[]);delete (globalThis as any).__controlledHumanOfflineLineage;
   assert.equal(controlledCalls.at(-1).action,'studio.source-package.create');assert.equal(controlledCalls.at(-1).targetFamily,'input_bundle');assert.equal(controlledCompletions.length,6);
   assert.equal(envelope.commandType,'studio.source-package.create');assert.equal(envelope.expectedAggregateVersion,0);assert.equal(envelope.expectedArtifactVersion,null);
   await executeStudioArtifactCommand(context,'studio.artifact.review.resolve',projection as any,{artifactVersionId:U[7],outcome:'approve',rationale:'controlled review',conditions:[]},'controlled-artifact-review',transport);

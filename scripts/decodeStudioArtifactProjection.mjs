@@ -7,7 +7,6 @@ import ts from 'typescript';
 const EXPECTED_SUPABASE_CLIENT_IMPORTS = Object.freeze([
   'beginControlledHumanCommand',
   'completeControlledHumanCommand',
-  'prepareControlledHumanOfflineLineage',
   'supabase',
 ]);
 const SUPABASE_CLIENT_STUB = `
@@ -15,7 +14,6 @@ interface ControlledHumanCommandAnchor{requestId:string;businessIdempotencyKey?:
 const rejectStudioDecoderInvocation=():never=>{throw new Error('UNEXPECTED_STUDIO_DECODER_TRANSPORT_OR_CONTROL_INVOCATION')};
 export const beginControlledHumanCommand=async(_input:{action:string;targetFamily:string;targetId:string;expectedVersion:number;selectorBindings:Record<string,unknown>}):Promise<ControlledHumanCommandAnchor|null>=>rejectStudioDecoderInvocation();
 export const completeControlledHumanCommand=async(_anchor:ControlledHumanCommandAnchor):Promise<unknown>=>rejectStudioDecoderInvocation();
-export const prepareControlledHumanOfflineLineage=async(_inputBundleId:string,_inputBundleVersion:number):Promise<null>=>rejectStudioDecoderInvocation();
 export const supabase:any=new Proxy({}, {get:()=>rejectStudioDecoderInvocation()});
 `;
 
@@ -119,7 +117,7 @@ const runSupabaseClientStubContractSelfTest = () => {
   ], SUPABASE_CLIENT_STUB, canonicalResolver), 'STUDIO_DECODER_SUPABASE_DYNAMIC_IMPORT_DRIFT');
   expectReject('missing-stub-export', () => validateSupabaseClientStubContract(
     [sourceFile(canonicalImport)],
-    SUPABASE_CLIENT_STUB.replace('export const prepareControlledHumanOfflineLineage', 'const prepareControlledHumanOfflineLineage'),
+    SUPABASE_CLIENT_STUB.replace('export const completeControlledHumanCommand', 'const completeControlledHumanCommand'),
     canonicalResolver,
   ), 'STUDIO_DECODER_SUPABASE_STUB_EXPORT_DRIFT');
   if (!SUPABASE_CLIENT_STUB.includes('UNEXPECTED_STUDIO_DECODER_TRANSPORT_OR_CONTROL_INVOCATION')) {

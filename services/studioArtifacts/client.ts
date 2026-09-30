@@ -1,5 +1,5 @@
 import type { TenantContextProjection } from '../../types';
-import { beginControlledHumanCommand, completeControlledHumanCommand, prepareControlledHumanOfflineLineage, supabase } from '../supabaseClient';
+import { beginControlledHumanCommand, completeControlledHumanCommand, supabase } from '../supabaseClient';
 import {
   STUDIO_ARTIFACT_LIFECYCLES,
   STUDIO_ARTIFACT_TYPES,
@@ -445,8 +445,8 @@ export const executeStudioWorkspaceCommand = async (
   // Commands outside the controlled-human catalog retain their normal
   // production path. The exercise hook is additive and must never narrow the
   // established Studio command surface when the controlled runtime is off.
-  if(commandType==='studio.source-package.create'&&payload.sourceMode==='direct_transcript_bundle')
-    await prepareControlledHumanOfflineLineage(String(inputBundle?.id??''),Number(inputBundle?.version??-1));
+  // Direct packages use the existing Studio-owned extraction/review lineage.
+  // The server validates it; the legacy Assess preparer crosses module ownership.
   const controlledAction=commandType.startsWith('studio.handoff.')?commandType.replace(/^studio\./u,''):commandType;
   const anchor=selectorBindings?await beginControlledHumanCommand({action:controlledAction,targetFamily:target.family,targetId:target.id,expectedVersion:target.version,selectorBindings}):null;
   const envelope: StudioWorkspaceCommandEnvelope = { contractVersion: STUDIO_ARTIFACT_CONTRACT_VERSION, requestId: anchor?.requestId??crypto.randomUUID(), idempotencyKey:anchor?.businessIdempotencyKey??idempotencyKey, commandType, organizationId: context.organizationId, workspaceId: context.workspaceId, authorizationVersion: context.authorizationVersion, expectedAggregateVersion: expectedVersion, expectedArtifactVersion: createLike ? null : expectedVersion, payload };

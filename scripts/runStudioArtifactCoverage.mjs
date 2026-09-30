@@ -44,7 +44,6 @@ const supabaseClient = path.resolve('services/supabaseClient.ts');
 const EXPECTED_SUPABASE_CLIENT_IMPORTS = Object.freeze([
   'beginControlledHumanCommand',
   'completeControlledHumanCommand',
-  'prepareControlledHumanOfflineLineage',
   'supabase',
 ]);
 const SUPABASE_CLIENT_STUB = `
@@ -53,7 +52,6 @@ const isControlledHumanRuntimeEnabled=():boolean=>false;
 const rejectControlledHumanCoverageInvocation=():never=>{throw new Error('UNEXPECTED_CONTROLLED_HUMAN_COVERAGE_STUB_INVOCATION')};
 export const beginControlledHumanCommand=async(input:{action:string;targetFamily:string;targetId:string;expectedVersion:number;selectorBindings:Record<string,unknown>}):Promise<ControlledHumanCommandAnchor|null>=>{const f=(globalThis as any).__controlledHumanBegin;if(f)return f(input);return isControlledHumanRuntimeEnabled()?rejectControlledHumanCoverageInvocation():null};
 export const completeControlledHumanCommand=async(anchor:ControlledHumanCommandAnchor):Promise<unknown>=>{const f=(globalThis as any).__controlledHumanComplete;if(!f)return rejectControlledHumanCoverageInvocation();return f(anchor)};
-export const prepareControlledHumanOfflineLineage=async(inputBundleId:string,inputBundleVersion:number):Promise<null>=>{const f=(globalThis as any).__controlledHumanOfflineLineage;if(f){await f(inputBundleId,inputBundleVersion);return null}return isControlledHumanRuntimeEnabled()?rejectControlledHumanCoverageInvocation():null};
 export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},rpc:async(...args:any[])=>{const f=(globalThis as any).__studioRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)},auth:{getSession:async()=>({data:{session:null},error:null})}};
 `;
 host.readFile = file => path.resolve(file) === supabaseClient
@@ -162,7 +160,7 @@ const runSupabaseClientStubContractSelfTest = () => {
   ]), 'STUDIO_COVERAGE_SUPABASE_DYNAMIC_IMPORT_DRIFT');
   expectReject('missing-stub-export', () => validateSupabaseClientStubContract(
     [sourceFile(canonicalImport)],
-    SUPABASE_CLIENT_STUB.replace('export const prepareControlledHumanOfflineLineage', 'const prepareControlledHumanOfflineLineage'),
+    SUPABASE_CLIENT_STUB.replace('export const completeControlledHumanCommand', 'const completeControlledHumanCommand'),
   ), 'STUDIO_COVERAGE_SUPABASE_STUB_EXPORT_DRIFT');
   for (const marker of [
     'isControlledHumanRuntimeEnabled=():boolean=>false',

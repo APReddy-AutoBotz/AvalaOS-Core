@@ -591,6 +591,28 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const runDirectSourceSuccess=async()=>{await observationFixture.beforeMachineStep('CH-10','create-direct-studio-plan');await database.client.query('begin');try{
     await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[generationBinding.actor_id]);
     const directBundle=hybridTargetBundle;
+    // Reproduce the hosted pre-anchor rejection against the actual owner guard.
+    // The client must use the canonical Studio command below, without this
+    // obsolete Assess-owned preparation or any replacement lineage fabrication.
+    const lineageSideEffects=async()=>(await database.client.query(`select
+      (select count(*) from public.enterprise_ai_job_ledger) jobs,
+      (select count(*) from public.enterprise_ai_command_receipts) ai_receipts,
+      (select count(*) from public.enterprise_transcript_extraction_bindings) assess_bindings,
+      (select count(*) from public.enterprise_evidence_candidates) candidates,
+      (select count(*) from public.studio_artifact_source_packages) packages,
+      (select count(*) from public.studio_artifact_command_receipts) studio_receipts,
+      (select count(*) from public.privileged_audit_events) audits,
+      (select count(*) from public.enterprise_ai_usage_ledger) usage,
+      (select count(*) from public.enterprise_ai_effect_journal) effects`)).rows[0];
+    const beforeLegacyPreparation=await lineageSideEffects();
+    await database.client.query('savepoint legacy_offline_preparation');
+    await assert.rejects(database.client.query(`select public.pr_c_controlled_human_prepare_offline_lineage($1,$2,$3)`,
+      [context.exerciseDigest,directBundle.id,Number(directBundle.version)]),error=>
+      error.code==='P0001'&&error.message==='ENTERPRISE_EVIDENCE_RESOURCE_NOT_FOUND'
+      &&String(error.where).includes('enterprise_assert_assess_evidence_authority_v1'));
+    await database.client.query('rollback to savepoint legacy_offline_preparation');
+    await database.client.query('release savepoint legacy_offline_preparation');
+    assert.deepEqual(await lineageSideEffects(),beforeLegacyPreparation,'legacy rejection must retain no side effects');
     const directManifest=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,directBundle.version_id])).rows[0].value;
     const directManifestReplay=(await database.client.query(`select public.studio_pr_b_candidate_manifest($1,$2,$3) value`,[generationBinding.org_id,generationBinding.workspace_id,directBundle.version_id])).rows[0].value;
     assert.equal(directManifest.length,2);assert.deepEqual(directManifestReplay,directManifest);

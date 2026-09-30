@@ -1517,3 +1517,43 @@ skip steps, grant permissions, force controls, or replay business actions to mak
 the campaign pass. Rollback reverts the bounded repair and its fixture/evidence
 changes together, including the dialog sizing rule; retained immutable exercises
 remain unchanged. No database or Edge deployment change is required.
+
+### CH-10 legacy offline-preparation correction (2026-09-30)
+
+Run `36679307899` on `5f27daa71348b3fbbc1c74f50cc680c20272e5d5`
+passed preparation and stopped at CH-10 with `COMPLETED_STEP_MISSING`.
+Bounded recovery and private-state erasure succeeded. Read-only inspection
+confirmed a deprovisioned exercise, 27 earlier bindings, and no CH-10 anchor.
+Bounded function-name diagnostics identified the legacy offline preparation
+RPC attempting an Assess extraction job for a Studio-private source. The
+current owner guard correctly rejected it before the client could anchor.
+
+Confirmed source defect: the client still invoked that obsolete preparation
+before the normal Studio package command. The current seeder already creates
+exact Studio extraction bindings and accepted decisions for both acceptance
+policies. The browser fixture mocked preparation successfully, while the
+database fixture called the normal command directly; neither covered this
+pre-command failure. All three read-only reviewers closed before the controller
+began the bounded correction under the fixed workspace-write profile.
+
+The client now proceeds directly to the existing anchor, canonical Studio
+command and completion. The server still validates actor, tenant, locked bundle,
+candidate decisions and complete source coverage. No migration, replacement RPC,
+permission, provider or eligibility change is introduced. Historical SQL and
+the Assess owner guard remain unchanged. Three compiler import contracts track
+the removed import and retain their adversarial self-checks.
+
+Executed evidence: the targeted client regression failed before the correction
+when the legacy hook rejected, then passed with zero legacy calls and retained
+anchor/command/completion assertions. The fresh-chain PostgreSQL 16 harness
+passed with zero skips: it reproduced the same legacy rejection, verified no
+retained job, receipt, binding, candidate, package, audit, usage or effect changes,
+and completed its existing connected server paths and two seed/deprovision
+cycles. TypeScript, all 25 compiler-contract self-checks, and the refreshed
+85-command/241-assertion evidence contract passed. Exact-head CI, preview and the full hosted campaign remain planned
+verification. These results do not establish hosted synthetic acceptance.
+
+Rollback reverts the client and associated tests/import bindings together;
+disable new exercise commands if rollback restores the known legacy failure.
+Retain immutable exercises and SQL history. CONTROLLED-HUMAN remains `not_run`;
+SYNTHETIC-ROLE-ACCEPTANCE and merge remain NO-GO until complete verified evidence.
