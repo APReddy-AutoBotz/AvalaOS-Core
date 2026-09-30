@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../../../index.css';
 import GovernedDeliveryWorkspace, { MonitorApprovedBaselinePanel } from '../../../components/delivery/GovernedDeliveryWorkspace';
@@ -141,11 +141,18 @@ const initialMonitor: MonitorApprovedBaselinesProjection = { contractVersion: 'e
 const unrelatedMonitorBaseline: MonitorApprovedBaselinesProjection['baselines'][number] = { id: uuid(91), version: 1, status: 'approved', readiness: 'review_required', lineageClassification: 'not_assessed', planningOnly: true, workPackageId: uuid(60), workPackageVersion: 1, acceptedItemCount: 1, acceptedItems: [{ version: 1, type: 'task', title: 'Seeded unrelated planning item', status: 'accepted' }], milestones: [], dependencies: [], blockers: [], risks: [] };
 const retainedMonitorBaseline: MonitorApprovedBaselinesProjection['baselines'][number] = { id: uuid(92), version: 3, status: 'approved', readiness: 'review_required', lineageClassification: 'assessed', planningOnly: false, workPackageId: deliveryPackageId, workPackageVersion: 2, acceptedItemCount: 2, acceptedItems: [{ version: 2, type: 'milestone', title: 'Retained milestone', status: 'accepted' }, { version: 1, type: 'risk', title: 'Retained risk', status: 'accepted' }], milestones: ['Retained milestone'], dependencies: [], blockers: [], risks: ['Retained risk'] };
 
+declare global {
+  interface Window {
+    __prCConnectedSnapshot?: { delivery: DeliveryWorkspaceProjection; monitor: MonitorApprovedBaselinesProjection };
+  }
+}
+
 function Harness() {
   const params = new URLSearchParams(location.search);
   const fixtureState = params.get('state') ?? '';
   const [view, setView] = useState<'delivery' | 'enterprise-monitor' | 'primary-monitor' | 'context-monitor'>((params.get('view') as 'delivery' | 'enterprise-monitor' | 'primary-monitor' | 'context-monitor') ?? 'delivery');
   const [delivery, setDelivery] = useState<DeliveryWorkspaceProjection>(() => {
+    if (fixtureState === 'connected-remaining' && window.__prCConnectedSnapshot) return window.__prCConnectedSnapshot.delivery;
     if (fixtureState === 'handoff-outbox') {
       const handoff: DeliveryWorkspaceProjection['outbox'][number] = { ...initialHandoff, direction: 'outbox', status: 'requested' };
       return { ...initialDelivery, inbox: [{ ...initialHandoff, id: uuid(12) }], outbox: params.has('duplicate-handoff') ? [handoff, handoff] : [handoff] };
@@ -170,10 +177,16 @@ function Harness() {
     return initialDelivery;
   });
   const [monitor, setMonitor] = useState<MonitorApprovedBaselinesProjection>(() => {
+    if (fixtureState === 'connected-remaining' && window.__prCConnectedSnapshot) return window.__prCConnectedSnapshot.monitor;
     if (fixtureState === 'blocked-seeded-baseline') return { ...initialMonitor, baselines: [unrelatedMonitorBaseline] };
     if (fixtureState === 'monitor-history-readonly') return { ...initialMonitor, featureFlags: { monitorApprovedBaselineEnabled: false }, baselines: [retainedMonitorBaseline, unrelatedMonitorBaseline] };
     return initialMonitor;
   });
+  // Fixture transport only: preserve actually committed projections across the
+  // real document reload used by the hosted CH-11 preparation.
+  useEffect(() => {
+    if (fixtureState === 'connected-remaining') window.__prCConnectedSnapshot = { delivery, monitor };
+  }, [fixtureState, delivery, monitor]);
   const [status, setStatus] = useState('Committed Delivery projection loaded.');
   const [error, setError] = useState('');
   const [pageBusy, setPageBusy] = useState(false);

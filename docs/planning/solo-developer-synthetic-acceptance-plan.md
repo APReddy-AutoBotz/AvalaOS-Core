@@ -1495,6 +1495,22 @@ GHSA-hrr3-gc8f-f4qj. The lockfile alone advances the existing compatible
 transitive dependency from 3.1.7 to patched 3.1.8; npm reported zero
 vulnerabilities after that update. No direct dependency or range changed.
 
+CI run `36674534955` subsequently exposed a fixture-only reload omission:
+CH-11 continued after a CSS zoom reset, while the hosted preparation reloads the
+document. Mobile viewport state could therefore carry into later pointer
+confirmation. The inert connected fixture now snapshots only the projections
+actually produced by preceding commands, performs a real page reload, and
+verifies that the approved direct package and baseline survive unchanged before
+executing CH-11. No expected business state is substituted. Six repeated
+connected executions pass (three Desktop, three Pixel), including ordinary
+post-reload pointer actions. Application and runner source are unchanged by
+this follow-up; rollback removes the fixture snapshot/reload and its bindings.
+
+The external pinned-image registry limit also affected the Native Assess job
+before tests. The same image was subsequently downloaded successfully on a
+fresh runner, and Native run `36674534972` attempt 3 passed on `ee162bf`; this
+is prior-candidate evidence only, not proof for the forthcoming fixture commit.
+
 Planned verification: refresh provenance and verify the final exact
 candidate before another protected full campaign. Do not weaken eligibility,
 skip steps, grant permissions, force controls, or replay business actions to make

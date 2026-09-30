@@ -678,6 +678,15 @@ test('PR C synthetic CH-10 through CH-11 connects direct planning, accessibility
   await observeBrowserOnlyStep({page,checkpointId:'CH-14',stepId:'verify-no-horizontal-overflow',state,interactionSequence:interactions});
   await page.getByRole('navigation',{name:'Harness views'}).getByRole('button',{name:'delivery',exact:true}).click();
 
+  const committedSnapshot = await page.evaluate(() => window.__prCConnectedSnapshot);
+  expect(committedSnapshot?.delivery.packages.find(pkg => pkg.id === directPackageId)?.status).toBe('approved');
+  expect(committedSnapshot?.monitor.baselines.map(baseline => baseline.id)).toEqual([directBaselineId]);
+  await page.addInitScript(snapshot => { window.__prCConnectedSnapshot = snapshot; }, committedSnapshot);
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.getByRole('list',{name:'Delivery packages',exact:true}).locator(`button[data-package-id="${directPackageId}"]`).click();
+  await expect(page.getByTestId(`delivery-package-${directPackageId}`)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.style.zoom)).toBe('');
+  expect(await page.evaluate(() => window.__prCConnectedSnapshot)).toEqual(committedSnapshot);
   await executeServerAction(page,'CH-11','create-manual-delivery-package',interactions,state);
   state.set('prereq:ch11:packageId',manualPackageId);
   await isolateFirstActionableDeliveryItem(page,interactions,manualPackageId,'Verify synthetic recovery checkpoint');
