@@ -1000,16 +1000,22 @@ const completeVisibleDialog = async (page, stepId, interactionSequence) => {
 };
 
 const waitForControlledHumanEvidencePanel = async (page, phase, timeoutMs) => {
-  const banner = page.getByTestId('controlled-human-nonproduction-banner');
-  const blocked = page.getByTestId('controlled-human-environment-blocked');
-  await page.locator('[data-testid="controlled-human-nonproduction-banner"]:visible, [data-testid="controlled-human-environment-blocked"]:visible')
-    .first().waitFor({ state: 'attached', timeout: timeoutMs })
+  const snapshot = await page.waitForFunction(() => {
+    if (document.querySelector('[data-testid="controlled-human-environment-blocked"]')) return { state: 'blocked' };
+    const banners = [...document.querySelectorAll('[data-testid="controlled-human-nonproduction-banner"]')];
+    if (banners.length > 1) return { state: 'duplicate-banner' };
+    if (banners.length === 0) return false;
+    const banner = banners[0]; const style = getComputedStyle(banner); const rect = banner.getBoundingClientRect();
+    if (style.visibility !== 'visible' || rect.width === 0 || rect.height === 0) return false;
+    if (banner.querySelectorAll('details').length !== 1) return { state: 'panel-count' };
+    return { state: 'ready' };
+  }, undefined, { timeout: timeoutMs }).then(handle => handle.jsonValue())
     .catch(() => { throw new Error(`PR_C_SYNTHETIC_BROWSER_${phase}_PANEL_COUNT`); });
-  if (await blocked.count()) throw new Error('PR_C_SYNTHETIC_BROWSER_PREVIEW_BINDING_BLOCKED');
-  assert.equal(await banner.count(), 1, `PR_C_SYNTHETIC_BROWSER_${phase}_BANNER_COUNT`);
-  const panel = banner.locator('details');
-  assert.equal(await panel.count(), 1, `PR_C_SYNTHETIC_BROWSER_${phase}_PANEL_COUNT`);
-  return { banner, panel };
+  if (snapshot.state === 'blocked') throw new Error('PR_C_SYNTHETIC_BROWSER_PREVIEW_BINDING_BLOCKED');
+  if (snapshot.state === 'duplicate-banner') throw new Error(`PR_C_SYNTHETIC_BROWSER_${phase}_BANNER_COUNT`);
+  if (snapshot.state !== 'ready') throw new Error(`PR_C_SYNTHETIC_BROWSER_${phase}_PANEL_COUNT`);
+  const banner = page.getByTestId('controlled-human-nonproduction-banner');
+  return { banner, panel: banner.locator('details') };
 };
 
 const armServerStep = async (page, checkpointId, stepId, interactionSequence) => {

@@ -268,9 +268,9 @@ test('proof collection reopens the evidence panel after the application action',
   } finally { await browser.close(); }
 });
 
-test('CH-12 waits for the real evidence banner across both revoked-actor reloads', async () => {
+test('CH-12 mutation denial survives atomic evidence-banner remounts', async () => {
   const { build } = await import('vite');
-  const planned = buildBrowserExecutionCatalog().find(step => step.checkpointId === 'CH-12' && step.stepId === 'revoked-actor-projection-denied');
+  const planned = buildBrowserExecutionCatalog().find(step => step.checkpointId === 'CH-12' && step.stepId === 'revoked-actor-mutation-denied');
   assert(planned?.serverAction);
   const workspaceId = '11111111-1111-4111-a111-111111111111';
   const requestId = '77777777-7777-4777-a777-777777777777';
@@ -300,11 +300,9 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     const App = () => {
       const [ready, setReady] = useState(false);
       useEffect(() => {
-        let active = true; let timer;
-        void window.fixtureBeginLoad().then(load => {
-          timer = setTimeout(() => { void window.fixtureReady(load).then(() => { if (active) setReady(true); }); }, 120);
-        });
-        return () => { active = false; clearTimeout(timer); };
+        window.fixtureSetEvidenceReady = value => setReady(Boolean(value));
+        void window.fixtureMounted();
+        return () => { delete window.fixtureSetEvidenceReady; };
       }, []);
       return ready ? <Banner /> : <main>Loading workspace...</main>;
     };
@@ -336,8 +334,7 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     const page = await browser.newPage();
     const requests = [];
     page.on('request', request => requests.push(request.url()));
-    await page.exposeFunction('fixtureBeginLoad', () => { fixtureState.loads += 1; return fixtureState.loads; });
-    await page.exposeFunction('fixtureReady', load => { fixtureState.events.push(`ready:${load}`); });
+    await page.exposeFunction('fixtureMounted', () => { fixtureState.loads += 1; });
     await page.exposeFunction('fixtureListBindings', () => [{
       checkpointId: planned.checkpointId, stepId: planned.stepId, action: planned.serverAction.action,
       state: fixtureState.proof ? 'completed' : 'unanchored',
@@ -350,8 +347,65 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     await page.route('https://synthetic.invalid/**', route => route.fulfill({
       contentType: 'text/html', body: '<!doctype html><html><body><div id="root"></div><script>' + script + '</script></body></html>',
     }));
+    const realBanner = page.getByTestId('controlled-human-nonproduction-banner');
+    const realPanel = realBanner.locator('details');
+    const setEvidenceReady = async ready => {
+      await page.waitForFunction(() => typeof window.fixtureSetEvidenceReady === 'function');
+      await page.evaluate(value => window.fixtureSetEvidenceReady(value), ready);
+      await realBanner.waitFor({ state: ready ? 'visible' : 'detached' });
+    };
+    let readinessCalls = 0; let releaseAfterOldCount = false; let releaseDuringPanelRead = false;
+    const panel = {
+      count: (...args) => realPanel.count(...args),
+      locator: (...args) => realPanel.locator(...args),
+      async getAttribute(...args) {
+        if (!releaseDuringPanelRead) return realPanel.getAttribute(...args);
+        releaseDuringPanelRead = false;
+        const pendingRead = realPanel.getAttribute(...args);
+        await setEvidenceReady(true);
+        return pendingRead;
+      },
+    };
+    const banner = {
+      async count(...args) {
+        const actual = await realBanner.count(...args);
+        if (releaseAfterOldCount) {
+          releaseAfterOldCount = false; assert.equal(actual, 0); await setEvidenceReady(true);
+        }
+        return actual;
+      },
+      locator: selector => selector === 'details' ? panel : realBanner.locator(selector),
+      getByRole: (...args) => realBanner.getByRole(...args), getByLabel: (...args) => realBanner.getByLabel(...args),
+      getByText: (...args) => realBanner.getByText(...args), getByTestId: (...args) => realBanner.getByTestId(...args),
+    };
+    // This narrow wrapper creates the hosted scheduling seam with real React
+    // detach/remounts while every queried count and readiness predicate remains real.
+    const scheduledPage = {
+      reload: (...args) => page.reload(...args), waitForLoadState: (...args) => page.waitForLoadState(...args),
+      viewportSize: (...args) => page.viewportSize(...args), url: (...args) => page.url(...args),
+      waitForTimeout: (...args) => page.waitForTimeout(...args),
+      getByTestId: (id, ...args) => id === 'controlled-human-nonproduction-banner' ? banner : page.getByTestId(id, ...args),
+      locator(selector, ...args) {
+        const located = page.locator(selector, ...args);
+        if (selector !== '[data-testid="controlled-human-nonproduction-banner"]:visible, [data-testid="controlled-human-environment-blocked"]:visible') return located;
+        return { first: () => ({ waitFor: async options => {
+          readinessCalls += 1; await setEvidenceReady(true); const result = await located.first().waitFor(options);
+          if (readinessCalls === 2) { await setEvidenceReady(false); releaseAfterOldCount = true; }
+          return result;
+        } }) };
+      },
+      async waitForFunction(predicate, arg, options) {
+        readinessCalls += 1;
+        await setEvidenceReady(false);
+        assert.equal(await page.evaluate(predicate, arg), false, 'loading state must remain pending');
+        await setEvidenceReady(true);
+        const result = await page.waitForFunction(predicate, arg, options);
+        if (readinessCalls === 2) { await setEvidenceReady(false); releaseDuringPanelRead = true; }
+        return result;
+      },
+    };
     await page.goto('https://synthetic.invalid/');
-    await page.getByText('Controlled human test', { exact: false }).waitFor({ state: 'visible' });
+    await setEvidenceReady(true);
     const calls = [];
     const api = {
       async rpc(name) {
@@ -369,14 +423,14 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     let tick = Date.parse('2026-09-30T00:00:00.000Z');
     const result = await executePlannedStep({
       planned,
-      session: { page, api, identity: { applicationActorDigest: exerciseDigest, applicationSessionDigest: exerciseDigest } },
+      session: { page: scheduledPage, api, identity: { applicationActorDigest: exerciseDigest, applicationSessionDigest: exerciseDigest } },
       providerEgress: [], state: new Map(), nextTime: () => new Date(tick += 1).toISOString(),
       apiDescriptor: descriptor, exerciseDigest,
     });
     assert.deepEqual(calls, ['pr_c_controlled_human_anchor_step', 'pr_c_controlled_human_execute_denied_step']);
     assert.deepEqual(result.browserArtifact.serverAnchor, safeAnchor);
     assert.deepEqual(result.browserArtifact.serverBinding, safeBinding);
-    assert.deepEqual(fixtureState.events, ['ready:1', 'ready:2', 'arm', 'anchor', 'denial', 'ready:3']);
+    assert.deepEqual(fixtureState.events, ['arm', 'anchor', 'denial']);
     assert.equal(fixtureState.loads, 3);
     assert(result.browserArtifact.interactionSequence.indexOf(`arm:ch-12:${planned.stepId}`)
       < result.browserArtifact.interactionSequence.indexOf(`api:preanchor:ch-12:${planned.stepId}`));
@@ -391,8 +445,9 @@ test('evidence readiness fails closed for missing, blocked, and duplicate surfac
   try {
     for (const [markup, code] of [
       ['<main>Loading workspace...</main>', 'PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_COUNT'],
-      ['<main>Loading workspace...</main><script>setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<section data-testid="controlled-human-environment-blocked">Blocked</section>\'), 25)</script>', 'PR_C_SYNTHETIC_BROWSER_PREVIEW_BINDING_BLOCKED'],
-      ['<section data-testid="controlled-human-nonproduction-banner"><details></details></section><section data-testid="controlled-human-nonproduction-banner"><details></details></section>', 'PR_C_SYNTHETIC_BROWSER_PROOF_BANNER_COUNT'],
+      ['<section data-testid="controlled-human-nonproduction-banner" style="display:none"><details></details></section>', 'PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_COUNT'],
+      ['<main>Loading workspace...</main><script>setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<section hidden data-testid="controlled-human-environment-blocked">Blocked</section>\'), 25)</script>', 'PR_C_SYNTHETIC_BROWSER_PREVIEW_BINDING_BLOCKED'],
+      ['<section data-testid="controlled-human-nonproduction-banner"><details></details></section><section hidden data-testid="controlled-human-nonproduction-banner"><details></details></section>', 'PR_C_SYNTHETIC_BROWSER_PROOF_BANNER_COUNT'],
       ['<section data-testid="controlled-human-nonproduction-banner"><details></details><details></details></section>', 'PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_COUNT'],
     ]) {
       const page = await browser.newPage();

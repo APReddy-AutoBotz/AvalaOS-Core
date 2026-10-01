@@ -1812,3 +1812,49 @@ Rollback reverts the runner readiness correction and its regression together.
 No data or Edge rollback is needed. Preserve failed-run and cleanup history;
 acceptance and merge remain blocked until the complete campaign passes and AP
 confirms merge. `CONTROLLED-HUMAN` remains `not_run`.
+
+### CH-12 atomic proof-panel observation correction (2026-10-01)
+
+Executed evidence: protected run `36877102565` on `0d88cd7` completed the
+revoked-actor projection denial, then failed during the mutation-denial proof
+readback with `PR_C_SYNTHETIC_BROWSER_PROOF_BANNER_COUNT`. Recovery and private
+browser-state erasure succeeded. Full acceptance remains unproven.
+
+Confirmed source defect: the preceding readiness correction waited for a
+visible surface, then sampled blocked, banner and panel counts in separate
+browser operations. Those reads can observe different React mounts. Source
+inspection shows that restored authentication and the subsequent organization
+effect can render a banner, loading state, then a new banner. The sanitized
+hosted error does not retain its actual count; a zero count during this sequence
+is an inference, not a recorded hosted DOM observation. No duplicate product
+render path was found. The previous delayed-mount test did not cover remounts.
+
+Read-only architecture, security and quality reviews completed before scoped
+implementation resumed. The controller selected one atomic browser-side
+readiness observation over a fixed-frame stability delay: elapsed frames do
+not establish session readiness, and a later separate count would preserve the
+race. Preserve strict dynamic locators, bounded waiting on missing/loading
+state, immediate blocked/duplicate rejection, exact step selection, one anchor
+and denial execution, and the final exact proof comparison. Do not retry whole
+actions or change product authorization, session providers, SQL or Edge code.
+
+Executed evidence: a deterministic real React remount reproduced the old
+`PROOF_BANNER_COUNT` failure with an actual count of zero in the CH-12 mutation
+step. After correction, both focused tests passed, including a further remount
+after readiness and exact proof readback through dynamic locators. The blocked,
+hidden/duplicate-banner, wrong-panel and missing-surface guards remain enforced.
+The static boundary scan passed with zero forbidden hits and stale entries;
+existing line-bound references remain unchanged. The fixture API is simulated;
+hosted server proof still requires the full campaign.
+
+The first concurrent synthetic suite passed 73/76: existing Monitor reload,
+Monitor parity panel opening, and a 650ms proof-refresh fixture hit timing
+failures. Each passed in isolation (3/3), and one repeat of the exact suite
+passed 76/76. Contention is a supported inference, not a proven cause; no timeout
+was increased. Patch formatting passed. Refresh source-bound provenance before
+publication; exact-head CI, preview and full acceptance remain required.
+
+Rollback reverts the helper and regression together, restoring the known
+runner false-negative risk. Preserve retained exercise and cleanup history;
+no database or Edge rollback is needed. Merge remains blocked pending complete
+synthetic evidence and AP's final confirmation.
