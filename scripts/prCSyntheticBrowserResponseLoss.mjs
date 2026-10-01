@@ -40,10 +40,12 @@ const validateEnvelope = (body, { organizationId, workspaceId }) => {
   return body;
 };
 
-const validateResponse = (value, body, outcome) => {
-  if (!record(value) || value.ok !== true || value.outcome !== outcome || value.action !== ACTION
+const validateResponse = (value, body) => {
+  if (!exactKeys(value, ['ok', 'outcome', 'receiptId', 'action', 'resourceId', 'resourceVersion', 'packageVersionId'])
+    || value.ok !== true || value.outcome !== 'committed' || value.action !== ACTION
     || !UUID.test(value.receiptId ?? '') || value.resourceId !== body.payload.workPackageId
-    || !Number.isSafeInteger(value.resourceVersion) || value.resourceVersion !== body.payload.expectedPackageVersion + 1) {
+    || !Number.isSafeInteger(value.resourceVersion) || value.resourceVersion !== body.payload.expectedPackageVersion + 1
+    || !UUID.test(value.packageVersionId ?? '') || value.packageVersionId === body.payload.expectedPackageVersionId) {
     fail('PR_C_SYNTHETIC_RESPONSE_LOSS_RESPONSE_REJECTED');
   }
   return value;
@@ -100,16 +102,17 @@ export async function executeSyntheticResponseLoss({
       if (intercepted === 1) {
         const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
         if (typeof response.ok !== 'function' || !response.ok()) fail('PR_C_SYNTHETIC_RESPONSE_LOSS_RESPONSE_REJECTED');
-        const responseBody = validateResponse(await response.json(), body, 'committed');
+        const responseBody = validateResponse(await response.json(), body);
         original = { body, response: responseBody, status: response.status() };
         return route.abort('failed');
       }
       if (!original || !sameRetry(original.body, body)) fail('PR_C_SYNTHETIC_RESPONSE_LOSS_RETRY_IDENTITY_REJECTED');
       const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30_000 });
       if (typeof response.ok !== 'function' || !response.ok()) fail('PR_C_SYNTHETIC_RESPONSE_LOSS_RESPONSE_REJECTED');
-      const responseBody = validateResponse(await response.json(), body, 'replayed');
+      const responseBody = validateResponse(await response.json(), body);
       if (responseBody.receiptId !== original.response.receiptId || responseBody.resourceId !== original.response.resourceId
-        || responseBody.resourceVersion !== original.response.resourceVersion) fail('PR_C_SYNTHETIC_RESPONSE_LOSS_RETRY_RESULT_REJECTED');
+        || responseBody.resourceVersion !== original.response.resourceVersion
+        || canonicalJson(responseBody) !== canonicalJson(original.response)) fail('PR_C_SYNTHETIC_RESPONSE_LOSS_RETRY_RESULT_REJECTED');
       retry = { body, response: responseBody, status: response.status() };
       return route.fulfill({ response });
     } catch (error) {

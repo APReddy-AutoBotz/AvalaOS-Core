@@ -1858,3 +1858,49 @@ Rollback reverts the helper and regression together, restoring the known
 runner false-negative risk. Preserve retained exercise and cleanup history;
 no database or Edge rollback is needed. Merge remains blocked pending complete
 synthetic evidence and AP's final confirmation.
+
+### CH-13 canonical committed-response recovery correction (2026-10-01)
+
+Executed evidence: the protected campaign on exact head `6ed9929` completed 79
+of the 84 ordered steps before the first CH-13 step failed. The failed step and
+four later steps remain unaccepted. Read-only hosted inspection found two
+distinct attempts with the same idempotency and payload binding, one committed
+effect, a retained canonical receipt whose stored outcome is `committed`, no
+completed controlled-human binding, and successful exercise deprovisioning.
+The precise HTTP response bytes were not retained, so this does not prove a
+successful browser readback or full campaign.
+
+Confirmed source defect: the Delivery SQL returns the exact stored committed
+receipt response for an authorized retry, and the deployed function definition
+contains that same return branch. The Edge Delivery projector preserves the
+canonical `committed` outcome while removing private hashes and item details.
+The response-loss runner incorrectly required `replayed` on the second response
+and therefore rejected the production contract after the server had safely
+reconciled one effect.
+
+Read-only architecture, security and quality Wave 1 reviews completed before
+the controller authorized these scoped writes under the managed workspace-write
+profile.
+
+The correction requires `committed` for both attempts, validates the exact
+public revision-response shape including `packageVersionId`, and requires full
+canonical equality between the original and retry responses. It continues to
+reject replay-labelled, drifted, non-2xx, excess-attempt, same-request-id,
+changed-key and changed-payload retries. The production-client regression uses
+the real public projector, injects one retryable first transport loss, verifies
+two invocations with one business key and payload but fresh request IDs, and
+completes the controlled-human step once.
+
+Executed local evidence: the production-shaped committed retry reproduced
+`PR_C_SYNTHETIC_RESPONSE_LOSS_RESPONSE_REJECTED` before the source correction.
+After correction, the focused response-loss tests passed 4/4 and the focused
+Delivery/Monitor client gate passed, including its two browser scope-isolation
+tests. The single feature integration gate passed 77/77 with zero skips; the
+static boundary scan passed with zero forbidden hits and stale entries. Patch
+formatting passed. This simulated network/client evidence does not replace hosted CH-13 or
+the complete 84-step campaign. Exact-head CI, preview binding and protected
+synthetic acceptance remain planned verification.
+
+Rollback reverts the response-loss helper, its focused regression, the client
+retry regression and test hook together. No database or Edge rollback is
+needed because their canonical committed-response behavior is unchanged.

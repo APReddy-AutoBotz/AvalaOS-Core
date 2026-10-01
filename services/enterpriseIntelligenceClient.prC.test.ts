@@ -3,6 +3,7 @@ import { DeliveryMonitorCommandInputError, buildDeliveryMonitorSelectorPayload, 
 import { DELIVERY_MONITOR_FIXTURE_IDS as ids } from './deliveryMonitor/fixtures';
 import { controlledHumanAssessPrerequisite, controlledHumanTarget, enterpriseIntelligenceClient } from './enterpriseIntelligenceClient';
 import { emitPrCAssertion } from '../supabase/functions/_shared/deliveryMonitorPrCTestEvidence';
+import { projectDeliveryMonitorPublicResult } from '../supabase/functions/_shared/deliveryMonitorCommand';
 
 type Invocation = {
   name: string;
@@ -169,7 +170,7 @@ controlledState.__prCControlledEnabled = false;
 controlledState.__prCArmedStep = null;
 // Exercise the actual controlled client path; ordinary transport cases below
 // deliberately have controlled mode off and cannot prove anchor authority.
-const transport = globalThis as typeof globalThis & { __prCInvoke?: any; __prCBegin?: any };
+const transport = globalThis as typeof globalThis & { __prCInvoke?: any; __prCBegin?: any; __prCComplete?: any };
 const ordinaryInvoke = transport.__prCInvoke;
 const manualCase = cases.find(value => value.method === 'createManualDeliveryPackage')!;
 const session = { userId: ids.itemAggregateId, organizationId: ids.organizationId, organizationName: 'Synthetic',
@@ -202,6 +203,48 @@ for (const invalidContexts of [[], [session, session], [{ ...session, organizati
 contexts = [session]; rejectAnchor = true; calls.length = 0;
 await assert.rejects(manualCase.invoke(), /ANCHOR_VERSION_REJECTED/);
 assert.deepEqual(calls, ['tenant-session', 'anchor'], 'stale authority cannot retry or dispatch');
+const revisionCase = cases.find(value => value.method === 'commitDeliveryPackageRevision')!;
+const revisionPayload = buildDeliveryMonitorSelectorPayload(revisionCase.command);
+const canonicalRevision = {
+  ok: true as const, outcome: 'committed' as const, receiptId: ids.reviewId,
+  action: 'delivery.package.revision.commit' as const, resourceId: ids.packageId, resourceVersion: 2,
+  packageVersionId: ids.baselineId, packageHash: '4'.repeat(64),
+  items: [{ itemAggregateId: ids.itemAggregateId, itemVersionId: ids.approvalId, version: 3, itemHash: '5'.repeat(64), status: 'edited' }],
+};
+const publicRevision = projectDeliveryMonitorPublicResult(canonicalRevision, canonicalRevision.action, { payload: revisionPayload });
+assert.deepEqual(Object.keys(publicRevision).sort(), [
+  'action', 'ok', 'outcome', 'packageVersionId', 'receiptId', 'resourceId', 'resourceVersion',
+]);
+const responseLossAnchor = { safeAnchor: { challengeToken: `sha256:${'6'.repeat(64)}` },
+  requestId: ids.handoffVersionId, businessIdempotencyKey: 'controlled-response-loss-revision' };
+const responseLossInvocations: Invocation[] = []; const completions: unknown[] = [];
+transport.__prCBegin = async () => responseLossAnchor;
+transport.__prCComplete = async (...args: unknown[]) => {
+  assert.equal(responseLossInvocations.length, 2, 'controlled proof completes only after the retry');
+  completions.push(args); return null;
+};
+transport.__prCInvoke = async (name: string, options: Invocation['options']) => {
+  assert.equal(name, 'enterprise-intelligence-command'); responseLossInvocations.push({ name, options });
+  if (responseLossInvocations.length === 1) {
+    const error = new Error('synthetic first response loss'); error.name = 'FunctionsFetchError';
+    return { data: null, error };
+  }
+  return { data: publicRevision, error: null };
+};
+controlledState.__prCArmedStep = { stepId: 'simulate-response-loss', observationKind: 'server_event' };
+const recoveredRevision = await revisionCase.invoke();
+assert.deepEqual(recoveredRevision, publicRevision);
+assert.equal(responseLossInvocations.length, 2);
+const firstResponseLossBody = responseLossInvocations[0].options.body;
+const secondResponseLossBody = responseLossInvocations[1].options.body;
+assert.equal(firstResponseLossBody.idempotencyKey, responseLossAnchor.businessIdempotencyKey);
+assert.equal(secondResponseLossBody.idempotencyKey, responseLossAnchor.businessIdempotencyKey);
+assert.equal(firstResponseLossBody.requestId, responseLossAnchor.requestId);
+assert.notEqual(secondResponseLossBody.requestId, firstResponseLossBody.requestId);
+assert.match(String(secondResponseLossBody.requestId), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+assert.deepEqual(secondResponseLossBody, { ...firstResponseLossBody, requestId: secondResponseLossBody.requestId });
+assert.equal(completions.length, 1); assert.deepEqual(completions[0], [responseLossAnchor]);
+delete transport.__prCComplete; controlledState.__prCArmedStep = null;
 transport.__prCInvoke = ordinaryInvoke; delete transport.__prCBegin;
 controlledState.__prCControlledEnabled = false;
 for (const testCase of cases) {
