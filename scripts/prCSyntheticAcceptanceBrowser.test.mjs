@@ -11,6 +11,7 @@ import {
   CONTROLLED_HUMAN_CATALOG,
   CONTROLLED_HUMAN_EXECUTION_ORDER,
   CONTROLLED_HUMAN_SERVER_ACTIONS,
+  canonicalDigest,
 } from './prCControlledHumanEvidenceContract.mjs';
 import {
   SYNTHETIC_PERSONA_ORDER,
@@ -22,6 +23,7 @@ import {
   collectProof,
   deriveBrowserIdentityDigests,
   deterministicPersonaEmail,
+  executePlannedStep,
   latestCompletedAt,
   parsePasswordBundle,
   safeBrowserRoute,
@@ -32,6 +34,7 @@ import {
   assertSyntheticCommandContinuity,
   summarizePrerequisiteInteractions,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
+import { buildSyntheticApiEvidenceDescriptor } from './prCSyntheticBrowserEvidenceActions.mjs';
 import {
   deriveSyntheticApplicationActorDigest,
   deriveSyntheticApplicationSessionDigest,
@@ -265,6 +268,140 @@ test('proof collection reopens the evidence panel after the application action',
     assert.equal(proof.serverBinding.stepId, 'resolve-material-assess-conflict');
     assert.deepEqual(interactions, ['inspect-proof:ch-01:resolve-material-assess-conflict']);
     assert.equal(await page.locator('details').getAttribute('open'), '');
+  } finally { await browser.close(); }
+});
+
+test('CH-12 waits for the real evidence banner across both revoked-actor reloads', async () => {
+  const { build } = await import('vite');
+  const planned = buildBrowserExecutionCatalog().find(step => step.checkpointId === 'CH-12' && step.stepId === 'revoked-actor-projection-denied');
+  assert(planned?.serverAction);
+  const workspaceId = '11111111-1111-4111-a111-111111111111';
+  const requestId = '77777777-7777-4777-a777-777777777777';
+  const descriptor = buildSyntheticApiEvidenceDescriptor(planned, { workspaceId, authorizationVersion: 7 });
+  const challengeToken = `sha256:${'2'.repeat(64)}`;
+  const bindingToken = `sha256:${'3'.repeat(64)}`;
+  const safeAnchor = {
+    contractVersion: 'pr-c-controlled-human-step-anchor-1', stepId: planned.stepId, action: planned.serverAction.action,
+    targetFamily: descriptor.targetFamily,
+    targetDigest: canonicalDigest({ resourceFamily: descriptor.targetFamily, resourceId: descriptor.targetId }),
+    expectedVersion: descriptor.expectedVersion, transitionKind: planned.serverAction.transitionKind,
+    selectorDigest: canonicalDigest(descriptor.selectorBindings), intentDigest: `sha256:${'4'.repeat(64)}`,
+    requestDigest: `sha256:${'5'.repeat(64)}`, challengeToken,
+  };
+  const safeBinding = {
+    contractVersion: 'pr-c-controlled-human-step-binding-3', stepId: planned.stepId, action: planned.serverAction.action,
+    result: 'denied', expectedVersion: descriptor.expectedVersion, observedVersion: descriptor.expectedVersion,
+    denialCodeDigest: canonicalDigest({ denialCode: planned.serverAction.expectedDenialCode }), anchorToken: challengeToken,
+    requestDigest: safeAnchor.requestDigest, intentDigest: safeAnchor.intentDigest, bindingToken,
+  };
+  const source = `import React, { useEffect, useState } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import Banner from './components/auth/ControlledHumanNonProductionBanner';
+    const record = event => { const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push(event); localStorage.setItem('events', JSON.stringify(events)); };
+    const App = () => {
+      const [ready, setReady] = useState(false);
+      useEffect(() => {
+        const load = Number(localStorage.getItem('loads') || '0') + 1;
+        localStorage.setItem('loads', String(load));
+        const timer = setTimeout(() => { record('ready:' + load); setReady(true); }, 120);
+        return () => clearTimeout(timer);
+      }, []);
+      return ready ? <Banner /> : <main>Loading workspace...</main>;
+    };
+    createRoot(document.getElementById('root')).render(<App />);`;
+  const entry = `${process.cwd().replaceAll('\\', '/')}/synthetic-ch12-banner-readiness-fixture.tsx`;
+  const compiled = await build({
+    configFile: false, envDir: false, logLevel: 'silent',
+    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+    build: { write: false, minify: false, lib: { entry, name: 'SyntheticCh12BannerReadiness', formats: ['iife'] } },
+    plugins: [{ name: 'synthetic-ch12-banner-readiness', enforce: 'pre',
+      resolveId(id) {
+        if (id.replaceAll('\\', '/').endsWith('/synthetic-ch12-banner-readiness-fixture.tsx')) return entry;
+        if (/services\/supabaseClient$/u.test(id)) return '\0synthetic-ch12-banner-backend';
+      },
+      load(id) {
+        if (id === entry) return source;
+        if (id === '\0synthetic-ch12-banner-backend') return `
+          const step = ${JSON.stringify({ checkpointId: planned.checkpointId, stepId: planned.stepId, action: planned.serverAction.action })};
+          const record = event => { const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push(event); localStorage.setItem('events', JSON.stringify(events)); };
+          export const getControlledHumanBrowserBinding = () => ({ status: 'authorized' });
+          export const listControlledHumanStepBindings = async () => {
+            const proof = JSON.parse(localStorage.getItem('completedProof') || 'null');
+            return [{ ...step, state: proof ? 'completed' : 'unanchored', safeAnchor: proof?.serverAnchor ?? null, safeBinding: proof?.serverBinding ?? null }];
+          };
+          export const getLastCompletedControlledHumanProof = () => null;
+          export const armControlledHumanStep = option => {
+            if (option.checkpointId !== step.checkpointId || option.stepId !== step.stepId) throw new Error('fixture arm mismatch');
+            localStorage.setItem('armed', 'true'); record('arm');
+          };
+        `;
+      },
+    }],
+  });
+  const script = compiled[0].output.find(file => file.type === 'chunk').code;
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    const requests = [];
+    page.on('request', request => requests.push(request.url()));
+    await page.route('https://synthetic.invalid/**', route => route.fulfill({
+      contentType: 'text/html', body: '<!doctype html><html><body><div id="root"></div><script>' + script + '</script></body></html>',
+    }));
+    await page.goto('https://synthetic.invalid/');
+    await page.getByText('Controlled human test', { exact: false }).waitFor({ state: 'visible' });
+    const calls = [];
+    const api = {
+      async rpc(name) {
+        calls.push(name);
+        if (name === 'pr_c_controlled_human_anchor_step') {
+          assert.equal(await page.evaluate(() => localStorage.getItem('armed')), 'true');
+          await page.evaluate(() => { const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push('anchor'); localStorage.setItem('events', JSON.stringify(events)); });
+          return { safeAnchor, execution: { requestId } };
+        }
+        assert.equal(name, 'pr_c_controlled_human_execute_denied_step');
+        await page.evaluate(proof => {
+          const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push('denial'); localStorage.setItem('events', JSON.stringify(events));
+          localStorage.setItem('completedProof', JSON.stringify(proof));
+        }, { serverAnchor: safeAnchor, serverBinding: safeBinding });
+        return safeBinding;
+      },
+      async invoke() { assert.fail('revoked-actor denial must not invoke an ordinary command'); },
+    };
+    let tick = Date.parse('2026-09-30T00:00:00.000Z');
+    const result = await executePlannedStep({
+      planned,
+      session: { page, api, identity: { applicationActorDigest: exerciseDigest, applicationSessionDigest: exerciseDigest } },
+      providerEgress: [], state: new Map(), nextTime: () => new Date(tick += 1).toISOString(),
+      apiDescriptor: descriptor, exerciseDigest,
+    });
+    assert.deepEqual(calls, ['pr_c_controlled_human_anchor_step', 'pr_c_controlled_human_execute_denied_step']);
+    assert.deepEqual(result.browserArtifact.serverAnchor, safeAnchor);
+    assert.deepEqual(result.browserArtifact.serverBinding, safeBinding);
+    const events = await page.evaluate(() => JSON.parse(localStorage.getItem('events') || '[]'));
+    assert.deepEqual(events, ['ready:1', 'ready:2', 'arm', 'anchor', 'denial', 'ready:3']);
+    assert.equal(await page.evaluate(() => localStorage.getItem('loads')), '3');
+    assert(result.browserArtifact.interactionSequence.indexOf(`arm:ch-12:${planned.stepId}`)
+      < result.browserArtifact.interactionSequence.indexOf(`api:preanchor:ch-12:${planned.stepId}`));
+    assert(result.browserArtifact.interactionSequence.indexOf(`api:preanchor:ch-12:${planned.stepId}`)
+      < result.browserArtifact.interactionSequence.indexOf(`api:server-owned-denial:${planned.stepId}`));
+    assert.equal(requests.every(url => new URL(url).hostname === 'synthetic.invalid'), true);
+  } finally { await browser.close(); }
+});
+
+test('evidence readiness fails closed for missing, blocked, and duplicate surfaces', async () => {
+  const browser = await chromium.launch();
+  try {
+    for (const [markup, code] of [
+      ['<main>Loading workspace...</main>', 'PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_COUNT'],
+      ['<main>Loading workspace...</main><script>setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<section data-testid="controlled-human-environment-blocked">Blocked</section>\'), 25)</script>', 'PR_C_SYNTHETIC_BROWSER_PREVIEW_BINDING_BLOCKED'],
+      ['<section data-testid="controlled-human-nonproduction-banner"><details></details></section><section data-testid="controlled-human-nonproduction-banner"><details></details></section>', 'PR_C_SYNTHETIC_BROWSER_PROOF_BANNER_COUNT'],
+      ['<section data-testid="controlled-human-nonproduction-banner"><details></details><details></details></section>', 'PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_COUNT'],
+    ]) {
+      const page = await browser.newPage();
+      await page.setContent(markup);
+      await assert.rejects(collectProof(page, 'CH-12', 'revoked-actor-projection-denied', [], { timeoutMs: 150 }), new RegExp(code, 'u'));
+      await page.close();
+    }
   } finally { await browser.close(); }
 });
 

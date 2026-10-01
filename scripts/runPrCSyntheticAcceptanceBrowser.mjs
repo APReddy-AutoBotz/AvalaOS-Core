@@ -999,10 +999,21 @@ const completeVisibleDialog = async (page, stepId, interactionSequence) => {
   if (confirm) { await confirm.click(); interactionSequence.push('activate:dialog-confirm'); }
 };
 
-const armServerStep = async (page, checkpointId, stepId, interactionSequence) => {
+const waitForControlledHumanEvidencePanel = async (page, phase, timeoutMs) => {
   const banner = page.getByTestId('controlled-human-nonproduction-banner');
+  const blocked = page.getByTestId('controlled-human-environment-blocked');
+  await page.locator('[data-testid="controlled-human-nonproduction-banner"]:visible, [data-testid="controlled-human-environment-blocked"]:visible')
+    .first().waitFor({ state: 'attached', timeout: timeoutMs })
+    .catch(() => { throw new Error(`PR_C_SYNTHETIC_BROWSER_${phase}_PANEL_COUNT`); });
+  if (await blocked.count()) throw new Error('PR_C_SYNTHETIC_BROWSER_PREVIEW_BINDING_BLOCKED');
+  assert.equal(await banner.count(), 1, `PR_C_SYNTHETIC_BROWSER_${phase}_BANNER_COUNT`);
   const panel = banner.locator('details');
-  assert.equal(await panel.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ARM_PANEL_COUNT');
+  assert.equal(await panel.count(), 1, `PR_C_SYNTHETIC_BROWSER_${phase}_PANEL_COUNT`);
+  return { banner, panel };
+};
+
+const armServerStep = async (page, checkpointId, stepId, interactionSequence) => {
+  const { banner, panel } = await waitForControlledHumanEvidencePanel(page, 'ARM', 30_000);
   if (await panel.getAttribute('open') === null) {
     await panel.locator('summary').click().catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_ARM_PANEL_OPEN_FAILED'); });
   }
@@ -1027,8 +1038,7 @@ const armServerStep = async (page, checkpointId, stepId, interactionSequence) =>
 };
 
 export const collectProof = async (page, checkpointId, stepId, interactionSequence, { timeoutMs = 15_000 } = {}) => {
-  const banner = page.getByTestId('controlled-human-nonproduction-banner');
-  const panel = banner.locator('details');
+  const { banner, panel } = await waitForControlledHumanEvidencePanel(page, 'PROOF', timeoutMs);
   if (await panel.getAttribute('open') === null) {
     await panel.locator('summary').click()
       .catch(() => { throw new Error('PR_C_SYNTHETIC_BROWSER_PROOF_PANEL_OPEN_FAILED'); });

@@ -1760,3 +1760,46 @@ fingerprint changes; the extractor, count, database-column checks and negative
 mutation guards remain unchanged. All 13 focused inventory contract tests passed,
 including the retained negative mutations, before publishing the reconciled
 candidate. No further runtime source change or Edge deployment is required.
+
+### CH-12 evidence-panel readiness correction (2026-10-01)
+
+Executed evidence: protected run `36740134899` on `224db4a` passed the earlier
+CH-10 Studio path and reached CH-12, then failed at
+`revoked-actor-projection-denied` with `PR_C_SYNTHETIC_BROWSER_ARM_PANEL_COUNT`.
+Recovery and private browser-state erasure both succeeded. The final read-only
+phase, independent full-campaign observation, and acceptance recomputation were
+not run; this is not a synthetic acceptance PASS.
+
+Confirmed source defect: the runner reloads before a server action and considers
+a visible body usable while the application still renders `Loading workspace`.
+Negative API evidence deliberately skips ordinary workspace navigation. The
+immediate evidence-panel count can therefore run before the revoked-session
+screen mounts its existing controlled-human banner. The revoked actor remains
+the required actor for the denial; moving revocation or weakening authorization
+would invalidate that check.
+
+The architecture, security, and quality reviewers completed read-only Wave 1
+before the controller authorized scoped implementation under the existing
+workspace-write profile. The correction waits for the exact evidence surface
+before arming and proof readback, preserving bounded failure on missing,
+blocked, or duplicate surfaces and the exact durable proof comparison. Generic
+page readiness remains unchanged because it also runs before authentication.
+No product UI, permission, SQL, migration, or deployed Edge source change is
+required.
+
+Executed evidence: the new delayed real-React-banner regression reproduced
+`PR_C_SYNTHETIC_BROWSER_ARM_PANEL_COUNT` before the source change. After the
+correction, both focused tests passed: the actual CH-12 runner waits across both
+reloads, arms before anchoring, obtains the expected denied binding and reads
+back the exact proof. Missing, late-blocked, duplicate-banner and duplicate-panel
+cases fail closed. The API boundary is a test fixture, not new hosted denial
+proof. Existing PostgreSQL denial authority tests remain the server-contract
+evidence. Typecheck and the focused synthetic acceptance gate passed (76/76,
+zero skips); `git diff --check` passed. Exact-head CI, preview binding and the
+full protected 84-step campaign remain planned verification. No unrelated
+regression suites or thresholds are added.
+
+Rollback reverts the runner readiness correction and its regression together.
+No data or Edge rollback is needed. Preserve failed-run and cleanup history;
+acceptance and merge remain blocked until the complete campaign passes and AP
+confirms merge. `CONTROLLED-HUMAN` remains `not_run`.
