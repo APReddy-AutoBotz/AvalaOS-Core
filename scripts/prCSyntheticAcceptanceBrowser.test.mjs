@@ -11,7 +11,6 @@ import {
   CONTROLLED_HUMAN_CATALOG,
   CONTROLLED_HUMAN_EXECUTION_ORDER,
   CONTROLLED_HUMAN_SERVER_ACTIONS,
-  canonicalDigest,
 } from './prCControlledHumanEvidenceContract.mjs';
 import {
   SYNTHETIC_PERSONA_ORDER,
@@ -23,7 +22,6 @@ import {
   collectProof,
   deriveBrowserIdentityDigests,
   deterministicPersonaEmail,
-  executePlannedStep,
   latestCompletedAt,
   parsePasswordBundle,
   safeBrowserRoute,
@@ -34,7 +32,6 @@ import {
   assertSyntheticCommandContinuity,
   summarizePrerequisiteInteractions,
 } from './runPrCSyntheticAcceptanceBrowser.mjs';
-import { buildSyntheticApiEvidenceDescriptor } from './prCSyntheticBrowserEvidenceActions.mjs';
 import {
   deriveSyntheticApplicationActorDigest,
   deriveSyntheticApplicationSessionDigest,
@@ -294,17 +291,20 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     denialCodeDigest: canonicalDigest({ denialCode: planned.serverAction.expectedDenialCode }), anchorToken: challengeToken,
     requestDigest: safeAnchor.requestDigest, intentDigest: safeAnchor.intentDigest, bindingToken,
   };
+  const fixtureState = { loads: 0, events: [], armed: false, proof: null };
+  let markArmRecorded;
+  const armRecorded = new Promise(resolve => { markArmRecorded = resolve; });
   const source = `import React, { useEffect, useState } from 'react';
     import { createRoot } from 'react-dom/client';
     import Banner from './components/auth/ControlledHumanNonProductionBanner';
-    const record = event => { const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push(event); localStorage.setItem('events', JSON.stringify(events)); };
     const App = () => {
       const [ready, setReady] = useState(false);
       useEffect(() => {
-        const load = Number(localStorage.getItem('loads') || '0') + 1;
-        localStorage.setItem('loads', String(load));
-        const timer = setTimeout(() => { record('ready:' + load); setReady(true); }, 120);
-        return () => clearTimeout(timer);
+        let active = true; let timer;
+        void window.fixtureBeginLoad().then(load => {
+          timer = setTimeout(() => { void window.fixtureReady(load).then(() => { if (active) setReady(true); }); }, 120);
+        });
+        return () => { active = false; clearTimeout(timer); };
       }, []);
       return ready ? <Banner /> : <main>Loading workspace...</main>;
     };
@@ -322,18 +322,10 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
       load(id) {
         if (id === entry) return source;
         if (id === '\0synthetic-ch12-banner-backend') return `
-          const step = ${JSON.stringify({ checkpointId: planned.checkpointId, stepId: planned.stepId, action: planned.serverAction.action })};
-          const record = event => { const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push(event); localStorage.setItem('events', JSON.stringify(events)); };
           export const getControlledHumanBrowserBinding = () => ({ status: 'authorized' });
-          export const listControlledHumanStepBindings = async () => {
-            const proof = JSON.parse(localStorage.getItem('completedProof') || 'null');
-            return [{ ...step, state: proof ? 'completed' : 'unanchored', safeAnchor: proof?.serverAnchor ?? null, safeBinding: proof?.serverBinding ?? null }];
-          };
+          export const listControlledHumanStepBindings = () => window.fixtureListBindings();
           export const getLastCompletedControlledHumanProof = () => null;
-          export const armControlledHumanStep = option => {
-            if (option.checkpointId !== step.checkpointId || option.stepId !== step.stepId) throw new Error('fixture arm mismatch');
-            localStorage.setItem('armed', 'true'); record('arm');
-          };
+          export const armControlledHumanStep = option => { void window.fixtureArm(option); };
         `;
       },
     }],
@@ -344,6 +336,17 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     const page = await browser.newPage();
     const requests = [];
     page.on('request', request => requests.push(request.url()));
+    await page.exposeFunction('fixtureBeginLoad', () => { fixtureState.loads += 1; return fixtureState.loads; });
+    await page.exposeFunction('fixtureReady', load => { fixtureState.events.push(`ready:${load}`); });
+    await page.exposeFunction('fixtureListBindings', () => [{
+      checkpointId: planned.checkpointId, stepId: planned.stepId, action: planned.serverAction.action,
+      state: fixtureState.proof ? 'completed' : 'unanchored',
+      safeAnchor: fixtureState.proof?.serverAnchor ?? null, safeBinding: fixtureState.proof?.serverBinding ?? null,
+    }]);
+    await page.exposeFunction('fixtureArm', option => {
+      assert.equal(option.checkpointId, planned.checkpointId); assert.equal(option.stepId, planned.stepId);
+      fixtureState.armed = true; fixtureState.events.push('arm'); markArmRecorded();
+    });
     await page.route('https://synthetic.invalid/**', route => route.fulfill({
       contentType: 'text/html', body: '<!doctype html><html><body><div id="root"></div><script>' + script + '</script></body></html>',
     }));
@@ -354,15 +357,11 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
       async rpc(name) {
         calls.push(name);
         if (name === 'pr_c_controlled_human_anchor_step') {
-          assert.equal(await page.evaluate(() => localStorage.getItem('armed')), 'true');
-          await page.evaluate(() => { const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push('anchor'); localStorage.setItem('events', JSON.stringify(events)); });
+          await armRecorded; assert.equal(fixtureState.armed, true); fixtureState.events.push('anchor');
           return { safeAnchor, execution: { requestId } };
         }
         assert.equal(name, 'pr_c_controlled_human_execute_denied_step');
-        await page.evaluate(proof => {
-          const events = JSON.parse(localStorage.getItem('events') || '[]'); events.push('denial'); localStorage.setItem('events', JSON.stringify(events));
-          localStorage.setItem('completedProof', JSON.stringify(proof));
-        }, { serverAnchor: safeAnchor, serverBinding: safeBinding });
+        fixtureState.events.push('denial'); fixtureState.proof = { serverAnchor: safeAnchor, serverBinding: safeBinding };
         return safeBinding;
       },
       async invoke() { assert.fail('revoked-actor denial must not invoke an ordinary command'); },
@@ -377,9 +376,8 @@ test('CH-12 waits for the real evidence banner across both revoked-actor reloads
     assert.deepEqual(calls, ['pr_c_controlled_human_anchor_step', 'pr_c_controlled_human_execute_denied_step']);
     assert.deepEqual(result.browserArtifact.serverAnchor, safeAnchor);
     assert.deepEqual(result.browserArtifact.serverBinding, safeBinding);
-    const events = await page.evaluate(() => JSON.parse(localStorage.getItem('events') || '[]'));
-    assert.deepEqual(events, ['ready:1', 'ready:2', 'arm', 'anchor', 'denial', 'ready:3']);
-    assert.equal(await page.evaluate(() => localStorage.getItem('loads')), '3');
+    assert.deepEqual(fixtureState.events, ['ready:1', 'ready:2', 'arm', 'anchor', 'denial', 'ready:3']);
+    assert.equal(fixtureState.loads, 3);
     assert(result.browserArtifact.interactionSequence.indexOf(`arm:ch-12:${planned.stepId}`)
       < result.browserArtifact.interactionSequence.indexOf(`api:preanchor:ch-12:${planned.stepId}`));
     assert(result.browserArtifact.interactionSequence.indexOf(`api:preanchor:ch-12:${planned.stepId}`)
@@ -648,3 +646,6 @@ test('synthetic authored claims cover the actual scaffold decision trace without
 
 // Preserve the existing line-bound static evidence for the session fixture above.
 import './prCSyntheticBrowserNavigation.test.mjs';
+import { canonicalDigest } from './prCControlledHumanEvidenceContract.mjs';
+import { executePlannedStep } from './runPrCSyntheticAcceptanceBrowser.mjs';
+import { buildSyntheticApiEvidenceDescriptor } from './prCSyntheticBrowserEvidenceActions.mjs';

@@ -1799,6 +1799,15 @@ zero skips); `git diff --check` passed. Exact-head CI, preview binding and the
 full protected 84-step campaign remain planned verification. No unrelated
 regression suites or thresholds are added.
 
+Candidate `be63b80` reached a verified preview, but CI rejected the new test
+fixture's browser-storage references and the shifted line bindings of an older
+session fixture. This was a missed static-boundary integration check, not a new
+hosted campaign failure. The scanner and its allowlist remain unchanged: the
+existing session-fixture positions are restored, and the new fixture holds its
+synthetic state in the test process across reloads. Both focused browser cases
+passed again; the static boundary scan passed with zero forbidden hits and zero
+stale allowlist entries before publishing the corrected candidate.
+
 Rollback reverts the runner readiness correction and its regression together.
 No data or Edge rollback is needed. Preserve failed-run and cleanup history;
 acceptance and merge remain blocked until the complete campaign passes and AP
