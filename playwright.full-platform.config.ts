@@ -28,6 +28,7 @@ const deviceVariants = [
 ] as const;
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'fullPlatformCampaign.spec.ts',
   forbidOnly: true,

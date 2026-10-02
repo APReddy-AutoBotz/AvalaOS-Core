@@ -1,5 +1,6 @@
 import { DEFAULT_ENABLED_MODULES } from '../constants/moduleConfig';
-import { Organization, ProductModuleKey, Scope, ScopeType, User } from '../types';
+import { EnterpriseSessionState, Organization, ProductModuleKey, Scope, ScopeType, TenantContextProjection, User } from '../types';
+import { bindAuthoritativePresentationCapabilities } from './viewAccessGuard';
 
 export type ProductAction =
   | 'process.create'
@@ -35,6 +36,8 @@ export type ProductActionReason =
   | 'disabled_module'
   | 'invalid_scope'
   | 'missing_permission'
+  | 'server_context_unavailable'
+  | 'governed_workflow_required'
   | 'missing_project_context'
   | 'missing_process_context'
   | 'missing_document_context'
@@ -52,6 +55,13 @@ export interface ProductActionContext {
   documentGenerationId?: string | null;
   hasDocumentContext?: boolean;
   targetUserId?: string | null;
+  /** Presentation only. Every server command independently reauthorizes. */
+  dataAccess?: 'local' | 'server' | 'disabled';
+  serverContext?: {
+    workspaceId?: string | null;
+    sessionState: EnterpriseSessionState;
+    tenantContext?: TenantContextProjection | null;
+  };
 }
 
 export interface ProductActionDecision {
@@ -324,6 +334,33 @@ export function resolveProductActionPolicy(input: ProductActionContext): Product
   }
   if (!metadata.allowedScopes.includes(input.scope.type)) {
     return buildDecision(input.action, metadata, false, 'invalid_scope', 'This action is not available in the current workspace scope.');
+  }
+  if (input.dataAccess && input.dataAccess !== 'local') {
+    const binding = input.serverContext;
+    if (input.dataAccess !== 'server' || !binding || binding.sessionState !== 'ready') {
+      return buildDecision(input.action, metadata, false, 'server_context_unavailable', 'Refresh the server-authorized workspace before making changes.');
+    }
+    const capabilities = bindAuthoritativePresentationCapabilities({
+      userId: input.user.id,
+      organizationId: input.organization.id,
+      workspaceId: binding.workspaceId,
+      sessionState: binding.sessionState,
+      tenantContext: binding.tenantContext,
+    });
+    if (!capabilities.length) {
+      return buildDecision(input.action, metadata, false, 'server_context_unavailable', 'The current actor and workspace do not match a usable server context.');
+    }
+    // The legacy editors below do not implement canonical Studio/Delivery
+    // commands. Never translate their permission names into server authority.
+    if (input.action !== 'process.create') {
+      return buildDecision(input.action, metadata, false, 'governed_workflow_required', 'Use the governed module workspace for this action. Legacy editors cannot make server changes.');
+    }
+    const requiredPermissions = ['assess.read', 'assess.process.create'];
+    const serverMetadata = { ...metadata, requiredPermissions };
+    if (!requiredPermissions.every(capability => capabilities.includes(capability))) {
+      return buildDecision(input.action, serverMetadata, false, 'missing_permission', 'Your current workspace role cannot create processes. An administrator must assign an authorized author role.');
+    }
+    return buildDecision(input.action, serverMetadata, true, 'allowed', 'Process creation is available; the server will verify current authority before saving.');
   }
   if (metadata.requiresProject && !input.projectId && input.scope.type !== ScopeType.PROJECT) {
     return buildDecision(input.action, metadata, false, 'missing_project_context', 'Select a project before taking this action.');

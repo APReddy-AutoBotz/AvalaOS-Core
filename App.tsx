@@ -10,6 +10,7 @@ import { MOCK_DOC_TEMPLATES } from './data/docTemplates';
 import { useAuth } from './components/auth/AuthProvider';
 import { useOrganizationContext } from './components/auth/OrganizationProvider';
 import { EnterpriseSessionStateView, EnterpriseSessionToolbar } from './components/auth/EnterpriseSessionBoundary';
+import ControlledHumanNonProductionBanner from './components/auth/ControlledHumanNonProductionBanner';
 import OnboardingWizard from './components/auth/OnboardingWizard';
 import { useDelivery } from './components/delivery/DeliveryProvider';
 import { useDocs } from './components/docs/DocsProvider';
@@ -17,10 +18,14 @@ import { useProcessService } from './services/processService';
 
 import { clearLegacyBrowserProviderKey, StorageKeys, usePersistentState } from './services/storage';
 import { useHandoffLedger } from './services/handoffLedgerService';
-import { isLocalRuntimeEnabled } from './services/supabaseClient';
+import { getControlledHumanBrowserBinding, getRuntimeDataAccess, isLocalRuntimeEnabled } from './services/supabaseClient';
+import { resolveGovernedCreationSurface } from './services/governedCreationNavigation';
 import { timesheetAdapter } from './services/adapters/timesheetAdapter';
 import { buildDocsToDeliveryLineage, collectDocsToDeliveryEvidenceRefs, summarizeDocsToDeliveryLineageCompleteness } from './services/docsToDeliveryLineage';
-import { resolveViewAccess } from './services/viewAccessGuard';
+import {
+  bindAuthoritativePresentationCapabilities,
+  resolveViewAccess,
+} from './services/viewAccessGuard';
 import {
   areScopesEqual,
   DEFAULT_PERSISTED_SCOPE,
@@ -66,6 +71,7 @@ const ProjectSelectorModal = React.lazy(() => import('./components/delivery/Proj
 const DocsForgeView = React.lazy(() => import('./components/docs/DocsForgeView'));
 const TemplateStudioView = React.lazy(() => import('./components/docs/TemplateManagerView'));
 const DocsView = React.lazy(() => import('./components/docs/DocsView'));
+const GovernedStudioRoute = React.lazy(() => import('./components/docs/GovernedStudioRoute'));
 const CustomDashboardView = React.lazy(() => import('./components/shared/CustomDashboardView'));
 const PortfolioView = React.lazy(() => import('./components/shared/PortfolioView'));
 const OrganizationSetupView = React.lazy(() => import('./components/auth/OrganizationSetupView'));
@@ -89,6 +95,12 @@ const ViewLoadingFallback = () => (
 
 function App() {
   const localRuntimeEnabled = isLocalRuntimeEnabled();
+  const controlledHumanBrowserBinding = getControlledHumanBrowserBinding();
+  // A rejected controlled browser binding must remain a presentation-only
+  // boundary. Service authority still resolves through getRuntimeDataAccess.
+  const dataAccess = controlledHumanBrowserBinding.status === 'blocked'
+    ? 'server'
+    : getRuntimeDataAccess();
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
@@ -165,11 +177,6 @@ function App() {
   // Assess Detail State
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const enabledModules = currentOrganization?.enabledModules;
-  const hasAdminAccess = Boolean(currentUser && (
-    currentUser.orgRole === 'Admin' ||
-    currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission)) ||
-    tenantContext?.capabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))
-  ));
   const explicitNavigationIntent = useMemo(
     () => typeof window !== 'undefined' && hasProductNavigationSearch(window.location.search),
     [],
@@ -216,9 +223,27 @@ function App() {
     localRuntime: localRuntimeEnabled,
   }), [currentOrganization, currentUser, currentWorkspace, guardLoading, localRuntimeEnabled, sessionState, tenantContext]);
   const authoritativeViewCapabilities = useMemo(() => (
-    governPresentationAccess.allowed && tenantContext ? tenantContext.capabilities : []
-  ), [governPresentationAccess.allowed, governPresentationAccess.contextKey, tenantContext]);
+    // Undefined selects local synthetic presentation only. A server session must
+    // retain its bound array, including [] as an explicit denial after revocation.
+    dataAccess === 'local' ? undefined : bindAuthoritativePresentationCapabilities({
+      userId: currentUser?.id,
+      organizationId: currentOrganization?.id,
+      workspaceId: currentWorkspace?.id,
+      sessionState,
+      tenantContext,
+    })
+  ), [
+    dataAccess,
+    currentOrganization?.id,
+    currentUser?.id,
+    currentWorkspace?.id,
+    sessionState,
+    tenantContext,
+  ]);
   const governContextKey = useRef<string | null>(null);
+  const hasAdminAccess = Boolean(currentUser && (dataAccess === 'local'
+    ? currentUser.orgRole === 'Admin' || currentUser.permissions?.some(permission => ['org.admin', 'security.manage', 'byok.manage'].includes(permission))
+    : dataAccess === 'server' && (authoritativeViewCapabilities ?? []).some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability))));
 
   const setScopeIfChanged = useCallback((scope: Scope) => {
     setCurrentScope(previous => {
@@ -356,6 +381,13 @@ function App() {
     applyGuardedView(view, requestedScope);
   };
 
+  const handleAdminNavigate = () => {
+    if (!hasAdminAccess || guardLoading) return;
+    setGovernViewOpen(false);
+    organizationScopeTransition.current = false;
+    applyGuardedView(View.WORKSPACE, { type: ScopeType.ORGANIZATION });
+  };
+
   const handleDashboardStatClick = (filter: Filters) => {
     setQuickFilter(filter);
     applyGuardedView(View.LIST, { type: ScopeType.MY_WORK });
@@ -389,7 +421,9 @@ function App() {
     documentGenerationId: context.documentGenerationId,
     hasDocumentContext: context.hasDocumentContext,
     targetUserId: context.targetUserId,
-  }), [currentOrganization, currentScope, currentUser, enabledModules, guardLoading]);
+    dataAccess,
+    serverContext: { workspaceId: currentWorkspace?.id, sessionState, tenantContext },
+  }), [currentOrganization, currentScope, currentUser, currentWorkspace?.id, dataAccess, enabledModules, guardLoading, sessionState, tenantContext]);
 
   const ensureProductAction = useCallback((
     action: ProductAction,
@@ -1181,6 +1215,16 @@ function App() {
       return <OrganizationSetupView currentUser={currentUser} allUsers={users} />;
     }
 
+    const governedCreationSurface = resolveGovernedCreationSurface(dataAccess, currentView);
+    if (governedCreationSurface === 'studio') return <GovernedStudioRoute />;
+    if (governedCreationSurface === 'delivery') return <EnterpriseIntelligenceView
+      key={`delivery:${currentUser.id}:${currentOrganization?.id}:${currentWorkspace?.id}:${tenantContext?.authorizationVersion}`}
+      organization={currentOrganization}
+      workspace={currentWorkspace}
+      currentUser={currentUser}
+      initialTab="delivery"
+    />;
+
     switch (currentView) {
       case View.DASHBOARD:
         return <CustomDashboardView currentUser={currentUser} tasks={activeTasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} />;
@@ -1194,6 +1238,12 @@ function App() {
           onViewChange={handleViewChange}
           captureMode={productMarketingCapture}
           outcomeSignal={productMarketingCapture ? MARKETING_CAPTURE_MONITOR_SIGNAL : undefined}
+          canonicalMonitorContext={!productMarketingCapture && currentOrganization?.id && currentWorkspace?.id ? {
+            actorId: currentUser.id,
+            organizationId: currentOrganization.id,
+            workspaceId: currentWorkspace.id,
+            expectedAuthorizationVersion: tenantContext?.authorizationVersion,
+          } : undefined}
         />;
       case View.DOCS_FORGE:
         return <DocsForgeView
@@ -1437,6 +1487,21 @@ function App() {
     }
   };
 
+  if (controlledHumanBrowserBinding.status === 'blocked') {
+    if (!currentUser) return <PublicWebsite />;
+    return <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <ControlledHumanNonProductionBanner />
+      <main className="grid min-h-[calc(100vh-2.75rem)] place-items-center p-6">
+        <section className="w-full max-w-xl rounded-3xl border border-red-200 bg-white p-8 text-center shadow-xl dark:border-red-900 dark:bg-slate-900">
+          <p className="av-eyebrow">Controlled human test</p>
+          <h1 className="mt-3 text-3xl font-bold text-[#002C4B] dark:text-white">Workspace access blocked</h1>
+          <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-300">The connected test binding is no longer valid. No workspace projection or mutation is available.</p>
+          <a href="/sign-in" className="btn-primary mt-6 inline-flex min-h-11 items-center justify-center px-5 text-sm font-bold">Return to controlled sign-in</a>
+        </section>
+      </main>
+    </div>;
+  }
+
   if (authLoading || orgLoading) {
     return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-abz-ink-950 text-slate-500 font-medium">Loading workspace...</div>;
   }
@@ -1462,7 +1527,7 @@ function App() {
         currentScope={currentScope}
         currentView={currentView}
         onViewChange={handleViewChange}
-        onScopeChange={handleScopeChange}
+        onAdminNavigate={handleAdminNavigate}
         collapsed={isSidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(collapsed => !collapsed)}
         canAccessAdmin={hasAdminAccess}
@@ -1474,6 +1539,7 @@ function App() {
         onMobileClose={() => setMobileNavigationOpen(false)}
       />
       <div className="flex flex-col flex-1 overflow-hidden relative">
+        <ControlledHumanNonProductionBanner />
         <Header
           theme={theme}
           toggleTheme={toggleTheme}

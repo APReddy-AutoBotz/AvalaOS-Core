@@ -31,11 +31,11 @@ const statusClass = (status: string) => {
 
 const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, createProcessDecision, presentationProcesses, captureMode = false }) => {
     const { currentOrganization } = useOrganization();
-    const { processes, loading, refreshProcesses } = useProcessService();
+    const { processes, loading } = useProcessService();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const displayedProcesses = captureMode ? (presentationProcesses ?? []) : processes;
     const displayedLoading = captureMode ? false : loading;
-    const canCreateProcess = !captureMode && (createProcessDecision?.allowed ?? true);
+    const canCreateProcess = !captureMode && (createProcessDecision?.allowed ?? false);
     const createProcessBlockedReason = captureMode
         ? 'Synthetic marketing capture is read-only.'
         : createProcessDecision && !createProcessDecision.allowed ? createProcessDecision.message : 'Process creation is not authorized in this workspace.';
@@ -155,7 +155,6 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
             <ProcessCreationModal
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
-                onCreated={refreshProcesses}
             />
         </div>
     );

@@ -2,9 +2,16 @@ import React, { useState } from 'react';
 import { useTemplateService } from '../../services/templateService';
 import ProcessCreationModal from './ProcessCreationModal';
 import { ClipboardListIcon, DocumentDuplicateIcon, SparklesIcon } from '../shared/icons';
+import { useOrganizationContext } from '../auth/OrganizationProvider';
+import { getRuntimeDataAccess } from '../../services/supabaseClient';
+import { PROCESS_CREATE_CAPABILITY, PROCESS_CREATE_TEMPLATE_IDS } from '../../services/processCreationContract';
 
 const TemplateLibraryView: React.FC = () => {
     const { availablePacks } = useTemplateService();
+    const { sessionState, tenantContext } = useOrganizationContext();
+    const canCreate = getRuntimeDataAccess() === 'local' || (sessionState === 'ready' &&
+        Boolean(tenantContext?.capabilities.includes(PROCESS_CREATE_CAPABILITY)) &&
+        Boolean(tenantContext?.capabilities.includes('assess.read')));
     const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
     const totalTemplates = availablePacks.reduce((sum, pack) => sum + pack.templates.length, 0);
     const unlockedTemplates = availablePacks.reduce((sum, pack) => sum + (pack.isLocked ? 0 : pack.templates.length), 0);
@@ -83,14 +90,14 @@ const TemplateLibraryView: React.FC = () => {
                                         </div>
 
                                         <button
-                                            disabled={pack.isLocked}
+                                            disabled={pack.isLocked || !canCreate || !PROCESS_CREATE_TEMPLATE_IDS.includes(template.id as typeof PROCESS_CREATE_TEMPLATE_IDS[number])}
                                             onClick={() => setSelectedTemplateId(template.id)}
                                             className={`w-full rounded-xl py-2.5 text-sm font-black transition-all ${pack.isLocked
                                                     ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
                                                     : 'bg-[#ffbc03] text-[#002C4B] shadow-lg shadow-[#ffbc03]/15 hover:-translate-y-0.5'
                                                 }`}
                                         >
-                                            {pack.isLocked ? 'Requires workspace configuration' : 'Use Template'}
+                                            {pack.isLocked ? 'Requires workspace configuration' : !PROCESS_CREATE_TEMPLATE_IDS.includes(template.id as typeof PROCESS_CREATE_TEMPLATE_IDS[number]) ? 'Template not available for creation' : !canCreate ? 'Creation unavailable for your role' : 'Use Template'}
                                         </button>
                                     </div>
                                 ))}

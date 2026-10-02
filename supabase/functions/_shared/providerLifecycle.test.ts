@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import {
   assertProviderLifecycleOperationAuthority,
-  executeProviderLifecycleCommand,
+  executeProviderLifecycleCommand as executeProviderLifecycleCommandWithAuthority,
   mapProviderLifecycleRpcError,
   ProviderLifecycleError,
   type ProviderLifecycleAuthority,
   type ProviderLifecycleConfig,
   type ProviderLifecycleDatabase,
   type ProviderLifecycleOperation,
+  type ProviderLifecycleDeps,
+  type ProviderLifecycleExecutionContext,
 } from './providerLifecycle';
 import {
   fingerprintProviderSecret,
@@ -40,6 +42,40 @@ const KEY_TWO = '77777777-7777-4777-8777-777777777777';
 const NONCE_ONE = '88888888-8888-4888-8888-888888888888';
 const NONCE_TWO = '99999999-9999-4999-8999-999999999999';
 const now = new Date('2026-08-04T10:00:00.000Z');
+
+type CampaignMockKeys = 'assertCampaignLifecycle' | 'assertCampaignRegistration' | 'reserveCampaignEffect';
+type LifecycleTestDeps = Omit<ProviderLifecycleDeps, CampaignMockKeys> & Partial<Pick<ProviderLifecycleDeps, CampaignMockKeys>>;
+// Explicit ordinary-authority mocks retain lifecycle behavior coverage without
+// making missing production RPCs or provider-free targets implicitly allowed.
+const mockPermits = new Set<object>();
+const campaignMocks: Pick<ProviderLifecycleDeps, CampaignMockKeys> = {
+  assertCampaignLifecycle: async () => undefined,
+  assertCampaignRegistration: async () => undefined,
+  reserveCampaignEffect: async binding => {
+    assert.ok(binding.receiptId && binding.executionToken);
+    const permit = { mode: 'ordinary' as const, ownsProviderEffect: true, replayed: false, binding };
+    mockPermits.add(permit); return permit;
+  },
+};
+const executeProviderLifecycleCommand = (
+  operation: ProviderLifecycleOperation, actor: ProviderLifecycleAuthority, payload: unknown,
+  deps: LifecycleTestDeps, execution?: ProviderLifecycleExecutionContext,
+) => {
+  // Validation now requires a durable execution identity. Existing receipt/lease
+  // tests retain their own exact context; simple adapter cases use this mock.
+  const context = execution ?? (operation === 'provider.validate' || operation === 'provider.secret.rotate' ? {
+    receiptId: crypto.randomUUID(), executionToken: crypto.randomUUID(), executionFence: 1,
+    plan: {}, persistPlan: async (plan: Record<string, unknown>) => structuredClone(plan),
+    renewCleanupLease: async () => undefined,
+  } : undefined);
+  return executeProviderLifecycleCommandWithAuthority(operation, actor, payload, {
+    ...campaignMocks, ...deps,
+    validateConnection: async (input, options) => {
+      assert.equal(mockPermits.delete(input.effectPermit), true, 'Validation consumes the reserved mock permit once');
+      return deps.validateConnection(input, options);
+    },
+  }, context);
+};
 
 const authority: ProviderLifecycleAuthority = {
   actorId: ACTOR,
@@ -213,6 +249,62 @@ await test('executes the seven-step lifecycle without persisting raw secret mate
   for (const result of results) {
     assert.equal(result.resourceId, CONFIG);
     assert.equal(result.providerConfigId, CONFIG);
+  }
+});
+
+await test('campaign registration denial has zero database, secret, validation, or provider effects', async () => {
+  const effects = { load: 0, transition: 0, secret: 0, validate: 0 };
+  const deps = {
+    database: { loadConfig: async () => { effects.load += 1; return null; }, transition: async () => { effects.transition += 1; return {}; } },
+    secretBackend: { kind: 'vault', writable: true, resolve: async () => { effects.secret += 1; return 'unexpected'; } } as ProviderSecretBackend,
+    routeResolverDeps: {} as never, validateConnection: async () => { effects.validate += 1; return { validated: true as const }; },
+    now: () => now, randomId: () => KEY_ONE,
+    assertCampaignRegistration: async () => { throw new Error('denied'); },
+  };
+  await assert.rejects(executeProviderLifecycleCommand('provider.register', authority, {
+    provider: 'openai', displayName: 'Denied provider', defaultModel: 'gpt-governed',
+    capabilities: ['assess.evidence.extract'], modelAllowlist: ['gpt-governed'],
+  }, deps), (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PROVIDER_BLOCKED');
+  assert.deepEqual(effects, { load: 0, transition: 0, secret: 0, validate: 0 });
+});
+
+await test('campaign lifecycle denial occurs after read-only load but before secret, reserve, validation, or transition effects', async () => {
+  const config: ProviderLifecycleConfig = { id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'],
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_DENIED', status: 'active' } };
+  const effects = { load: 0, transition: 0, secret: 0, reserve: 0, validate: 0 };
+  const deps = {
+    database: { loadConfig: async () => { effects.load += 1; return config; }, transition: async () => { effects.transition += 1; return {}; } },
+    secretBackend: { kind: 'vault', writable: true, resolve: async () => { effects.secret += 1; return 'unexpected'; } } as ProviderSecretBackend,
+    routeResolverDeps: {} as never, validateConnection: async () => { effects.validate += 1; return { validated: true as const }; },
+    now: () => now, randomId: () => KEY_TWO,
+    assertCampaignLifecycle: async () => { throw new Error('denied'); },
+    reserveCampaignEffect: async () => { effects.reserve += 1; throw new Error('unexpected'); },
+  };
+  await assert.rejects(executeProviderLifecycleCommand('provider.validate', authority, { providerConfigId: CONFIG }, deps),
+    (error: unknown) => error instanceof ProviderLifecycleError && error.code === 'PROVIDER_BLOCKED');
+  assert.deepEqual(effects, { load: 1, transition: 0, secret: 0, reserve: 0, validate: 0 });
+});
+
+await test('validation reserve denial or non-owning replay has zero secret, validation, or transition effects', async () => {
+  const config: ProviderLifecycleConfig = { id: CONFIG, organizationId: ORG, provider: 'openai', status: 'active',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'],
+    keyRef: { id: KEY_ONE, provider: 'openai', resolverType: 'server_reference', secretRef: 'AVALA_PROVIDER_SECRET_OPENAI_11111111111141118111111111111111_RESERVE', status: 'active' } };
+  for (const reserveCampaignEffect of [
+    async () => { throw new Error('denied'); },
+    async (binding: import('./syntheticAiCampaign').SyntheticAiEffectInput) => ({ mode: 'ordinary' as const, ownsProviderEffect: false, replayed: true, binding }),
+  ]) {
+    const effects = { transition: 0, secret: 0, validate: 0 };
+    const deps = {
+      database: { loadConfig: async () => config, transition: async () => { effects.transition += 1; return {}; } },
+      secretBackend: { kind: 'vault', writable: true, resolve: async () => { effects.secret += 1; return 'unexpected'; } } as ProviderSecretBackend,
+      routeResolverDeps: {} as never, validateConnection: async () => { effects.validate += 1; return { validated: true as const }; },
+      now: () => now, randomId: () => KEY_TWO, reserveCampaignEffect,
+    };
+    await assert.rejects(executeProviderLifecycleCommand('provider.validate', authority, { providerConfigId: CONFIG }, deps),
+      (error: unknown) => error instanceof ProviderLifecycleError
+        && (error.code === 'PROVIDER_BLOCKED' || error.code === 'COMMAND_IN_PROGRESS'));
+    assert.deepEqual(effects, { transition: 0, secret: 0, validate: 0 });
   }
 });
 
@@ -580,6 +672,7 @@ await test('revoked bind and rotate recover managed writes once without a raw-ke
     };
     const deps = {
       database: { loadConfig: async () => null, transition: async () => { throw new Error('mutation must not run'); } },
+      ...campaignMocks,
       secretBackend: {
         kind: 'vault', writable: true,
         resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),
@@ -685,6 +778,7 @@ await test('slow bind and rotate cleanup keeps one fenced delete owner beyond on
       },
       deps: {
         database: { loadConfig: async () => null, transition: async () => ({}) },
+        ...campaignMocks,
         secretBackend: {
           kind: 'vault', writable: true,
           resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),
@@ -767,6 +861,7 @@ await test('timed-out cleanup aborts before fenced takeover and terminal replay 
       },
       deps: {
         database: { loadConfig: async () => null, transition: async () => ({}) },
+        ...campaignMocks,
         secretBackend: {
           kind: 'vault', writable: true,
           resolve: async (input: { secretRef: string }) => secrets.get(input.secretRef),

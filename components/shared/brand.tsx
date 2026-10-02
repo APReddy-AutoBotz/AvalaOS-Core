@@ -46,7 +46,7 @@ const Wordmark: React.FC<{ dark?: boolean }> = ({ dark = false }) => (
       x="138"
       y="74"
       fill={dark ? '#F7F9FC' : 'var(--kp-logo-word, #002C4B)'}
-      fontFamily="Outfit, 'Avenir Next', Inter, sans-serif"
+      fontFamily="'Outfit Variable', 'Avenir Next', 'Inter Variable', sans-serif"
       fontSize="48"
       fontWeight="600"
       letterSpacing="7"
@@ -57,7 +57,7 @@ const Wordmark: React.FC<{ dark?: boolean }> = ({ dark = false }) => (
       x="350"
       y="74"
       fill={dark ? '#E9B95D' : 'var(--kp-logo-accent, #9A6500)'}
-      fontFamily="Outfit, 'Avenir Next', Inter, sans-serif"
+      fontFamily="'Outfit Variable', 'Avenir Next', 'Inter Variable', sans-serif"
       fontSize="48"
       fontWeight="600"
       letterSpacing="7"
@@ -99,7 +99,7 @@ export const AvalaLifecycleLockup: React.FC<BrandAssetProps> = ({ className }) =
       x="138"
       y="122"
       fill="#C6D1DC"
-      fontFamily="Outfit, 'Avenir Next', Inter, sans-serif"
+      fontFamily="'Outfit Variable', 'Avenir Next', 'Inter Variable', sans-serif"
       fontSize="18"
       fontWeight="650"
       letterSpacing="1.05"
@@ -124,7 +124,7 @@ export const AvalaHeroLogo: React.FC<BrandAssetProps> = ({ className }) => (
     </g>
     <path d="M113 19V99" stroke="#456078" strokeWidth="1.5" />
     <Wordmark dark />
-    <text x="138" y="122" fill="#C6D1DC" fontFamily="Outfit, 'Avenir Next', Inter, sans-serif" fontSize="18" fontWeight="650" letterSpacing="1.05">
+    <text x="138" y="122" fill="#C6D1DC" fontFamily="'Outfit Variable', 'Avenir Next', 'Inter Variable', sans-serif" fontSize="18" fontWeight="650" letterSpacing="1.05">
       ASSESS · VALIDATE · ASSEMBLE · LAUNCH · AUDIT
     </text>
   </svg>
@@ -138,7 +138,7 @@ export const AvalaEnterpriseLockup: React.FC<BrandAssetProps> = ({ className }) 
     </g>
     <path d="M113 19V99" stroke="#456078" strokeWidth="1.5" />
     <Wordmark dark />
-    <text x="138" y="121" fill="#C6D1DC" fontFamily="Outfit, 'Avenir Next', Inter, sans-serif" fontSize="16" fontWeight="600" letterSpacing="1.6">
+    <text x="138" y="121" fill="#C6D1DC" fontFamily="'Outfit Variable', 'Avenir Next', 'Inter Variable', sans-serif" fontSize="16" fontWeight="600" letterSpacing="1.6">
       GOVERNED AI &amp; AUTOMATION DELIVERY OS
     </text>
   </svg>

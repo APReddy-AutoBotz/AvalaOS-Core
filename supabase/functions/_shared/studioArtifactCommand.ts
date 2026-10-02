@@ -35,7 +35,7 @@ export const STUDIO_SAFE_ERROR_CODES = [
   'INVALID_COMMAND', 'GENERATION_FAILED', 'COMMAND_UNAVAILABLE', 'RESOURCE_STALE',
   'SOURCE_COVERAGE_INCOMPLETE', 'MODULE_ROUTE_NOT_ALLOWED', 'HANDOFF_NOT_ELIGIBLE',
   'HANDOFF_STALE', 'HANDOFF_EXPIRED', 'TEMPLATE_NOT_APPROVED', 'PROVIDER_ROUTE_UNAVAILABLE',
-  'BUDGET_EXHAUSTED', 'COMMAND_IN_PROGRESS', 'RECEIPT_FINALIZATION_FAILED',
+  'BUDGET_EXHAUSTED', 'COMMAND_IN_PROGRESS', 'RECEIPT_FINALIZATION_FAILED', 'COMMAND_OUTCOME_UNKNOWN',
 ] as const;
 export type StudioArtifactDomainErrorCode = typeof STUDIO_SAFE_ERROR_CODES[number];
 export type StudioArtifactErrorCode = 'METHOD_NOT_ALLOWED' | 'AUTHENTICATION_REQUIRED' | 'COMMAND_NOT_SUPPORTED' | StudioArtifactDomainErrorCode;
@@ -48,6 +48,7 @@ const statuses: Record<StudioArtifactErrorCode, number> = {
   TEMPLATE_NOT_APPROVED: 409,
   PROVIDER_ROUTE_UNAVAILABLE: 503, BUDGET_EXHAUSTED: 429, COMMAND_IN_PROGRESS: 409,
   RECEIPT_FINALIZATION_FAILED: 503,
+  COMMAND_OUTCOME_UNKNOWN: 503,
 };
 export class StudioArtifactError extends Error {
   constructor(public readonly code: StudioArtifactErrorCode) { super(code); this.name = 'StudioArtifactError'; }
@@ -272,7 +273,7 @@ export const parseStudioArtifactEnvelope = (value: unknown): StudioCommandEnvelo
 };
 
 export const studioArtifactErrorBody = (error: StudioArtifactError) => ({
-  ok: false, outcome: 'failed_before_commit' as const,
+  ok: false, outcome: error.code === 'COMMAND_OUTCOME_UNKNOWN' ? 'commit_uncertain' as const : 'failed_before_commit' as const,
   error: { code: error.code, message: 'The command could not be completed.' },
 });
 export const asStudioArtifactError = (error: unknown) => error instanceof StudioArtifactError ? error : new StudioArtifactError('COMMAND_UNAVAILABLE');

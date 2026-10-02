@@ -1,5 +1,8 @@
 # AvalaOS Core Document Authority Map
 
+The local AI-output correction and subsequent isolated synthetic AI release are
+governed by `docs/planning/assess-studio-ai-output-correction.md`.
+
 ## Studio governed-artifact authority
 
 The canonical Studio governed-artifact data, command, lifecycle, source-package, template, Assess-to-Studio handoff, trust, legacy, and rollback boundary is `docs/architecture/studio-governed-artifact-authority.md`. The accepted private-rendition, storage, brokered-download, retention, legal-hold, deletion, reconciliation, and rollback authority remains routed separately to `docs/architecture/studio-private-artifact-authority.md`. The active governed multi-source transcript implementation boundary and its PR A/PR B/PR C sequence are defined by `docs/planning/governed-multisource-transcript-module-handoff-plan.md`.
@@ -35,6 +38,7 @@ Read only this sequence unless the active task requires more:
 | Current and target trust/data/runtime architecture | `docs/architecture/current-to-target-enterprise-architecture.md` |
 | Enterprise Intelligence BYOK, evidence ingestion, Studio handoff, Delivery/Monitor lineage, Modernization, and Assemble Phase 1 authority | `docs/architecture/enterprise-intelligence-authority.md` |
 | Governed multi-source transcript PR sequence, cross-module handoffs, and acceptance gates | `docs/planning/governed-multisource-transcript-module-handoff-plan.md` |
+| PR #264 solo-owner synthetic acceptance policy, exact-head binding, execution, and proof limits | `docs/planning/solo-developer-synthetic-acceptance-plan.md` |
 | Studio source packages, tenant templates, structured editing, governed generation, and Assess-to-Studio handoff consumption | `docs/architecture/studio-governed-artifact-authority.md` |
 | Active security, reliability, quality, and readiness risks | `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md` |
 | Cross-layer execution-plan requirements | `PLANS.md` |
@@ -51,6 +55,8 @@ Read only this sequence unless the active task requires more:
 | Accepted Studio private rendition, storage, download, retention, legal-hold, deletion, and rollback authority | `docs/architecture/studio-private-artifact-authority.md` |
 | PR #217 post-merge projection, command-translation, crash-recovery, due-work, and hold/deletion serialization correction | `docs/architecture/pr217-post-merge-runtime-contract-forward-fix.md` |
 | Canonical database migration authority | `supabase/migrations/`; `docs/schema/README.md` explains the legacy-reference boundary |
+| Active creation access, isolated synthetic Admin, verification and rollout boundary | `docs/planning/creation-access-synthetic-admin-remediation.md` |
+| Approved native Assess supporting-document upload, typed AI mapping, CSV/XLSX safety, verification and rollback | `docs/planning/assess-supporting-document-mapping.md` |
 
 The Enterprise Intelligence implementation plan and acceptance gates are maintained in `docs/planning/enterprise-intelligence-byok-ingestion-delivery-assemble-plan.md`. It is an active execution plan, not a substitute for the authority documents above.
 
@@ -72,7 +78,7 @@ PR 1D closure baseline `779a4801aa7c6660ad4581f8e334f5ad422519e7` remains retain
 
 ## Current governed-transcript authority
 
-Governed multi-source transcript PR A is accepted at source/CI level through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. Governed multi-source transcript PR B is the active substantial Studio boundary. PR C Delivery/Monitor work remains excluded. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+Governed multi-source transcript PR A is accepted through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`. PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through post-PR-B `main` `5433cad41721355e3ec5a29bc2f87772540c77b5`. Existing Draft PR #264 is the sole active Governed Delivery and Monitor PR C boundary; its corrective implementation candidate is under verification and remains merge NO-GO. The approved `solo-owner-synthetic-v1` policy permits a separate `SYNTHETIC-ROLE-ACCEPTANCE` result for this PR; it does not turn machine observations into `CONTROLLED-HUMAN` proof. Exact-head CI, preview, hosted synthetic execution, cleanup, and fresh-review gates remain pending until verified and bound in the PR description. Hosted behavior, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
 
 | Avala Assess V2 domain, rule, command, persistence, compatibility, and rollback architecture | `docs/architecture/assess-v2-decision-intelligence-architecture.md` |
 

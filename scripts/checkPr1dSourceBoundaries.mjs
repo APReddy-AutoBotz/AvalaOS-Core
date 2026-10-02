@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { assertPr1dBrowserFixture } from './pr1dBrowserFixtureContract.mjs';
 
 const root = process.cwd();
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -44,6 +45,8 @@ const enterpriseBoundary = read('services/enterpriseAssessContract.ts');
 const sessionPolicy = read('services/enterpriseSessionPolicy.ts');
 const workspace = read('components/assess-v2/AssessV2Workspace.tsx');
 const browserFixture = read('tests/browser/pr1d.spec.ts');
+const networkFixture = read('tests/browser/pr1dNetworkFixture.ts');
+assertPr1dBrowserFixture({ spec: browserFixture, fixture: networkFixture, capabilities });
 const architecture = read('docs/architecture/assess-v2-decision-intelligence-architecture.md');
 const migrationDoc = read('docs/migrations/pr1d-assess-v2-decision-intelligence.md');
 
@@ -79,8 +82,7 @@ requireText(browserFixture, 'Retrieve and Execute primitives expose and persist 
 requireText(workspace, 'accountable owner', 'UI exposes application accountable-owner authoring');
 requireText(browserFixture, 'displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', 'browser proves displayed required controls can finalize');
 forbidText(workspace, "['suggested','submitted','validated','rejected']", 'validated authoring control');
-requireText(browserFixture, 'ASSESS_V2_CAPABILITIES.draftWrite', 'browser fixture uses canonical draft-write capability');
-for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'server'], [client, 'client'], [workspace, 'UI'], [browserFixture, 'browser fixture'], [migrations, 'migration'], [architecture, 'architecture'], [migrationDoc, 'migration docs']]) {
+for (const [source, label] of [[capabilities, 'typed contract'], [handlers, 'server'], [client, 'client'], [workspace, 'UI'], [browserFixture, 'browser scenarios'], [networkFixture, 'browser network fixture'], [migrations, 'migration'], [architecture, 'architecture'], [migrationDoc, 'migration docs']]) {
   forbidText(source, "assess.v2.write", `obsolete capability in ${label}`);
 }
 

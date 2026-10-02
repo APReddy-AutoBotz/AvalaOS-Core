@@ -2,6 +2,70 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/docs/StudioArtifactRenditions.tsx', 'utf8');
+const browserSource = readFileSync('tests/browser/studioPrivateArtifacts.spec.ts', 'utf8');
+const cssSource = readFileSync('index.css', 'utf8');
+
+const assertGhostTransitionContract = (candidate: string) => {
+  const ghostRule = candidate.match(/\.btn-ghost\s*\{([^}]+)\}/u)?.[1] ?? '';
+  assert.ok(ghostRule, 'btn-ghost CSS rule must remain source inspectable');
+  const transitionValue = ghostRule.match(/transition\s*:\s*([^;]+);/u)?.[1] ?? '';
+  const transitions = transitionValue
+    .split(',')
+    .map(value => value.replace(/\s+/gu, ' ').trim())
+    .filter(Boolean);
+  assert.deepEqual(
+    transitions,
+    [
+      'background-color 180ms ease',
+      'border-color 180ms ease',
+      'color 180ms ease',
+    ],
+    'btn-ghost may animate only its three visual color properties',
+  );
+  assert.equal(transitions.some(value => /(?:^|\s)(?:all|opacity)(?:\s|$)/u.test(value)), false,
+    'btn-ghost must never transition disabled-state opacity');
+};
+
+assertGhostTransitionContract(cssSource);
+const replaceGhostTransition = (replacement: string) => cssSource.replace(
+  /(\.btn-ghost\s*\{[^}]*?)transition:\s*background-color 180ms ease,\s*border-color 180ms ease,\s*color 180ms ease;([^}]*\})/u,
+  (_match, before, after) => `${before}${replacement}${after}`,
+);
+const transitionMutants = [
+  replaceGhostTransition('transition: all 180ms ease;'),
+  replaceGhostTransition(
+    'transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, opacity 180ms ease;',
+  ),
+  replaceGhostTransition(
+    'transition: background-color 180ms ease, color 180ms ease;',
+  ),
+];
+for (const mutant of transitionMutants) {
+  assert.notEqual(mutant, cssSource, 'each transition negative must mutate the actual source');
+  assert.throws(() => assertGhostTransitionContract(mutant),
+    'transition broadening, opacity animation, and required-property omission must fail closed');
+}
+
+for (const token of [
+  'gateFirstPrivateProjection',
+  'firstPrivateProjectionStarted',
+  'MutationObserver',
+  "getByRole('button', { name: 'Download unavailable' })",
+  "getByRole('button', { name: 'Download Markdown' })",
+  'animation.transitionProperty === \'opacity\'',
+  "expect(disabledStyle.opacity).toBe('0.5')",
+  "expect(enabledStyle.immediateOpacity).toBe('1')",
+  "expect(enabledStyle.firstFrameOpacity).toBe('1')",
+  'immediateOpacityTransitions',
+  'firstFrameOpacityTransitions',
+  "not.toContain('all')",
+  "not.toContain('opacity')",
+]) {
+  assert.ok(browserSource.includes(token), `private rendition transition regression missing: ${token}`);
+}
+for (const forbidden of ['page.waitForTimeout(', 'page.emulateMedia(', 'page.addStyleTag(']) {
+  assert.ok(!browserSource.includes(forbidden), `private rendition regression weakens real timing: ${forbidden}`);
+}
 for (const token of [
   'Private governed renditions',
   'Not generated',

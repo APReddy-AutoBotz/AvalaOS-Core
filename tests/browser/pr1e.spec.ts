@@ -19,7 +19,7 @@ const EVIDENCE=['71000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-
 const CAPABILITIES=['assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest','assess.v2.approve','assess.v2.govern.resolve','assess.v2.studio.handoff'];
 const headers={'access-control-allow-origin':'*','access-control-allow-headers':'*','content-type':'application/json'};
 
-const installGovernedReviewFixture=async(page:Page)=>{
+const installGovernedReviewFixture=async(page:Page,options:{capabilities?:string[];reviewerLabel?:string;failFirstAttestation?:boolean}={})=>{
   const seededCase={...structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE),id:CASE,organizationId:ORG,workspaceId:WS,sourceProcessId:PROCESS,ownerId:AUTHOR,status:'reviewer-ready' as const,version:3};
   const decision=await buildDecisionVersionV2(seededCase,AUTHOR,'2026-07-20T12:00:00.000Z');
   let projection:any={
@@ -34,7 +34,7 @@ const installGovernedReviewFixture=async(page:Page)=>{
     controls:[{controlId:'human-approval',label:'Human approval',status:'unresolved'},{controlId:'audit',label:'Immutable audit',status:'unresolved'}],
     governStatus:'pending',handoffStatus:'not_ready',
   };
-  const committed:string[]=[]; const rejected:string[]=[]; let failNextAttestation=true;
+  const committed:string[]=[]; const rejected:string[]=[]; let failNextAttestation=options.failFirstAttestation??true;
   const user={id:USER,email:'reviewer@avala.test',role:'authenticated',user_metadata:{full_name:'Independent Reviewer'},aud:'authenticated',created_at:'2026-07-20T00:00:00.000Z'};
   await page.addInitScript(({user})=>{const now=Math.floor(Date.now()/1000);localStorage.setItem('sb-127-auth-token',JSON.stringify({access_token:'browser-fixture-token',refresh_token:'browser-fixture-refresh',token_type:'bearer',expires_in:3600,expires_at:now+3600,user}));localStorage.setItem('avalaos-core-v1-view',JSON.stringify('process_catalog'));localStorage.setItem('avalaos-core-v1-scope',JSON.stringify({type:'my_work'}));},{user});
   const ok=(route:any,body:unknown)=>route.fulfill({status:200,headers,body:JSON.stringify(body)});
@@ -46,10 +46,10 @@ const installGovernedReviewFixture=async(page:Page)=>{
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
     if(url.pathname==='/auth/v1/user')return ok(route,user);
     if(url.pathname==='/auth/v1/token')return ok(route,{access_token:'browser-fixture-token',refresh_token:'browser-fixture-refresh',token_type:'bearer',expires_in:3600,user});
-    if(url.pathname==='/functions/v1/tenant-session')return ok(route,{contexts:[{userId:USER,organizationId:ORG,organizationName:'Avala Enterprise',workspaceId:WS,workspaceName:'Governed Assess',authorizationVersion:9,capabilities:CAPABILITIES}]});
+    if(url.pathname==='/functions/v1/tenant-session')return ok(route,{contexts:[{userId:USER,organizationId:ORG,organizationName:'Avala Enterprise',workspaceId:WS,workspaceName:'Governed Assess',authorizationVersion:9,capabilities:options.capabilities??CAPABILITIES}]});
     if(url.pathname==='/rest/v1/rpc/assess_v2_review_queue')return ok(route,projection.assignmentId?[{assignmentId:ASSIGNMENT,caseId:CASE,caseName:projection.caseName,status:projection.status==='reviewer_ready'?'in_review':projection.status}]:[]);
     if(url.pathname==='/rest/v1/rpc/assess_v2_review_workspace')return ok(route,projection);
-    if(url.pathname==='/rest/v1/rpc/assess_v2_eligible_reviewers')return ok(route,projection.status==='reviewer_ready'?[{actorId:USER,label:'Independent Reviewer',authorizationVersion:9}]:[]);
+    if(url.pathname==='/rest/v1/rpc/assess_v2_eligible_reviewers')return ok(route,projection.status==='reviewer_ready'?[{actorId:USER,label:options.reviewerLabel??'Independent Reviewer',authorizationVersion:9}]:[]);
     if(url.pathname==='/functions/v1/assess-v2-command'){
       const body=request.postDataJSON() as any; const type=String(body.commandType);
       if(body.expectedVersion!==projection.caseVersion){rejected.push(type);return fail(route,'VERSION_CONFLICT');}
@@ -107,4 +107,29 @@ test('governed reviewer assignment through durable Studio handoff',async({page})
   expect(fixture.committed).toEqual(['assessment_v2.review.assign','assessment_v2.evidence.attest','assessment_v2.evidence.attest','assessment_v2.review.resolve','assessment_v2.govern.resolve','assessment_v2.studio.handoff']);
   const axe=await new AxeBuilder({page}).include('[data-testid="assess-v2-review-workspace"]').analyze();expect(axe.violations.filter(item=>item.impact==='serious'||item.impact==='critical')).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+for(const personaKey of ['requester','studio_reviewer']) test(`PR C synthetic ${personaKey} uses its exact Assess assignment authority`,async({page})=>{
+  const {readFile}=await import('node:fs/promises');
+  const {assignAssessReviewer,prepareAssessReviewApproval}=await import('../../scripts/runPrCSyntheticAcceptanceBrowser.mjs');
+  const manifest=JSON.parse(await readFile('testing/process-lifecycle/fixtures/delivery-monitor-pr-c/controlled-human-environment.json','utf8'));
+  const persona=manifest.personas.find((item:{key:string})=>item.key===personaKey);
+  expect(persona).toBeTruthy();
+  const fixture=await installGovernedReviewFixture(page,{capabilities:persona.capabilities,reviewerLabel:'Synthetic studio_reviewer',failFirstAttestation:false});
+  await page.goto('/');await expect(page.getByRole('heading',{name:'Process Catalog'})).toBeVisible();await page.getByRole('button',{name:'View'}).first().click();
+  const review=page.getByTestId('assess-v2-review-workspace');await expect(review).toBeVisible();
+  await expect(review.getByText('Current committed review loaded.',{exact:true})).toBeVisible();
+  if(personaKey==='requester'){
+    await expect(review.getByLabel('Eligible reviewer',{exact:true})).toHaveCount(0);
+    await expect(review.getByRole('button',{name:'Commit reviewer assignment',exact:true})).toHaveCount(0);
+    expect(fixture.committed).toEqual([]);return;
+  }
+  const interactions:string[]=[];
+  await assignAssessReviewer(page,interactions);
+  await prepareAssessReviewApproval(page,interactions);
+  await review.getByRole('button',{name:'Approve reviewed decision',exact:true}).click();
+  await expect(review.getByText('Review resolution committed: Approved.',{exact:true})).toBeVisible();
+  expect(fixture.committed).toEqual(['assessment_v2.review.assign','assessment_v2.evidence.attest','assessment_v2.evidence.attest','assessment_v2.review.resolve']);
+  expect(fixture.rejected).toEqual([]);
+  await expect(review.getByRole('button',{name:'Create durable Studio handoff',exact:true})).toBeDisabled();
 });

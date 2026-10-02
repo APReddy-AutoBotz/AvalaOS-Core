@@ -35,7 +35,7 @@ assert.match(source, /if \(hasUnsavedChanges\) throw new Error\('Save the curren
 assert.match(source, /disabled=\{busy \|\| isReadOnly \|\| hasUnsavedChanges \|\| structuralGaps\.length > 0/);
 assert.match(source, /Unsaved V2 authoring changes are visible\. Save the draft before finalizing\./);
 
-const saveAction = source.match(/const save = \(\) => run\(async \(\) => \{([\s\S]*?)\}\);\r?\n  const reload/)?.[1] ?? '';
+const saveAction = source.match(/const save = \(\) => run\(async \(\) => \{([\s\S]*?)\}\);\r?\n  const reloadCommitted/)?.[1] ?? '';
 assert.match(saveAction, /await saveAssessV2Draft/);
 assert.match(saveAction, /setSavedDraftFingerprint\(authorDraftFingerprint\(authorDraft\)\)/);
 assert.ok(
@@ -52,5 +52,10 @@ assert.ok(
 for (const baseline of ['resumedDraft', 'clonedDraft', 'createdDraft', 'reloadedDraft']) {
   assert.match(source, new RegExp(`setSavedDraftFingerprint\\([^\\n]*${baseline}`));
 }
+
+assert.match(source, /<AssessSupportingDocumentIntake/);
+assert.match(source, /tenantContext\.authorizationVersion}:\$\{processId}:\$\{draft\.caseId}:\$\{version}/);
+assert.match(source, /hasUnsavedChanges=\{hasUnsavedChanges\}/);
+assert.match(source, /onCommitted=\{reloadCommitted\}/);
 
 console.log('Assess V2 unsaved-finalization regression suite passed.');

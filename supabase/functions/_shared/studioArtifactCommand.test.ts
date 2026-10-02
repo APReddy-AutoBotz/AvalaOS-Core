@@ -179,7 +179,8 @@ void (async () => {
     executeAtomicCommand: async () => { effects += 1; return committed; },
   };
   const ok = await handleStudioArtifactCommand(requestFor(), deps);
-  mark(ok.status === 201 && effects === 1 && authorityLoads === 2, 'IDEMP-001', 'handler-authority-before-effect-and-disclosure', 'new-generation-receipt');
+  mark(ok.status === 201 && effects === 1 && authorityLoads === 2
+    && ok.headers.get('Access-Control-Allow-Origin') === '*', 'IDEMP-001', 'handler-authority-before-effect-and-disclosure', 'new-generation-receipt');
 
   const methodDenied = await handleStudioArtifactCommand(new Request('https://local/studio', { method: 'GET' }), deps);
   const authDenied = await handleStudioArtifactCommand(requestFor(), {
@@ -201,11 +202,23 @@ void (async () => {
     .map(response => response.json()));
   mark(methodDenied.status === 405 && authDenied.status === 401 && malformedJson.status === 400
     && actorMismatch.status === 404 && capabilityDenied.status === 403 && transportFailure.status === 503
+    && [methodDenied, authDenied, malformedJson, actorMismatch, capabilityDenied, transportFailure]
+      .every(response => response.headers.get('Access-Control-Allow-Origin') === '*')
     && precommitBodies.every(body => body.ok === false && body.outcome === 'failed_before_commit'
       && body.error?.message === 'The command could not be completed.'
       && !JSON.stringify(body).includes('private database')),
   'STUDIO-TR-009', 'handler.precommit-method-auth-json-authority-and-transport-errors-sanitized',
   'handler-precommit-negative-matrix');
+  const uncertainResult = await handleStudioArtifactCommand(requestFor(), {
+    ...deps, executeAtomicCommand: async () => { throw new StudioArtifactError('COMMAND_OUTCOME_UNKNOWN'); },
+  });
+  const uncertainBody = await uncertainResult.json();
+  mark(uncertainResult.status === 503 && uncertainBody.ok === false
+    && uncertainBody.outcome === 'commit_uncertain'
+    && uncertainBody.error?.code === 'COMMAND_OUTCOME_UNKNOWN'
+    && !JSON.stringify(uncertainBody).includes('failed_before_commit'),
+  'STUDIO-TR-009', 'handler.post-rpc-malformed-result-never-claims-precommit-failure',
+  'post-rpc-response-binding-unknown');
 
   let retainedAuthorityLoads = 0;
   const retainedAfterVersionBump = await handleStudioArtifactCommand(requestFor(), {
@@ -333,7 +346,10 @@ void (async () => {
       ? { actorId: ids[11], authorizationVersion: 3, capabilities: ['studio.artifacts.generate'] }
       : { actorId: ids[11], authorizationVersion: 4, capabilities: [] }),
   });
-  mark(revokedBeforeDisclosure.status === 403 && effects === 1, 'AUTH-004', 'api.revoked-before-terminal-disclosure', 'response-loss-revocation', studioPrBRuntime('revoked-after-effect', [], { artifact: 'studio-artifact-new' }));
+  const revokedBeforeDisclosureBody = await revokedBeforeDisclosure.json();
+  mark(revokedBeforeDisclosure.status === 503 && revokedBeforeDisclosureBody.outcome === 'commit_uncertain'
+    && revokedBeforeDisclosureBody.error?.code === 'COMMAND_OUTCOME_UNKNOWN' && effects === 1,
+  'AUTH-004', 'api.revoked-before-terminal-disclosure', 'response-loss-revocation', studioPrBRuntime('revoked-after-effect', [], { artifact: 'studio-artifact-new' }));
 
   let providerEffects = 0;
   const replay = await handleStudioArtifactCommand(requestFor(), {

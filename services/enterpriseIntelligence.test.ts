@@ -16,7 +16,10 @@ import {
   sanitizeEvidenceExcerpt,
   type ModernizationFactors,
 } from './enterpriseIntelligence';
+import { createDeliveryWorkspaceFixture, createMonitorBaselinesFixture } from './deliveryMonitor/fixtures';
+import { decodeDeliveryWorkspaceProjection, decodeMonitorApprovedBaselinesProjection } from './deliveryMonitor/contracts';
 import { emptyTranscriptFlowProjection } from './transcriptFlow/contracts';
+import { emptyStudioSourceFlowProjection } from './studioArtifacts/workspaceModel';
 
 const completeFactors: ModernizationFactors = {
   criticality: 'medium',
@@ -237,9 +240,51 @@ test('browser projection decoder rejects raw authority and sensitive server fiel
     studioDocuments: [], deliveryPackages: [], monitorBaselines: [],
     modernizationDecisions: [], blueprints: [], approvalResources: [], commandActivity: [],
     transcriptFlow: emptyTranscriptFlowProjection(),
+    studioSourceFlow: emptyStudioSourceFlowProjection(),
     assessPromotion: { state: 'contract_pending', acceptedCandidateCount: 0, provenanceComplete: false, idempotencyState: 'not_started', conflicts: [] },
   };
   assert.equal(decodeEnterpriseIntelligenceProjection(baseProjection).authorizationVersion, 7);
+  const deliveryWorkspace = decodeDeliveryWorkspaceProjection(createDeliveryWorkspaceFixture());
+  const monitorApprovedBaselines = decodeMonitorApprovedBaselinesProjection(createMonitorBaselinesFixture());
+  const decodedDelivery = decodeEnterpriseIntelligenceProjection({
+    ...baseProjection,
+    deliveryWorkspace: { ...deliveryWorkspace, organizationId: baseProjection.organizationId, workspaceId: baseProjection.workspaceId },
+    monitorApprovedBaselines: { ...monitorApprovedBaselines, organizationId: baseProjection.organizationId, workspaceId: baseProjection.workspaceId },
+  });
+  assert.equal(decodedDelivery.deliveryWorkspace?.outbox.length, 1);
+  assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].label, 'Delivery package v1');
+  assert.equal(decodedDelivery.deliveryWorkspace?.packages[0].items[0].aggregateId, deliveryWorkspace.packages[0].items[0].aggregateId);
+  assert.equal(decodedDelivery.monitorApprovedBaselines?.baselines.length, 1);
+  assert.throws(() => decodeEnterpriseIntelligenceProjection({ ...baseProjection, deliveryWorkspace: createDeliveryWorkspaceFixture() }));
+  assert.throws(() => decodeEnterpriseIntelligenceProjection({ ...baseProjection, monitorApprovedBaselines: createMonitorBaselinesFixture() }));
+  const uppercaseEquivalent = decodeEnterpriseIntelligenceProjection({
+    ...baseProjection,
+    deliveryWorkspace: {
+      ...deliveryWorkspace,
+      organizationId: baseProjection.organizationId.toUpperCase(),
+      workspaceId: baseProjection.workspaceId.toUpperCase(),
+    },
+    monitorApprovedBaselines: {
+      ...monitorApprovedBaselines,
+      organizationId: baseProjection.organizationId.toUpperCase(),
+      workspaceId: baseProjection.workspaceId.toUpperCase(),
+    },
+  });
+  assert.equal(uppercaseEquivalent.deliveryWorkspace?.organizationId, baseProjection.organizationId.toUpperCase());
+  assert.throws(
+    () => decodeEnterpriseIntelligenceProjection({
+      ...baseProjection,
+      deliveryWorkspace: { ...deliveryWorkspace, organizationId: '30000000-0000-4000-8000-000000000003', workspaceId: baseProjection.workspaceId },
+    }),
+    /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  );
+  assert.throws(
+    () => decodeEnterpriseIntelligenceProjection({
+      ...baseProjection,
+      monitorApprovedBaselines: { ...monitorApprovedBaselines, organizationId: baseProjection.organizationId, workspaceId: '40000000-0000-4000-8000-000000000004' },
+    }),
+    /ENTERPRISE_PROJECTION_SCOPE_MISMATCH/,
+  );
   assert.throws(
     () => decodeEnterpriseIntelligenceProjection({ ...baseProjection, providers: [{ secretReference: 'server-only' }] }),
     /ENTERPRISE_PROJECTION_SENSITIVE_FIELD/,

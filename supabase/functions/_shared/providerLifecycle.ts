@@ -1,6 +1,8 @@
 import type { EnterpriseAiProvider, EnterpriseAiCapability } from '../../../services/enterpriseIntelligence.ts';
 import { ENTERPRISE_AI_CAPABILITIES, ENTERPRISE_AI_PROVIDERS } from '../../../services/enterpriseIntelligence.ts';
 import {
+  createProviderValidationIdentity,
+  hashProviderValidationIdentity,
   isAllowedProviderEndpoint,
   validateProviderConnection,
 } from './enterpriseIntelligenceAi.ts';
@@ -18,6 +20,12 @@ import {
   type ProviderSecretBackend,
 } from './providerSecretAdapter.ts';
 import { postgrest, rpc, supabaseRpcErrorHasSignal } from './supabase.ts';
+import {
+  assertSyntheticAiLifecycleRegistrationAllowed,
+  assertSyntheticAiLifecycleOperationAllowed,
+  reserveSyntheticAiProviderEffect,
+  type SyntheticAiEffectPermit,
+} from './syntheticAiCampaign.ts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -92,6 +100,9 @@ export type ProviderLifecycleDeps = {
   validateConnection: typeof validateProviderConnection;
   now: () => Date;
   randomId: () => string;
+  assertCampaignRegistration(input: { organizationId: string; workspaceId: string }): Promise<void>;
+  assertCampaignLifecycle(input: { organizationId: string; workspaceId: string; providerConfigId: string; operation: string }): Promise<void>;
+  reserveCampaignEffect(input: Parameters<typeof reserveSyntheticAiProviderEffect>[0]): Promise<SyntheticAiEffectPermit>;
   secretDeleteTimeoutMs?: number;
 };
 
@@ -190,6 +201,11 @@ const isFreshValidation = (value: string | null | undefined, now: Date) => {
     && timestamp <= now.getTime()
     && now.getTime() - timestamp <= ENTERPRISE_PROVIDER_VALIDATION_MAX_AGE_MS;
 };
+
+const providerLifecycleEndpoint = (config: ProviderLifecycleConfig) => config.endpoint || ({
+  openai: 'https://api.openai.com', anthropic: 'https://api.anthropic.com',
+  gemini: 'https://generativelanguage.googleapis.com', groq: 'https://api.groq.com',
+} as Partial<Record<EnterpriseAiProvider, string>>)[config.provider] || '';
 
 export const assertProviderLifecycleOperationAuthority = (
   operation: ProviderLifecycleOperation,
@@ -537,6 +553,14 @@ export const executeProviderLifecycleCommand = async (
   }
 
   if (operation === 'provider.register') {
+    try {
+      await deps.assertCampaignRegistration({
+        organizationId: authority.organizationId,
+        workspaceId: authority.workspaceId,
+      });
+    } catch {
+      throw new ProviderLifecycleError('PROVIDER_BLOCKED');
+    }
     const provider = requireProvider(payload.provider);
     const displayName = requireString(payload.displayName, 240);
     const defaultModel = requireString(payload.defaultModel, 200);
@@ -579,6 +603,12 @@ export const executeProviderLifecycleCommand = async (
   }
 
   const config = await loadConfig(deps, authority, payload.providerConfigId);
+  try {
+    await deps.assertCampaignLifecycle({
+      organizationId: authority.organizationId, workspaceId: authority.workspaceId,
+      providerConfigId: config.id, operation,
+    });
+  } catch { throw new ProviderLifecycleError('PROVIDER_BLOCKED'); }
   if (config.status === 'retired' || config.status === 'revoked') throw new ProviderLifecycleError('PROVIDER_BLOCKED');
 
   if (operation === 'provider.secret.bind') {
@@ -612,10 +642,30 @@ export const executeProviderLifecycleCommand = async (
   }
 
   if (operation === 'provider.validate') {
+    if (!execution || !config.keyRef) throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
     let lastValidatedAt = typeof execution?.plan.lastValidatedAt === 'string' && execution.plan.validationSucceeded === true
       ? execution.plan.lastValidatedAt
       : undefined;
     if (!lastValidatedAt) {
+      let permit: SyntheticAiEffectPermit;
+      let validationIdentity: ReturnType<typeof createProviderValidationIdentity>;
+      try {
+        const endpoint = providerLifecycleEndpoint(config);
+        validationIdentity = createProviderValidationIdentity({ provider: config.provider, endpoint,
+          deployment: config.deployment, model: config.defaultModel, providerConfigId: config.id,
+          authorizationKeyRefId: config.keyRef.id, validationKeyRefId: config.keyRef.id });
+        permit = await deps.reserveCampaignEffect({
+          actorId: authority.actorId, organizationId: authority.organizationId, workspaceId: authority.workspaceId,
+          authorizationVersion: authority.authorizationVersion, receiptId: execution.receiptId,
+          effectId: execution.receiptId, executionToken: execution.executionToken, executionFence: execution.executionFence,
+          providerConfigId: config.id, keyRefId: config.keyRef.id, provider: config.provider,
+          endpoint: validationIdentity.endpoint,
+          model: config.defaultModel, operation: 'provider.validate',
+          requestHash: await hashProviderValidationIdentity(validationIdentity),
+          maximumOutputTokens: 32_768,
+        });
+      } catch { throw new ProviderLifecycleError('PROVIDER_BLOCKED'); }
+      if (!permit.ownsProviderEffect || permit.replayed) throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
       const providerKey = await resolveBoundSecret(config, authority, deps);
       try {
         await deps.validateConnection({
@@ -624,6 +674,10 @@ export const executeProviderLifecycleCommand = async (
           deployment: config.deployment,
           model: config.defaultModel,
           apiKey: providerKey,
+          providerConfigId: config.id,
+          authorizationKeyRefId: config.keyRef.id,
+          validationKeyRefId: config.keyRef.id,
+          effectPermit: permit,
         });
       } catch {
         throw new ProviderLifecycleError('VALIDATION_FAILED');
@@ -711,13 +765,34 @@ export const executeProviderLifecycleCommand = async (
       ? execution.plan.lastValidatedAt
       : undefined;
     if (!lastValidatedAt) {
+      if (!execution) throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+      let permit: SyntheticAiEffectPermit;
+      let validationIdentity: ReturnType<typeof createProviderValidationIdentity>;
       try {
+        const endpoint = providerLifecycleEndpoint(config);
+        validationIdentity = createProviderValidationIdentity({ provider: config.provider, endpoint,
+          deployment: config.deployment, model: config.defaultModel, providerConfigId: config.id,
+          authorizationKeyRefId: config.keyRef.id, validationKeyRefId: keyRefId });
+        permit = await deps.reserveCampaignEffect({
+          actorId: authority.actorId, organizationId: authority.organizationId, workspaceId: authority.workspaceId,
+          authorizationVersion: authority.authorizationVersion, receiptId: execution.receiptId,
+          effectId: execution.receiptId, executionToken: execution.executionToken, executionFence: execution.executionFence,
+          providerConfigId: config.id, keyRefId: config.keyRef.id, provider: config.provider,
+          endpoint: validationIdentity.endpoint, model: config.defaultModel, operation: 'provider.validate',
+          requestHash: await hashProviderValidationIdentity(validationIdentity),
+          maximumOutputTokens: 32_768,
+        });
+        if (!permit.ownsProviderEffect || permit.replayed) throw new ProviderLifecycleError('COMMAND_IN_PROGRESS');
         await deps.validateConnection({
           provider: config.provider,
           endpoint: config.endpoint,
           deployment: config.deployment,
           model: config.defaultModel,
           apiKey: prepared.value,
+          providerConfigId: config.id,
+          authorizationKeyRefId: config.keyRef.id,
+          validationKeyRefId: keyRefId,
+          effectPermit: permit,
         });
       } catch {
         await cleanupPlannedSecret(deps, authority, execution, 'VALIDATION_FAILED', {
@@ -868,4 +943,7 @@ export const createProviderLifecycleDeps = (
   validateConnection: validateProviderConnection,
   now: () => new Date(),
   randomId: () => crypto.randomUUID(),
+  assertCampaignRegistration: assertSyntheticAiLifecycleRegistrationAllowed,
+  assertCampaignLifecycle: assertSyntheticAiLifecycleOperationAllowed,
+  reserveCampaignEffect: reserveSyntheticAiProviderEffect,
 });

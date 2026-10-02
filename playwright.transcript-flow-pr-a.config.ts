@@ -1,6 +1,9 @@
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'transcriptFlowPrA.spec.ts',
   forbidOnly: true,
@@ -8,7 +11,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   reporter: 'list',
-  outputDir: `${process.env.TEMP || process.env.TMP || '.'}/avalaos-transcript-flow-pr-a-playwright`,
+  outputDir: path.join(tmpdir(), 'avalaos-transcript-flow-pr-a-playwright', String(process.pid)),
   use: {
     baseURL: 'http://127.0.0.1:4193',
     trace: 'off',

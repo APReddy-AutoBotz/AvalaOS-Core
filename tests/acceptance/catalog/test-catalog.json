@@ -407,8 +407,11 @@
       "title": "Sandbox: keyboard accessibility",
       "module": "Sandbox",
       "feature": "keyboard",
-      "ruleRequirement": "keyboard accessibility",
+      "ruleRequirement": "Keyboard focus and nonempty strict contrast proof on the actual opaque Home attention target throughout normal and reduced screen-entry motion; unresolved whole-page gradient diagnostics are not contrast PASS",
       "sourceReference": [
+        "App.tsx",
+        "components/shared/CustomDashboardView.tsx",
+        "index.css",
         "services/hostedSandboxRoute.ts"
       ],
       "branchIds": [
@@ -425,9 +428,13 @@
         "Real providers disabled"
       ],
       "actions": [
-        "Exercise keyboard accessibility through the declared environment"
+        "Enter every sandbox persona on Desktop Chrome and Pixel 7 and activate the first-tab-stop skip link with Enter",
+        "Close mobile navigation, select My Work through the actual workspace switcher, then navigate Home for each persona, activate the skip link again, and sample the actual main animation under normal and reduced motion",
+        "Require strict positive contrast on the existing Open work paragraph inside its opaque Home summary card, plus the unchanged serious or critical full-page accessibility gate; retain whole-page contrast incompletes separately as unresolved_manual",
+        "Retain exactly one execution-bound full-page summary per persona and device before terminal assertions; reject empty or inapplicable-only scans and missing, duplicate, late, stale or substituted summaries without promoting unresolved contrast to PASS",
+        "Prove the contrast oracle rejects the old faded or invisible animation in an isolated in-memory negative check, then restore and reverify product rendering"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
+      "expectedResult": "Main content retains keyboard focus, opacity one and no blur; strict motion contrast proves only the existing opaque Home paragraph, while unresolved whole-page gradient measurements are never counted as passing contrast",
       "expectedMutation": "declared synthetic state transition",
       "expectedMutationCount": 1,
       "expectedDenial": false,

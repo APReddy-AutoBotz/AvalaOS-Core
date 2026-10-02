@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { contentToStructuredSections, decodeStudioWorkspaceProjection, structuredSectionsToContent, StudioAuthorityEpoch, StudioWorkspaceProjectionError } from './workspaceModel.ts';
+import { contentToStructuredSections, decodeStudioSourceFlowProjection, decodeStudioWorkspaceProjection, studioDirectPackageEligibility, structuredSectionsToContent, StudioAuthorityEpoch, StudioWorkspaceProjectionError } from './workspaceModel.ts';
 
 const ids = Array.from({ length: 20 }, (_, index) => `${String(index + 1).padStart(8, '0')}-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
 const context = { organizationId: ids[0], workspaceId: ids[1] };
@@ -74,6 +74,23 @@ const assessOnly=decodeStudioWorkspaceProjection({...projection,mode:'accepted_a
 const hybrid=decodeStudioWorkspaceProjection(projection,context);
 const explicitReuse=decodeStudioWorkspaceProjection({...projection,selectedSources:[assessSource,{...assessSource,family:'studio',role:'supporting',label:'Explicit exact-version reuse'}],totalSelectedSourceCount:2},context);
 assert.equal(direct.planningOnly,true);assert.equal(assessOnly.mode,'accepted_assess_handoff');assert.deepEqual(hybrid.selectedSources.map(source=>source.family),['assess','studio']);assert.equal(new Set(explicitReuse.selectedSources.map(source=>source.sourceVersionId)).size,1);
+const flowIds=Array.from({length:8},(_,index)=>`9000000${index}-0000-4000-8000-${String(index+1).padStart(12,'0')}`);
+const studioSourceFlow={
+  featureState:{sourceMutationsEnabled:true,providerExtractionEnabled:true},
+  sources:[{sourceId:flowIds[0],versionSelector:flowIds[1],displayName:'Workshop transcript',versionLabel:'Source version 1',mimeType:'text/plain',extractedCharacterCount:120,state:'ready',selectable:true,reuseState:'unused'}],
+  sourceSets:[{id:flowIds[2],versionSelector:flowIds[3],version:1,ownerModule:'studio',label:'Studio source set',versionLabel:'Source-set version 1',status:'locked',sourceCount:1,extractedCharacterCount:120,members:[{sourceId:flowIds[0],versionSelector:flowIds[1],displayName:'Workshop transcript',versionLabel:'Source version 1',ordinal:1,role:'primary',extractedCharacterCount:120,state:'ready'}],lockState:'locked',blockers:[],updatedAt:'2026-09-24T05:00:00.000Z'}],
+  inputBundles:[{id:flowIds[4],versionSelector:flowIds[5],version:1,ownerModule:'studio',label:'Studio input bundle',versionLabel:'Bundle version 1',status:'locked',sourceSetIds:[flowIds[2]],sourceSetVersions:[{sourceSetId:flowIds[2],sourceSetVersionSelector:flowIds[3],sourceSetVersion:1,ordinal:1}],sourceVersionSelectors:[flowIds[1]],sourceCount:1,extractedCharacterCount:120,lockedAt:'2026-09-24T05:01:00.000Z'}],
+  extractionJobs:[{id:flowIds[6],inputBundleId:flowIds[4],inputBundleVersionId:flowIds[5],inputBundleVersion:1,status:'succeeded',candidateCount:1,bindingCount:1,createdAt:'2026-09-24T05:02:00.000Z',completedAt:'2026-09-24T05:02:01.000Z'}],
+  candidates:[{id:flowIds[7],candidateVersion:1,inputBundleId:flowIds[4],inputBundleVersionId:flowIds[5],inputBundleVersion:1,extractionBindingId:flowIds[6],extractionJobId:flowIds[6],sourceSetId:flowIds[2],sourceSetVersionId:flowIds[3],sourceSetVersion:1,sourceId:flowIds[0],sourceVersionId:flowIds[1],sourceLabel:'Workshop transcript',sourceVersionLabel:'Source version 1',field:'business_requirement',value:'Retain the exact approved invoice exception.',safeExcerpt:'approved invoice exception',sourceLocator:'lines 8-9',confidence:0.92,status:'accepted',provenanceState:'anchored',reviewState:'reviewed_by_you',editCount:0,reviewedAt:'2026-09-24T05:03:00.000Z'}],
+};
+const decodedFlow=decodeStudioSourceFlowProjection(studioSourceFlow);
+assert.equal(studioDirectPackageEligibility(decodedFlow,flowIds[5]).eligible,true);
+assert.equal(studioDirectPackageEligibility({...decodedFlow,candidates:decodedFlow.candidates.map(candidate=>({...candidate,status:'suggested',reviewState:'pending'}))},flowIds[5]).eligible,false);
+assert.equal(studioDirectPackageEligibility({...decodedFlow,extractionJobs:[...decodedFlow.extractionJobs,{...decodedFlow.extractionJobs[0],id:ids[5],status:'failed' as const,candidateCount:0,createdAt:'2026-09-24T05:04:00.000Z',completedAt:'2026-09-24T05:04:01.000Z'}]},flowIds[5]).eligible,true,'a newer failed retry cannot erase retained exact accepted coverage');
+assert.equal(studioDirectPackageEligibility({...decodedFlow,candidates:decodedFlow.candidates.map(candidate=>({...candidate,provenanceState:'incomplete' as const}))},flowIds[5]).eligible,false,'incomplete grounding cannot satisfy package coverage');
+assert.throws(()=>decodeStudioSourceFlowProjection({...studioSourceFlow,inputBundles:[{...studioSourceFlow.inputBundles[0],sourceCount:2}]}),StudioWorkspaceProjectionError);
+assert.throws(()=>decodeStudioSourceFlowProjection({...studioSourceFlow,candidates:[{...studioSourceFlow.candidates[0],rawText:'must-not-project'}]}),StudioWorkspaceProjectionError);
+assert.throws(()=>decodeStudioSourceFlowProjection({...studioSourceFlow,featureState:{...studioSourceFlow.featureState,reason:'unknown'}}),StudioWorkspaceProjectionError);
 const capabilities=['studio.artifacts.read','studio.handoffs.read','studio.sources.read','studio.templates.read'];
 const baseLineage={profile:'node-domain',sourcePackageId:ids[6],sourcePackageVersionId:ids[7],sourcePackageVersion:3,sourcePackageHash:'b'.repeat(64),templateId:ids[2],templateVersionId:ids[3],templateVersion:'studio-brd-2',templateHash:'a'.repeat(64),handoffId:ids[4],handoffVersionId:ids[5],handoffVersion:1,artifactId:ids[13],artifactVersionId:ids[14],artifactVersion:1,authorActorId:ids[15],reviewerActorId:ids[16],approverActorId:ids[17],separationOfDuty:'independent_author_reviewer_approver'};
 const marker=(testId:string,assertionId:string,fixture:string,lineage:Record<string,unknown>)=>console.log(`PR_B_ASSERTION ${JSON.stringify({testId,assertionId,fixture,result:'passed',runtimeContext:{persona:{id:ids[18],state:'active',capabilities},organizationId:context.organizationId,workspaceId:context.workspaceId,lineage:{...baseLineage,...lineage}}})}`);
@@ -83,4 +100,4 @@ marker('STUDIO-TR-003','direct-domain-no-fabricated-assess-ancestry','STUDIO-DIR
 marker('PATH-005','hybrid-domain-disjoint-source-families','HYBRID-DOMAIN-01',{mode:hybrid.mode,assessSourceVersionId:assessSource.sourceVersionId,studioSourceVersionId:studioSource.sourceVersionId});
 marker('STUDIO-TR-002','hybrid-domain-exact-lineage','HYBRID-DOMAIN-01',{mode:hybrid.mode,selectedSourceCount:hybrid.selectedSources.length,inputBundleVersionId:hybrid.inputBundleVersionId,inputBundleVersion:hybrid.inputBundleVersion});
 marker('PATH-006','explicit-exact-version-reuse-domain','EXPLICIT-REUSE-DOMAIN-01',{mode:explicitReuse.mode,reusedSourceVersionId:assessSource.sourceVersionId,sourceFamilies:explicitReuse.selectedSources.map(source=>source.family),automaticReuse:false});
-console.log('studio PR B workspace model: 42 strict projection, lineage, template, handoff and structured-content assertions passed');
+console.log('studio PR B workspace model: 47 strict projection, lineage, template, handoff and structured-content assertions passed');

@@ -14,6 +14,8 @@ assert.match(source, /Request more information/);
 assert.match(source, /Reject evidence/);
 assert.match(source, /Approve reviewed decision/);
 assert.match(source, /Request changes/);
+assert.match(source, /capabilities\.includes\(ASSESS_V2_CAPABILITIES\.draftWrite\)/, 'the author must be able to read a requested revision');
+assert.match(source, /disabled=\{busy \|\| !can\(ASSESS_V2_CAPABILITIES\.draftWrite\)\}/, 'only a draft writer may start a requested revision');
 assert.match(source, /Avala Govern action and control review/);
 assert.match(source, /controlStatuses\[control\.controlId\] \?\? control\.status/,'reviewer disposition edits override the loaded projection');
 assert.match(source, /Create durable Studio handoff/);

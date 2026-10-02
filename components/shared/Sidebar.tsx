@@ -31,7 +31,7 @@ interface SidebarProps {
   currentScope: Scope;
   currentView: View;
   onViewChange: (view: View) => void;
-  onScopeChange: (scope: Scope) => void;
+  onAdminNavigate: () => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   canAccessAdmin?: boolean;
@@ -96,7 +96,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   currentScope,
   currentView,
   onViewChange,
-  onScopeChange,
+  onAdminNavigate,
   collapsed,
   onToggleCollapse,
   canAccessAdmin: adminAccessOverride,
@@ -183,7 +183,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     return button;
   };
 
-  const activeSubnav = !collapsed && !governOpen
+  const activeSubnav = !collapsed && !governOpen && currentScope.type !== ScopeType.ORGANIZATION
     ? currentView === View.PROCESS_CATALOG || currentView === View.TEMPLATE_LIBRARY || currentView === View.ENTERPRISE_INTELLIGENCE ? assessSubnav
       : currentView === View.DOCS_FORGE || currentView === View.DOCS || currentView === View.TEMPLATE_STUDIO || currentView === View.WORKSPACE ? studioSubnav
         : deliveryViews.has(currentView) ? deliverySubnav
@@ -222,7 +222,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button data-testid="mobile-sign-out" type="button" onClick={signOut} className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold text-[var(--av-color-brand-primary)] transition-colors hover:bg-[var(--av-color-bg-subtle)]">Sign Out</button>
         </div>}
         {!collapsed && <p className="nav-section-label px-3 pb-2">Administration</p>}
-        {canAccessAdmin && <button type="button" onClick={() => { onScopeChange({ type: ScopeType.ORGANIZATION }); onViewChange(View.ENTERPRISE_INTELLIGENCE); onMobileClose?.(); }} aria-current={currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentView === View.ENTERPRISE_INTELLIGENCE && currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'lg:justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:hidden' : ''}>Admin / Intelligence</span></button>}
+        {canAccessAdmin && <button type="button" onClick={() => { onAdminNavigate(); onMobileClose?.(); }} aria-current={currentView === View.WORKSPACE && currentScope.type === ScopeType.ORGANIZATION ? 'page' : undefined} title={collapsed ? 'Admin' : undefined} className={`nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${currentView === View.WORKSPACE && currentScope.type === ScopeType.ORGANIZATION ? 'is-active font-bold' : 'text-[var(--av-color-text-muted)] hover:bg-[var(--av-color-bg-subtle)] hover:text-[var(--av-color-text)]'} ${collapsed ? 'lg:justify-center' : ''}`}><CogIcon className="h-5 w-5 shrink-0" /><span className={collapsed ? 'lg:hidden' : ''}>Admin</span></button>}
       </div>
     </aside>
   </>;

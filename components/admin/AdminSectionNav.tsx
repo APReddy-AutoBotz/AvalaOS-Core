@@ -25,7 +25,7 @@ const AdminSectionNav: React.FC<AdminSectionNavProps> = ({
             key={section.key}
             type="button"
             onClick={() => onSelectSection(section.key)}
-            className={`rounded-xl px-3 py-3 text-left transition-colors ${active
+            className={`rounded-xl px-3 py-3 text-left transition-none ${active
               ? 'bg-[#002C4B] text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900'
             }`}

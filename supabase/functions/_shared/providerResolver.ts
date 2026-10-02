@@ -20,6 +20,7 @@ export type ProviderResolverOperation =
   | 'refine_section'
   | 'test_provider_connection'
   | 'assess.evidence.extract'
+  | 'studio.evidence.extract'
   | 'assess.evidence.summarize'
   | 'delivery.work_items.draft'
   | 'modernization.rationale.draft'
@@ -235,6 +236,7 @@ const operations: ProviderResolverOperation[] = [
   'refine_section',
   'test_provider_connection',
   'assess.evidence.extract',
+  'studio.evidence.extract',
   'assess.evidence.summarize',
   'delivery.work_items.draft',
   'modernization.rationale.draft',

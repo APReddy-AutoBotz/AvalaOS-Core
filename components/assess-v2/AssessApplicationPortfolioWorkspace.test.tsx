@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import AssessApplicationPortfolioWorkspace,{ committedAssessment, currentApplicationLifecycle, nextCommittedApplicationMetadata, parseApplicationImportRows, renderApplicationPortfolioState, syntheticApplicationPortfolioFixture } from './AssessApplicationPortfolioWorkspace';
+import AssessApplicationPortfolioWorkspace,{ applicationProjectionErrorCopy, committedAssessment, currentApplicationLifecycle, nextCommittedApplicationMetadata, parseApplicationImportRows, renderApplicationPortfolioState, syntheticApplicationPortfolioFixture } from './AssessApplicationPortfolioWorkspace';
 assert.equal(renderApplicationPortfolioState({loading:true,applications:[]}).state,'loading');
 assert.equal(renderApplicationPortfolioState({offline:true,applications:[]}).state,'offline');
 assert.equal(renderApplicationPortfolioState({readOnly:true,applications:[]}).state,'read-only');
 assert.equal(renderApplicationPortfolioState({failedPersistence:true,applications:[]}).state,'failed-persistence');
+assert.equal(renderApplicationPortfolioState({unavailable:true,failedPersistence:true,applications:[]}).state,'unavailable');
+assert.doesNotMatch(applicationProjectionErrorCopy(new Error('P0001')),/P0001|persistence/i);
 assert.equal(renderApplicationPortfolioState({failedPersistence:true,projectionReloadRequired:true,applications:[]}).state,'projection-reload-required');
 assert.equal(renderApplicationPortfolioState({applications:[]}).state,'empty');
 const fixture=syntheticApplicationPortfolioFixture();assert.equal(fixture.length,3);assert.equal(fixture[0].version,1);assert.equal(fixture[0].metadata.synthetic,true);
@@ -28,6 +30,9 @@ assert.equal(currentApplicationLifecycle(projection,'app-id').draft?.id,'revised
 assert.equal(currentApplicationLifecycle(projection,'app-id').changesRequested,undefined,'historical changes-requested row must not remain actionable');
 const tenant={userId:'u',organizationId:'o',organizationName:'Org',workspaceId:'w',workspaceName:'Ws',authorizationVersion:1,capabilities:['assess.applications.read','assess.applications.write','assess.applications.import','assess.applications.finalize','assess.applications.review','assess.applications.portfolio.read','assess.applications.portfolio.write']};
 const html=renderToStaticMarkup(React.createElement(AssessApplicationPortfolioWorkspace,{tenantContext:tenant as any,transport:{loadProjection:async()=>projection,invoke:async()=>({outcome:'committed' as const,resource:{id:'server',version:1,status:'draft'}})}}));
+const requesterHtml=renderToStaticMarkup(React.createElement(AssessApplicationPortfolioWorkspace,{tenantContext:{...tenant,capabilities:['assess.v2.read','assess.v2.create']} as any,transport:{loadProjection:async()=>{throw new Error('Forbidden request was sent')},invoke:async()=>{throw new Error('Forbidden command was sent')}}}));
+assert.match(requesterHtml,/Application Portfolio is unavailable for your current workspace role/);
+assert.doesNotMatch(requesterHtml,/Failed persistence|Create portfolio application|CSV \/ JSON import|P0001/);
 for(const name of ['Create portfolio application','Save portfolio metadata','Import portfolio rows','Save portfolio assessment','Submit portfolio assessment for review','Record portfolio review decision','Create revised portfolio assessment','Generate application modernization snapshot','Show synthetic AP fixture'])assert.match(html,new RegExp(name));
 for(const stale of ['Create manual application','Save metadata version','>Import rows<','>Finalize<','>Approve<','>Review<','>Start revision<','Create portfolio snapshot'])assert.doesNotMatch(html,new RegExp(stale));
 console.log('PR 1G application portfolio workspace authority tests passed.');

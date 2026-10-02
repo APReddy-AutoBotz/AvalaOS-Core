@@ -1,5 +1,17 @@
 export type FullPlatformExecutionMode = 'fixture' | 'connected';
 
+export const hasAtomicPaletteTransition = (style: {
+  property: string;
+  duration: string;
+  delay: string;
+}): boolean => {
+  if (style.property === 'none') return true;
+  // Computed styles default to `all` even on labels with no animation. A
+  // non-zero duration or delay can decouple foreground/background changes.
+  const zeroTimes = (value: string) => value.split(',').every(time => /^0(?:\.0+)?m?s$/u.test(time.trim()));
+  return style.property.trim().length > 0 && zeroTimes(style.duration) && zeroTimes(style.delay);
+};
+
 export interface FullPlatformServerPreflight {
   schemaVersion: 'avalaos-full-platform-preflight-v1';
   status: 'ready';

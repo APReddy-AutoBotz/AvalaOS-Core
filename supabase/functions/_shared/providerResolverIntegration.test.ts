@@ -165,6 +165,7 @@ const runScenario = async (
     useDefaultSecretLookup?: boolean;
     keyRef?: ProviderKeyRefRow | null;
     workspaceMembership?: WorkspaceMembershipRoleContext | null;
+    campaignDenied?: boolean;
     throwAt?: 'membership' | 'workspaceMembership' | 'policy' | 'config' | 'keyRef';
   } = {},
 ) => {
@@ -189,6 +190,10 @@ const runScenario = async (
       assertNoSensitiveFields(event);
       if (options.auditFails) throw new Error('audit unavailable');
       return { status: 'persisted' };
+    },
+    assertCampaignLegacy: async () => {
+      order.push('campaign-authority');
+      if (options.campaignDenied) throw new Error('campaign denied');
     },
   };
 
@@ -355,6 +360,7 @@ const main = async () => {
     'resolver:config',
     'resolver:keyRef',
     'audit:allowed',
+    'campaign-authority',
     'secret',
     'createJob',
     'provider',
@@ -367,6 +373,14 @@ const main = async () => {
   assert.equal(refineAllowed.result.status, 'allowed');
   assert.equal(refineAllowed.providerCalls, 1);
   assert.equal(refineAllowed.createJobCalls, 1);
+
+  const campaignDenied = await runScenario('generate_document', { campaignDenied: true });
+  assert.equal(campaignDenied.result.status, 'blocked');
+  assert.equal(campaignDenied.result.body.failureClass, 'provider_call_blocked');
+  assert.equal(campaignDenied.secretCalls, 0);
+  assert.equal(campaignDenied.createJobCalls, 0);
+  assert.equal(campaignDenied.providerCalls, 0);
+  assert.equal(campaignDenied.order.at(-1), 'campaign-authority');
 
   const auditFailure = await runScenario('generate_document', { auditFails: true });
   assert.equal(auditFailure.result.status, 'blocked');

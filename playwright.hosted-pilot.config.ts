@@ -6,6 +6,7 @@ if (!rawUrl) throw new Error('HOSTED_PILOT_URL is required; hosted acceptance ca
 const hostedOrigin = await validateResolvedHostedUrl(rawUrl);
 
 export default defineConfig({
+  captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser',
   testMatch: 'hostedPilot.spec.ts',
   forbidOnly: true,

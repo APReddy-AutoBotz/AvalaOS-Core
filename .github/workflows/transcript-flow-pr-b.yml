@@ -15,27 +15,8 @@ concurrency:
 jobs:
   exact-head-governed-evidence:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      PR_B_BASE_SHA: 11e670003a73b0ab5a28650b70afac4b267760f4
       PR_B_EXACT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      ENTERPRISE_INTELLIGENCE_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      PR1D_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      PR1E_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,18 +30,5 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Verify PR B registry, fixtures, owners, lineage, and adversarial evidence contract
-        run: npm run test:transcript-flow:studio-evidence-contract
-      - name: Execute the exact governed multi-source Studio PR B and retained-platform command registry
-        run: node scripts/runTranscriptFlowPrBEvidence.mjs
-      - name: Independently verify per-assertion exact-head PR B evidence
-        run: npm run test:transcript-flow:studio-evidence
-      - name: Upload sanitized exact-head governed multi-source Studio PR B evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: governed-multisource-studio-pr-b-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
-          path: output/process-lifecycle-pr-b/
-          if-no-files-found: error
-          retention-days: 14
+      - name: Verify immutable PR B evidence contract at its retained exact head
+        run: npm run test:transcript-flow:studio-evidence-contract:retained

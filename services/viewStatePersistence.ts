@@ -115,8 +115,13 @@ function isCleanPersistedScope(value: unknown, normalizedScope: Scope) {
   );
 }
 
-function isOrganizationWorkspaceDecisionPath(view: View, scope: Scope, user: User | null) {
-  return view === View.WORKSPACE && scope.type === ScopeType.ORGANIZATION && user?.orgRole === 'Admin';
+function isOrganizationWorkspaceDecisionPath(view: View, scope: Scope, user: User | null, authoritativeCapabilities?: readonly string[]) {
+  // A supplied server projection (including an empty one) replaces legacy role
+  // labels. Navigation preservation is presentation, never mutation authority.
+  const adminAccess = authoritativeCapabilities === undefined
+    ? user?.orgRole === 'Admin'
+    : authoritativeCapabilities.some(capability => ['org.admin', 'security.manage', 'byok.manage'].includes(capability));
+  return Boolean(user) && view === View.WORKSPACE && scope.type === ScopeType.ORGANIZATION && adminAccess;
 }
 
 export function resolvePersistedViewScopeState({
@@ -147,7 +152,7 @@ export function resolvePersistedViewScopeState({
   if (
     access.allowed ||
     access.guardSeverity === 'wait' ||
-    (preserveOrganizationWorkspace && isOrganizationWorkspaceDecisionPath(normalizedView, normalizedScope, user))
+    (preserveOrganizationWorkspace && isOrganizationWorkspaceDecisionPath(normalizedView, normalizedScope, user, authoritativeCapabilities))
   ) {
     return {
       view: normalizedView,

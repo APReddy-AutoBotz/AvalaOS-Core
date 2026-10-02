@@ -8,9 +8,10 @@ export default defineConfig({
   // serves the immutable output, so preview-time VITE_* values cannot select the
   // pilot authority boundary for this isolated production-build harness.
   define: {
+    '__AVALA_SYNTHETIC_BROWSER_TEST_BUILD__': JSON.stringify(true),
     'import.meta.env.VITE_AVALA_RUNTIME_MODE': JSON.stringify('pilot'),
-    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://trust-test.invalid'),
-    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('test-anon-key'),
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://127.0.0.1:59999'),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('sb_publishable_synthetic_public_key_264'),
   },
   build: {
     outDir: 'dist-trust-assurance',

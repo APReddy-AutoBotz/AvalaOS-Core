@@ -4,7 +4,7 @@ import { buildApplicationCommand, stableApplicationIdempotencyKey, sendApplicati
 
 (async()=>{
 const USER='11111111-1111-4111-8111-111111111111',ORG='22222222-2222-4222-8222-222222222222',WS='33333333-3333-4333-8333-333333333333',APP='44444444-4444-4444-8444-444444444444',APP2='44444444-4444-4444-8444-444444444445',META='55555555-5555-4555-8555-555555555555',META2='55555555-5555-4555-8555-555555555556',ASSESSMENT='66666666-6666-4666-8666-666666666666',RECEIPT='77777777-7777-4777-8777-777777777777',ECON='88888888-8888-4888-8888-888888888888';
-const context={userId:USER,organizationId:ORG,organizationName:'Org',workspaceId:WS,workspaceName:'Ws',authorizationVersion:4,capabilities:['assess.applications.write']};
+const context={userId:USER,organizationId:ORG,organizationName:'Org',workspaceId:WS,workspaceName:'Ws',authorizationVersion:4,capabilities:['assess.applications.write','assess.applications.read','assess.applications.portfolio.read']};
 const metadata:ApplicationMetadata={name:'ERP',businessCapabilities:[],supportedProcesses:[],businessCriticality:'Unknown',lifecycleState:'Unknown',sourceCode:'Unknown',documentationQuality:'Unknown',automatedTestMaturity:'Unknown',deploymentRepeatability:'Unknown',observability:'Unknown',dataClassifications:[],regulatedData:'Unknown',operatingRegions:[],interfaces:[],upstreamDependencies:[],downstreamDependencies:[],realTime:'Unknown',eventDriven:'Unknown',synchronous:'Unknown',batch:'Unknown',synthetic:false};
 const app:ApplicationRecord={id:APP,orgId:ORG,workspaceId:WS,version:1,metadataVersion:1,metadata,authorId:USER,status:'draft',evidence:[]};
 const app2:ApplicationRecord={...app,id:APP2,metadata:{...metadata,name:'CRM'}};
@@ -20,6 +20,30 @@ let invoked:any;const result=await sendApplicationCommand(context as any,'applic
 assert.equal((await defaultApplicationPortfolioTransport.invoke(command)).resource.id,APP);
 assert.equal((await defaultApplicationPortfolioTransport.loadProjection(context as any)).inventory[0].id,APP);
 assert.equal(decode(projectionDto).assessments[0].dimensions.length,7);
+const snapshotOnlyDto={...projectionDto,inventory:[],metadataVersions:[],importReceipts:[],rowOutcomes:[],processLinks:[],dependencies:[],assessments:[],dimensions:[],recommendations:[],reviews:[],economicsReferences:[]};
+const snapshotRead=decodeApplicationProjection(snapshotOnlyDto,{organizationId:ORG,workspaceId:WS,readScope:'snapshot'});
+assert.equal(snapshotRead.inventory.length,0);
+assert.equal(snapshotRead.portfolioSnapshot?.inventoryCount,2);
+assert.equal(snapshotRead.waves.length,2);
+const detailsOnlyDto={...projectionDto,portfolioSnapshot:null,waves:[]};
+assert.equal(decodeApplicationProjection(detailsOnlyDto,{organizationId:ORG,workspaceId:WS,readScope:'details'}).inventory.length,2);
+for(const hostile of [
+  {...snapshotOnlyDto,inventory:[app]},
+  {...snapshotOnlyDto,portfolioSnapshot:{...projectionDto.portfolioSnapshot,workspaceId:'33333333-3333-4333-8333-333333333334'}},
+  {...snapshotOnlyDto,portfolioSnapshot:{...projectionDto.portfolioSnapshot,inventoryCount:1}},
+  {...snapshotOnlyDto,waves:[waves[0]]},
+]) assert.throws(()=>decodeApplicationProjection(hostile,{organizationId:ORG,workspaceId:WS,readScope:'snapshot'}),/MALFORMED_APPLICATION_PROJECTION/);
+assert.throws(()=>decodeApplicationProjection(projectionDto,{organizationId:ORG,workspaceId:WS,readScope:'details'}),/MALFORMED_APPLICATION_PROJECTION/);
+let forbiddenRpcCalls=0;
+(globalThis as any).__pr1gSupabaseClient.rpc=async()=>{forbiddenRpcCalls++;return{data:projectionDto}};
+await assert.rejects(()=>defaultApplicationPortfolioTransport.loadProjection({...context,capabilities:[]} as any),/PROJECTION_UNAVAILABLE/);
+assert.equal(forbiddenRpcCalls,0,'portfolio RPC must not be sent without either read capability');
+(globalThis as any).__pr1gSupabaseClient.rpc=async()=>({data:projectionDto});
+;(globalThis as any).__pr1gSupabaseClient.rpc=async()=>({data:snapshotOnlyDto});
+assert.equal((await defaultApplicationPortfolioTransport.loadProjection({...context,capabilities:['assess.applications.portfolio.read']} as any)).portfolioSnapshot?.inventoryCount,2);
+;(globalThis as any).__pr1gSupabaseClient.rpc=async()=>({data:detailsOnlyDto});
+assert.equal((await defaultApplicationPortfolioTransport.loadProjection({...context,capabilities:['assess.applications.read']} as any)).inventory.length,2);
+;(globalThis as any).__pr1gSupabaseClient.rpc=async()=>({data:projectionDto});
 
 const malformed=(mutate:(value:any)=>any)=>assert.throws(()=>decode(mutate(structuredClone(projectionDto))),/MALFORMED_APPLICATION_PROJECTION/);
 malformed(value=>{delete value.inventory[0].status;return value});

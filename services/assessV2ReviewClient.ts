@@ -1,5 +1,5 @@
 import type { TenantContextProjection } from '../types';
-import { supabase } from './supabaseClient';
+import { beginControlledHumanCommand, completeControlledHumanCommand, isControlledHumanRuntimeEnabled, supabase } from './supabaseClient';
 import { EnterpriseBoundaryError } from './enterpriseAssess';
 import { isEnterpriseObject, readEnterpriseErrorCode } from './enterpriseAssessContract';
 import { buildAssessV2ReviewEnvelope, type EvidenceAttestationOutcome, type ReviewResolution } from './assessV2ReviewClientContract';
@@ -100,6 +100,16 @@ const committedProjection = (value: unknown): AssessV2ReviewProjection => {
   return parseProjection(value.resource);
 };
 
+const controlledDigest = async (value: unknown) => {
+  const canonical = (input: unknown): string => Array.isArray(input) ? `[${input.map(canonical).join(',')}]`
+    : input && typeof input === 'object'
+      ? `{${Object.keys(input as Record<string, unknown>).sort().map(key => `${JSON.stringify(key)}:${canonical((input as Record<string, unknown>)[key])}`).join(',')}}`
+      : JSON.stringify(input);
+  if (!globalThis.crypto?.subtle) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value)));
+  return `sha256:${Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+};
+
 export const readAssessV2ReviewQueue = async (context: TenantContextProjection, transport: AssessV2ReviewTransport = defaultTransport) => {
   const value = await transport.readQueue(context);
   if (!Array.isArray(value)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
@@ -114,8 +124,19 @@ export const readEligibleAssessV2Reviewers = async (context: TenantContextProjec
 
 const execute = async (context: TenantContextProjection, commandType: string, projection: AssessV2ReviewProjection, payload: Record<string, unknown>, operation: string, transport: AssessV2ReviewTransport) => {
   const idempotencyKey = `${operation}:${projection.caseId}:${projection.decisionId}:${projection.reviewSequence}`;
+  const controlled = isControlledHumanRuntimeEnabled() && commandType === 'assessment_v2.review.resolve'
+    ? await beginControlledHumanCommand({
+      action: commandType, targetFamily: 'assess_case', targetId: projection.caseId, expectedVersion: projection.caseVersion,
+      selectorBindings: {
+        caseId: projection.caseId, decisionId: projection.decisionId, reviewSequence: projection.reviewSequence,
+        resolution: payload.resolution, rationaleDigest: await controlledDigest(payload.rationale), conditionsDigest: await controlledDigest(payload.conditions),
+      },
+    })
+    : null;
   const envelope = buildAssessV2ReviewEnvelope(context, commandType, { caseId: projection.caseId, decisionId: projection.decisionId, reviewSequence: projection.reviewSequence, ...payload }, idempotencyKey, projection.caseVersion);
-  return committedProjection(await transport.invoke(envelope));
+  const result = committedProjection(await transport.invoke(controlled ? { ...envelope, requestId: controlled.requestId } : envelope));
+  if (controlled) await completeControlledHumanCommand(controlled);
+  return result;
 };
 
 export const attestAssessV2Evidence = (context: TenantContextProjection, projection: AssessV2ReviewProjection, evidenceId: string, claimIds: string[], outcome: EvidenceAttestationOutcome, rationale: string, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.evidence.attest', projection, { evidenceId, claimIds, outcome, rationale }, `attest:${evidenceId}:${outcome}`, transport);

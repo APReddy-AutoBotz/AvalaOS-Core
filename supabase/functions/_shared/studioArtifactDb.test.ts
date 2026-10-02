@@ -191,7 +191,7 @@ void (async () => {
   for (const candidate of malformedResults) {
     try { await executeStudioAtomicCommand(handoffCommand, async () => candidate.value as never); }
     catch (error) {
-      if (error instanceof StudioArtifactError && error.code === 'COMMAND_UNAVAILABLE') {
+      if (error instanceof StudioArtifactError && error.code === 'COMMAND_OUTCOME_UNKNOWN') {
         rejectedMalformedResults.push(candidate.fixture);
       }
     }
@@ -463,6 +463,81 @@ void (async () => {
   mark(rpcName === STUDIO_RPC.generationClaim && claim.reconcileOnly && !claim.providerAllowed && claim.executionFence === 8
     && rpcArgs.p_attempt_id === ids[9] && rpcArgs.p_lease_seconds === 45,
   'IDEMP-002-B', 'db.reconcile-only-claim-skips-new-provider-authority', 'staged-response-refence', { attemptId: ids[9], executionFence: 8, reconcileOnly: true });
+
+  for (const [index, terminalState] of ['completed', 'stale_completed'].entries()) {
+    let proposedRecoveryToken = '';
+    let mutableMaterialReads = 0;
+    const durableTerminalToken = ids[13 + index];
+    const terminalClaim = await claimStudioGeneration({
+      ...plan, attemptId: ids[9], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
+      sourcePackageVersion: 1, maximumOutputTokens: 2_000, expectedTemplateVersion: 'system-brd-v3',
+    }, async (_name, args) => {
+      proposedRecoveryToken = String(args.p_execution_token);
+      return {
+        outcome: 'replayed', attemptId: ids[9], state: terminalState,
+        executionToken: durableTerminalToken, executionFence: 9 + index,
+        leaseExpiresAt: null, providerAllowed: false, reconcileOnly: false,
+      } as never;
+    }, async () => {
+      mutableMaterialReads += 1;
+      throw new Error('disabled template/provider material must not be read');
+    });
+    mark(terminalClaim.claimKind === 'terminal'
+      && terminalClaim.terminalState === (terminalState === 'completed' ? 'completed' : 'stale')
+      && terminalClaim.executionToken === durableTerminalToken
+      && terminalClaim.executionToken !== proposedRecoveryToken
+      && terminalClaim.executionFence === 9 + index
+      && terminalClaim.leaseExpiresAt === null
+      && !terminalClaim.providerAllowed && !terminalClaim.reconcileOnly
+      && mutableMaterialReads === 0,
+    'IDEMP-002-B', `db.${terminalState.replace('_', '-')}-claim-uses-durable-terminal-fence`,
+    `lost-finalizer-response-${terminalState}`, {
+      attemptId: ids[9], executionToken: durableTerminalToken, executionFence: 9 + index,
+      terminalState, mutableMaterialReads, newProviderExecutionAllowed: false,
+    });
+  }
+  const defaultBoundaryTerminalClaim = await claimStudioGeneration({ attemptId: ids[9] }, async () => ({
+    outcome: 'replayed', attemptId: ids[9], state: 'completed',
+    executionToken: ids[13], executionFence: 9, leaseExpiresAt: null,
+    providerAllowed: false, reconcileOnly: false,
+  }) as never);
+  mark(defaultBoundaryTerminalClaim.claimKind === 'terminal',
+    'IDEMP-002-B', 'db.terminal-claim-default-material-boundary-performs-zero-reads',
+    'disabled-template-and-provider-config-after-commit', {
+      attemptId: ids[9], materialReads: 0, newProviderExecutionAllowed: false,
+    });
+  const terminalReplayBase = {
+    outcome: 'replayed', attemptId: ids[9], state: 'completed',
+    executionToken: ids[13], executionFence: 9, leaseExpiresAt: null,
+    providerAllowed: false, reconcileOnly: false,
+  };
+  const invalidTerminalReplays: unknown[] = [
+    { ...terminalReplayBase, executionToken: undefined },
+    { ...terminalReplayBase, executionToken: 'not-a-uuid' },
+    { ...terminalReplayBase, executionFence: undefined },
+    { ...terminalReplayBase, executionFence: 0 },
+    { ...terminalReplayBase, attemptId: ids[10] },
+    { ...terminalReplayBase, outcome: 'committed' },
+    { ...terminalReplayBase, providerAllowed: true },
+    { ...terminalReplayBase, reconcileOnly: true },
+    { ...terminalReplayBase, leaseExpiresAt: undefined },
+    { ...terminalReplayBase, leaseExpiresAt: '2030-01-01T00:00:00Z' },
+    { ...terminalReplayBase, privateProviderPlan: {} },
+  ];
+  let rejectedTerminalReplays = 0;
+  for (const replay of invalidTerminalReplays) {
+    try {
+      await claimStudioGeneration({
+        ...plan, attemptId: ids[9], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
+        sourcePackageVersion: 1, maximumOutputTokens: 2_000, expectedTemplateVersion: 'system-brd-v3',
+      }, async () => replay as never, async () => material);
+    } catch { rejectedTerminalReplays += 1; }
+  }
+  mark(rejectedTerminalReplays === invalidTerminalReplays.length,
+    'STUDIO-TR-009', 'db.terminal-claim-requires-durable-fence-and-no-active-lease',
+    'malformed-completed-claim-replay-matrix', {
+      attemptId: ids[9], rejectedTerminalReplays, newProviderExecutionAllowed: false,
+    });
 
   let preProviderExecutions = 0;
   const recordedFailures: Array<{ attemptId: string; executionToken: string; executionFence: number; failureCode: string }> = [];
