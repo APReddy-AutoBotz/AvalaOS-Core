@@ -1984,3 +1984,65 @@ allowed hits, zero forbidden hits and zero stale entries; the one new
 storage-state allowance is confined to the exact inert fixture line. Patch
 formatting passed. Final candidate CI/preview verification and the protected
 hosted campaign remain required before any acceptance or merge claim.
+
+### Browser observation and persistence boundary repair (2026-10-02)
+
+Executed evidence: candidate `e8f579c` passed all 18 required workflows,
+independent Native Assess and governed artifact verification, and exact-preview
+verification. Protected run `36987612912` completed all 84 browser steps,
+including final read-only restoration, all-persona sign-out and private-state
+erasure. Its independent server observer rejected CH-01
+`complete-remaining-assess-fields-manually` with two successful receipts, two
+audits and one new target inside a zero-effect observation. Bounded recovery
+deprovisioned the exercise and the always-run private-state cleanup passed.
+Acceptance recomputation was not run; the complete campaign remains failed.
+
+Confirmed source defect: the runner created and saved an Assess case inside
+the manual-field observation window. The same mismatch exists in CH-02:
+structured editing also revised the artifact, submitted it and assigned its
+reviewer inside a zero-effect window. The observer correctly rejected these
+effects. The prior component tests proved the UI operations but did not combine
+their real timing with the independent observer's zero-effect contract.
+
+All read-only architecture, security and quality reviews completed before
+scoped writes under the managed workspace-write profile. The repair uses the
+already approved prerequisite phase between catalog observations: create the
+Assess case before local field completion, save and reload it before conflict
+resolution, and persist/submit/assign the local Studio edit before independent
+review. The actual local edits remain within their named observation windows.
+Persisted prerequisites require exact response and projection checks and must
+not be represented as effect-free observations. Preserve all 84 observations,
+43 anchored server actions and existing absence/negative checks. No observer
+exception, SQL migration, schema, scoring or product authorization change is
+part of this repair.
+
+Planned verification: focused real-component checks must prove that both
+recorded edit windows have zero command effects and their prerequisite writes
+persist the exact content. The disposable PostgreSQL observer integration must
+verify the five commands' actor/scope, receipts/audits, resource/version lineage
+and reviewer, reject writes inside either zero-effect window, and complete all
+three observer roles and downstream evidence validators. Record exact results
+before publishing the candidate; exact-head CI, preview and the full protected
+campaign remain required. Rollback reverts the runner phase split and focused
+tests/provenance together, leaving the synthetic exercise deprovisioned and
+retaining immutable failed-run history. No database or Edge rollback is needed.
+
+Executed local evidence: the synthetic feature gate passed 79/79 with no skips
+(97.0 seconds); TypeScript and the AI-mode boundary gate passed. The static
+boundary scan retained 830 allowed hits, zero forbidden hits and zero stale
+entries. The focused Assess and Studio browser checks, including compatibility
+wrappers, passed 8/8 across Desktop Chrome and Pixel 7. The phase-window
+follow-up also passed 4/4, executing the actual recorded step
+executor for both edits and the successful Assess prerequisite orchestration.
+The disposable PostgreSQL
+16 integration passed 1/1 without skips (169.1 seconds), verified all five
+prerequisite commands through production SQL functions and exact persisted
+receipt/audit/content readback, and rejected real writes inside both quiet
+windows. It retained the human observer proof under rollback, bound twelve
+synthetic sessions, then persisted all three synthetic observer roles covering
+84 observations and 43 proof pairs. Their actual database outputs, quiescence,
+deprovision and independent cleanup records passed the final synthetic acceptance
+builder. Browser assertions supplied to that database-only fixture are explicitly
+labelled fixtures, not hosted browser evidence. The disposable database container
+was removed. The new candidate still requires exact-head CI, preview verification
+and a complete protected hosted campaign; no hosted PASS or merge is claimed.

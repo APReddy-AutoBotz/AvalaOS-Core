@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { buildBrowserExecutionCatalog, editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, executePlannedStep, prepareSyntheticDirectPdd, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
+import { assertSyntheticStudioDraftReadback, buildBrowserExecutionCatalog, editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, executePlannedStep, persistAndSubmitSyntheticStudioDraft, prepareSyntheticDirectPdd, runSyntheticObservationPrerequisites, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -14,6 +14,7 @@ const markerC=(info:TestInfo,testId:'STUDIO-TR-001'|'STUDIO-TR-003',assertionId:
 const isSourceProviderTraffic=(request:Request)=>{const url=request.url();if(/https:\/\/(?:api\.openai\.com|api\.groq\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com)(?:\/|$)/i.test(url))return true;if(!/\/functions\/v1\/enterprise-intelligence(?:[/?]|$)/i.test(url))return false;return /studio\.(?:evidence|bundle)\.extract/i.test(`${url}\n${request.postData()??''}`);};
 const navigate=async(page:Page,url:string,ready?:()=>Promise<void>)=>{let lastError:unknown;for(let attempt=1;attempt<=2;attempt+=1){try{await page.goto(url,{waitUntil:'commit',timeout:60_000});if(ready)await ready();return;}catch(error){lastError=error;if(attempt<2)await page.goto('about:blank',{waitUntil:'load',timeout:5_000}).catch(()=>undefined);}}throw lastError;};
 const open=async(page:Page,query='')=>navigate(page,`/tests/browser/studioPrB/harness.html${query}`,async()=>{await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible({timeout:15_000});});
+const captureStudioFixtureCommand=async(page:Page,{commandType}:{commandType:string},activate:()=>Promise<unknown>)=>{const before=await page.evaluate(()=>(window as any).__studioCommandCalls.length);await activate();await page.waitForFunction(count=>(window as any).__studioCommandCalls.length===count+1,before);const command=await page.evaluate(index=>structuredClone((window as any).__studioCommandCalls[index]),before);expect(command.commandType).toBe(commandType);return command;};
 
 test('PR C synthetic CH-10 executes the full direct Studio PDD catalog action through retained asynchronous state', async ({page}) => {
   page.setDefaultTimeout(3_000);
@@ -92,10 +93,64 @@ test('PR C synthetic runner edits, commits, submits, and assigns one exact sourc
   await page.getByRole('button',{name:'Generate governed package draft'}).click();
   await expect(page.getByText(/Draft committed from exact Studio Source Package v1/)).toBeVisible();
   const interactions:string[]=[];
-  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'BRD · direct transcript bundle',reviewerActorId:'00000020-0000-4000-8000-000000000020'});
+  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'BRD · direct transcript bundle',reviewerActorId:'00000020-0000-4000-8000-000000000020',captureCommand:captureStudioFixtureCommand});
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   expect(interactions).toEqual(['select:synthetic-studio-transcript-draft','commit:immutable-structured-studio-revision','submit-and-assign:synthetic-studio-transcript-draft']);
   await expect(page.getByText('In review committed.',{exact:true})).toBeVisible();
+});
+
+test('PR C synthetic observation phase split keeps Studio commands outside the structured-edit window', async ({page}) => {
+  await page.route('**/synthetic-studio?*',async route=>{
+    const url=new URL(route.request().url());
+    await route.fulfill({response:await route.fetch({url:new URL(`/tests/browser/studioPrB/harness.html${url.search}`,url).href})});
+  });
+  await navigate(page,'/synthetic-studio?mode=direct',async()=>{await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();});
+  const builder=page.getByRole('region',{name:'Studio Source Package builder'});
+  await builder.getByLabel('Exact locked Studio bundle').selectOption({index:1});
+  await builder.getByRole('button',{name:'Create direct planning package'}).click();
+  await expect(builder.getByText(/Direct BRD source package committed and reloaded/)).toBeVisible();
+  await page.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');
+  await page.getByRole('button',{name:'Generate governed package draft'}).click();
+  await expect(page.getByText(/Draft committed from exact Studio Source Package v1/)).toBeVisible();
+  const workspace=await selectSyntheticStudioDraft(page,[],'BRD · direct transcript bundle');
+  const artifactId=await workspace.getByLabel('Governed artifact',{exact:true}).inputValue();
+  const identity={applicationActorDigest:`sha256:${'a'.repeat(64)}`,applicationSessionDigest:`sha256:${'b'.repeat(64)}`};
+  const state=new Map<string,any>([
+    ['phase:ch02:studio-draft',{phase:'selected',artifactId,actorDigest:identity.applicationActorDigest}],
+  ]);
+  const planned=buildBrowserExecutionCatalog().find(step=>step.checkpointId==='CH-02'&&step.stepId==='edit-structured-document')!;
+  const beforeObservation=await page.evaluate(()=>(window as any).__studioCommandCalls.length);
+  let time=Date.now();
+  const record=await executePlannedStep({planned,session:{page,identity},providerEgress:[],state,
+    nextTime:()=>new Date(time++).toISOString(),apiDescriptor:undefined,exerciseDigest:undefined,prerequisiteInteractions:[]});
+  expect(Date.parse(record.startedAt)).toBeLessThan(Date.parse(record.completedAt));
+  expect(record.browserArtifact.interactionSequence).toContain('edit:structured-studio-document');
+  expect(state.get('phase:ch02:studio-draft')).toMatchObject({phase:'edited',artifactId,actorDigest:identity.applicationActorDigest});
+  expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(beforeObservation);
+  const expectedBody=await page.locator('section[aria-labelledby="structured-editor-title"] textarea').inputValue();
+  const persisted=await persistAndSubmitSyntheticStudioDraft(page,[],{
+    reviewerActorId:'00000020-0000-4000-8000-000000000020',
+    expectedScope:{organizationId,workspaceId,authorizationVersion:7},
+    captureCommand:captureStudioFixtureCommand,
+  });
+  const commands=await page.evaluate(()=>(window as any).__studioCommandCalls);
+  expect(commands.slice(beforeObservation).map((item:any)=>item.commandType)).toEqual([
+    'studio.artifact.draft.revise','studio.artifact.review.submit','studio.artifact.review.assign',
+  ]);
+  expect(commands.slice(beforeObservation).every((item:any)=>item.body.organizationId===organizationId
+    && item.body.workspaceId===workspaceId&&item.body.authorizationVersion===7&&item.response.ok===true)).toBe(true);
+  expect(persisted).toMatchObject({artifactId:'00000038-0000-4000-8000-000000000038',contentVersion:2,submitted:true,assigned:true});
+  await assertSyntheticStudioDraftReadback(page,expectedBody);
+  await page.locator('section[aria-labelledby="structured-editor-title"] textarea').evaluate((element:any)=>{element.value='Corrupted body';});
+  await expect(assertSyntheticStudioDraftReadback(page,expectedBody)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_STUDIO_REVISION_READBACK_REJECTED');
+  expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(beforeObservation+3);
+  const review=buildBrowserExecutionCatalog().find(step=>step.checkpointId==='CH-02'&&step.stepId==='review-studio-document')!;
+  state.set('catalog:lastCompletedStep','CH-02:edit-structured-document');
+  state.set('catalog:lastCompletedAt',record.completedAt);
+  state.set('exercise:scope',{organizationId,workspaceId,authorizationVersion:7});
+  state.set('phase:ch02:studio-draft',{phase:'selected',artifactId:persisted.artifactId,actorDigest:identity.applicationActorDigest});
+  await expect(runSyntheticObservationPrerequisites({planned:review,sessions:new Map([['requester',{page,identity}]]),state,interactionSequence:[]}))
+    .rejects.toThrow('PR_C_SYNTHETIC_BROWSER_CH02_EDIT_MARKER_REJECTED');
 });
 
 test('PR C synthetic generation binds the exact source-only hybrid artifact and approved tenant template after reload', async ({page}) => {
@@ -221,7 +276,7 @@ test('PR C synthetic draft selection waits for the exact loaded document before 
   await open(page,'?mode=direct&syntheticSelection=1');
   await expect(page.getByRole('region',{name:'Structured section editor'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.');
   await selectSyntheticHybridStudioDraft(page,[],'Synthetic Studio source context retained for controlled acceptance editing.');
-  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId:'00000020-0000-4000-8000-000000000020'});
+  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId:'00000020-0000-4000-8000-000000000020',captureCommand:captureStudioFixtureCommand});
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   await page.reload({waitUntil:'domcontentloaded'});
   await selectSyntheticStudioDraft(page,[]);
@@ -239,7 +294,7 @@ test('PR C synthetic Studio reviewer selection binds the exact actor despite dup
   await open(page,'?mode=direct&syntheticSelection=1&reviewerLabels=email');
   page.setDefaultTimeout(5000);
   const reviewerActorId='00000020-0000-4000-8000-000000000020';
-  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId});
+  const result=await editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId,captureCommand:captureStudioFixtureCommand});
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   expect(await page.evaluate(()=>(window as any).__studioAssignedReviewerIds)).toEqual([reviewerActorId]);
 });
@@ -248,7 +303,7 @@ for(const mode of ['missing','duplicate']){
   test(`PR C synthetic Studio reviewer selection rejects ${mode} actor options before assignment`, async ({page}) => {
     await open(page,`?mode=direct&syntheticSelection=1&reviewerLabels=email&reviewerOptions=${mode}`);
     page.setDefaultTimeout(5000);
-    const result=editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId:'00000020-0000-4000-8000-000000000020'});
+    const result=editAndSubmitSyntheticStudioDraft(page,[],{reviewerActorId:'00000020-0000-4000-8000-000000000020',captureCommand:captureStudioFixtureCommand});
     await expect(result).rejects.toThrow(mode==='missing'?'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_OPTION_MISSING':'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_COUNT');
     expect(await page.evaluate(()=>(window as any).__studioAssignedReviewerIds??[])).toEqual([]);
   });

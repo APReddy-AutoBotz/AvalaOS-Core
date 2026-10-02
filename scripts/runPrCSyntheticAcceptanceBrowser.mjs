@@ -188,6 +188,46 @@ const digest = value => sha256Digest(Buffer.from(typeof value === 'string' ? val
 const iso = () => new Date().toISOString();
 const safeLabel = value => String(value).toLowerCase().replace(/[^a-z0-9._:-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 128);
 
+const commandRequestBody = request => {
+  try { return request.postDataJSON(); } catch { return null; }
+};
+
+const captureBrowserCommand = async (page, { endpoint, commandType }, activate) => {
+  const responsePromise = page.waitForResponse(response => {
+    let pathname = '';
+    try { pathname = new URL(response.url()).pathname; } catch { return false; }
+    const body = commandRequestBody(response.request());
+    return pathname.endsWith(endpoint) && response.request().method() === 'POST' && body?.commandType === commandType;
+  }, { timeout: 30_000 });
+  try { await activate(); }
+  catch (error) { void responsePromise.catch(() => undefined); throw error; }
+  const response = await responsePromise;
+  const body = commandRequestBody(response.request());
+  let result;
+  try { result = await response.json(); } catch { throw new Error(`PR_C_SYNTHETIC_BROWSER_COMMAND_RESPONSE_REJECTED:${commandType}`); }
+  assert(response.ok(), `PR_C_SYNTHETIC_BROWSER_COMMAND_HTTP_REJECTED:${commandType}`);
+  return { commandType, requestId: body?.requestId, body, response: result };
+};
+
+const assertCapturedCommand = (command, { commandType, expectedScope, expectedResourceId = '', expectedVersion }) => {
+  assert.equal(command?.commandType, commandType, `PR_C_SYNTHETIC_BROWSER_COMMAND_TYPE_REJECTED:${commandType}`);
+  assert(command.body?.commandType === commandType && typeof command.body.requestId === 'string',
+    `PR_C_SYNTHETIC_BROWSER_COMMAND_ENVELOPE_REJECTED:${commandType}`);
+  if (expectedScope) {
+    assert(command.body.organizationId === expectedScope.organizationId
+      && command.body.workspaceId === expectedScope.workspaceId
+      && command.body.authorizationVersion === expectedScope.authorizationVersion,
+    `PR_C_SYNTHETIC_BROWSER_COMMAND_SCOPE_REJECTED:${commandType}`);
+  }
+  assert(command.response?.ok === true && ['committed', 'replayed'].includes(command.response.outcome),
+    `PR_C_SYNTHETIC_BROWSER_COMMAND_OUTCOME_REJECTED:${commandType}`);
+  const resourceId = command.response.resourceId ?? command.response.resource?.id;
+  if (expectedResourceId) assert.equal(resourceId, expectedResourceId, `PR_C_SYNTHETIC_BROWSER_COMMAND_RESOURCE_REJECTED:${commandType}`);
+  if (expectedVersion !== undefined)
+    assert.equal(command.response.resource?.version, expectedVersion, `PR_C_SYNTHETIC_BROWSER_COMMAND_VERSION_REJECTED:${commandType}`);
+  return command;
+};
+
 // Product navigation carries process and scope identifiers in the query string.
 // Evidence needs only the non-identifying view and scope to identify the surface.
 export const safeBrowserRoute = pageUrl => {
@@ -612,12 +652,10 @@ export const selectSyntheticHybridStudioDraft = async (page, interactionSequence
   return workspace;
 };
 
-export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequence, {
-  title = SYNTHETIC_STUDIO_DRAFT_TITLE, reviewerActorId = '',
-} = {}) => {
-  assert(typeof reviewerActorId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(reviewerActorId),
-    'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_ID_INVALID');
-  const workspace = await selectSyntheticStudioDraft(page, interactionSequence, title);
+export const editSyntheticStudioDraft = async (page, interactionSequence) => {
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready',
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
   const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
   await editor.waitFor({ state: 'visible' });
   const body = editor.locator('label').filter({ hasText: 'Section body' }).locator('textarea');
@@ -626,14 +664,58 @@ export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequenc
   const prior = await body.inputValue();
   const appended = `${prior}\nSynthetic acceptance edit.`.trim();
   await body.fill(appended);
+  assert.equal(await body.inputValue(), appended, 'PR_C_SYNTHETIC_BROWSER_STUDIO_LOCAL_EDIT_REJECTED');
+  interactionSequence.push('edit:structured-studio-document');
+  return { priorDigest: digest(prior), savedDigest: digest(appended), changed: appended !== prior, appended };
+};
+
+export const assertSyntheticStudioDraftReadback = async (page, expectedBody) => {
+  assert(typeof expectedBody === 'string' && expectedBody.endsWith('Synthetic acceptance edit.'),
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_EXPECTED_BODY_REJECTED');
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
+  const body = editor.locator('label').filter({ hasText: 'Section body' }).locator('textarea');
+  assert.equal(await body.inputValue(), expectedBody, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVISION_READBACK_REJECTED');
+  return { bodyDigest: digest(expectedBody) };
+};
+
+export const persistAndSubmitSyntheticStudioDraft = async (page, interactionSequence, {
+  reviewerActorId = '', expectedScope = /** @type {any} */ (null), captureCommand = captureBrowserCommand,
+} = {}) => {
+  assert(typeof reviewerActorId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(reviewerActorId),
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_ID_INVALID');
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready',
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
+  const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
+  assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(artifactId),
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_ARTIFACT_ID_INVALID');
+  const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
+  const body = editor.locator('label').filter({ hasText: 'Section body' }).locator('textarea');
+  const expectedBody = await body.inputValue();
+  const priorVersionText = await workspace.getByText(/^Aggregate v[1-9][0-9]* · Content v[1-9][0-9]*$/u).innerText();
+  const priorContentVersion = Number(/Content v([1-9][0-9]*)$/u.exec(priorVersionText)?.[1]);
+  assert(Number.isSafeInteger(priorContentVersion), 'PR_C_SYNTHETIC_BROWSER_STUDIO_PRIOR_VERSION_REJECTED');
   const commit = editor.getByRole('button', { name: 'Commit immutable revision', exact: true });
   assert(await commit.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_STRUCTURED_COMMIT_DISABLED');
-  await commit.click();
+  const revision = await captureCommand(page, {
+    endpoint: '/functions/v1/studio-artifact-command', commandType: 'studio.artifact.draft.revise',
+  }, () => commit.click());
+  assertCapturedCommand(revision, { commandType: 'studio.artifact.draft.revise', expectedScope, expectedResourceId: artifactId });
+  assert.equal(revision.body.payload?.artifactId, artifactId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVISION_ARTIFACT_REJECTED');
   await workspace.getByText('Draft committed.', { exact: true }).waitFor({ state: 'visible' });
+  await workspace.getByText(new RegExp(`^Aggregate v[1-9][0-9]* · Content v${priorContentVersion + 1}$`, 'u')).waitFor({ state: 'visible' });
+  await assertSyntheticStudioDraftReadback(page, expectedBody);
   interactionSequence.push('commit:immutable-structured-studio-revision');
   const submit = workspace.getByRole('button', { name: 'Submit for review', exact: true });
   assert(await submit.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_STUDIO_SUBMIT_DISABLED');
-  await submit.click();
+  const submission = await captureCommand(page, {
+    endpoint: '/functions/v1/studio-artifact-command', commandType: 'studio.artifact.review.submit',
+  }, () => submit.click());
+  assertCapturedCommand(submission, { commandType: 'studio.artifact.review.submit', expectedScope, expectedResourceId: artifactId });
+  assert(submission.body.payload?.artifactId === artifactId
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(submission.body.payload?.artifactVersionId ?? ''),
+  'PR_C_SYNTHETIC_BROWSER_STUDIO_SUBMISSION_BINDING_REJECTED');
   await workspace.getByText('Reviewer ready committed.', { exact: true }).waitFor({ state: 'visible' });
   const reviewer = workspace.getByLabel('Eligible independent reviewer', { exact: true });
   const option = reviewer.locator(`option[value="${reviewerActorId}"]`);
@@ -644,10 +726,26 @@ export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequenc
   assert(await reviewer.inputValue() === reviewerActorId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVIEWER_SELECTION_MISMATCH');
   const assign = workspace.getByRole('button', { name: 'Assign reviewer', exact: true });
   assert(await assign.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_STUDIO_ASSIGN_DISABLED');
-  await assign.click();
+  const assignment = await captureCommand(page, {
+    endpoint: '/functions/v1/studio-artifact-command', commandType: 'studio.artifact.review.assign',
+  }, () => assign.click());
+  assertCapturedCommand(assignment, { commandType: 'studio.artifact.review.assign', expectedScope, expectedResourceId: artifactId });
+  assert(assignment.body.payload?.artifactId === artifactId && assignment.body.payload?.reviewerId === reviewerActorId
+    && assignment.body.payload?.artifactVersionId === submission.body.payload?.artifactVersionId,
+    'PR_C_SYNTHETIC_BROWSER_STUDIO_ASSIGNMENT_BINDING_REJECTED');
   await workspace.getByText('In review committed.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('submit-and-assign:synthetic-studio-transcript-draft');
-  return { priorDigest: digest(prior), savedDigest: digest(appended), changed: appended !== prior, submitted: true, assigned: true };
+  return { artifactId, savedDigest: digest(expectedBody), contentVersion: priorContentVersion + 1,
+    submitted: true, assigned: true, commands: [revision, submission, assignment] };
+};
+
+export const editAndSubmitSyntheticStudioDraft = async (page, interactionSequence, {
+  title = SYNTHETIC_STUDIO_DRAFT_TITLE, reviewerActorId = '', expectedScope = /** @type {any} */ (null), captureCommand = captureBrowserCommand,
+} = {}) => {
+  await selectSyntheticStudioDraft(page, interactionSequence, title);
+  const edited = await editSyntheticStudioDraft(page, []);
+  const persisted = await persistAndSubmitSyntheticStudioDraft(page, interactionSequence, { reviewerActorId, expectedScope, captureCommand });
+  return { ...edited, ...persisted, changed: edited.changed };
 };
 
 const verifyRenderedDeliveryItemIds = async (selected, expectedIds) => {
@@ -1272,13 +1370,25 @@ export const SYNTHETIC_ASSESS_REVIEW_CLAIMS = Object.freeze([
   'asset.strategicLifespan', 'asset.technicalHealth', 'asset.businessCriticality', 'asset.ownershipModel', 'asset.vendorRoadmap', 'asset.operatingStability', 'asset.accountableOwner',
 ]);
 
-export const completeAssessDraft = async (page, interactionSequence) => {
+export const createSyntheticAssessDraft = async (page, interactionSequence, { expectedScope } = {}) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
   const create = workspace.getByRole('button', { name: 'New assessment (V2)', exact: true });
   await create.waitFor({ state: 'visible' });
   assert(await create.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CREATE_DISABLED');
-  await create.click(); interactionSequence.push('create:assess-v2-case');
+  const command = await captureBrowserCommand(page, {
+    endpoint: '/functions/v1/assess-v2-command', commandType: 'assessment_v2.create',
+  }, () => create.click());
+  const caseId = command.body?.payload?.caseId;
+  assert(typeof caseId === 'string', 'PR_C_SYNTHETIC_BROWSER_ASSESS_CASE_ID_MISSING');
+  assertCapturedCommand(command, { commandType: 'assessment_v2.create', expectedScope, expectedResourceId: caseId, expectedVersion: 1 });
+  interactionSequence.push('create:assess-v2-case');
+  return { caseId, version: 1, command };
+};
+
+export const completeSyntheticAssessFields = async (page, interactionSequence) => {
+  const workspace = page.getByTestId('assess-v2-workspace');
+  await workspace.waitFor({ state: 'visible' });
   await workspace.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   interactionSequence.push('scaffold:assess-structure');
   await workspace.getByLabel('V2 case description', { exact: true }).fill('Manually reviewed synthetic Assess process and source observations.');
@@ -1293,15 +1403,56 @@ export const completeAssessDraft = async (page, interactionSequence) => {
   await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
   interactionSequence.push('link:manual-synthetic-decision-claims');
   interactionSequence.push('fill:manual-assess-facts');
+  return { manuallyCompletedFactCount: 7, owner: 'Synthetic Assess owner' };
+};
+
+export const assertSyntheticAssessDraftReadback = async page => {
+  const workspace = page.getByTestId('assess-v2-workspace');
+  assert.equal(await workspace.getByLabel('V2 case description', { exact: true }).inputValue(),
+    'Manually reviewed synthetic Assess process and source observations.', 'PR_C_SYNTHETIC_BROWSER_ASSESS_DESCRIPTION_READBACK_REJECTED');
+  assert.equal(await workspace.getByLabel('Primitive 1 primitive.rulesStable', { exact: true }).inputValue(), 'true',
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_RULE_READBACK_REJECTED');
+  assert.equal(await workspace.getByLabel('Application 1 accountable owner', { exact: true }).inputValue(), 'Synthetic Assess owner',
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_OWNER_READBACK_REJECTED');
+  assert.equal(await workspace.getByLabel('Application 1 strategic lifespan', { exact: true }).inputValue(), 'long',
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_LIFESPAN_READBACK_REJECTED');
+  assert.equal(await workspace.getByLabel('Interaction 1 data classification', { exact: true }).inputValue(), 'Internal',
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_CLASSIFICATION_READBACK_REJECTED');
+  for (const fact of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'])
+    assert.equal(await workspace.getByLabel(`Interaction 1 ${fact}`, { exact: true }).inputValue(), 'true',
+      `PR_C_SYNTHETIC_BROWSER_ASSESS_INTERACTION_READBACK_REJECTED:${fact}`);
+  assert.equal(await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIMS_READBACK_REJECTED');
+  return { exactFieldCount: 10 };
+};
+
+export const persistSyntheticAssessDraft = async (page, interactionSequence, {
+  caseId = '', priorVersion = 1, expectedScope = /** @type {any} */ (null),
+} = {}) => {
+  const workspace = page.getByTestId('assess-v2-workspace');
   const save = workspace.getByRole('button', { name: 'Save V2 draft', exact: true });
   assert(await save.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_SAVE_DISABLED');
-  await save.click();
+  const command = await captureBrowserCommand(page, {
+    endpoint: '/functions/v1/assess-v2-command', commandType: 'assessment_v2.draft.upsert',
+  }, () => save.click());
+  const exactCaseId = caseId || command.body?.payload?.caseId;
+  assert(typeof exactCaseId === 'string', 'PR_C_SYNTHETIC_BROWSER_ASSESS_CASE_ID_MISSING');
+  assert.equal(command.body?.expectedVersion, priorVersion, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EXPECTED_VERSION_REJECTED');
+  assertCapturedCommand(command, { commandType: 'assessment_v2.draft.upsert', expectedScope,
+    expectedResourceId: exactCaseId, expectedVersion: priorVersion + 1 });
   await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('save:assess-v2-draft');
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
   await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('reload:assess-v2-draft');
-  assert.equal(await workspace.getByLabel('Application 1 accountable owner', { exact: true }).inputValue(), 'Synthetic Assess owner');
+  await assertSyntheticAssessDraftReadback(page);
+  return { caseId: exactCaseId, version: priorVersion + 1, command, reloaded: true };
+};
+
+export const completeAssessDraft = async (page, interactionSequence) => {
+  const created = await createSyntheticAssessDraft(page, interactionSequence);
+  await completeSyntheticAssessFields(page, interactionSequence);
+  await persistSyntheticAssessDraft(page, interactionSequence, created);
   return { createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true };
 };
 
@@ -1456,10 +1607,15 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
     if (plan.enabled) assert(await control.locator.isEnabled(), `PR_C_SYNTHETIC_BROWSER_CONTROL_DISABLED:${stepId}`);
     observed = { role: plan.role, name: control.name, enabled: await control.locator.isEnabled() };
   } else if (plan.kind === 'complete-assess-fields') {
-    observed = await completeAssessDraft(page, interactionSequence);
+    const marker = state.get('phase:ch01:assess-draft');
+    assert(marker?.phase === 'created', 'PR_C_SYNTHETIC_BROWSER_CH01_CREATE_MARKER_REJECTED');
+    observed = await completeSyntheticAssessFields(page, interactionSequence);
+    state.set('phase:ch01:assess-draft', { ...marker, phase: 'fields_observed' });
   } else if (plan.kind === 'edit-structured-document') {
-    const reviewerActorId = await resolveSyntheticStudioReviewerId(state.get('sessions'));
-    observed = await editAndSubmitSyntheticStudioDraft(page, interactionSequence, { reviewerActorId });
+    const marker = state.get('phase:ch02:studio-draft');
+    assert(marker?.phase === 'selected', 'PR_C_SYNTHETIC_BROWSER_CH02_SELECTION_MARKER_REJECTED');
+    observed = await editSyntheticStudioDraft(page, interactionSequence);
+    state.set('phase:ch02:studio-draft', { ...marker, phase: 'edited', savedDigest: observed.savedDigest });
   } else if (plan.kind === 'control-absence') {
     const counts = {}; for (const name of plan.names) counts[name] = await page.getByRole(plan.role, { name, exact: true }).count();
     assert(Object.values(counts).every(count => count === 0), `PR_C_SYNTHETIC_BROWSER_CONTROL_PRESENT:${stepId}`); observed = counts;
@@ -1852,6 +2008,84 @@ export const summarizePrerequisiteInteractions = values => {
   return result;
 };
 
+const requireCompletedStep = (state, expected, next) => {
+  assert.equal(state.get('catalog:lastCompletedStep'), expected,
+    `PR_C_SYNTHETIC_BROWSER_PREREQUISITE_ORDER_REJECTED:${next}`);
+};
+
+const waitPastCompletedObservation = async state => {
+  const value = state.get('catalog:lastCompletedAt');
+  assert(typeof value === 'string' && Number.isFinite(Date.parse(value)), 'PR_C_SYNTHETIC_BROWSER_PREREQUISITE_TIME_REJECTED');
+  const boundary = Date.parse(value);
+  if (Date.now() <= boundary) await new Promise(resolve => setTimeout(resolve, boundary - Date.now() + 1));
+  assert(Date.now() > boundary, 'PR_C_SYNTHETIC_BROWSER_PREREQUISITE_TIME_OVERLAP');
+};
+
+const prerequisiteInteractions = (target, values) => {
+  target.push(...values.map(value => `prerequisite:${value}`));
+};
+
+export const runSyntheticObservationPrerequisites = async ({ planned, sessions, state, interactionSequence }) => {
+  const key = `${planned.checkpointId}:${planned.stepId}`;
+  const requester = sessions.get('requester');
+  assert(requester, 'PR_C_SYNTHETIC_BROWSER_REQUESTER_CONTEXT_MISSING');
+  const expectedScope = state.get('exercise:scope');
+  assert(expectedScope, 'PR_C_SYNTHETIC_BROWSER_EXERCISE_SCOPE_MISSING');
+  if (key === 'CH-01:complete-remaining-assess-fields-manually') {
+    requireCompletedStep(state, 'CH-01:select-two-assess-transcripts', key);
+    await waitPastCompletedObservation(state);
+    assert.equal(state.has('phase:ch01:assess-draft'), false, 'PR_C_SYNTHETIC_BROWSER_CH01_CREATE_MARKER_DUPLICATE');
+    const interactions = [];
+    const assessReady = await requester.page.getByTestId('assess-v2-workspace').isVisible();
+    if (!assessReady)
+      await openSurface(requester.page, 'assess-case', interactions);
+    else interactions.push('retain:current-assess-case-surface');
+    const created = await createSyntheticAssessDraft(requester.page, interactions, { expectedScope });
+    state.set('phase:ch01:assess-draft', { phase: 'created', caseId: created.caseId, version: created.version,
+      actorDigest: requester.identity.applicationActorDigest });
+    prerequisiteInteractions(interactionSequence, interactions);
+  }
+  if (key === 'CH-01:resolve-material-assess-conflict') {
+    requireCompletedStep(state, 'CH-01:complete-remaining-assess-fields-manually', key);
+    await waitPastCompletedObservation(state);
+    const marker = state.get('phase:ch01:assess-draft');
+    assert(marker?.phase === 'fields_observed' && marker.actorDigest === requester.identity.applicationActorDigest,
+      'PR_C_SYNTHETIC_BROWSER_CH01_FIELDS_MARKER_REJECTED');
+    const interactions = [];
+    const persisted = await persistSyntheticAssessDraft(requester.page, interactions, {
+      caseId: marker.caseId, priorVersion: marker.version, expectedScope,
+    });
+    state.set('phase:ch01:assess-draft', { ...marker, phase: 'persisted', version: persisted.version });
+    prerequisiteInteractions(interactionSequence, interactions);
+  }
+  if (key === 'CH-02:edit-structured-document') {
+    requireCompletedStep(state, 'CH-02:select-custom-template', key);
+    await waitPastCompletedObservation(state);
+    assert.equal(state.has('phase:ch02:studio-draft'), false, 'PR_C_SYNTHETIC_BROWSER_CH02_SELECTION_MARKER_DUPLICATE');
+    const interactions = [];
+    const workspace = await selectSyntheticStudioDraft(requester.page, interactions);
+    const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
+    state.set('phase:ch02:studio-draft', { phase: 'selected', artifactId,
+      actorDigest: requester.identity.applicationActorDigest });
+    prerequisiteInteractions(interactionSequence, interactions);
+  }
+  if (key === 'CH-02:review-studio-document') {
+    requireCompletedStep(state, 'CH-02:edit-structured-document', key);
+    await waitPastCompletedObservation(state);
+    const marker = state.get('phase:ch02:studio-draft');
+    assert(marker?.phase === 'edited' && marker.actorDigest === requester.identity.applicationActorDigest,
+      'PR_C_SYNTHETIC_BROWSER_CH02_EDIT_MARKER_REJECTED');
+    const interactions = [];
+    const reviewerActorId = await resolveSyntheticStudioReviewerId(sessions);
+    const persisted = await persistAndSubmitSyntheticStudioDraft(requester.page, interactions, { reviewerActorId, expectedScope });
+    assert.equal(persisted.artifactId, marker.artifactId, 'PR_C_SYNTHETIC_BROWSER_CH02_ARTIFACT_MARKER_REJECTED');
+    assert.equal(persisted.savedDigest, marker.savedDigest, 'PR_C_SYNTHETIC_BROWSER_CH02_CONTENT_MARKER_REJECTED');
+    state.set('phase:ch02:studio-draft', { ...marker, phase: 'in_review', contentVersion: persisted.contentVersion,
+      reviewerActorId });
+    prerequisiteInteractions(interactionSequence, interactions);
+  }
+};
+
 export const executePlannedStep = async ({ planned, session, providerEgress, state, nextTime, apiDescriptor, exerciseDigest, prerequisiteInteractions = [] }) => {
   const { page, identity } = session;
   const interactionSequence = summarizePrerequisiteInteractions(prerequisiteInteractions);
@@ -1868,7 +2102,9 @@ export const executePlannedStep = async ({ planned, session, providerEgress, sta
   }
   const apiEvidence = isSyntheticApiEvidenceStep(planned);
   const dialogContinuation = planned.checkpointId === 'CH-14' && ['preserve-invalid-input', 'logical-focus-return'].includes(planned.stepId);
-  if (!dialogContinuation && !(apiEvidence && planned.serverAction.observationKind === 'negative_attempt'))
+  const preparedObservationWindow = (planned.checkpointId === 'CH-01' && planned.stepId === 'complete-remaining-assess-fields-manually')
+    || (planned.checkpointId === 'CH-02' && planned.stepId === 'edit-structured-document');
+  if (!preparedObservationWindow && !dialogContinuation && !(apiEvidence && planned.serverAction.observationKind === 'negative_attempt'))
     await openSurface(page, planned.surface, interactionSequence, planned.stepId);
   if (planned.checkpointId === 'CH-09') await verifySyntheticMonitorBaseline(page, interactionSequence, {
     packageId: state.get('full-governed-package')?.packageId, baselineId: state.get('ch08:baselineId'),
@@ -2018,6 +2254,7 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
       try {
         const prerequisiteInteractions = [];
         await runSyntheticPrerequisites({ nextStep: planned, sessions: personas, state, interactionSequence: prerequisiteInteractions });
+        await runSyntheticObservationPrerequisites({ planned, sessions: personas, state, interactionSequence: prerequisiteInteractions });
         if (planned.stepId === 'stop-with-no-delivery-resource') {
           const workspace = await readSyntheticDeliveryWorkspace(requester);
           const candidate = workspace.eligibleStudioArtifacts.filter(value => value.studioArtifactId === state.get('ch02:artifactId'));
@@ -2033,9 +2270,11 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
         }
         if (planned.stepId === 'request-package-changes') state.set('monitor:before-blocked', await readAuthorizedMonitorSnapshot(personas.get('monitor_viewer')));
         const apiDescriptor = await prepareApiEvidenceDescriptor(planned, personas, state, binding);
-        records.get(planned.checkpointId).steps.push(await executePlannedStep({ planned, session, providerEgress, state, nextTime,
-          apiDescriptor, exerciseDigest: binding.exerciseDigest, prerequisiteInteractions }));
+        const completed = await executePlannedStep({ planned, session, providerEgress, state, nextTime,
+          apiDescriptor, exerciseDigest: binding.exerciseDigest, prerequisiteInteractions });
+        records.get(planned.checkpointId).steps.push(completed);
         state.set('catalog:lastCompletedStep', `${planned.checkpointId}:${planned.stepId}`);
+        state.set('catalog:lastCompletedAt', completed.completedAt);
       } catch (error) {
         throw safeBrowserStepFailure(planned, error);
       }

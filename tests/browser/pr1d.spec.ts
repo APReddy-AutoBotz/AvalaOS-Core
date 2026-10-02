@@ -9,7 +9,7 @@ import { parseAssessV2DraftPayload } from '../../supabase/functions/_shared/asse
 import { PROCESS_CREATE_CAPABILITY, parseProcessCreateEnvelope } from '../../services/processCreationContract';
 import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, type AssessmentCaseV2, createUnknownAgentNecessityFacts } from '../../services/assessV2/types';
 import { ALL_CAPABILITIES, API, ASSESSMENT, ORG, PROCESS, SECONDARY_WS, USER, WS, installEnterpriseFixture, jsonHeaders } from './pr1dNetworkFixture';
-import { completeAssessDraft, finalizeAssessDraftForReview } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { assertSyntheticAssessDraftReadback, buildBrowserExecutionCatalog, completeAssessDraft, executePlannedStep, finalizeAssessDraftForReview, runSyntheticObservationPrerequisites } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const expectProcessCatalog = async (page: Page) => {
   const catalog = page.getByTestId('process-catalog-view');
@@ -44,11 +44,58 @@ test('PR C synthetic runner manually completes and reloads the real Assess V2 dr
   await page.goto('/');
   await expectProcessCatalog(page);
   await page.getByRole('button', { name: 'View' }).first().click();
+  await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
   const interactions: string[] = [];
   const observed = await completeAssessDraft(page, interactions);
   expect(observed).toEqual({ createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true });
   expect(interactions).toContain('save:assess-v2-draft');
   await expect(page.getByLabel('Application 1 accountable owner')).toHaveValue('Synthetic Assess owner');
+});
+
+test('PR C synthetic observation phase split keeps Assess writes outside the manual-field window', async ({ page }) => {
+  const fixture = await installEnterpriseFixture(page, { initialStatus: 'Ready for Review' });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  await page.getByRole('button', { name: 'View' }).first().click();
+  await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
+  const identity = { applicationActorDigest: `sha256:${'a'.repeat(64)}`, applicationSessionDigest: `sha256:${'b'.repeat(64)}` };
+  const requester = { page, identity };
+  const state = new Map<string, any>([
+    ['catalog:lastCompletedStep', 'CH-01:select-two-assess-transcripts'],
+    ['catalog:lastCompletedAt', new Date(Date.now() - 10).toISOString()],
+    ['exercise:scope', { organizationId: ORG, workspaceId: WS, authorizationVersion: 9 }],
+  ]);
+  const prerequisiteInteractions: string[] = [];
+  const planned = buildBrowserExecutionCatalog().find(step => step.checkpointId === 'CH-01'
+    && step.stepId === 'complete-remaining-assess-fields-manually')!;
+  await runSyntheticObservationPrerequisites({ planned, sessions: new Map([['requester', requester]]), state, interactionSequence: prerequisiteInteractions });
+  expect(fixture.committedCommands.map(item => item.commandType)).toEqual(['assessment_v2.create']);
+  const beforeObservation = fixture.committedCommands.length;
+  const record = await executePlannedStep({ planned, session: requester, providerEgress: [], state,
+    nextTime: () => new Date().toISOString(), apiDescriptor: undefined, exerciseDigest: undefined,
+    prerequisiteInteractions });
+  expect(fixture.committedCommands).toHaveLength(beforeObservation);
+  expect(record.browserArtifact.interactionSequence).toContain('scaffold:assess-structure');
+  state.set('catalog:lastCompletedStep', 'CH-01:complete-remaining-assess-fields-manually');
+  state.set('catalog:lastCompletedAt', record.completedAt);
+  const resolve = buildBrowserExecutionCatalog().find(step => step.checkpointId === 'CH-01'
+    && step.stepId === 'resolve-material-assess-conflict')!;
+  const resolvePrerequisites: string[] = [];
+  await runSyntheticObservationPrerequisites({ planned: resolve, sessions: new Map([['requester', requester]]), state,
+    interactionSequence: resolvePrerequisites });
+  expect(state.get('phase:ch01:assess-draft')).toMatchObject({ phase: 'persisted', version: 2,
+    actorDigest: identity.applicationActorDigest });
+  expect(resolvePrerequisites).toEqual([
+    'prerequisite:save:assess-v2-draft', 'prerequisite:reload:assess-v2-draft',
+  ]);
+  expect(fixture.committedCommands.map(item => item.commandType)).toEqual(['assessment_v2.create', 'assessment_v2.draft.upsert']);
+  await expect(page.getByLabel('Application 1 accountable owner')).toHaveValue('Synthetic Assess owner');
+  await page.getByLabel('Application 1 accountable owner').fill('Corrupted owner');
+  await expect(assertSyntheticAssessDraftReadback(page)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_OWNER_READBACK_REJECTED');
+  expect(fixture.committedCommands).toHaveLength(2);
+  state.set('phase:ch01:assess-draft', { ...state.get('phase:ch01:assess-draft'), phase: 'created' });
+  await expect(runSyntheticObservationPrerequisites({ planned: resolve, sessions: new Map([['requester', requester]]), state,
+    interactionSequence: [] })).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_CH01_FIELDS_MARKER_REJECTED');
 });
 
 for (const afterTranscriptApply of [false, true]) test(`PR C synthetic runner finalizes the ${afterTranscriptApply ? 'post-Apply' : 'manually completed'} Assess draft for independent review`, async ({ page }) => {

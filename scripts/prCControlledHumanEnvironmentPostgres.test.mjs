@@ -5,12 +5,14 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import pg from 'pg';
 import ts from 'typescript';
-import { PostgresEnvironmentAdapter, assertTargetInventory, buildIdentifiers, controlledHumanStepEvidenceSpec, deriveContext, deterministicUuid, loadFixture, postDeprovisionVerify, seedAssessUpstream, sha256, validateControlledHumanObserverEnvelopeBridge } from './prCControlledHumanEnvironment.mjs';
+import { PostgresEnvironmentAdapter, assertTargetInventory, bindSyntheticSessions, buildIdentifiers, checkpointObserve, controlledHumanStepEvidenceSpec, deprovision, deriveContext, deterministicUuid, loadFixture, postDeprovisionVerify, quiesce, seedAssessUpstream, sha256, validateControlledHumanObserverEnvelopeBridge } from './prCControlledHumanEnvironment.mjs';
 import {MIGRATION_FILE,PostgresEnvironmentMigrationAdapter,deriveMigrationContext,loadMigration,migrationApply,migrationPreflight,migrationVerify} from './prCControlledHumanEnvironmentMigration.mjs';
-import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA,validateControlledHumanObservedDuty,validateControlledHumanProofPairs} from './prCControlledHumanEvidenceContract.mjs';
+import {CONTROLLED_HUMAN_CATALOG,CONTROLLED_HUMAN_EXECUTION_ORDER,CONTROLLED_HUMAN_SERVER_ACTIONS,HUMAN_DUTY_BY_PERSONA,canonicalDigest,validateControlledExerciseObservedDuty,validateControlledHumanObservedDuty,validateControlledHumanProofPairs} from './prCControlledHumanEvidenceContract.mjs';
 import {createControlledHumanObservationFixture} from './prCControlledHumanObservationFixture.mjs';
 import {inspectPreflightTargetReadOnly} from './prCControlledHumanCredentialPreflight.mjs';
 import {runSyntheticPrerequisites,SYNTHETIC_PREREQUISITE_STATE_KEYS} from './prCSyntheticBrowserPrerequisites.mjs';
+import {SYNTHETIC_PERSONA_ORDER,buildSyntheticObserverRequest,buildSyntheticSessionBindingRequest,buildVerifiedSyntheticAcceptanceSession,requiredSyntheticBrowserAssertionId} from './prCSyntheticAcceptanceEvidence.mjs';
+import {deriveSyntheticApplicationActorDigest,deriveSyntheticApplicationSessionDigest} from './prCSyntheticIdentity.mjs';
 
 const {Client}=pg;
 const adminUrl=process.env.PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL;
@@ -294,6 +296,19 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const captureAbsence=buildCaptureAbsence();
     observationFixture=createControlledHumanObservationFixture({orderedSteps,machineStepKeys,postQuiesceStepKeys:['CH-13\0verify-history-readable-and-actions-absent'],expectedExerciseDigest:context.exerciseDigest,expectedScopeDigest:observationScopeDigest,
       exerciseStartedAt:seededAt,captureAbsence,waitForServerTimeAfter});
+    const syntheticSessionIds=new Map();
+    for(const user of users){
+      const sessionId=deterministicUuid(context.exerciseId,`synthetic-application-session-${user.key}`);syntheticSessionIds.set(user.key,sessionId);
+      await database.client.query('insert into auth.sessions(id,user_id) values($1,$2)',[sessionId,user.id]);
+    }
+    const syntheticPersonaIdentities=SYNTHETIC_PERSONA_ORDER.map(personaKey=>{
+      const user=users.find(record=>record.key===personaKey);const sessionId=syntheticSessionIds.get(personaKey);assert.ok(user&&sessionId);
+      return{personaKey,applicationActorDigest:deriveSyntheticApplicationActorDigest({exerciseDigest:context.exerciseDigest,personaKey,authUserId:user.id}),applicationSessionDigest:deriveSyntheticApplicationSessionDigest({exerciseDigest:context.exerciseDigest,personaKey,sessionId})};
+    });
+    const syntheticSessionBindingRequest=buildSyntheticSessionBindingRequest(syntheticPersonaIdentities);
+    const syntheticSessionBindingRecord=await bindSyntheticSessions(context,database,syntheticSessionBindingRequest);
+    assert.equal(syntheticSessionBindingRecord.sessionBindingCount,12);
+    assert.equal(syntheticSessionBindingRecord.requestDigest,canonicalDigest(syntheticSessionBindingRequest));
     let generationCommand={contractVersion:'pr-c-controlled-human-synthetic-studio-generation-1',actorId:generationBinding.actor_id,requestId:deterministicUuid(context.exerciseId,'synthetic-generation-request'),idempotencyKey:'synthetic-generation-exact',organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,authorizationVersion:Number(generationBinding.authorization_version),environmentClass:'hosted_nonproduction_pilot',prNumber:264,releaseSha:context.releaseSha,reviewHeadSha:context.reviewHeadSha,deployId:context.deployId,deployOrigin:context.deployOrigin,exerciseDigest:context.exerciseDigest,targetFingerprint:context.targetFingerprint,artifactId:generationBinding.artifact_id,sourcePackageId:generationBinding.source_package_id,sourcePackageVersion:Number(generationBinding.source_package_version),sourcePackageHash:generationBinding.package_hash,expectedAggregateVersion:Number(generationBinding.aggregate_version),expectedCurrentVersionId:generationBinding.current_version_id,expectedApprovedVersionId:generationBinding.current_approved_version_id,template:{kind:'tenant',templateId:generationBinding.template_id,versionId:generationBinding.template_version_id,version:Number(generationBinding.template_version),hash:generationBinding.template_hash}};
     const generationSnapshot=async()=>(await database.client.query(`select
       (select count(*)::int from public.pr_c_controlled_human_synthetic_generation_receipts) receipts,
@@ -826,6 +841,85 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       state=await studioArtifactState(artifactId);await invokeStudioPrerequisite('requester','studio.artifact.review.submit',artifactId,{artifactId,artifactVersionId:state.current_version_id},'submit');
       state=await studioArtifactState(artifactId);await invokeStudioPrerequisite('studio_reviewer','studio.artifact.review.assign',artifactId,{artifactId,artifactVersionId:state.current_version_id,reviewerId:handoffActors.studio_reviewer.auth_user_id},'assign');
     };
+
+    // The browser prerequisites for CH-01 and CH-02 are ordinary production
+    // commands that must finish before the local fill/edit observation windows.
+    // Exercise their exact persisted request -> receipt -> audit and lineage
+    // contracts here, then prove that either chain is rejected if moved inside
+    // its quiet window. Every disposable chain is contained by rollback.
+    const agentNecessityKeys=['irreducibleAmbiguity','adaptiveNextStep','toolOrPathSelection','incrementalValue','controllable'];
+    const unknownAgentNecessity=()=>Object.fromEntries(agentNecessityKeys.map(key=>[key,{fieldId:`agent.${key}`,value:null,status:'unknown',evidenceIds:[],source:'user'}]));
+    const invokeAssessProductionChain=async suffix=>{
+      const actor=handoffActors.requester;const authorizationVersion=Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,actor.auth_user_id])).rows[0].version);
+      const processId=deterministicUuid(context.exerciseId,`observer-assess-process-${suffix}`);const caseId=deterministicUuid(context.exerciseId,`observer-assess-case-${suffix}`);
+      const createRequestId=deterministicUuid(context.exerciseId,`observer-assess-create-request-${suffix}`);const upsertRequestId=deterministicUuid(context.exerciseId,`observer-assess-upsert-request-${suffix}`);
+      const primitiveId=deterministicUuid(context.exerciseId,`observer-assess-primitive-${suffix}`);const decisionId=deterministicUuid(context.exerciseId,`observer-assess-decision-${suffix}`);const exceptionId=deterministicUuid(context.exerciseId,`observer-assess-exception-${suffix}`);
+      const authoring={caseId,name:`Observer Assess ${suffix}`,description:'Persisted outside the CH-01 local fill window.',primitives:[{id:primitiveId,facts:{'primitive.rulesStable':{fieldId:'primitive.rulesStable',value:true,status:'suggested',evidenceIds:[],source:'template'}},agentNecessity:unknownAgentNecessity()}],edges:[],decisionPoints:[{id:decisionId,primitiveId,name:'Observer gate',ruleDescription:'Retain exact production lineage.',outcomeLabels:['continue','exception'],evidenceIds:[]}],exceptionPaths:[{id:exceptionId,fromPrimitiveId:primitiveId,name:'Observer exception',trigger:'Synthetic failure',resolutionPrimitiveIds:[primitiveId],evidenceIds:[]}],assets:[],interactions:[],evidence:[],agentNecessity:unknownAgentNecessity()};
+      await database.client.query(`insert into public.assess_processes(id,org_id,workspace_id,name,status) values($1,$2,$3,$4,'Draft')`,[processId,generationBinding.org_id,generationBinding.workspace_id,`Observer process ${suffix}`]);
+      await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actor.auth_user_id]);
+      const created=(await database.client.query(`select public.pr1d_create_assess_v2_case($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) result`,[actor.auth_user_id,generationBinding.org_id,generationBinding.workspace_id,caseId,processId,`Observer Assess ${suffix}`,'Persisted production create.',createRequestId,`observer-assess-create-${suffix}`,authorizationVersion])).rows[0].result;
+      assert.equal(created.outcome,'committed',`Assess create production command rejected: ${JSON.stringify(created)}`);assert.equal(created.resource.id,caseId);assert.equal(Number(created.resource.version),1);
+      const upserted=(await database.client.query(`select public.pr1d_upsert_assess_v2_draft($1,$2,$3,$4,1,$5::jsonb,$6,$7,$8) result`,[actor.auth_user_id,generationBinding.org_id,generationBinding.workspace_id,caseId,JSON.stringify(authoring),upsertRequestId,`observer-assess-upsert-${suffix}`,authorizationVersion])).rows[0].result;
+      assert.equal(upserted.outcome,'committed',`Assess upsert production command rejected: ${JSON.stringify(upserted)}`);assert.equal(upserted.resource.id,caseId);assert.equal(Number(upserted.resource.version),2);
+      const persisted=(await database.client.query(`select c.id,c.org_id,c.workspace_id,c.process_id,c.owner_id,c.version,c.head_version_id,v.case_id,v.version head_version,v.source_kind,v.created_by,v.name,v.description,
+        (select count(*)::int from public.assess_v2_primitives p where p.case_id=c.id and p.version_id=v.id) primitive_count,
+        (select count(*)::int from public.assess_v2_decision_points p where p.case_id=c.id and p.version_id=v.id) decision_count,
+        (select count(*)::int from public.assess_v2_exception_paths p where p.case_id=c.id and p.version_id=v.id) exception_count
+        from public.assess_v2_cases c join public.assess_v2_case_versions v on v.id=c.head_version_id where c.id=$1`,[caseId])).rows[0];
+      assert.deepEqual({org:persisted.org_id,workspace:persisted.workspace_id,processId:persisted.process_id,owner:persisted.owner_id,version:Number(persisted.version),head:persisted.head_version_id,caseId:persisted.case_id,headVersion:Number(persisted.head_version),source:persisted.source_kind,creator:persisted.created_by,name:persisted.name,description:persisted.description,primitives:Number(persisted.primitive_count),decisions:Number(persisted.decision_count),exceptions:Number(persisted.exception_count)},
+        {org:generationBinding.org_id,workspace:generationBinding.workspace_id,processId,owner:actor.auth_user_id,version:2,head:upserted.resource.headVersionId,caseId,headVersion:2,source:'draft_upsert',creator:actor.auth_user_id,name:authoring.name,description:authoring.description,primitives:1,decisions:1,exceptions:1});
+      for(const [action,requestId,version] of [['assessment_v2.create',createRequestId,1],['assessment_v2.draft.upsert',upsertRequestId,2]]){
+        const pair=(await database.client.query(`select receipt.id receipt_id,receipt.org_id receipt_org,receipt.workspace_id receipt_workspace,receipt.actor_id receipt_actor,receipt.command_type receipt_action,receipt.request_id receipt_request,receipt.status,
+          audit.id audit_id,audit.org_id audit_org,audit.workspace_id audit_workspace,audit.actor_id audit_actor,audit.action audit_action,audit.request_id audit_request,audit.resource_id,audit.resource_version,audit.outcome
+          from public.assess_command_receipts receipt join public.privileged_audit_events audit on audit.org_id=receipt.org_id and audit.workspace_id=receipt.workspace_id and audit.actor_id=receipt.actor_id and audit.action=receipt.command_type and audit.request_id=receipt.request_id
+          where receipt.org_id=$1 and receipt.workspace_id=$2 and receipt.actor_id=$3 and receipt.command_type=$4 and receipt.request_id=$5`,[generationBinding.org_id,generationBinding.workspace_id,actor.auth_user_id,action,requestId])).rows;
+        assert.equal(pair.length,1);assert.deepEqual({receiptOrg:pair[0].receipt_org,receiptWorkspace:pair[0].receipt_workspace,receiptActor:pair[0].receipt_actor,receiptAction:pair[0].receipt_action,receiptRequest:pair[0].receipt_request,status:pair[0].status,auditOrg:pair[0].audit_org,auditWorkspace:pair[0].audit_workspace,auditActor:pair[0].audit_actor,auditAction:pair[0].audit_action,auditRequest:pair[0].audit_request,resource:pair[0].resource_id,resourceVersion:Number(pair[0].resource_version),outcome:pair[0].outcome},
+          {receiptOrg:generationBinding.org_id,receiptWorkspace:generationBinding.workspace_id,receiptActor:actor.auth_user_id,receiptAction:action,receiptRequest:requestId,status:'succeeded',auditOrg:generationBinding.org_id,auditWorkspace:generationBinding.workspace_id,auditActor:actor.auth_user_id,auditAction:action,auditRequest:requestId,resource:caseId,resourceVersion:version,outcome:'succeeded'});
+      }
+      return{caseId,actorId:actor.auth_user_id};
+    };
+    const invokeStudioProductionCommand=async(personaKey,commandType,artifactId,payload,suffix)=>{
+      const actor=handoffActors[personaKey],state=await studioArtifactState(artifactId);assert.ok(actor&&state);
+      const authorizationVersion=Number((await database.client.query(`select version from public.authorization_versions where org_id=$1 and user_id=$2`,[generationBinding.org_id,actor.auth_user_id])).rows[0].version);
+      const requestId=deterministicUuid(context.exerciseId,`observer-studio-${commandType}-${suffix}`);const command={commandType,requestId,idempotencyKey:`observer-studio-${commandType}-${suffix}`,organizationId:generationBinding.org_id,workspaceId:generationBinding.workspace_id,actorId:actor.auth_user_id,authorizationVersion,expectedAggregateVersion:Number(state.aggregate_version),expectedArtifactVersion:Number(state.artifact_version),payload};
+      await database.client.query(`select set_config('request.jwt.claim.sub',$1,false)`,[actor.auth_user_id]);
+      const result=(await database.client.query(`select public.studio_artifact_command_claim($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result;
+      assert.equal(result.outcome,'committed');assert.equal(result.resourceId,artifactId);
+      const pair=(await database.client.query(`select receipt.id receipt_id,receipt.org_id receipt_org,receipt.workspace_id receipt_workspace,receipt.actor_id receipt_actor,receipt.command_type receipt_action,receipt.request_id receipt_request,receipt.status,receipt.resource_id,
+        audit.id audit_id,audit.org_id audit_org,audit.workspace_id audit_workspace,audit.actor_id audit_actor,audit.action audit_action,audit.request_id audit_request,audit.resource_id audit_resource,audit.resource_version,audit.outcome
+        from public.studio_artifact_command_receipts receipt join public.privileged_audit_events audit on audit.org_id=receipt.org_id and audit.workspace_id=receipt.workspace_id and audit.actor_id=receipt.actor_id and audit.action=receipt.command_type and audit.request_id=receipt.request_id
+        where receipt.id=$1`,[result.receiptId])).rows;
+      assert.equal(pair.length,1);assert.deepEqual({receiptOrg:pair[0].receipt_org,receiptWorkspace:pair[0].receipt_workspace,receiptActor:pair[0].receipt_actor,receiptAction:pair[0].receipt_action,receiptRequest:pair[0].receipt_request,status:pair[0].status,resource:pair[0].resource_id,auditOrg:pair[0].audit_org,auditWorkspace:pair[0].audit_workspace,auditActor:pair[0].audit_actor,auditAction:pair[0].audit_action,auditRequest:pair[0].audit_request,auditResource:pair[0].audit_resource,outcome:pair[0].outcome},
+        {receiptOrg:generationBinding.org_id,receiptWorkspace:generationBinding.workspace_id,receiptActor:actor.auth_user_id,receiptAction:commandType,receiptRequest:requestId,status:'committed',resource:artifactId,auditOrg:generationBinding.org_id,auditWorkspace:generationBinding.workspace_id,auditActor:actor.auth_user_id,auditAction:commandType,auditRequest:requestId,auditResource:artifactId,outcome:'succeeded'});
+      return{actorId:actor.auth_user_id,requestId,receiptId:result.receiptId,state,result};
+    };
+    const invokeStudioProductionChain=async(artifactId,suffix)=>{
+      const before=await studioArtifactState(artifactId);const content={...before.content,title:`Observer Studio ${suffix}`};
+      const revised=await invokeStudioProductionCommand('requester','studio.artifact.draft.revise',artifactId,{artifactId,parentVersionId:before.current_version_id,content},`${suffix}-revise`);
+      const afterRevise=await studioArtifactState(artifactId);assert.equal(Number(afterRevise.aggregate_version),Number(before.aggregate_version)+1);assert.equal(Number(afterRevise.artifact_version),Number(before.artifact_version)+1);assert.notEqual(afterRevise.current_version_id,before.current_version_id);assert.deepEqual(afterRevise.content,content);
+      const lineage=(await database.client.query(`select artifact_id,parent_version_id,version,content,author_id,org_id,workspace_id from public.studio_artifact_versions where id=$1`,[afterRevise.current_version_id])).rows[0];
+      assert.deepEqual({artifactId:lineage.artifact_id,parentVersionId:lineage.parent_version_id,version:Number(lineage.version),content:lineage.content,authorId:lineage.author_id,orgId:lineage.org_id,workspaceId:lineage.workspace_id},{artifactId,parentVersionId:before.current_version_id,version:Number(before.artifact_version)+1,content,authorId:handoffActors.requester.auth_user_id,orgId:generationBinding.org_id,workspaceId:generationBinding.workspace_id});
+      const submitted=await invokeStudioProductionCommand('requester','studio.artifact.review.submit',artifactId,{artifactId,artifactVersionId:afterRevise.current_version_id},`${suffix}-submit`);
+      const afterSubmit=await studioArtifactState(artifactId);assert.equal(afterSubmit.current_version_id,afterRevise.current_version_id);assert.equal(Number(afterSubmit.aggregate_version),Number(afterRevise.aggregate_version)+1);
+      const assigned=await invokeStudioProductionCommand('studio_reviewer','studio.artifact.review.assign',artifactId,{artifactId,artifactVersionId:afterRevise.current_version_id,reviewerId:handoffActors.studio_reviewer.auth_user_id},`${suffix}-assign`);
+      const afterAssign=await studioArtifactState(artifactId);const assignment=(await database.client.query(`select artifact_id,artifact_version_id,reviewer_id,assigned_by,receipt_id,org_id,workspace_id from public.studio_artifact_review_assignments where artifact_id=$1 and artifact_version_id=$2`,[artifactId,afterRevise.current_version_id])).rows[0];
+      assert.ok(assignment);assert.notEqual(handoffActors.requester.auth_user_id,handoffActors.studio_reviewer.auth_user_id);assert.deepEqual({artifactId:assignment.artifact_id,artifactVersionId:assignment.artifact_version_id,reviewerId:assignment.reviewer_id,assignedBy:assignment.assigned_by,receiptId:assignment.receipt_id,orgId:assignment.org_id,workspaceId:assignment.workspace_id},{artifactId,artifactVersionId:afterRevise.current_version_id,reviewerId:handoffActors.studio_reviewer.auth_user_id,assignedBy:handoffActors.studio_reviewer.auth_user_id,receiptId:assigned.receiptId,orgId:generationBinding.org_id,workspaceId:generationBinding.workspace_id});
+      assert.equal(afterAssign.current_version_id,afterRevise.current_version_id);assert.equal(Number(afterAssign.aggregate_version),Number(afterSubmit.aggregate_version)+1);
+      return{before,afterRevise,afterAssign,revised,submitted,assigned};
+    };
+    const productionProofArtifact=await approvedArtifact();assert.ok(productionProofArtifact);
+    await database.client.query('begin');try{
+      await invokeAssessProductionChain('outside-local-fill-window');
+      await invokeStudioProductionChain(productionProofArtifact.id,'outside-local-edit-window');
+    }finally{await database.client.query('rollback')}
+    const assertQuietWindowRejectsProductionWrites=async({checkpointId,stepId,label,write})=>{
+      let transactionOpen=false;
+      const poisonedCapture=buildCaptureAbsence(async()=>{await database.client.query('begin');transactionOpen=true;await write()});
+      const poisonedFixture=createControlledHumanObservationFixture({orderedSteps:[{checkpointId,stepId,personaKey:'requester'}],machineStepKeys:new Set(),expectedExerciseDigest:context.exerciseDigest,expectedScopeDigest:observationScopeDigest,exerciseStartedAt:seededAt,captureAbsence:poisonedCapture,waitForServerTimeAfter});
+      try{await assert.rejects(poisonedFixture.captureRemaining(),/PR_C_CH_OBSERVATION_FIXTURE_ACTIVITY_REJECTED/u,label)}finally{if(transactionOpen)await database.client.query('rollback')}
+    };
+    await assertQuietWindowRejectsProductionWrites({checkpointId:'CH-01',stepId:'complete-remaining-assess-fields-manually',label:'CH-01 local fill window must reject real Assess create/upsert activity',write:()=>invokeAssessProductionChain('poison-local-fill-window')});
+    await assertQuietWindowRejectsProductionWrites({checkpointId:'CH-02',stepId:'edit-structured-document',label:'CH-02 local edit window must reject real Studio revise/submit/assign activity',write:()=>invokeStudioProductionChain(productionProofArtifact.id,'poison-local-edit-window')});
 
     // Exercise the Studio prerequisite sequence against the real projection
     // and command claim. The Edge handler adds only `ok:true` to this exact
@@ -1386,11 +1480,9 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const humanProcess=deterministicUuid(context.exerciseId,'representative-human-process');await database.client.query(`insert into public.assess_processes(id,org_id,workspace_id,name,status) values($1,$2,$3,'Representative human mutation','Draft')`,[humanProcess,scope.org_id,scope.workspace_id]);assertTargetInventory(await database.inspect(context),context);
     const wrongScopeProcess=deterministicUuid(context.exerciseId,'wrong-scope-process');await database.client.query(`insert into public.assess_processes(id,org_id,workspace_id,name,status) values($1,$2,$3,'Wrong scope mutation','Draft')`,[wrongScopeProcess,scope.org_id,scope.other_workspace_id]);const wrongScopeInventory=await database.inspect(context);assert.ok(Number(wrongScopeInventory.unownedResourceRows)>0);assert.throws(()=>assertTargetInventory(wrongScopeInventory,context),/UNOWNED_RESOURCE_REJECTED/u);await database.client.query(`delete from public.assess_processes where id=$1`,[wrongScopeProcess]);
     await assert.rejects(database.quiesce(context,2),/PR_C_CONTROLLED_HUMAN_STATE_MISMATCH/u);
-    await database.prepareRecovery(context,'quiesce',1);
-    const quiesced=await database.quiesce(context,1);assert.equal(quiesced.lifecycle,'read_only');assert.equal(quiesced.runtimeControlReadOnlyCount,2);assert.equal(quiesced.featureFlagCountEnabled,0);assert.ok(Number.isFinite(Date.parse(quiesced.transitionedAt)));
-    assert.deepEqual(await database.quiesce(context,1),quiesced);
-    const quiescedInspection=await database.lifecycleInspection(context);await database.bindQuiescedHistory(context,2,quiescedInspection.immutableHistoryDigest);await database.completeRecovery(context,'quiesce');
-    const finalQuiesce={...quiesced,concurrencyVersion:2};
+    const quiesceRecord=await quiesce(context,database,1);assert.equal(quiesceRecord.lifecycle,'read_only');assert.equal(quiesceRecord.concurrencyVersion,2);assert.equal(quiesceRecord.runtimeControlReadOnlyCount,2);assert.equal(quiesceRecord.featureFlagCountEnabled,0);assert.ok(Number.isFinite(Date.parse(quiesceRecord.transitionedAt)));
+    const quiescedReplay=await database.quiesce(context,1);assert.equal(quiescedReplay.lifecycle,'read_only');assert.equal(Number(quiescedReplay.concurrencyVersion),2);
+    const finalQuiesce=quiesceRecord;
     const readOnlyAttestation=(await database.client.query(`select public.pr_c_controlled_human_public_attestation($1,$2,$3,$4,$5,$6) result`,[context.releaseSha,context.reviewHeadSha,context.deployId,context.deployOrigin,context.exerciseDigest,context.publicTargetDigest])).rows[0].result;assert.equal(readOnlyAttestation.attested,true);
     assert.equal((await database.client.query(`select read_only and not provider_enabled safe from public.enterprise_intelligence_runtime_control where singleton`)).rows[0].safe,true);
     assert.equal((await database.client.query(`select read_only and not provider_enabled safe from public.studio_artifact_runtime_control where singleton`)).rows[0].safe,true);
@@ -1491,12 +1583,34 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
       }
       assert.deepEqual(await exactRequestCausalSnapshot(database.client),exactRequestBaseline,`rollback-isolated observer poison iteration ${iteration} must not alter exact-request causality or primary transaction state`);
     }
-    const observedDuties=[];
-    for(const humanRole of ['requester','reviewer','approver']){
-      const steps=buildObservedDutyRequest(humanRole);const observed=await database.observeDuty(context,humanRole,steps,sha256({humanRole,steps}));
-      const validation=validateControlledHumanObservedDuty({humanRole,requestedSteps:steps,serverSteps:observed.steps,proofPairs:persistedProofPairs});
-      observedDuties.push({humanRole,steps,observed,validation});
-      assert.equal(observed.steps.length,steps.length);assert.ok(observed.steps.every((record,index)=>record.humanAttemptDigest===steps[index].attemptDigest));
+    const identityByPersona=new Map(syntheticPersonaIdentities.map(record=>[record.personaKey,record]));const proofByStep=new Map(persistedProofPairs.map(pair=>[`${pair.checkpointId}\0${pair.stepId}`,pair]));let syntheticArtifactOrdinal=0;
+    const syntheticCheckpoints=CONTROLLED_HUMAN_CATALOG.map(expected=>{const checkpointId=expected.checkpointId;return{checkpointId,journeyId:expected.journeyId,testIds:expected.testIds,outcome:'passed',steps:expected.steps.map(step=>{
+      const timing=observedTimingByStep.get(`${checkpointId}\0${step.stepId}`);const identity=identityByPersona.get(step.personaKey);const proof=proofByStep.get(`${checkpointId}\0${step.stepId}`);const ordinal=syntheticArtifactOrdinal++;
+      assert.ok(timing&&identity);return{stepId:step.stepId,personaKey:step.personaKey,outcome:'passed',startedAt:new Date(timing.started).toISOString(),completedAt:new Date(timing.completed).toISOString(),applicationActorDigest:identity.applicationActorDigest,applicationSessionDigest:identity.applicationSessionDigest,
+        browserArtifact:{artifactId:`postgres-observer-${checkpointId.toLowerCase()}-${ordinal}`,route:'/enterprise',viewport:'postgres-integration-fixture',assertions:[{assertionId:requiredSyntheticBrowserAssertionId(checkpointId,step.stepId),kind:'dom',result:'passed',actualDigest:sha256({fixture:'postgres-observer-browser-shape',checkpointId,stepId:step.stepId,ordinal})}],interactionSequence:['postgres-observer-fixture',`step-${ordinal}`],serverAnchor:proof?.anchor??null,serverBinding:proof?.binding??null}};
+    })}});
+    // Preserve the legacy human observer integration proof in an outer rollback,
+    // because the table key intentionally allows only one execution kind per
+    // step. The persisted records below are the separately labelled synthetic
+    // evidence used by the PR #264 acceptance builder.
+    const humanObservedDuties=[];await database.client.query('begin');let humanSavepointOrdinal=0;let activeHumanSavepoint=null;
+    const humanProbeDatabase=Object.create(database);humanProbeDatabase.client={query:async(text,parameters)=>{const command=typeof text==='string'?text.trim().toLowerCase():'';
+      if(command==='begin'){activeHumanSavepoint=`human_observer_${humanSavepointOrdinal++}`;return database.client.query(`savepoint ${activeHumanSavepoint}`)}
+      if(command==='commit'){const result=await database.client.query(`release savepoint ${activeHumanSavepoint}`);activeHumanSavepoint=null;return result}
+      if(command==='rollback'){const savepoint=activeHumanSavepoint;await database.client.query(`rollback to savepoint ${savepoint}`);const result=await database.client.query(`release savepoint ${savepoint}`);activeHumanSavepoint=null;return result}
+      return database.client.query(text,parameters)}};
+    try{
+      for(const humanRole of ['requester','reviewer','approver']){const steps=buildObservedDutyRequest(humanRole);const observed=await humanProbeDatabase.observeDuty(context,humanRole,steps,sha256({humanRole,steps}));const validation=validateControlledHumanObservedDuty({humanRole,requestedSteps:steps,serverSteps:observed.steps,proofPairs:persistedProofPairs});humanObservedDuties.push({humanRole,steps,observed,validation});assert.equal(observed.steps.length,steps.length);assert.ok(observed.steps.every((record,index)=>record.humanAttemptDigest===steps[index].attemptDigest));}
+      assert.deepEqual(humanObservedDuties.flatMap(duty=>duty.validation.machineStepKeys).sort(),CONTROLLED_HUMAN_SERVER_ACTIONS.map(item=>`${item.checkpointId}\0${item.stepId}`).sort());
+      validateControlledHumanProofPairs(persistedProofPairs,humanObservedDuties.flatMap(duty=>duty.observed.steps));
+    }finally{await database.client.query('rollback')}
+    assert.equal(Number((await database.client.query(`select count(*) count from public.pr_c_controlled_human_step_observations`)).rows[0].count),0,'rollback-isolated human observer proof must not occupy the synthetic evidence key');
+    const observedDuties=[];const serverObservers=[];
+    for(const syntheticRole of ['requester','reviewer','approver']){
+      const request=buildSyntheticObserverRequest(syntheticRole,syntheticCheckpoints);const observed=await checkpointObserve(context,database,request);
+      const validation=validateControlledExerciseObservedDuty({executionKind:'synthetic',role:syntheticRole,requestedSteps:request.steps,serverSteps:observed.steps,proofPairs:persistedProofPairs});
+      observedDuties.push({humanRole:syntheticRole,steps:request.steps,observed,validation});serverObservers.push(observed);
+      assert.equal(observed.executionKind,'synthetic');assert.equal(observed.syntheticRole,syntheticRole);assert.equal(observed.steps.length,request.steps.length);assert.ok(observed.steps.every((record,index)=>record.machineAttemptDigest===request.steps[index].attemptDigest&&record.applicationActorDigest===request.steps[index].applicationActorDigest&&record.applicationSessionDigest===request.steps[index].applicationSessionDigest));
     }
     const observedMachineKeys=observedDuties.flatMap(duty=>duty.validation.machineStepKeys).sort();
     assert.deepEqual(observedMachineKeys,CONTROLLED_HUMAN_SERVER_ACTIONS.map(item=>`${item.checkpointId}\0${item.stepId}`).sort(),'observer coverage must equal the exact 43-step machine catalog');
@@ -1518,18 +1632,25 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const reviewerSteps=observedDuties.find(duty=>duty.humanRole==='reviewer').steps;
     assert.ok(reviewerSteps.filter(step=>step.stepId!=='verify-history-readable-and-actions-absent').every(step=>Date.parse(step.completedAt)<finalQuiesceTime));
     assert.ok(Date.parse(reviewerSteps.find(step=>step.stepId==='verify-history-readable-and-actions-absent').startedAt)>=finalQuiesceTime);
-    await assert.rejects(database.observeDuty(context,'reviewer',reviewerSteps,sha256('substituted-observer-request')),/OBSERVER_REQUEST_REJECTED/u);
+    await assert.rejects(database.observeDuty(context,'reviewer',reviewerSteps,sha256('substituted-observer-request'),'synthetic'),/OBSERVER_REQUEST_REJECTED/u);
     assert.equal(Number((await database.client.query(`select count(*) count from public.pr_c_controlled_human_step_observations`)).rows[0].count),observedDuties.reduce((total,duty)=>total+duty.steps.length,0));
-    for(let index=0;index<3;index++)await database.client.query('insert into auth.sessions(id,user_id) values($1,$2)',[deterministicUuid(context.exerciseId,`session-${index}`),users[index].id]);
-    const sessionCount=await database.revokeSessions(context);assert.equal(sessionCount,3);
+    const deprovisionRecord=await deprovision(context,database,2,{disableUsers:async userIds=>userIds.length});assert.equal(deprovisionRecord.lifecycle,'deprovisioned');assert.equal(deprovisionRecord.concurrencyVersion,3);assert.equal(deprovisionRecord.operationEventSequence,5);assert.equal(deprovisionRecord.sessionsRevoked,12);assert.equal(deprovisionRecord.credentialsDisabled,12);
     assert.deepEqual(await database.boundUserIds(context),[...users].sort((left,right)=>left.key.localeCompare(right.key)).map(user=>user.id));
     assert.equal(Number((await database.client.query(`select count(*) count from auth.sessions where user_id=any($1::uuid[])`,[users.map(user=>user.id)])).rows[0].count),0);
-    await database.prepareRecovery(context,'deprovision',2);const deprovisioned=await database.finalizeDeprovision(context,2,sessionCount,12);assert.equal(deprovisioned.lifecycle,'deprovisioned');assert.equal(deprovisioned.concurrencyVersion,3);assert.equal(deprovisioned.operationEventSequence,5);await database.completeRecovery(context,'deprovision');const postState=await database.lifecycleInspection(context);assert.equal(postState.immutableHistoryRetained,true);assert.equal(postState.domainRowsDeleted,0);assert.equal(postState.activeSessionCount,0);assert.equal(postState.operationEventSequence,5);assert.match(postState.inspectionAttemptDigest,/^sha256:[0-9a-f]{64}$/u);assert.match(postState.inspectionObservedAt,/Z$/u);assert.deepEqual(postState.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});
+    const postState=await database.lifecycleInspection(context);assert.equal(postState.immutableHistoryRetained,true);assert.equal(postState.domainRowsDeleted,0);assert.equal(postState.activeSessionCount,0);assert.equal(postState.operationEventSequence,5);assert.match(postState.inspectionAttemptDigest,/^sha256:[0-9a-f]{64}$/u);assert.match(postState.inspectionObservedAt,/Z$/u);assert.deepEqual(postState.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});
     await database.client.query('begin');try{
       await database.client.query(`insert into public.ai_provider_audit_events(id,event_type,org_id,workspace_id,provider,operation,status,actor_id,metadata) values($1,'post_observer_probe',$2,$3,'openai','synthetic-test','recorded',$4,'{"synthetic":true}'::jsonb)`,[deterministicUuid(context.exerciseId,'post-observer-provider-traffic'),generationBinding.org_id,generationBinding.workspace_id,generationBinding.actor_id]);
       assert.equal((await database.lifecycleInspection(context)).safety.providerEgress,1);await assert.rejects(postDeprovisionVerify(context,database),/PROVIDER_STATE_REJECTED|PARTIAL_RESET_REJECTED/u);
     }finally{await database.client.query('rollback')}
     const postVerified=await postDeprovisionVerify(context,database);assert.deepEqual(postVerified.safety,{providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});assert.equal(postVerified.postInspectionDigest,postState.postInspectionDigest);assert.notEqual(postVerified.inspectionAttemptDigest,postState.inspectionAttemptDigest);assert.ok(Date.parse(postVerified.inspectionObservedAt)>=Date.parse(postState.inspectionObservedAt));assert.equal(postVerified.operationEventSequence,postState.operationEventSequence);
+    const syntheticPersonas=syntheticPersonaIdentities.map(record=>({...record,role:HUMAN_DUTY_BY_PERSONA[record.personaKey],signedOutAt:deprovisionRecord.inspectionObservedAt,signOutEvidenceDigest:sha256({fixture:'postgres-session-revocation',personaKey:record.personaKey,applicationSessionDigest:record.applicationSessionDigest,sessionsRevoked:deprovisionRecord.sessionsRevoked})}));
+    const syntheticPolicy=JSON.parse(await readFile('testing/process-lifecycle/contracts/pr-c-solo-owner-synthetic-policy.json','utf8'));
+    const syntheticBinding={repository:'APReddy-AutoBotz/AvalaOS-Core',prNumber:264,branch:'controller/governed-delivery-monitor-pr-c-20260831',exactHead:context.releaseSha,
+      preview:{origin:context.deployOrigin,deployId:context.deployId,releaseSha:context.releaseSha,environment:context.environmentClass,context:'deploy-preview',reviewId:264,siteName:'avalaos-pilot'},
+      backend:{exerciseDigest:context.exerciseDigest,targetFingerprint:context.targetFingerprint,publicTargetDigest:context.publicTargetDigest,personaManifestDigest:context.personaManifestDigest,fixtureManifestDigest:context.fixtureManifestDigest,migrationTip:context.migrationTip},
+      producer:{workflowPath:'.github/workflows/transcript-flow-pr-c.yml',job:'synthetic_role_acceptance',event:'workflow_dispatch',runId:'1',runAttempt:1,owner:'APReddy-AutoBotz'}};
+    const verifiedSyntheticSession=buildVerifiedSyntheticAcceptanceSession({policy:syntheticPolicy,binding:syntheticBinding,personas:syntheticPersonas,checkpoints:syntheticCheckpoints,sessionBindingRecord:syntheticSessionBindingRecord,serverObservers,quiesceRecord,deprovisionRecord,postDeprovisionRecord:postVerified,completedAt:postVerified.inspectionObservedAt});
+    assert.deepEqual(verifiedSyntheticSession.totals,{journeyCount:8,checkpointCount:14,stepCount:84,passedStepCount:84,failedStepCount:0,blockedStepCount:0,providerEgress:0,realProviderCalls:0,customerDataRecords:0,externalUsers:0});assert.equal(verifiedSyntheticSession.lifecycle.status,'verified_deprovisioned');assert.equal(verifiedSyntheticSession.serverObservers.length,3);
     assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_delivery_work_packages`)).rows[0].count),8);
     assert.equal(Number((await database.client.query(`select count(*) count from public.enterprise_monitor_baselines`)).rows[0].count),3);
     const auditCountAfterFirst=Number((await database.client.query(`select count(*) count from public.privileged_audit_events`)).rows[0].count);assert.ok(auditCountAfterFirst>=2);
