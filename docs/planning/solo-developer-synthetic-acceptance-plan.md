@@ -1914,3 +1914,73 @@ client harness and still rejects calls when no hook is installed. The exact
 previously failing coverage command passed locally with unchanged 95/95/85
 thresholds; no application behavior changed. Include this one-line harness
 correction in the same PR and require the final candidate's CI and preview.
+
+### Final read-only restoration repair (2026-10-02)
+
+Executed evidence: candidate `5fb80af` passed all 18 required workflows,
+independent native and governed artifact verification, and exact-head preview
+verification. Protected run `36958138521` completed all 83 active browser steps,
+actor/session binding and quiescence. Its final read-only step failed with
+`PR_C_SYNTHETIC_BROWSER_NAVIGATION_SHELL_MISSING`. Bounded recovery deprovisioned
+the exercise and private-state erasure passed. Final Monitor observation,
+all-persona sign-out, independent observations and acceptance recomputation
+remain not run; this is not a complete acceptance PASS.
+
+Confirmed source defect: the final browser phase restored sessions at `/`,
+while the controlled preview binding requires `/sign-in`. The active phase
+already uses the correct route. The application failed closed as designed;
+the runner's body/local-storage checks missed the route denial. A second
+confirmed defect would prevent final sign-out: the revoked actor's empty
+enterprise-session view offered refresh but no application sign-out action.
+The read-only architecture, security and quality reviewers completed before
+the controller transitioned to scoped writes under the managed workspace-write
+profile. The initial page-load timing hypothesis was superseded by the exact
+route mismatch; no timeout increase or orchestration redesign is required.
+
+The repair resumes at the authorized route and waits for an application shell
+or the explicitly expected revoked-actor empty-session view before checking
+the retained identity. The unavailable-workspace view exposes the existing
+AuthProvider sign-out action, with a bounded failure message and retry. The
+same actor/session binding, fresh Monitor reload, retained four-baseline digest,
+absent mutation controls, all-persona logout and private-state erasure remain
+required. Runtime route authorization, SQL, Edge functions, scoring and
+quiescence controls are unchanged.
+
+Planned verification: a focused actual-application regression must exercise
+the resumed final phase, reject the old root route, preserve the retained
+Monitor history, sign out all personas including the revoked actor, and erase
+private state. Local evidence and final candidate CI/preview results will be
+recorded before the next protected campaign. Rollback reverts the runner and
+session-view repair together; leave the synthetic environment deprovisioned
+and retain failed-run history. No database or Edge rollback is required.
+
+The actual-application regression also exposed a third confirmed runner/UI
+contract defect before another hosted dispatch: desktop Header says `Sign Out`
+and lacked the runner's expected `desktop-sign-out` identifier. The existing
+button now supplies that identifier without changing its handler or accessible
+name. Include this selector with the runner/session-view rollback. The full
+resumed-phase regression must observe all twelve SDK logout requests and state
+directory removal; local fixture responses are not hosted server evidence.
+
+The connected regression then reached all twelve sign-outs and exposed the
+last normal-cleanup defect: `rm` without recursion rejects a directory even
+when it is empty. Use nonrecursive `rmdir` after the existing empty-directory
+assertion. The independent workflow recovery/erasure path had already passed
+on the failed hosted run; this correction repairs normal browser completion.
+
+Executed focused local evidence: both actual-application regressions passed
+together (62.6 seconds). The positive case restores all twelve original
+synthetic actor/session identities through the real App and providers, compares
+the four-baseline retained identity digest, requires disabled creation and
+absent mutation controls, observes twelve SDK logout requests including the
+revoked actor, validates the completed browser campaign, and verifies the
+state directory no longer exists. The negative case proves the old root route
+renders only the public application and cannot resume workspace access. Its
+backend responses and the prior 83-step records are explicitly inert local
+fixtures; it executes the final phase, not a replacement hosted campaign.
+The existing synthetic feature integration gate passed 79/79 with zero skips
+(145.4 seconds). The final static boundary scan passed 15 patterns with 830
+allowed hits, zero forbidden hits and zero stale entries; the one new
+storage-state allowance is confined to the exact inert fixture line. Patch
+formatting passed. Final candidate CI/preview verification and the protected
+hosted campaign remain required before any acceptance or merge claim.

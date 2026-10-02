@@ -88,6 +88,13 @@
   "entries": [
     {
       "pattern": "localStorage",
+      "path": "scripts/prCSyntheticBrowserReadOnly.test.mjs",
+      "lines": [245],
+      "reason": "test/control documentation",
+      "futureAction": "Keep these inert Playwright storage-state fixtures confined to the isolated final-phase regression. They are not server authorization or hosted acceptance evidence."
+    },
+    {
+      "pattern": "localStorage",
       "path": "scripts/prCSyntheticAcceptanceBrowser.test.mjs",
       "lines": [206, 215],
       "reason": "test/control documentation",

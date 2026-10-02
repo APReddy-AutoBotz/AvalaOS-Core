@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from './AuthProvider';
 import { useOrganizationContext } from './OrganizationProvider';
 import { EnterpriseSessionStatePanel } from './EnterpriseSessionStatePanel';
 import ControlledHumanNonProductionBanner from './ControlledHumanNonProductionBanner';
@@ -6,10 +7,30 @@ import ControlledHumanNonProductionBanner from './ControlledHumanNonProductionBa
 
 export const EnterpriseSessionStateView: React.FC = () => {
   const { sessionState, sessionMessage, refreshOrgs } = useOrganizationContext();
+  const { signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    setSignOutFailed(false);
+    try {
+      await signOut();
+    } catch {
+      setSignOutFailed(true);
+      setSigningOut(false);
+    }
+  };
   return <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
     <ControlledHumanNonProductionBanner />
     <main className="grid min-h-[calc(100vh-2.75rem)] place-items-center p-6" aria-live="polite">
-      <EnterpriseSessionStatePanel state={sessionState} message={sessionMessage} onRefresh={() => refreshOrgs()} />
+      <div className="w-full max-w-xl">
+        <EnterpriseSessionStatePanel state={sessionState} message={sessionMessage} onRefresh={() => refreshOrgs()} />
+        <button type="button" onClick={handleSignOut} disabled={signingOut}
+          className="mt-4 min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-[#002C4B] disabled:opacity-50">
+          {signingOut ? 'Signing out...' : 'Sign out'}
+        </button>
+        {signOutFailed && <p role="alert" className="mt-3 text-sm text-red-700">Sign-out failed. Please try again.</p>}
+      </div>
     </main>
   </div>;
 };

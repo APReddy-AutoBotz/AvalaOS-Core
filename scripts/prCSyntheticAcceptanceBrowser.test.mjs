@@ -440,6 +440,8 @@ test('CH-12 mutation denial survives atomic evidence-banner remounts', async () 
   } finally { await browser.close(); }
 });
 
+import './prCSyntheticBrowserReadOnly.test.mjs';
+
 test('evidence readiness fails closed for missing, blocked, and duplicate surfaces', async () => {
   const browser = await chromium.launch();
   try {

@@ -87,6 +87,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, currentView, curren
             <div className="max-w-[132px] truncate text-[10px] font-semibold text-[var(--av-color-text-muted)]">{currentUser.roleTitle || currentUser.orgRole || 'Demo user'}</div>
           </div>
           <button
+            data-testid="desktop-sign-out"
             type="button"
             onClick={signOut}
             className="rounded-lg px-2 py-1 text-xs font-bold text-[var(--av-color-brand-primary)] transition-colors hover:bg-[var(--av-color-bg-subtle)]"

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -2080,6 +2080,25 @@ const signOut = async (page, personaKey) => {
   return { signedOutAt: iso(), signOutEvidenceDigest: digest({ personaKey, route: new URL(page.url()).pathname, sessionPresent: false }) };
 };
 
+export const waitForResumedPage = async (page, personaKey) => {
+  assert.equal(new URL(page.url()).pathname, '/sign-in', 'PR_C_SYNTHETIC_BROWSER_RESUME_ROUTE_REJECTED');
+  await page.waitForFunction(key => {
+    if (document.querySelector('#primary-navigation')) return 'shell';
+    if (key === 'revoked_actor'
+      && document.querySelector('[data-testid="enterprise-session-boundary"] h1')?.textContent === 'No enterprise workspace'
+      && [...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Sign out')) return 'revoked';
+    return null;
+  }, personaKey, { timeout: 20_000 }).catch(async () => {
+    const state = await page.evaluate(() => {
+      if (document.querySelector('[data-testid="controlled-human-environment-blocked"]')) return 'BINDING_BLOCKED';
+      if (document.querySelector('[data-testid="enterprise-session-boundary"]')) return 'SESSION_BOUNDARY';
+      if (document.querySelector('input[type="password"]')) return 'SIGNED_OUT';
+      return 'APP_NOT_READY';
+    }).catch(() => 'APP_UNAVAILABLE');
+    throw new Error(`PR_C_SYNTHETIC_BROWSER_RESUME_${state}:${personaKey}`);
+  });
+};
+
 export const runReadOnlyBrowserPhase = async ({ active, env = process.env, preparation, headed = false, stateDirectory, browserFactory = () => chromium.launch({ headless: !headed }) } = {}) => {
   const binding = exactEnvironment(env, preparation); assert(stateDirectory, 'PR_C_SYNTHETIC_BROWSER_STATE_DIRECTORY_REQUIRED');
   assert(active?.kind === 'pr264-synthetic-browser-active-private' && canonicalJson(active.binding) === canonicalJson(binding.binding), 'PR_C_SYNTHETIC_BROWSER_RESUME_BINDING_REJECTED');
@@ -2089,7 +2108,8 @@ export const runReadOnlyBrowserPhase = async ({ active, env = process.env, prepa
     for (const record of active.personas) {
       const stateFile = path.resolve(stateDirectory, `${record.personaKey}.json`); assert.equal(path.dirname(stateFile), path.resolve(stateDirectory));
       const context = await browser.newContext({ ...(record.personaKey === 'monitor_viewer' ? devices['Pixel 7'] : devices['Desktop Chrome']), storageState: stateFile, serviceWorkers: 'block' });
-      const page = await context.newPage(); attachProviderObserver(page, providerEgress); await page.goto(binding.previewOrigin, { waitUntil: 'domcontentloaded' }); await waitForUsablePage(page);
+      const page = await context.newPage(); attachProviderObserver(page, providerEgress); await page.goto(`${binding.previewOrigin}/sign-in`, { waitUntil: 'domcontentloaded' }); await waitForUsablePage(page);
+      await waitForResumedPage(page, record.personaKey);
       const identity = await readCurrentIdentity(page, record.personaKey, binding.exerciseDigest);
       assertResumedIdentity({ applicationActorDigest: record.applicationActorDigest, applicationSessionDigest: record.applicationSessionDigest }, identity, record.personaKey);
       personas.set(record.personaKey, { context, page, identity });
@@ -2103,7 +2123,7 @@ export const runReadOnlyBrowserPhase = async ({ active, env = process.env, prepa
     for (const record of active.personas) personaEvidence.push({ ...record, ...await signOut(personas.get(record.personaKey).page, record.personaKey) });
     assert.equal(providerEgress.length, 0, 'PR_C_SYNTHETIC_BROWSER_PROVIDER_EGRESS');
     for (const record of active.storageStateFiles) await rm(path.join(stateDirectory, record.file));
-    assert.deepEqual(await readdir(stateDirectory), [], 'PR_C_SYNTHETIC_BROWSER_EPHEMERAL_STATE_REMAINS'); await rm(stateDirectory, { recursive: false });
+    assert.deepEqual(await readdir(stateDirectory), [], 'PR_C_SYNTHETIC_BROWSER_EPHEMERAL_STATE_REMAINS'); await rmdir(stateDirectory);
     return validateBrowserCampaignShape({ binding: active.binding, personas: personaEvidence, checkpoints, completedAt: iso() });
   } finally {
     await Promise.all([...personas.values()].map(({ context }) => context.close().catch(() => undefined))); await browser.close().catch(() => undefined);
