@@ -40,7 +40,7 @@ const assertProcessModalAccess = async (page: Page) => {
 };
 
 test('PR C synthetic runner manually completes and reloads the real Assess V2 draft', async ({ page }) => {
-  await installEnterpriseFixture(page, { initialStatus: 'Ready for Review' });
+  await installEnterpriseFixture(page, { initialStatus: 'Ready for Review', reverseAssessPrimitiveReadback: true });
   await page.goto('/');
   await expectProcessCatalog(page);
   await page.getByRole('button', { name: 'View' }).first().click();
@@ -53,7 +53,7 @@ test('PR C synthetic runner manually completes and reloads the real Assess V2 dr
 });
 
 test('PR C synthetic observation phase split keeps Assess writes outside the manual-field window', async ({ page }) => {
-  const fixture = await installEnterpriseFixture(page, { initialStatus: 'Ready for Review' });
+  const fixture = await installEnterpriseFixture(page, { initialStatus: 'Ready for Review', reverseAssessPrimitiveReadback: true });
   await page.goto('/');
   await expectProcessCatalog(page);
   await page.getByRole('button', { name: 'View' }).first().click();
@@ -89,9 +89,39 @@ test('PR C synthetic observation phase split keeps Assess writes outside the man
     'prerequisite:save:assess-v2-draft', 'prerequisite:reload:assess-v2-draft',
   ]);
   expect(fixture.committedCommands.map(item => item.commandType)).toEqual(['assessment_v2.create', 'assessment_v2.draft.upsert']);
+  const primitiveId = state.get('phase:ch01:assess-draft').primitiveId as string;
+  expect(primitiveId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+  const upsertPrimitives = fixture.committedCommands[1].payload.primitives as Array<Record<string, any>>;
+  const persistedPrimitive = upsertPrimitives.filter(primitive => primitive.id === primitiveId);
+  expect(persistedPrimitive).toHaveLength(1);
+  expect(persistedPrimitive[0]).toMatchObject({ id: primitiveId, name: 'Capture request', type: 'Capture',
+    facts: { 'primitive.rulesStable': { fieldId: 'primitive.rulesStable', value: true, status: 'known', source: 'user' } } });
+  const workspace = page.getByTestId('assess-v2-workspace');
+  const targetPrimitive = workspace.locator(`fieldset[data-assess-primitive-id="${primitiveId}"]`);
+  const otherPrimitive = workspace.locator(`fieldset[data-assess-primitive-id]:not([data-assess-primitive-id="${primitiveId}"])`);
+  await expect(targetPrimitive.getByLabel(/^Primitive [1-9][0-9]* name$/u)).toHaveValue('Capture request');
+  await expect(targetPrimitive.getByLabel(/^Primitive [1-9][0-9]* type$/u)).toHaveValue('Capture');
+  const targetRule = targetPrimitive.getByLabel(/^Primitive [1-9][0-9]* primitive[.]rulesStable$/u);
+  const otherRule = otherPrimitive.getByLabel(/^Primitive [1-9][0-9]* primitive[.]rulesStable$/u);
+  await targetRule.selectOption('false');
+  await otherRule.selectOption('true');
+  await expect(assertSyntheticAssessDraftReadback(page, primitiveId)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_RULE_READBACK_REJECTED');
+  await targetRule.selectOption('true');
+  await otherRule.selectOption('unknown');
+  const targetHandle = await targetPrimitive.elementHandle();
+  const otherHandle = await otherPrimitive.elementHandle();
+  expect(targetHandle).not.toBeNull();
+  expect(otherHandle).not.toBeNull();
+  const otherPrimitiveId = await otherPrimitive.getAttribute('data-assess-primitive-id');
+  await targetHandle!.evaluate(element => element.removeAttribute('data-assess-primitive-id'));
+  await expect(assertSyntheticAssessDraftReadback(page, primitiveId)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_READBACK_REJECTED');
+  await targetHandle!.evaluate((element, id) => element.setAttribute('data-assess-primitive-id', id), primitiveId);
+  await otherHandle!.evaluate((element, id) => element.setAttribute('data-assess-primitive-id', id), primitiveId);
+  await expect(assertSyntheticAssessDraftReadback(page, primitiveId)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_READBACK_REJECTED');
+  await otherHandle!.evaluate((element, id) => element.setAttribute('data-assess-primitive-id', id!), otherPrimitiveId);
   await expect(page.getByLabel('Application 1 accountable owner')).toHaveValue('Synthetic Assess owner');
   await page.getByLabel('Application 1 accountable owner').fill('Corrupted owner');
-  await expect(assertSyntheticAssessDraftReadback(page)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_OWNER_READBACK_REJECTED');
+  await expect(assertSyntheticAssessDraftReadback(page, primitiveId)).rejects.toThrow('PR_C_SYNTHETIC_BROWSER_ASSESS_OWNER_READBACK_REJECTED');
   expect(fixture.committedCommands).toHaveLength(2);
   state.set('phase:ch01:assess-draft', { ...state.get('phase:ch01:assess-draft'), phase: 'created' });
   await expect(runSyntheticObservationPrerequisites({ planned: resolve, sessions: new Map([['requester', requester]]), state,

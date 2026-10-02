@@ -2105,3 +2105,61 @@ are exact lines in the inert negative-test fixture. The evidence/CI contracts
 passed with the unchanged 85-command, 241-assertion registry. Source provenance
 was refreshed, and patch formatting passed. Exact-head CI, preview and a full
 protected hosted campaign are still required before acceptance is claimed.
+
+### Assess primitive identity readback correction (2026-10-02)
+
+Executed evidence: candidate `788fb13` passed all 18 required workflows,
+independent Native Assess and governed artifact verification, and exact-preview
+verification. Protected run `37013397621` failed in the active phase at the
+CH-01 prerequisite before `resolve-material-assess-conflict`: the reloaded
+case description passed, but the `Primitive 1 primitive.rulesStable` readback
+was not `true`. Session binding, final logout, the server observer and acceptance
+recomputation were not run. Recovery passed with lifecycle `deprovisioned` and
+private-state cleanup passed. This run does not establish a logout result.
+
+Confirmed source and coverage defect: the runner treats a display position as
+primitive identity. The scaffold creates two primitives with random immutable
+IDs, while the browser's child-row query has no ordering contract and the
+database stores no authoring ordinal. Reload can put the unedited primitive
+first. The local network fixture always returned insertion order. This is a
+concrete failure path consistent with the hosted error; the recovered hosted
+row's exact value is not retained evidence. A save-payload assertion is also
+needed to distinguish missing authoring input from a reordered projection.
+
+All read-only architecture, security and quality reviews completed before
+implementation. Retain the edited primitive ID in the existing private runner
+state; expose its existing ID on the actual fieldset solely for selection;
+verify the captured save payload has exactly that primitive and its canonical
+known `rulesStable=true` fact; and reread the same ID after reload. Raw IDs
+must not enter sanitized evidence. Preserve all other fact values, deterministic
+scoring, server authorization and the complete acceptance catalog. Do not set
+both primitives to true, accept any true primitive, add retries, sort the global
+projection, or introduce an ordinal/schema migration.
+
+Planned focused verification: reverse primitive rows in the network fixture and
+first reproduce the current failure, then verify the identity-based repair on
+Desktop Chrome and Pixel 7. Corrupt the intended primitive while the other is
+true and require rejection; reject missing/duplicate identity selectors. Verify
+the existing complete-draft wrapper with the same focused browser gate. Rollback
+reverts the runner, selector, fixtures and provenance together; the exercise
+remains deprovisioned and no database/Edge rollback is necessary. Full hosted
+acceptance and AP's final merge confirmation remain required.
+
+Executed reproduction before the runner/product correction: reversing only the
+fixture's primitive child readback made the existing CH-01 phase test fail on
+both Desktop Chrome (7.2 seconds) and Pixel 7 (9.4 seconds), with the exact
+`PR_C_SYNTHETIC_BROWSER_ASSESS_RULE_READBACK_REJECTED` code and the display-first
+primitive returning `unknown` instead of `true`. No fact-value or server command
+change was needed to reproduce the failed run's assertion.
+
+Executed corrected verification: the same reversed-readback phase test and the
+complete-draft compatibility wrapper passed 4/4 across Desktop Chrome and
+Pixel 7 in 43.7 seconds. The phase test verifies the saved primitive UUID and
+canonical fact, rereads the same ID after reversal, rejects the wrong primitive
+being true, rejects missing/duplicate identity selectors and retains the owner
+corruption check. No additional command occurs inside the manual observation.
+TypeScript passed. The static boundary scan passed 15 patterns, 834 allowed
+hits, zero forbidden hits and zero stale entries; existing fixture allowances
+only moved by one line. The product change is one identity attribute on the
+existing primitive fieldset. Exact-head CI, preview and full hosted acceptance
+remain pending for the corrected candidate.

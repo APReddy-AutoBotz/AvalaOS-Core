@@ -46,6 +46,7 @@ import { executeSyntheticResponseLoss } from './prCSyntheticBrowserResponseLoss.
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SHA = /^[0-9a-f]{40}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const PERSONA_KEYS = Object.freeze([...SYNTHETIC_PERSONA_ORDER]);
 const SERVER_STEP_KEYS = new Set(CONTROLLED_HUMAN_SERVER_ACTIONS.map(record => `${record.checkpointId}:${record.stepId}`));
 const CATALOG_BY_CHECKPOINT = new Map(CONTROLLED_HUMAN_CATALOG.map(record => [record.checkpointId, record]));
@@ -1386,13 +1387,37 @@ export const createSyntheticAssessDraft = async (page, interactionSequence, { ex
   return { caseId, version: 1, command };
 };
 
+const exactSyntheticAssessPrimitive = async (workspace, primitiveId = '') => {
+  assert(!primitiveId || UUID.test(primitiveId), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_REJECTED');
+  const primitives = workspace.locator('fieldset[data-assess-primitive-id]');
+  const matches = [];
+  for (let index = 0; index < await primitives.count(); index += 1) {
+    const primitive = primitives.nth(index);
+    const id = await primitive.getAttribute('data-assess-primitive-id');
+    if (primitiveId) {
+      if (id === primitiveId) matches.push({ primitive, id });
+      continue;
+    }
+    const name = primitive.getByLabel(/^Primitive [1-9][0-9]* name$/u);
+    const type = primitive.getByLabel(/^Primitive [1-9][0-9]* type$/u);
+    if (await name.count() === 1 && await type.count() === 1
+      && await name.inputValue() === 'Capture request' && await type.inputValue() === 'Capture') matches.push({ primitive, id });
+  }
+  assert.equal(matches.length, 1, primitiveId
+    ? 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_READBACK_REJECTED'
+    : 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_IDENTITY_REJECTED');
+  assert(UUID.test(matches[0].id ?? ''), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_REJECTED');
+  return matches[0];
+};
+
 export const completeSyntheticAssessFields = async (page, interactionSequence) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
   await workspace.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   interactionSequence.push('scaffold:assess-structure');
+  const { primitive, id: primitiveId } = await exactSyntheticAssessPrimitive(workspace);
   await workspace.getByLabel('V2 case description', { exact: true }).fill('Manually reviewed synthetic Assess process and source observations.');
-  await workspace.getByLabel('Primitive 1 primitive.rulesStable', { exact: true }).selectOption('true');
+  await primitive.getByLabel(/^Primitive [1-9][0-9]* primitive[.]rulesStable$/u).selectOption('true');
   await workspace.locator('summary').filter({ hasText: '3. Applications and interactions' }).click();
   await workspace.getByLabel('Application 1 accountable owner', { exact: true }).fill('Synthetic Assess owner');
   await workspace.getByLabel('Application 1 strategic lifespan', { exact: true }).selectOption('long');
@@ -1403,14 +1428,20 @@ export const completeSyntheticAssessFields = async (page, interactionSequence) =
   await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
   interactionSequence.push('link:manual-synthetic-decision-claims');
   interactionSequence.push('fill:manual-assess-facts');
-  return { manuallyCompletedFactCount: 7, owner: 'Synthetic Assess owner' };
+  return { manuallyCompletedFactCount: 7, owner: 'Synthetic Assess owner', primitiveId };
 };
 
-export const assertSyntheticAssessDraftReadback = async page => {
+export const assertSyntheticAssessDraftReadback = async (page, primitiveId) => {
+  assert(UUID.test(primitiveId ?? ''), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_REJECTED');
   const workspace = page.getByTestId('assess-v2-workspace');
+  const { primitive } = await exactSyntheticAssessPrimitive(workspace, primitiveId);
+  assert.equal(await primitive.getByLabel(/^Primitive [1-9][0-9]* name$/u).inputValue(), 'Capture request',
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_NAME_READBACK_REJECTED');
+  assert.equal(await primitive.getByLabel(/^Primitive [1-9][0-9]* type$/u).inputValue(), 'Capture',
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_TYPE_READBACK_REJECTED');
   assert.equal(await workspace.getByLabel('V2 case description', { exact: true }).inputValue(),
     'Manually reviewed synthetic Assess process and source observations.', 'PR_C_SYNTHETIC_BROWSER_ASSESS_DESCRIPTION_READBACK_REJECTED');
-  assert.equal(await workspace.getByLabel('Primitive 1 primitive.rulesStable', { exact: true }).inputValue(), 'true',
+  assert.equal(await primitive.getByLabel(/^Primitive [1-9][0-9]* primitive[.]rulesStable$/u).inputValue(), 'true',
     'PR_C_SYNTHETIC_BROWSER_ASSESS_RULE_READBACK_REJECTED');
   assert.equal(await workspace.getByLabel('Application 1 accountable owner', { exact: true }).inputValue(), 'Synthetic Assess owner',
     'PR_C_SYNTHETIC_BROWSER_ASSESS_OWNER_READBACK_REJECTED');
@@ -1427,8 +1458,9 @@ export const assertSyntheticAssessDraftReadback = async page => {
 };
 
 export const persistSyntheticAssessDraft = async (page, interactionSequence, {
-  caseId = '', priorVersion = 1, expectedScope = /** @type {any} */ (null),
+  caseId = '', priorVersion = 1, primitiveId = '', expectedScope = /** @type {any} */ (null),
 } = {}) => {
+  assert(UUID.test(primitiveId), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_REJECTED');
   const workspace = page.getByTestId('assess-v2-workspace');
   const save = workspace.getByRole('button', { name: 'Save V2 draft', exact: true });
   assert(await save.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_SAVE_DISABLED');
@@ -1440,19 +1472,28 @@ export const persistSyntheticAssessDraft = async (page, interactionSequence, {
   assert.equal(command.body?.expectedVersion, priorVersion, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EXPECTED_VERSION_REJECTED');
   assertCapturedCommand(command, { commandType: 'assessment_v2.draft.upsert', expectedScope,
     expectedResourceId: exactCaseId, expectedVersion: priorVersion + 1 });
+  const primitives = command.body?.payload?.primitives;
+  assert(Array.isArray(primitives), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_COMMAND_REJECTED');
+  const matches = primitives.filter(primitive => primitive?.id === primitiveId);
+  assert.equal(matches.length, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_COMMAND_REJECTED');
+  const target = matches[0];
+  const rule = target?.facts?.['primitive.rulesStable'];
+  assert(target.name === 'Capture request' && target.type === 'Capture'
+    && rule?.fieldId === 'primitive.rulesStable' && rule?.value === true && rule?.status === 'known' && rule?.source === 'user',
+  'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_COMMAND_REJECTED');
   await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('save:assess-v2-draft');
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
   await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('reload:assess-v2-draft');
-  await assertSyntheticAssessDraftReadback(page);
+  await assertSyntheticAssessDraftReadback(page, primitiveId);
   return { caseId: exactCaseId, version: priorVersion + 1, command, reloaded: true };
 };
 
 export const completeAssessDraft = async (page, interactionSequence) => {
   const created = await createSyntheticAssessDraft(page, interactionSequence);
-  await completeSyntheticAssessFields(page, interactionSequence);
-  await persistSyntheticAssessDraft(page, interactionSequence, created);
+  const fields = await completeSyntheticAssessFields(page, interactionSequence);
+  await persistSyntheticAssessDraft(page, interactionSequence, { ...created, primitiveId: fields.primitiveId });
   return { createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true };
 };
 
@@ -1609,8 +1650,10 @@ export const observeBrowserOnlyStep = async ({ page, checkpointId, stepId, state
   } else if (plan.kind === 'complete-assess-fields') {
     const marker = state.get('phase:ch01:assess-draft');
     assert(marker?.phase === 'created', 'PR_C_SYNTHETIC_BROWSER_CH01_CREATE_MARKER_REJECTED');
-    observed = await completeSyntheticAssessFields(page, interactionSequence);
-    state.set('phase:ch01:assess-draft', { ...marker, phase: 'fields_observed' });
+    const fields = await completeSyntheticAssessFields(page, interactionSequence);
+    observed = { manuallyCompletedFactCount: fields.manuallyCompletedFactCount, owner: fields.owner,
+      primitiveIdDigest: digest(fields.primitiveId) };
+    state.set('phase:ch01:assess-draft', { ...marker, phase: 'fields_observed', primitiveId: fields.primitiveId });
   } else if (plan.kind === 'edit-structured-document') {
     const marker = state.get('phase:ch02:studio-draft');
     assert(marker?.phase === 'selected', 'PR_C_SYNTHETIC_BROWSER_CH02_SELECTION_MARKER_REJECTED');
@@ -2053,7 +2096,7 @@ export const runSyntheticObservationPrerequisites = async ({ planned, sessions, 
       'PR_C_SYNTHETIC_BROWSER_CH01_FIELDS_MARKER_REJECTED');
     const interactions = [];
     const persisted = await persistSyntheticAssessDraft(requester.page, interactions, {
-      caseId: marker.caseId, priorVersion: marker.version, expectedScope,
+      caseId: marker.caseId, priorVersion: marker.version, primitiveId: marker.primitiveId, expectedScope,
     });
     state.set('phase:ch01:assess-draft', { ...marker, phase: 'persisted', version: persisted.version });
     prerequisiteInteractions(interactionSequence, interactions);

@@ -39,6 +39,7 @@ export type FixtureOptions = {
   holdFirstProcessResponse?: boolean;
   failProcessCommand?: BoundaryCode;
   includeSecondaryWorkspace?: boolean;
+  reverseAssessPrimitiveReadback?: boolean;
 };
 
 type AssessmentRow = {
@@ -290,7 +291,12 @@ export const installEnterpriseFixture = async (page: Page, options: FixtureOptio
       if (versionId === `eq.${V2_CLONE_VERSION}`) cloneEvidenceVersionReads.push(versionId);
       return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':evidence.length?'0-0/1':'*/0'},body:JSON.stringify(evidence.map(payload => ({ payload })))});
     }
-    if (childName in v2Children) return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':v2Children[childName].length?'0-0/1':'*/0'},body:JSON.stringify(v2Children[childName].map(payload => ({ payload })))});
+    if (childName in v2Children) {
+      const values = childName === 'assess_v2_primitives' && options.reverseAssessPrimitiveReadback
+        ? [...v2Children[childName]].reverse()
+        : v2Children[childName];
+      return route.fulfill({status:200,headers:{...jsonHeaders,'content-range':values.length?'0-0/1':'*/0'},body:JSON.stringify(values.map(payload => ({ payload })))});
+    }
     if (url.pathname === '/functions/v1/assess-command') {
       const body = request.postDataJSON() as Record<string,any>;
       if (options.failCommand?.type === body.commandType) {
