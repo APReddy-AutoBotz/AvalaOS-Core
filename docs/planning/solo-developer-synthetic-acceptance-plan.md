@@ -1904,3 +1904,13 @@ synthetic acceptance remain planned verification.
 Rollback reverts the response-loss helper, its focused regression, the client
 retry regression and test hook together. No database or Edge rollback is
 needed because their canonical committed-response behavior is unchanged.
+
+Candidate `de36bcd` passed 17/18 workflows and exact-preview verification, but
+the governed CI coverage runner rejected the new client completion call because
+its separate Supabase test stub still threw unconditionally. This was a missed
+test-harness integration in the repair; no protected campaign was dispatched.
+The coverage stub now uses the same explicit completion hook as the focused
+client harness and still rejects calls when no hook is installed. The exact
+previously failing coverage command passed locally with unchanged 95/95/85
+thresholds; no application behavior changed. Include this one-line harness
+correction in the same PR and require the final candidate's CI and preview.
