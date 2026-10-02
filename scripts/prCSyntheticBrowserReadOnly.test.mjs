@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -28,7 +29,7 @@ const DEPLOY_ID = '6'.repeat(24);
 const digest = character => `sha256:${character.repeat(64)}`;
 const EXERCISE_DIGEST = digest('a');
 const TARGET_FINGERPRINT = digest('b');
-const PUBLIC_TARGET_DIGEST = digest('c');
+const PUBLIC_TARGET_DIGEST = `sha256:${createHash('sha256').update(`pr-c-controlled-human-public-target\0${LOOPBACK_ORIGIN}`).digest('hex')}`;
 const PERSONA_MANIFEST_DIGEST = digest('d');
 const FIXTURE_MANIFEST_DIGEST = digest('e');
 const ORGANIZATION_ID = '00000001-0000-4000-8000-000000000001';
@@ -113,6 +114,7 @@ const buildFixture = () => fixturePromise ??= (async () => {
     import { createMonitorBaselinesFixture } from './services/deliveryMonitor/fixtures';
     import { decodeMonitorApprovedBaselinesProjection, validateCanonicalMonitorApprovedBaselinesProjection } from './services/deliveryMonitor/contracts';
     const config = window.__prCReadOnlyFixture;
+    const nativeFetch = window.fetch.bind(window);
     const json = value => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
     const tokenPayload = headers => {
       const authorization = new Headers(headers || {}).get('authorization') || '';
@@ -132,7 +134,13 @@ const buildFixture = () => fixturePromise ??= (async () => {
         '/rest/v1/projects', '/rest/v1/sprints', '/rest/v1/tasks', '/rest/v1/timesheet_entries']);
       if (readTables.has(url.pathname) && ['GET', 'HEAD'].includes(method)) return json([]);
       if (url.pathname === '/auth/v1/user') return persona ? json({ id: persona.actorId, email: persona.email, role: 'authenticated', aud: 'authenticated', user_metadata: { full_name: persona.personaKey } }) : json({});
-      if (url.pathname === '/auth/v1/logout') return json({});
+      if (url.pathname === '/auth/v1/logout') {
+        if (config.retainLogoutSession) {
+          const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-') && candidate.endsWith('-auth-token'));
+          if (key) sessionStorage.setItem('__prCRetainedLogoutSession', JSON.stringify({ key, value: localStorage.getItem(key) }));
+        }
+        return nativeFetch(input, init);
+      }
       if (url.pathname === '/functions/v1/tenant-session') {
         await new Promise(resolve => setTimeout(resolve, 75));
         return json({ contexts: persona?.personaKey === 'revoked_actor' || !persona ? [] : [{
@@ -253,10 +261,14 @@ const createState = async () => {
     retainedMonitorHistory, lastCompletedAt: latestStep.completedAt } };
 };
 
-const browserFactory = async ({ wrongRoot = false } = {}) => {
+const browserFactory = async ({ wrongRoot = false, logoutStatus = 200, abortLogout = false,
+  logoutDelayMs = 0, postLogoutDocumentDelayMs = 0, delayedLogoutCount = 0,
+  retainLogoutSession = false, postLogoutDocument = 'app' } = {}) => {
   const built = await buildFixture();
   const browser = await chromium.launch();
   const requests = [];
+  const postLogoutPages = new WeakMap();
+  let logoutCount = 0;
   return {
     requests,
     async newContext(options) {
@@ -264,11 +276,39 @@ const browserFactory = async ({ wrongRoot = false } = {}) => {
       return {
         async newPage() {
           const page = await context.newPage();
-          await page.addInitScript(config => { window.__prCReadOnlyFixture = config; }, fixtureConfig);
+          await page.addInitScript(config => {
+            window.__prCReadOnlyFixture = config;
+            const retained = sessionStorage.getItem('__prCRetainedLogoutSession');
+            if (config.retainLogoutSession && retained) {
+              try {
+                const { key, value } = JSON.parse(retained);
+                if (typeof key === 'string' && typeof value === 'string') localStorage.setItem(key, value);
+              } catch { /* deliberately malformed fixture state remains absent */ }
+            }
+          }, { ...fixtureConfig, retainLogoutSession });
           await page.exposeBinding('__recordPrCReadOnlyRequest', (_source, record) => { requests.push(record); });
           await page.route('**/*', route => route.abort());
-          await page.route(`${PREVIEW_ORIGIN}/**`, route => route.fulfill({ contentType: 'text/html; charset=utf-8', body:
-            `<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${built.css}</style></head><body><div id="root"></div><script>${built.code.replaceAll('</script>', '<\\/script>')}</script></body></html>` }));
+          await page.route(`${LOOPBACK_ORIGIN}/auth/v1/logout*`, async route => {
+            const delayed = logoutCount < delayedLogoutCount;
+            logoutCount += 1;
+            if (delayed && logoutDelayMs) await new Promise(resolve => setTimeout(resolve, logoutDelayMs));
+            if (abortLogout) { await route.abort(); return; }
+            postLogoutPages.set(page, { delayed });
+            await route.fulfill({ status: logoutStatus, contentType: 'application/json', body: JSON.stringify({}) });
+          });
+          await page.route(`${PREVIEW_ORIGIN}/**`, async route => {
+            const postLogout = postLogoutPages.get(page);
+            if (postLogout) {
+              postLogoutPages.delete(page);
+              if (postLogout.delayed && postLogoutDocumentDelayMs) await new Promise(resolve => setTimeout(resolve, postLogoutDocumentDelayMs));
+              if (postLogoutDocument === 'spoof') {
+                await route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<html><body><main><label>Email<input type="email"></label></main></body></html>' });
+                return;
+              }
+            }
+            await route.fulfill({ contentType: 'text/html; charset=utf-8', body:
+              `<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${built.css}</style></head><body><div id="root"></div><script>${built.code.replaceAll('</script>', '<\\/script>')}</script></body></html>` });
+          });
           if (wrongRoot) {
             const navigate = page.goto.bind(page);
             page.goto = async (_url, gotoOptions) => {
@@ -289,6 +329,11 @@ const browserFactory = async ({ wrongRoot = false } = {}) => {
   };
 };
 
+const assertRejectedLogoutPreservesPrivateState = async (directory, createdBrowser) => {
+  await access(path.join(directory, 'requester.json'));
+  assert.deepEqual(createdBrowser.requests.filter(record => record.pathname === '/auth/v1/logout').map(record => record.personaKey), ['requester']);
+};
+
 test('final read-only phase restores the real app, proves retained Monitor history, and signs out every persona', async () => {
   const { directory, active } = await createState();
   let createdBrowser;
@@ -296,7 +341,9 @@ test('final read-only phase restores the real app, proves retained Monitor histo
     let campaign;
     try {
       campaign = await runReadOnlyBrowserPhase({ active, env, preparation, stateDirectory: directory,
-        browserFactory: async () => (createdBrowser = await browserFactory()) });
+        browserFactory: async () => (createdBrowser = await browserFactory({
+          logoutDelayMs: 10_250, postLogoutDocumentDelayMs: 10_250, delayedLogoutCount: 1,
+        })) });
     } catch (error) {
       const pathCounts = Object.entries(Object.groupBy(createdBrowser?.requests || [], record => record.pathname))
         .map(([pathname, records]) => `${pathname}:${records.length}`).sort().join(',');
@@ -313,6 +360,59 @@ test('final read-only phase restores the real app, proves retained Monitor histo
     assert.equal(requests.some(record => !(allowedReads.has(record.pathname)
       || record.pathname === '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
       || ['/auth/v1/user', '/auth/v1/logout', '/functions/v1/tenant-session', '/functions/v1/enterprise-intelligence-query'].includes(record.pathname))), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('final read-only phase records terminal inactive logout responses only after local postconditions pass', async () => {
+  const { directory, active } = await createState();
+  let createdBrowser;
+  try {
+    const campaign = await runReadOnlyBrowserPhase({ active, env, preparation, stateDirectory: directory,
+      browserFactory: async () => (createdBrowser = await browserFactory({ logoutStatus: 401 })) });
+    assert.equal(campaign.personas.length, 12);
+    assert.equal(createdBrowser.requests.filter(record => record.pathname === '/auth/v1/logout').length, 12);
+    assert.equal(new Set(campaign.personas.map(record => record.signOutEvidenceDigest)).size, 12);
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('final read-only phase rejects a non-terminal logout response', async () => {
+  const { directory, active } = await createState();
+  let createdBrowser;
+  try {
+    await assert.rejects(runReadOnlyBrowserPhase({ active, env, preparation, stateDirectory: directory,
+      browserFactory: async () => (createdBrowser = await browserFactory({ logoutStatus: 500 })) }),
+    /PR_C_SYNTHETIC_BROWSER_SIGNOUT_REJECTED:requester:response:HTTP_500/u);
+    await assertRejectedLogoutPreservesPrivateState(directory, createdBrowser);
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('final read-only phase rejects a post-logout document without the real sign-in form', async () => {
+  const { directory, active } = await createState();
+  let createdBrowser;
+  try {
+    await assert.rejects(runReadOnlyBrowserPhase({ active, env, preparation, stateDirectory: directory,
+      browserFactory: async () => (createdBrowser = await browserFactory({ postLogoutDocument: 'spoof' })) }),
+    /PR_C_SYNTHETIC_BROWSER_SIGNOUT_REJECTED:requester:render:(?:FAILED|TIMEOUT)/u);
+    await assertRejectedLogoutPreservesPrivateState(directory, createdBrowser);
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('final read-only phase rejects restoration of the exact bound session after navigation', async () => {
+  const { directory, active } = await createState();
+  let createdBrowser;
+  try {
+    await assert.rejects(runReadOnlyBrowserPhase({ active, env, preparation, stateDirectory: directory,
+      browserFactory: async () => (createdBrowser = await browserFactory({ retainLogoutSession: true })) }),
+    /PR_C_SYNTHETIC_BROWSER_SIGNOUT_REJECTED:requester:session:(?:SESSION_RETAINED|TIMEOUT)/u);
+    await assertRejectedLogoutPreservesPrivateState(directory, createdBrowser);
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(() => undefined);
   }

@@ -2306,17 +2306,182 @@ export const runActiveBrowserPhase = async ({ env = process.env, preparation, he
   }
 };
 
-const signOut = async (page, personaKey) => {
+const SIGN_OUT_STAGE_TIMEOUT_MS = 20_000;
+
+const signOutFailure = (personaKey, stage, status) => new Error(
+  `PR_C_SYNTHETIC_BROWSER_SIGNOUT_REJECTED:${personaKey}:${stage}:${status}`,
+);
+
+const boundedSignOutStage = async (personaKey, stage, operation) => {
+  let timeout;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(signOutFailure(personaKey, stage, 'TIMEOUT')), SIGN_OUT_STAGE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    if (String(error?.message ?? '').startsWith('PR_C_SYNTHETIC_BROWSER_SIGNOUT_REJECTED:')) throw error;
+    throw signOutFailure(personaKey, stage, 'FAILED');
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const isLogoutRequest = request => {
+  try { return request.method() === 'POST' && new URL(request.url()).pathname === '/auth/v1/logout'; }
+  catch { return false; }
+};
+
+const observeLogout = page => {
+  let resolveRequest; let resolveTransport; let resolveNavigation;
+  let logoutRequest = null; let logoutRequestCount = 0; let documentRequest = null; let documentResponse = null; let documentUrl = null; let closed = false;
+  const request = new Promise(resolve => { resolveRequest = resolve; });
+  const transport = new Promise(resolve => { resolveTransport = resolve; });
+  const navigation = new Promise(resolve => { resolveNavigation = resolve; });
+  const settleNavigation = () => {
+    if (documentRequest && documentResponse && documentUrl) resolveNavigation({ outcome: 'committed', request: documentRequest, response: documentResponse, url: documentUrl });
+  };
+  const onRequest = candidate => {
+    if (isLogoutRequest(candidate)) {
+      logoutRequestCount += 1;
+      if (logoutRequest === null) {
+        logoutRequest = candidate;
+        resolveRequest(candidate);
+      }
+      return;
+    }
+    if (candidate.isNavigationRequest() && candidate.frame() === page.mainFrame() && candidate.resourceType() === 'document') {
+      documentRequest ??= candidate;
+      settleNavigation();
+    }
+  };
+  const onResponse = response => {
+    if (response.request() === logoutRequest) resolveTransport({ outcome: 'response', response });
+    if (response.request() === documentRequest) { documentResponse = response; settleNavigation(); }
+  };
+  const onRequestFailed = candidate => {
+    if (candidate === logoutRequest) resolveTransport({ outcome: 'request_failed' });
+    if (candidate === documentRequest) resolveNavigation({ outcome: 'request_failed' });
+  };
+  const onFrameNavigated = frame => {
+    if (frame === page.mainFrame() && documentRequest) { documentUrl = frame.url(); settleNavigation(); }
+  };
+  page.on('request', onRequest);
+  page.on('response', onResponse);
+  page.on('requestfailed', onRequestFailed);
+  page.on('framenavigated', onFrameNavigated);
+  return {
+    request, transport, navigation, logoutRequestCount: () => logoutRequestCount,
+    close() {
+      if (closed) return;
+      closed = true;
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      page.off('requestfailed', onRequestFailed);
+      page.off('framenavigated', onFrameNavigated);
+    },
+  };
+};
+
+const logoutRequestIdentity = async request => {
+  const authorization = await request.headerValue('authorization');
+  const token = /^Bearer\s+([A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+)$/u.exec(authorization ?? '')?.[1];
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    if (typeof payload?.sub !== 'string' || typeof payload?.session_id !== 'string') return null;
+    return { authUserId: payload.sub, sessionId: payload.session_id };
+  } catch { return null; }
+};
+
+const waitForBoundSessionRemoval = async (page, { authUserId, sessionId }) => {
+  const deadline = Date.now() + SIGN_OUT_STAGE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const present = await page.evaluate(({ expectedActor, expectedSession }) => {
+      const contains = value => {
+        if (!value || typeof value !== 'object') return false;
+        if (typeof value.access_token === 'string') {
+          try {
+            const payload = JSON.parse(atob(value.access_token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')));
+            if (payload.sub === expectedActor && payload.session_id === expectedSession) return true;
+          } catch { /* malformed unrelated application state */ }
+        }
+        return Object.values(value).some(contains);
+      };
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const raw = localStorage.getItem(localStorage.key(index));
+        if (!raw) continue;
+        try { if (contains(JSON.parse(raw))) return true; } catch { /* unrelated application state */ }
+      }
+      return false;
+    }, { expectedActor: authUserId, expectedSession: sessionId }).catch(() => true);
+    if (!present) return true;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return false;
+};
+
+const waitForActualSignInForm = async page => {
+  const email = page.getByLabel(/work email|email/iu).first();
+  await email.waitFor({ state: 'visible', timeout: SIGN_OUT_STAGE_TIMEOUT_MS });
+  const form = email.locator('xpath=ancestor::form[1]');
+  assert.equal(await form.count(), 1, 'PR_C_SYNTHETIC_BROWSER_SIGNOUT_FORM_REJECTED');
+  await form.getByLabel(/password/iu).first().waitFor({ state: 'visible', timeout: SIGN_OUT_STAGE_TIMEOUT_MS });
+  await form.getByRole('button', { name: /sign in|continue to workspace/iu }).first().waitFor({ state: 'visible', timeout: SIGN_OUT_STAGE_TIMEOUT_MS });
+};
+
+const signOut = async (page, record, binding) => {
+  const personaKey = record.personaKey;
   let button = await firstVisible([page.getByTestId('desktop-sign-out'), page.getByTestId('mobile-sign-out'), page.getByRole('button', { name: 'Sign out', exact: true })]);
   if (!button) {
     const opener = await firstVisible([page.getByRole('button', { name: 'Open navigation', exact: true })]);
     if (opener) { await opener.click(); button = await firstVisible([page.getByTestId('mobile-sign-out'), page.getByRole('button', { name: 'Sign out', exact: true })]); }
   }
-  assert(button, `PR_C_SYNTHETIC_BROWSER_SIGNOUT_CONTROL_MISSING:${personaKey}`); await button.click();
-  await page.getByLabel(/work email|email/iu).first().waitFor({ state: 'visible', timeout: 20_000 });
-  const sessionPresent = await page.evaluate(() => [...Array(localStorage.length).keys()].some(index => /access_token/u.test(localStorage.getItem(localStorage.key(index)) ?? '')));
-  assert.equal(sessionPresent, false, `PR_C_SYNTHETIC_BROWSER_SIGNOUT_SESSION_RETAINED:${personaKey}`);
-  return { signedOutAt: iso(), signOutEvidenceDigest: digest({ personaKey, route: new URL(page.url()).pathname, sessionPresent: false }) };
+  assert(button, `PR_C_SYNTHETIC_BROWSER_SIGNOUT_CONTROL_MISSING:${personaKey}`);
+  const observation = observeLogout(page);
+  try {
+    const request = await boundedSignOutStage(personaKey, 'request', Promise.all([button.click({ noWaitAfter: true }), observation.request]).then(([, value]) => value));
+    const requestTargetDigest = sha256Digest(`pr-c-controlled-human-public-target\0${new URL(request.url()).origin}`);
+    if (requestTargetDigest !== binding.backend.publicTargetDigest) throw signOutFailure(personaKey, 'request', 'ORIGIN_REJECTED');
+    const requestIdentity = await boundedSignOutStage(personaKey, 'identity', logoutRequestIdentity(request));
+    if (!requestIdentity) throw signOutFailure(personaKey, 'request', 'IDENTITY_MISSING');
+    let requestIdentityDigests;
+    try { requestIdentityDigests = deriveBrowserIdentityDigests({ exerciseDigest: binding.backend.exerciseDigest, personaKey, ...requestIdentity }); }
+    catch { throw signOutFailure(personaKey, 'request', 'IDENTITY_REJECTED'); }
+    if (canonicalJson(requestIdentityDigests) !== canonicalJson({
+      applicationActorDigest: record.applicationActorDigest,
+      applicationSessionDigest: record.applicationSessionDigest,
+    })) throw signOutFailure(personaKey, 'request', 'IDENTITY_REJECTED');
+
+    const transport = await boundedSignOutStage(personaKey, 'response', observation.transport);
+    if (transport.outcome !== 'response') throw signOutFailure(personaKey, 'response', 'TRANSPORT_REJECTED');
+    const responseStatus = transport.response.status();
+    const transportOutcome = responseStatus >= 200 && responseStatus < 300 ? 'server_logout'
+      : [401, 403, 404].includes(responseStatus) ? 'already_inactive' : null;
+    if (!transportOutcome) throw signOutFailure(personaKey, 'response', `HTTP_${responseStatus}`);
+
+    const navigation = await boundedSignOutStage(personaKey, 'document', observation.navigation);
+    if (navigation.outcome !== 'committed' || navigation.response.status() < 200 || navigation.response.status() >= 300)
+      throw signOutFailure(personaKey, 'document', 'NAVIGATION_REJECTED');
+    const location = new URL(navigation.url);
+    if (location.origin !== binding.preview.origin || location.pathname !== '/sign-in' || location.search || location.hash)
+      throw signOutFailure(personaKey, 'document', 'ROUTE_REJECTED');
+    const sessionRemovedAfterNavigation = await boundedSignOutStage(personaKey, 'session', waitForBoundSessionRemoval(page, requestIdentity));
+    if (sessionRemovedAfterNavigation === false) throw signOutFailure(personaKey, 'session', 'SESSION_RETAINED');
+    await boundedSignOutStage(personaKey, 'render', waitForActualSignInForm(page));
+    const finalLocation = new URL(page.url());
+    if (finalLocation.origin !== binding.preview.origin || finalLocation.pathname !== '/sign-in' || finalLocation.search || finalLocation.hash)
+      throw signOutFailure(personaKey, 'render', 'ROUTE_REJECTED');
+    const sessionRemovedAfterRender = await boundedSignOutStage(personaKey, 'session', waitForBoundSessionRemoval(page, requestIdentity));
+    if (sessionRemovedAfterRender === false) throw signOutFailure(personaKey, 'session', 'SESSION_RETAINED');
+    if (observation.logoutRequestCount() !== 1) throw signOutFailure(personaKey, 'request', 'COUNT_REJECTED');
+    return { signedOutAt: iso(), signOutEvidenceDigest: digest({ personaKey, requestTargetDigest, requestIdentityDigests,
+      transportOutcome, responseStatus, route: '/sign-in', sessionPresent: false, signInFormRendered: true }) };
+  } finally {
+    observation.close();
+  }
 };
 
 export const waitForResumedPage = async (page, personaKey) => {
@@ -2359,7 +2524,7 @@ export const runReadOnlyBrowserPhase = async ({ active, env = process.env, prepa
       state: new Map([['retained-monitor-history', active.retainedMonitorHistory]]), nextTime });
     const checkpoints = active.checkpoints.map(record => record.checkpointId === planned.checkpointId ? { ...record, steps: [...record.steps, finalStep] } : record);
     const personaEvidence = [];
-    for (const record of active.personas) personaEvidence.push({ ...record, ...await signOut(personas.get(record.personaKey).page, record.personaKey) });
+    for (const record of active.personas) personaEvidence.push({ ...record, ...await signOut(personas.get(record.personaKey).page, record, active.binding) });
     assert.equal(providerEgress.length, 0, 'PR_C_SYNTHETIC_BROWSER_PROVIDER_EGRESS');
     for (const record of active.storageStateFiles) await rm(path.join(stateDirectory, record.file));
     assert.deepEqual(await readdir(stateDirectory), [], 'PR_C_SYNTHETIC_BROWSER_EPHEMERAL_STATE_REMAINS'); await rmdir(stateDirectory);

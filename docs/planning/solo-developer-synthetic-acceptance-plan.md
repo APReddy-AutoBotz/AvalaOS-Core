@@ -2046,3 +2046,62 @@ builder. Browser assertions supplied to that database-only fixture are explicitl
 labelled fixtures, not hosted browser evidence. The disposable database container
 was removed. The new candidate still requires exact-head CI, preview verification
 and a complete protected hosted campaign; no hosted PASS or merge is claimed.
+
+### Final logout observation correction (2026-10-02)
+
+Executed evidence: candidate `1647e5c` passed all 18 required workflows,
+independent Native Assess and governed artifact verification, and exact-preview
+verification. Protected run `37001874434` passed active browser execution,
+session binding and quiescence, then failed during final all-persona sign-out:
+the runner timed out waiting for the email control. The independent server
+observer and acceptance recomputation were not run. Bounded recovery passed
+with lifecycle `deprovisioned`, and private-state cleanup passed.
+
+Confirmed source and coverage defect: one post-click locator timeout combines
+logout transport, SDK session clearing, document navigation and sign-in render
+without identifying the affected persona or stage. The local real-App fixture
+always returns an immediate successful logout response and an inline document.
+The actual hosted cause remains a suspected defect requiring deeper validation;
+there is no evidence yet that a particular HTTP error or product authorization
+failure caused it. The prior observation-window repair remains locally verified
+but was not reached by this run's hosted observer.
+
+The read-only architecture, security and quality reviews completed before
+implementation under the managed workspace-write profile. The bounded change
+belongs to the runner and its real-App regression: observe the exact logout
+request to the digest-bound backend, preserve actor/session identity checks,
+classify safe response outcomes, require removal of the bound persisted session,
+and require a fresh document at `/sign-in` with the real sign-in form. Use
+separate bounded stages and sanitized persona/stage/status errors. Do not retry
+logout automatically, accept UI-only success, or change product authentication.
+The installed SDK's terminal invalid-session responses remain distinguishable
+from successful server logout and require all local postconditions. Final
+deprovision remains responsible for proving zero active synthetic sessions.
+
+Planned focused verification: all twelve actors must complete through actual
+intercepted logout requests, including delayed response and document loading;
+rejected or missing responses, retained session state, and failed sign-in render
+must not produce completion evidence. Keep existing evidence schema and all
+journey requirements. Rollback reverts the runner/test/provenance change together
+and leaves the exercise deprovisioned; no database or Edge rollback is needed.
+Hosted acceptance and merge remain NO-GO until full exact-candidate evidence
+passes and AP separately confirms merge.
+
+Executed focused evidence: the initial six-case real-App run passed 6/6 in
+204.3 seconds. After final navigation and session checks, five cases passed;
+the retained-session case correctly rejected completion but its assertion
+expected `SESSION_RETAINED` while the bounded stage reported `TIMEOUT`.
+The assertion now accepts only those two exact session-stage rejection codes,
+and the targeted retained-session rerun passed 1/1 in 50.6 seconds. Negative
+cases retain the requester state file and prove no later persona logged out.
+Coverage includes all twelve personas, a successful logout/document delay
+totaling more than 20 seconds with each individual stage within its bound,
+terminal HTTP 401, rejected HTTP 500, an incomplete sign-in form, retained
+session state and the wrong resume route. The delayed fixture demonstrates
+the combined-timeout design weakness; it does not identify the hosted cause.
+TypeScript passed. The static boundary scan passed 15 patterns with 834 allowed
+hits, zero forbidden hits and zero stale entries; the four storage allowances
+are exact lines in the inert negative-test fixture. The evidence/CI contracts
+passed with the unchanged 85-command, 241-assertion registry. Source provenance
+was refreshed, and patch formatting passed. Exact-head CI, preview and a full
+protected hosted campaign are still required before acceptance is claimed.
