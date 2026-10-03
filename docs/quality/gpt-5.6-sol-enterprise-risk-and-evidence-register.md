@@ -1,5 +1,27 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Paid validation dependency gate (2026-10-03)
+
+PR #265 CI is blocked by `GHSA-vfj7-8cjw-p6xm` in the existing
+`braces@3.0.3` dependency of the Tailwind 3 build toolchain. The advisory has no
+patched braces release. Read-only review found fixed repository-owned content
+globs and no product-runtime import or tenant/provider-input path to the affected
+pattern parser. This limits the identified exposure to build/dev/test availability;
+it does not dismiss the advisory or establish general safety.
+
+A one-candidate, one-attempt synthetic-only risk exception is proposed, not
+approved. It would preserve the original two effects and cumulative budget, require
+all relevant non-audit checks separately, leave CI visibly failed and the PR
+unmergeable, and change no audit policy or dependency configuration. Production
+and customer traffic remain outside scope. The existing low-severity DOMPurify
+advisory does not trigger the moderate gate; its IN_PLACE/hook trigger was not
+found in application source, and its available patch remains separate work.
+
+The historical PR #264 PostgreSQL fixture now validates the entire approved
+migration list but executes only its frozen synthetic-acceptance chain. Its two
+seed/deprovision cycles passed locally. The new eight-scenario continuation suite
+owns the complete current-chain proof. No runtime marker guard was relaxed.
+
 ## Paid continuation preflight (2026-10-03)
 
 Executed evidence: PR #264's 84-step synthetic acceptance and post-merge CI passed.
