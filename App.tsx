@@ -94,20 +94,23 @@ const ViewLoadingFallback = () => (
 );
 
 function App() {
+  const { user: currentUser, loading: authLoading } = useAuth();
   const localRuntimeEnabled = isLocalRuntimeEnabled();
   const controlledHumanBrowserBinding = getControlledHumanBrowserBinding();
   // A rejected controlled browser binding must remain a presentation-only
-  // boundary. Service authority still resolves through getRuntimeDataAccess.
+  // boundary. Anonymous public pages need no workspace data authority.
+  // Authenticated services still resolve through getRuntimeDataAccess.
   const dataAccess = controlledHumanBrowserBinding.status === 'blocked'
     ? 'server'
-    : getRuntimeDataAccess();
+    : currentUser
+      ? getRuntimeDataAccess()
+      : 'disabled';
   const [theme, setTheme] = usePersistentState<'light' | 'dark'>(StorageKeys.THEME, 'light');
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [isGovernViewOpen, setGovernViewOpen] = useState(false);
 
   // App State
-  const { user: currentUser, loading: authLoading } = useAuth();
   const {
     currentOrganization,
     currentWorkspace,

@@ -1,5 +1,32 @@
 # Assess and Studio AI output correction
 
+## Ordinary public-route initialization correction (2026-10-03)
+
+Candidate `872cc91` cleared the prior CI failures and served exact preview identity.
+Preview QA then reached six failing PUBLIC-001/PUBLIC-002/ADMIN-001 cases across
+Desktop/Pixel. Captured blank pages and browser errors confirmed an App render
+exception: workspace authority was resolved before the anonymous public return.
+Closed architecture/security/quality reviews located the synchronous App call;
+the client module itself has no uncaught eager authority resolution.
+
+App now reads auth first and uses the existing disabled presentation classification
+for anonymous visitors. Authenticated workspace rendering still calls the strict
+resolver; blocked controlled bindings retain their existing presentation branch.
+No route, mode, backend, credential, provider or service authorization changes.
+Sign-in remains visibly fail-closed when backend configuration is unavailable.
+
+Executed evidence: ordinary production build passed; the unchanged six public,
+sign-in and Admin journey cases passed in a focused local source fixture (6/6,
+Desktop/Pixel, exit 0). The fixture used the ordinary Vite entrypoint, so its
+loopback placeholder could not enable server authority. Typecheck, runtime-mode
+boundaries, hosted Sandbox route denials and static AI boundary scan passed.
+An initial local hook-order edit was caught by typecheck and corrected; an initial
+private grep selected no tests, then all six intended cases were executed.
+No test assertion or hosted acceptance requirement changed. Refresh only current
+App source binding and the canonical PR C provenance. New-head hosted CI/preview
+remain required. Rollback is the App deferral plus matching source bindings; paid
+history, disabled providers and the read-only Monitor fallback remain unchanged.
+
 ## CI follow-up on dependency repair (2026-10-03)
 
 Candidate `3140a93` reached a ready Netlify preview, but CI identified four
