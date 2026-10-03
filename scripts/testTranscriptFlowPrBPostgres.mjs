@@ -25,6 +25,9 @@ assert.ok(featureIndex>0,`${migrationName} missing or not ordered`);
 const baseline=migrations.slice(0,featureIndex);
 const feature=[migrationName];
 const all=migrations;
+const promptVersionMigration='20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql';
+const promptVersionIndex=migrations.indexOf(promptVersionMigration);
+assert.ok(promptVersionIndex>featureIndex,'BRD prompt-v2 migration missing or not ordered');
 const currentMigrationTip=migrations.at(-1)?.match(/^(\d{14})_/u)?.[1];
 assert.ok(currentMigrationTip,'current migration tip missing or malformed');
 const suffix=`${process.pid}_${Date.now()}`;
@@ -179,8 +182,8 @@ try{
   admin=await connect(adminUrl);
   for(const [role,attrs] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']])if(!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[role])).rowCount){await admin.query(`CREATE ROLE ${role} ${attrs}`);roles.push(role)}
 
-  const promptDatabase=await createDatabase(admin,names.prompt);await apply(promptDatabase,all.slice(0,-1));
-  await runPromptVersionOnlyScenario(promptDatabase,all.at(-1));
+  const promptDatabase=await createDatabase(admin,names.prompt);await apply(promptDatabase,all.slice(0,promptVersionIndex));
+  await runPromptVersionOnlyScenario(promptDatabase,promptVersionMigration);
   if(promptVersionOnly){
     console.log('Focused Studio BRD prompt v2 PostgreSQL mode passed.');
   }else{

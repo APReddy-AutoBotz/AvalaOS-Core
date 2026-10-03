@@ -2,6 +2,16 @@
 
 ## BRD-v2 quality-validation allowance (2026-10-03)
 
+Candidate `8f58668` passed the allowance feature workflow and preview QA, but the
+Delivery/Monitor registry exposed a confirmed test-fixture defect: the retained
+prompt upgrade scenario selected the last migration instead of its named prompt-v2
+migration. Adding the allowance therefore applied prompt v2 before the legacy-v1
+assertion. The scenario now selects `20261003123459` explicitly and applies only
+its predecessors first. Historical v1/v2 assertions and the current full-chain
+scenario remain unchanged. The entire previously failing PostgreSQL command passed
+locally (35 emitted assertions plus the prompt upgrade scenario, exit 0), with
+fixture cleanup and the owned server stopped. New-head CI remains required.
+
 AP approved one bounded quality-validation continuation for the existing paid
 synthetic campaign. Migration
 `20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql` adds one
