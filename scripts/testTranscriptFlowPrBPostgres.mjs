@@ -8,8 +8,11 @@ import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostg
 import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL;
+const promptVersionOnly=process.argv.includes('--prompt-version-only');
+const unsupportedArguments=process.argv.slice(2).filter(argument=>argument!=='--prompt-version-only');
+if(unsupportedArguments.length)throw Error(`unsupported argument: ${unsupportedArguments.join(',')}`);
 if(!adminUrl){
-  if(process.env.CI)throw Error('TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL is required');
+  if(process.env.CI||promptVersionOnly)throw Error('TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL is required');
   console.log('TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL not set; PR B PostgreSQL scenarios were not run locally.');
   process.exit(0);
 }
@@ -25,14 +28,15 @@ const all=migrations;
 const currentMigrationTip=migrations.at(-1)?.match(/^(\d{14})_/u)?.[1];
 assert.ok(currentMigrationTip,'current migration tip missing or malformed');
 const suffix=`${process.pid}_${Date.now()}`;
-const names=Object.fromEntries(['fresh','upgrade','populated','dirty_hash','dirty_missing','dirty_partial'].map(label=>[label,`studio_pr_b_${label}_${suffix}`]));
+const names=Object.fromEntries(['fresh','upgrade','prompt','populated','dirty_hash','dirty_missing','dirty_partial'].map(label=>[label,`studio_pr_b_${label}_${suffix}`]));
 const clients=[];const databases=[];const roles=[];
 const urlFor=name=>{const url=new URL(adminUrl);url.pathname=`/${name}`;return url.toString()};
 const connect=async connectionString=>{const client=new Client({connectionString});await client.connect();clients.push(client);return client};
 const delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
 const transaction=async(client,label,sql)=>{await client.query('BEGIN');try{await client.query(sql);await client.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await client.query('ROLLBACK');throw error}};
 const bootstrap=async client=>transaction(client,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
-const apply=async(client,list)=>{for(const name of list)await applySyntheticAiTerminalJournalMigrationForTest(client,name,async()=>transaction(client,name,await readFile(join('supabase/migrations',name),'utf8')))};
+const readMigration=async name=>(await readFile(join('supabase/migrations',name),'utf8')).replace(/\r\n/gu,'\n');
+const apply=async(client,list)=>{for(const name of list)await applySyntheticAiTerminalJournalMigrationForTest(client,name,async()=>transaction(client,name,await readMigration(name)))};
 const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);assert.equal((await admin.query('SELECT 1 FROM pg_database WHERE datname=$1',[name])).rowCount,0);await admin.query(`CREATE DATABASE ${name}`);databases.push(name);const client=await connect(urlFor(name));await bootstrap(client);return client};
 const emit=(testId,assertionId,fixture,runtimeContext)=>console.log(`PR_B_ASSERTION ${JSON.stringify({testId,assertionId,fixture,result:'passed',runtimeContext})}`);
 const context=(persona,organizationId,workspaceId,lineage)=>({persona:{id:persona.id,state:'active',capabilities:[...persona.capabilities].sort()},organizationId,workspaceId,lineage});
@@ -83,6 +87,72 @@ const structuredContent=(title,sourceAnchors=[],labels=['human_authored'])=>{
   const sourceIds=[...new Set(sourceAnchors.map(anchor=>anchor.sourceVersionId))];
   return{contractVersion:'studio-artifact-2',title,summary:'Synthetic governed Studio artifact.',sections:[{id:'summary',title:'Summary',body:title,sourceAnchors,labels}],coverage:{selectedSourceVersionIds:sourceIds,coveredSourceVersionIds:sourceIds,complete:true}};
 };
+const runPromptVersionOnlyScenario=async(client,migration)=>{
+  const runtime=await createEnterpriseIntelligenceFixture(client,'brd');
+  await client.query(`INSERT INTO public.role_capabilities(role_id,capability_key)
+    SELECT role_values.role_id,capability_values.capability FROM unnest($1::uuid[]) role_values(role_id)
+    CROSS JOIN unnest($2::text[]) capability_values(capability) ON CONFLICT DO NOTHING`,[[runtime.role,runtime.routeRole],['studio.artifacts.generate','studio.sources.read','studio.sources.manage']]);
+  await client.query(`UPDATE public.ai_provider_configs SET last_validated_at=statement_timestamp() WHERE id=$1`,[runtime.provider]);
+  const routeId=runtime.uuid(9500);
+  await client.query(`INSERT INTO public.enterprise_ai_capability_routes(id,org_id,workspace_id,provider_config_id,capability,model,enabled,allowed_roles,version,created_by,updated_by)
+    VALUES($1,$2,$3,$4,'studio.document.generate','fixture-model',true,ARRAY[$5::text],1,$6,$6)`,[routeId,runtime.org,runtime.workspace,runtime.provider,runtime.routeRole,runtime.requester]);
+  await client.query(`INSERT INTO public.enterprise_transcript_workspace_flags(org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,updated_by)
+    VALUES($1,$2,true,true,true,$3) ON CONFLICT(org_id,workspace_id) DO UPDATE SET unified_byok_gateway_enabled=true,studio_multisource_enabled=true,module_handoffs_enabled=true,updated_by=$3`,[runtime.org,runtime.workspace,runtime.requester]);
+  await client.query(`UPDATE public.enterprise_intelligence_runtime_control SET enabled=true,read_only=false,provider_enabled=true,updated_at=statement_timestamp() WHERE singleton`);
+  await client.query(`UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=true,updated_at=statement_timestamp() WHERE singleton`);
+  const authorizationVersion=Number((await client.query(`SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2`,[runtime.org,runtime.requester])).rows[0].version);
+  const template=(await client.query(`SELECT id FROM public.studio_system_template_versions WHERE artifact_type='brd' AND superseded_at IS NULL`)).rows[0];
+  assert.ok(template?.id);
+  const request=async(label,ordinal)=>{
+    const selectors=(await client.query(`SELECT artifact.id artifact_id,artifact.aggregate_version,artifact.current_version_id,artifact.current_approved_version_id,
+      artifact.source_package_id,package.package_hash FROM public.studio_artifact_aggregates artifact
+      JOIN public.studio_artifact_source_packages package ON package.id=artifact.source_package_id AND package.artifact_id=artifact.id
+      WHERE artifact.id=$1`,[runtime.artifactId])).rows[0];
+    assert.ok(selectors?.source_package_id);
+    const command={actorId:runtime.requester,organizationId:runtime.org,workspaceId:runtime.workspace,requestId:runtime.uuid(9510+ordinal),
+      idempotencyKey:`brd-prompt-version-${label}`,authorizationVersion,artifactId:selectors.artifact_id,sourcePackageId:selectors.source_package_id,
+      templateKind:'system',templateVersionId:template.id,expectedAggregateVersion:Number(selectors.aggregate_version),
+      expectedCurrentVersionId:selectors.current_version_id,expectedApprovedVersionId:selectors.current_approved_version_id};
+    return(await client.query(`SELECT public.studio_artifact_generation_request_v2($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result;
+  };
+
+  const legacy=await request('legacy-v1',0);
+  assert.equal(legacy.generationPlan.promptVersion,'studio-pr-b-1');
+  const runtimeBefore=(await client.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
+    FROM public.enterprise_intelligence_runtime_control enterprise CROSS JOIN public.studio_artifact_runtime_control studio
+    WHERE enterprise.singleton AND studio.singleton`)).rows[0];
+  await applySyntheticAiTerminalJournalMigrationForTest(client,migration,async()=>transaction(client,migration,await readMigration(migration)));
+  assert.deepEqual((await client.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
+    FROM public.enterprise_intelligence_runtime_control enterprise CROSS JOIN public.studio_artifact_runtime_control studio
+    WHERE enterprise.singleton AND studio.singleton`)).rows[0],runtimeBefore);
+  assert.equal((await client.query(`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).rows[0].migration_tip,'20261003123459');
+
+  const legacyToken=runtime.uuid(9520);const legacyClaim=(await client.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[legacy.attemptId,legacyToken])).rows[0].result;
+  assert.equal(legacyClaim.promptVersion,'studio-pr-b-1');assert.equal(legacyClaim.providerPlanHash,legacy.generationPlan.providerPlanHash);assert.equal(legacyClaim.artifactType,'brd');
+  await client.query(`SELECT public.studio_artifact_generation_fail_v2($1,$2,$3,'GENERATION_START_CONFLICT')`,[legacy.attemptId,legacyToken,legacyClaim.executionFence]);
+
+  await client.query('BEGIN');
+  try{
+    const current=await request('new-v2',1);
+    assert.equal(current.generationPlan.promptVersion,'studio-pr-b-2');assert.match(current.generationPlan.providerPlanHash,/^[0-9a-f]{64}$/u);
+    const firstToken=runtime.uuid(9521);const first=(await client.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[current.attemptId,firstToken])).rows[0].result;
+    assert.equal(first.providerAllowed,true);assert.equal(first.promptVersion,'studio-pr-b-2');assert.equal(first.providerPlanHash,current.generationPlan.providerPlanHash);
+    await client.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'prompt-v2-fixture',$4::jsonb)`,[current.attemptId,firstToken,first.executionFence,JSON.stringify({contractVersion:'studio-artifact-2'})]);
+    await client.query(`UPDATE public.enterprise_ai_capability_routes SET version=version+1 WHERE id=$1`,[routeId]);
+    const recovery=(await client.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[current.attemptId,runtime.uuid(9522)])).rows[0].result;
+    assert.equal(recovery.providerAllowed,false);assert.equal(recovery.reconcileOnly,true);assert.equal(recovery.promptVersion,'studio-pr-b-2');assert.equal(recovery.providerPlanHash,current.generationPlan.providerPlanHash);
+  }finally{await client.query('ROLLBACK')}
+
+  await client.query('BEGIN');
+  try{
+    const tampered=await request('hash-tamper',2);
+    await client.query('SAVEPOINT hash_tamper');
+    await client.query(`UPDATE public.enterprise_ai_capability_routes SET version=version+1 WHERE id=$1`,[routeId]);
+    await assert.rejects(client.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60)`,[tampered.attemptId,runtime.uuid(9523)]),/PROVIDER_ROUTE_UNAVAILABLE/u);
+    await client.query('ROLLBACK TO SAVEPOINT hash_tamper');
+  }finally{await client.query('ROLLBACK')}
+  console.log('Studio BRD prompt v2 upgrade and claim scenario passed.');
+};
 const cloneAssessHandoff=async(client,fixture,ordinal,sourceVersionId=null,caseId=null)=>{
   const ids={decision:fixture.uuid(7200+ordinal*20),review:fixture.uuid(7201+ordinal*20),resolution:fixture.uuid(7202+ordinal*20),govern:fixture.uuid(7203+ordinal*20),handoff:fixture.uuid(7204+ordinal*20)};
   const receipts=[0,1,2,3].map(offset=>fixture.uuid(7210+ordinal*20+offset));
@@ -109,6 +179,11 @@ try{
   admin=await connect(adminUrl);
   for(const [role,attrs] of [['anon','NOLOGIN'],['authenticated','NOLOGIN'],['service_role','NOLOGIN BYPASSRLS']])if(!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[role])).rowCount){await admin.query(`CREATE ROLE ${role} ${attrs}`);roles.push(role)}
 
+  const promptDatabase=await createDatabase(admin,names.prompt);await apply(promptDatabase,all.slice(0,-1));
+  await runPromptVersionOnlyScenario(promptDatabase,all.at(-1));
+  if(promptVersionOnly){
+    console.log('Focused Studio BRD prompt v2 PostgreSQL mode passed.');
+  }else{
   const fresh=await createDatabase(admin,names.fresh);await apply(fresh,all);
   const freshTip=(await fresh.query(`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).rows[0]?.migration_tip;
   assert.equal(freshTip,currentMigrationTip);
@@ -906,6 +981,7 @@ try{
   emit('MIGRATION-006','DEFAULT-OFF-READONLY-EXACT-REPLAY-NO-EFFECT','fresh-default-off-and-replay',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:generationPackage.id,hash:generationPackage.package_hash},template:{id:tenantTemplateId,versionId:approvedTemplate.id},handoff:{id:generationHandoffId},artifact:{id:generationArtifactId},defaultOff:defaultOffEvidence,exactReplays:{templateVersionCountUnchanged:true,handoffConsumptionCountUnchanged:true,generationAttemptCountUnchanged:true}}));
 
   console.log('Governed multi-source Studio PR B PostgreSQL scenarios passed.');
+  }
 }finally{
   for(const client of clients.reverse())if(client!==admin)await client.end().catch(()=>{});
   if(admin){for(const name of databases.reverse())await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(error=>{console.error(`cleanup failed ${name}: ${error.message}`);process.exitCode=1});for(const role of roles.reverse())await admin.query(`DROP ROLE IF EXISTS ${role}`).catch(()=>{});await admin.end().catch(()=>{})}

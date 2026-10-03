@@ -1,5 +1,31 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Current BRD prompt-version boundary (2026-10-03)
+
+PR #265's build and preview corrections are merged and verified. The next
+BRD-quality correction changes trusted static instructions, while keeping the
+complete accepted source package in the existing untrusted input. No source
+projection, inferred workflow, new template section or semantic approval is added.
+Explicit null/unknown inputs remain unknown.
+
+Generation attempts already pin prompt identity in their provider-plan hash.
+The forward correction preserves those historical rows and exact v1 prompt
+bytes. Only fresh BRD plans select v2; FRD/PDD retain v1. The locked database
+claim supplies the prompt identity through material loading, token estimation
+and provider invocation. Missing or unsupported identities fail before spending
+or provider execution. Before a new provider effect, the claim verifies the
+stored plan hash against the current route. Reconcile-only claims retain their
+stored identity without adding this mutable-route gate. Local PostgreSQL proof
+covers both route-drift denial and staged-response recovery. Existing
+authorization, idempotency, single-effect and human draft/review boundaries remain
+in force.
+
+Deployment is not part of the current implementation authority. Its eventual
+order is dual-version runtime before creation of v2 plans, with providers off
+during version skew. After v2 exists, rollback must preserve v2 readability and
+historical hashes; pause generation or forward-correct new-plan selection.
+Never relabel attempts or reinterpret a v1 replay using v2 instructions.
+
 ## Current PR #265 build compatibility boundary (2026-10-03)
 
 The completed synthetic downstream path retains immutable AI BRD v1, source-grounded

@@ -1,5 +1,30 @@
 # AvalaOS Core Source Of Truth
 
+## Current BRD semantic-fidelity correction (2026-10-03)
+
+PR #265 merged as `b4d306124104d48ca85baff3af90915182b31cfe` after
+passing candidate checks and preview verification. Its merge tree equals the
+tested head; post-merge Core CI run `37121983737` passed. This supersedes the
+pending/draft status in the dated entries below, without transferring the paid
+or hosted evidence from its original candidate.
+
+AP authorized the next implementation: preserve source-stated workflow, roles,
+decisions, exceptions and explicit unknowns in generated BRDs. The retained
+accepted Assess package contains these facts; the original AI output omitted
+them despite satisfying the structural contract. The active AI-output plan owns
+the implemented BRD-specific prompt correction, immutable prompt-version binding,
+focused verification and safe rollout. Local output, database-adapter and
+PostgreSQL upgrade checks pass. Candidate CI remains pending. Existing attempts
+and original BRD v1 stay unchanged.
+
+The paid campaign is closed. Its last verified conservative charge remains
+USD 4.6409936 under the USD 10 cumulative cap, with eight consumed debits,
+zero unresolved reservations and both provider runtimes off. A new implementation
+does not authorize another paid effect or hosted deployment. Improved provider
+output quality is `not run` until a separately approved live validation.
+The corrected synthetic v2, five accepted Delivery items and read-only Monitor
+baseline remain separate evidence; production readiness is not established.
+
 ## Current paid validation and release-blocker repair (2026-10-03)
 
 Executed evidence on `89c95ec`: one provider validation and one joined-source BRD

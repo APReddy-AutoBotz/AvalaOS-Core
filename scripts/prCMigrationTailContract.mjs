@@ -25,6 +25,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20260928060000_pr_c_synthetic_direct_planning_generation.sql',
   '20261003015246_synthetic_ai_final_paid_validation_continuation.sql',
   '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql',
+  '20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -33,7 +34,7 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, and synthetic Studio provider-free successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, and Studio BRD prompt-v2 successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners must validate the approved tail before deriving its

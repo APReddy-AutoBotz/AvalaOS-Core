@@ -283,7 +283,11 @@ void (async () => {
     sourcePackageId: ids[5], sourcePackageHash: 'package-hash-v1', sourcePackageVersion: 1,
     templateKind: 'system', templateVersionId: ids[6], templateVersion: 'system-brd-v3', templateHash: 'template-hash-v3',
     provider: 'openai', providerRouteId: ids[13], providerConfigId: ids[14], model: 'governed-model', requestId: ids[1],
+    artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-2', providerPlanHash: 'f'.repeat(64),
     anchorManifestHash: '9'.repeat(64), anchorCount: 1,
+  };
+  const storedPromptPlan = {
+    artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-2', providerPlanHash: 'f'.repeat(64),
   };
   const assessPackageHash = 'd'.repeat(64);
   const assessAnchor = { sourceVersionId: ids[15], locator: 'assess:accepted-handoff', anchorHash: assessPackageHash };
@@ -453,16 +457,22 @@ void (async () => {
   } catch { mismatchRejected = true; }
   mark(mismatchRejected, 'INJECTION-001', 'db.handoff-id-citation-substitution-rejected', 'mismatched-handoff-source-anchor', { sourceVersionId: ids[15], substitutedHandoffId: ids[11] });
 
+  let claimMaterialPlan: Record<string, unknown> = {};
   const claim = await claimStudioGeneration({
-    ...plan, attemptId: ids[9], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
+    ...plan, promptVersion: 'studio-pr-b-1', providerPlanHash: 'e'.repeat(64),
+    attemptId: ids[9], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
     sourcePackageVersion: 1, maximumOutputTokens: 2_000, expectedTemplateVersion: 'system-brd-v3',
   }, async (name, args) => {
     rpcName = name; rpcArgs = args;
-    return { attemptId: ids[9], executionToken: ids[12], executionFence: 8, leaseExpiresAt: '2030-01-01T00:00:00Z', providerAllowed: false, reconcileOnly: true } as never;
-  }, async () => material);
+    return { attemptId: ids[9], executionToken: ids[12], executionFence: 8, leaseExpiresAt: '2030-01-01T00:00:00Z', providerAllowed: false, reconcileOnly: true, ...storedPromptPlan } as never;
+  }, async authoritativePlan => { claimMaterialPlan = authoritativePlan; return material; });
   mark(rpcName === STUDIO_RPC.generationClaim && claim.reconcileOnly && !claim.providerAllowed && claim.executionFence === 8
-    && rpcArgs.p_attempt_id === ids[9] && rpcArgs.p_lease_seconds === 45,
-  'IDEMP-002-B', 'db.reconcile-only-claim-skips-new-provider-authority', 'staged-response-refence', { attemptId: ids[9], executionFence: 8, reconcileOnly: true });
+    && rpcArgs.p_attempt_id === ids[9] && rpcArgs.p_lease_seconds === 45
+    && claimMaterialPlan.promptVersion === 'studio-pr-b-2'
+    && claimMaterialPlan.providerPlanHash === 'f'.repeat(64),
+  'IDEMP-002-B', 'db.reconcile-only-claim-uses-stored-prompt-authority', 'staged-response-refence', {
+    attemptId: ids[9], executionFence: 8, reconcileOnly: true, promptVersion: String(claimMaterialPlan.promptVersion),
+  });
 
   for (const [index, terminalState] of ['completed', 'stale_completed'].entries()) {
     let proposedRecoveryToken = '';
@@ -543,7 +553,7 @@ void (async () => {
   const recordedFailures: Array<{ attemptId: string; executionToken: string; executionFence: number; failureCode: string }> = [];
   const terminalClaimFailure = await executeStudioGenerationDependency({ attemptId: ids[9] }, {
     claim: initial => claimStudioGeneration(initial, async () => ({
-      attemptId: ids[9], executionToken: ids[12], executionFence: 9,
+      attemptId: ids[9], executionToken: ids[12], executionFence: 9, ...storedPromptPlan,
     }) as never, async () => { throw new StudioArtifactError('SOURCE_COVERAGE_INCOMPLETE'); }),
     execute: async () => { preProviderExecutions += 1; return { state: 'completed', resource: {} }; },
     fail: async input => { recordedFailures.push(input); },
@@ -555,7 +565,7 @@ void (async () => {
   });
   const uncertainMaterialFailure = await executeStudioGenerationDependency({ attemptId: ids[10] }, {
     claim: initial => claimStudioGeneration(initial, async () => ({
-      attemptId: ids[10], executionToken: ids[13], executionFence: 10,
+      attemptId: ids[10], executionToken: ids[13], executionFence: 10, ...storedPromptPlan,
     }) as never, async () => { throw new Error('synthetic private material read failure'); }),
     execute: async () => { preProviderExecutions += 1; return { state: 'completed', resource: {} }; },
     fail: async () => { throw new Error('synthetic fenced failure write loss'); },
@@ -622,7 +632,7 @@ void (async () => {
   }
   const invalidFailureCaller = await executeStudioGenerationDependency({ attemptId: ids[9] }, {
     claim: initial => claimStudioGeneration(initial, async () => ({
-      attemptId: ids[9], executionToken: ids[12], executionFence: 9,
+      attemptId: ids[9], executionToken: ids[12], executionFence: 9, ...storedPromptPlan,
     }) as never, async () => { throw new Error('synthetic material failure'); }),
     fail: input => failStudioGeneration(input, async () => ({ ...validFailureAck, outcome: 'no_op' }) as never),
   });
