@@ -1,5 +1,39 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current one-use BRD validation risks and evidence (2026-10-03)
+
+Executed evidence: PR #266 merged with an identical tested tree; candidate CI,
+preview and post-merge CI passed. The authorized synthetic Studio deployment and
+migration `20261003123459` were verified against committed bytes. Nineteen protected
+tables were unchanged, both providers remained off, eight debits remained consumed,
+zero reservations were unresolved, and cumulative conservative spending stayed at
+USD 4.6409936. These results do not prove improved real-provider output.
+
+Confirmed authority boundary: the former final continuation is immutable and fully
+consumed. A new generation cannot use remaining dollars without a fresh bounded
+allowance. AP authorized preparing that additive implementation. Keep one generation,
+optional stale-provider validation, canonical-ledger accounting, original USD 10 cap
+and maximum aggregate USD 5.583912. Activation and paid output remain **not run**.
+
+Read-only retained-evidence correction: the spent predecessor has future clock
+expiry. Treat consumption and expiry separately; do not force a wait or reopen
+slots. Verify compatibility for a prior window's last reserved-but-unconsumed
+effect before any successor exists. A time-capped replay must still reject changed
+requested duration, and post-reservation source/route/head drift must deny egress.
+
+Executed local evidence: the new migration contract passed 3/3 and two grouped
+PostgreSQL scenarios passed through the real request/claim/token-reservation/
+campaign-consumption/finalization path with mocked output. They verify predecessor
+compatibility, original debit and v1/v2 preservation, approved-v2 retention, draft
+v3 creation, exact spending ceilings, changed replay and freshness/route drift
+denials, and rejection of a second generation or validation. Both disposable
+databases were removed. Migration-tail/CI wiring checks passed 20/20, and AI-boundary
+and secret-hygiene scans passed. Existing ledger regressions remain required in CI;
+these focused scenarios do not claim exhaustive concurrency or expiry coverage.
+Exact-head CI and real semantic validation remain pending. Semantic acceptance must compare the v3 draft
+to the retained joined source and preserve original v1, approved v2, its approved
+pointer and downstream lineage. No second paid generation follows a quality miss.
+
 ## Current BRD semantic-fidelity risk (2026-10-03)
 
 Executed evidence: PR #265 merged as `b4d3061` with the tested tree unchanged;

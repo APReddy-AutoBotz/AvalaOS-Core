@@ -1,5 +1,29 @@
 # AvalaOS Core Source Of Truth
 
+## Current one-use BRD quality validation (2026-10-03)
+
+PR #266 merged as `34fc02de9d4f2465e1f65d1630bc2af3074ec7d7` with
+the tested tree unchanged. All 16 candidate workflows, preview and seven applicable
+post-merge Core CI jobs passed. AP separately authorized the synthetic rollout:
+the exact Studio function and migration `20261003123459` are deployed and verified.
+Nineteen protected table fingerprints remained unchanged; both providers are off,
+eight debits are consumed, no reservation is unresolved, and conservative cumulative
+spending remains USD 4.6409936. These results supersede the pending statements below.
+
+AP authorized preparing one fresh BRD-v2 quality-validation allowance under the
+original USD 10 cap. The active AI-output plan owns this additive, immutable window
+over the existing campaign/debit ledger. It permits one Studio generation and at
+most one provider validation only if the exact prior validation is stale. Projected
+aggregate ceilings are USD 5.1124528 without validation and USD 5.583912 with it.
+The consumed final window and every historical debit remain immutable. Installation
+must not activate a window or provider. Actual fresh validation is **not run** until
+the new candidate is verified and separately authorized for hosted activation.
+
+The new output must be an unapproved v3 draft on the retained assessed artifact.
+Approved v2 and its Delivery/Monitor lineage stay unchanged. No extraction, mapping,
+approval, publication, automatic paid retry or production action is included.
+One synthetic output cannot establish general model quality or production readiness.
+
 ## Current BRD semantic-fidelity correction (2026-10-03)
 
 PR #265 merged as `b4d306124104d48ca85baff3af90915182b31cfe` after

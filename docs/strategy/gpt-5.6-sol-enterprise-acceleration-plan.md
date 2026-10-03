@@ -1,5 +1,23 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current one-use BRD validation allowance (2026-10-03)
+
+PR #266 is merged, CI-green and deployed to the separately authorized synthetic
+target. Exact function source and migration were verified with providers off;
+19 protected tables, eight consumed debits and USD 4.6409936 aggregate remained
+unchanged. Its prompt-v2 output quality has not yet been tested with a provider.
+
+AP authorized the next bounded implementation: one immutable quality-validation
+window using the existing campaign ledger. Retain one generation slot, optional
+validation only when server freshness requires it, the original USD 10 global cap
+and the narrower USD 5.583912 aggregate ceiling. No general campaign framework,
+shadow budget, historical allowance reset or automatic retry is needed.
+The completed architecture/security/quality findings authorize the write phase;
+one implementation worker owns migration, focused tests and task plan, while the
+root owns integration, active authority, evidence and the single implementation PR.
+Keep exact-head CI and hosted activation separate. Stop at the implementation PR
+boundary; no new merge, deployment, paid call or production authority is implied.
+
 ## Current BRD semantic-fidelity workstream (2026-10-03)
 
 PR #265 is merged; its exact candidate and post-merge Core CI passed. The next

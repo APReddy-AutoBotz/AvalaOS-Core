@@ -1,5 +1,31 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## One-use BRD quality-validation authority (2026-10-03)
+
+The merged PR #266 Studio runtime and prompt-v2 migration are source-verified on
+the authorized synthetic target. Both providers remain off. The next allowance
+uses the existing immutable campaign and canonical debit ledger; it cannot reopen
+the consumed final continuation or spend through ordinary budgeting as a bypass.
+The predecessor may still have future clock expiry after all its effects are
+consumed. Only an activated successor may supersede that exact spent predecessor;
+installing the schema must preserve older reserve/consume behavior before then.
+
+One additive immutable window binds the exact synthetic target, administrator,
+prior campaign/window, provider/key/routes/model, deployed source identity, source
+package/hash, artifact/template, current and approved heads, and BRD prompt-v2
+identity. Its only effects are one generation and optional provider validation
+when the exact server-side validation is stale. Freshness, expiry, concurrent slot
+reservation and consumption-before-egress remain server responsibilities. A failed
+or uncertain effect retains its debit; it does not create another paid attempt.
+Bind requested window length exactly on activation replay, even when validation
+freshness shortens actual expiry. Recheck scope and freshness at consumption so
+drift after reservation cannot authorize an effect.
+
+Normal Studio finalization appends an unapproved v3 draft and preserves the approved
+v2 pointer. No special publication or Delivery/Monitor update is allowed. Rollback
+keeps providers off/read-only while retaining allowance, attempts, debits and all
+version/lineage history. Installation alone changes no runtime activation state.
+
 ## Current BRD prompt-version boundary (2026-10-03)
 
 PR #265's build and preview corrections are merged and verified. The next
