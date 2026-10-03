@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl = process.env.PR1E_REVIEW_AUTHORITY_DATABASE_URL;
 if (!adminUrl) {
@@ -72,7 +73,8 @@ try {
     .filter((name) => name.endsWith('.sql'))
     .sort();
   for (const name of migrations) {
-    await tx(test, fs.readFileSync(path.join('supabase/migrations', name), 'utf8'));
+    await applySyntheticAiTerminalJournalMigrationForTest(test, name,
+      () => tx(test, fs.readFileSync(path.join('supabase/migrations', name), 'utf8')));
   }
 
   const helperSignature =

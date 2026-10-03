@@ -4,6 +4,7 @@ import {mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import pg from 'pg';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 import {createApprovedStudioFixture,createAvailablePrivateArtifactFixture,privateCommand,downloadCommand} from './studioPrivateArtifactPostgresFixture.mjs';
 import {runStudioPrivateArtifactCrossLayerEvidence} from './studioPrivateArtifactCrossLayerPostgres.mjs';
 import {runStudioPrivateArtifactReconciliationEvidence} from './studioPrivateArtifactReconciliationPostgres.mjs';
@@ -182,7 +183,7 @@ const {Client}=pg;const suffix=`${process.pid}_${Date.now()}`;const databaseName
 const migrations=(await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort();const accepted='20260729163251_studio_private_artifact_authority.sql';const feature='20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql';const acceptedIndex=migrations.indexOf(accepted);const featureIndex=migrations.indexOf(feature);assert.notEqual(acceptedIndex,-1);assert.equal(featureIndex,acceptedIndex+1);const baseline=migrations.slice(0,acceptedIndex);
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};const connect=async url=>{const db=new Client({connectionString:url});await db.connect();clients.push(db);return db};
 const tx=async(db,label,sql)=>{await db.query('BEGIN');try{await db.query(sql);await db.query('COMMIT');console.log(`MIGRATION PASS ${label}`)}catch(error){await db.query('ROLLBACK');throw error}};
-const apply=async(db,list)=>{for(const name of list)await tx(db,name,await readFile(join('supabase/migrations',name),'utf8'))};
+const apply=async(db,list)=>{for(const name of list)await applySyntheticAiTerminalJournalMigrationForTest(db,name,async()=>tx(db,name,await readFile(join('supabase/migrations',name),'utf8')))};
 const createDb=async name=>{await admin.query(`CREATE DATABASE ${name}`);created.push(name);const db=await connect(urlFor(name));await tx(db,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);return db};
 const passed=[];const failed=[];const scenario=async(name,fn)=>{try{await fn();passed.push(name);console.log(`PASS ${name}`)}catch(error){const message=(error instanceof Error?error.message:String(error)).replace(/\s+/g,' ').slice(0,600);failed.push({name,message});console.error(`FAIL ${name}: ${message}`)}};
 try{

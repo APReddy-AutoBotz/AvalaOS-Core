@@ -4,6 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
+import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl = process.env.STUDIO_SOURCE_INTEGRATION_DATABASE_URL;
 if (!adminUrl) {
@@ -19,7 +20,6 @@ const { Client } = pg;
 const migrationName = '20260924052038_studio_independent_source_integration.sql';
 const syntheticMigrationName = '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql';
 const syntheticStudioFixtureMigrationName = '20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql';
-const terminalJournalCorrection = '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql';
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 const featureMigrationIndex = migrations.indexOf(migrationName);
 assert.ok(featureMigrationIndex > 0);
@@ -149,19 +149,8 @@ try {
   await db.query(`SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,'accepted',$6,$7,'Retained pre-migration Studio review')`,
     [fixture.candidate, fixture.org, fixture.workspace, legacyCandidate.value, legacyCandidate.excerpt_hash, fixture.reviewer, legacyCandidate.value]);
   for (const migration of migrations.slice(featureMigrationIndex)) {
-    let providerState;
-    if (migration === terminalJournalCorrection) {
-      providerState = await one(db, `SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
-        FROM public.enterprise_intelligence_runtime_control enterprise CROSS JOIN public.studio_artifact_runtime_control studio
-        WHERE enterprise.singleton AND studio.singleton`);
-      await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
-      await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
-    }
-    await transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8'));
-    if (providerState) {
-      await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=$1 WHERE singleton', [providerState.enterprise]);
-      await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=$1 WHERE singleton', [providerState.studio]);
-    }
+    await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
+      async () => transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8')));
   }
   assert.equal(await count(db, 'public.enterprise_source_set_version_items', 'WHERE source_set_version_id=$1', [legacySetVersion]), 1);
   assert.equal(await count(db, 'public.studio_legacy_extraction_binding_compatibility', 'WHERE binding_id=$1 AND job_id=$2', [legacyBinding, fixture.job]), 1);

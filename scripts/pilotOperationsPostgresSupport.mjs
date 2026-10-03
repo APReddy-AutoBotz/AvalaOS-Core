@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {readFile, readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const {Client} = pg;
 export const featureMigration = '20260809120000_pilot_operations_control_plane.sql';
@@ -53,17 +54,19 @@ export async function applyMigrations(client, names) {
   for (const name of names) {
     const sql=await readFile(join('supabase/migrations', name), 'utf8');
     const contentSha256=createHash('sha256').update(sql.replace(/\r\n/gu,'\n')).digest('hex');
-    await client.query('BEGIN');
-    try {
-      await client.query(sql);
-      await client.query(`INSERT INTO avalaos_migrations.applied(filename,content_sha256,release_sha)
-        VALUES($1,$2,$3) ON CONFLICT(filename) DO UPDATE SET content_sha256=excluded.content_sha256,
-        release_sha=excluded.release_sha`,[name,contentSha256,'0'.repeat(40)]);
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    await applySyntheticAiTerminalJournalMigrationForTest(client, name, async () => {
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query(`INSERT INTO avalaos_migrations.applied(filename,content_sha256,release_sha)
+          VALUES($1,$2,$3) ON CONFLICT(filename) DO UPDATE SET content_sha256=excluded.content_sha256,
+          release_sha=excluded.release_sha`,[name,contentSha256,'0'.repeat(40)]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
   }
 }
 

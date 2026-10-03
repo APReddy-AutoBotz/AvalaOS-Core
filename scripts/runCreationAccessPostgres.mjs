@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
 import {PROJECTION_MIGRATION_REJECTION_CASES} from './projectionRpcPostgrestContract.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -95,17 +96,19 @@ try {
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
-      await db.query('BEGIN');
-      try { await db.query(sql); await db.query('COMMIT'); }
-      catch (error) {
-        await db.query('ROLLBACK');
-        // Retain only fixed domain codes; never expose SQL diagnostics, rows,
-        // connection strings, function arguments or raw exception objects.
-        const domainCode = /^[A-Z][A-Z0-9_]{1,100}$/.test(error.message ?? '') ? error.message : 'UNCLASSIFIED';
-        report.migrationFailure = { path: file, sqlstate: error.code ?? 'unknown', domainCode };
-        console.error(`Migration failed: ${file}; SQLSTATE ${error.code ?? 'unknown'}; domain ${domainCode}`);
-        throw error;
-      }
+      await applySyntheticAiTerminalJournalMigrationForTest(db, file, async () => {
+        await db.query('BEGIN');
+        try { await db.query(sql); await db.query('COMMIT'); }
+        catch (error) {
+          await db.query('ROLLBACK');
+          // Retain only fixed domain codes; never expose SQL diagnostics, rows,
+          // connection strings, function arguments or raw exception objects.
+          const domainCode = /^[A-Z][A-Z0-9_]{1,100}$/.test(error.message ?? '') ? error.message : 'UNCLASSIFIED';
+          report.migrationFailure = { path: file, sqlstate: error.code ?? 'unknown', domainCode };
+          console.error(`Migration failed: ${file}; SQLSTATE ${error.code ?? 'unknown'}; domain ${domainCode}`);
+          throw error;
+        }
+      });
       if (!report.migrations.some(row => row.path === file)) report.migrations.push({ path: file, sha256: createHash('sha256').update(sql).digest('hex') });
     }
   };

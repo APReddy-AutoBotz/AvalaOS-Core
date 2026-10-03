@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const { Client } = pg;
 const adminConnection = process.env.PR1A_MIGRATION_DATABASE_URL;
@@ -55,7 +56,8 @@ const runSql = async (client, label, sql) => {
 
 const applyMigrations = async (client, names) => {
   for (const name of names) {
-    await runSql(client, name, fs.readFileSync(path.join(migrationsDir, name), 'utf8'));
+    await applySyntheticAiTerminalJournalMigrationForTest(client, name,
+      () => runSql(client, name, fs.readFileSync(path.join(migrationsDir, name), 'utf8')));
   }
 };
 

@@ -7,6 +7,7 @@ import {validateAssessImportDatabaseUrl} from './assessImportValidationContract.
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
 import {loadSyntheticAiModules} from './loadSyntheticAiModules.mjs';
 import {meetingText} from './syntheticAiCampaignFixtures.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const originalFetch=globalThis.fetch;
 const originalDeno=globalThis.Deno;
@@ -34,7 +35,6 @@ const json=value=>JSON.stringify(value);
 const uuid=()=>crypto.randomUUID();
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
 assert.equal(migrations.at(-1),'20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
-const terminalJournalCorrection='20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql';
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const EXPECTED_ASSERTIONS=[
  'MAP-PG-BUDGET-001-legacy-domain-preserved',
@@ -175,19 +175,7 @@ try{
  await transaction(database,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
  for(const name of migrations){
   if(name===featureMigration){fixture=await createEnterpriseIntelligenceFixture(database);await database.query(`INSERT INTO public.enterprise_transcript_workspace_flags(org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,updated_by) VALUES($1,$2,true,true,true,true,$3)`,[fixture.org,fixture.workspace,fixture.requester])}
-  let providerState;
-  if(name===terminalJournalCorrection){
-   providerState=await one(database,`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
-    FROM public.enterprise_intelligence_runtime_control enterprise CROSS JOIN public.studio_artifact_runtime_control studio
-    WHERE enterprise.singleton AND studio.singleton`);
-   await database.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
-   await database.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
-  }
-  await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
-  if(providerState){
-   await database.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=$1 WHERE singleton',[providerState.enterprise]);
-   await database.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=$1 WHERE singleton',[providerState.studio]);
-  }
+  await applySyntheticAiTerminalJournalMigrationForTest(database,name,async()=>transaction(database,name,await readFile(join('supabase/migrations',name),'utf8')));
  }
  assert.ok(fixture);const modules=await loadSyntheticAiModules();fixture.modules=modules;
  const providerBudget=await import('../supabase/functions/_shared/providerBudget.ts');

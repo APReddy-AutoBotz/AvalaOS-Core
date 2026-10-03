@@ -33,6 +33,18 @@ passed. An initial fixture provider-on precondition failure is retained; the
 fixture now disables providers during migration and restores only its prior local
 state afterward. Corrected exact-candidate CI and hosted execution remain pending.
 
+Candidate `403c5ad` passed the new recovery cases in CI, but retained full-chain
+database runners failed while installing the successor with their historical
+provider-on defaults. This is a confirmed test-setup defect, not a paid-provider
+failure. The shared disposable-test helper now disables both provider flags only
+while installing that exact successor and restores each fixture's previous flags
+afterward. Full-chain callers use that helper; production SQL and provider guards
+are unchanged. The failed runners passed locally: Studio Artifact 16/16,
+Enterprise Intelligence 30/30, and all retained Transcript Flow assertions. All
+disposable databases were cleaned. Their test loaders normalize Windows line
+endings for migration-source drift checks. All 17 affected scripts parsed and
+the diff check passed. New exact-head CI and hosted execution remain pending.
+
 The private browser now waits for the selected artifact/package/hash/assessed
 lineage. A delayed-projection check observed generation disabled until the exact
 empty joined BRD loaded, with zero paid requests. The earlier screen showing the

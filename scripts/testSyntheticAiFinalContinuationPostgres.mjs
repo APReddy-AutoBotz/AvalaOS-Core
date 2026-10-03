@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import pg from 'pg';
 import {validateAssessImportDatabaseUrl} from './assessImportValidationContract.mjs';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl=validateAssessImportDatabaseUrl(process.env.ASSESS_DOCUMENT_MAPPING_POSTGRES_ADMIN_URL);
 const parsed=new URL(adminUrl);assert.ok(['127.0.0.1','localhost','::1'].includes(parsed.hostname));assert.equal(parsed.pathname,'/postgres');
@@ -28,7 +29,7 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(cu
 GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`;
 const names=[`ai_final_fresh_${process.pid}_${Date.now()}`,`ai_final_upgrade_${process.pid}_${Date.now()}`];
 const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;return value.toString()};
-const applyChain=async(db,through)=>{let fixture;for(const name of migrations){if(name===featureMigration)fixture=await createEnterpriseIntelligenceFixture(db,'frd');if(name===migration){await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton')}await transaction(db,name,await readMigration(name));if(name===through)break}assert.ok(fixture);return fixture};
+const applyChain=async(db,through)=>{let fixture;for(const name of migrations){if(name===featureMigration)fixture=await createEnterpriseIntelligenceFixture(db,'frd');await applySyntheticAiTerminalJournalMigrationForTest(db,name,async()=>transaction(db,name,await readMigration(name)));if(name===through)break}assert.ok(fixture);return fixture};
 const claimReceipt=async(db,fixture,command,label)=>{const request=uuid(),token=uuid(),requestHash=hash(`${command}:${label}`);const row=await one(db,`SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,NULL,$8)).*`,[fixture.requester,fixture.org,fixture.workspace,command,`final-${label}`,request,requestHash,token]);return{...row,requestHash}};
 const seedHistoricalReceipt=async(db,fixture,command,label)=>{const request=uuid(),requestHash=hash(`${command}:${label}`);const row=await one(db,`INSERT INTO public.enterprise_ai_command_receipts(org_id,workspace_id,actor_id,command_type,runtime_area,resource_type,idempotency_key,initial_request_id,last_request_id,request_hash,status,completed_at) VALUES($1,$2,$3,$4,'provider','synthetic_ai_campaign',$5,$6,$6,$7,'committed',statement_timestamp()-interval '9 days') RETURNING *`,[fixture.org,fixture.workspace,fixture.requester,command,`historic-${label}`,request,requestHash]);return{...row,requestHash}};
 
