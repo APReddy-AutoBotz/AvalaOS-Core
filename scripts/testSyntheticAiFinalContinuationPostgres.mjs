@@ -18,7 +18,8 @@ const pass=(testId,detail)=>console.log(`ASSESS_DOCUMENT_MAPPING_PG_ASSERTION ${
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
 const migration='20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql';const predecessor='20261003015246_synthetic_ai_final_paid_validation_continuation.sql';
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
-assert.equal(migrations.at(-1),migration);assert.equal(migrations.at(-2),predecessor);
+assert.equal(migrations.at(-1),'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
+assert.equal(migrations.at(-2),migration);assert.equal(migrations.at(-3),predecessor);
 const readMigration=async(name)=>(await readFile(join('supabase/migrations',name),'utf8')).replaceAll('\r\n','\n');
 const migrationSql=await readMigration(migration);
 const authBootstrap=`DO $$BEGIN CREATE ROLE anon NOLOGIN;EXCEPTION WHEN duplicate_object THEN NULL;END$$;

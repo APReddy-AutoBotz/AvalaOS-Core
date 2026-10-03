@@ -40,6 +40,9 @@ The focused fixture suite passes 3/3 and the disposable Assess/Studio budget
 pipeline passes 14/14 with mocked secret/provider transport. Migration input is
 normalized to LF in that harness for the same behavior on Windows and Linux.
 No production validation or fail-closed check was relaxed.
+The frozen final-continuation fixture now recognizes the successor in repository
+ordering while still applying only its original migration range; its eight
+PostgreSQL scenarios pass without provider calls or hosted access.
 
 Rollout requires exact-head CI, source attestation and separate deployment
 authority. Keep both provider runtimes off, deploy code that reads v1 and v2
