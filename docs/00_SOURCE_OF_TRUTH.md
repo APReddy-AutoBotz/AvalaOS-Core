@@ -1,5 +1,17 @@
 # AvalaOS Core Source Of Truth
 
+## Current terminal failure-journal correction (2026-10-03)
+
+Candidate `58cd46e` reached the approved synthetic migration/function deployment
+after feature-owned non-audit checks and the exact-candidate dependency exception.
+Recovery stopped before activation: a legitimate immutable failed-command journal
+was omitted by the fixture and rejected by the blanket journal guard. The active
+AI-output plan owns one forward-only exact journal binding correction, its focused
+verification and corrected-candidate evidence. Preserve the deployed predecessor
+and every historical row. Both provider runtimes remain off; no new paid effect
+occurred and USD 3.6980752 remains retained. Aggregate CI stays red and PR #265
+unmergeable; the exact-candidate risk exception must be rebound before use.
+
 ## Post-merge paid AI validation (2026-10-03)
 
 PR #264 merged as `2f8208420ec3b40c03ea50f92e7bb9746142eef9` after independently

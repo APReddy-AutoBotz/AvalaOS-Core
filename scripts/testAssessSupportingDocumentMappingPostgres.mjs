@@ -23,7 +23,8 @@ const expectedFullChainTip=approvedFullChainTip(migrations);
 const feature='20260916083814_assess_supporting_document_mapping.sql';
 const mappingIdentity='20260916151050_assess_document_mapping_identity_convergence.sql';
 const xlsxCorrection='20260916181916_assess_document_xlsx_ingestion_authority.sql';
-assert.equal(expectedFullChainTip,'20261003015246','Assess mapping must validate the exact approved synthetic acceptance successor chain.');
+const terminalJournalCorrection='20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql';
+assert.equal(expectedFullChainTip,'20261003055918','Assess mapping must validate the exact approved synthetic acceptance successor chain.');
 assert.equal(migrations.indexOf(PROJECTION_RPC_CORRECTION),migrations.indexOf(xlsxCorrection)+1,'Projection correction must immediately follow XLSX ingestion authority.');
 assert.equal(migrations.indexOf(mappingIdentity),migrations.indexOf(feature)+1,'Identity convergence must immediately follow the frozen mapping migration.');
 assert.equal(migrations.indexOf(xlsxCorrection),migrations.indexOf(mappingIdentity)+1,'XLSX ingestion authority must immediately follow the known mapping-identity predecessor.');
@@ -117,7 +118,19 @@ try{
       xlsxAuthority={sourceId,sourceVersionId,requestId,executionToken,requestHash,receipt,source,version,pendingResult,classifierBefore};
       pass('MAP-PG-011-predecessor-xlsx-rejection','the real receipt-owned source-create RPC rejects XLSX at the predecessor trigger with zero source, version, or effect rows');
     }
+    let providerState;
+    if(name===terminalJournalCorrection){
+      providerState=(await database.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
+        FROM public.enterprise_intelligence_runtime_control enterprise CROSS JOIN public.studio_artifact_runtime_control studio
+        WHERE enterprise.singleton AND studio.singleton`)).rows[0];
+      await database.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+      await database.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+    }
     await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
+    if(providerState){
+      await database.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=$1 WHERE singleton',[providerState.enterprise]);
+      await database.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=$1 WHERE singleton',[providerState.studio]);
+    }
     if(name===xlsxCorrection){
       const classifierAfter=await classifierAuthority(database);
       const {body_hash:oldClassifierBodyHash,...oldClassifierMetadata}=xlsxAuthority.classifierBefore;

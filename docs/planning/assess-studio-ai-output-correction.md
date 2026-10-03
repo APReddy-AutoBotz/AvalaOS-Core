@@ -1,5 +1,50 @@
 # Assess and Studio AI output correction
 
+## Current terminal failure-journal correction (2026-10-03)
+
+Executed evidence: candidate `58cd46e` reached source-verified deployment on the
+approved dedicated synthetic target: five pending migrations and four JWT-verified
+Edge functions. The four AP-approved private-test workflow gates passed their
+relevant non-audit checks under the exact-candidate dependency-risk exception.
+Aggregate CI remains red and PR #265 remains unmergeable.
+
+Hosted recovery returned `SYNTHETIC_AI_MAPPING_RECONCILIATION_UNSAFE` before
+activation or spending. The historical failed command has exactly one immutable
+terminal journal row: matching receipt, tenant, operation, response, canonical
+hash, fence and completion time; no resource, debit, output or proposals. The
+recovery predicate and earlier fixture incorrectly assumed zero journal rows.
+This is a confirmed source defect; the earlier eight-scenario pass omitted the
+actual historical shape.
+
+Preserve deployed migration `20261003015246` unchanged. Forward successor
+`20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql` requires
+empty recovery/continuation authorities and both provider runtimes off. It binds
+exactly one matching failed-command journal by immutable FK and full-row canonical
+hash, rejecting missing, additional or mismatched rows before recovery or replay.
+Every existing identity, no-debit/no-output and spending guard remains. Only
+mechanical migration-tip bindings advance; historical rows remain unchanged.
+
+Executed local evidence: all eight focused PostgreSQL scenarios passed, including
+fresh/populated migration, reproduced predecessor failure, journal-field/missing/
+extra/canonical-hash denials, replay, concurrency, complete history preservation,
+unchanged effect limits and reapply. Both disposable databases were dropped and
+confirmed absent. The tail contract passed 8/8 and the affected migration contract
+passed. An initial fixture provider-on precondition failure is retained; the
+fixture now disables providers during migration and restores only its prior local
+state afterward. Corrected exact-candidate CI and hosted execution remain pending.
+
+The private browser now waits for the selected artifact/package/hash/assessed
+lineage. A delayed-projection check observed generation disabled until the exact
+empty joined BRD loaded, with zero paid requests. The earlier screen showing the
+previous selection is retained as failed inspection evidence.
+
+No continuation is activated and no new paid effect occurred. Both runtimes are
+off; six consumed debits plus carry retain USD 3.6980752 under the original USD 10
+cap. The successor is not deployed. Its new candidate needs the dependency-risk
+exception rebound before hosted recovery and paid execution. The two-effect limit
+and no-automatic-paid-retry rule remain. Rollback withholds activation or disables
+provider execution while preserving every historical row.
+
 ## Joined paid-AI validation continuation (2026-10-03)
 
 AP explicitly approved using the retained assessed-handoff BRD draft after live
