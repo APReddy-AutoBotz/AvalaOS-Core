@@ -1,5 +1,84 @@
 # Assess and Studio AI output correction
 
+## Current dependency and evidence binding repair (2026-10-03)
+
+The user authorized next steps after the completed paid and downstream synthetic
+path. Work stays in existing PR #265. The prior exact candidate `89c95ec` passed
+provider validation, one joined BRD generation, immutable reopen, source-grounded
+agent revision v2, synthetic approval, five accepted Delivery items and exact
+read-only Monitor publication. The generated v1 semantic omissions remain a quality
+finding. No further paid call is authorized by this repair. Retain USD 4.6409936,
+all eight consumed debits, zero unresolved reservations and both runtimes off.
+
+Read-only architecture, security and quality reviews agree: no patched braces
+release exists, both Tailwind 3 dependency paths must be removed, and a bounded
+Tailwind 4 compatibility migration is necessary within this PR. The latest reviewed
+upstream versions are Tailwind and its PostCSS plugin 4.3.3. Do not use a fork,
+invented version, audit suppression or weaker CI policy. The stale PR C owner
+hashes must be refreshed with the existing canonical generator.
+
+Upstream references: [reviewed braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+and [Tailwind 4 compatibility guide](https://tailwindcss.com/docs/upgrade-guide).
+
+In scope: dependency/lockfile, PostCSS configuration, CSS entry and compatibility,
+existing JS theme, two programmatic CSS browser builders, active documentation,
+generated registry/provenance. Preserve repository-owned source scanning; excluded
+private/output files must not become class sources. No Health feature edits,
+provider/schema/authorization changes, new campaign, hosted mutation or production.
+Tailwind 4 requires Safari 16.4+, Chrome 111+, Firefox 128+; no older-browser support
+contract was found. Existing browser proof covers Chromium Desktop/Pixel only.
+
+Acceptance: clean lock install; braces absent; unchanged moderate audit gate passes;
+production build succeeds; directly affected desktop/mobile CSS harnesses pass with
+the existing layout/focus/behavior assertions; custom theme/dark rendering preserved;
+canonical PR C contract passes with unchanged assertion inventory. Refresh source
+bindings only after the final edits. A refresh itself proves no command execution.
+Do not run unrelated database or paid-provider regressions. Record exact commands,
+failures, final results and proof limits here before committing the same branch.
+
+Rollback: revert dependency, configuration, CSS and harness compatibility together.
+That restores the old toolchain and its known advisory, so it restores the merge
+blocker too. Keep providers off, preserve all historical data/evidence and use the
+existing read-only Monitor baseline. New-head CI/preview require separate evidence;
+previous hosted success is not transferable. No merge or production authorization.
+
+The preview workflow exposed a second confirmed source mismatch: all ordinary PR
+builds exited without identity headers, while ordinary preview QA required the
+release/deploy/environment tuple. Closed read-only architecture/security/quality
+review approved an exact ordinary-preview metadata path. It emits only the public
+identity and existing security headers; no controlled-human binding, runtime
+activation or backend/provider change occurs. PR #264 partial claims still fail
+closed before generic handling; stable production authorization is unchanged.
+
+Executed local verification:
+
+- `npm ci --ignore-scripts`: passed; only the CSS dependency chain changed.
+- `npm ls braces --all`: empty; npm's empty-tree exit is 1.
+- `npm audit --audit-level=moderate`: passed, exit 0. Only the pre-existing low
+  DOMPurify advisory remains; it is not represented as fixed.
+- `npm run build`: passed. The actual Netlify `--build` router also passed on
+  final CSS with synthetic local ordinary-preview metadata and demo mode, emitted
+  exact generic identity and no preview binding, and performed no hosted action.
+- `node --test scripts/prCSyntheticAcceptanceBrowser.test.mjs`: 69/69 passed.
+  After correcting v4's changed outline semantics, the final-source CSS-owning
+  `completed evidence leaves workspace actions clickable` case passed again (1/1).
+- Navigation scenarios in `scripts/prCSyntheticBrowserNavigation.test.mjs`: 3/3
+  passed. The final real Chromium computed-style theme/dark/responsive/focus/legacy
+  compatibility check passed (1/1). No old-browser or all-engine claim follows.
+- `npm run test:transcript-flow:delivery-monitor-evidence-contract`: migration
+  and CI static checks plus 75/75 adversarial contract checks passed.
+- Canonical `--refresh-bindings` preserves all 85 commands, 241 assertions,
+  15 owners and 10 explicit not-run boundaries. Three stale owner hashes changed;
+  assertion inventory and requirements did not.
+- `node --test scripts/writeHostedPilotNetlifyHeaders.test.mjs`: 84/84 passed,
+  including ordinary metadata substitutions and retained controlled/stable guards.
+- `node tests/browser/previewExhaustiveBrowserQaWorkflowContract.test.mjs`:
+  passed with no workflow semantic changes.
+
+Final source/provenance validation and diff review precede same-branch commit/push.
+New-head GitHub CI and actual Netlify preview proof remain pending. No paid call,
+database migration, broad local regression or hosted mutation was performed.
+
 ## Current terminal failure-journal correction (2026-10-03)
 
 Executed evidence: candidate `58cd46e` reached source-verified deployment on the

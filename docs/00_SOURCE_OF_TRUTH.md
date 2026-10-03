@@ -1,5 +1,26 @@
 # AvalaOS Core Source Of Truth
 
+## Current paid validation and release-blocker repair (2026-10-03)
+
+Executed evidence on `89c95ec`: one provider validation and one joined-source BRD
+generation succeeded. The original BRD v1 remains immutable; its semantic quality
+needs improvement. AP separately authorized a source-grounded agent revision v2,
+synthetic review/approval, five accepted Delivery items and an exact read-only
+Monitor baseline. Browser and independent persisted-state checks passed. These
+prove synthetic lifecycle behavior, not independent human or production acceptance.
+Eight consumed debits plus retained carry total USD 4.6409936; both provider
+runtimes are off and no reservation is unresolved. No further paid effect follows.
+
+AP's next-step instruction authorizes bounded PR #265 merge-blocker remediation:
+remove the vulnerable Tailwind 3 dependency chain through a compatible Tailwind 4
+build integration and refresh stale generated PR C owner/source bindings. Preserve
+audit enforcement, appearance, test requirements and existing evidence. The
+ordinary-preview identity mismatch is also repaired without controlled activation.
+Focused local audit/build/browser/header/evidence checks pass; new-head CI and
+preview remain pending, and old hosted proof stays bound to `89c95ec`. PR #265 remains
+draft; merge and production are not authorized. The active AI-output plan owns
+this repair and its focused verification.
+
 ## Current terminal failure-journal correction (2026-10-03)
 
 Candidate `58cd46e` reached the approved synthetic migration/function deployment

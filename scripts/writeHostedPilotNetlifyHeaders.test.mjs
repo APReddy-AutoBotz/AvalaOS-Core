@@ -49,6 +49,16 @@ const exactStableTuple = {
   VITE_SUPABASE_URL: undefined,
   VITE_SUPABASE_ANON_KEY: undefined,
 };
+const exactOrdinaryTuple = {
+  ...exactPreviewTuple,
+  HEAD: 'codex/paid-ai-joined-validation-20261003',
+  REVIEW_ID: '265',
+  DEPLOY_PRIME_URL: 'https://deploy-preview-265--avalaos-pilot.netlify.app',
+  PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: undefined,
+  PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: undefined,
+  PR_C_CONTROLLED_HUMAN_EXPECTED_PUBLIC_TARGET_DIGEST: undefined,
+  VITE_PR_C_CONTROLLED_HUMAN_ENABLED: 'authorized',
+};
 
 async function runCase(overrides = {}, { base = exactPreviewTuple } = {}) {
   const cwd = await mkdtemp(join(tmpdir(), 'avalaos-pr-c-controlled-human-netlify-'));
@@ -223,17 +233,65 @@ for (const [label, override] of [
     PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: undefined,
     VITE_PR_C_CONTROLLED_HUMAN_ENABLED: 'authorized',
   }],
-  ['another pull request preview', {
-    HEAD: 'feature/pr-265',
-    REVIEW_ID: '265',
-    DEPLOY_PRIME_URL: 'https://deploy-preview-265--avalaos-pilot.netlify.app',
-    PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: undefined,
-    PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: undefined,
-    VITE_PR_C_CONTROLLED_HUMAN_ENABLED: 'authorized',
-  }],
 ]) {
   test(`${label} remains an ordinary build with no controlled-human headers`, async () => {
     await expectOrdinary(override);
+  });
+}
+
+test('exact ordinary PR preview exposes immutable identity without controlled-human binding', async () => {
+  const result = await runCase({}, { base: exactOrdinaryTuple });
+  try {
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.headers,
+      `/*\n  X-AvalaOS-Release: ${release}\n  X-AvalaOS-Environment: hosted_nonproduction_pilot\n  X-AvalaOS-Netlify-Deploy-ID: ${deployId}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  X-Frame-Options: DENY\n`);
+    assert.doesNotMatch(result.headers, /Preview-Binding|sha256:|supabase|publishable|exercise|fingerprint|codex|265/i);
+    assert.match(result.stdout, /exact ordinary PR preview without controlled-human mode/);
+  } finally { await result.cleanup(); }
+});
+
+for (const [label, override] of [
+  ['missing release', { COMMIT_REF: undefined }],
+  ['malformed release', { COMMIT_REF: 'A'.repeat(40) }],
+  ['missing deploy', { DEPLOY_ID: undefined }],
+  ['malformed deploy', { DEPLOY_ID: 'B'.repeat(24) }],
+  ['wrong permalink', { DEPLOY_URL: 'https://wrong--avalaos-pilot.netlify.app' }],
+  ['wrong context', { CONTEXT: 'branch-deploy' }],
+  ['wrong site', { SITE_NAME: 'avalaos-production' }],
+  ['wrong site URL', { URL: 'https://avalaos.com' }],
+  ['missing PR flag', { PULL_REQUEST: undefined }],
+  ['false PR flag', { PULL_REQUEST: 'false' }],
+  ['missing head', { HEAD: undefined }],
+  ['unsafe head', { HEAD: 'feature/unsafe\nbranch' }],
+  ['missing review', { REVIEW_ID: undefined }],
+  ['noncanonical review', { REVIEW_ID: '0265' }],
+  ['zero review', { REVIEW_ID: '0' }],
+  ['substituted review', { REVIEW_ID: '266' }],
+  ['substituted origin', { DEPLOY_PRIME_URL: 'https://deploy-preview-266--avalaos-pilot.netlify.app' }],
+  ['custom origin', { DEPLOY_PRIME_URL: 'https://preview.avalaos.com' }],
+  ['trailing-slash origin', { DEPLOY_PRIME_URL: 'https://deploy-preview-265--avalaos-pilot.netlify.app/' }],
+]) {
+  test(`ordinary preview does not attest ${label}`, async () => {
+    const result = await runCase(override, { base: exactOrdinaryTuple });
+    try {
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(result.headers, null);
+    } finally { await result.cleanup(); }
+  });
+}
+
+for (const [label, override] of [
+  ['PR number', { REVIEW_ID: '264' }],
+  ['head branch', { HEAD: exactPreviewTuple.HEAD }],
+  ['preview origin', { DEPLOY_PRIME_URL: exactPreviewTuple.DEPLOY_PRIME_URL }],
+]) {
+  test(`ordinary preview cannot bypass partial PR #264 ${label}`, async () => {
+    const result = await runCase(override, { base: exactOrdinaryTuple });
+    try {
+      assert.notEqual(result.status, 0);
+      assert.equal(result.headers, null);
+      assert.match(result.stderr, /NETLIFY_PR_C_CONTROLLED_HUMAN_PREVIEW_REQUIRED/);
+    } finally { await result.cleanup(); }
   });
 }
 

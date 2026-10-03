@@ -1,5 +1,28 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Current PR #265 build compatibility boundary (2026-10-03)
+
+The completed synthetic downstream path retains immutable AI BRD v1, source-grounded
+agent revision v2, role-separated decisions, exact accepted Delivery items and a
+read-only Monitor baseline. No provider effect accompanies downstream publishing.
+Monitor readiness remains `review_required`, with no live telemetry or mutation.
+
+The next repair replaces Tailwind 3's vulnerable transitive build dependencies with
+Tailwind 4 and its matching PostCSS plugin. Retain the existing theme, explicit
+repository-owned source scope and rendered behavior; adapt the two direct CSS test
+builders to the same compiler. Browser compatibility is Safari 16.4+, Chrome 111+
+and Firefox 128+; current executed browser coverage remains Chromium Desktop/Pixel,
+not proof for all three engines. No scoring, authorization, provider, schema or
+business-command contract changes. Refresh generated evidence bindings after final
+source changes without treating a refresh as executed verification.
+
+Ordinary PR preview identity uses an exact site/context/release/deploy/review/URL
+tuple and emits only public release/deploy/environment plus passive security
+headers. It does not activate controlled-human mode or publish a preview binding.
+Controlled PR #264 claims keep precedence and fail closed; stable production
+authorization is unchanged. This repairs ordinary QA identity, not product
+authorization or readiness. Local build, header and focused browser checks pass.
+
 ## Current terminal failure-journal correction (2026-10-03)
 
 Candidate `58cd46e` reached the approved synthetic migration/function deployment

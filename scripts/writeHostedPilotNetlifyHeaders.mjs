@@ -98,6 +98,20 @@ const previewChecks = {
   privateEnvironment: !forbiddenPrivateEnvironmentPresent,
 };
 const exactControlledHumanPreview = Object.values(previewChecks).every(Boolean);
+// Ordinary PR QA also binds an exact immutable deployment. These public
+// identity headers convey no controlled-human or backend/provider authority.
+const exactOrdinaryPreview = !controlledHumanCandidateClaimed
+  && /^[0-9a-f]{40}$/.test(release ?? '')
+  && /^[0-9a-f]{24}$/.test(deployId ?? '')
+  && context === 'deploy-preview'
+  && siteName === EXPECTED_SITE
+  && siteUrl === EXPECTED_SITE_URL
+  && pullRequest === 'true'
+  && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(headBranch ?? '')
+  && /^[1-9][0-9]*$/.test(reviewId ?? '')
+  && reviewId !== EXPECTED_REVIEW_ID
+  && deployOrigin === `https://deploy-preview-${reviewId}--${EXPECTED_SITE}.netlify.app`
+  && deployUrl === `https://${deployId}--${EXPECTED_SITE}.netlify.app`;
 // Commit the browser's build-time exercise binding without publishing the digest itself.
 const previewBinding = exactControlledHumanPreview
   ? `sha256:${createHash('sha256').update(`pr-c-preview-binding\0${exerciseDigest}`).digest('hex')}`
@@ -163,7 +177,7 @@ if (process.argv.includes('--build')) {
   await runBuild(exactControlledHumanPreview ? controlledHumanBuildEnvironment : ordinaryBuildEnvironment);
 }
 
-if (!exactControlledHumanPreview && !authorizedStablePilotTestingContext) {
+if (!exactControlledHumanPreview && !exactOrdinaryPreview && !authorizedStablePilotTestingContext) {
   console.log('Ordinary Netlify build completed without controlled-human mode or response identity headers.');
   process.exit(0);
 }
@@ -177,4 +191,6 @@ await writeFile(
 
 console.log(exactControlledHumanPreview
   ? 'Controlled-human response identity headers generated for exact PR #264 Deploy Preview commit.'
+  : exactOrdinaryPreview
+  ? 'Public response identity headers generated for exact ordinary PR preview without controlled-human mode.'
   : 'Hosted non-production response identity headers generated for exact authorized stable pilot commit.');

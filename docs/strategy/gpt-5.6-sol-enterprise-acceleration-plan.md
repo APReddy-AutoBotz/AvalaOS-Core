@@ -1,5 +1,27 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current PR #265 release-blocker repair (2026-10-03)
+
+The paid validation and separately authorized synthetic corrected-BRD → Delivery
+→ Monitor path completed on `89c95ec`. Original AI output remains quality-limited;
+manual correction is not improved-generation proof. Preserve USD 4.6409936 in
+conservative cumulative charges, eight consumed debits, zero unresolved reservations
+and both provider runtimes off.
+
+Next, within the same implementation PR, remove the unpatched Tailwind 3/braces
+build chain through upstream Tailwind 4 compatibility and refresh stale PR C owner
+bindings. Read-only architecture/security/quality findings are closed. Limit local
+verification to dependency audit/build, the affected CSS/browser checks and evidence
+contracts. Do not rerun database or paid campaigns for this tooling change. Keep
+current source proof distinct from the prior exact-head hosted run; merge, hosted
+promotion and production remain separate gates.
+
+Local dependency/build, affected browser, evidence-contract and preview-header
+checks passed. Ordinary previews now receive exact public deployment identity
+without controlled-human activation, correcting their deterministic QA timeout.
+The protected PR #264 and stable-site gates are unchanged. Await new-head CI and
+actual preview verification before any release conclusion.
+
 ## Current terminal failure-journal correction (2026-10-03)
 
 Candidate `58cd46e` reached the approved synthetic migration/function deployment

@@ -1,5 +1,36 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current PR #265 blockers and completed synthetic evidence (2026-10-03)
+
+Executed evidence: paid generation and corrected-v2 synthetic publishing passed on
+`89c95ec`; the original AI draft's semantic omissions remain a quality finding.
+Manual correction and synthetic actors do not establish improved provider quality
+or independent human acceptance. Total conservative charge is USD 4.6409936, eight
+consumed debits, zero unresolved reservations, both provider runtimes off.
+
+Confirmed source defects: current audit still reports high-severity
+`GHSA-vfj7-8cjw-p6xm`; braces 3.0.3 has no published patch. PR C CI independently
+fails `PR_C_OWNER_HASH:migration-static`, with another stale Studio PostgreSQL owner
+binding. Fix through the upstream Tailwind 4 build pipeline and the existing
+`--refresh-bindings` generator, preserving audit and evidence enforcement. The
+compatibility risk is changed generated CSS; focused browser/build proof is required.
+No new dependency-risk waiver is granted. The existing low-severity DOMPurify
+finding remains separate unless explicitly repaired and verified.
+
+Planned verification: moderate audit, production build, affected desktop/mobile CSS
+harnesses, generated-source contract and final diff review. Exact-candidate CI and
+preview remain pending after any new commit. The prior preview CI stopped waiting
+for an exact deploy; neither registry repair nor a clean audit proves preview success.
+
+Executed local repair evidence: braces is absent and the unchanged moderate audit
+passes (the low DOMPurify finding remains). The production/final preview-router
+builds, affected CSS browser checks, 75 evidence-contract cases and 84 preview-header
+cases pass. Three stale owner bindings were refreshed without changing requirements.
+The preview timeout was traced to a confirmed source mismatch: ordinary builds
+omitted headers that their QA required. Exact ordinary previews now receive generic
+identity only; controlled/stable guards and workflow verification remain unchanged.
+Actual new-head CI/preview are still pending; no hosted or production claim follows.
+
 ## Current terminal failure-journal correction (2026-10-03)
 
 Candidate `58cd46e` reached the approved synthetic migration/function deployment
