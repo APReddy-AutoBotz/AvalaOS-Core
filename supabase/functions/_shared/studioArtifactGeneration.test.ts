@@ -156,7 +156,11 @@ const claim: StudioExecutableGenerationClaim = {
   templateId: ids[13], templateVersionId: ids[2], templateVersion: 3,
   templatePayload: tenantTemplatePayload, templateHash: hash('c'), templateHead: 3,
   expectedArtifactHead: 0, manualBrief: null,
-  providerPlan: { provider: 'openai', routeId: ids[1], providerConfigId: ids[2], model: 'governed-model', resolverDecision: decision },
+  providerPlan: {
+    provider: 'openai', routeId: ids[1], providerConfigId: ids[2], model: 'governed-model',
+    artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-2',
+    providerPlanHash: hash('f'), resolverDecision: decision,
+  },
   maximumOutputTokens: 2_000, timeoutMs: 30_000,
   providerAllowed: true, reconcileOnly: false,
 };
@@ -248,6 +252,27 @@ void (async () => {
     fail: async (_attemptId: string, code: string) => { events.push(`fail:${code}`); },
     runBudgeted: executedBudget,
   };
+  const invalidPromptClaims = [
+    { ...claim, providerPlan: { ...claim.providerPlan, promptKey: undefined } },
+    { ...claim, providerPlan: { ...claim.providerPlan, promptVersion: undefined } },
+    { ...claim, providerPlan: { ...claim.providerPlan, providerPlanHash: 'bad' } },
+    { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'pdd', promptVersion: 'studio-pr-b-2' } },
+  ];
+  let invalidPromptBudgetEntries = 0; let invalidPromptProviderEffects = 0; let invalidPromptFailureWrites = 0;
+  const invalidPromptResults = [];
+  for (const invalidClaim of invalidPromptClaims) {
+    invalidPromptResults.push(await executeClaimedStudioGeneration(invalidClaim as StudioExecutableGenerationClaim, {
+      ...deps,
+      runProvider: async () => { invalidPromptProviderEffects += 1; throw new Error('provider forbidden'); },
+      runBudgeted: (async () => { invalidPromptBudgetEntries += 1; throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+      fail: async () => { invalidPromptFailureWrites += 1; },
+    }));
+  }
+  mark(invalidPromptResults.every(result => result.state === 'failed')
+    && invalidPromptBudgetEntries === 0 && invalidPromptProviderEffects === 0
+    && invalidPromptFailureWrites === invalidPromptClaims.length,
+  'PROVIDER-009-B', 'generation.invalid-or-non-brd-v2-prompt-plan-fails-before-budget-and-provider',
+  'missing-wrong-prompt-identity-and-v2-non-brd-matrix');
   const success = await executeClaimedStudioGeneration(claim, deps);
   mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound
     && events.join(',') === 'provider,stage,finalize',

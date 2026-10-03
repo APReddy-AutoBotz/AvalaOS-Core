@@ -1,5 +1,33 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current BRD semantic-fidelity risk (2026-10-03)
+
+Executed evidence: PR #265 merged as `b4d3061` with the tested tree unchanged;
+post-merge Core CI `37121983737` passed. This closes the prior merge blockers.
+The existing low DOMPurify advisory remains separate.
+
+Confirmed source defect: complete accepted Assess facts reach the generation
+input, but the BRD instructions do not affirmatively require the workflow,
+roles, decision/exception rules and explicit unknowns omitted by the retained
+paid output. Structural validity and citations are insufficient semantic proof.
+The original output and its NEEDS IMPROVEMENT assessment remain immutable.
+
+The correction introduces a BRD-only prompt v2 with exact database version
+binding. Compatibility risk: silently executing new instructions under a stored
+v1 plan. Executed local evidence: output-contract and DB-adapter tests pass,
+including frozen v1 bytes, exact nested untrusted-source preservation,
+estimator/request agreement, tenant BRDs and unsupported-version pre-effect
+denial. The focused PostgreSQL 16 upgrade passes for legacy v1, new BRD v2,
+plan-hash drift rejection and reconcile-only recovery after route drift.
+Three new static migration cases and eight migration-tail cases pass; server
+typecheck, Studio boundaries and AI/secret scans pass. Candidate CI is pending.
+Actual improved provider output is `not run`, not implied by unit fixtures.
+
+No new paid effect, hosted migration or provider activation is authorized.
+Last verified spending remains USD 4.6409936, zero unresolved reservations and
+both runtimes off. Prior synthetic publishing and Monitor proof stays bound to
+its original candidate; it is not independent-human or production acceptance.
+
 ## Current PR #265 blockers and completed synthetic evidence (2026-10-03)
 
 Executed evidence: paid generation and corrected-v2 synthetic publishing passed on

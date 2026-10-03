@@ -12,17 +12,26 @@ import type { JsonObject } from './studioArtifactCommand.ts';
 import type { StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
 import {
   normalizeStudioArtifactTemplate,
+  STUDIO_TEMPLATE_ARTIFACT_TYPES,
   type StudioArtifactTemplateContract,
 } from './studioArtifactTemplateContract.ts';
 
 export const STUDIO_PROVIDER_CAPABILITY = 'studio.document.generate' as const;
 export const STUDIO_PROVIDER_IDENTITIES: readonly EnterpriseAiProvider[] = ENTERPRISE_AI_PROVIDERS;
+export const STUDIO_PROVIDER_PROMPT_KEY = 'studio-multisource-generation' as const;
+export const STUDIO_PROVIDER_PROMPT_VERSIONS = ['studio-pr-b-1', 'studio-pr-b-2'] as const;
+export type StudioProviderPromptVersion = typeof STUDIO_PROVIDER_PROMPT_VERSIONS[number];
+export type StudioProviderArtifactType = typeof STUDIO_TEMPLATE_ARTIFACT_TYPES[number];
 
 export type StudioProviderPlan = Readonly<{
   provider: EnterpriseAiProvider;
   routeId: string;
   providerConfigId: string;
   model: string;
+  artifactType: StudioProviderArtifactType;
+  promptKey: typeof STUDIO_PROVIDER_PROMPT_KEY;
+  promptVersion: StudioProviderPromptVersion;
+  providerPlanHash: string;
   endpoint?: string;
   deployment?: string;
   resolverDecision: AllowedEnterpriseProviderResolverDecision;
@@ -223,11 +232,19 @@ export const expandStudioProviderAnchorReferences = (
 export const buildStudioArtifactTaskInstruction = (
   template: StudioArtifactTemplateContract,
   selectedSourceVersionIds: readonly string[],
+  promptVersion: StudioProviderPromptVersion,
+  artifactType: StudioProviderArtifactType,
 ) => {
   const selected = [...selectedSourceVersionIds];
   if (selected.length > 20 || selected.some(id => typeof id !== 'string' || !UUID.test(id))
-    || new Set(selected).size !== selected.length) throw new Error('STUDIO_SELECTED_SOURCE_CONTRACT_INVALID');
-  return [
+    || new Set(selected).size !== selected.length
+    || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion)
+    || !STUDIO_TEMPLATE_ARTIFACT_TYPES.includes(artifactType)
+    || template.artifactType !== null && template.artifactType !== artifactType
+    || promptVersion === 'studio-pr-b-2' && artifactType !== 'brd') {
+    throw new Error('STUDIO_SELECTED_SOURCE_CONTRACT_INVALID');
+  }
+  const instruction = [
   'Generate one governed Studio document as strict JSON for human review.',
   'Return exactly the top-level keys contractVersion, title, summary, sections, and coverage.',
   'contractVersion must equal studio-artifact-2; title must be non-empty; summary must be a string.',
@@ -252,7 +269,16 @@ export const buildStudioArtifactTaskInstruction = (
     sourceAnchorWireShape: { exactKeys: ['anchorRef'], anchorRefFormat: 'anchor-NNNN' },
     selectedSourceVersionIds: selected,
   })}`,
-  ].join(' ');
+  ];
+  if (promptVersion === 'studio-pr-b-2') instruction.splice(-1, 0,
+    'For this BRD, preserve every explicit workflow primitive, state, action, event, edge, sequence, branch, loop, and triggering condition in the closest existing template section; never collapse distinct source steps or add a section.',
+    'Preserve only source-stated ordering, edges, and conditions; never infer a missing sequence, edge, or condition from array order or proximity.',
+    'Preserve every explicit role, owner, responsibility boundary, and handoff, including who initiates, receives, decides, approves, escalates, or becomes accountable; never infer an unprovided owner or transfer ownership.',
+    'Preserve every explicit decision, option, condition, outcome, business rule, exception, escalation, unresolved conflict, and source-stated consequence in the closest existing section without converting one category into another.',
+    'For effort, transaction or case volume, technical health, and agent necessity, preserve the explicit supplied value. When a category is absent or explicitly null, state Unknown — not established by supplied evidence in the closest existing section; never convert unknown to zero, none, not applicable, healthy, unhealthy, automated, or agent-recommended.',
+    'Do not infer that an AI agent or automation is necessary, suitable, approved, or unnecessary. Preserve only the source-stated position and keep an unstated position explicitly unknown.',
+  );
+  return instruction.join(' ');
 };
 
 export const buildStudioResponseSchema = (template: StudioArtifactTemplateContract) => {
@@ -270,13 +296,18 @@ export const buildStudioResponseSchema = (template: StudioArtifactTemplateContra
 };
 
 export const estimateStudioProviderInputTokens = (
-  input: Pick<StudioProviderGatewayInput, 'sourcePackage' | 'templatePayload' | 'selectedSourceVersionIds' | 'canonicalSourceAnchors' | 'manualBrief'>,
+  input: Pick<StudioProviderGatewayInput, 'plan' | 'sourcePackage' | 'templatePayload' | 'selectedSourceVersionIds' | 'canonicalSourceAnchors' | 'manualBrief'>,
 ) => {
   const template = normalizeStudioArtifactTemplate(input.templatePayload);
+  if (input.plan.promptKey !== STUDIO_PROVIDER_PROMPT_KEY || !HASH.test(input.plan.providerPlanHash)) {
+    throw new Error('STUDIO_PROVIDER_PLAN_INVALID');
+  }
   const bindings = buildStudioProviderAnchorBindings(input.selectedSourceVersionIds, input.canonicalSourceAnchors);
   return estimateMaximumProviderInputTokens({
     capability: STUDIO_PROVIDER_CAPABILITY,
-    taskInstruction: buildStudioArtifactTaskInstruction(template, input.selectedSourceVersionIds),
+    taskInstruction: buildStudioArtifactTaskInstruction(
+      template, input.selectedSourceVersionIds, input.plan.promptVersion, input.plan.artifactType,
+    ),
     untrustedSource: buildUntrustedStudioInput(input, bindings),
     // Reserve schema overhead conservatively for every provider; only OpenAI sends it.
     responseSchema: buildStudioResponseSchema(template),
@@ -295,6 +326,10 @@ export const callStudioArtifactProvider = async (
   } = {},
 ): Promise<StudioProviderGatewayResult> => {
   if (!ENTERPRISE_AI_PROVIDERS.includes(input.plan.provider)
+    || input.plan.promptKey !== STUDIO_PROVIDER_PROMPT_KEY
+    || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(input.plan.promptVersion)
+    || !STUDIO_TEMPLATE_ARTIFACT_TYPES.includes(input.plan.artifactType)
+    || !HASH.test(input.plan.providerPlanHash)
     || input.plan.resolverDecision.status !== 'allowed'
     || input.plan.resolverDecision.operation !== STUDIO_PROVIDER_CAPABILITY
     || input.plan.resolverDecision.routeId !== input.plan.routeId
@@ -305,7 +340,9 @@ export const callStudioArtifactProvider = async (
   let template: StudioArtifactTemplateContract; let instruction: string; let untrustedSource: string;
   try {
     template = normalizeStudioArtifactTemplate(input.templatePayload);
-    instruction = buildStudioArtifactTaskInstruction(template, input.selectedSourceVersionIds);
+    instruction = buildStudioArtifactTaskInstruction(
+      template, input.selectedSourceVersionIds, input.plan.promptVersion, input.plan.artifactType,
+    );
     const bindings = buildStudioProviderAnchorBindings(input.selectedSourceVersionIds, input.canonicalSourceAnchors);
     untrustedSource = buildUntrustedStudioInput(input, bindings);
   }

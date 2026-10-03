@@ -15,7 +15,12 @@ import {
   type StudioGenerationClaim,
   type StudioGenerationFailureCode,
 } from './studioArtifactGeneration.ts';
-import { callStudioArtifactProvider } from './studioArtifactProvider.ts';
+import {
+  callStudioArtifactProvider,
+  STUDIO_PROVIDER_PROMPT_KEY,
+  STUDIO_PROVIDER_PROMPT_VERSIONS,
+  type StudioProviderArtifactType,
+} from './studioArtifactProvider.ts';
 import { ENTERPRISE_AI_PROVIDERS } from '../../../services/enterpriseIntelligence.ts';
 import {
   STUDIO_TEMPLATE_ARTIFACT_CLASSES,
@@ -374,6 +379,17 @@ export async function loadStudioGenerationMaterial(
   const workspace = string(field(plan, 'workspaceId', 'workspace_id'));
   const actor = string(field(plan, 'actorId', 'actor_id'));
   const artifactId = string(field(plan, 'artifactId', 'artifact_id'));
+  const artifactType = string(field(plan, 'artifactType', 'artifact_type')) as StudioProviderArtifactType;
+  const promptKey = string(field(plan, 'promptKey', 'prompt_key'));
+  const promptVersion = string(field(plan, 'promptVersion', 'prompt_version'));
+  const providerPlanHash = string(field(plan, 'providerPlanHash', 'provider_plan_hash'));
+  if (!STUDIO_TEMPLATE_ARTIFACT_CLASSES.includes(artifactType)
+    || promptKey !== STUDIO_PROVIDER_PROMPT_KEY
+    || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion as never)
+    || !projectionHash.test(providerPlanHash)
+    || promptVersion === 'studio-pr-b-2' && artifactType !== 'brd') {
+    throw new StudioArtifactError('PROVIDER_ROUTE_UNAVAILABLE');
+  }
   const sourcePackageId = string(field(plan, 'sourcePackageId', 'source_package_id'));
   const sourcePackageHash = string(field(plan, 'sourcePackageHash', 'source_package_hash'));
   const requestedPackageVersion = integer(field(plan, 'sourcePackageVersion', 'source_package_version'), 1);
@@ -540,6 +556,8 @@ export async function loadStudioGenerationMaterial(
     sourcePackage, selectedSourceVersionIds, sourceAnchors, manualBrief, templatePayload,
     providerPlan: {
       provider: provider as StudioExecutableGenerationClaim['providerPlan']['provider'], routeId, providerConfigId, model,
+      artifactType, promptKey: STUDIO_PROVIDER_PROMPT_KEY,
+      promptVersion: promptVersion as StudioExecutableGenerationClaim['providerPlan']['promptVersion'], providerPlanHash,
       ...(config.endpoint_url ? { endpoint: config.endpoint_url } : {}),
       ...(config.deployment_name ? { deployment: config.deployment_name } : {}), resolverDecision,
     },
@@ -592,7 +610,13 @@ export const claimStudioGeneration = async (
     };
   }
   const returnedLease = field(value, 'leaseExpiresAt', 'lease_expires_at');
-  const plan = { ...initial, ...value };
+  const claimPromptPlan = {
+    artifactType: string(field(value, 'artifactType', 'artifact_type')),
+    promptKey: string(field(value, 'promptKey', 'prompt_key')),
+    promptVersion: string(field(value, 'promptVersion', 'prompt_version')),
+    providerPlanHash: string(field(value, 'providerPlanHash', 'provider_plan_hash')),
+  };
+  const plan = { ...initial, ...value, ...claimPromptPlan };
   const claimed = {
     attemptId: durableUuid(field(plan, 'attemptId', 'attempt_id')),
     executionToken: durableUuid(field(value, 'executionToken', 'execution_token')),

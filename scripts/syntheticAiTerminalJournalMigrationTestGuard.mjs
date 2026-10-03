@@ -1,8 +1,15 @@
 export const SYNTHETIC_AI_TERMINAL_JOURNAL_MIGRATION =
   '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql';
+export const STUDIO_BRD_PROMPT_V2_MIGRATION =
+  '20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql';
+
+const PROVIDER_OFF_MIGRATIONS = new Set([
+  SYNTHETIC_AI_TERMINAL_JOURNAL_MIGRATION,
+  STUDIO_BRD_PROMPT_V2_MIGRATION,
+]);
 
 export async function applySyntheticAiTerminalJournalMigrationForTest(client, migrationName, applyMigration) {
-  if (migrationName !== SYNTHETIC_AI_TERMINAL_JOURNAL_MIGRATION) return applyMigration();
+  if (!PROVIDER_OFF_MIGRATIONS.has(migrationName)) return applyMigration();
 
   const state = await client.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
     FROM public.enterprise_intelligence_runtime_control enterprise

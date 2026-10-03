@@ -1,5 +1,24 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current BRD semantic-fidelity workstream (2026-10-03)
+
+PR #265 is merged; its exact candidate and post-merge Core CI passed. The next
+AP-authorized implementation corrects the original BRD's semantic omissions.
+Read-only architecture, security and quality findings are closed. The implemented
+slice contains static BRD-specific source-fidelity instructions, database-pinned
+prompt v2 for new BRD attempts, preserved v1 execution, focused contracts and a
+forward migration. FRD/PDD behavior remains v1. Do not add a second source model,
+semantic scoring, extra provider calls or automatic retries.
+
+The active AI-output plan owns acceptance and rollback. Local checks passed for
+prompt bytes/source fidelity, claimed version authority and PostgreSQL upgrade
+compatibility; existing feature CI retains its database coverage and includes the
+new upgrade case. Candidate CI remains pending. A mock response cannot prove
+better provider prose. Finish the reviewable implementation before seeking any
+new paid validation authority. The original campaign is closed at its last
+verified USD 4.6409936 conservative charge; hosted rollout, new paid effects and
+merge of this new workstream require their own authority.
+
 ## Current PR #265 release-blocker repair (2026-10-03)
 
 The paid validation and separately authorized synthetic corrected-BRD → Delivery

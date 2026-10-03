@@ -231,6 +231,7 @@ const budgetInput = (claim: StudioExecutableGenerationClaim): ProviderBudgetRese
     capability: 'studio.document.generate', model: claim.providerPlan.model,
   },
   estimatedInputTokens: estimateStudioProviderInputTokens({
+    plan: claim.providerPlan,
     sourcePackage: claim.sourcePackage,
     templatePayload: claim.templatePayload,
     selectedSourceVersionIds: claim.selectedSourceVersionIds,

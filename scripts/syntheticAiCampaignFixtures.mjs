@@ -31,6 +31,8 @@ export async function studioFixture(loadMaterial, model, artifactType = 'pdd') {
   const plan = { organizationId: fixtureOrg, workspaceId: fixtureId(11), actorId: fixtureId(12), artifactId: fixtureId(21), sourcePackageId: fixtureId(22), sourcePackageHash: digest('synthetic-package'), sourcePackageVersion: 1,
     templateKind: 'system', templateVersionId: fixtureId(23), templateVersion: `system-${artifactType}-1`, templateHash: digest(`template-${artifactType}`),
     provider: 'openai', providerRouteId: fixtureId(8), providerConfigId: fixtureId(9), model, requestId: fixtureId(24),
+    artifactType, promptKey: 'studio-multisource-generation', promptVersion: artifactType === 'brd' ? 'studio-pr-b-2' : 'studio-pr-b-1',
+    providerPlanHash: digest(`synthetic-provider-plan-${artifactType}-${model}`),
     anchorManifestHash: digest(JSON.stringify(anchors)), anchorCount: anchors.length, candidateManifestHash: digest(JSON.stringify(manifest)) };
   const tables = {
     studio_artifact_source_packages: [{ id: plan.sourcePackageId, artifact_id: plan.artifactId, org_id: fixtureOrg, workspace_id: plan.workspaceId, version: 1, source_mode: 'direct_transcript_bundle', assess_handoff_id: null, studio_input_bundle_version_id: fixtureId(25), manual_brief_hash: null, package_hash: plan.sourcePackageHash,

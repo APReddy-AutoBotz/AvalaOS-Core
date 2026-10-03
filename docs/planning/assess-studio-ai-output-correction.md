@@ -1,5 +1,59 @@
 # Assess and Studio AI output correction
 
+## BRD semantic-fidelity prompt version (2026-10-03)
+
+The retained paid BRD proved the governed provider path but exposed a semantic
+quality gap: prompt version `studio-pr-b-1` did not explicitly require the model
+to retain every source-stated workflow primitive, edge, condition, owner,
+handoff, decision, outcome, rule, exception and explicit unknown. This slice adds
+`studio-pr-b-2` for new BRD attempts only. It uses the already loaded full Assess
+package as untrusted source, forbids inference of missing order or relationships,
+and requires explicit null or unknown effort, volume, technical-health and agent-
+necessity facts to remain explicit. FRD and PDD attempts continue to use v1.
+
+Migration `20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql` binds the
+artifact type, prompt key, prompt version and canonical provider-plan hash in the
+locked claim. Missing, unknown, mismatched or null identities reject before budget,
+secret lookup or provider fetch. New-effect paths revalidate the current locked
+route tuple; reconcile-only paths retain their stored identity so a later route
+version cannot prevent safe recovery. Existing v1 rows, hashes and terminal
+replays are unchanged. Tenant BRDs use the authoritative claimed artifact type
+rather than template-title or payload inference. The migration requires both
+provider runtimes off and advances only the current migration-tip consumers.
+
+Executed local evidence: the Studio output-contract suite passed; the focused DB
+adapter suite passed with the claim identity overriding caller/initial-plan input;
+the three-case migration contract passed; and the disposable PostgreSQL upgrade
+case passed from the predecessor chain through legacy-v1 claim, new-BRD-v2 claim,
+reconcile-only route drift and pre-effect hash-mismatch denial. The PostgreSQL
+fixture database and roles were removed in `finally`. The migration-tail contract
+passed 8/8, Edge typecheck passed, and the Studio migration/static gate including
+the new cases passed. AI-boundary and secret-hygiene scans also passed. Focused
+test failures found during implementation were fixture/type/static-test defects
+and were corrected before these final passes; no provider call or hosted mutation
+was made.
+
+Candidate CI exposed a synthetic fixture that omitted the now-required prompt
+identity. The fixture now declares that identity, and the budget integration
+harness loads material from the authoritative claim before estimating tokens.
+The focused fixture suite passes 3/3 and the disposable Assess/Studio budget
+pipeline passes 14/14 with mocked secret/provider transport. Migration input is
+normalized to LF in that harness for the same behavior on Windows and Linux.
+No production validation or fail-closed check was relaxed.
+The frozen final-continuation fixture now recognizes the successor in repository
+ordering while still applying only its original migration range; its eight
+PostgreSQL scenarios pass without provider calls or hosted access.
+
+Rollout requires exact-head CI, source attestation and separate deployment
+authority. Keep both provider runtimes off, deploy code that reads v1 and v2
+first, then apply the additive migration. Provider validation requires separate
+authority after those checks. Real BRD semantic quality is
+still **not run** for v2; mocked source-fidelity evidence does not prove a useful
+provider output. Rollback disables or keeps generation read-only and preserves v2
+readability, attempts, hashes and audit history. Do not relabel or backfill v1 rows
+and do not destructively reverse the migration; if new BRD creation must return to
+v1, do so with a reviewed forward change while retaining all existing v2 records.
+
 ## Ordinary public-route initialization correction (2026-10-03)
 
 Candidate `872cc91` cleared the prior CI failures and served exact preview identity.
