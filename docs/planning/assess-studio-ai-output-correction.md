@@ -79,7 +79,8 @@ the new window/campaign using its existing controls; do not reverse immutable
 ledger history. Production deployment and broader readiness are not authorized.
 Executed local evidence: all eight focused PostgreSQL 16 scenarios passed,
 covering fresh/populated migration, immutable history, guarded concurrent
-recovery/activation, identity and runtime denial, ordered effect allocation,
+recovery/activation, identity and runtime denial, ordered effect allocation and
+consumption, generation-permit replay denial with both final debits consumed,
 expiry, third-effect denial, and migration reapply. Both disposable databases
 were dropped and independently confirmed absent. The CI command contract also
 passed all 12 checks, and the migration-tail contract passed 8/8. No provider
