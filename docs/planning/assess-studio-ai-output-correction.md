@@ -33,6 +33,14 @@ test failures found during implementation were fixture/type/static-test defects
 and were corrected before these final passes; no provider call or hosted mutation
 was made.
 
+Candidate CI exposed a synthetic fixture that omitted the now-required prompt
+identity. The fixture now declares that identity, and the budget integration
+harness loads material from the authoritative claim before estimating tokens.
+The focused fixture suite passes 3/3 and the disposable Assess/Studio budget
+pipeline passes 14/14 with mocked secret/provider transport. Migration input is
+normalized to LF in that harness for the same behavior on Windows and Linux.
+No production validation or fail-closed check was relaxed.
+
 Rollout requires exact-head CI, source attestation and separate deployment
 authority. Keep both provider runtimes off, deploy code that reads v1 and v2
 first, then apply the additive migration. Provider validation requires separate

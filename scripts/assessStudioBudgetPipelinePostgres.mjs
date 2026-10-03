@@ -175,7 +175,7 @@ try{
  await transaction(database,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
  for(const name of migrations){
   if(name===featureMigration){fixture=await createEnterpriseIntelligenceFixture(database);await database.query(`INSERT INTO public.enterprise_transcript_workspace_flags(org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,updated_by) VALUES($1,$2,true,true,true,true,$3)`,[fixture.org,fixture.workspace,fixture.requester])}
-  await applySyntheticAiTerminalJournalMigrationForTest(database,name,async()=>transaction(database,name,await readFile(join('supabase/migrations',name),'utf8')));
+  await applySyntheticAiTerminalJournalMigrationForTest(database,name,async()=>transaction(database,name,(await readFile(join('supabase/migrations',name),'utf8')).replace(/\r\n/gu,'\n')));
  }
  assert.ok(fixture);const modules=await loadSyntheticAiModules();fixture.modules=modules;
  const providerBudget=await import('../supabase/functions/_shared/providerBudget.ts');
@@ -192,7 +192,7 @@ try{
   execution:{receiptId:claim.receiptId,jobId:claim.attemptId,executionToken:claim.executionToken,executionFence:claim.executionFence,
    routeId:claim.providerPlan.routeId,providerConfigId:claim.providerPlan.providerConfigId,provider:claim.providerPlan.provider,
    capability:'studio.document.generate',model:claim.providerPlan.model},
-  estimatedInputTokens:studioProvider.estimateStudioProviderInputTokens({sourcePackage:claim.sourcePackage,templatePayload:claim.templatePayload,
+  estimatedInputTokens:studioProvider.estimateStudioProviderInputTokens({plan:claim.providerPlan,sourcePackage:claim.sourcePackage,templatePayload:claim.templatePayload,
    selectedSourceVersionIds:claim.selectedSourceVersionIds,canonicalSourceAnchors:claim.sourceAnchors,manualBrief:claim.manualBrief}),
   maximumOutputTokens:claim.maximumOutputTokens,
  });
@@ -517,8 +517,7 @@ try{
  const studioRequested=(await database.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) result',[json(studioRequest)])).rows[0].result;
  const studioPackage=await one(database,'SELECT version FROM public.studio_artifact_source_packages WHERE id=$1',[aggregate.source_package_id]);
  const studioInitial={...studioRequested.generationPlan,actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,authorizationVersion,requestId:studioRequest.requestId,receiptId:studioRequested.receiptId,sourcePackageVersion:Number(studioPackage.version)};
- const studioMaterial=await studioDb.loadStudioGenerationMaterial(studioInitial,createPostgrestRead(database),gateway.invoke);
- const studioClaim=await studioDb.claimStudioGeneration(studioInitial,gateway.invoke,async()=>studioMaterial);assert.equal(studioClaim.providerAllowed,true);
+ const studioClaim=await studioDb.claimStudioGeneration(studioInitial,gateway.invoke,plan=>studioDb.loadStudioGenerationMaterial(plan,createPostgrestRead(database),gateway.invoke));assert.equal(studioClaim.providerAllowed,true);
  const contract=modules.normalizeStudioArtifactTemplate(studioClaim.templatePayload);const anchors=studioClaim.sourceAnchors;const selected=studioClaim.selectedSourceVersionIds;
  const anchorCatalog=studioProvider.buildStudioProviderAnchorCatalog(selected,anchors);
  const studioContent={contractVersion:'studio-artifact-2',title:'Synthetic AP business requirements',summary:'Source-backed AP exception requirements.',sections:contract.sections.map((section,index)=>({id:section.id,title:section.title,body:`Distinct source-backed ${section.id} content ${index+1}.`,sourceAnchors:index===0?anchorCatalog.map(anchor=>({anchorRef:anchor.anchorRef})):[],labels:index===0?[]:['template_required']})),coverage:{selectedSourceVersionIds:selected,coveredSourceVersionIds:selected,complete:true}};
@@ -565,8 +564,7 @@ try{
  const failedRequest={...studioRequest,requestId:uuid(),idempotencyKey:`budget-pipeline-studio-stage-failure-${uuid()}`,templateVersionId:replacementTemplate.id,expectedAggregateVersion:Number(latestAggregate.aggregate_version),expectedCurrentVersionId:latestAggregate.current_version_id,expectedApprovedVersionId:latestAggregate.current_approved_version_id};
  const failedRequested=(await database.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) result',[json(failedRequest)])).rows[0].result;
  const failedInitial={...failedRequested.generationPlan,actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,authorizationVersion,requestId:failedRequest.requestId,receiptId:failedRequested.receiptId,sourcePackageVersion:Number(studioPackage.version)};
- const failedMaterial=await studioDb.loadStudioGenerationMaterial(failedInitial,createPostgrestRead(database),gateway.invoke);
- const failedClaim=await studioDb.claimStudioGeneration(failedInitial,gateway.invoke,async()=>failedMaterial);assert.equal(failedClaim.providerAllowed,true);
+ const failedClaim=await studioDb.claimStudioGeneration(failedInitial,gateway.invoke,plan=>studioDb.loadStudioGenerationMaterial(plan,createPostgrestRead(database),gateway.invoke));assert.equal(failedClaim.providerAllowed,true);
  const beforeStageFailure=gateway.counts();const stageFailureDeps={runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async()=>{throw new Error('SYNTHETIC_STAGE_PERSISTENCE_FAILED')},finalize:async()=>{throw new Error('FINALIZE_WITHOUT_STAGE_FORBIDDEN')},fail:async()=>{throw new Error('TERMINAL_FAILURE_AFTER_EFFECT_FORBIDDEN')}};
  const stageFailure=await studioGeneration.executeClaimedStudioGeneration(failedClaim,stageFailureDeps);assert.equal(stageFailure.state,'uncertain');assert.deepEqual(gateway.counts(),{secretReads:beforeStageFailure.secretReads+1,fetches:beforeStageFailure.fetches+1});
  assert.equal((await one(database,'SELECT state FROM public.enterprise_ai_budget_reservations WHERE studio_attempt_id=$1',[failedRequested.attemptId])).state,'uncertain');assert.equal(await count(database,'public.synthetic_ai_campaign_effect_debits','studio_attempt_id=$1 AND consumed_at IS NOT NULL',[failedRequested.attemptId]),1);assert.equal(await count(database,'public.studio_generation_staged_responses','attempt_id=$1',[failedRequested.attemptId]),0);
@@ -610,8 +608,7 @@ try{
  const staleAggregateAfterRequest=await one(database,'SELECT aggregate_version,current_version_id,current_approved_version_id FROM public.studio_artifact_aggregates WHERE id=$1',[staleArtifactId]);
  assert.equal(Number(staleAggregateAfterRequest.aggregate_version),Number(staleAggregate.aggregate_version)+1);assert.equal(staleAggregateAfterRequest.current_version_id,staleAggregate.current_version_id);assert.equal(staleAggregateAfterRequest.current_approved_version_id,staleAggregate.current_approved_version_id);
  const staleInitial={...staleRequested.generationPlan,actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,authorizationVersion,requestId:staleRequest.requestId,receiptId:staleRequested.receiptId,sourcePackageVersion:1};
- const staleMaterial=await studioDb.loadStudioGenerationMaterial(staleInitial,createPostgrestRead(database),gateway.invoke);
- const staleClaim=await studioDb.claimStudioGeneration(staleInitial,gateway.invoke,async()=>staleMaterial);assert.equal(staleClaim.claimKind,'active');assert.equal(staleClaim.providerAllowed,true);
+ const staleClaim=await studioDb.claimStudioGeneration(staleInitial,gateway.invoke,plan=>studioDb.loadStudioGenerationMaterial(plan,createPostgrestRead(database),gateway.invoke));assert.equal(staleClaim.claimKind,'active');assert.equal(staleClaim.providerAllowed,true);
  let loseStaleFinalizeResponse=true;
  const staleDeps={runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async input=>{await database.query('SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,$4,$5::jsonb)',[input.attemptId,input.executionToken,input.executionFence,input.providerOperationId??null,json(input.response)])},finalize:async input=>{
   if(loseStaleFinalizeResponse){
@@ -725,8 +722,7 @@ try{
  const parallelRequested=(await database.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) result',[json(parallelRequest)])).rows[0].result;
  const parallelInitial={...parallelRequested.generationPlan,actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,
   authorizationVersion,requestId:parallelRequest.requestId,receiptId:parallelRequested.receiptId,sourcePackageVersion:1};
- const parallelMaterial=await studioDb.loadStudioGenerationMaterial(parallelInitial,createPostgrestRead(database),gateway.invoke);
- const parallelClaim=await studioDb.claimStudioGeneration(parallelInitial,gateway.invoke,async()=>parallelMaterial);assert.equal(parallelClaim.providerAllowed,true);
+ const parallelClaim=await studioDb.claimStudioGeneration(parallelInitial,gateway.invoke,plan=>studioDb.loadStudioGenerationMaterial(plan,createPostgrestRead(database),gateway.invoke));assert.equal(parallelClaim.providerAllowed,true);
  const parallelStudioBudget=studioBudgetInputFor(parallelClaim);
  const studioBudgetInvoke=(name,args)=>studioGeneration.studioBudgetRpc(name,args,gateway.invoke);
  const parallelStudioReservation=await providerBudget.reserveProviderBudget(parallelStudioBudget,studioBudgetInvoke);assert.equal(parallelStudioReservation.ownsProviderEffect,true);

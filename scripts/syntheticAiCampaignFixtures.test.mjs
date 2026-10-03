@@ -12,6 +12,9 @@ test('all document fixtures use the production loader and canonical template IDs
     assert.equal(material.sourceAnchors.length, 6);
     assert.equal(material.selectedSourceVersionIds.length, 1);
     assert.equal(api.normalizeStudioArtifactTemplate(material.templatePayload).artifactType, kind);
+    assert.equal(material.providerPlan.artifactType, kind);
+    assert.equal(material.providerPlan.promptKey, 'studio-multisource-generation');
+    assert.equal(material.providerPlan.promptVersion, kind === 'brd' ? 'studio-pr-b-2' : 'studio-pr-b-1');
   }
 });
 
