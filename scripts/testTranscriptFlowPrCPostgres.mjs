@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import pg from 'pg';
 import {createApprovedStudioFixture} from './studioPrivateArtifactPostgresFixture.mjs';
 import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL;
 if(!adminUrl){
@@ -23,7 +24,7 @@ const urlFor=name=>{const url=new URL(adminUrl);url.pathname=`/${name}`;return u
 const connect=async connectionString=>{const client=new Client({connectionString});await client.connect();clients.push(client);return client};
 const transaction=async(client,label,sql)=>{await client.query('BEGIN');try{await client.query(sql);await client.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await client.query('ROLLBACK');throw new Error(`${label}: ${error.message}`,{cause:error})}};
 const bootstrap=client=>transaction(client,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
-const apply=async(client,list)=>{for(const name of list)await transaction(client,name,await readFile(join('supabase/migrations',name),'utf8'))};
+const apply=async(client,list)=>{for(const name of list)await applySyntheticAiTerminalJournalMigrationForTest(client,name,async()=>transaction(client,name,await readFile(join('supabase/migrations',name),'utf8')))};
 const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);await admin.query(`CREATE DATABASE ${name}`);databases.push(name);const client=await connect(urlFor(name));await bootstrap(client);return client};
 const persona={id:'30000013-0000-4000-8000-000000000013',state:'active',capabilities:[]};
 const emit=(testId,assertionId,fixture,runtimeContext)=>console.log(`PR_C_ASSERTION ${JSON.stringify({testId,assertionId,fixture,owner:'postgres',result:'passed',runtimeContext:{persona,organizationId:runtimeContext.organizationId??'97000000-0000-4000-8000-000000000010',workspaceId:runtimeContext.workspaceId??'97000000-0000-4000-8000-000000000011',...runtimeContext}})}`);

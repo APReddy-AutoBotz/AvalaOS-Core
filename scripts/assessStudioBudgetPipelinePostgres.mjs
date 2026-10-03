@@ -7,6 +7,7 @@ import {validateAssessImportDatabaseUrl} from './assessImportValidationContract.
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
 import {loadSyntheticAiModules} from './loadSyntheticAiModules.mjs';
 import {meetingText} from './syntheticAiCampaignFixtures.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const originalFetch=globalThis.fetch;
 const originalDeno=globalThis.Deno;
@@ -33,7 +34,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const json=value=>JSON.stringify(value);
 const uuid=()=>crypto.randomUUID();
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-1),'20260928060000_pr_c_synthetic_direct_planning_generation.sql');
+assert.equal(migrations.at(-1),'20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const EXPECTED_ASSERTIONS=[
  'MAP-PG-BUDGET-001-legacy-domain-preserved',
@@ -174,7 +175,7 @@ try{
  await transaction(database,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
  for(const name of migrations){
   if(name===featureMigration){fixture=await createEnterpriseIntelligenceFixture(database);await database.query(`INSERT INTO public.enterprise_transcript_workspace_flags(org_id,workspace_id,transcript_source_sets_enabled,assess_multisource_apply_enabled,unified_byok_gateway_enabled,governed_journeys_enabled,updated_by) VALUES($1,$2,true,true,true,true,$3)`,[fixture.org,fixture.workspace,fixture.requester])}
-  await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
+  await applySyntheticAiTerminalJournalMigrationForTest(database,name,async()=>transaction(database,name,await readFile(join('supabase/migrations',name),'utf8')));
  }
  assert.ok(fixture);const modules=await loadSyntheticAiModules();fixture.modules=modules;
  const providerBudget=await import('../supabase/functions/_shared/providerBudget.ts');

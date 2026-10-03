@@ -1,5 +1,52 @@
 # AvalaOS Core Source Of Truth
 
+## Current paid validation and release-blocker repair (2026-10-03)
+
+Executed evidence on `89c95ec`: one provider validation and one joined-source BRD
+generation succeeded. The original BRD v1 remains immutable; its semantic quality
+needs improvement. AP separately authorized a source-grounded agent revision v2,
+synthetic review/approval, five accepted Delivery items and an exact read-only
+Monitor baseline. Browser and independent persisted-state checks passed. These
+prove synthetic lifecycle behavior, not independent human or production acceptance.
+Eight consumed debits plus retained carry total USD 4.6409936; both provider
+runtimes are off and no reservation is unresolved. No further paid effect follows.
+
+AP's next-step instruction authorizes bounded PR #265 merge-blocker remediation:
+remove the vulnerable Tailwind 3 dependency chain through a compatible Tailwind 4
+build integration and refresh stale generated PR C owner/source bindings. Preserve
+audit enforcement, appearance, test requirements and existing evidence. The
+ordinary-preview identity mismatch is also repaired without controlled activation.
+Focused local audit/build/browser/header/evidence checks pass; new-head CI and
+preview remain pending, and old hosted proof stays bound to `89c95ec`. PR #265 remains
+draft; merge and production are not authorized. The active AI-output plan owns
+this repair and its focused verification.
+
+## Current terminal failure-journal correction (2026-10-03)
+
+Candidate `58cd46e` reached the approved synthetic migration/function deployment
+after feature-owned non-audit checks and the exact-candidate dependency exception.
+Recovery stopped before activation: a legitimate immutable failed-command journal
+was omitted by the fixture and rejected by the blanket journal guard. The active
+AI-output plan owns one forward-only exact journal binding correction, its focused
+verification and corrected-candidate evidence. Preserve the deployed predecessor
+and every historical row. Both provider runtimes remain off; no new paid effect
+occurred and USD 3.6980752 remains retained. Aggregate CI stays red and PR #265
+unmergeable; the exact-candidate risk exception must be rebound before use.
+
+## Post-merge paid AI validation (2026-10-03)
+
+PR #264 merged as `2f8208420ec3b40c03ea50f92e7bb9746142eef9` after independently
+verified 84/84 synthetic steps, all 18 candidate workflows and passing post-merge
+CI. `CONTROLLED-HUMAN` remains `not_run` under the approved PR-specific waiver.
+AP now authorizes real AI validation with a USD 10 maximum; the original
+cumulative ceiling and prior USD 3.6980752 conservative charge remain preserved.
+The active AI-output correction plan owns a two-effect continuation: fresh
+provider validation and one BRD from the retained joined Assess→Studio package.
+Hosted preflight found an expired one-time renewal and one historical no-effect
+mapping reservation needing guarded reconciliation. Both provider runtimes are
+off; no new paid effect has occurred. Focused local recovery/continuation checks passed; hosted recovery/activation
+and actual output quality remain pending. This is not production readiness or production deployment authority.
+
 ## PR #264 solo-owner synthetic acceptance authority (2026-09-24)
 
 AP approved the PR-specific `solo-owner-synthetic-v1` plan in

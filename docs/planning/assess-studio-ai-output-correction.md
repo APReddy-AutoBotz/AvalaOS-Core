@@ -1,5 +1,288 @@
 # Assess and Studio AI output correction
 
+## Ordinary public-route initialization correction (2026-10-03)
+
+Candidate `872cc91` cleared the prior CI failures and served exact preview identity.
+Preview QA then reached six failing PUBLIC-001/PUBLIC-002/ADMIN-001 cases across
+Desktop/Pixel. Captured blank pages and browser errors confirmed an App render
+exception: workspace authority was resolved before the anonymous public return.
+Closed architecture/security/quality reviews located the synchronous App call;
+the client module itself has no uncaught eager authority resolution.
+
+App now reads auth first and uses the existing disabled presentation classification
+for anonymous visitors. Authenticated workspace rendering still calls the strict
+resolver; blocked controlled bindings retain their existing presentation branch.
+No route, mode, backend, credential, provider or service authorization changes.
+Sign-in remains visibly fail-closed when backend configuration is unavailable.
+
+Executed evidence: ordinary production build passed; the unchanged six public,
+sign-in and Admin journey cases passed in a focused local source fixture (6/6,
+Desktop/Pixel, exit 0). The fixture used the ordinary Vite entrypoint, so its
+loopback placeholder could not enable server authority. Typecheck, runtime-mode
+boundaries, hosted Sandbox route denials and static AI boundary scan passed.
+An initial local hook-order edit was caught by typecheck and corrected; an initial
+private grep selected no tests, then all six intended cases were executed.
+No test assertion or hosted acceptance requirement changed. Refresh only current
+App source binding and the canonical PR C provenance. New-head hosted CI/preview
+remain required. Rollback is the App deferral plus matching source bindings; paid
+history, disabled providers and the read-only Monitor fallback remain unchanged.
+
+## CI follow-up on dependency repair (2026-10-03)
+
+Candidate `3140a93` reached a ready Netlify preview, but CI identified four
+confirmed source/test integration defects: the separate acceptance inventory still
+hashed the old CSS/package sources; four exact static-scan allowlist entries kept
+old line numbers after test edits; Tailwind's changed slate palette altered the
+existing modal backdrop; and a delayed-response harness control was covered by
+its open confirmation dialog. These are retained separately from paid proof.
+
+Corrections preserve the original modal color, update only existing allowlist line
+bindings and affected source hashes, and position only the test harness's response
+release control above its modal. No runtime approval behavior or assertion was
+weakened. Focused executed evidence: AI boundary and secret hygiene scans passed;
+acceptance inventory validation and its negative provenance tests passed; the
+cleanup-boundary regression passed; both desktop/mobile modal assertions passed;
+and all four selected delayed-baseline browser cases passed. The standalone modal
+runner printed both successful cases but hung during local Windows server teardown
+and was interrupted afterward; its two assertions are not represented as a clean
+runner exit. The dedicated baseline runner completed with exit 0.
+
+Refresh the PR C bindings after these edits. New-head CI and preview are still
+required; no additional paid call, hosted mutation or merge is authorized.
+
+## Current dependency and evidence binding repair (2026-10-03)
+
+The user authorized next steps after the completed paid and downstream synthetic
+path. Work stays in existing PR #265. The prior exact candidate `89c95ec` passed
+provider validation, one joined BRD generation, immutable reopen, source-grounded
+agent revision v2, synthetic approval, five accepted Delivery items and exact
+read-only Monitor publication. The generated v1 semantic omissions remain a quality
+finding. No further paid call is authorized by this repair. Retain USD 4.6409936,
+all eight consumed debits, zero unresolved reservations and both runtimes off.
+
+Read-only architecture, security and quality reviews agree: no patched braces
+release exists, both Tailwind 3 dependency paths must be removed, and a bounded
+Tailwind 4 compatibility migration is necessary within this PR. The latest reviewed
+upstream versions are Tailwind and its PostCSS plugin 4.3.3. Do not use a fork,
+invented version, audit suppression or weaker CI policy. The stale PR C owner
+hashes must be refreshed with the existing canonical generator.
+
+Upstream references: [reviewed braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+and [Tailwind 4 compatibility guide](https://tailwindcss.com/docs/upgrade-guide).
+
+In scope: dependency/lockfile, PostCSS configuration, CSS entry and compatibility,
+existing JS theme, two programmatic CSS browser builders, active documentation,
+generated registry/provenance. Preserve repository-owned source scanning; excluded
+private/output files must not become class sources. No Health feature edits,
+provider/schema/authorization changes, new campaign, hosted mutation or production.
+Tailwind 4 requires Safari 16.4+, Chrome 111+, Firefox 128+; no older-browser support
+contract was found. Existing browser proof covers Chromium Desktop/Pixel only.
+
+Acceptance: clean lock install; braces absent; unchanged moderate audit gate passes;
+production build succeeds; directly affected desktop/mobile CSS harnesses pass with
+the existing layout/focus/behavior assertions; custom theme/dark rendering preserved;
+canonical PR C contract passes with unchanged assertion inventory. Refresh source
+bindings only after the final edits. A refresh itself proves no command execution.
+Do not run unrelated database or paid-provider regressions. Record exact commands,
+failures, final results and proof limits here before committing the same branch.
+
+Rollback: revert dependency, configuration, CSS and harness compatibility together.
+That restores the old toolchain and its known advisory, so it restores the merge
+blocker too. Keep providers off, preserve all historical data/evidence and use the
+existing read-only Monitor baseline. New-head CI/preview require separate evidence;
+previous hosted success is not transferable. No merge or production authorization.
+
+The preview workflow exposed a second confirmed source mismatch: all ordinary PR
+builds exited without identity headers, while ordinary preview QA required the
+release/deploy/environment tuple. Closed read-only architecture/security/quality
+review approved an exact ordinary-preview metadata path. It emits only the public
+identity and existing security headers; no controlled-human binding, runtime
+activation or backend/provider change occurs. PR #264 partial claims still fail
+closed before generic handling; stable production authorization is unchanged.
+
+Executed local verification:
+
+- `npm ci --ignore-scripts`: passed; only the CSS dependency chain changed.
+- `npm ls braces --all`: empty; npm's empty-tree exit is 1.
+- `npm audit --audit-level=moderate`: passed, exit 0. Only the pre-existing low
+  DOMPurify advisory remains; it is not represented as fixed.
+- `npm run build`: passed. The actual Netlify `--build` router also passed on
+  final CSS with synthetic local ordinary-preview metadata and demo mode, emitted
+  exact generic identity and no preview binding, and performed no hosted action.
+- `node --test scripts/prCSyntheticAcceptanceBrowser.test.mjs`: 69/69 passed.
+  After correcting v4's changed outline semantics, the final-source CSS-owning
+  `completed evidence leaves workspace actions clickable` case passed again (1/1).
+- Navigation scenarios in `scripts/prCSyntheticBrowserNavigation.test.mjs`: 3/3
+  passed. The final real Chromium computed-style theme/dark/responsive/focus/legacy
+  compatibility check passed (1/1). No old-browser or all-engine claim follows.
+- `npm run test:transcript-flow:delivery-monitor-evidence-contract`: migration
+  and CI static checks plus 75/75 adversarial contract checks passed.
+- Canonical `--refresh-bindings` preserves all 85 commands, 241 assertions,
+  15 owners and 10 explicit not-run boundaries. Three stale owner hashes changed;
+  assertion inventory and requirements did not.
+- `node --test scripts/writeHostedPilotNetlifyHeaders.test.mjs`: 84/84 passed,
+  including ordinary metadata substitutions and retained controlled/stable guards.
+- `node tests/browser/previewExhaustiveBrowserQaWorkflowContract.test.mjs`:
+  passed with no workflow semantic changes.
+
+Final source/provenance validation and diff review precede same-branch commit/push.
+New-head GitHub CI and actual Netlify preview proof remain pending. No paid call,
+database migration, broad local regression or hosted mutation was performed.
+
+## Current terminal failure-journal correction (2026-10-03)
+
+Executed evidence: candidate `58cd46e` reached source-verified deployment on the
+approved dedicated synthetic target: five pending migrations and four JWT-verified
+Edge functions. The four AP-approved private-test workflow gates passed their
+relevant non-audit checks under the exact-candidate dependency-risk exception.
+Aggregate CI remains red and PR #265 remains unmergeable.
+
+Hosted recovery returned `SYNTHETIC_AI_MAPPING_RECONCILIATION_UNSAFE` before
+activation or spending. The historical failed command has exactly one immutable
+terminal journal row: matching receipt, tenant, operation, response, canonical
+hash, fence and completion time; no resource, debit, output or proposals. The
+recovery predicate and earlier fixture incorrectly assumed zero journal rows.
+This is a confirmed source defect; the earlier eight-scenario pass omitted the
+actual historical shape.
+
+Preserve deployed migration `20261003015246` unchanged. Forward successor
+`20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql` requires
+empty recovery/continuation authorities and both provider runtimes off. It binds
+exactly one matching failed-command journal by immutable FK and full-row canonical
+hash, rejecting missing, additional or mismatched rows before recovery or replay.
+Every existing identity, no-debit/no-output and spending guard remains. Only
+mechanical migration-tip bindings advance; historical rows remain unchanged.
+
+Executed local evidence: all eight focused PostgreSQL scenarios passed, including
+fresh/populated migration, reproduced predecessor failure, journal-field/missing/
+extra/canonical-hash denials, replay, concurrency, complete history preservation,
+unchanged effect limits and reapply. Both disposable databases were dropped and
+confirmed absent. The tail contract passed 8/8 and the affected migration contract
+passed. An initial fixture provider-on precondition failure is retained; the
+fixture now disables providers during migration and restores only its prior local
+state afterward. Corrected exact-candidate CI and hosted execution remain pending.
+
+Candidate `403c5ad` passed the new recovery cases in CI, but retained full-chain
+database runners failed while installing the successor with their historical
+provider-on defaults. This is a confirmed test-setup defect, not a paid-provider
+failure. The shared disposable-test helper now disables both provider flags only
+while installing that exact successor and restores each fixture's previous flags
+afterward. Full-chain callers use that helper; production SQL and provider guards
+are unchanged. The failed runners passed locally: Studio Artifact 16/16,
+Enterprise Intelligence 30/30, and all retained Transcript Flow assertions. All
+disposable databases were cleaned. Their test loaders normalize Windows line
+endings for migration-source drift checks. All 17 affected scripts parsed and
+the diff check passed. New exact-head CI and hosted execution remain pending.
+
+The private browser now waits for the selected artifact/package/hash/assessed
+lineage. A delayed-projection check observed generation disabled until the exact
+empty joined BRD loaded, with zero paid requests. The earlier screen showing the
+previous selection is retained as failed inspection evidence.
+
+No continuation is activated and no new paid effect occurred. Both runtimes are
+off; six consumed debits plus carry retain USD 3.6980752 under the original USD 10
+cap. The successor is not deployed. Its new candidate needs the dependency-risk
+exception rebound before hosted recovery and paid execution. The two-effect limit
+and no-automatic-paid-retry rule remain. Rollback withholds activation or disables
+provider execution while preserving every historical row.
+
+## Joined paid-AI validation continuation (2026-10-03)
+
+AP explicitly approved using the retained assessed-handoff BRD draft after live
+readback corrected the initial mixed-source/PDD assumption. The binding requires
+`source_mode=assess_handoff`, assessed lineage, the exact accepted handoff and
+package hash, and an empty BRD aggregate; mixed and independent packages are
+excluded. This does not authorize another effect or increase the original cap.
+
+AP authorized real paid AI validation with a maximum USD 10 on 2026-10-03.
+This continuation conservatively retains the ORIGINAL cumulative USD 10 ceiling,
+all historical charges and the same campaign. PR #264 is merged as
+`2f8208420ec3b40c03ea50f92e7bb9746142eef9`; its 84-step provider-free acceptance
+and post-merge CI passed. Those results are not real-provider quality proof.
+
+The first paid pass is exactly one fresh provider validation followed by one BRD
+generation from the retained Assess → Govern → Studio source package. It uses the
+existing first-party OpenAI configuration and pinned model only. The maximum new
+conservative charge is USD 0.9429184, giving an aggregate ceiling of USD 4.6409936
+for this pass, below the unchanged USD 10 campaign cap. Assess remapping,
+independent Studio extraction, other document types/providers and automatic paid
+retries are outside this two-effect window.
+
+Read-only architecture, security and quality reviews closed before writes.
+The dedicated `avalaos-ai-synthetic` project was resumed under this authorization.
+Hosted preflight confirmed migration tip `20260923190853`, one expired enabled
+campaign, one expired renewal, six consumed currency debits, exactly
+USD 3.6980752 retained, both provider runtimes off, and one joined source package
+with no generated version. Existing provider-free projects remain untouched.
+
+Preflight also found one historical uncertain Assess mapping token reservation
+from the 2026-09-23 output-limit mismatch. Its receipt is terminal failed, the
+mapping run is claimed, and it has no currency debit, staged output, proposals or
+applications. The mapping-specific API cannot reconcile that state. Implement a
+service-only, fresh-admin, exact-target no-effect reconciliation with locked
+identity and durable no-effect checks, preserving the reservation and failed
+history. Only its state/reconciliation metadata may change; no currency charge is
+refunded and no old mapping run becomes executable. Any effect, output, identity
+mismatch or different uncertainty rejects. Record an append-only reconciliation
+record and support exact replay without a second transition.
+
+Read-only preflight additionally confirmed that the historical mapping author
+differs from the current Admin operator. Reconciliation authorizes the fresh
+operator independently, then binds the original receipt/run/reservation actor,
+historical authorization version, token, fence and provider route to one another.
+Both identities are retained in immutable evidence. Distinct-actor positive cases,
+cross-row identity/version/token/fence denials, and replay lineage-drift denials
+passed in the eight-scenario PostgreSQL suite; historical receipt/run data remain
+unchanged. No hosted reconciliation or paid effect has occurred.
+
+In the same implementation slice, add one immutable second-and-final approval
+window for the original campaign, limited to the two effects above and at most
+24 hours. Activation requires the exact retained debit multiset, unchanged carry
+and cap, no unresolved reservation or pending ownership transfer, runtimes off,
+and fresh exact admin/target/provider/key/route bindings. Installation creates no
+paid authority. Reserve and consume bind each new debit to the active window,
+reject old permits and operation substitution, serialize concurrent allocation,
+and retain the token budgets and irreversible disable control.
+
+Acceptance: focused disposable PostgreSQL fresh/populated recovery and
+continuation checks, negative identity/budget/expiry/concurrency/replay cases,
+affected contracts/typechecks/static checks, then required exact-head CI and
+source-attested synthetic deployment. Apply the canonical pending migrations in
+order, with provider execution off. Reconcile the historical no-effect reservation
+through the new RPC, independently read it back, and activate the two-effect window
+only immediately before actual business testing.
+
+The retained input is a manually declared synthetic AP case with two primitives
+(capture and human policy review), an approve/escalate decision, and an incomplete-
+request exception. It explicitly does not derive from the earlier AI-ingested
+transcript or SOP. The paid BRD must preserve that distinction and its unknown
+agent-necessity, volume, effort, and technical-health facts. This pass does not
+prove useful Assess extraction or a complete AI-assisted intake journey.
+
+For the paid BRD, verify the exact joined package/handoff/template and source
+versions; strict sections and valid citations; grounded roles and rules;
+explicit unknowns; no invented interfaces, thresholds or compliance claims.
+Reopen the committed immutable draft and compare its version, content and lineage.
+Provider HTTP success alone is insufficient. Keep the draft unapproved and do not
+perform downstream handoffs. Record actual usage separately from conservative
+charges; an invoice is not independently verified.
+
+Stop on the first unexpected or ambiguous result; retain its charge and reconcile
+the same operation without a new paid attempt. Disable provider runtimes at the
+end or on failure and preserve all data. Rollback withholds activation or disables
+the new window/campaign using its existing controls; do not reverse immutable
+ledger history. Production deployment and broader readiness are not authorized.
+Executed local evidence: all eight focused PostgreSQL 16 scenarios passed,
+covering fresh/populated migration, immutable history, guarded concurrent
+recovery/activation, identity and runtime denial, ordered effect allocation and
+consumption, generation-permit replay denial with both final debits consumed,
+expiry, third-effect denial, and migration reapply. Both disposable databases
+were dropped and independently confirmed absent. The CI command contract also
+passed all 12 checks, and the migration-tail contract passed 8/8. No provider
+call or hosted mutation occurred in these tests.
+Required exact-head CI, hosted recovery/activation, and the real paid BRD remain
+`not run`. No new paid effect has occurred.
+
 ## Studio independent-source integration correction (2026-09-24)
 
 Objective: make the already-approved direct Studio source journey operable for a

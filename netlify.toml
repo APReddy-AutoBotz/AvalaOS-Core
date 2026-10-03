@@ -1,5 +1,6 @@
 [build]
-  # The permanent build router preserves ordinary branch/preview behavior,
+  # The permanent build router gives exact PR previews public deploy identity,
+  # preserves ordinary branch behavior,
   # admits controlled-human mode only for the exact PR #264 Deploy Preview,
   # and fails closed for production context unless the pre-existing exact
   # avalaos-pilot stable non-production authorization tuple is present.

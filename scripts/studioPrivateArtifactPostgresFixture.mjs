@@ -19,8 +19,8 @@ export async function privateCommand(db,command){
  const serialized=JSON.stringify(normalized);assert.equal(typeof serialized,'string');return (await stage(normalized.commandType,()=>db.query('SELECT public.studio_private_artifact_command_claim($1::jsonb) result',[serialized]))).rows[0].result
 }
 export async function downloadCommand(db,command){const serialized=JSON.stringify(command);return (await stage('download claim',()=>db.query('SELECT public.studio_artifact_download_claim($1::jsonb) result',[serialized]))).rows[0].result}
-export async function createApprovedStudioFixture(db){
- const base=await createCommittedStudioFixture(db);let aggregate=Number(base.aggregate.aggregate_version);const version=Number(base.version.version);
+export async function createApprovedStudioFixture(db,artifactType='brd'){
+ const base=await createCommittedStudioFixture(db,artifactType);let aggregate=Number(base.aggregate.aggregate_version);const version=Number(base.version.version);
  const claim=async(commandType,actor,authorizationVersion,payload,key)=>{
   const command={commandType,requestId:uuid(100+aggregate),idempotencyKey:key,organizationId:base.org,workspaceId:base.workspace,actorId:actor,authorizationVersion,expectedAggregateVersion:aggregate,expectedArtifactVersion:version,payload};
   const result=(await stage(commandType,()=>db.query('SELECT public.studio_artifact_command_claim($1::jsonb) result',[JSON.stringify(command)]))).rows[0].result;assert.equal(result.outcome,'committed');aggregate++;return result;

@@ -1,5 +1,87 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current PR #265 blockers and completed synthetic evidence (2026-10-03)
+
+Executed evidence: paid generation and corrected-v2 synthetic publishing passed on
+`89c95ec`; the original AI draft's semantic omissions remain a quality finding.
+Manual correction and synthetic actors do not establish improved provider quality
+or independent human acceptance. Total conservative charge is USD 4.6409936, eight
+consumed debits, zero unresolved reservations, both provider runtimes off.
+
+Confirmed source defects: current audit still reports high-severity
+`GHSA-vfj7-8cjw-p6xm`; braces 3.0.3 has no published patch. PR C CI independently
+fails `PR_C_OWNER_HASH:migration-static`, with another stale Studio PostgreSQL owner
+binding. Fix through the upstream Tailwind 4 build pipeline and the existing
+`--refresh-bindings` generator, preserving audit and evidence enforcement. The
+compatibility risk is changed generated CSS; focused browser/build proof is required.
+No new dependency-risk waiver is granted. The existing low-severity DOMPurify
+finding remains separate unless explicitly repaired and verified.
+
+Planned verification: moderate audit, production build, affected desktop/mobile CSS
+harnesses, generated-source contract and final diff review. Exact-candidate CI and
+preview remain pending after any new commit. The prior preview CI stopped waiting
+for an exact deploy; neither registry repair nor a clean audit proves preview success.
+
+Executed local repair evidence: braces is absent and the unchanged moderate audit
+passes (the low DOMPurify finding remains). The production/final preview-router
+builds, affected CSS browser checks, 75 evidence-contract cases and 84 preview-header
+cases pass. Three stale owner bindings were refreshed without changing requirements.
+The preview timeout was traced to a confirmed source mismatch: ordinary builds
+omitted headers that their QA required. Exact ordinary previews now receive generic
+identity only; controlled/stable guards and workflow verification remain unchanged.
+Actual new-head CI/preview are still pending; no hosted or production claim follows.
+
+## Current terminal failure-journal correction (2026-10-03)
+
+Candidate `58cd46e` reached the approved synthetic migration/function deployment
+after feature-owned non-audit checks and the exact-candidate dependency exception.
+Recovery stopped before activation: a legitimate immutable failed-command journal
+was omitted by the fixture and rejected by the blanket journal guard. The active
+AI-output plan owns one forward-only exact journal binding correction, its focused
+verification and corrected-candidate evidence. Preserve the deployed predecessor
+and every historical row. Both provider runtimes remain off; no new paid effect
+occurred and USD 3.6980752 remains retained. Aggregate CI stays red and PR #265
+unmergeable; the exact-candidate risk exception must be rebound before use.
+
+## Paid validation dependency gate (2026-10-03)
+
+PR #265 CI is blocked by `GHSA-vfj7-8cjw-p6xm` in the existing
+`braces@3.0.3` dependency of the Tailwind 3 build toolchain. The advisory has no
+patched braces release. Read-only review found fixed repository-owned content
+globs and no product-runtime import or tenant/provider-input path to the affected
+pattern parser. This limits the identified exposure to build/dev/test availability;
+it does not dismiss the advisory or establish general safety.
+
+AP approved a one-candidate, one-attempt synthetic-only risk exception for
+`95922edb200693bc36bc0555443777c6c9c4c0a7`. A subsequent pre-deployment ownership
+correction changes that SHA, so the exception requires a fresh exact-head binding
+before use. It preserves the original two effects and cumulative budget, requires
+all relevant non-audit checks separately, leaves CI visibly failed and the PR
+unmergeable, and changes no audit policy or dependency configuration. Production
+and customer traffic remain outside scope. The existing low-severity DOMPurify
+advisory does not trigger the moderate gate; its IN_PLACE/hook trigger was not
+found in application source, and its available patch remains separate work.
+
+The historical PR #264 PostgreSQL fixture now validates the entire approved
+migration list but executes only its frozen synthetic-acceptance chain. Its two
+seed/deprovision cycles passed locally. The new eight-scenario continuation suite
+owns the complete current-chain proof. No runtime marker guard was relaxed.
+
+## Paid continuation preflight (2026-10-03)
+
+Executed evidence: PR #264's 84-step synthetic acceptance and post-merge CI passed.
+The resumed dedicated AI target retains six consumed debits totaling USD 3.6980752
+including carry, an expired campaign/renewal, and disabled provider runtimes.
+Confirmed source defects: the one-time renewal cannot represent AP's new bounded
+approval; the mapping budget API cannot reconcile a historical uncertain
+reservation whose failed receipt has no currency debit, staged output or proposals.
+The active AI-output plan owns a guarded no-effect recovery and a two-effect
+continuation under the unchanged USD 10 cumulative cap. No new paid effect or
+production action has occurred. Actual joined generated-document quality remains
+not run until independently observed; preserve failed and historical evidence.
+Focused local PostgreSQL evidence passed all eight recovery/continuation scenarios
+with verified disposable-database cleanup; the CI command contract passed 12/12.
+
 ## PR #264 approved synthetic acceptance correction (2026-09-24)
 
 The owner approved the scoped replacement policy in

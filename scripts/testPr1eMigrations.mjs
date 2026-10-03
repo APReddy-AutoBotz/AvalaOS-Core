@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl=process.env.PR1E_MIGRATION_DATABASE_URL;if(!adminUrl){console.error('PR1E_MIGRATION_DATABASE_URL is required.');process.exit(1);}
 const {Client}=pg;const dbName='avalaos_pr1e_migration_test';const createdRoles=[];
@@ -20,7 +21,7 @@ try{
   const expectedFullChainTip=approvedFullChainTip(migrations);
   for(const name of migrations){
     const sql=fs.readFileSync(path.join('supabase/migrations',name),'utf8');
-    await tx(test,sql);
+    await applySyntheticAiTerminalJournalMigrationForTest(test,name,()=>tx(test,sql));
     if(name==='20260923133000_pr1e_evidence_claim_operator_binding.sql'
       ||name==='20260923142120_pr1e_govern_control_alias_binding.sql'
       ||name==='20260923144653_studio_command_authority_capabilities.sql'

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium, devices } from '@playwright/test';
+import { buildTailwindBrowserFixtureCss } from './buildTailwindBrowserFixtureCss.mjs';
 import { openSurface, observeBrowserOnlyStep, executePlannedStep, buildBrowserExecutionCatalog, collectProof } from './runPrCSyntheticAcceptanceBrowser.mjs';
 
 // Real sidebar, authorization guard, route resolver, Delivery and both Monitor
@@ -9,9 +9,6 @@ import { openSurface, observeBrowserOnlyStep, executePlannedStep, buildBrowserEx
 let fixturePromise;
 const fixture = () => fixturePromise ??= (async () => {
   const { build } = await import('vite');
-  const { default: postcss } = await import('postcss');
-  const { default: tailwindcss } = await import('tailwindcss');
-  const { default: tailwindConfig } = await import('../tailwind.config.js');
   const source = `import React, { useEffect, useState } from 'react';
     import { createRoot } from 'react-dom/client';
     import Sidebar from './components/shared/Sidebar';
@@ -104,11 +101,41 @@ const fixture = () => fixturePromise ??= (async () => {
       `;
     } }],
   });
-  const files = ['components/shared/Sidebar.tsx', 'components/shared/Header.tsx', 'components/auth/EnterpriseSessionBoundary.tsx', 'components/shared/PortfolioView.tsx', 'components/delivery/GovernedDeliveryWorkspace.tsx', 'components/enterprise/EnterpriseIntelligenceView.tsx', 'components/auth/ControlledHumanNonProductionBanner.tsx'];
-  const content = [{ raw: source, extension: 'tsx' }, ...await Promise.all(files.map(async file => ({ raw: await readFile(new URL(`../${file}`, import.meta.url), 'utf8'), extension: 'tsx' })))];
-  const css = await postcss([tailwindcss({ ...tailwindConfig, content })]).process(await readFile(new URL('../index.css', import.meta.url), 'utf8'), { from: undefined });
-  return { css: css.css, code: compiled[0].output.find(file => file.type === 'chunk').code };
+  const css = await buildTailwindBrowserFixtureCss(source);
+  return { css, code: compiled[0].output.find(file => file.type === 'chunk').code };
 })();
+
+test('Tailwind production pipeline preserves custom theme, dark, responsive, focus, and legacy layout utilities', async () => {
+  const css = await buildTailwindBrowserFixtureCss('<div className="hidden bg-primary font-display shadow-sm rounded-sm ring focus:outline-none focus:ring-2 focus:ring-abz-primary dark:bg-surface-dark sm:flex flex-shrink-0">Continue</div>');
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+    await page.setContent(`<style>${css}</style><body class="dark"><span id="surface-reference" style="background:var(--av-color-surface)"></span><div id="subject" role="button" tabindex="0" class="hidden bg-primary font-display shadow-sm rounded-sm ring focus:outline-none focus:ring-2 focus:ring-abz-primary dark:bg-surface-dark sm:flex flex-shrink-0">Continue</div></body>`);
+    await page.locator('#subject').focus();
+    const computed = await page.evaluate(() => {
+      const subject = getComputedStyle(document.querySelector('#subject'));
+      return {
+        backgroundColor: subject.backgroundColor,
+        referenceBackgroundColor: getComputedStyle(document.querySelector('#surface-reference')).backgroundColor,
+        borderRadius: subject.borderRadius,
+        boxShadow: subject.boxShadow,
+        display: subject.display,
+        flexShrink: subject.flexShrink,
+        fontFamily: subject.fontFamily,
+        outlineStyle: subject.outlineStyle,
+      };
+    });
+    assert.equal(computed.backgroundColor, computed.referenceBackgroundColor);
+    assert.equal(computed.borderRadius, '2px');
+    assert.notEqual(computed.boxShadow, 'none');
+    assert.equal(computed.display, 'flex');
+    assert.equal(computed.flexShrink, '0');
+    assert.match(computed.fontFamily, /^Outfit/u);
+    assert.equal(computed.outlineStyle, 'solid');
+  } finally {
+    await browser.close();
+  }
+});
 
 const mount = async (browser, persona, viewport, snapshot = {}) => {
   const built = await fixture();

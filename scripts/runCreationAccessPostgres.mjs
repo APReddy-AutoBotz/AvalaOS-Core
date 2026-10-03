@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {approvedFullChainTip} from './prCMigrationTailContract.mjs';
 import {PROJECTION_MIGRATION_REJECTION_CASES} from './projectionRpcPostgrestContract.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -61,8 +62,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20260928060000');
-  assert.equal(migrations.length, 93);
+  assert.equal(approvedFullChainTip(migrations), '20261003055918');
+  assert.equal(migrations.length, 95);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -89,21 +90,25 @@ try {
   assert.equal(migrations[renewalIndex + 9], '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql');
   assert.equal(migrations[renewalIndex + 10], '20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql');
   assert.equal(migrations[renewalIndex + 11], '20260928060000_pr_c_synthetic_direct_planning_generation.sql');
-  assert.equal(renewalIndex, migrations.length - 12);
+  assert.equal(migrations[renewalIndex + 12], '20261003015246_synthetic_ai_final_paid_validation_continuation.sql');
+  assert.equal(migrations[renewalIndex + 13], '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
+  assert.equal(renewalIndex, migrations.length - 14);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
-      await db.query('BEGIN');
-      try { await db.query(sql); await db.query('COMMIT'); }
-      catch (error) {
-        await db.query('ROLLBACK');
-        // Retain only fixed domain codes; never expose SQL diagnostics, rows,
-        // connection strings, function arguments or raw exception objects.
-        const domainCode = /^[A-Z][A-Z0-9_]{1,100}$/.test(error.message ?? '') ? error.message : 'UNCLASSIFIED';
-        report.migrationFailure = { path: file, sqlstate: error.code ?? 'unknown', domainCode };
-        console.error(`Migration failed: ${file}; SQLSTATE ${error.code ?? 'unknown'}; domain ${domainCode}`);
-        throw error;
-      }
+      await applySyntheticAiTerminalJournalMigrationForTest(db, file, async () => {
+        await db.query('BEGIN');
+        try { await db.query(sql); await db.query('COMMIT'); }
+        catch (error) {
+          await db.query('ROLLBACK');
+          // Retain only fixed domain codes; never expose SQL diagnostics, rows,
+          // connection strings, function arguments or raw exception objects.
+          const domainCode = /^[A-Z][A-Z0-9_]{1,100}$/.test(error.message ?? '') ? error.message : 'UNCLASSIFIED';
+          report.migrationFailure = { path: file, sqlstate: error.code ?? 'unknown', domainCode };
+          console.error(`Migration failed: ${file}; SQLSTATE ${error.code ?? 'unknown'}; domain ${domainCode}`);
+          throw error;
+        }
+      });
       if (!report.migrations.some(row => row.path === file)) report.migrations.push({ path: file, sha256: createHash('sha256').update(sql).digest('hex') });
     }
   };
@@ -120,7 +125,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20260928060000') => {
+  const assertFinalIdentity = async (db, expectedTip = '20261003055918') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {

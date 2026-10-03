@@ -75,7 +75,7 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20260928060000');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261003055918');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -89,16 +89,16 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
-  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20260928060000')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 93)'));
+  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261003055918')"));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 95)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
-  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20260928060000'/u);
+  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261003055918'/u);
   assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
 });
 
 test('projection RPC volatility successor is exact and adversarially bound', () => {
-  const sql = readFileSync(PROJECTION_RPC_VOLATILITY_MIGRATION_PATH, 'utf8');
+  const sql = readFileSync(PROJECTION_RPC_VOLATILITY_MIGRATION_PATH, 'utf8').replaceAll('\r\n', '\n');
   assert.deepEqual(assertProjectionRpcVolatilityMigration(sql), {
     predecessorTip: '20260916181916',
     currentTip: '20260916203406',
@@ -112,9 +112,9 @@ test('projection RPC volatility successor is exact and adversarially bound', () 
 });
 
 test('XLSX ingestion successor preserves exact function and environment authority', () => {
-  const sql = readFileSync(XLSX_INGESTION_MIGRATION_PATH, 'utf8');
-  const frozenAuthoritySql = readFileSync(XLSX_INGESTION_FROZEN_AUTHORITY_PATH, 'utf8');
-  const frozenClassifierSql = readFileSync(XLSX_INGESTION_FROZEN_CLASSIFIER_PATH, 'utf8');
+  const sql = readFileSync(XLSX_INGESTION_MIGRATION_PATH, 'utf8').replaceAll('\r\n', '\n');
+  const frozenAuthoritySql = readFileSync(XLSX_INGESTION_FROZEN_AUTHORITY_PATH, 'utf8').replaceAll('\r\n', '\n');
+  const frozenClassifierSql = readFileSync(XLSX_INGESTION_FROZEN_CLASSIFIER_PATH, 'utf8').replaceAll('\r\n', '\n');
   assert.deepEqual(assertAssessDocumentXlsxIngestionMigration(sql, frozenAuthoritySql, frozenClassifierSql), {
     predecessorTip: '20260916151050',
     currentTip: '20260916181916',

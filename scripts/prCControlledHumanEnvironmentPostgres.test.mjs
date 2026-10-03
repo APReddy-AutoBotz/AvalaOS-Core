@@ -13,6 +13,8 @@ import {inspectPreflightTargetReadOnly} from './prCControlledHumanCredentialPref
 import {runSyntheticPrerequisites,SYNTHETIC_PREREQUISITE_STATE_KEYS} from './prCSyntheticBrowserPrerequisites.mjs';
 import {SYNTHETIC_PERSONA_ORDER,buildSyntheticObserverRequest,buildSyntheticSessionBindingRequest,buildVerifiedSyntheticAcceptanceSession,requiredSyntheticBrowserAssertionId} from './prCSyntheticAcceptanceEvidence.mjs';
 import {deriveSyntheticApplicationActorDigest,deriveSyntheticApplicationSessionDigest} from './prCSyntheticIdentity.mjs';
+import {SYNTHETIC_ACCEPTANCE_MIGRATION_TIP} from './prCControlledHumanEnvironment.mjs';
+import {assertPrCMigrationTail} from './prCMigrationTailContract.mjs';
 
 const {Client}=pg;
 const adminUrl=process.env.PR_C_CONTROLLED_HUMAN_TEST_DATABASE_URL;
@@ -52,8 +54,11 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     const bootstrap=new Client({connectionString:databaseUrl.toString()});await bootstrap.connect();
     await bootstrap.query(`create schema auth;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb not null default '{}'::jsonb);create table auth.sessions(id uuid primary key,user_id uuid not null references auth.users(id) on delete cascade);create function auth.uid() returns uuid language sql stable as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,statements text[] not null,name text not null);`);
     const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
+    assertPrCMigrationTail(migrations);
     const migrationIndex=migrations.indexOf(MIGRATION_FILE.split('/').at(-1));assert.ok(migrationIndex>0);
-    for(const name of migrations.slice(0,migrationIndex)){const sql=await readFile(join('supabase/migrations',name),'utf8');await bootstrap.query('begin');try{await bootstrap.query(sql);await bootstrap.query(`insert into supabase_migrations.schema_migrations(version,statements,name) values($1,$2::text[],$3)`,[name.slice(0,14),[sql],name.slice(15,-4)]);await bootstrap.query('commit')}catch(error){await bootstrap.query('rollback');throw new Error(`${name}: ${error.message}`)}}
+    const frozenTips=migrations.filter(name=>name.slice(0,14)===SYNTHETIC_ACCEPTANCE_MIGRATION_TIP);
+    assert.equal(frozenTips.length,1);const frozenTipIndex=migrations.indexOf(frozenTips[0]);assert.ok(frozenTipIndex>migrationIndex);
+    for(const name of migrations.slice(0,migrationIndex)){const sql=(await readFile(join('supabase/migrations',name),'utf8')).replaceAll('\r\n','\n');await bootstrap.query('begin');try{await bootstrap.query(sql);await bootstrap.query(`insert into supabase_migrations.schema_migrations(version,statements,name) values($1,$2::text[],$3)`,[name.slice(0,14),[sql],name.slice(15,-4)]);await bootstrap.query('commit')}catch(error){await bootstrap.query('rollback');throw new Error(`${name}: ${error.message}`)}}
     const identity=(await bootstrap.query(`select (select system_identifier::text from pg_control_system()) system_identifier,current_database() database_name,current_user database_role`)).rows[0];
     const targetFingerprint=sha256(`${identity.system_identifier}\0${identity.database_name}\0${identity.database_role}`);await bootstrap.end();
     const fixtureState=await loadFixture();const head='83cab00bee481df22351302cc8c1c00bda3f1664';const migration=await loadMigration();
@@ -76,9 +81,11 @@ test('PostgreSQL 16 applies exact migration and repeats two complete seed/deprov
     try { assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,false); }
     catch(error) { throw new Error(`${error.message} position=${error.position??'unknown'} where=${error.where??'unknown'}`,{cause:error}); }
     await migrationVerify(migrationContext,migrationAdapter);assert.equal((await migrationApply(migrationContext,migrationAdapter,migration)).replayed,true);
-    const tailMigrations=migrations.slice(migrationIndex+1);
+    // This harness owns the frozen PR #264 exercise. The final-continuation
+    // PostgreSQL suite separately applies and proves the complete current chain.
+    const tailMigrations=migrations.slice(migrationIndex+1,frozenTipIndex+1);
     for(const name of tailMigrations){
-      const sql=await readFile(join('supabase/migrations',name),'utf8');
+      const sql=(await readFile(join('supabase/migrations',name),'utf8')).replaceAll('\r\n','\n');
       if(name==='20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql'){
         await migrationAdapter.client.query('begin');
         try{

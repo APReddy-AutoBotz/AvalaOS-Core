@@ -1,5 +1,52 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Current PR #265 build compatibility boundary (2026-10-03)
+
+The completed synthetic downstream path retains immutable AI BRD v1, source-grounded
+agent revision v2, role-separated decisions, exact accepted Delivery items and a
+read-only Monitor baseline. No provider effect accompanies downstream publishing.
+Monitor readiness remains `review_required`, with no live telemetry or mutation.
+
+The next repair replaces Tailwind 3's vulnerable transitive build dependencies with
+Tailwind 4 and its matching PostCSS plugin. Retain the existing theme, explicit
+repository-owned source scope and rendered behavior; adapt the two direct CSS test
+builders to the same compiler. Browser compatibility is Safari 16.4+, Chrome 111+
+and Firefox 128+; current executed browser coverage remains Chromium Desktop/Pixel,
+not proof for all three engines. No scoring, authorization, provider, schema or
+business-command contract changes. Refresh generated evidence bindings after final
+source changes without treating a refresh as executed verification.
+
+Ordinary PR preview identity uses an exact site/context/release/deploy/review/URL
+tuple and emits only public release/deploy/environment plus passive security
+headers. It does not activate controlled-human mode or publish a preview binding.
+Controlled PR #264 claims keep precedence and fail closed; stable production
+authorization is unchanged. This repairs ordinary QA identity, not product
+authorization or readiness. Local build, header and focused browser checks pass.
+
+## Current terminal failure-journal correction (2026-10-03)
+
+Candidate `58cd46e` reached the approved synthetic migration/function deployment
+after feature-owned non-audit checks and the exact-candidate dependency exception.
+Recovery stopped before activation: a legitimate immutable failed-command journal
+was omitted by the fixture and rejected by the blanket journal guard. The active
+AI-output plan owns one forward-only exact journal binding correction, its focused
+verification and corrected-candidate evidence. Preserve the deployed predecessor
+and every historical row. Both provider runtimes remain off; no new paid effect
+occurred and USD 3.6980752 remains retained. Aggregate CI stays red and PR #265
+unmergeable; the exact-candidate risk exception must be rebound before use.
+
+## Paid validation continuation boundary (2026-10-03)
+
+The post-PR-264 paid pass retains the same synthetic campaign, immutable original
+carry/debits and USD 10 aggregate ceiling. A service-only recovery may reconcile
+only the exact proven no-effect historical mapping reservation under fresh admin
+authority; it cannot reactivate that run or refund currency. A new immutable
+second-and-final window permits one provider validation and one joined-source BRD
+generation. Exact window-bound one-use permits, serialized currency allocation,
+token budgets, target/route/key bindings and independent output readback remain
+mandatory. Installation alone grants no provider authority. See the active
+AI-output correction plan for the bounded rollout and read-only fallback.
+
 ## PR #264 synthetic acceptance evidence boundary
 
 The AP-approved `solo-owner-synthetic-v1` policy authorizes one controller to

@@ -4,6 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
+import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl = process.env.STUDIO_SOURCE_INTEGRATION_DATABASE_URL;
 if (!adminUrl) {
@@ -22,10 +23,12 @@ const syntheticStudioFixtureMigrationName = '20260926053818_pr_c_synthetic_studi
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 const featureMigrationIndex = migrations.indexOf(migrationName);
 assert.ok(featureMigrationIndex > 0);
-assert.equal(migrations.at(-4), migrationName);
-assert.equal(migrations.at(-3), syntheticMigrationName);
-assert.equal(migrations.at(-2), syntheticStudioFixtureMigrationName);
-assert.equal(migrations.at(-1), '20260928060000_pr_c_synthetic_direct_planning_generation.sql');
+assert.equal(migrations.at(-6), migrationName);
+assert.equal(migrations.at(-5), syntheticMigrationName);
+assert.equal(migrations.at(-4), syntheticStudioFixtureMigrationName);
+assert.equal(migrations.at(-3), '20260928060000_pr_c_synthetic_direct_planning_generation.sql');
+assert.equal(migrations.at(-2), '20261003015246_synthetic_ai_final_paid_validation_continuation.sql');
+assert.equal(migrations.at(-1), '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -145,7 +148,10 @@ try {
   const legacyCandidate = await one(db, `SELECT value,excerpt_hash FROM public.enterprise_evidence_candidates WHERE id=$1`, [fixture.candidate]);
   await db.query(`SELECT public.enterprise_review_evidence_candidate($1,$2,$3,$4,$5,'accepted',$6,$7,'Retained pre-migration Studio review')`,
     [fixture.candidate, fixture.org, fixture.workspace, legacyCandidate.value, legacyCandidate.excerpt_hash, fixture.reviewer, legacyCandidate.value]);
-  for (const migration of migrations.slice(featureMigrationIndex)) await transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8'));
+  for (const migration of migrations.slice(featureMigrationIndex)) {
+    await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
+      async () => transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8')));
+  }
   assert.equal(await count(db, 'public.enterprise_source_set_version_items', 'WHERE source_set_version_id=$1', [legacySetVersion]), 1);
   assert.equal(await count(db, 'public.studio_legacy_extraction_binding_compatibility', 'WHERE binding_id=$1 AND job_id=$2', [legacyBinding, fixture.job]), 1);
   await expectedFailure(() => db.query(`INSERT INTO public.enterprise_transcript_extraction_bindings(id,org_id,workspace_id,job_id,receipt_id,
@@ -158,10 +164,10 @@ try {
     WHERE org_id=$1 AND workspace_id=$2`, [fixture.org, fixture.workspace])).studio_source_integration_enabled, false);
 
   const identity = await one(db, `SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`);
-  assert.equal(identity.migration_tip, '20260928060000');
+  assert.equal(identity.migration_tip, '20261003055918');
   const identityConstraint = await one(db, `SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
     WHERE conrelid='public.hosted_pilot_environment_identity'::regclass AND conname='hosted_pilot_environment_identity_migration_tip_check'`);
-  assert.equal(identityConstraint.expression, "(migration_tip = '20260928060000'::text)");
+  assert.equal(identityConstraint.expression, "(migration_tip = '20261003055918'::text)");
   const role = fixed(331);
   const orgRole = fixed(332);
   const packageActor = fixed(333);

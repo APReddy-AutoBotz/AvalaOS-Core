@@ -5,6 +5,7 @@ import pg from 'pg';
 import {createCommittedStudioFixture} from './studioArtifactPostgresFixture.mjs';
 import {createAvailablePrivateArtifactFixture} from './studioPrivateArtifactPostgresFixture.mjs';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_PR_B_MIGRATION_DATABASE_URL;
 if(!adminUrl){
@@ -31,7 +32,7 @@ const connect=async connectionString=>{const client=new Client({connectionString
 const delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
 const transaction=async(client,label,sql)=>{await client.query('BEGIN');try{await client.query(sql);await client.query('COMMIT');console.log(`APPLIED ${label}`)}catch(error){await client.query('ROLLBACK');throw error}};
 const bootstrap=async client=>transaction(client,'auth bootstrap',`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid primary key);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
-const apply=async(client,list)=>{for(const name of list)await transaction(client,name,await readFile(join('supabase/migrations',name),'utf8'))};
+const apply=async(client,list)=>{for(const name of list)await applySyntheticAiTerminalJournalMigrationForTest(client,name,async()=>transaction(client,name,await readFile(join('supabase/migrations',name),'utf8')))};
 const createDatabase=async(admin,name)=>{assert.match(name,/^[a-z0-9_]+$/);assert.equal((await admin.query('SELECT 1 FROM pg_database WHERE datname=$1',[name])).rowCount,0);await admin.query(`CREATE DATABASE ${name}`);databases.push(name);const client=await connect(urlFor(name));await bootstrap(client);return client};
 const emit=(testId,assertionId,fixture,runtimeContext)=>console.log(`PR_B_ASSERTION ${JSON.stringify({testId,assertionId,fixture,result:'passed',runtimeContext})}`);
 const context=(persona,organizationId,workspaceId,lineage)=>({persona:{id:persona.id,state:'active',capabilities:[...persona.capabilities].sort()},organizationId,workspaceId,lineage});

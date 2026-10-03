@@ -23,6 +23,8 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20260924113000_pr_c_synthetic_acceptance_execution_kind.sql',
   '20260926053818_pr_c_synthetic_studio_provider_free_fixture.sql',
   '20260928060000_pr_c_synthetic_direct_planning_generation.sql',
+  '20261003015246_synthetic_ai_final_paid_validation_continuation.sql',
+  '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {

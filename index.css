@@ -4,9 +4,62 @@
   high-trust surfaces, restrained motion, and clear decision states.
 */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@config "./tailwind.config.js";
+@source "./index.html";
+@source "./App.tsx";
+@source "./index.tsx";
+@source "./components/**/*.{ts,tsx}";
+
+/* Preserve the Tailwind 3 defaults used by the existing visual system. */
+@theme {
+  --default-ring-width: 3px;
+  --default-ring-color: #6366f1;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
+  }
+}
+
+@utility flex-shrink-0 {
+  flex-shrink: 0;
+}
+
+.outline-none,
+.focus\:outline-none:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Preserve the existing modal backdrop across the Tailwind palette change. */
+.bg-slate-950\/60 { background-color: rgb(2 6 23 / 0.6); }
+
+/* Tailwind 4 removed the opacity helpers still used by legacy widget classes. */
+.bg-abz-azure-500.bg-opacity-10 { background-color: rgb(37 99 235 / 0.1); }
+.bg-abz-amber-500.bg-opacity-10 { background-color: rgb(255 188 3 / 0.1); }
+.bg-abz-red-500.bg-opacity-10 { background-color: rgb(239 68 68 / 0.1); }
+.bg-abz-indigo-500.bg-opacity-10 { background-color: rgb(0 44 75 / 0.1); }
+.bg-abz-primary.hover\:bg-opacity-90:hover { background-color: color-mix(in srgb, var(--av-color-brand-primary) 90%, transparent); }
 
 :root {
   color-scheme: light;

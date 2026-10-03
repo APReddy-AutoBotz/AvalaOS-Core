@@ -6,6 +6,7 @@ import './prCSyntheticBrowserPrerequisites.test.mjs';
 import './prCSyntheticBrowserEvidenceActions.test.mjs';
 import './prCSyntheticBrowserResponseLoss.test.mjs';
 import { chromium } from '@playwright/test';
+import { buildTailwindBrowserFixtureCss } from './buildTailwindBrowserFixtureCss.mjs';
 
 import {
   CONTROLLED_HUMAN_CATALOG,
@@ -462,9 +463,6 @@ test('evidence readiness fails closed for missing, blocked, and duplicate surfac
 
 test('completed evidence leaves workspace actions clickable in the fixed-height app shell', async () => {
   const { build } = await import('vite');
-  const { default: postcss } = await import('postcss');
-  const { default: tailwindcss } = await import('tailwindcss');
-  const { default: tailwindConfig } = await import('../tailwind.config.js');
   const stepId = 'resolve-material-assess-conflict';
   const safeAnchor = { stepId, ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`anchorField${i}`, exerciseDigest])) };
   const safeBinding = { stepId, ...Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`bindingField${i}`, exerciseDigest])) };
@@ -547,11 +545,7 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
       },
     }],
   });
-  const css = await postcss([tailwindcss({ ...tailwindConfig, content: [
-    { raw: source, extension: 'tsx' },
-    { raw: await readFile(new URL('../components/auth/ControlledHumanNonProductionBanner.tsx', import.meta.url), 'utf8'), extension: 'tsx' },
-    { raw: await readFile(new URL('../components/enterprise/AssessTranscriptCandidateReview.tsx', import.meta.url), 'utf8'), extension: 'tsx' },
-  ] })]).process(await readFile(new URL('../index.css', import.meta.url), 'utf8'), { from: undefined });
+  const css = await buildTailwindBrowserFixtureCss(source);
   const browser = await chromium.launch();
   try {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 412, height: 915 }]) {
@@ -560,7 +554,7 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
       page.on('pageerror', error => pageErrors.push(error.message));
       await page.route('**/*', route => route.abort());
       await page.setContent('<div id="root"></div>');
-      await page.addStyleTag({ content: css.css });
+      await page.addStyleTag({ content: css });
       await page.addScriptTag({ content: compiled[0].output.find(file => file.type === 'chunk').code });
       assert.deepEqual(pageErrors, []);
       await page.getByLabel('Locked input bundle').selectOption('bundle:bundle-v1');
@@ -582,7 +576,7 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
         await proofPage.route('**/*', route => route.abort());
         await proofPage.setContent('<div id="root"></div>');
         await proofPage.evaluate(mode => { window.proofMode = mode; }, mode);
-        await proofPage.addStyleTag({ content: css.css });
+        await proofPage.addStyleTag({ content: css });
         await proofPage.addScriptTag({ content: compiled[0].output.find(file => file.type === 'chunk').code });
         const interactions = [];
         if (mode === 'delayed') {

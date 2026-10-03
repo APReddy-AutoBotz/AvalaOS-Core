@@ -5,6 +5,7 @@ import {readFile, readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 execFileSync(process.execPath, ['scripts/testEnterpriseIntelligenceMigration.mjs'], {stdio: 'inherit'});
 
@@ -39,7 +40,7 @@ const urlFor = name => { const url = new URL(adminUrl); url.pathname = `/${name}
 const connect = async url => { const client = new Client({connectionString: url}); await client.connect(); clients.push(client); return client; };
 const transaction = async (client, label, sql) => {
   await client.query('BEGIN');
-  try { await client.query(sql); await client.query('COMMIT'); console.log(`APPLIED ${label}`); }
+  try { await client.query(sql.replaceAll('\r\n', '\n')); await client.query('COMMIT'); console.log(`APPLIED ${label}`); }
   catch (error) { await client.query('ROLLBACK'); throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`); }
 };
 const bootstrap = client => transaction(client, 'Supabase auth bootstrap', `
@@ -51,7 +52,9 @@ const bootstrap = client => transaction(client, 'Supabase auth bootstrap', `
   GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 `);
 const apply = async (client, list) => {
-  for (const name of list) await transaction(client, name, await readFile(join('supabase/migrations', name), 'utf8'));
+  for (const name of list) await applySyntheticAiTerminalJournalMigrationForTest(
+    client, name, async () => transaction(client, name, await readFile(join('supabase/migrations', name), 'utf8')),
+  );
 };
 const createDatabase = async (admin, name) => {
   assert.match(name, /^[a-z0-9_]+$/);

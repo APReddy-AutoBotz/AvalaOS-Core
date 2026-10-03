@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import pg from 'pg';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
 import {assertEnterpriseProjectionSchema,assertEnterpriseProjectionDatabaseColumns,extractEnterpriseProjectionSchemaContract} from './enterpriseProjectionSchemaContract.mjs';
+import {applySyntheticAiTerminalJournalMigrationForTest} from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const adminUrl=process.env.TRANSCRIPT_FLOW_MIGRATION_DATABASE_URL;
 if(!adminUrl){
@@ -27,7 +28,7 @@ const urlFor=name=>{const value=new URL(adminUrl);value.pathname=`/${name}`;retu
 const connect=async url=>{const client=new Client({connectionString:url});await client.connect();clients.push(client);return client};
 const transaction=async(client,label,sql)=>{
   await client.query('BEGIN');
-  try{await client.query(sql);await client.query('COMMIT');console.log(`APPLIED ${label}`)}
+  try{await client.query(sql.replaceAll('\r\n','\n'));await client.query('COMMIT');console.log(`APPLIED ${label}`)}
   catch(error){await client.query('ROLLBACK');throw new Error(`${label}: ${error instanceof Error?error.message:String(error)}`)}
 };
 const sha=value=>createHash('sha256').update(value).digest('hex');
@@ -81,7 +82,7 @@ try{
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
   `);
-  for(const name of migrations)await transaction(database,name,await readFile(join('supabase/migrations',name),'utf8'));
+  for(const name of migrations)await applySyntheticAiTerminalJournalMigrationForTest(database,name,async()=>transaction(database,name,await readFile(join('supabase/migrations',name),'utf8')));
   assert.ok(Number((await database.query("SELECT current_setting('server_version_num')::int version")).rows[0].version)>=160000);
 
   const enterpriseProjectionSource=await readFile('supabase/functions/_shared/enterpriseIntelligenceQuery.ts','utf8');
