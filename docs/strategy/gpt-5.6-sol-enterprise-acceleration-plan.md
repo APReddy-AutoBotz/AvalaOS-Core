@@ -1,5 +1,16 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Approved paid-validation continuation (2026-10-03)
+
+PR #264 is merged with its complete provider-free acceptance evidence and passing
+post-merge CI. AP's new maximum-USD-10 paid-validation approval continues the
+original cumulative campaign cap. Follow the active AI-output correction plan
+for a guarded historical mapping no-effect recovery and one second-and-final
+two-effect window: provider validation plus a joined-source BRD. Preserve prior
+charges and all data; no automatic paid retry, production or new provider follows.
+Use focused local recovery/budget checks, required exact-head CI and an attested
+deployment to the existing dedicated AI synthetic target before activation.
+
 ## PR #264 solo-owner acceptance continuation (2026-09-24)
 
 AP approved `docs/planning/solo-developer-synthetic-acceptance-plan.md` on the

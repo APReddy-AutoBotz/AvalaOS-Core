@@ -1,5 +1,92 @@
 # Assess and Studio AI output correction
 
+## Joined paid-AI validation continuation (2026-10-03)
+
+AP explicitly approved using the retained assessed-handoff BRD draft after live
+readback corrected the initial mixed-source/PDD assumption. The binding requires
+`source_mode=assess_handoff`, assessed lineage, the exact accepted handoff and
+package hash, and an empty BRD aggregate; mixed and independent packages are
+excluded. This does not authorize another effect or increase the original cap.
+
+AP authorized real paid AI validation with a maximum USD 10 on 2026-10-03.
+This continuation conservatively retains the ORIGINAL cumulative USD 10 ceiling,
+all historical charges and the same campaign. PR #264 is merged as
+`2f8208420ec3b40c03ea50f92e7bb9746142eef9`; its 84-step provider-free acceptance
+and post-merge CI passed. Those results are not real-provider quality proof.
+
+The first paid pass is exactly one fresh provider validation followed by one BRD
+generation from the retained Assess → Govern → Studio source package. It uses the
+existing first-party OpenAI configuration and pinned model only. The maximum new
+conservative charge is USD 0.9429184, giving an aggregate ceiling of USD 4.6409936
+for this pass, below the unchanged USD 10 campaign cap. Assess remapping,
+independent Studio extraction, other document types/providers and automatic paid
+retries are outside this two-effect window.
+
+Read-only architecture, security and quality reviews closed before writes.
+The dedicated `avalaos-ai-synthetic` project was resumed under this authorization.
+Hosted preflight confirmed migration tip `20260923190853`, one expired enabled
+campaign, one expired renewal, six consumed currency debits, exactly
+USD 3.6980752 retained, both provider runtimes off, and one joined source package
+with no generated version. Existing provider-free projects remain untouched.
+
+Preflight also found one historical uncertain Assess mapping token reservation
+from the 2026-09-23 output-limit mismatch. Its receipt is terminal failed, the
+mapping run is claimed, and it has no currency debit, staged output, proposals or
+applications. The mapping-specific API cannot reconcile that state. Implement a
+service-only, fresh-admin, exact-target no-effect reconciliation with locked
+identity and durable no-effect checks, preserving the reservation and failed
+history. Only its state/reconciliation metadata may change; no currency charge is
+refunded and no old mapping run becomes executable. Any effect, output, identity
+mismatch or different uncertainty rejects. Record an append-only reconciliation
+record and support exact replay without a second transition.
+
+In the same implementation slice, add one immutable second-and-final approval
+window for the original campaign, limited to the two effects above and at most
+24 hours. Activation requires the exact retained debit multiset, unchanged carry
+and cap, no unresolved reservation or pending ownership transfer, runtimes off,
+and fresh exact admin/target/provider/key/route bindings. Installation creates no
+paid authority. Reserve and consume bind each new debit to the active window,
+reject old permits and operation substitution, serialize concurrent allocation,
+and retain the token budgets and irreversible disable control.
+
+Acceptance: focused disposable PostgreSQL fresh/populated recovery and
+continuation checks, negative identity/budget/expiry/concurrency/replay cases,
+affected contracts/typechecks/static checks, then required exact-head CI and
+source-attested synthetic deployment. Apply the canonical pending migrations in
+order, with provider execution off. Reconcile the historical no-effect reservation
+through the new RPC, independently read it back, and activate the two-effect window
+only immediately before actual business testing.
+
+The retained input is a manually declared synthetic AP case with two primitives
+(capture and human policy review), an approve/escalate decision, and an incomplete-
+request exception. It explicitly does not derive from the earlier AI-ingested
+transcript or SOP. The paid BRD must preserve that distinction and its unknown
+agent-necessity, volume, effort, and technical-health facts. This pass does not
+prove useful Assess extraction or a complete AI-assisted intake journey.
+
+For the paid BRD, verify the exact joined package/handoff/template and source
+versions; strict sections and valid citations; grounded roles and rules;
+explicit unknowns; no invented interfaces, thresholds or compliance claims.
+Reopen the committed immutable draft and compare its version, content and lineage.
+Provider HTTP success alone is insufficient. Keep the draft unapproved and do not
+perform downstream handoffs. Record actual usage separately from conservative
+charges; an invoice is not independently verified.
+
+Stop on the first unexpected or ambiguous result; retain its charge and reconcile
+the same operation without a new paid attempt. Disable provider runtimes at the
+end or on failure and preserve all data. Rollback withholds activation or disables
+the new window/campaign using its existing controls; do not reverse immutable
+ledger history. Production deployment and broader readiness are not authorized.
+Executed local evidence: all eight focused PostgreSQL 16 scenarios passed,
+covering fresh/populated migration, immutable history, guarded concurrent
+recovery/activation, identity and runtime denial, ordered effect allocation,
+expiry, third-effect denial, and migration reapply. Both disposable databases
+were dropped and independently confirmed absent. The CI command contract also
+passed all 12 checks, and the migration-tail contract passed 8/8. No provider
+call or hosted mutation occurred in these tests.
+Required exact-head CI, hosted recovery/activation, and the real paid BRD remain
+`not run`. No new paid effect has occurred.
+
 ## Studio independent-source integration correction (2026-09-24)
 
 Objective: make the already-approved direct Studio source journey operable for a

@@ -1,5 +1,20 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Paid continuation preflight (2026-10-03)
+
+Executed evidence: PR #264's 84-step synthetic acceptance and post-merge CI passed.
+The resumed dedicated AI target retains six consumed debits totaling USD 3.6980752
+including carry, an expired campaign/renewal, and disabled provider runtimes.
+Confirmed source defects: the one-time renewal cannot represent AP's new bounded
+approval; the mapping budget API cannot reconcile a historical uncertain
+reservation whose failed receipt has no currency debit, staged output or proposals.
+The active AI-output plan owns a guarded no-effect recovery and a two-effect
+continuation under the unchanged USD 10 cumulative cap. No new paid effect or
+production action has occurred. Actual joined generated-document quality remains
+not run until independently observed; preserve failed and historical evidence.
+Focused local PostgreSQL evidence passed all eight recovery/continuation scenarios
+with verified disposable-database cleanup; the CI command contract passed 12/12.
+
 ## PR #264 approved synthetic acceptance correction (2026-09-24)
 
 The owner approved the scoped replacement policy in

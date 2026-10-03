@@ -1,5 +1,19 @@
 # AvalaOS Core Source Of Truth
 
+## Post-merge paid AI validation (2026-10-03)
+
+PR #264 merged as `2f8208420ec3b40c03ea50f92e7bb9746142eef9` after independently
+verified 84/84 synthetic steps, all 18 candidate workflows and passing post-merge
+CI. `CONTROLLED-HUMAN` remains `not_run` under the approved PR-specific waiver.
+AP now authorizes real AI validation with a USD 10 maximum; the original
+cumulative ceiling and prior USD 3.6980752 conservative charge remain preserved.
+The active AI-output correction plan owns a two-effect continuation: fresh
+provider validation and one BRD from the retained joined Assess→Studio package.
+Hosted preflight found an expired one-time renewal and one historical no-effect
+mapping reservation needing guarded reconciliation. Both provider runtimes are
+off; no new paid effect has occurred. Focused local recovery/continuation checks passed; hosted recovery/activation
+and actual output quality remain pending. This is not production readiness or production deployment authority.
+
 ## PR #264 solo-owner synthetic acceptance authority (2026-09-24)
 
 AP approved the PR-specific `solo-owner-synthetic-v1` plan in

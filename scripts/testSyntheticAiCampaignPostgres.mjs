@@ -181,7 +181,7 @@ try{
  await setRequestHost(client);
 
  phase='default_off_and_schema';
- check((await one(client,`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).migration_tip,baselineUpgrade?'20260917173445':'20260928060000');
+ check((await one(client,`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).migration_tip,baselineUpgrade?'20260917173445':'20261003015246');
  check(await count(client,'public.synthetic_ai_campaign_authorities'),0);
  check(await count(client,'public.synthetic_ai_campaign_effect_debits'),0);
  const schema=(await one(client,`SELECT

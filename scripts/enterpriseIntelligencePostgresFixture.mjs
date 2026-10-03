@@ -4,8 +4,8 @@ import {createApprovedStudioFixture} from './studioPrivateArtifactPostgresFixtur
 const uuid = number => `99000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const hash = character => character.repeat(64);
 
-export async function createEnterpriseIntelligenceFixture(db) {
-  const studio = await createApprovedStudioFixture(db);
+export async function createEnterpriseIntelligenceFixture(db, artifactType = 'brd') {
+  const studio = await createApprovedStudioFixture(db, artifactType);
   const enterpriseCapabilities = [
     'byok.manage', 'security.manage',
     'evidence.write', 'evidence.review', 'assessment.edit', 'approvals.review',

@@ -1,5 +1,17 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Paid validation continuation boundary (2026-10-03)
+
+The post-PR-264 paid pass retains the same synthetic campaign, immutable original
+carry/debits and USD 10 aggregate ceiling. A service-only recovery may reconcile
+only the exact proven no-effect historical mapping reservation under fresh admin
+authority; it cannot reactivate that run or refund currency. A new immutable
+second-and-final window permits one provider validation and one joined-source BRD
+generation. Exact window-bound one-use permits, serialized currency allocation,
+token budgets, target/route/key bindings and independent output readback remain
+mandatory. Installation alone grants no provider authority. See the active
+AI-output correction plan for the bounded rollout and read-only fallback.
+
 ## PR #264 synthetic acceptance evidence boundary
 
 The AP-approved `solo-owner-synthetic-v1` policy authorizes one controller to
