@@ -51,6 +51,9 @@
   outline-offset: 2px;
 }
 
+/* Preserve the existing modal backdrop across the Tailwind palette change. */
+.bg-slate-950\/60 { background-color: rgb(2 6 23 / 0.6); }
+
 /* Tailwind 4 removed the opacity helpers still used by legacy widget classes. */
 .bg-abz-azure-500.bg-opacity-10 { background-color: rgb(37 99 235 / 0.1); }
 .bg-abz-amber-500.bg-opacity-10 { background-color: rgb(255 188 3 / 0.1); }

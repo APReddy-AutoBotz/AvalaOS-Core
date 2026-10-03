@@ -1,5 +1,28 @@
 # Assess and Studio AI output correction
 
+## CI follow-up on dependency repair (2026-10-03)
+
+Candidate `3140a93` reached a ready Netlify preview, but CI identified four
+confirmed source/test integration defects: the separate acceptance inventory still
+hashed the old CSS/package sources; four exact static-scan allowlist entries kept
+old line numbers after test edits; Tailwind's changed slate palette altered the
+existing modal backdrop; and a delayed-response harness control was covered by
+its open confirmation dialog. These are retained separately from paid proof.
+
+Corrections preserve the original modal color, update only existing allowlist line
+bindings and affected source hashes, and position only the test harness's response
+release control above its modal. No runtime approval behavior or assertion was
+weakened. Focused executed evidence: AI boundary and secret hygiene scans passed;
+acceptance inventory validation and its negative provenance tests passed; the
+cleanup-boundary regression passed; both desktop/mobile modal assertions passed;
+and all four selected delayed-baseline browser cases passed. The standalone modal
+runner printed both successful cases but hung during local Windows server teardown
+and was interrupted afterward; its two assertions are not represented as a clean
+runner exit. The dedicated baseline runner completed with exit 0.
+
+Refresh the PR C bindings after these edits. New-head CI and preview are still
+required; no additional paid call, hosted mutation or merge is authorized.
+
 ## Current dependency and evidence binding repair (2026-10-03)
 
 The user authorized next steps after the completed paid and downstream synthetic

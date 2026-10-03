@@ -96,7 +96,7 @@
     {
       "pattern": "localStorage",
       "path": "scripts/prCSyntheticAcceptanceBrowser.test.mjs",
-      "lines": [206, 215],
+      "lines": [207, 216],
       "reason": "test/control documentation",
       "futureAction": "Keep synthetic browser session setup and storage-state verification in this test only; never use browser storage as server authorization."
     },
@@ -320,7 +320,7 @@
       "pattern": "GROQ_API_KEY",
       "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
       "lines": [
-        59
+        69
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the provider-key name confined to build-boundary negative tests; never use a real provider value."
@@ -329,7 +329,7 @@
       "pattern": "GEMINI_API_KEY",
       "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
       "lines": [
-        61
+        71
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the provider-key name confined to build-boundary negative tests; never use a real provider value."
@@ -338,7 +338,7 @@
       "pattern": "VITE_GEMINI_API_KEY",
       "path": "scripts/writeHostedPilotNetlifyHeaders.test.mjs",
       "lines": [
-        261
+        319
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the synthetic browser-provider variable confined to a rejection test; never use a real provider value."
