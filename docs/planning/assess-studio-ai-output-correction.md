@@ -1,5 +1,70 @@
 # Assess and Studio AI output correction
 
+## BRD-v2 quality-validation allowance (2026-10-03)
+
+AP approved one bounded quality-validation continuation for the existing paid
+synthetic campaign. Migration
+`20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql` adds one
+immutable, service-only window for the already approved prompt-v2 BRD source and
+aggregate. It does not reopen or modify the fully consumed final continuation.
+The original USD 10 cap, USD 0.4714592 fixed debit, USD 4.6409936 baseline and
+all eight consumed debits remain authoritative. A fresh provider configuration
+permits exactly one BRD generation, capped at USD 5.1124528 aggregate. A stale
+configuration permits one validation followed by one BRD generation, capped at
+USD 5.583912 aggregate. Installation creates no window and requires both provider
+runtimes off.
+
+Activation binds the exact target, fresh admin authority, campaign, consumed
+predecessor, provider/key/routes/model, release and source attestation, assessed
+source package and hash, artifact/template, current and approved v2 heads, prompt
+tuple `studio-multisource-generation@studio-pr-b-2`, generation actor and canonical
+provider-plan hash. Freshness is fixed at activation: a fresh window expires no
+later than its freshness boundary and cannot acquire a validation slot; a stale
+window requires its own consumed successful validation. Reserve and consume both
+recheck the immutable window, current route/plan/source/head bindings and branch
+freshness. Consumption precedes provider egress. Concurrent/replayed/substituted,
+expired, drifted or additional effects fail closed while retaining any debit that
+was already reserved. Existing v1/v2 versions and approved-v2 lineage are never
+rewritten; successful generation appends an ordinary draft v3 and leaves the
+approved pointer on v2.
+
+Focused executed evidence passed:
+
+- `node --test scripts/testSyntheticAiBrdV2QualityValidationMigration.mjs`:
+  3/3 passed, exit 0.
+- `node scripts/testSyntheticAiBrdV2QualityValidationPostgres.mjs` against the
+  isolated loopback PostgreSQL 16 fixture: 2/2 grouped scenarios passed, exit 0.
+  The test upgrades the predecessor chain, proves every pre-existing debit is
+  byte-equivalent after subtracting only the new nullable tag, proves every old
+  tag is null, preserves exact v1/v2 content and hashes, and confirms an
+  unexpired predecessor can consume its last reserved slot before a successor
+  exists. It exercises a real Studio request, claim, token reservation, campaign
+  reserve/consume, response stage, budget settlement and finalize with mocked
+  provider output. Freshness/route drift, redundant validation, consume-time
+  freshness changes, changed activation replay, a second generation and a second
+  validation all reject. Both disposable databases were dropped and confirmed
+  absent.
+- Integration checks: migration-tail and CI-command contracts passed 20/20;
+  Delivery/Monitor evidence contracts passed 75/75 with the unchanged 241 assertion
+  expectations and 85 commands. Acceptance inventory/provenance validation,
+  migration static checks, AI-boundary and secret-hygiene scans passed. Current
+  source bindings were refreshed; historical PR-B evidence was not rewritten.
+  The owned local PostgreSQL server was stopped with its data directory retained.
+
+The retained sanitized log is
+`output/local-private/brd-quality-postgres.log`. Earlier focused failures in that
+log were fixture defects (missing token reservation, missing canonical citations,
+and assertion parameter/type mistakes); the final source completed cleanly. No
+secret was read, no provider/network effect occurred, and no hosted system was
+inspected or mutated. Exact-head CI, deployment, activation and real BRD quality
+validation remain **not run**.
+
+Rollback keeps both runtimes provider-off or read-only and withholds activation.
+If a window has been activated, disable the existing campaign before any further
+effect. Retain the additive window, debit, attempt, version and audit rows; do not
+delete history, reopen predecessor authority, refund retained debits or relabel
+v1/v2 records. A corrective rollback must be a reviewed forward migration.
+
 ## BRD semantic-fidelity prompt version (2026-10-03)
 
 The retained paid BRD proved the governed provider path but exposed a semantic
