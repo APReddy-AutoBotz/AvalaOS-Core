@@ -40,6 +40,15 @@ refunded and no old mapping run becomes executable. Any effect, output, identity
 mismatch or different uncertainty rejects. Record an append-only reconciliation
 record and support exact replay without a second transition.
 
+Read-only preflight additionally confirmed that the historical mapping author
+differs from the current Admin operator. Reconciliation authorizes the fresh
+operator independently, then binds the original receipt/run/reservation actor,
+historical authorization version, token, fence and provider route to one another.
+Both identities are retained in immutable evidence. Distinct-actor positive cases,
+cross-row identity/version/token/fence denials, and replay lineage-drift denials
+passed in the eight-scenario PostgreSQL suite; historical receipt/run data remain
+unchanged. No hosted reconciliation or paid effect has occurred.
+
 In the same implementation slice, add one immutable second-and-final approval
 window for the original campaign, limited to the two effects above and at most
 24 hours. Activation requires the exact retained debit multiset, unchanged carry

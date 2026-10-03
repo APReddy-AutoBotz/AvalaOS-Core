@@ -9,10 +9,12 @@ globs and no product-runtime import or tenant/provider-input path to the affecte
 pattern parser. This limits the identified exposure to build/dev/test availability;
 it does not dismiss the advisory or establish general safety.
 
-A one-candidate, one-attempt synthetic-only risk exception is proposed, not
-approved. It would preserve the original two effects and cumulative budget, require
-all relevant non-audit checks separately, leave CI visibly failed and the PR
-unmergeable, and change no audit policy or dependency configuration. Production
+AP approved a one-candidate, one-attempt synthetic-only risk exception for
+`95922edb200693bc36bc0555443777c6c9c4c0a7`. A subsequent pre-deployment ownership
+correction changes that SHA, so the exception requires a fresh exact-head binding
+before use. It preserves the original two effects and cumulative budget, requires
+all relevant non-audit checks separately, leaves CI visibly failed and the PR
+unmergeable, and changes no audit policy or dependency configuration. Production
 and customer traffic remain outside scope. The existing low-severity DOMPurify
 advisory does not trigger the moderate gate; its IN_PLACE/hook trigger was not
 found in application source, and its available patch remains separate work.

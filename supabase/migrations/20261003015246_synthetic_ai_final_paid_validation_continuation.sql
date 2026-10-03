@@ -31,6 +31,8 @@ CREATE TABLE public.synthetic_ai_mapping_no_effect_reconciliations(
   receipt_id uuid NOT NULL UNIQUE REFERENCES public.enterprise_ai_command_receipts(id) ON DELETE RESTRICT,
   mapping_run_id uuid NOT NULL UNIQUE REFERENCES public.enterprise_assess_document_mapping_runs(id) ON DELETE RESTRICT,
   actor_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+  historical_actor_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+  historical_authorization_version bigint NOT NULL CHECK(historical_authorization_version>0),
   org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE RESTRICT,
   workspace_id uuid NOT NULL,
   authorization_version bigint NOT NULL CHECK(authorization_version>0),
@@ -155,13 +157,37 @@ BEGIN
       AND authority.org_id=p_org AND authority.workspace_id=p_workspace AND authority.operator_actor_id=p_actor
     FOR UPDATE;
   SELECT * INTO receipt FROM public.enterprise_ai_command_receipts row
-    WHERE row.id=p_receipt AND row.org_id=p_org AND row.workspace_id=p_workspace AND row.actor_id=p_actor FOR UPDATE;
+    WHERE row.id=p_receipt AND row.org_id=p_org AND row.workspace_id=p_workspace FOR UPDATE;
   SELECT * INTO mapping_run FROM public.enterprise_assess_document_mapping_runs row
     WHERE row.id=p_mapping_run AND row.org_id=p_org AND row.workspace_id=p_workspace
-      AND row.receipt_id=p_receipt AND row.created_by=p_actor FOR UPDATE;
+      AND row.receipt_id=p_receipt FOR UPDATE;
   SELECT * INTO reservation FROM public.enterprise_ai_budget_reservations row
     WHERE row.id=p_reservation AND row.org_id=p_org AND row.workspace_id=p_workspace
       AND row.receipt_id=p_receipt AND row.assess_mapping_run_id=p_mapping_run FOR UPDATE;
+  -- Fresh Admin authority belongs to the reconciler. Historical execution
+  -- identity belongs to the original author and must agree across locked rows.
+  IF campaign.id IS NULL OR receipt.id IS NULL OR mapping_run.id IS NULL OR reservation.id IS NULL
+    OR receipt.actor_id IS NULL OR mapping_run.created_by IS DISTINCT FROM receipt.actor_id
+    OR reservation.actor_id IS DISTINCT FROM receipt.actor_id
+    OR reservation.authorization_version IS NULL OR reservation.authorization_version<=0
+    OR mapping_run.authorization_version IS DISTINCT FROM reservation.authorization_version
+    OR receipt.execution_token IS NULL OR mapping_run.execution_token IS DISTINCT FROM receipt.execution_token
+    OR reservation.execution_token IS DISTINCT FROM receipt.execution_token
+    OR receipt.execution_fence IS NULL OR receipt.execution_fence<=0
+    OR mapping_run.execution_fence IS DISTINCT FROM receipt.execution_fence
+    OR reservation.execution_fence IS DISTINCT FROM receipt.execution_fence
+    OR mapping_run.route_id IS DISTINCT FROM reservation.route_id
+    OR mapping_run.provider_config_id IS DISTINCT FROM reservation.provider_config_id
+    OR mapping_run.provider IS DISTINCT FROM reservation.provider OR mapping_run.model IS DISTINCT FROM reservation.model
+    OR reservation.route_id IS DISTINCT FROM campaign.assess_route_id
+    OR reservation.provider_config_id IS DISTINCT FROM campaign.provider_config_id
+    OR reservation.provider IS DISTINCT FROM campaign.provider OR reservation.model IS DISTINCT FROM campaign.model
+  THEN RAISE EXCEPTION 'SYNTHETIC_AI_MAPPING_RECONCILIATION_LINEAGE_MISMATCH';END IF;
+  digest_value:='sha256:'||encode(public.digest(convert_to(concat_ws('|','synthetic-ai-mapping-no-effect-v1',
+    campaign.id::text,p_reservation::text,p_receipt::text,p_mapping_run::text,p_actor::text,p_org::text,p_workspace::text,
+    p_authorization_version::text,p_target_fingerprint,p_project_ref,reservation.failure_class,reservation.reserved_at::text,
+    reservation.reserved_tokens::text,receipt.actor_id::text,reservation.authorization_version::text,
+    receipt.execution_token::text,receipt.execution_fence::text),'UTF8'),'sha256'),'hex');
   SELECT * INTO prior FROM public.synthetic_ai_mapping_no_effect_reconciliations row
     WHERE row.reservation_id=p_reservation;
   IF prior.id IS NOT NULL THEN
@@ -169,6 +195,9 @@ BEGIN
       OR prior.mapping_run_id IS DISTINCT FROM p_mapping_run OR prior.actor_id IS DISTINCT FROM p_actor
       OR prior.org_id IS DISTINCT FROM p_org OR prior.workspace_id IS DISTINCT FROM p_workspace
       OR prior.authorization_version IS DISTINCT FROM p_authorization_version
+      OR prior.historical_actor_id IS DISTINCT FROM receipt.actor_id
+      OR prior.historical_authorization_version IS DISTINCT FROM reservation.authorization_version
+      OR prior.reconciliation_digest IS DISTINCT FROM digest_value
       OR prior.target_fingerprint IS DISTINCT FROM p_target_fingerprint OR prior.project_ref IS DISTINCT FROM p_project_ref
       OR reservation.state<>'released' OR reservation.release_reason<>'reconciled_no_effect'
     THEN RAISE EXCEPTION 'SYNTHETIC_AI_MAPPING_RECONCILIATION_REPLAY_MISMATCH';END IF;
@@ -181,7 +210,7 @@ BEGIN
     OR receipt.id IS NULL OR receipt.status<>'failed' OR receipt.command_type<>'assess.document-map.analyze'
     OR receipt.runtime_area<>'ingestion' OR receipt.completed_at IS NULL
     OR receipt.response#>>'{error,code}' IS DISTINCT FROM 'COMMAND_UNAVAILABLE'
-    OR mapping_run.id IS NULL OR mapping_run.status<>'claimed' OR mapping_run.authorization_version IS DISTINCT FROM p_authorization_version
+    OR mapping_run.id IS NULL OR mapping_run.status<>'claimed'
     OR mapping_run.safe_result IS NOT NULL OR mapping_run.output_hash IS NOT NULL OR mapping_run.staged_payload_hash IS NOT NULL
     OR mapping_run.token_input IS NOT NULL OR mapping_run.token_output IS NOT NULL OR mapping_run.latency_ms IS NOT NULL
     OR reservation.id IS NULL OR reservation.authority_kind<>'assess_mapping' OR reservation.job_id IS NOT NULL
@@ -203,16 +232,12 @@ BEGIN
     OR EXISTS(SELECT 1 FROM public.synthetic_ai_campaign_effect_debits debit
       WHERE debit.receipt_id=p_receipt OR debit.assess_mapping_run_id=p_mapping_run OR debit.effect_id=p_mapping_run)
   THEN RAISE EXCEPTION 'SYNTHETIC_AI_MAPPING_RECONCILIATION_UNSAFE';END IF;
-  digest_value:='sha256:'||encode(public.digest(convert_to(concat_ws('|','synthetic-ai-mapping-no-effect-v1',
-    campaign.id::text,p_reservation::text,p_receipt::text,p_mapping_run::text,p_actor::text,p_org::text,p_workspace::text,
-    p_authorization_version::text,p_target_fingerprint,p_project_ref,reservation.failure_class,reservation.reserved_at::text,
-    reservation.reserved_tokens::text),'UTF8'),'sha256'),'hex');
   result_value:=jsonb_build_object('status','reconciled_no_effect','campaignId',campaign.id,
     'reservationId',p_reservation,'receiptId',p_receipt,'mappingRunId',p_mapping_run,'reconciliationDigest',digest_value);
   INSERT INTO public.synthetic_ai_mapping_no_effect_reconciliations(campaign_id,reservation_id,receipt_id,mapping_run_id,
-    actor_id,org_id,workspace_id,authorization_version,target_fingerprint,project_ref,retained_failure_class,
+    actor_id,historical_actor_id,historical_authorization_version,org_id,workspace_id,authorization_version,target_fingerprint,project_ref,retained_failure_class,
     retained_receipt_error_code,retained_reserved_at,retained_reserved_tokens,reconciliation_digest,result)
-  VALUES(campaign.id,p_reservation,p_receipt,p_mapping_run,p_actor,p_org,p_workspace,p_authorization_version,
+  VALUES(campaign.id,p_reservation,p_receipt,p_mapping_run,p_actor,receipt.actor_id,reservation.authorization_version,p_org,p_workspace,p_authorization_version,
     p_target_fingerprint,p_project_ref,reservation.failure_class,'COMMAND_UNAVAILABLE',reservation.reserved_at,
     reservation.reserved_tokens,digest_value,result_value) RETURNING * INTO inserted;
   UPDATE public.enterprise_ai_budget_reservations SET state='released',release_reason='reconciled_no_effect',
