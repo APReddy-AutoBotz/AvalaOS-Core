@@ -27,7 +27,7 @@ const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_
 
 test('creation PostgreSQL runner executes the real migration-order preflight with the synthetic acceptance successor last', () => {
   const source = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
-  const start = source.indexOf('  const creationStart =');
+  const start = source.indexOf('  assert.equal(migrations.length,');
   const end = source.indexOf('  const apply =', start);
   assert.ok(start >= 0 && end > start, 'Actual runner preflight must be present');
   const preflight = source.slice(start, end);
@@ -90,7 +90,7 @@ test('fresh-chain identity derives only from the validated approved successor ta
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
   assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261004025101')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 97)'));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 98)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
   assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261004025101'/u);

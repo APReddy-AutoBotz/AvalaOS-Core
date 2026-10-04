@@ -44,7 +44,7 @@ Executed local verification:
 - Migration-tail tests passed 8/8. Delivery/Monitor evidence-contract tests passed 75/75 with all 241 registered assertion expectations and 85 commands retained. Acceptance inventory/provenance validation passed. Current source bindings were refreshed; historical evidence was not rewritten.
 - Final Edge typecheck and the 14-case mocked PostgreSQL pipeline passed again after the source-selector guard was added. No broad local browser/product regression suite was run.
 
-The first prompt upgrade run exposed a fixture conflict: a staged v2 attempt was still active when the test requested v3. The corrected test validly finalizes v2 first. A direct-source runtime fixture also needed its original template restored. The corrected focused runs passed. Exact-head CI remains pending at publication. Real prompt-v3 provider quality, hosted rollout and production validation are **not run**.
+The first prompt upgrade run exposed a fixture conflict: a staged v2 attempt was still active when the test requested v3. The corrected test validly finalizes v2 first. A direct-source runtime fixture also needed its original template restored. The corrected focused runs passed. Initial candidate CI found a stale creation-access migration-count assertion: it still expected 97 after the new migration raised the chain to 98. The runner and its focused contract now expect 98, and its actual preflight assertions were executed locally without launching the unrelated database scenarios. Exact-head CI remains pending at publication. Real prompt-v3 provider quality, hosted rollout and production validation are **not run**.
 
 
 ## BRD-v2 quality-validation allowance (2026-10-03)
