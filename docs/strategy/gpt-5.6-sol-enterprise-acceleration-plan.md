@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current BRD-v3 validation allowance (2026-10-04)
+
+PR #268 is merged, CI-green and source-verified on the authorized synthetic target. Its deployment preserved 20 protected tables, all nine consumed effects and USD 5.1124528 aggregate. Both providers remain OFF. Real prompt-v3 quality is not yet proven.
+
+AP's next-step instruction authorizes preparing one bounded validation allowance under the original USD 10 cap. All three read-only architecture, security and quality reviews closed before writes. Their reconciled design extends the existing immutable quality-window table, preserves the v2 branch exactly, and reuses the existing reserve/consume path. One implementation worker owns migration, focused tests and task-plan updates; the root owns integration, current authority, evidence and the single PR. The fixed workspace-write profile is now used only for that package; no nested delegation.
+
+Allow one prompt-v3 generation and optional stale-provider validation, with aggregate ceilings USD 5.583912 / USD 6.0553712. No generic allowance framework, runtime change, paid retry or historical reset. Verify focused fresh/stale PostgreSQL paths, immutable history, slot contention, migration/CI contracts and affected budget integration. Keep ordinary CI enforcement. Stop at the implementation PR boundary; merge and hosted activation need their own authority.
+
 ## Current source-fact retention slice (2026-10-04)
 
 PR #267 is merged and its approved one-generation synthetic validation is complete: technical PASS, semantic needs-improvement; conservative cumulative debit USD 5.1124528, nine consumed effects, zero unresolved reservations, providers OFF at last check. The consumed allowance remains closed.

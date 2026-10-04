@@ -37,9 +37,9 @@ test('one-time renewal tests are mandatory and cannot be substituted by green ex
   assert.equal(postgres.filter(command => command.name === 'test:assess-import:campaign-renewal').length, 1);
   assert.equal(feature.filter(command => command.name === 'test:synthetic-ai-renewal-contract').length, 1);
   assert.equal(postgres.find(command => command.name === 'test:assess-import:campaign-renewal').script,
-    'node scripts/testSyntheticAiCampaignRenewalPostgres.mjs && node scripts/testSyntheticAiFinalContinuationPostgres.mjs && node scripts/testSyntheticAiBrdV2QualityValidationPostgres.mjs');
+    'node scripts/testSyntheticAiCampaignRenewalPostgres.mjs && node scripts/testSyntheticAiFinalContinuationPostgres.mjs && node scripts/testSyntheticAiBrdV2QualityValidationPostgres.mjs && node scripts/testSyntheticAiBrdV3QualityValidationPostgres.mjs');
   assert.equal(feature.find(command => command.name === 'test:synthetic-ai-renewal-contract').script,
-    'node --test scripts/testSyntheticAiCampaignRenewalMigration.mjs scripts/testSyntheticAiBrdV2QualityValidationMigration.mjs');
+    'node --test scripts/testSyntheticAiCampaignRenewalMigration.mjs scripts/testSyntheticAiBrdV2QualityValidationMigration.mjs scripts/testSyntheticAiBrdV3QualityValidationMigration.mjs');
   for (const [group, name] of [['postgres','test:assess-import:campaign-renewal'], ['feature','test:synthetic-ai-renewal-contract']]) {
     assert.throws(() => assessImportCommands(group, {...scripts, [name]: 'node -e "process.exit(0)"'}), /SUBSTITUTED/);
   }

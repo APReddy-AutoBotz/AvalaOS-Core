@@ -1,5 +1,13 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## BRD-v3 one-use validation boundary (2026-10-04)
+
+The deployed prompt-v3 correction needs a fresh allowance because the prompt-v2 window is consumed. Extend the existing immutable quality-window table with one same-campaign predecessor reference and exact v2/v3 branch constraints. Preserve all existing rows and the legacy debit FK name; it remains the single canonical quality-window tag. Permit at most one row per campaign and prompt version, and at most one successor to a prior window. A superseded predecessor never becomes active again, even after its successor expires.
+
+New service-only v3 activation requires providers OFF, the exact synthetic target and original campaign, fresh administrator/generation authority, exact consumed prompt-v2 predecessor and nine-debit baseline, no unresolved reservations, and source/template/provider/route/head/release bindings. The current draft v3 must descend from the consumed predecessor's completed Studio generation; approved v2 remains separate and unchanged. Existing generic reserve/consume checks derive prompt and plan identity from the immutable window. One generation, plus validation only when stale, is bounded to USD 5.583912 or USD 6.0553712 aggregate within the original USD 10 cap.
+
+This is a database-only allowance extension, not a new provider/runtime path. Installing its schema creates no window or activation. Normal Studio finalization can append only an unapproved draft v4. Rollback keeps providers OFF/read-only or disables the campaign, retaining all windows, debits, attempts, versions and audit history. Fresh real-provider semantic quality remains unproven until the separately authorized run and source comparison complete.
+
 ## BRD source-fact retention boundary (2026-10-04)
 
 The approved PR #267 paid validation generated artifact draft v3 under prompt v2, with technical success but semantic omissions. Artifact version and prompt version are separate identities. This correction introduces `studio-pr-b-3` only for fresh BRD plans; old v1/v2 plans and staged responses retain exact historical behavior.

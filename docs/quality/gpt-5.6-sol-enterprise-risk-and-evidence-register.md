@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current BRD-v3 validation authority and evidence (2026-10-04)
+
+Executed evidence: PR #268 merged with the tested tree unchanged; candidate CI/preview and seven executed post-merge Core CI jobs passed. Its separately authorized synthetic Studio deployment and migration were source-verified, preserving 20 protected table snapshots. A fresh read-only check confirms nine consumed effects, USD 5.1124528 conservative aggregate, zero unresolved reservations, providers OFF, current draft v3 and approved v2. Provider validation is stale. No fresh prompt-v3 provider call has occurred; the invoice is not independently verified.
+
+Confirmed authority boundary: the old prompt-v2 window is fully consumed and cannot be reused. AP authorized preparation of a fresh bounded validation. The three closed read-only reviews agree on extending the existing immutable table and canonical ledger rather than adding a parallel spending path. Preserve the complete v2 constraint branch, same-campaign predecessor ancestry, unique successor and campaign/prompt identities, exact source/head/route bindings, and permanent predecessor supersession. A failed or uncertain effect retains its debit and grants no automatic retry.
+
+Executed evidence: static migration checks passed 3/3, fresh/stale allowance PostgreSQL scenarios 2/2, mocked production budget pipeline 14/14, and migration/CI contracts 20/20. The focused suite verifies existing-record preservation, service-only access, replay and activation substitution denials, two-connection slot contention, expiry without predecessor revival, new unapproved draft v4 and unchanged approved v2. A generated-constraint-name assumption and local expiry fixture were corrected before the passing results. No hosted or paid mutation occurred. Limits are one generation plus at most one stale-provider validation, aggregate USD 5.583912 / USD 6.0553712 within the original USD 10 cap. No approval, publication, Delivery/Monitor mutation, production or general AI-quality claim follows. Candidate CI remains pending at publication; paid validation is **not run**.
+
 ## BRD retention follow-up and paid evidence (2026-10-04)
 
 Executed evidence: PR #267 candidate/preview and post-merge CI passed. Its authorized synthetic migration preserved 19 protected table snapshots. One real prompt-v2 BRD generation committed and reopened draft v3, preserving prior v1/v2, approved-v2 pointer, five accepted Delivery items and five Monitor baseline items. Validation was fresh and skipped. Nine consumed effects retain USD 5.1124528 conservative aggregate; no unresolved reservations and providers OFF at last verification. The provider invoice is not independently verified.
