@@ -1,5 +1,15 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## BRD retention follow-up and paid evidence (2026-10-04)
+
+Executed evidence: PR #267 candidate/preview and post-merge CI passed. Its authorized synthetic migration preserved 19 protected table snapshots. One real prompt-v2 BRD generation committed and reopened draft v3, preserving prior v1/v2, approved-v2 pointer, five accepted Delivery items and five Monitor baseline items. Validation was fresh and skipped. Nine consumed effects retain USD 5.1124528 conservative aggregate; no unresolved reservations and providers OFF at last verification. The provider invoice is not independently verified.
+
+Confirmed source defect: v2 instructions explicitly require the missing facts but final validation covers structure/citations, not source-fact retention. The executed output omitted the case intermediate, named Finance owner, explicit incomplete-request resolution, and unknown effort/volume/technical health. It remains needs-improvement, not a quality PASS.
+
+Planned correction: prompt-v3-only deterministic retention of bounded canonical source facts alongside model prose. Fixed allowlisted paths, exact source-anchor binding, escaped values, pre-effect size/shape rejection and immutable stored prompt identity are required. Model prose can still contradict retained facts; retention is not semantic correctness, human approval or production readiness. No automatic retry or additional paid allowance follows.
+
+Executed evidence: focused runtime/recovery checks, local prompt-upgrade PostgreSQL and the 14-case mocked budget pipeline passed, including deficient-model retention, source-mode/anchor/reference rejection before budget, postcomposition limits, stored-v2 recovery and fresh-v3 selection. Source boundaries, migration static checks, 75 evidence-contract cases, acceptance provenance, Edge typecheck, AI-boundary and secret-hygiene checks passed. The active task plan records exact results and corrected fixture/compiler failures. Candidate CI is pending at publication. Real v3-provider quality remains **not run**. No new hosted inspection or mutation has occurred in this work package.
+
 ## Current one-use BRD validation risks and evidence (2026-10-03)
 
 Executed evidence: PR #266 merged with an identical tested tree; candidate CI,

@@ -62,7 +62,7 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20261003150800');
+  assert.equal(approvedFullChainTip(migrations), '20261004025101');
   assert.equal(migrations.length, 97);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
@@ -94,7 +94,8 @@ try {
   assert.equal(migrations[renewalIndex + 13], '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
   assert.equal(migrations[renewalIndex + 14], '20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
   assert.equal(migrations[renewalIndex + 15], '20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-  assert.equal(renewalIndex, migrations.length - 16);
+  assert.equal(migrations[renewalIndex + 16], '20261004025101_studio_brd_source_fact_retention_v3.sql');
+  assert.equal(renewalIndex, migrations.length - 17);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
@@ -127,7 +128,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20261003150800') => {
+  const assertFinalIdentity = async (db, expectedTip = '20261004025101') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {

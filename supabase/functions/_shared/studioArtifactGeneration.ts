@@ -10,6 +10,11 @@ import type { JsonObject } from './studioArtifactCommand.ts';
 import { rpc } from './supabase.ts';
 import type { StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
 import { normalizeStudioArtifactTemplate } from './studioArtifactTemplateContract.ts';
+import {
+  composeStudioBrdSourceFacts,
+  deriveStudioBrdSourceFacts,
+  StudioBrdSourceFactsError,
+} from './studioBrdSourceFacts.ts';
 
 export const STUDIO_GENERATION_FAILURE_CODES = [
   'PROVIDER_GOVERNANCE_BLOCKED', 'PROVIDER_REQUEST_FAILED', 'PROVIDER_RATE_LIMITED',
@@ -302,6 +307,22 @@ export const executeClaimedStudioGeneration = async (
       if (reconciled.state === 'stale') return { state: 'stale', resource: reconciled.resource };
       return { state: 'in_progress', resource: reconciled.resource };
     }
+    let sourceFacts: ReturnType<typeof deriveStudioBrdSourceFacts> = null;
+    if (claim.providerPlan.promptVersion === 'studio-pr-b-3') {
+      try {
+        sourceFacts = deriveStudioBrdSourceFacts(
+          claim.sourcePackage,
+          claim.sourceAnchors,
+          claim.selectedSourceVersionIds,
+        );
+      }
+      catch (error) {
+        if (error instanceof StudioBrdSourceFactsError) {
+          throw new StudioProviderGatewayError('SOURCE_COVERAGE_INCOMPLETE', false);
+        }
+        throw error;
+      }
+    }
     const execution = await runBudgeted(budgetInput(claim), async () => deps.runProvider({
       organizationId: claim.organizationId, workspaceId: claim.workspaceId, actorId: claim.actorId,
       plan: claim.providerPlan, sourcePackage: claim.sourcePackage, templatePayload: claim.templatePayload,
@@ -330,6 +351,15 @@ export const executeClaimedStudioGeneration = async (
             claim.sourceAnchors,
             claim.templatePayload,
           );
+          if (sourceFacts !== null) {
+            content = composeStudioBrdSourceFacts(content, sourceFacts, claim.templatePayload);
+            content = validateStudioDraft(
+              content,
+              claim.selectedSourceVersionIds,
+              claim.sourceAnchors,
+              claim.templatePayload,
+            );
+          }
         }
         catch {
           if (JSON.stringify(providerResult.content).length > 500_000) throw new StudioProviderGatewayError('PROVIDER_OUTPUT_INVALID', true);

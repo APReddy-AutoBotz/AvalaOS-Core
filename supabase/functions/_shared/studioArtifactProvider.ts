@@ -19,7 +19,7 @@ import {
 export const STUDIO_PROVIDER_CAPABILITY = 'studio.document.generate' as const;
 export const STUDIO_PROVIDER_IDENTITIES: readonly EnterpriseAiProvider[] = ENTERPRISE_AI_PROVIDERS;
 export const STUDIO_PROVIDER_PROMPT_KEY = 'studio-multisource-generation' as const;
-export const STUDIO_PROVIDER_PROMPT_VERSIONS = ['studio-pr-b-1', 'studio-pr-b-2'] as const;
+export const STUDIO_PROVIDER_PROMPT_VERSIONS = ['studio-pr-b-1', 'studio-pr-b-2', 'studio-pr-b-3'] as const;
 export type StudioProviderPromptVersion = typeof STUDIO_PROVIDER_PROMPT_VERSIONS[number];
 export type StudioProviderArtifactType = typeof STUDIO_TEMPLATE_ARTIFACT_TYPES[number];
 
@@ -241,7 +241,7 @@ export const buildStudioArtifactTaskInstruction = (
     || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion)
     || !STUDIO_TEMPLATE_ARTIFACT_TYPES.includes(artifactType)
     || template.artifactType !== null && template.artifactType !== artifactType
-    || promptVersion === 'studio-pr-b-2' && artifactType !== 'brd') {
+    || promptVersion !== 'studio-pr-b-1' && artifactType !== 'brd') {
     throw new Error('STUDIO_SELECTED_SOURCE_CONTRACT_INVALID');
   }
   const instruction = [
@@ -270,13 +270,16 @@ export const buildStudioArtifactTaskInstruction = (
     selectedSourceVersionIds: selected,
   })}`,
   ];
-  if (promptVersion === 'studio-pr-b-2') instruction.splice(-1, 0,
+  if (promptVersion !== 'studio-pr-b-1') instruction.splice(-1, 0,
     'For this BRD, preserve every explicit workflow primitive, state, action, event, edge, sequence, branch, loop, and triggering condition in the closest existing template section; never collapse distinct source steps or add a section.',
     'Preserve only source-stated ordering, edges, and conditions; never infer a missing sequence, edge, or condition from array order or proximity.',
     'Preserve every explicit role, owner, responsibility boundary, and handoff, including who initiates, receives, decides, approves, escalates, or becomes accountable; never infer an unprovided owner or transfer ownership.',
     'Preserve every explicit decision, option, condition, outcome, business rule, exception, escalation, unresolved conflict, and source-stated consequence in the closest existing section without converting one category into another.',
     'For effort, transaction or case volume, technical health, and agent necessity, preserve the explicit supplied value. When a category is absent or explicitly null, state Unknown — not established by supplied evidence in the closest existing section; never convert unknown to zero, none, not applicable, healthy, unhealthy, automated, or agent-recommended.',
     'Do not infer that an AI agent or automation is necessary, suitable, approved, or unnecessary. Preserve only the source-stated position and keep an unstated position explicitly unknown.',
+  );
+  if (promptVersion === 'studio-pr-b-3') instruction.splice(-1, 0,
+    'For this BRD v3 request, a server-controlled post-validation step appends a bounded accepted-Assessment source-facts block for human review; that block is not model-generated reasoning and is outside this response schema.',
   );
   return instruction.join(' ');
 };

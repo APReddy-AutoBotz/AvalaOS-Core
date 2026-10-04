@@ -298,7 +298,11 @@ void (async () => {
       manual_brief_hash: null, package_hash: 'package-hash-v1', candidate_manifest: [], candidate_manifest_hash: '0'.repeat(64), candidate_count: 0,
       anchor_manifest: [assessAnchor], anchor_manifest_hash: '9'.repeat(64), anchor_count: 1,
     }] as T;
-    if (path.startsWith('assess_v2_studio_handoffs?')) return [{ id: ids[11], source_version_id: ids[15], package: { facts: [] }, package_hash: assessPackageHash }] as T;
+    if (path.startsWith('assess_v2_studio_handoffs?')) return [{
+      id: ids[11], source_version_id: ids[15],
+      package: { process: { primitives: [], edges: [], decisionPoints: [], exceptionPaths: [], assets: [], agentNecessity: {} } },
+      package_hash: assessPackageHash,
+    }] as T;
     if (path.startsWith('studio_system_template_versions?')) return [{ id: ids[6], template_version: 'system-brd-v3', provider_instructions: { sections: ['scope'] }, template_hash: 'template-hash-v3' }] as T;
     if (path.startsWith('ai_provider_configs?')) return [{ id: ids[14], provider: 'openai', key_ref_id: ids[16], model_allowlist: ['governed-model'], status: 'active' }] as T;
     throw new Error(`unexpected safe projection query: ${path.split('?')[0]}`);
@@ -307,6 +311,20 @@ void (async () => {
   mark(material.selectedSourceVersionIds.length === 1 && material.selectedSourceVersionIds[0] === ids[15]
     && !material.selectedSourceVersionIds.includes(ids[11]),
   'STUDIO-TR-004', 'db.assess-citation-binds-source-version-not-handoff', 'assess-handoff-source-selector', { sourceVersionId: ids[15], handoffId: ids[11] });
+  const v3Material = await loadStudioGenerationMaterial({ ...plan, promptVersion: 'studio-pr-b-3', providerPlanHash: '3'.repeat(64) }, read);
+  let nonBrdV3Reads = 0; let nonBrdV3Rejected = false;
+  try {
+    await loadStudioGenerationMaterial({ ...plan, artifactType: 'pdd', promptVersion: 'studio-pr-b-3' }, async <T>() => {
+      nonBrdV3Reads += 1; return [] as T;
+    });
+  } catch (error) {
+    nonBrdV3Rejected = error instanceof StudioArtifactError && error.code === 'PROVIDER_ROUTE_UNAVAILABLE';
+  }
+  mark(v3Material.providerPlan.promptVersion === 'studio-pr-b-3'
+    && (v3Material.sourcePackage.assessPackage as Record<string, unknown>).process !== undefined
+    && nonBrdV3Rejected && nonBrdV3Reads === 0,
+  'PROVIDER-009-B', 'db.brd-v3-material-loads-canonical-assess-process-and-non-brd-rejects-before-read',
+  'studio-pr-b-3-authoritative-material-contract', { promptVersion: 'studio-pr-b-3', sourceVersionId: ids[15] });
 
   const hybridCandidateManifestHash = 'e'.repeat(64);
   const hybridCandidateManifest = [
@@ -472,6 +490,27 @@ void (async () => {
     && claimMaterialPlan.providerPlanHash === 'f'.repeat(64),
   'IDEMP-002-B', 'db.reconcile-only-claim-uses-stored-prompt-authority', 'staged-response-refence', {
     attemptId: ids[9], executionFence: 8, reconcileOnly: true, promptVersion: String(claimMaterialPlan.promptVersion),
+  });
+  let v3ClaimMaterialPlan: Record<string, unknown> = {};
+  const authoritativeV3Claim = await claimStudioGeneration({
+    ...plan, promptVersion: 'studio-pr-b-1', providerPlanHash: '1'.repeat(64),
+    attemptId: ids[10], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
+    sourcePackageVersion: 1, maximumOutputTokens: 2_000, expectedTemplateVersion: 'system-brd-v3',
+  }, async () => ({
+    attemptId: ids[10], executionToken: ids[13], executionFence: 9,
+    leaseExpiresAt: '2030-01-01T00:00:00Z', providerAllowed: true, reconcileOnly: false,
+    artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-3',
+    providerPlanHash: '3'.repeat(64),
+  }) as never, async authoritativePlan => {
+    v3ClaimMaterialPlan = authoritativePlan;
+    return v3Material;
+  });
+  mark(authoritativeV3Claim.claimKind === 'active' && authoritativeV3Claim.providerPlan.promptVersion === 'studio-pr-b-3'
+    && v3ClaimMaterialPlan.promptVersion === 'studio-pr-b-3'
+    && v3ClaimMaterialPlan.providerPlanHash === '3'.repeat(64),
+  'PROVIDER-009-B', 'db.claimed-brd-v3-prompt-authority-overrides-caller-substitution',
+  'caller-v1-stored-v3-generation-claim', {
+    attemptId: ids[10], promptVersion: String(v3ClaimMaterialPlan.promptVersion), providerAllowed: true,
   });
 
   for (const [index, terminalState] of ['completed', 'stale_completed'].entries()) {

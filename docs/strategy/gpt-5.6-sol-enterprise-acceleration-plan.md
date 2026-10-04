@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current source-fact retention slice (2026-10-04)
+
+PR #267 is merged and its approved one-generation synthetic validation is complete: technical PASS, semantic needs-improvement; conservative cumulative debit USD 5.1124528, nine consumed effects, zero unresolved reservations, providers OFF at last check. The consumed allowance remains closed.
+
+AP authorized one implementation PR for the remaining BRD omissions. Completed read-only architecture/security/quality reviews agree that another prose-only prompt cannot guarantee retention. Under the fixed workspace-write profile, Wave 1 was behaviorally read-only and all reviewers closed before writes. Wave 2 has exclusive runtime and schema/test workers; the root owns integration, active documentation, provenance and the PR. No nested delegation.
+
+Implement a bounded, nonpersistent rendering of canonical Assess business facts into an existing BRD section. Preserve AI prose, source anchors, unknowns and immutable v1/v2 behavior; bind fresh requests to prompt v3. No new response schema, semantic score, source authority, campaign allowance or retry framework. Run only affected runtime/adapter, migration/upgrade and source-boundary checks locally. Exact-candidate CI/preview remains required. Stop at the implementation PR boundary; merge, deployment and a further paid validation need separate authority.
+
 ## Current one-use BRD validation allowance (2026-10-03)
 
 PR #266 is merged, CI-green and deployed to the separately authorized synthetic
