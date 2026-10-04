@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Current BRD-v3 validation preparation (2026-10-04)
+
+PR #268 merged as `f8b80738bdb5e40640735ec3641feb275b565dd6` with the tested tree unchanged. Candidate CI, preview and seven executed post-merge Core CI jobs passed. The separately authorized synthetic rollout verified the Studio function source and migration `20261004025101`, preserving 20 protected table snapshots. These executed results supersede the pending statements below.
+
+AP authorized proceeding with the next bounded BRD validation under the original USD 10 cumulative cap. Read-only target checks confirm nine consumed effects, USD 5.1124528 in conservative ledger charges, no unresolved reservations, current unapproved draft v3, approved v2, and both providers OFF. The prior prompt-v2 allowance is consumed; remaining dollars cannot reopen it. Provider validation is now stale.
+
+The active AI-output plan owns one forward-only, one-use prompt-v3 allowance using the existing immutable window table and campaign ledger. It permits one generation and, only when server freshness requires it, one preceding provider validation. Aggregate ceilings are USD 5.583912 fresh or USD 6.0553712 stale. Successful generation may append unapproved draft v4; approved v2 and Delivery/Monitor lineage stay unchanged. Installation does not activate the allowance or providers. Focused static, fresh/stale PostgreSQL, 14-case budget-pipeline and migration/CI-contract checks passed. Exact-head CI is pending at publication; a fresh real prompt-v3 run is **not run**. Merge and hosted activation remain separate PR-boundary actions.
+
 ## Current BRD source-fact retention correction (2026-10-04)
 
 PR #267 merged as `399f0dd79ff420b1b7ce8c40842837fc869cf232` with the tested tree unchanged. Sixteen candidate workflows, preview and seven executed post-merge Core CI jobs passed. The separately authorized synthetic migration and one-use real BRD validation completed. Provider validation was fresh and skipped; one generation appended unapproved draft v3 while approved v2, original v1/v2 and the five accepted Delivery/Monitor items stayed unchanged. Nine consumed effects total USD 5.1124528 in conservative ledger charges, with zero unresolved reservations and both providers OFF at the last verified check. These results supersede the pending statements below.

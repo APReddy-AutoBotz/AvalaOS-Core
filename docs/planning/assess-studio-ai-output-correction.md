@@ -1,5 +1,70 @@
 # Assess and Studio AI output correction
 
+## BRD-v3 quality-validation allowance (2026-10-04)
+
+### Outcome and boundary
+
+AP authorized one successor validation for the existing synthetic campaign under
+the original USD 10 cumulative cap. Migration
+`20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql` minimally
+extends the existing immutable quality-window table. It does not create a second
+allowance framework, reopen the consumed v2 row, reset history, approve a draft,
+publish work items or change Delivery/Monitor. Both provider runtimes must be OFF
+for installation and activation. Activation remains service-only.
+
+The new row must chain to the campaign's exact consumed prompt-v2 window and the
+prompt-v2 attempt that generated current draft v3. It binds the synthetic target,
+admin and generation authorization versions, provider/key/routes/model, Assess
+source package and template, current draft v3, approved v2, release SHA and source
+attestation. The campaign must have exactly nine consumed effects, USD 5.1124528
+aggregate spend and no unresolved budget state. Fresh provider state permits one
+prompt-v3 generation, capped at USD 5.583912 aggregate. Stale state permits one
+validation followed by one prompt-v3 generation, capped at USD 6.0553712. The
+campaign-level USD 10 ceiling remains unchanged. No automatic retry is added.
+
+Once the v3 successor exists, its v2 predecessor is excluded permanently from
+active-window, reserve and consume selection, including after the successor
+expires. Existing unconsumed v2 rows retain their prior behavior until a valid
+successor is activated. The generation may append draft v4 only; approved v2 and
+all earlier versions remain unchanged.
+
+### Acceptance, proof and rollback
+
+Focused static migration checks passed 3/3. Two disposable PostgreSQL scenarios
+passed with zero provider calls, secret reads or hosted access: the fresh branch
+performed a real two-connection final-slot race (one owner, one exact replay),
+then reserved/consumed/finalized one prompt-v3 generation into draft v4; the stale
+branch consumed one committed validation before its single generation and rejected
+another slot. The suite verified v1/v2/draft-v3 preservation and the approved-v2 pointer, forced
+RLS and service-only activation, rejection of invalid lineage/authorization/source/
+route/head substitutions and replay mismatch, kept schema/debit history unchanged,
+and cleaned their databases. The current 14-case mocked production budget pipeline
+also passed, including a fresh full migration chain, cap contention and recovery
+without retry.
+
+The first integrated run exposed a PostgreSQL-generated constraint-name truncation
+assumption before any hosted or paid action. Constraint replacement now identifies
+the exact legacy unique/check constraints by catalog keys and expression shape;
+the corrected pipeline and focused PostgreSQL runs passed. A no-cost replay of the
+retained real prompt-v2 output through current v3 deterministic composition also
+retained the previously omitted source facts, while leaving the original model
+content unchanged. That replay is not fresh prompt-v3 provider proof. The local
+expiry fixture initially used an invalid timestamp interval; correcting only that
+fixture produced the passing no-predecessor-revival check.
+
+Executed commands: `node --test scripts/testSyntheticAiBrdV3QualityValidationMigration.mjs`
+(3/3); `node scripts/testSyntheticAiBrdV3QualityValidationPostgres.mjs` (2/2 grouped
+scenarios); `node scripts/assessStudioBudgetPipelinePostgres.mjs` (14/14);
+`node --test scripts/prCMigrationTailContract.test.mjs scripts/assessImportValidationContract.test.mjs`
+(20/20). Database commands used the existing isolated loopback PostgreSQL 16
+fixture and removed their disposable databases. No broad local product/browser
+regression suite was run. Exact-head CI and preview remain pending at publication.
+
+Hosted installation, activation and any paid provider effect remain separately
+gated. Rollback keeps both runtimes OFF/read-only or disables the campaign and
+retains every window, debit, attempt, version and audit record. Never delete the
+extension, refund/reset history or reactivate a superseded predecessor.
+
 ## Deterministic BRD source-fact retention (2026-10-04)
 
 ### Outcome and baseline
