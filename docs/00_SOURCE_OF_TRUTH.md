@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Current BRD source-fact retention correction (2026-10-04)
+
+PR #267 merged as `399f0dd79ff420b1b7ce8c40842837fc869cf232` with the tested tree unchanged. Sixteen candidate workflows, preview and seven executed post-merge Core CI jobs passed. The separately authorized synthetic migration and one-use real BRD validation completed. Provider validation was fresh and skipped; one generation appended unapproved draft v3 while approved v2, original v1/v2 and the five accepted Delivery/Monitor items stayed unchanged. Nine consumed effects total USD 5.1124528 in conservative ledger charges, with zero unresolved reservations and both providers OFF at the last verified check. These results supersede the pending statements below.
+
+Executed real output still needs improvement: prompt v2 preserved capture/review and the approval condition but omitted the intermediate case, named Finance owner, explicit incomplete-request route, and unknown effort/volume/technical-health fields. Structure and citations did not prove semantic completeness.
+
+AP authorized the focused correction: fresh BRD prompt v3 retains a clearly labeled, deterministic block of source-stated Assess facts alongside the AI narrative. The existing immutable package remains the only source authority. No source record, score, approval, historical attempt or consumed allowance is rewritten. The active AI-output plan owns implementation, focused verification and rollback. Focused runtime/recovery checks, prompt-upgrade PostgreSQL, the 14-case mocked budget pipeline, source contracts and Edge checks passed; candidate CI is pending at publication. Real v3-prompt validation is **not run**. No fresh paid attempt, hosted rollout, merge or production action is authorized by this implementation.
+
 ## Current one-use BRD quality validation (2026-10-03)
 
 PR #266 merged as `34fc02de9d4f2465e1f65d1630bc2af3074ec7d7` with

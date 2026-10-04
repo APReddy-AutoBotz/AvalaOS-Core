@@ -1,5 +1,15 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## BRD source-fact retention boundary (2026-10-04)
+
+The approved PR #267 paid validation generated artifact draft v3 under prompt v2, with technical success but semantic omissions. Artifact version and prompt version are separate identities. This correction introduces `studio-pr-b-3` only for fresh BRD plans; old v1/v2 plans and staged responses retain exact historical behavior.
+
+A bounded nonpersistent renderer reads only fixed business paths from the server-loaded, hash/anchor-verified Assess handoff package. It preserves explicit primitive input/output and rules, named ownership, source-stated edges/conditions, decisions/outcomes, exception routes and explicit known/unknown effort, volume, technical health and agent necessity. It resolves unique source references without deriving sequence from array order, excludes infrastructure/lineage metadata, and rejects ambiguous/malformed/oversized material before provider egress. Zero and false remain values, not missing data.
+
+The server adds a clearly labeled source-facts block alongside unchanged provider prose in the existing requirements section, otherwise the first required narrative section, otherwise the first template section. Source values are escaped content, never trusted instructions. The canonical accepted-handoff anchor travels with the block. The model response must pass its existing contract before composition; the composed result must pass again before staging. A retained source block cannot rescue an invalid provider document or grant semantic PASS/approval. Reconciliation reads the already staged bytes rather than recomputing content.
+
+The forward migration expands immutable prompt identity and selects v3 for fresh BRDs only. No data backfill or allowance change. Deploy version-compatible runtime before the migration, with providers OFF, only after separate rollout approval. Rollback is provider OFF/read-only or a forward selector correction preserving v3 readability and every draft/claim/hash. Do not relabel or delete historical data.
+
 ## One-use BRD quality-validation authority (2026-10-03)
 
 The merged PR #266 Studio runtime and prompt-v2 migration are source-verified on

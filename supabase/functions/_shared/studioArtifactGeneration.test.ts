@@ -2,8 +2,9 @@ import { runBudgetedProviderEffect, type ProviderBudgetReservation, type Provide
 import { executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
+import { composeStudioBrdSourceFacts, deriveStudioBrdSourceFacts } from './studioBrdSourceFacts.ts';
 
-const ids = Array.from({ length: 14 }, (_, index) => `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+const ids = Array.from({ length: 24 }, (_, index) => `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
 const hash = (character: string) => character.repeat(64);
 const context = studioPrBRuntime('studio-author', ['studio.artifacts.generate'], {
   sourcePackage: 'hybrid-package-v4', template: 'tenant-brd-v3', artifact: 'studio-artifact-v1', provider: 'openai',
@@ -282,6 +283,212 @@ void (async () => {
   const replay = await executeClaimedStudioGeneration(claim, { ...deps, runBudgeted: replayBudget });
   mark(replay.state === 'completed' && providerEffects === 0 && events.join(',') === 'finalize', 'IDEMP-002-B', 'generation.response-loss-reconciles-staged-effect', 'provider-response-loss-replay');
   mark(providerEffects === 0, 'PROVIDER-009-B', 'generation.replay-zero-provider-effect', 'atomic-budget-provider-replay');
+
+  const assessAnchor = { sourceVersionId: ids[0], locator: 'assess:accepted-handoff', anchorHash: hash('d') };
+  const fact = (value: boolean | null, status = value === null ? 'unknown' : 'known') => ({ value, status });
+  const sourceProcess = {
+    primitives: [
+      {
+        id: ids[16], type: 'Capture', name: 'Capture invoice', description: '<script>source only</script>',
+        trigger: 'Invoice arrives', owner: 'Synthetic Intake', inputs: ['Invoice'], outputs: ['Case'], rules: ['Keep source fields'], volumeShare: 0, manualEffort: null,
+        agentNecessity: { irreducibleAmbiguity: fact(false), adaptiveNextStep: fact(null) },
+      },
+      {
+        id: ids[17], type: 'Approve', name: 'Human policy review', description: 'Finance review',
+        inputs: ['Case'], outputs: ['Decision'], rules: ['Approve or Escalate only when evidence is complete'], volumeShare: null, manualEffort: 0,
+      },
+    ],
+    edges: [{ id: ids[18], fromPrimitiveId: ids[16], toPrimitiveId: ids[17], condition: 'Invoice is complete' }],
+    decisionPoints: [{ id: ids[19], primitiveId: ids[17], name: 'Policy decision', ruleDescription: 'Approve or escalate', outcomeLabels: ['Approve', 'Escalate'] }],
+    exceptionPaths: [{ id: ids[20], fromPrimitiveId: ids[16], name: 'Incomplete request', trigger: 'Source facts are absent', resolutionPrimitiveIds: [ids[17]] }],
+    assets: [{ id: ids[21], name: 'Finance case system', accountableOwner: 'Synthetic Finance', technicalHealth: 'unknown' }],
+    agentNecessity: {
+      irreducibleAmbiguity: fact(null), adaptiveNextStep: fact(false), toolOrPathSelection: fact(null),
+      incrementalValue: fact(null), controllable: fact(true),
+    },
+  };
+  const v3TemplatePayload = { artifactType: 'brd', sections: ['summary', 'requirements', 'risks'] };
+  const deficientV3Draft = {
+    contractVersion: 'studio-artifact-2', title: 'BRD', summary: 'Model summary.',
+    sections: [
+      { id: 'summary', title: 'Summary', body: 'Model summary narrative.', sourceAnchors: [assessAnchor], labels: [] },
+      { id: 'requirements', title: 'Requirements', body: 'Model omitted source details.', sourceAnchors: [], labels: ['template_required'] },
+      { id: 'risks', title: 'Risks', body: 'Human review remains required.', sourceAnchors: [], labels: ['template_required'] },
+    ],
+    coverage: { selectedSourceVersionIds: [ids[0]], coveredSourceVersionIds: [ids[0]], complete: true },
+  };
+  const v3Claim: StudioExecutableGenerationClaim = {
+    ...claim,
+    sourcePackage: {
+      contractVersion: 'studio-source-package-2', sourceMode: 'assess_handoff',
+      assessPackage: { process: sourceProcess }, selectedSourceVersionIds: [ids[0]],
+    },
+    sourceAnchors: [assessAnchor],
+    templatePayload: v3TemplatePayload,
+    providerPlan: { ...claim.providerPlan, promptVersion: 'studio-pr-b-3' },
+  };
+  const v3ProviderResult: StudioProviderGatewayResult = { ...providerResult, content: deficientV3Draft };
+  let v3ProviderEffects = 0; let v3Stages = 0; let v3Finalizations = 0;
+  let stagedV3: Record<string, unknown> | undefined;
+  const v3ExecutedBudget = (async (_input: unknown, effect: () => Promise<StudioProviderGatewayResult>, options: { beforeSettle: (result: StudioProviderGatewayResult, reservation: ProviderBudgetReservation) => Promise<void> }) => {
+    const result = await effect(); await options.beforeSettle(result, reservation); return { kind: 'executed' as const, result, reservation };
+  }) as unknown as typeof runBudgetedProviderEffect;
+  const v3Dependencies: StudioGenerationDependencies = {
+    runProvider: async () => { v3ProviderEffects += 1; return v3ProviderResult; },
+    stage: async input => { v3Stages += 1; stagedV3 = input.response; },
+    finalize: async () => { v3Finalizations += 1; return { state: 'completed', resource: { version: 3 } }; },
+    fail: async () => { throw new Error('v3 must not fail'); },
+    runBudgeted: v3ExecutedBudget,
+  };
+  const v3Completed = await executeClaimedStudioGeneration(v3Claim, v3Dependencies);
+  const stagedSections = stagedV3?.sections as Array<{ id: string; body: string; sourceAnchors: unknown[]; labels: string[] }>;
+  const requirements = stagedSections?.find(section => section.id === 'requirements');
+  mark(v3Completed.state === 'completed' && v3ProviderEffects === 1 && v3Stages === 1 && v3Finalizations === 1
+    && requirements?.body.startsWith('Model omitted source details.\n\n')
+    && requirements.body.includes('Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):')
+    && requirements.body.includes('Synthetic Finance') && requirements.body.includes('Approve; Escalate')
+    && requirements.body.includes('Trigger: Invoice arrives') && requirements.body.includes('Owner: Synthetic Intake')
+    && requirements.body.includes('Inputs: Case') && requirements.body.includes('Outputs: Case')
+    && requirements.body.includes('Approve or Escalate only when evidence is complete')
+    && requirements.body.includes('Exception: Incomplete request')
+    && requirements.body.includes('Trigger: Source facts are absent')
+    && requirements.body.includes('Resolution primitives: Human policy review')
+    && requirements.body.includes('Technical health: unknown')
+    && requirements.body.includes('condition: Invoice is complete')
+    && requirements.body.includes('Volume share: 0') && requirements.body.includes('Manual effort: Unknown')
+    && requirements.body.includes('value=false, status=known') && requirements.body.includes('&lt;script&gt;source only&lt;/script&gt;')
+    && !requirements.body.includes('<script>')
+    && JSON.stringify(requirements.sourceAnchors) === JSON.stringify([assessAnchor])
+    && JSON.stringify(requirements.labels) === JSON.stringify(['template_required']),
+  'STUDIO-TR-008', 'generation.brd-v3-appends-deterministic-source-facts-after-deficient-model-narrative',
+  'brd-v3-source-fact-retention-and-canonical-anchor');
+
+  const sourceFactsBlock = deriveStudioBrdSourceFacts(v3Claim.sourcePackage, v3Claim.sourceAnchors, v3Claim.selectedSourceVersionIds);
+  const narrativeFallbackTemplate = {
+    sectionDefinitions: [
+      { id: 'risks', title: 'Risks', required: false, fieldKind: 'risks' },
+      { id: 'scope', title: 'Scope', required: true, fieldKind: 'narrative' },
+    ], fieldSchema: {},
+  };
+  const narrativeFallbackDraft = {
+    ...deficientV3Draft,
+    sections: [
+      { id: 'risks', title: 'Risks', body: 'Risk narrative.', sourceAnchors: [assessAnchor], labels: [] },
+      { id: 'scope', title: 'Scope', body: 'Scope narrative.', sourceAnchors: [], labels: ['template_required'] },
+    ],
+  };
+  const narrativeFallback = composeStudioBrdSourceFacts(narrativeFallbackDraft, sourceFactsBlock, narrativeFallbackTemplate);
+  const firstSectionFallback = composeStudioBrdSourceFacts({
+    ...deficientV3Draft,
+    sections: [
+      { id: 'summary', title: 'Summary', body: 'Summary narrative.', sourceAnchors: [assessAnchor], labels: [] },
+      { id: 'risks', title: 'Risks', body: 'Risk narrative.', sourceAnchors: [], labels: ['template_required'] },
+    ],
+  }, sourceFactsBlock, { artifactType: 'brd', sections: ['summary', 'risks'] });
+  const narrativeFallbackSections = narrativeFallback.sections as Array<{ id: string; body: string }>;
+  const firstFallbackSections = firstSectionFallback.sections as Array<{ id: string; body: string }>;
+  mark(!narrativeFallbackSections[0].body.includes('Source facts from the accepted Assess handoff')
+    && narrativeFallbackSections[1].body.includes('Source facts from the accepted Assess handoff')
+    && firstFallbackSections[0].body.includes('Source facts from the accepted Assess handoff')
+    && !firstFallbackSections[1].body.includes('Source facts from the accepted Assess handoff'),
+  'STUDIO-TR-008', 'generation.brd-v3-targets-requirements-then-required-narrative-then-first-section',
+  'brd-v3-trusted-section-selection-fallbacks');
+
+  const v3Replay = await executeClaimedStudioGeneration(v3Claim, {
+    ...v3Dependencies,
+    runProvider: async () => { v3ProviderEffects += 1; throw new Error('duplicate provider forbidden'); },
+    stage: async () => { v3Stages += 1; },
+    runBudgeted: replayBudget,
+  });
+  mark(v3Replay.state === 'completed' && v3ProviderEffects === 1 && v3Stages === 1 && v3Finalizations === 2,
+    'IDEMP-002-B', 'generation.brd-v3-duplicate-replay-adds-no-provider-effect-or-stage',
+    'brd-v3-provider-response-loss-replay');
+
+  let directV3Stage: Record<string, unknown> | undefined;
+  const directV3 = await executeClaimedStudioGeneration({
+    ...claim,
+    providerPlan: { ...claim.providerPlan, promptVersion: 'studio-pr-b-3' },
+    sourcePackage: { ...claim.sourcePackage, sourceMode: 'direct_transcript_bundle', assessPackage: null },
+  }, {
+    ...v3Dependencies,
+    runProvider: async () => ({ ...providerResult, content: valid }),
+    stage: async input => { directV3Stage = input.response; },
+  });
+  mark(directV3.state === 'completed' && JSON.stringify(directV3Stage) === JSON.stringify(valid),
+    'STUDIO-TR-008', 'generation.brd-v3-without-assess-package-preserves-provider-draft-exactly',
+    'direct-source-brd-v3-no-made-up-facts');
+
+  let malformedBudgetEntries = 0; let malformedProviderEffects = 0; let malformedFailures = 0;
+  const malformedV3Claims = [
+    {
+      ...v3Claim,
+      sourcePackage: { ...v3Claim.sourcePackage, assessPackage: { process: { ...sourceProcess, edges: [{ fromPrimitiveId: ids[16], toPrimitiveId: ids[22] }] } } },
+    },
+    {
+      ...v3Claim,
+      sourcePackage: {
+        ...v3Claim.sourcePackage,
+        assessPackage: { process: { ...sourceProcess, primitives: Array.from({ length: 12 }, (_, index) => ({
+          id: `21000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+          type: 'Capture', name: `Oversized ${index}`, description: 'x'.repeat(3_000), inputs: [], outputs: [], rules: [],
+          volumeShare: 0, manualEffort: 0,
+        })), edges: [], decisionPoints: [], exceptionPaths: [], assets: [] } },
+      },
+    },
+    { ...v3Claim, sourceAnchors: [{ ...assessAnchor, sourceVersionId: ids[22] }] },
+    { ...v3Claim, sourcePackage: { ...v3Claim.sourcePackage, sourceMode: 'direct_transcript_bundle' } },
+  ];
+  const malformedResults = [];
+  for (const malformedClaim of malformedV3Claims) {
+    malformedResults.push(await executeClaimedStudioGeneration(malformedClaim, {
+      ...v3Dependencies,
+      runProvider: async () => { malformedProviderEffects += 1; throw new Error('provider forbidden'); },
+      runBudgeted: (async () => { malformedBudgetEntries += 1; throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+      fail: async (_attemptId, failureCode) => { if (failureCode === 'SOURCE_COVERAGE_INCOMPLETE') malformedFailures += 1; },
+    }));
+  }
+  mark(malformedResults.every(result => result.state === 'failed' && result.failureCode === 'SOURCE_COVERAGE_INCOMPLETE')
+    && malformedBudgetEntries === 0 && malformedProviderEffects === 0 && malformedFailures === malformedV3Claims.length,
+  'STUDIO-TR-008', 'generation.brd-v3-malformed-reference-and-oversized-facts-block-before-budget-egress',
+  'brd-v3-source-facts-preflight-zero-egress');
+
+  let rejectedDraftStages = 0; let rejectedDraftProviderEffects = 0;
+  const postCompositionOversized = {
+    ...deficientV3Draft,
+    sections: deficientV3Draft.sections.map(section => section.id === 'requirements'
+      ? { ...section, body: 'y'.repeat(19_000) }
+      : section),
+  };
+  const providerInvalidBeforeComposition = {
+    ...deficientV3Draft,
+    sections: deficientV3Draft.sections.map(section => section.id === 'requirements'
+      ? { ...section, body: '   ' }
+      : section),
+  };
+  const rejectedDraftResults = [];
+  for (const content of [postCompositionOversized, providerInvalidBeforeComposition]) {
+    rejectedDraftResults.push(await executeClaimedStudioGeneration(v3Claim, {
+      ...v3Dependencies,
+      runProvider: async () => { rejectedDraftProviderEffects += 1; return { ...v3ProviderResult, content }; },
+      stage: async () => { rejectedDraftStages += 1; },
+      runBudgeted: v3ExecutedBudget,
+    }));
+  }
+  mark(rejectedDraftResults.every(result => result.state === 'uncertain' && result.failureCode === 'GENERATION_UNCERTAIN')
+    && rejectedDraftProviderEffects === 2 && rejectedDraftStages === 0,
+  'STUDIO-TR-008', 'generation.brd-v3-postcomposition-limit-and-invalid-provider-draft-never-stage',
+  'brd-v3-block-cannot-repair-model-output-or-exceed-document-contract');
+
+  let reconcileV3Finalizes = 0;
+  const reconcileV3 = await executeClaimedStudioGeneration({ ...malformedV3Claims[0], reconcileOnly: true }, {
+    ...v3Dependencies,
+    runProvider: async () => { throw new Error('reconcile provider forbidden'); },
+    runBudgeted: (async () => { throw new Error('reconcile budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+    finalize: async () => { reconcileV3Finalizes += 1; return { state: 'completed', resource: { version: 3 } }; },
+  });
+  mark(reconcileV3.state === 'completed' && reconcileV3Finalizes === 1,
+    'IDEMP-002-B', 'generation.brd-v3-reconcile-finalizes-durable-stage-without-recomputing-source-facts',
+    'brd-v3-reconcile-only-malformed-current-material-ignored');
 
   let terminalProviderEffects = 0; let terminalStages = 0; let terminalBudgetEntries = 0;
   let terminalFailureWrites = 0; let terminalFinalizations = 0; let terminalIdentityMatches = 0;

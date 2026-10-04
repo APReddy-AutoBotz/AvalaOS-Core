@@ -1,5 +1,52 @@
 # Assess and Studio AI output correction
 
+## Deterministic BRD source-fact retention (2026-10-04)
+
+### Outcome and baseline
+
+AP authorized correcting the remaining omissions after PR #267 merged at `399f0dd` and completed its one-use validation. That run generated artifact draft v3 using prompt v2; it was technically successful but semantically incomplete. Approved artifact v2 and downstream lineage are unchanged. The last verified conservative charge is USD 5.1124528, nine effects consumed, no unresolved reservations, both runtimes OFF. The completed allowance is not reusable.
+
+Fresh BRD generation must retain source-stated workflow facts, named owners, decisions, exception routing and explicit unknowns even when the model omits them. The correction preserves the AI narrative and adds a labeled source-facts block within the existing document. It cannot approve or claim semantic correctness of the prose.
+
+### Scope and authority
+
+Use one nonpersistent bounded rendering of the existing server-loaded Assess handoff; no new source model, provider request, response schema, scoring, approval, publication, paid allowance or Delivery/Monitor mutation. Bind only new BRD requests to `studio-pr-b-3`. Keep v1/v2 bytes, identities, claims, replays and staged-response recovery exact; FRD/PDD stay v1. Missing Assess material in other source modes does not authorize fabricated facts. Present malformed/ambiguous material rejects.
+
+All three read-only reviews closed before writes. Runtime and schema workers have disjoint ownership; the root controls integration, migration chain, evidence and PR. Unrelated worktree changes and the existing stash remain preserved.
+
+### Behavior and failure handling
+
+Read only allowlisted business facts from the immutable Assess process: primitive descriptions/types/input/output/rules, explicit edges/conditions, roles/ownership, decisions/outcomes/rules, exceptions/triggers/resolution references, asset technical health, manual effort, volume, agent-necessity values. Resolve references by unique source identity without using list order as workflow order. Null/absent facts remain explicitly Unknown; zero/false retain their values. Exclude IDs, hashes, audits, attestations and other authority metadata from the displayed block.
+
+Preflight source shape, binding and size before budget reservation or provider access. Source strings are escaped untrusted content and never enter trusted instructions/schema. Choose the existing requirements section by trusted ID, else first required narrative, else first section. Preserve model prose, template IDs/order and existing labels; attach the canonical accepted-handoff anchor. Validate the original provider document and then the composed document before staging once. Respect existing 20,000-character section and 500,000-character draft limits. A malformed/oversized provider response after egress retains its effect and gets no retry. Recovery consumes persisted staged bytes without re-rendering source facts.
+
+### Migration and rollback
+
+Migration `20261004025101_studio_brd_source_fact_retention_v3.sql` advances predecessor `20261003150800` while both providers are OFF. It permits stored v1/v2/v3 prompt identities and selects v3 for fresh BRDs in the canonical provider-plan hash. No historical attempt/version/debit/allowance is updated. Frozen historical migration scenarios stay pinned to named boundaries; full-chain fixtures advance to the current tip.
+
+Future rollout order, after separate approval: verify exact candidate and runtime sources; keep providers OFF; deploy v1/v2/v3-compatible Studio runtime, then apply the migration; verify old rows and new-plan identity before any fresh authorized provider effect. Rollback keeps providers OFF/read-only or uses a forward change to stop selecting v3 while retaining all versions and staged responses. No destructive schema rollback, refunds, history reset or allowance reopening.
+
+### Acceptance and verification
+
+- A source-shaped fixture and deliberately deficient provider response retain the case transition, Finance owner/reviewer responsibility, evidence-dependent Approve/Escalate, incomplete-request human resolution, and unknown volume/effort/health/agent necessity in the saved content.
+- Hostile strings stay data; malformed, ambiguous, foreign-anchor and oversized source material stop before budget/provider calls. No inference, extra section, semantic PASS, approval or retry is added.
+- Historical v1/v2 bytes and recovery remain intact; fresh BRD requests/claims select v3 and a canonical exact hash.
+- Focused runtime/provider/generation and DB-adapter checks; static migration and named prompt-upgrade PostgreSQL case; current migration-tail/CI contracts; Edge typecheck; AI-boundary and secret-hygiene scans. No broad local browser/product regression suite for this source-only slice.
+- Exact-head CI and preview are required before review completion. Real-provider quality for prompt v3 is **not run** and requires a separately approved attempt; local mocked evidence cannot substitute for it.
+
+Executed local verification:
+
+- Studio source boundaries and migration contracts passed; prompt-v2/v3 static migration cases passed 7/7.
+- The focused PostgreSQL prompt upgrade passed: v1 remains readable, a staged v2 request survives the upgrade and finalizes, fresh BRD requests/claims use v3, FRD/PDD remain v1, and route drift rejects before egress.
+- The existing Assess/Studio budget pipeline passed 14/14 against disposable loopback PostgreSQL, including stage/finalize and recovery without another provider effect. Its HTTP and secret backends were mocked; this is not paid-provider evidence. Both database runs cleaned their fixtures and stopped the owned server.
+- AI-boundary and secret-hygiene scans passed with zero forbidden hits. Edge typecheck passed after correcting a TypeScript narrowing declaration in the new helper.
+- `npm run test:studio-output-contract` and `npm run test:assess-import:studio-recovery` passed. They cover deficient-model retention, primitive owners/triggers, case transitions, evidence-dependent decisions, exception resolution, unknown/zero/false values, escaping, trusted section fallbacks, foreign references/anchors and source-mode rejection before budget, postcomposition limits, invalid model response rejection, frozen v1/v2 instruction bytes and recovery without re-rendering.
+- Migration-tail tests passed 8/8. Delivery/Monitor evidence-contract tests passed 75/75 with all 241 registered assertion expectations and 85 commands retained. Acceptance inventory/provenance validation passed. Current source bindings were refreshed; historical evidence was not rewritten.
+- Final Edge typecheck and the 14-case mocked PostgreSQL pipeline passed again after the source-selector guard was added. No broad local browser/product regression suite was run.
+
+The first prompt upgrade run exposed a fixture conflict: a staged v2 attempt was still active when the test requested v3. The corrected test validly finalizes v2 first. A direct-source runtime fixture also needed its original template restored. The corrected focused runs passed. Initial candidate CI found a stale creation-access migration-count assertion: it still expected 97 after the new migration raised the chain to 98. The runner and its focused contract now expect 98, and its actual preflight assertions were executed locally without launching the unrelated database scenarios. Exact-head CI remains pending at publication. Real prompt-v3 provider quality, hosted rollout and production validation are **not run**.
+
+
 ## BRD-v2 quality-validation allowance (2026-10-03)
 
 Candidate `8f58668` passed the allowance feature workflow and preview QA, but the

@@ -387,7 +387,7 @@ export async function loadStudioGenerationMaterial(
     || promptKey !== STUDIO_PROVIDER_PROMPT_KEY
     || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion as never)
     || !projectionHash.test(providerPlanHash)
-    || promptVersion === 'studio-pr-b-2' && artifactType !== 'brd') {
+    || promptVersion !== 'studio-pr-b-1' && artifactType !== 'brd') {
     throw new StudioArtifactError('PROVIDER_ROUTE_UNAVAILABLE');
   }
   const sourcePackageId = string(field(plan, 'sourcePackageId', 'source_package_id'));
