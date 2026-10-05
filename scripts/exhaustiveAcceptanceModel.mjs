@@ -216,7 +216,19 @@ export const validateSourceProvenance = (catalog, bindings, provenanceDocument, 
     const proofContract = (proofOwnerRegistry?.contracts ?? []).find(item => item.branchId === key);
     if (!proofContract || canonicalValue(actualOwners) !== canonicalValue(proofContract.ownership)) errors.push(`source-provenance-proof-owner:${key}`);
     const scope = contract.scope ?? {};
-    if (scope.fixtureId !== testCase.fixture || !['planned-fixture','executed-fixture'].includes(scope.evidenceScope)) errors.push(`source-provenance-scope:${key}`);
+    if (scope.fixtureId !== testCase.fixture || !['planned-fixture','executed-fixture','executed-deterministic-oracle'].includes(scope.evidenceScope)) errors.push(`source-provenance-scope:${key}`);
+    if (scope.evidenceScope === 'executed-deterministic-oracle') {
+      const approvedOracle = /^ASSESS-0(?:0[5-9]|1[0-7])$/u.test(testCase.testId)
+        && testCase.environment === 'deterministic_oracle'
+        && actualOwners.length === 1 && actualOwners[0].kind === 'oracle-scenario';
+      const expectedScope = { evidenceScope: 'executed-deterministic-oracle', fixtureId: 'TRANSCRIPT-001', persistentMutationCount: 0 };
+      if (!approvedOracle || canonicalValue(scope) !== canonicalValue(expectedScope)
+        || testCase.expectedMutation !== 'none' || testCase.expectedMutationCount !== 0
+        || testCase.expectedAudit !== 'not applicable'
+        || testCase.realProviderAllowed !== false || testCase.customerDataAllowed !== false) {
+        errors.push(`source-provenance-deterministic-scope:${key}`);
+      }
+    }
     if (scope.evidenceScope === 'planned-fixture' && (scope.organizationId !== null || scope.workspaceId !== null)) errors.push(`source-provenance-planned-scope:${key}`);
     if (scope.evidenceScope === 'executed-fixture' && (!/^[0-9a-f-]{36}$/u.test(scope.organizationId ?? '') || !/^[0-9a-f-]{36}$/u.test(scope.workspaceId ?? ''))) errors.push(`source-provenance-executed-scope:${key}`);
     if (testCase.testId === 'SAFETY-005' && canonicalValue(scope) !== canonicalValue({

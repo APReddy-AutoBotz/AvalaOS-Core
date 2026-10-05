@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
+import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import {
   evaluateHostedTest,
   evaluateCompositeTest,
@@ -136,7 +137,13 @@ assert.deepEqual(validateRetainedProducerResults({ suite: suiteA, emitted, ident
 assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { schemaVersion: 2, results: [{ ...retained.results[0], suiteId: 'suite-b', testId: 'TEST-B' }] }, identity: expected, provenanceByTestId: expected.provenanceByTestId }).some(item => item.startsWith('producer-suite-mismatch:')), 'suite-a process cannot impersonate suite-b evidence');
 assert.ok(validateRetainedProducerResults({ suite: suiteA, emitted: { schemaVersion: 2, results: [{ ...retained.results[0], testId: 'TEST-B' }] }, identity: expected, provenanceByTestId: expected.provenanceByTestId }).some(item => item.startsWith('producer-test-id-mismatch:')), 'producer cannot emit a Test ID outside its own configured suite');
 
-const oracleScope = { evidenceScope: 'planned-fixture', fixtureId: 'synthetic-default', organizationId: null, workspaceId: null };
+const oracleScope = { evidenceScope: 'executed-deterministic-oracle', fixtureId: 'TRANSCRIPT-001', persistentMutationCount: 0 };
+const oracleActual = { rejected: true };
+const oracleIdentity = {
+  sourceDigests: { production: `sha256:${'1'.repeat(64)}`, independentOracle: `sha256:${'2'.repeat(64)}`, comparator: `sha256:${'3'.repeat(64)}` },
+  fixture: { fixtureId: 'TRANSCRIPT-001', slug: 'clean-straight-through', digest: `sha256:${'4'.repeat(64)}` },
+  scenarioContractDigest: `sha256:${'5'.repeat(64)}`,
+};
 const oracleProvenance = {
   branchId: 'ASSESS-V1_VALIDATION_MISSING',
   testId: 'ASSESS-005',
@@ -154,23 +161,33 @@ const oracleExpected = {
   oracleCommand: 'node scripts/runAssessV1AcceptanceOracle.mjs',
   oracleBindingByTestId: new Map([['ASSESS-005', { testId: 'ASSESS-005', scenario: 'missing-input' }]]),
   provenanceByTestId: new Map([['ASSESS-005', oracleProvenance]]),
+  oracleEvidenceIdentity: oracleIdentity,
+  oracleScenarioByTestId: new Map([['ASSESS-005', { inputDigest: `sha256:${'6'.repeat(64)}` }]]),
+  oracleExpectedOutputByScenario: { 'missing-input': oracleActual },
+  oracleScope,
 };
 const oracleResult = {
-  testId: 'ASSESS-005', scenario: 'missing-input', status: 'BLOCKED',
+  testId: 'ASSESS-005', scenario: 'missing-input', status: 'PASS',
   releaseSha: expected.releaseSha, workflowRunId: expected.workflowRunId, workflowAttempt: expected.workflowAttempt,
   environment: oracleExpected.oracleEnvironment, workflowPath: oracleExpected.oracleWorkflowPath, command: oracleExpected.oracleCommand,
+  inputDigest: `sha256:${'6'.repeat(64)}`,
+  oracleOutputDigest: canonicalDigest(oracleActual),
+  productionOutputDigest: canonicalDigest(oracleActual),
+  persistentMutationCount: 0,
   assertionIds: ['assess-v1-oracle::ASSESS-005::missing-input'],
   assertionOutcomes: [{ assertionId: 'assess-v1-oracle::ASSESS-005::missing-input', status: 'PASS' }],
   scenarioIds: ['missing-input'], branchIds: ['ASSESS-V1_VALIDATION_MISSING'], sourceReferences: ['services/scoringEngine.ts'], scope: oracleScope,
+  actual: { oracle: oracleActual, production: oracleActual, matched: true },
 };
 const oracle = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   releaseSha: expected.releaseSha,
   workflowRunId: expected.workflowRunId,
   workflowAttempt: expected.workflowAttempt,
   environment: oracleExpected.oracleEnvironment,
   workflowPath: oracleExpected.oracleWorkflowPath,
   command: oracleExpected.oracleCommand,
+  evidenceIdentity: oracleIdentity,
   results: [oracleResult],
 };
 assert.deepEqual(validateOracleManifest(oracle, oracleExpected), []);
@@ -182,7 +199,24 @@ assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, scena
 assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, branchIds: ['ASSESS-FAKE-FAMILY-LIKE-PROOF'] }] }, oracleExpected).some(item => item.startsWith('oracle-branches:')), 'family-like proof cannot substitute for the exact branch');
 assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, sourceReferences: ['services/fakeScoringEngine.ts'] }] }, oracleExpected).some(item => item.startsWith('oracle-sources:')), 'fake source proof must fail closed');
 assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, assertionIds: ['aggregate-suite-green'], assertionOutcomes: [{ assertionId: 'aggregate-suite-green', status: 'PASS' }] }] }, oracleExpected).some(item => item.startsWith('oracle-ownership:')), 'aggregate or substituted assertion cannot promote the exact Test ID');
-assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, status: 'PASS' }] }, oracleExpected).some(item => item.startsWith('oracle-status-not-derived:')), 'planned fixture scope cannot be promoted to PASS');
+assert.ok(validateOracleManifest({ ...oracle, evidenceIdentity: { ...oracleIdentity, fixture: { ...oracleIdentity.fixture, digest: `sha256:${'7'.repeat(64)}` } } }, oracleExpected).includes('oracle-evidence-identity'), 'wrong fixture digest must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, evidenceIdentity: { ...oracleIdentity, sourceDigests: { ...oracleIdentity.sourceDigests, production: `sha256:${'8'.repeat(64)}` } } }, oracleExpected).includes('oracle-evidence-identity'), 'wrong production source digest must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, inputDigest: `sha256:${'9'.repeat(64)}` }] }, oracleExpected).some(item => item.startsWith('oracle-input-digest:')), 'wrong scenario input digest must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, persistentMutationCount: 1 }] }, oracleExpected).some(item => item.startsWith('oracle-persistent-mutation:')), 'nonzero mutation claim must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, scope: { ...oracleScope, organizationId: '00000000-0000-4000-8000-000000000001' } }] }, oracleExpected).some(item => item.startsWith('oracle-scope:')), 'tenant scope substitution must fail closed');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, actual: { oracle: { rejected: false }, production: { rejected: false }, matched: true }, oracleOutputDigest: canonicalDigest({ rejected: false }), productionOutputDigest: canonicalDigest({ rejected: false }) }] }, oracleExpected).some(item => item.startsWith('oracle-expected-output:')), 'changed coordinated output must not receive PASS');
+assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, actual: null }] }, oracleExpected).some(item => item.startsWith('oracle-output-shape:')), 'malformed output must return a bounded validation error');
+const failedComparison = {
+  ...oracleResult,
+  status: 'FAIL',
+  assertionOutcomes: [{ ...oracleResult.assertionOutcomes[0], status: 'FAIL' }],
+  actual: { oracle: oracleActual, production: { rejected: false }, matched: false },
+  productionOutputDigest: canonicalDigest({ rejected: false }),
+};
+assert.deepEqual(validateOracleManifest({ ...oracle, results: [failedComparison] }, oracleExpected), [], 'a genuine same-run comparison failure remains valid FAIL evidence');
+const plannedScope = { evidenceScope: 'planned-fixture', fixtureId: 'TRANSCRIPT-001', organizationId: null, workspaceId: null };
+const plannedExpected = { ...oracleExpected, provenanceByTestId: new Map([['ASSESS-005', { ...oracleProvenance, scope: plannedScope }]]) };
+assert.deepEqual(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, status: 'BLOCKED', scope: plannedScope }] }, plannedExpected), [], 'planned scope remains valid BLOCKED evidence');
 assert.ok(validateOracleManifest({ ...oracle, results: [{ ...oracleResult, status: 'PASS', assertionOutcomes: [{ ...oracleResult.assertionOutcomes[0], status: 'BLOCKED' }] }] }, oracleExpected).some(item => item.startsWith('oracle-status-not-derived:')), 'green status cannot hide a skipped assertion');
 assert.ok(validateOracleManifest({ ...oracle, results: [...oracle.results, oracle.results[0]] }, oracleExpected).some(item => item.startsWith('duplicate-or-missing-oracle:')));
 assert.ok(validateOracleManifest({ ...oracle, results: [] }, oracleExpected).some(item => item.startsWith('oracle-result-missing:')), 'missing exact oracle result must fail closed');

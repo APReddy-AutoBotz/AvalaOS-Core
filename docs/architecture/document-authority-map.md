@@ -30,6 +30,8 @@ Read only this sequence unless the active task requires more:
 
 ## Active Authority
 
+The approved thirteen-case calculation-only scoring acceptance correction, deterministic evidence scope, focused verification and rollback are governed by `docs/planning/deterministic-oracle-acceptance.md`. This does not change runtime scoring or tenant/server acceptance authority.
+
 The current Pilot Operations response-header correction, actual-entrypoint and two-origin browser verification, deployment boundary and rollback are governed by `docs/planning/pilot-operations-cors.md`.
 
 The current configured-environment/no-release Pilot Operations frontend correction, focused verification and rollback are governed by `docs/planning/pilot-operations-empty-release.md`; operational behavior remains in `docs/operations/v1-pilot-operations-runbook.md`.

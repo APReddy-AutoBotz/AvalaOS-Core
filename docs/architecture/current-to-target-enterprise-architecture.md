@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Deterministic acceptance evidence boundary (2026-10-05)
+
+The approved correction in `docs/planning/deterministic-oracle-acceptance.md` separates pure scoring evidence from tenant execution. Only ASSESS-005..017 may use an exact-input/source/run-bound deterministic fixture without organization/workspace IDs, with zero persistent mutations. Real production and independent-oracle output equality is required. This scope cannot satisfy hosted, retained or server evidence, or grant authorization, audit or provider-effect proof. Production scoring and its independent oracle algorithms remain unchanged. Historical artifacts retain their original disposition.
+
 ## Pilot Operations browser response boundary (2026-10-05)
 
 Both Pilot Operations Edge functions must attach the existing shared CORS contract to actual JSON responses as well as preflight. The local helpers retain `cache-control: no-store`, existing status/body mappings and every bearer, tenant, capability, version, flag and RPC check. This permits browser access to already-authorized responses without adding cookie credentials, origin reflection or another authorization mechanism. The bounded correction and proof limits are in `docs/planning/pilot-operations-cors.md`; no schema or data flow changes.

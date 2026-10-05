@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current deterministic acceptance boundary (2026-10-05)
+
+AP approved one bounded implementation for the thirteen ASSESS-005..017 calculation-only cases: correct mutation expectations, bind real production/oracle comparisons to exact inputs and execution, and validate an oracle-only scope. The implementation, focused checks and rollback stay together under `docs/planning/deterministic-oracle-acceptance.md`. The three read-only reviews are closed. Focused producer, validator, catalog and report-integration checks passed locally, including exactly 13 PASS and 95 BLOCKED through the actual producer. Other 95 case criteria and runtime scoring stay unchanged; no broad regression, new paid call, hosted exercise or deployment is included. Candidate CI is pending at publication; historical incomplete acceptance evidence is not relabeled.
+
 ## Current Pilot Operations CORS correction (2026-10-05)
 
 PR #270 is merged and its approved synthetic browser attempt exposed missing CORS headers on actual Edge responses. Cleanup and fresh-session denial passed. Follow `docs/planning/pilot-operations-cors.md`: reuse the shared headers in two local response helpers, preserve authorization and no-store, and verify the actual entrypoints plus real two-origin browser fetches. All three read-only reviews closed before the fixed-profile write phase. One worker owns endpoints/tests/runbook; the controller owns integration, current evidence, provenance and the single PR. No migration, paid call, broader local regression or hosted mutation is included; stop at the merge/deployment boundary.

@@ -873,35 +873,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 validation missing through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
-      "expectedDenial": false,
+      "expectedResult": "Missing scoring input is rejected by the production scorer and independent oracle",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
+      "expectedDenial": true,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "ScoringValidationError",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -923,35 +921,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 validation invalid through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
+      "expectedResult": "Out-of-range scoring input is rejected by the production scorer and independent oracle",
       "expectedMutation": "none",
       "expectedMutationCount": 0,
       "expectedDenial": true,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "ScoringValidationError",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -973,35 +969,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 score min through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Governance score is 20 with Minimal risk and Go decision",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
-      "expectedScore": null,
-      "expectedClassification": null,
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
+      "expectedScore": 20,
+      "expectedClassification": "Minimal / Go",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1023,35 +1017,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 score max through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Governance score is 100 with Unacceptable risk and No-Go decision",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
-      "expectedScore": null,
-      "expectedClassification": null,
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
+      "expectedScore": 100,
+      "expectedClassification": "Unacceptable / No-Go",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1073,35 +1065,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 gate discovery through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Primary gating outcome is Needs Discovery",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "Needs Discovery",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1123,35 +1113,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 gate redesign through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Primary gating outcome is Process Redesign First",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "Process Redesign First",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1173,35 +1161,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 gate low value through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Primary gating outcome is Monitor / Deprioritize",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "Monitor / Deprioritize",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1223,35 +1209,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 gate human led through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Primary gating outcome is Human-Led / Do Not Automate",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "Human-Led / Do Not Automate",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1273,35 +1257,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 gate governance through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Primary gating outcome is Governance Review Required",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "Governance Review Required",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1323,35 +1305,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 gate no go through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
+      "expectedResult": "Primary gating outcome is No-Go",
       "expectedMutation": "none",
       "expectedMutationCount": 0,
       "expectedDenial": true,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
       "expectedScore": null,
-      "expectedClassification": null,
+      "expectedClassification": "No-Go",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1373,35 +1353,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 threshold below through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Completion quality 49.9 produces Needs Discovery",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
-      "expectedScore": null,
-      "expectedClassification": null,
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
+      "expectedScore": 49.9,
+      "expectedClassification": "Needs Discovery",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1423,35 +1401,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 threshold exact through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Completion quality 50 produces Passed",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
-      "expectedScore": null,
-      "expectedClassification": null,
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
+      "expectedScore": 50,
+      "expectedClassification": "Passed",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
@@ -1473,35 +1449,33 @@
       ],
       "environment": "deterministic_oracle",
       "persona": [
-        "role_appropriate"
+        "not_applicable"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "TRANSCRIPT-001",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
-        "Real providers disabled"
+        "Real providers disabled",
+        "Calculation-only; persistence is not invoked"
       ],
       "actions": [
         "Exercise v1 threshold above through the declared environment"
       ],
-      "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedResult": "Completion quality 50.1 produces Passed",
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
-      "expectedScore": null,
-      "expectedClassification": null,
+      "expectedStateAfter": "unchanged; calculation-only execution invokes no persistence",
+      "expectedScore": 50.1,
+      "expectedClassification": "Passed",
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
       "expectedAudit": "not applicable",
-      "viewport": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "browser": "chromium",
-      "destructiveOrNonDestructive": "destructive_synthetic_disposable",
+      "viewport": [],
+      "browser": "not_applicable",
+      "destructiveOrNonDestructive": "non_destructive",
       "realProviderAllowed": false,
       "customerDataAllowed": false,
       "automation": {
