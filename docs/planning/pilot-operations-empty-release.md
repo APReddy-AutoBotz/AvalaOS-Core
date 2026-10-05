@@ -49,3 +49,9 @@ Merge and deployment require their own authority at the PR boundary. Production 
 Private replay output is retained under `output/local-private/pilot-empty-state-20261005/replay-final-result.json`; browser runner status is `.agent/pilot-operations-playwright/.last-run.json`. These local files are not repository acceptance artifacts. The sanitized fixtures and focused checks are committed with the implementation so CI can reproduce them.
 
 Candidate CI and preview are pending at publication. Corrected hosted UI verification, hosted-target restore and production deployment are **not run**. The retained disposable recovery evidence remains bound to its original head; it is not relabeled as this candidate's execution.
+
+## Candidate CI integration follow-up
+
+On initial head `770d9d69e3944b0dca19c3a4cf34693eb702d472`, Pilot Operations, Core CI and preview/browser QA passed. The governed Delivery/Monitor evidence workflow failed with `PR_C_PROVENANCE_FILE_SET`: the generated source manifest had not been refreshed for this implementation's files. Refresh only the existing registry/provenance bindings with `node scripts/buildTranscriptFlowPrCRegistry.mjs --refresh-bindings`; preserve assertion expectations, runtime code, workflow requirements and historical execution results. Run the affected `test:transcript-flow:delivery-monitor-evidence-contract` checks before publishing the corrected head. This regeneration records source identity, not an executed acceptance pass. Final-head CI remains required.
+
+Executed evidence: the affected contract command passed 75/75 tests plus migration, workflow and final registry validation. All 241 assertion expectations, 85 command definitions and 15 owners are retained. Only source provenance and this implementation note changed in the follow-up; no feature regression rerun was needed locally.
