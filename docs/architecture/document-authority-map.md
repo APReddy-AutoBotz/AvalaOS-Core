@@ -30,6 +30,8 @@ Read only this sequence unless the active task requires more:
 
 ## Active Authority
 
+The current configured-environment/no-release Pilot Operations frontend correction, focused verification and rollback are governed by `docs/planning/pilot-operations-empty-release.md`; operational behavior remains in `docs/operations/v1-pilot-operations-runbook.md`.
+
 | Question | Authoritative document |
 | --- | --- |
 | Product identity, proof boundary, maturity, and current safe sequence | `docs/00_SOURCE_OF_TRUTH.md` |

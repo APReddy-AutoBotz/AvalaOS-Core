@@ -6,8 +6,8 @@ export type PilotOperationsTruth =
 
 export type PilotOperationsProjection = {
   /** Opaque server-projected identifiers used only to target authoritative commands. */
-  authority?: { environmentId: string; releaseId: string; releaseVersion: number; rollbackCurrentCandidateId?: string; rollbackCurrentVersion?: number; rollbackTargetCandidateId?: string; rollbackTargetVersion?: number };
-  release: { candidateLabel: string; commitSha: string; lifecycle: string; promotedHistoryLabel?: string };
+  authority?: { environmentId: string; releaseId?: string; releaseVersion?: number; rollbackCurrentCandidateId?: string; rollbackCurrentVersion?: number; rollbackTargetCandidateId?: string; rollbackTargetVersion?: number };
+  release: { candidateLabel: string; commitSha: string; lifecycle: string; promotedHistoryLabel?: string } | null;
   environment: { label: string; type: 'disposable_ci' | 'pilot_candidate'; lifecycle: string; version: number };
   controls: { maintenance: boolean; readOnly: boolean; disabledFeatures: string[] };
   health: { schemaCompatible: boolean; queueState: 'healthy' | 'degraded' | 'blocked'; reconciliationState: 'healthy' | 'degraded' | 'blocked' };
@@ -63,14 +63,14 @@ const enumValue = <T extends string>(value: unknown, allowed: readonly T[]): T =
 export const decodePilotOperationsProjection = (input: unknown): PilotOperationsProjection => {
   const root = object(input);
   if (Object.keys(root).some(key => !['authority','release','environment','controls','health','provider','recovery','promotion','truth','liveActivationAuthorized'].includes(key)) || !['release','environment','controls','health','provider','recovery','promotion','truth','liveActivationAuthorized'].every(key=>key in root)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
-  const release = object(root.release);
+  const release = root.release === null ? null : object(root.release);
   const environment = object(root.environment);
   const controls = object(root.controls);
   const health = object(root.health);
   const provider = object(root.provider);
   const recovery = object(root.recovery);
   const promotion = object(root.promotion);
-  if (Object.keys(release).some(key => !['candidateLabel', 'commitSha', 'lifecycle', 'promotedHistoryLabel'].includes(key)) || !['candidateLabel', 'commitSha', 'lifecycle'].every(key => key in release)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
+  if (release && (Object.keys(release).some(key => !['candidateLabel', 'commitSha', 'lifecycle', 'promotedHistoryLabel'].includes(key)) || !['candidateLabel', 'commitSha', 'lifecycle'].every(key => key in release))) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   exactKeys(environment, ['label', 'type', 'lifecycle', 'version']);
   exactKeys(controls, ['maintenance', 'readOnly', 'disabledFeatures']);
   exactKeys(health, ['schemaCompatible', 'queueState', 'reconciliationState']);
@@ -87,7 +87,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
   const rollbackReason = promotion.rollbackReason === undefined ? undefined : text(promotion.rollbackReason, safeBlocker);
   const rollbackTargetLabel = promotion.rollbackTargetLabel === undefined ? undefined : text(promotion.rollbackTargetLabel, safeLabel);
   const decoded: PilotOperationsProjection = {
-    release: { candidateLabel: text(release.candidateLabel, safeLabel), commitSha: text(release.commitSha, sha), lifecycle: text(release.lifecycle, safeState), ...(release.promotedHistoryLabel ? { promotedHistoryLabel: text(release.promotedHistoryLabel, safeLabel) } : {}) },
+    release: release ? { candidateLabel: text(release.candidateLabel, safeLabel), commitSha: text(release.commitSha, sha), lifecycle: text(release.lifecycle, safeState), ...(release.promotedHistoryLabel ? { promotedHistoryLabel: text(release.promotedHistoryLabel, safeLabel) } : {}) } : null,
     environment: {
       label: text(environment.label, safeLabel),
       type: enumValue(environment.type, ['disposable_ci', 'pilot_candidate'] as const),
@@ -110,8 +110,25 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
     truth: enumValue(root.truth, ['proven_disposable_or_ci_evidence', 'configured_not_live_verified', 'not_proven_hosted_live', 'failed'] as const),
     liveActivationAuthorized: false,
   };
-  if(root.authority!==undefined){const authority=object(root.authority);if(Object.keys(authority).some(k=>!['environmentId','releaseId','releaseVersion','rollbackCurrentCandidateId','rollbackCurrentVersion','rollbackTargetCandidateId','rollbackTargetVersion'].includes(k)))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');decoded.authority={environmentId:text(authority.environmentId,/^[0-9a-f-]{36}$/i),releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:Number.isSafeInteger(authority.releaseVersion)&&Number(authority.releaseVersion)>0?Number(authority.releaseVersion):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})(),...(authority.rollbackTargetCandidateId?{rollbackCurrentCandidateId:text(authority.rollbackCurrentCandidateId,/^[0-9a-f-]{36}$/i),rollbackCurrentVersion:Number(authority.rollbackCurrentVersion),rollbackTargetCandidateId:text(authority.rollbackTargetCandidateId,/^[0-9a-f-]{36}$/i),rollbackTargetVersion:Number(authority.rollbackTargetVersion)}:{})}}
+  if(root.authority!==undefined){
+    const authority=object(root.authority);
+    const allowed=['environmentId','releaseId','releaseVersion','rollbackCurrentCandidateId','rollbackCurrentVersion','rollbackTargetCandidateId','rollbackTargetVersion'];
+    if(Object.keys(authority).some(k=>!allowed.includes(k)))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
+    const environmentId=text(authority.environmentId,/^[0-9a-f-]{36}$/i);
+    if(!decoded.release){
+      exactKeys(authority,['environmentId']);
+      decoded.authority={environmentId};
+    }else{
+      if(!['environmentId','releaseId','releaseVersion'].every(key=>key in authority))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
+      const rollbackKeys=['rollbackCurrentCandidateId','rollbackCurrentVersion','rollbackTargetCandidateId','rollbackTargetVersion'];
+      const rollbackCount=rollbackKeys.filter(key=>key in authority).length;
+      if(rollbackCount!==0&&rollbackCount!==rollbackKeys.length)throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
+      const positiveVersion=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>0?Number(value):(()=>{throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE')})();
+      decoded.authority={environmentId,releaseId:text(authority.releaseId,/^[0-9a-f-]{36}$/i),releaseVersion:positiveVersion(authority.releaseVersion),...(rollbackCount?{rollbackCurrentCandidateId:text(authority.rollbackCurrentCandidateId,/^[0-9a-f-]{36}$/i),rollbackCurrentVersion:positiveVersion(authority.rollbackCurrentVersion),rollbackTargetCandidateId:text(authority.rollbackTargetCandidateId,/^[0-9a-f-]{36}$/i),rollbackTargetVersion:positiveVersion(authority.rollbackTargetVersion)}:{})};
+    }
+  }
   if(decoded.promotion.rollbackEligible!==Boolean(decoded.authority?.rollbackTargetCandidateId)||decoded.promotion.rollbackEligible===Boolean(decoded.promotion.rollbackReason))throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
+  if (!decoded.release && decoded.promotion.eligible) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.provider.enabled && !decoded.provider.configured) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (decoded.promotion.eligible !== (decoded.promotion.blockers.length === 0)) throw new Error('OPERATIONS_PROJECTION_UNAVAILABLE');
   if (!decoded.promotion.liveStopGates.includes('LIVE_ACTIVATION_NOT_AUTHORIZED')) throw new Error('LIVE_ACTIVATION_NOT_AUTHORIZED');
@@ -122,7 +139,7 @@ export const decodePilotOperationsProjection = (input: unknown): PilotOperations
 export const simulateNonLivePromotion = (projection: PilotOperationsProjection, requestedMode: 'dry_run' | 'live'): DryRunPromotionResult => {
   const orderedChecks = ['fresh_operator_authority', 'exact_candidate_environment_binding', 'schema_compatibility', 'required_evidence', 'current_approval', 'live_activation_stop_gate'];
   if (requestedMode === 'live') return { outcome: 'blocked', code: 'LIVE_ACTIVATION_NOT_AUTHORIZED', mutationDelta: 0, externalCallCount: 0, orderedChecks };
-  if (!projection.promotion.eligible || projection.controls.maintenance || projection.controls.readOnly || !projection.health.schemaCompatible) {
+  if (!projection.release || !projection.promotion.eligible || projection.controls.maintenance || projection.controls.readOnly || !projection.health.schemaCompatible) {
     return { outcome: 'blocked', code: 'PROMOTION_BLOCKED', mutationDelta: 0, externalCallCount: 0, orderedChecks };
   }
   return { outcome: 'promoted_non_live', code: 'NON_LIVE_DRY_RUN_COMPLETE', mutationDelta: 0, externalCallCount: 0, orderedChecks };

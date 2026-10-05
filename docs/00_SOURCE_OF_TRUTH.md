@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Current synthetic operator UI correction (2026-10-05)
+
+PR #269 is merged as `0f7df5dc91100bb3401e612aa2d05afe7d03e747`, with the tested tree unchanged. Its separately authorized synthetic validation produced BRD v4; AP approved its review and downstream Delivery/Monitor continuation. The retained campaign has 11 consumed effects, USD 6.0553712 conservative charges and no unresolved reservations, with both providers OFF at the last verification. The subsequent synthetic operator API exercise completed with the environment read-only, temporary operator access removed and the operations mutation switch absent/OFF. These executed results supersede the pending statements below; they do not establish production readiness.
+
+The next-step UI review found a confirmed source defect: a configured environment with no release candidate is valid server state, but the browser rejects its empty release tuple. The bounded correction and acceptance gates are in `docs/planning/pilot-operations-empty-release.md`. It preserves server authorization and aligns action controls with available identity and capabilities. No migration, paid call or hosted setting change is required. Focused source checks, 10/10 desktop/mobile browser cases, TypeScript checking and retained-response replay passed locally. Candidate CI/preview are pending at publication; corrected hosted UI verification is not run. Merge and deployment remain separate boundaries.
+
 ## Current BRD-v3 validation preparation (2026-10-04)
 
 PR #268 merged as `f8b80738bdb5e40640735ec3641feb275b565dd6` with the tested tree unchanged. Candidate CI, preview and seven executed post-merge Core CI jobs passed. The separately authorized synthetic rollout verified the Studio function source and migration `20261004025101`, preserving 20 protected table snapshots. These executed results supersede the pending statements below.
