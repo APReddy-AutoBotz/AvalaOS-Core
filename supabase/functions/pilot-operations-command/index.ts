@@ -1,11 +1,11 @@
-import { handleOptions } from '../_shared/http.ts';
+import { corsHeaders, handleOptions } from '../_shared/http.ts';
 import { decodePilotOperationsCommand, authorizePilotOperationsCommand, canonicalPilotOperationsPayload, PilotOperationsCommandError } from '../_shared/pilotOperationsCommand.ts';
 import { getAuthUser, supabaseEnv } from '../_shared/supabase.ts';
 import { createTenantAuthorityDatabase } from '../_shared/tenantAuthorityDb.ts';
 import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
 import { decodePilotOperationsFailure, pilotOperationsFailureStatus } from '../_shared/pilotOperationsErrors.ts';
 declare const Deno:{env:{get:(key:string)=>string|undefined};serve:(handler:(request:Request)=>Response|Promise<Response>)=>void};
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...corsHeaders,'content-type':'application/json','cache-control':'no-store'}});
 Deno.serve(async request=>{const options=handleOptions(request);if(options)return options;if(request.method!=='POST')return json({code:'ACCESS_DENIED'},404);
   try{const actor=(await getAuthUser(request)).id;const command=decodePilotOperationsCommand(await request.json().catch(()=>null));
     const authority=await resolveTenantAuthority(actor,{organizationId:command.organizationId,workspaceId:command.workspaceId,expectedAuthorizationVersion:command.expectedAuthorizationVersion},createTenantAuthorityDatabase(request));authorizePilotOperationsCommand(command,authority);

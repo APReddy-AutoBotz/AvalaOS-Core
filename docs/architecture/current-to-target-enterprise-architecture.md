@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Pilot Operations browser response boundary (2026-10-05)
+
+Both Pilot Operations Edge functions must attach the existing shared CORS contract to actual JSON responses as well as preflight. The local helpers retain `cache-control: no-store`, existing status/body mappings and every bearer, tenant, capability, version, flag and RPC check. This permits browser access to already-authorized responses without adding cookie credentials, origin reflection or another authorization mechanism. The bounded correction and proof limits are in `docs/planning/pilot-operations-cors.md`; no schema or data flow changes.
+
 ## BRD-v3 one-use validation boundary (2026-10-04)
 
 The deployed prompt-v3 correction needs a fresh allowance because the prompt-v2 window is consumed. Extend the existing immutable quality-window table with one same-campaign predecessor reference and exact v2/v3 branch constraints. Preserve all existing rows and the legacy debit FK name; it remains the single canonical quality-window tag. Permit at most one row per campaign and prompt version, and at most one successor to a prior window. A superseded predecessor never becomes active again, even after its successor expires.

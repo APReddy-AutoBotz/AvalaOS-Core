@@ -1,11 +1,11 @@
-import { handleOptions } from '../_shared/http.ts';
+import { corsHeaders, handleOptions } from '../_shared/http.ts';
 import { getAuthUser, supabaseEnv } from '../_shared/supabase.ts';
 import { createTenantAuthorityDatabase } from '../_shared/tenantAuthorityDb.ts';
 import { resolveTenantAuthority } from '../_shared/tenantAuthority.ts';
 import { decodePilotOperationsFailure, pilotOperationsFailureStatus } from '../_shared/pilotOperationsErrors.ts';
 declare const Deno:{serve:(handler:(request:Request)=>Response|Promise<Response>)=>void};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...corsHeaders,'content-type':'application/json','cache-control':'no-store'}});
 Deno.serve(async request=>{const options=handleOptions(request);if(options)return options;if(request.method!=='POST')return json({code:'ACCESS_DENIED'},404);
   try{const actor=(await getAuthUser(request)).id;const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
     if(!body||typeof body.organizationId!=='string'||!uuid.test(body.organizationId)||typeof body.workspaceId!=='string'||!uuid.test(body.workspaceId)||!Number.isSafeInteger(body.expectedAuthorizationVersion))return json({code:'VALIDATION_FAILED'},400);
