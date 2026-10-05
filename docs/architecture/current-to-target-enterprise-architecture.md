@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Trust acceptance producer boundary (2026-10-05)
+
+Only TRUST-001 through TRUST-005 may gain proof from this slice. The retained Trust binding must execute the existing real disposable PostgreSQL harness and emit results derived from named assertions, bound to the actual fixture scope, source, command, release and run identity. Aggregate unit-suite success, invented tenant identifiers or administrative trigger disabling cannot establish case completion. Preserve service-only command authorization, immutable evidence, three-person publication separation and atomic audit/receipt behavior. The implementation and rollback are governed by `docs/planning/trust-acceptance-evidence.md`; no runtime or schema change is authorized.
+
 ## Deterministic acceptance evidence boundary (2026-10-05)
 
 The approved correction in `docs/planning/deterministic-oracle-acceptance.md` separates pure scoring evidence from tenant execution. Only ASSESS-005..017 may use an exact-input/source/run-bound deterministic fixture without organization/workspace IDs, with zero persistent mutations. Real production and independent-oracle output equality is required. This scope cannot satisfy hosted, retained or server evidence, or grant authorization, audit or provider-effect proof. Production scoring and its independent oracle algorithms remain unchanged. Historical artifacts retain their original disposition.

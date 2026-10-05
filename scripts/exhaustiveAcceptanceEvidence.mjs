@@ -1,5 +1,6 @@
 import { verifyFullPageContrastAttachments } from './acceptanceExecutionProfile.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { TRUST_SUITE_ID, validateTrustAcceptanceProducer } from './trustAcceptanceEvidence.mjs';
 
 export const normalizePlaywrightStatus = status => {
   if (status === 'passed') return 'PASS';
@@ -46,6 +47,11 @@ export const validateRetainedProducerResults = ({ suite, emitted, identity, prov
     if (!sameObject(item?.scope, provenance?.scope)) errors.push(`producer-scope:${key}`);
     if (item?.status === 'PASS' && !passEligibleScope(item?.scope)) errors.push(`producer-scope-not-executed:${key}`);
   }
+  if (suite?.suiteId === TRUST_SUITE_ID) errors.push(...validateTrustAcceptanceProducer({
+    emitted,
+    identity,
+    command: suite.command.join(' '),
+  }));
   return errors;
 };
 
@@ -105,6 +111,12 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     const derivedStatus = assertionStatus(item?.assertionOutcomes);
     if (item?.status !== derivedStatus) errors.push(`result-status-not-derived:${key}`);
   }
+  const trustResults = (manifest?.results ?? []).filter(item => item?.suiteId === TRUST_SUITE_ID);
+  if (trustResults.length) errors.push(...validateTrustAcceptanceProducer({
+    emitted: { schemaVersion: 2, results: trustResults },
+    identity: expected,
+    command: expected.canonicalCommandBySuiteId?.get(TRUST_SUITE_ID),
+  }).map(error => `retained-${error}`));
   return errors;
 };
 

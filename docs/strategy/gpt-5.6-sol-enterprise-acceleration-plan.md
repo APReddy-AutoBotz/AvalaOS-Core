@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current Trust acceptance execution boundary (2026-10-05)
+
+PR #272 is merged with the tested tree unchanged, successful post-merge Core CI and 14 PASS / 94 BLOCKED in its fresh acceptance artifact. AP approved the next five-case Trust slice. All three read-only reviews are closed; the controller selected the existing retained orchestration plus the real Trust PostgreSQL harness, rather than a new evidence framework. Under the fixed workspace-write profile, one implementation worker owns the five assertions, minimal producer/CI wiring, focused tests and task plan; the controller owns canonical documents, generated bindings, integration and the single implementation PR. Preserve current criteria: positive publication/version changes and their negative invariants must both execute. Follow `docs/planning/trust-acceptance-evidence.md`; no broader local regression, hosted access, paid call or automatic merge of the next PR.
+
 ## Current deterministic acceptance boundary (2026-10-05)
 
 AP approved one bounded implementation for the thirteen ASSESS-005..017 calculation-only cases: correct mutation expectations, bind real production/oracle comparisons to exact inputs and execution, and validate an oracle-only scope. The implementation, focused checks and rollback stay together under `docs/planning/deterministic-oracle-acceptance.md`. The three read-only reviews are closed. Focused producer, validator, catalog and report-integration checks passed locally, including exactly 13 PASS and 95 BLOCKED through the actual producer. Other 95 case criteria and runtime scoring stay unchanged; no broad regression, new paid call, hosted exercise or deployment is included. Candidate CI is pending at publication; historical incomplete acceptance evidence is not relabeled.

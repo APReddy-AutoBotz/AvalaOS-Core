@@ -76,6 +76,21 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "selector": "export const deriveEffectiveProofStatus = ("
   },
   {
+    "anchorId": "trust-acceptance-harness",
+    "sourceReference": "scripts/testTrustAssurancePostgres.mjs",
+    "selector": "TRUST-001 exact reviewed evidence link"
+  },
+  {
+    "anchorId": "trust-acceptance-evidence",
+    "sourceReference": "scripts/trustAcceptanceEvidence.mjs",
+    "selector": "export const TRUST_TEST_IDS"
+  },
+  {
+    "anchorId": "trust-assurance-migration",
+    "sourceReference": "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql",
+    "selector": "CREATE FUNCTION public.trust_assurance_command"
+  },
+  {
     "anchorId": "ai-runtime-mode",
     "sourceReference": "services/aiMode.ts",
     "selector": "export const getAiExecutionPolicy = ({"
@@ -152,7 +167,7 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
     ],
     "trust-authority": [
       "node",
-      "scripts/runTrustAssuranceTest.mjs"
+      "scripts/testTrustAssurancePostgres.mjs"
     ],
     "ai-boundary": [
       "npm",
@@ -1902,7 +1917,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "TRUST-AUDIT_TRUTH",
     "testId": "TRUST-005",
     "sourceAnchorIds": [
-      "trust-assurance"
+      "trust-acceptance-harness",
+      "trust-acceptance-evidence",
+      "trust-assurance",
+      "trust-assurance-migration"
     ],
     "ownership": [
       {
@@ -1917,7 +1935,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "TRUST-CLAIM_EVIDENCE_SELECTION",
     "testId": "TRUST-001",
     "sourceAnchorIds": [
-      "trust-assurance"
+      "trust-acceptance-harness",
+      "trust-acceptance-evidence",
+      "trust-assurance",
+      "trust-assurance-migration"
     ],
     "ownership": [
       {
@@ -1932,7 +1953,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "TRUST-CROSS_TENANT_DENIAL",
     "testId": "TRUST-004",
     "sourceAnchorIds": [
-      "trust-assurance"
+      "trust-acceptance-harness",
+      "trust-acceptance-evidence",
+      "trust-assurance",
+      "trust-assurance-migration"
     ],
     "ownership": [
       {
@@ -1947,7 +1971,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "TRUST-IMMUTABLE_EVIDENCE",
     "testId": "TRUST-003",
     "sourceAnchorIds": [
-      "trust-assurance"
+      "trust-acceptance-harness",
+      "trust-acceptance-evidence",
+      "trust-assurance",
+      "trust-assurance-migration"
     ],
     "ownership": [
       {
@@ -1962,7 +1989,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "TRUST-PUBLICATION_SOD",
     "testId": "TRUST-002",
     "sourceAnchorIds": [
-      "trust-assurance"
+      "trust-acceptance-harness",
+      "trust-acceptance-evidence",
+      "trust-assurance",
+      "trust-assurance-migration"
     ],
     "ownership": [
       {

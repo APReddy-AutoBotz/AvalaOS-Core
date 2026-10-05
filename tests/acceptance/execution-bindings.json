@@ -127,7 +127,7 @@
       "suiteId": "trust-authority",
       "command": [
         "node",
-        "scripts/runTrustAssuranceTest.mjs"
+        "scripts/testTrustAssurancePostgres.mjs"
       ],
       "testIds": [
         "TRUST-001",
