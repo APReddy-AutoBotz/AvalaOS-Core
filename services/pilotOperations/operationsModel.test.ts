@@ -21,6 +21,16 @@ assert.deepEqual(simulateNonLivePromotion(projection, 'live'), {
   orderedChecks: ['fresh_operator_authority', 'exact_candidate_environment_binding', 'schema_compatibility', 'required_evidence', 'current_approval', 'live_activation_stop_gate'],
 });
 
+const emptyRelease = decodePilotOperationsProjection({
+  ...fixture(),
+  authority: { environmentId: fixture().authority.environmentId },
+  release: null,
+  promotion: { eligible: false, blockers: ['CANDIDATE_NOT_APPROVED'], liveStopGates: ['LIVE_ACTIVATION_NOT_AUTHORIZED'], rollbackEligible: false, rollbackReason: 'READ_ONLY_MODE' },
+});
+assert.equal(emptyRelease.release, null);
+assert.equal(emptyRelease.authority?.environmentId, fixture().authority.environmentId);
+assert.equal(simulateNonLivePromotion(emptyRelease, 'dry_run').code, 'PROMOTION_BLOCKED');
+
 for (const mutation of [
   (value: any) => { value.secretRef = 'AVALA_PROVIDER_SECRET_OPENAI_TENANT_VALUE'; },
   (value: any) => { value.provider.keyRefId = 'infrastructure-reference'; },
@@ -28,6 +38,10 @@ for (const mutation of [
   (value: any) => { value.provider.enabled = true; value.provider.configured = false; },
   (value: any) => { value.promotion.eligible = true; value.promotion.blockers = ['schema_mismatch']; },
   (value: any) => { value.recovery.evidenceDigest = 'sha256:short'; },
+  (value: any) => { value.release = null; value.authority = { environmentId: value.authority.environmentId, releaseId: value.authority.releaseId }; },
+  (value: any) => { value.release = null; value.authority = { environmentId: value.authority.environmentId }; },
+  (value: any) => { delete value.authority.releaseVersion; },
+  (value: any) => { delete value.authority.rollbackTargetVersion; },
 ]) {
   const input: any = fixture(); mutation(input);
   assert.throws(() => decodePilotOperationsProjection(input));
@@ -40,4 +54,4 @@ for (const input of [
   { ...fixture(), promotion: { ...fixture().promotion, eligible: false, blockers: ['missing_evidence'] } },
 ]) assert.equal(simulateNonLivePromotion(decodePilotOperationsProjection(input), 'dry_run').code, 'PROMOTION_BLOCKED');
 
-console.log('Pilot Operations projection and non-live promotion model: 12 fail-closed scenarios passed.');
+console.log('Pilot Operations projection and non-live promotion model: 17 populated, empty-release, and fail-closed scenarios passed.');

@@ -24,7 +24,7 @@ const host=ts.createCompilerHost(options);
 const readFile=host.readFile.bind(host);
 const supabaseClient=path.resolve('services/supabaseClient.ts');
 host.readFile=file=>path.resolve(file)===supabaseClient
-  ? "export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},rpc:async(...args:any[])=>{const f=(globalThis as any).__studioRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}};"
+  ? "export const getRuntimeDataAccess=()=> 'server'; export const isSupabaseConfigured=()=>true; export const supabase:any={functions:{invoke:async(...args:any[])=>{const f=(globalThis as any).__studioInvoke;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}},rpc:async(...args:any[])=>{const f=(globalThis as any).__studioRpc;if(!f)throw new Error('UNEXPECTED_LIVE_TRANSPORT');return f(...args)}};"
   : readFile(file);
 const program=ts.createProgram({rootNames,options,host});
 const diagnostics=ts.getPreEmitDiagnostics(program);

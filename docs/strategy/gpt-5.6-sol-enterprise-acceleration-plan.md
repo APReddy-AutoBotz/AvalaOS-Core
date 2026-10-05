@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current Pilot Operations empty-release correction (2026-10-05)
+
+The authorized synthetic operator API exercise is complete. The next-step frontend review identified a valid no-candidate projection that the UI cannot render. The three read-only reviews closed before writes. The controller selected a frontend-only normalization and capability-aware action correction; a projection migration and broader absent-environment redesign are unnecessary for this path. One implementation worker owns the feature and focused tests; the controller owns integration, current evidence and the single PR under the existing fixed workspace-write profile. No nested delegation.
+
+Follow `docs/planning/pilot-operations-empty-release.md`: retain strict identities, server authorization, stop gates and read-only recovery truth. Verify the dedicated feature suites and affected TypeScript/build integration. Reuse the separately bound disposable restore evidence without claiming a hosted-target restore or new-head execution. Stop at the PR boundary; no paid effect, merge or production deployment follows automatically.
+
 ## Current BRD-v3 validation allowance (2026-10-04)
 
 PR #268 is merged, CI-green and source-verified on the authorized synthetic target. Its deployment preserved 20 protected tables, all nine consumed effects and USD 5.1124528 aggregate. Both providers remain OFF. Real prompt-v3 quality is not yet proven.

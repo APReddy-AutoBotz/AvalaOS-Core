@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current Pilot Operations empty-release risk (2026-10-05)
+
+Confirmed source defect: the server's valid configured-environment/no-candidate projection contains an all-null release tuple that the strict browser decoder rejects. The resulting unavailable panel hides valid environment and recovery status. Controls also lack per-action capability filtering; current Edge/SQL authorization still rejects unauthorized commands, so no authorization bypass is established.
+
+The frontend-only correction is scoped by `docs/planning/pilot-operations-empty-release.md`. Strict partial-identity rejection, no invented IDs, current tenant fences and server authority are retained. Executed evidence: focused source checks, 10/10 Desktop Chrome/Pixel 7 cases, TypeScript checking and ten retained-response replay assertions passed. Candidate CI/preview are pending; hosted corrected-UI verification is not run. Retained exact-head disposable PostgreSQL recovery evidence was checked against its manifest and passed all six assertions; it is neither a restore of the current hosted synthetic target nor new-candidate CI. Hosted target backup/restore remains `not_run`. Providers remain OFF and the last verified conservative campaign debit remains USD 6.0553712 across 11 consumed effects; no further paid effect is included.
+
 ## Current BRD-v3 validation authority and evidence (2026-10-04)
 
 Executed evidence: PR #268 merged with the tested tree unchanged; candidate CI/preview and seven executed post-merge Core CI jobs passed. Its separately authorized synthetic Studio deployment and migration were source-verified, preserving 20 protected table snapshots. A fresh read-only check confirms nine consumed effects, USD 5.1124528 conservative aggregate, zero unresolved reservations, providers OFF, current draft v3 and approved v2. Provider validation is stale. No fresh prompt-v3 provider call has occurred; the invoice is not independently verified.
