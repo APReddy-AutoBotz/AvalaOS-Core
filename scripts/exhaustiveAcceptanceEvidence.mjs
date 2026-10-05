@@ -1,4 +1,5 @@
 import { verifyFullPageContrastAttachments } from './acceptanceExecutionProfile.mjs';
+import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 
 export const normalizePlaywrightStatus = status => {
   if (status === 'passed') return 'PASS';
@@ -124,14 +125,16 @@ export const evaluateCompositeTest = components => {
 
 export const validateOracleManifest = (manifest, expected) => {
   const errors = [];
-  if (!manifest || manifest.schemaVersion !== 2) errors.push('oracle-schema');
+  if (!manifest || manifest.schemaVersion !== 3) errors.push('oracle-schema');
   if (manifest?.releaseSha !== expected.releaseSha) errors.push('oracle-release-sha');
   if (String(manifest?.workflowRunId) !== String(expected.workflowRunId)) errors.push('oracle-workflow-run');
   if (String(manifest?.workflowAttempt) !== String(expected.workflowAttempt)) errors.push('oracle-workflow-attempt');
   if (manifest?.environment !== expected.oracleEnvironment) errors.push('oracle-environment');
   if (manifest?.workflowPath !== expected.oracleWorkflowPath) errors.push('oracle-workflow-path');
   if (manifest?.command !== expected.oracleCommand) errors.push('oracle-command');
+  if (!sameObject(manifest?.evidenceIdentity, expected.oracleEvidenceIdentity)) errors.push('oracle-evidence-identity');
   if (!Array.isArray(manifest?.results)) errors.push('oracle-result-array');
+  if ((manifest?.results ?? []).length !== (expected.oracleBindingByTestId?.size ?? 0)) errors.push('oracle-result-count');
   const seen = new Set();
   for (const item of manifest?.results ?? []) {
     const key = item?.testId ?? 'missing';
@@ -149,6 +152,9 @@ export const validateOracleManifest = (manifest, expected) => {
       if (String(item?.[field]) !== String(expectedValue)) errors.push(`oracle-${field}:${key}`);
     }
     if (item?.scenario !== binding?.scenario || !sameValues(item?.scenarioIds, binding ? [binding.scenario] : [])) errors.push(`oracle-scenario:${key}`);
+    const scenario = expected.oracleScenarioByTestId?.get(item?.testId);
+    if (!scenario || item?.inputDigest !== scenario.inputDigest) errors.push(`oracle-input-digest:${key}`);
+    if (item?.persistentMutationCount !== 0) errors.push(`oracle-persistent-mutation:${key}`);
     const owner = provenance?.ownership?.find(value => value.kind === 'oracle-scenario' && value.ownerId === binding?.scenario);
     if (!owner || !sameValues(item?.assertionIds, owner.assertionIds) || !sameValues(item?.scenarioIds, owner.scenarioIds)) errors.push(`oracle-ownership:${key}`);
     if (!sameValues(item?.branchIds, provenance ? [provenance.branchId] : [])) errors.push(`oracle-branches:${key}`);
@@ -157,7 +163,22 @@ export const validateOracleManifest = (manifest, expected) => {
     if (!Array.isArray(item?.assertionOutcomes) || !item.assertionOutcomes.length) errors.push(`oracle-assertion-outcomes:${key}`);
     if (!sameValues((item?.assertionOutcomes ?? []).map(outcome => outcome?.assertionId), item?.assertionIds)) errors.push(`oracle-assertion-outcome-ids:${key}`);
     const derived = assertionStatus(item?.assertionOutcomes);
-    const scopeBoundStatus = derived === 'FAIL' ? 'FAIL' : derived === 'PASS' && passEligibleScope(item?.scope) ? 'PASS' : 'BLOCKED';
+    const hasOutputs = item?.actual && Object.hasOwn(item.actual, 'oracle') && Object.hasOwn(item.actual, 'production');
+    const expectedOutput = expected.oracleExpectedOutputByScenario?.[item?.scenario];
+    if (!hasOutputs) {
+      errors.push(`oracle-output-shape:${key}`);
+    } else {
+      if (item?.oracleOutputDigest !== canonicalDigest(item.actual.oracle)) errors.push(`oracle-output-digest:${key}`);
+      if (item?.productionOutputDigest !== canonicalDigest(item.actual.production)) errors.push(`oracle-production-output-digest:${key}`);
+      if (derived === 'FAIL') {
+        if (item.actual.matched !== false) errors.push(`oracle-failed-comparison:${key}`);
+      } else if (item.actual.matched !== true || !sameObject(item.actual.oracle, item.actual.production)) {
+        errors.push(`oracle-output-equality:${key}`);
+      } else if (!expectedOutput || !sameObject(item.actual.oracle, expectedOutput)) {
+        errors.push(`oracle-expected-output:${key}`);
+      }
+    }
+    const scopeBoundStatus = derived === 'FAIL' ? 'FAIL' : derived === 'PASS' && sameObject(item?.scope, expected.oracleScope) ? 'PASS' : 'BLOCKED';
     if (item?.status !== scopeBoundStatus) errors.push(`oracle-status-not-derived:${key}`);
   }
   for (const testId of expected.oracleBindingByTestId?.keys() ?? []) if (!seen.has(testId)) errors.push(`oracle-result-missing:${testId}`);

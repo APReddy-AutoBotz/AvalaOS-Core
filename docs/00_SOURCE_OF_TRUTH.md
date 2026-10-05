@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Current deterministic scoring acceptance correction (2026-10-05)
+
+AP approved correcting ASSESS-005 through ASSESS-017 to calculation-only acceptance with zero persistent mutations. The previous exhaustive report records 1 PASS and 107 BLOCKED, despite green aggregate feature gates; its thirteen independent-oracle/production scoring comparisons passed but did not establish tenant-scoped state changes. Those historical results remain unchanged. `docs/planning/deterministic-oracle-acceptance.md` governs the implemented catalog, comparator and evidence-validation correction. Focused producer, adversarial validator, catalog and five report-integration checks passed locally; the actual producer-to-report test proves exactly 13 PASS while the other 95 stay BLOCKED. Scoring behavior and other case criteria remain unchanged. Candidate CI is pending at publication; no hosted, paid or production-readiness claim follows.
+
 ## Current Pilot Operations browser response correction (2026-10-05)
 
 PR #270 merged as `458c1f3044ceab814c9c1ffd1e52590c2532c196` with the tested tree unchanged; candidate checks and post-merge Core CI passed. Its approved synthetic operator UI verification exposed a second confirmed source defect: both Pilot Operations endpoints omit CORS headers from actual JSON responses although preflight succeeds. The browser issued one query and could not render the panel. Temporary read access was removed, fresh-session denial passed, all 39 protected-table fingerprints stayed unchanged, providers remained OFF and the operations mutation switch absent/OFF. Spending remains USD 6.0553712 across 11 consumed effects with no unresolved reservations.

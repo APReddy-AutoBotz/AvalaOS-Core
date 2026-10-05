@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { gateOracle, governanceOracle, validateOracleInputs } from '../tests/acceptance/oracles/assess-v1-oracle.mjs';
+import {
+  canonicalDigest,
+  canonicalJson,
+  loadAssessV1OracleEvidence,
+} from './assessV1OracleEvidence.mjs';
 import { canonicalCommand, loadCatalog, loadExecutionBindings, loadSourceProvenance, validateSourceProvenance } from './exhaustiveAcceptanceModel.mjs';
 
 const releaseSha = process.env.RELEASE_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -11,9 +16,6 @@ const workflowPath = process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/
 const environment = process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT || 'stable-release';
 const manifestPath = path.resolve(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const sutManifestPath = path.resolve(process.env.SUT_RESULTS_MANIFEST || 'acceptance-results/sut-oracle-results.json');
-const governanceManifestPath = path.resolve(process.env.GOVERNANCE_SUT_RESULTS_MANIFEST || 'acceptance-results/governance-sut-results.json');
-const fixtures = JSON.parse(fs.readFileSync('tests/acceptance/fixtures/process-discovery-transcripts.json', 'utf8')).fixtures;
-const base = fixtures.find(item => item.slug === 'clean-straight-through')?.oracleInputs;
 const bindings = loadExecutionBindings();
 const provenanceDocument = loadSourceProvenance();
 const catalog = loadCatalog();
@@ -23,10 +25,10 @@ const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [ite
 const catalogByTestId = new Map(catalog.cases.map(item => [item.testId, item]));
 const oracleContext = bindings.oracleExecution;
 const command = canonicalCommand(oracleContext?.command ?? []);
-if (!base) throw new Error('ORACLE_BASE_FIXTURE_MISSING');
 if (!/^[0-9a-f]{40}$/u.test(releaseSha)) throw new Error('ORACLE_RELEASE_SHA_REQUIRED');
 if (!oracleContext || !oracleContext.environments?.includes(environment) || oracleContext.workflowPath !== workflowPath || !command) throw new Error('ORACLE_CANONICAL_EXECUTION_CONTEXT_REQUIRED');
 
+const evidence = loadAssessV1OracleEvidence({ bindings });
 fs.mkdirSync(path.dirname(sutManifestPath), { recursive: true });
 const sutRun = spawnSync(process.execPath, [
   'scripts/runTypeScriptTest.mjs',
@@ -36,133 +38,123 @@ const sutRun = spawnSync(process.execPath, [
 ], {
   cwd: process.cwd(),
   stdio: 'inherit',
-  env: { ...process.env, SUT_RESULTS_MANIFEST: sutManifestPath },
-});
-if (sutRun.status !== 0) throw new Error('PRODUCTION_SCORING_COMPARATOR_FAILED');
-const sutManifest = JSON.parse(fs.readFileSync(sutManifestPath, 'utf8'));
-const exactIndex = (items, field, errorCode) => {
-  const index = new Map();
-  for (const item of items ?? []) {
-    const key = item?.[field];
-    if (!key || index.has(key)) throw new Error(errorCode);
-    index.set(key, item);
-  }
-  return index;
-};
-const sutIndex = exactIndex(sutManifest.results, 'testId', 'PRODUCTION_SCORING_COMPARATOR_DUPLICATE_RESULT');
-
-fs.mkdirSync(path.dirname(governanceManifestPath), { recursive: true });
-const governanceRun = spawnSync(process.execPath, [
-  'scripts/runTypeScriptTest.mjs',
-  'types.ts',
-  'services/scoringEngine.ts',
-  'services/scoringEngine.test.ts',
-], {
-  cwd: process.cwd(),
-  stdio: 'inherit',
   env: {
     ...process.env,
     RELEASE_SHA: releaseSha,
     GITHUB_RUN_ID: workflowRunId,
     GITHUB_RUN_ATTEMPT: workflowAttempt,
-    SCORING_GOVERNANCE_RESULTS_MANIFEST: governanceManifestPath,
+    ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+    SUT_RESULTS_MANIFEST: sutManifestPath,
   },
 });
-if (governanceRun.status !== 0) throw new Error('PRODUCTION_GOVERNANCE_SCORE_COMPARATOR_FAILED');
-const governanceManifest = JSON.parse(fs.readFileSync(governanceManifestPath, 'utf8'));
-if (governanceManifest?.schemaVersion !== 1
-  || governanceManifest?.releaseSha !== releaseSha
-  || String(governanceManifest?.workflowRunId) !== workflowRunId
-  || String(governanceManifest?.workflowAttempt) !== workflowAttempt
-  || !Array.isArray(governanceManifest?.results)) {
-  throw new Error('PRODUCTION_GOVERNANCE_SCORE_EVIDENCE_INVALID');
-}
-const governanceIndex = exactIndex(governanceManifest.results, 'scenario', 'PRODUCTION_GOVERNANCE_SCORE_DUPLICATE_RESULT');
+if (sutRun.status !== 0) throw new Error('PRODUCTION_SCORING_COMPARATOR_FAILED');
+const sutManifest = JSON.parse(fs.readFileSync(sutManifestPath, 'utf8'));
 
-const gateResult = (inputs, expected) => {
-  const actual = gateOracle(inputs).primaryGatingOutcome;
-  return { pass: actual === expected, actual: { primaryGatingOutcome: actual } };
-};
-
-const runScenario = scenario => {
-  switch (scenario) {
-    case 'missing-input':
-      try { validateOracleInputs({ ...base, completionQuality: undefined }); return { pass: false, actual: { rejected: false } }; }
-      catch (error) { return { pass: error instanceof RangeError, actual: { rejected: true } }; }
-    case 'invalid-input':
-      try { validateOracleInputs({ ...base, standardization: 0 }); return { pass: false, actual: { rejected: false } }; }
-      catch (error) { return { pass: error instanceof RangeError, actual: { rejected: true } }; }
-    case 'governance-min': {
-      const actual = governanceOracle({ ...base, riskCriticality: 1, governanceSensitivity: 1, dataSensitivity: 1, errorReversibility: 5, goalAmbiguity: 1 });
-      return { pass: actual.score === 20 && actual.riskTier === 'Minimal' && actual.gateDecision === 'Go', actual: { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
-    }
-    case 'governance-max': {
-      const actual = governanceOracle({ ...base, riskCriticality: 5, governanceSensitivity: 5, dataSensitivity: 5, errorReversibility: 1, goalAmbiguity: 5 });
-      return { pass: actual.score === 100 && actual.riskTier === 'Unacceptable' && actual.gateDecision === 'No-Go', actual: { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision } };
-    }
-    case 'needs-discovery':
-    case 'completion-below': return gateResult({ ...base, completionQuality: 49.9 }, 'Needs Discovery');
-    case 'completion-exact': return gateResult({ ...base, completionQuality: 50 }, 'Passed');
-    case 'completion-above': return gateResult({ ...base, completionQuality: 50.1 }, 'Passed');
-    case 'process-redesign': return gateResult({ ...base, processMaturity: 1, standardization: 1 }, 'Process Redesign First');
-    case 'low-value': return gateResult({ ...base, volume: 10, manualEffort: 1, cycleTimePain: 2, reworkPain: 2 }, 'Monitor / Deprioritize');
-    case 'human-led': return gateResult({ ...base, goalAmbiguity: 5, riskCriticality: 5 }, 'Human-Led / Do Not Automate');
-    case 'governance-review': return gateResult({ ...base, dataSensitivity: 4 }, 'Governance Review Required');
-    case 'no-go': return gateResult({ ...base, riskCriticality: 5, errorReversibility: 2, governanceSensitivity: 4 }, 'No-Go');
-    default: return { pass: false, actual: { error: `unknown oracle scenario ${scenario}` } };
+const same = (left, right) => canonicalJson(left) === canonicalJson(right);
+const exactIndex = (items, errorCode) => {
+  if (!Array.isArray(items) || items.length !== 13) throw new Error(errorCode);
+  const index = new Map();
+  for (const item of items) {
+    if (!item?.testId || index.has(item.testId)) throw new Error(errorCode);
+    index.set(item.testId, item);
   }
+  return index;
+};
+if (sutManifest?.schemaVersion !== 2
+  || sutManifest?.releaseSha !== releaseSha
+  || String(sutManifest?.workflowRunId) !== workflowRunId
+  || String(sutManifest?.workflowAttempt) !== workflowAttempt
+  || sutManifest?.workflowPath !== workflowPath
+  || sutManifest?.command !== command
+  || !same(sutManifest?.evidenceIdentity, evidence.identity)) {
+  throw new Error('PRODUCTION_SCORING_COMPARATOR_IDENTITY_INVALID');
+}
+const sutIndex = exactIndex(sutManifest.results, 'PRODUCTION_SCORING_COMPARATOR_RESULT_SET_INVALID');
+for (const scenario of evidence.scenarios) {
+  const result = sutIndex.get(scenario.testId);
+  if (!result
+    || result.scenario !== scenario.scenario
+    || result.status !== 'PASS'
+    || result.inputDigest !== scenario.inputDigest
+    || result.persistentMutationCount !== 0
+    || result.outputDigest !== canonicalDigest(result.actual)) {
+    throw new Error(`PRODUCTION_SCORING_COMPARATOR_RESULT_INVALID:${scenario.testId}`);
+  }
+}
+
+const expectedByScenario = new Map([
+  ['missing-input', { rejected: true }],
+  ['invalid-input', { rejected: true }],
+  ['governance-min', { governanceRisk: 20, riskTier: 'Minimal', gateDecision: 'Go' }],
+  ['governance-max', { governanceRisk: 100, riskTier: 'Unacceptable', gateDecision: 'No-Go' }],
+  ['needs-discovery', { primaryGatingOutcome: 'Needs Discovery' }],
+  ['process-redesign', { primaryGatingOutcome: 'Process Redesign First' }],
+  ['low-value', { primaryGatingOutcome: 'Monitor / Deprioritize' }],
+  ['human-led', { primaryGatingOutcome: 'Human-Led / Do Not Automate' }],
+  ['governance-review', { primaryGatingOutcome: 'Governance Review Required' }],
+  ['no-go', { primaryGatingOutcome: 'No-Go' }],
+  ['completion-below', { primaryGatingOutcome: 'Needs Discovery' }],
+  ['completion-exact', { primaryGatingOutcome: 'Passed' }],
+  ['completion-above', { primaryGatingOutcome: 'Passed' }],
+]);
+
+const runIndependentOracle = definition => {
+  if (definition.scenario === 'missing-input' || definition.scenario === 'invalid-input') {
+    try { validateOracleInputs(definition.input); return { rejected: false }; }
+    catch (error) { return { rejected: error instanceof RangeError }; }
+  }
+  if (definition.scenario === 'governance-min' || definition.scenario === 'governance-max') {
+    const actual = governanceOracle(definition.input);
+    return { governanceRisk: actual.score, riskTier: actual.riskTier, gateDecision: actual.gateDecision };
+  }
+  return { primaryGatingOutcome: gateOracle(definition.input).primaryGatingOutcome };
 };
 
-const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const results = [];
-for (const binding of bindings.oracleTests ?? []) {
-  const provenance = provenanceByTestId.get(binding.testId);
-  const testCase = catalogByTestId.get(binding.testId);
-  const owner = provenance?.ownership?.find(item => item.kind === 'oracle-scenario' && item.ownerId === binding.scenario);
+for (const definition of evidence.scenarios) {
+  const binding = bindings.oracleTests.find(item => item.testId === definition.testId);
+  const provenance = provenanceByTestId.get(definition.testId);
+  const testCase = catalogByTestId.get(definition.testId);
+  const owner = provenance?.ownership?.find(item => item.kind === 'oracle-scenario' && item.ownerId === definition.scenario);
   try {
-    if (!provenance || !testCase || !owner || owner.assertionIds?.length !== 1 || owner.scenarioIds?.length !== 1) throw new Error('ORACLE_PROOF_OWNER_MISSING');
-    const evaluated = runScenario(binding.scenario);
-    const sut = sutIndex.get(binding.testId);
-    let sutMatches = sut?.status === 'PASS';
-    let productionActual = sut?.actual ?? 'missing';
-
-    if (binding.scenario === 'governance-min' || binding.scenario === 'governance-max') {
-      const exactGovernance = governanceIndex.get(binding.scenario)?.actual;
-      const bandExpected = { riskTier: evaluated.actual.riskTier, gateDecision: evaluated.actual.gateDecision };
-      sutMatches = sutMatches && same(sut?.actual, bandExpected) && same(exactGovernance, evaluated.actual);
-      productionActual = { band: sut?.actual ?? 'missing', exactGovernance: exactGovernance ?? 'missing' };
-    } else {
-      sutMatches = sutMatches && same(sut?.actual, evaluated.actual);
-    }
-
-    const assertionOutcomes = [{ assertionId: owner.assertionIds[0], status: evaluated.pass && sutMatches ? 'PASS' : 'FAIL' }];
-    const status = assertionOutcomes[0].status === 'FAIL'
-      ? 'FAIL'
-      : provenance.scope?.evidenceScope === 'executed-fixture' && provenance.scope.organizationId && provenance.scope.workspaceId
-        ? 'PASS'
-        : 'BLOCKED';
+    if (!binding || binding.scenario !== definition.scenario || !provenance || !testCase || !owner
+      || owner.assertionIds?.length !== 1 || owner.scenarioIds?.length !== 1
+      || testCase.fixture !== evidence.scope.fixtureId
+      || testCase.expectedMutation !== 'none'
+      || testCase.expectedMutationCount !== 0) throw new Error('ORACLE_PROOF_OWNER_OR_CATALOG_INVALID');
+    const oracleActual = runIndependentOracle(definition);
+    const production = sutIndex.get(definition.testId);
+    const expected = expectedByScenario.get(definition.scenario);
+    const matched = Boolean(expected) && same(oracleActual, expected) && same(production.actual, oracleActual);
+    const scopeMatches = same(provenance.scope, evidence.scope);
+    const assertionOutcomes = [{ assertionId: owner.assertionIds[0], status: matched ? 'PASS' : 'FAIL' }];
     results.push({
-      testId: binding.testId,
-      scenario: binding.scenario,
-      status,
+      testId: definition.testId,
+      scenario: definition.scenario,
+      status: matched ? scopeMatches ? 'PASS' : 'BLOCKED' : 'FAIL',
       releaseSha,
       workflowRunId,
       workflowAttempt,
       environment,
       workflowPath,
       command,
+      inputDigest: definition.inputDigest,
+      oracleOutputDigest: canonicalDigest(oracleActual),
+      productionOutputDigest: production.outputDigest,
+      persistentMutationCount: 0,
       assertionIds: [...owner.assertionIds],
       assertionOutcomes,
       scenarioIds: [...owner.scenarioIds],
       branchIds: [...testCase.branchIds],
       sourceReferences: [...testCase.sourceReference],
       scope: { ...provenance.scope },
-      actual: { oracle: evaluated.actual, production: productionActual, matched: sutMatches },
+      actual: { oracle: oracleActual, production: production.actual, matched },
     });
   } catch (error) {
+    const actual = error instanceof Error ? error.message : String(error);
     results.push({
-      testId: binding.testId,
-      scenario: binding.scenario,
+      testId: definition.testId,
+      scenario: definition.scenario,
       status: 'FAIL',
       releaseSha,
       workflowRunId,
@@ -170,18 +162,34 @@ for (const binding of bindings.oracleTests ?? []) {
       environment,
       workflowPath,
       command,
+      inputDigest: definition.inputDigest,
+      oracleOutputDigest: canonicalDigest(actual),
+      productionOutputDigest: sutIndex.get(definition.testId)?.outputDigest ?? 'missing',
+      persistentMutationCount: 0,
       assertionIds: owner?.assertionIds ?? ['missing-owner'],
       assertionOutcomes: [{ assertionId: owner?.assertionIds?.[0] ?? 'missing-owner', status: 'FAIL' }],
-      scenarioIds: owner?.scenarioIds ?? [binding.scenario],
+      scenarioIds: owner?.scenarioIds ?? [definition.scenario],
       branchIds: testCase?.branchIds ?? ['missing-branch'],
       sourceReferences: testCase?.sourceReference ?? ['missing-source'],
-      scope: provenance?.scope ?? { evidenceScope: 'planned-fixture', fixtureId: testCase?.fixture ?? 'missing-fixture', organizationId: null, workspaceId: null },
-      actual: error instanceof Error ? error.message : String(error),
+      scope: provenance?.scope ? { ...provenance.scope } : { ...evidence.scope },
+      actual,
     });
   }
 }
 
-const manifest = { schemaVersion: 2, releaseSha, workflowRunId, workflowAttempt, environment, workflowPath, command, generatedAt: new Date().toISOString(), results };
+if (results.length !== 13 || new Set(results.map(item => item.testId)).size !== 13) throw new Error('ORACLE_RESULT_SET_INVALID');
+const manifest = {
+  schemaVersion: 3,
+  releaseSha,
+  workflowRunId,
+  workflowAttempt,
+  environment,
+  workflowPath,
+  command,
+  evidenceIdentity: evidence.identity,
+  generatedAt: new Date().toISOString(),
+  results,
+};
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 const temp = `${manifestPath}.tmp`;
 fs.writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`);

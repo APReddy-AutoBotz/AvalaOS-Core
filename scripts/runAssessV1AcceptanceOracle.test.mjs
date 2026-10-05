@@ -8,7 +8,6 @@ const root = process.cwd();
 const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-oracle-binding-'));
 const manifestPath = path.join(temp, 'oracle.json');
 const sutManifestPath = path.join(temp, 'sut.json');
-const governanceManifestPath = path.join(temp, 'governance.json');
 const identity = {
   RELEASE_SHA: 'a'.repeat(40),
   GITHUB_RUN_ID: '123456',
@@ -24,7 +23,6 @@ const run = extra => spawnSync(process.execPath, ['scripts/runAssessV1Acceptance
     ...identity,
     ORACLE_RESULTS_MANIFEST: manifestPath,
     SUT_RESULTS_MANIFEST: sutManifestPath,
-    GOVERNANCE_SUT_RESULTS_MANIFEST: governanceManifestPath,
     ...extra,
   },
 });
@@ -33,44 +31,65 @@ try {
   const exact = run();
   assert.equal(exact.status, 0, exact.stderr);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.schemaVersion, 2);
+  const sut = JSON.parse(readFileSync(sutManifestPath, 'utf8'));
+  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(sut.schemaVersion, 2);
   assert.equal(manifest.environment, 'pull-request');
   assert.equal(manifest.workflowAttempt, identity.GITHUB_RUN_ATTEMPT);
   assert.equal(manifest.command, 'node scripts/runAssessV1AcceptanceOracle.mjs');
+  assert.deepEqual(manifest.evidenceIdentity, sut.evidenceIdentity);
   assert.equal(manifest.results.length, 13);
-  assert.equal(manifest.results.every(item => item.status === 'BLOCKED'), true, 'planned fixture scope must remain BLOCKED even when every oracle assertion is green');
+  assert.equal(sut.results.length, 13);
+  assert.equal(new Set(manifest.results.map(item => item.testId)).size, 13);
+  assert.equal(manifest.results.every(item => item.status === 'PASS'), true);
   assert.equal(manifest.results.every(item => item.assertionOutcomes.length === 1 && item.assertionOutcomes[0].status === 'PASS'), true);
-  assert.equal(manifest.results.every(item => item.scope.evidenceScope === 'planned-fixture' && item.scope.organizationId === null && item.scope.workspaceId === null), true);
+  assert.equal(manifest.results.every(item => item.persistentMutationCount === 0), true);
+  assert.equal(manifest.results.every(item => item.scope.evidenceScope === 'executed-deterministic-oracle'
+    && item.scope.fixtureId === 'TRANSCRIPT-001'
+    && item.scope.persistentMutationCount === 0
+    && !('organizationId' in item.scope)
+    && !('workspaceId' in item.scope)), true);
+  assert.equal(manifest.results.every(item => item.actual.matched === true
+    && JSON.stringify(item.actual.oracle) === JSON.stringify(item.actual.production)), true);
+  assert.equal(new Set(manifest.results.map(item => item.inputDigest)).size, 12, 'only ASSESS-009 and ASSESS-015 intentionally share the same exact input');
+  for (const digest of [
+    ...Object.values(manifest.evidenceIdentity.sourceDigests),
+    manifest.evidenceIdentity.fixture.digest,
+    manifest.evidenceIdentity.scenarioContractDigest,
+    ...manifest.results.flatMap(item => [item.inputDigest, item.oracleOutputDigest, item.productionOutputDigest]),
+  ]) assert.match(digest, /^sha256:[0-9a-f]{64}$/u);
 
   const stable = run({ ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'stable-release' });
   assert.equal(stable.status, 0, stable.stderr);
   const stableManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   assert.equal(stableManifest.environment, 'stable-release');
-  assert.equal(stableManifest.results.every(item => item.status === 'BLOCKED'), true, 'stable execution also requires separately validated executed scope before promotion');
+  assert.equal(stableManifest.results.every(item => item.status === 'PASS'), true);
 
   assert.notEqual(run({ ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'substituted-preview' }).status, 0, 'non-canonical environment must fail before execution');
   assert.notEqual(run({ ACCEPTANCE_WORKFLOW_PATH: '.github/workflows/substituted.yml' }).status, 0, 'substituted workflow must fail before execution');
 
+  const plannedProvenance = JSON.parse(readFileSync('tests/acceptance/source-provenance.json', 'utf8'));
+  for (const contract of plannedProvenance.contracts) {
+    if (/^ASSESS-0(?:0[5-9]|1[0-7])$/u.test(contract.testId)) {
+      contract.scope = { evidenceScope: 'planned-fixture', fixtureId: 'TRANSCRIPT-001', organizationId: null, workspaceId: null };
+    }
+  }
+  const plannedPath = path.join(temp, 'planned-provenance.json');
+  writeFileSync(plannedPath, JSON.stringify(plannedProvenance));
+  const planned = run({ ACCEPTANCE_PROVENANCE: plannedPath });
+  assert.equal(planned.status, 0, planned.stderr);
+  const plannedManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  assert.equal(plannedManifest.results.every(item => item.status === 'BLOCKED'), true, 'planned scope cannot be promoted by green calculations');
+  assert.equal(plannedManifest.results.every(item => item.scope.evidenceScope === 'planned-fixture'), true);
+
   const bindings = JSON.parse(readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
-  const provenance = JSON.parse(readFileSync('tests/acceptance/source-provenance.json', 'utf8'));
-  const proofOwners = JSON.parse(readFileSync('tests/acceptance/proof-owner-registry.json', 'utf8'));
   bindings.oracleTests.find(item => item.testId === 'ASSESS-005').scenario = 'coordinated-fake-scenario';
-  provenance.contracts.find(item => item.testId === 'ASSESS-005').ownership[0] = {
-    kind: 'oracle-scenario', ownerId: 'coordinated-fake-scenario',
-    assertionIds: ['assess-v1-oracle::ASSESS-005::coordinated-fake-scenario'], scenarioIds: ['coordinated-fake-scenario'],
-  };
-  proofOwners.contracts.find(item => item.testId === 'ASSESS-005').ownership = structuredClone(provenance.contracts.find(item => item.testId === 'ASSESS-005').ownership);
   const bindingPath = path.join(temp, 'substituted-bindings.json');
-  const provenancePath = path.join(temp, 'substituted-provenance.json');
-  const proofOwnersPath = path.join(temp, 'substituted-proof-owners.json');
   writeFileSync(bindingPath, JSON.stringify(bindings));
-  writeFileSync(provenancePath, JSON.stringify(provenance));
-  writeFileSync(proofOwnersPath, JSON.stringify(proofOwners));
-  const coordinated = run({ ACCEPTANCE_BINDINGS: bindingPath, ACCEPTANCE_PROVENANCE: provenancePath, ACCEPTANCE_PROOF_OWNERS: proofOwnersPath });
-  assert.notEqual(coordinated.status, 0, 'coordinated binding, provenance, and registry substitution must fail against the source contract');
-  assert.match(coordinated.stderr, /proof-owner-source-contract/u);
+  const coordinated = run({ ACCEPTANCE_BINDINGS: bindingPath });
+  assert.notEqual(coordinated.status, 0, 'coordinated scenario substitution must fail against the fixed 13-case input contract');
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('assessment oracle exact execution and planned-scope binding tests passed');
+console.log('assessment oracle exact comparator, identity, and scope tests passed');

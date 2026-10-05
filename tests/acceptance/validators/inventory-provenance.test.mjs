@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { canonicalSourceSha256 } from '../../../scripts/exhaustiveAcceptanceModel.mjs';
+import { canonicalSourceSha256, validateSourceProvenance } from '../../../scripts/exhaustiveAcceptanceModel.mjs';
 
 const root = process.cwd();
 const validator = path.join(root, 'scripts/exhaustiveAcceptanceValidate.mjs');
@@ -18,6 +18,29 @@ const proofOwners = JSON.parse(readFileSync(proofOwnersPath, 'utf8'));
 const hostedSpec = readFileSync(path.join(root, 'tests/browser/exhaustiveHostedAcceptance.spec.ts'), 'utf8');
 const hostedRouteSource = readFileSync(path.join(root, 'services/hostedSandboxRoute.ts'), 'utf8');
 const inventory = JSON.parse(readFileSync(path.join(root, 'tests/acceptance/inventory.json'), 'utf8'));
+
+const deterministicScope = { evidenceScope: 'executed-deterministic-oracle', fixtureId: 'TRANSCRIPT-001', persistentMutationCount: 0 };
+const oracleContract = provenance.contracts.find(item => item.testId === 'ASSESS-005');
+assert.deepEqual(oracleContract.scope, deterministicScope, 'approved calculations carry no tenant execution identity');
+const deterministicErrors = (caseCatalog, caseProvenance) => validateSourceProvenance(caseCatalog, bindings, caseProvenance, root, proofOwners)
+  .filter(error => error.startsWith('source-provenance-deterministic-scope:'));
+assert.deepEqual(deterministicErrors(catalog, provenance), [], 'the approved thirteen scopes are valid');
+
+const tenantClaim = structuredClone(provenance);
+tenantClaim.contracts.find(item => item.testId === 'ASSESS-005').scope.organizationId = '11111111-1111-4111-8111-111111111111';
+assert.deepEqual(deterministicErrors(catalog, tenantClaim), [`source-provenance-deterministic-scope:${oracleContract.branchId}`], 'adding an unused tenant ID must not manufacture tenant proof');
+
+const mutationClaim = structuredClone(catalog);
+mutationClaim.cases.find(item => item.testId === 'ASSESS-005').expectedMutationCount = 1;
+assert.deepEqual(deterministicErrors(mutationClaim, provenance), [`source-provenance-deterministic-scope:${oracleContract.branchId}`], 'pure calculation evidence cannot satisfy a mutation-bearing case');
+
+const nonOracleCatalog = structuredClone(catalog);
+const nonOracleProvenance = structuredClone(provenance);
+const hostedCase = nonOracleCatalog.cases.find(item => item.testId === 'SANDBOX-001');
+Object.assign(hostedCase, { fixture: 'TRANSCRIPT-001', expectedMutation: 'none', expectedMutationCount: 0, expectedAudit: 'not applicable' });
+const hostedContract = nonOracleProvenance.contracts.find(item => item.testId === hostedCase.testId);
+hostedContract.scope = { ...deterministicScope };
+assert.deepEqual(deterministicErrors(nonOracleCatalog, nonOracleProvenance), [`source-provenance-deterministic-scope:${hostedContract.branchId}`], 'zero-mutation hosted cases still cannot borrow oracle execution scope');
 
 assert.equal(inventory.schemaVersion, 3);
 assert.equal(inventory.coveredBranchesSource, 'tests/acceptance/catalog/test-catalog.json');

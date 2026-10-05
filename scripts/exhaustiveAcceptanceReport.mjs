@@ -23,6 +23,7 @@ import {
   validateHostedPlaywrightReport,
 } from './exhaustiveAcceptanceEvidence.mjs';
 import { deriveExpectedHostedAcceptanceMetadata } from './hostedAcceptanceReportProvenance.mjs';
+import { ASSESS_V1_EXPECTED_OUTPUTS, loadAssessV1OracleEvidence } from './assessV1OracleEvidence.mjs';
 
 const root = process.cwd();
 const out = path.resolve(process.env.ACCEPTANCE_RESULTS_DIR || 'acceptance-results');
@@ -93,6 +94,7 @@ if (executionDisposition === 'EXECUTED') {
   }
 }
 
+const oracleEvidence = loadAssessV1OracleEvidence({ bindings });
 const expectedBinding = {
   releaseSha,
   workflowRunId,
@@ -109,6 +111,10 @@ const expectedBinding = {
   oracleWorkflowPath: bindings.oracleExecution?.workflowPath,
   oracleCommand: canonicalCommand(bindings.oracleExecution?.command ?? []),
   oracleBindingByTestId: new Map((bindings.oracleTests ?? []).map(item => [item.testId, item])),
+  oracleEvidenceIdentity: oracleEvidence.identity,
+  oracleScenarioByTestId: oracleEvidence.scenarioByTestId,
+  oracleExpectedOutputByScenario: ASSESS_V1_EXPECTED_OUTPUTS,
+  oracleScope: oracleEvidence.scope,
 };
 const retainedMap = retainedBindingMap(bindings);
 const retainedErrors = validateRetainedManifest(retainedManifest, expectedBinding, retainedMap);
@@ -190,7 +196,7 @@ const results = (catalog.cases ?? []).map(testCase => {
         status: item.status,
         reason: item.status === 'PASS' ? null
           : item.status === 'FAIL' ? `Oracle scenario failed: ${item.scenario}`
-            : 'Oracle assertions executed, but no separately validated same-run executed fixture scope was supplied.',
+            : 'Oracle assertions executed, but the declared fixture scope is not eligible for a calculation-only pass.',
       };
       actualResult = item?.actual ?? null;
     }

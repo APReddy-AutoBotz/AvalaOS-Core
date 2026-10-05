@@ -293,6 +293,46 @@ test('hostile hosted report provenance substitutions remain blocked under a gree
   passedControlScriptScenarios.add('exhaustive-report-hostile-provenance-blocked');
 });
 
+test('validated deterministic oracle evidence promotes only its 13 exact cases', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-acceptance-oracle-report-'));
+  const resultsDir = path.join(temp, 'results');
+  const oraclePath = path.join(temp, 'oracle.json');
+  const sutPath = path.join(temp, 'sut.json');
+  const runIdentity = {
+    RELEASE_SHA: releaseSha,
+    GITHUB_RUN_ID: '123456',
+    GITHUB_RUN_ATTEMPT: '2',
+    ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+    ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+  };
+  try {
+    const producer = spawnSync(process.execPath, ['scripts/runAssessV1AcceptanceOracle.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: { ...process.env, ...runIdentity, ORACLE_RESULTS_MANIFEST: oraclePath, SUT_RESULTS_MANIFEST: sutPath },
+    });
+    assert.equal(producer.status, 0, producer.stderr);
+    const reportRun = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: {
+        ...process.env,
+        ...runIdentity,
+        ACCEPTANCE_RESULTS_DIR: resultsDir,
+        ORACLE_RESULTS_MANIFEST: oraclePath,
+        ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
+      },
+    });
+    assert.equal(reportRun.status, 0, reportRun.stderr);
+    const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+    const passIds = report.results.filter(item => item.status === 'PASS').map(item => item.testId).sort();
+    assert.deepEqual(passIds, Array.from({ length: 13 }, (_, index) => `ASSESS-${String(index + 5).padStart(3, '0')}`));
+    assert.equal(report.results.filter(item => item.status === 'BLOCKED').length, 95);
+    assert.equal(report.results.filter(item => item.status === 'FAIL').length, 0);
+    assert.equal(report.results.filter(item => item.executionKind === 'oracle').every(item => item.status === 'PASS'), true);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
 test.after(() => {
   const directory = process.env.PR_C_CONTROL_SCRIPT_SCENARIO_REPORT_DIRECTORY;
   if (!directory || passedControlScriptScenarios.size !== 4) return;
