@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Current Pilot Operations response CORS defect (2026-10-05)
+
+Confirmed source defect: both endpoint JSON helpers omit the shared CORS headers used by preflight. Executed synthetic evidence after PR #270's merge: the operator authenticated, the browser issued one query, and the panel timed out; a separate read-only check observed preflight 200 with allow-origin and actual denial 404 with no-store but without allow-origin. This is a browser availability defect, not an established authorization bypass. The temporary workspace role was removed, fresh-session query denial passed, 39 protected-table fingerprints stayed unchanged and browser/preview cleanup completed. Providers remained OFF, the mutation flag absent/OFF, and cumulative conservative spending unchanged at USD 6.0553712.
+
+The correction in `docs/planning/pilot-operations-cors.md` retains shared wildcard CORS without credential sharing, server authorization and no-store. Executed evidence: 13 actual-entrypoint cases, the retained feature source suite, 12/12 Desktop Chrome/Pixel 7 browser cases, application/Edge typechecks and secret hygiene passed. The same fixture reproduces the missing header on unchanged PR #270 source. Candidate CI is pending and corrected hosted UI verification is not run. Existing injected-client UI tests did not cover HTTP response headers. No hosted-target recovery or production readiness claim follows.
+
 ## Current Pilot Operations empty-release risk (2026-10-05)
 
 Confirmed source defect: the server's valid configured-environment/no-candidate projection contains an all-null release tuple that the strict browser decoder rejects. The resulting unavailable panel hides valid environment and recovery status. Controls also lack per-action capability filtering; current Edge/SQL authorization still rejects unauthorized commands, so no authorization bypass is established.

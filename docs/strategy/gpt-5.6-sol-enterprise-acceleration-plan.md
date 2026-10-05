@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current Pilot Operations CORS correction (2026-10-05)
+
+PR #270 is merged and its approved synthetic browser attempt exposed missing CORS headers on actual Edge responses. Cleanup and fresh-session denial passed. Follow `docs/planning/pilot-operations-cors.md`: reuse the shared headers in two local response helpers, preserve authorization and no-store, and verify the actual entrypoints plus real two-origin browser fetches. All three read-only reviews closed before the fixed-profile write phase. One worker owns endpoints/tests/runbook; the controller owns integration, current evidence, provenance and the single PR. No migration, paid call, broader local regression or hosted mutation is included; stop at the merge/deployment boundary.
+
 ## Current Pilot Operations empty-release correction (2026-10-05)
 
 The authorized synthetic operator API exercise is complete. The next-step frontend review identified a valid no-candidate projection that the UI cannot render. The three read-only reviews closed before writes. The controller selected a frontend-only normalization and capability-aware action correction; a projection migration and broader absent-environment redesign are unnecessary for this path. One implementation worker owns the feature and focused tests; the controller owns integration, current evidence and the single PR under the existing fixed workspace-write profile. No nested delegation.

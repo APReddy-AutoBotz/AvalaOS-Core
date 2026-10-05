@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Current Pilot Operations browser response correction (2026-10-05)
+
+PR #270 merged as `458c1f3044ceab814c9c1ffd1e52590c2532c196` with the tested tree unchanged; candidate checks and post-merge Core CI passed. Its approved synthetic operator UI verification exposed a second confirmed source defect: both Pilot Operations endpoints omit CORS headers from actual JSON responses although preflight succeeds. The browser issued one query and could not render the panel. Temporary read access was removed, fresh-session denial passed, all 39 protected-table fingerprints stayed unchanged, providers remained OFF and the operations mutation switch absent/OFF. Spending remains USD 6.0553712 across 11 consumed effects with no unresolved reservations.
+
+The bounded response-header correction and actual-entrypoint/two-origin browser checks are governed by `docs/planning/pilot-operations-cors.md`. Existing authorization, no-store responses and mutation gates are preserved. Thirteen actual-entrypoint cases, the retained feature source suite, 12/12 desktop/mobile browser cases, application/Edge typechecks and secret hygiene passed locally. Candidate CI is pending; corrected hosted verification is not run. This is continuation of the operator path, not production readiness or another paid allowance.
+
 ## Current synthetic operator UI correction (2026-10-05)
 
 PR #269 is merged as `0f7df5dc91100bb3401e612aa2d05afe7d03e747`, with the tested tree unchanged. Its separately authorized synthetic validation produced BRD v4; AP approved its review and downstream Delivery/Monitor continuation. The retained campaign has 11 consumed effects, USD 6.0553712 conservative charges and no unresolved reservations, with both providers OFF at the last verification. The subsequent synthetic operator API exercise completed with the environment read-only, temporary operator access removed and the operations mutation switch absent/OFF. These executed results supersede the pending statements below; they do not establish production readiness.

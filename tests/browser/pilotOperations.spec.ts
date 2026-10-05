@@ -1,5 +1,11 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import {
+  startPilotOperationsHttpServer,
+  syntheticPilotOperationsCommandBody,
+  syntheticPilotOperationsHttp,
+  syntheticPilotOperationsQueryBody,
+} from '../../scripts/pilotOperationsHttpFixture.mjs';
 
 const open=async(page:import('@playwright/test').Page,state='ready')=>{await page.goto(`/tests/browser/pilotOperationsHarness.html?state=${state}`);await page.getByRole('button',{name:/Pilot Operations/}).click()};
 // This multi-command flow plus whole-panel Axe scan is functional, not a performance gate.
@@ -8,3 +14,49 @@ test('actual Admin Workbench owns loading, error, revoked and control states',as
 test('actual Admin Workbench shows stale, revoked and blocked command denial without false success',async({page})=>{for(const [state,code] of [['stale','VERSION_CONFLICT'],['denied','ACCESS_DENIED'],['blocked','ENVIRONMENT_BLOCKED']] as const){await open(page,state);await expect(page.getByRole('heading',{name:'Pilot Operations',exact:true,level:2})).toBeVisible();await page.getByRole('button',{name:'read only'}).click();await expect(page.getByText(code)).toBeVisible();await expect(page.getByText(/Authoritative command committed/)).toHaveCount(0)}});
 test('actual Admin Workbench preserves a valid environment with no release and blocks targetless commands',async({page})=>{await open(page,'no_release');const panel=page.getByRole('region',{name:'Pilot Operations',exact:true});await expect(panel.getByText('No release candidate registered.')).toBeVisible();await expect(panel.getByText(/Read-only on/)).toBeVisible();await expect(panel.getByText(/Backup: not_run/)).toBeVisible();await expect(panel.getByText(/Restore: not_run/)).toBeVisible();for(const name of ['validate','approve','simulate promotion','rollback'])await expect(panel.getByRole('button',{name})).toBeDisabled();await expect(panel.getByRole('button',{name:'maintenance'})).toBeEnabled();await expect(panel.getByRole('button',{name:'read only'})).toBeEnabled();await panel.getByRole('button',{name:'validate'}).evaluate((button:HTMLButtonElement)=>button.click());expect(await page.evaluate(()=>(window as unknown as {__pilotOperationsCalls:{command:number}}).__pilotOperationsCalls.command)).toBe(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true)});
 test('actual Admin Workbench removes every command when the observer lacks action capabilities',async({page})=>{await open(page,'observer');const panel=page.getByRole('region',{name:'Pilot Operations',exact:true});for(const name of ['validate','approve','simulate promotion','maintenance','read only','rollback'])await expect(panel.getByRole('button',{name})).toBeDisabled();await panel.getByRole('button',{name:'maintenance'}).evaluate((button:HTMLButtonElement)=>button.click());expect(await page.evaluate(()=>(window as unknown as {__pilotOperationsCalls:{query:number;command:number}}).__pilotOperationsCalls)).toEqual({query:1,command:0})});
+test('browser reads actual query success and gated command denial across origins', async ({ page }) => {
+  const httpFixture = await startPilotOperationsHttpServer();
+  try {
+    await page.goto('/tests/browser/pilotOperationsHarness.html');
+    const browserOrigin = new URL(page.url()).origin;
+    expect(httpFixture.origin).not.toBe(browserOrigin);
+    const result = await page.evaluate(async input => {
+      const invoke = async (path: string, body: unknown) => {
+        const response = await fetch(`${input.origin}${path}`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${input.token}`,
+            apikey: 'synthetic-public-key',
+            'x-client-info': 'pilot-operations-browser-regression',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+        // Readable status/body proves CORS; allow-origin itself is not an exposed response header.
+        return { status: response.status, body: await response.json(), cacheControl: response.headers.get('cache-control') };
+      };
+      return { query: await invoke('/query', input.query), command: await invoke('/command', input.command) };
+    }, {
+      origin: httpFixture.origin,
+      token: syntheticPilotOperationsHttp.bearerToken,
+      query: syntheticPilotOperationsQueryBody(),
+      command: syntheticPilotOperationsCommandBody(),
+    });
+    expect(result.query.status).toBe(200);
+    expect(result.query.body.release).toBeNull();
+    expect(result.command).toMatchObject({ status: 503, body: { code: 'FEATURE_DISABLED' } });
+    for (const response of [result.query, result.command]) expect(response.cacheControl).toBe('no-store');
+    for (const pathname of ['/query', '/command']) {
+      const requests = httpFixture.requests.filter(item => item.pathname === pathname);
+      expect(requests.map(item => item.method)).toEqual(['OPTIONS', 'POST']);
+      expect(requests[0].origin).toBe(browserOrigin);
+      for (const header of ['authorization', 'apikey', 'content-type', 'x-client-info']) {
+        expect(requests[0].requestedHeaders).toContain(header);
+      }
+    }
+    expect(httpFixture.query.rpcCalls).toHaveLength(1);
+    expect(httpFixture.command.rpcCalls).toHaveLength(0);
+  } finally {
+    await httpFixture.close();
+  }
+});

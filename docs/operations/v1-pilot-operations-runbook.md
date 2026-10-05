@@ -34,6 +34,15 @@ An operator may record a failed or requested drill but cannot self-attest a pass
 
 ## Troubleshooting
 
+The query and command functions include the shared CORS headers on actual JSON
+responses as well as preflight, retaining `cache-control: no-store`. A successful
+OPTIONS request alone does not prove that the browser can read the POST response.
+Use the actual-entrypoint and two-origin browser checks in the dedicated Pilot
+Operations suite. Never bypass CORS or replace response headers to claim hosted
+acceptance. Rollback redeploys the previous two function sources, preserving all
+stored state; browser reads then fail closed again. Keep providers and operations
+mutations OFF while separately approved synthetic observer verification runs.
+
 - **Stale/version conflict:** reload the server projection; never silently retry changed payload.
 - **Revoked/denied:** stop without disclosing whether another tenant resource exists.
 - **Missing evidence:** retain blocked status and run exact-head authoritative CI.
