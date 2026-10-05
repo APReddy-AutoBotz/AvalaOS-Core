@@ -103,3 +103,22 @@ database, browser, hosted, paid-provider or recovery regression was run locally.
 These are local executed results; candidate CI remains pending at publication.
 The historical 1 PASS / 107 BLOCKED artifact is unchanged. A fresh committed-head
 oracle result and PR CI establish their own execution identities.
+
+### First candidate CI and generated binding correction
+
+Candidate `998e1c5d9d428baa96be79f6808b2a7e34e5d0e7`, exhaustive acceptance
+run `37310089878` attempt 1: 14 PASS, 0 FAIL, 94 BLOCKED across 108 cases.
+All thirteen approved scoring cases passed, alongside the existing SAFETY-005
+case. Overall remains INCOMPLETE_COVERAGE; hosted execution is NOT_EXECUTED.
+
+The PR C workflow exposed stale generated source bindings
+(`PR_C_PROVENANCE_FILE_SET`). Refreshing those bindings preserves all 241
+registered assertion expectations, 85 commands and 15 owners; it does not add
+execution proof. `npm run test:transcript-flow:delivery-monitor-evidence-contract`
+passed all 75 focused cases and the final provenance validation locally.
+
+The first candidate Netlify preview failed during the build stage. AP authorized
+read-only metadata and build-log diagnosis. Metadata confirms exit code 2 only;
+the underlying build error remains unverified. No Netlify settings or deployment
+actions are authorized by this read-only diagnosis. Updated-candidate CI remains
+pending; this record does not claim merge or preview readiness.
