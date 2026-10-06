@@ -1740,7 +1740,13 @@
       "feature": "application",
       "ruleRequirement": "application create",
       "sourceReference": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "branchIds": [
         "APPS-APPLICATION_CREATE"
@@ -1749,7 +1755,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-application-portfolio-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -1790,7 +1796,13 @@
       "feature": "assessment",
       "ruleRequirement": "assessment snapshot",
       "sourceReference": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "branchIds": [
         "APPS-ASSESSMENT_SNAPSHOT"
@@ -1799,7 +1811,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-application-portfolio-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -1840,7 +1852,13 @@
       "feature": "modernization",
       "ruleRequirement": "modernization disposition",
       "sourceReference": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "branchIds": [
         "APPS-MODERNIZATION_DISPOSITION"
@@ -1849,7 +1867,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-application-portfolio-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -1890,7 +1908,13 @@
       "feature": "cross",
       "ruleRequirement": "cross workspace denial",
       "sourceReference": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "branchIds": [
         "APPS-CROSS_WORKSPACE_DENIAL"
@@ -1899,7 +1923,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-application-portfolio-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -1940,7 +1964,13 @@
       "feature": "replay",
       "ruleRequirement": "replay",
       "sourceReference": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "branchIds": [
         "APPS-REPLAY"
@@ -1949,7 +1979,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-application-portfolio-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",

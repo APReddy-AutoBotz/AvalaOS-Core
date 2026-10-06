@@ -78,6 +78,7 @@ jobs:
           node scripts/runExhaustiveAcceptanceReport.test.mjs
           node scripts/exhaustiveAcceptanceEvidence.test.mjs
           npm run test:trust-acceptance-evidence
+          npm run test:application-portfolio-acceptance-evidence
           node scripts/produceExhaustiveServerEvidence.test.mjs
           npm run test:hosted-evidence-family-attestations
           npm run test:acceptance:network-observer
@@ -89,6 +90,7 @@ jobs:
         continue-on-error: true
         env:
           TRUST_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          APPLICATION_PORTFOLIO_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
         run: node scripts/runExhaustiveRetainedSuites.mjs
 
       - name: Run independent assessment oracle against production scoring

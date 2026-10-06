@@ -37,9 +37,8 @@
     {
       "suiteId": "application-portfolio",
       "command": [
-        "npm",
-        "run",
-        "test:pr1g"
+        "node",
+        "scripts/testPr1gMigrations.mjs"
       ],
       "testIds": [
         "APPS-001",

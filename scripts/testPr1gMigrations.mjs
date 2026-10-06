@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
+import { writeApplicationPortfolioAcceptanceProducer } from './applicationPortfolioAcceptanceEvidence.mjs';
 
 execFileSync(process.execPath, ['scripts/checkPr1gMigrationContract.mjs'], { stdio: 'inherit' });
 
@@ -14,10 +15,33 @@ if (!url) {
 }
 
 const pg = await import('pg');
-const client = new pg.Client({ connectionString: url });
-await client.connect();
+const connectedClients = new Set();
+const temporaryFiles = new Set();
+const cleanupErrors = [];
+const connectClient = async () => {
+  const connection = new pg.Client({ connectionString: url });
+  await connection.connect();
+  connectedClients.add(connection);
+  return connection;
+};
+const closeClient = async connection => {
+  if (!connectedClients.has(connection)) return;
+  await connection.end();
+  connectedClients.delete(connection);
+};
+const writeTemporaryFile = async (path, content) => {
+  await writeFile(path, content, { mode: 0o600 });
+  temporaryFiles.add(path);
+};
+const removeTemporaryFile = async path => {
+  await unlink(path);
+  temporaryFiles.delete(path);
+};
+const client = await connectClient();
 
 const executed = [];
+const acceptanceActuals = {};
+const acceptanceFailures = {};
 const scenario = async (name, fn) => {
   console.log(`PR 1G PostgreSQL scenario started: ${name}`);
   const result = await fn();
@@ -25,8 +49,26 @@ const scenario = async (name, fn) => {
   console.log(`PR 1G PostgreSQL scenario passed: ${name}`);
   return result;
 };
+const acceptanceScenario = async (testId, name, fn) => {
+  try {
+    await scenario(`${testId} ${name}`, fn);
+  } catch (error) {
+    acceptanceFailures[testId] = { failureCode: 'assertion_failed' };
+    console.error(`${testId} acceptance assertion failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
+};
+const expectSqlRejection = async (expected, fn) => {
+  let rejection;
+  try {
+    await fn();
+  } catch (error) {
+    rejection = error;
+  }
+  assert(rejection, `EXPECTED_SQL_REJECTION_${expected}`);
+  assert(String(rejection.message).includes(expected), `WRONG_SQL_REJECTION_${expected}`);
 };
 const expectSqlFailure = async (name, expected, fn) => scenario(name, async () => {
   try {
@@ -109,10 +151,11 @@ const rpc = async (connection, {
   org = ORG,
   workspace = WS,
 }) => {
-  await connection.query('BEGIN');
+    await connection.query('BEGIN');
   try {
     await connection.query('SET LOCAL ROLE service_role');
-    const caller=await connection.query('SELECT auth.uid() actor');
+    const caller=await connection.query('SELECT current_user role,auth.uid() actor');
+    assert(caller.rows[0].role==='service_role','SERVICE_ROLE_RPC_BOUNDARY_REQUIRED');
     assert(caller.rows[0].actor===null,'SERVICE_ROLE_CALLER_UID_MUST_BE_NULL');
     const result = await connection.query(
       `SELECT public.pr1g_execute_application_command(
@@ -189,6 +232,7 @@ const createSnapshot = async (expected, id = nextUuid(), key) => rpc(client, {
   payload: { portfolioSnapshotId: id },
 });
 
+let cleanupVerified = false;
 try {
   await scenario('PostgreSQL 16 version', async () => {
     const version = await client.query('SHOW server_version_num');
@@ -410,7 +454,7 @@ try {
     }));
   });
   await scenario('concurrent authorization lock serializes revocation and next mutation denies',async()=>{
-    const authoritySession=new pg.Client({connectionString:url}),revocationSession=new pg.Client({connectionString:url});await Promise.all([authoritySession.connect(),revocationSession.connect()]);
+    const authoritySession=await connectClient(),revocationSession=await connectClient();
     try{
       await authoritySession.query('BEGIN');await authoritySession.query("SELECT public.pr1b_assert_command_authority($1,$2,$3,'assess.applications.write',$4)",[ACTOR,ORG,WS,AUTH_VERSION]);
       let revoked=false;const revocation=revocationSession.query("UPDATE workspace_memberships SET status='disabled' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]).then(()=>{revoked=true});
@@ -418,7 +462,7 @@ try {
       await authoritySession.query('COMMIT');await revocation;
       await expectSqlFailure('post-revocation next mutation governed denial','PR1B_NOT_FOUND',()=>rpc(client,{type:'application.create',payload:{applicationId:nextUuid(),name:'Revoked',description:'Denied'}}));
       await revocationSession.query("UPDATE workspace_memberships SET status='active' WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3",[ORG,WS,ACTOR]);await resetActorVersion();
-    }finally{await Promise.all([authoritySession.end(),revocationSession.end()])}
+    }finally{await Promise.all([closeClient(authoritySession),closeClient(revocationSession)])}
   });
 
   const gatedApp = await createApplication('Gated UI');
@@ -482,8 +526,8 @@ try {
       bridgeFixtures.push({name:definition.name,applicationId,orgId:ORG,workspaceId:WS,metadataVersion:1,metadata:definition.metadata,evidence,postgres:{dimensions:dimensionsResult.rows,recommendation:recommendationResult.rows[0]}});
     }
     const parityPath=`/tmp/avalaos-pr1g-parity-${process.pid}.json`;
-    await writeFile(parityPath,JSON.stringify(bridgeFixtures),{mode:0o600});
-    try{execFileSync(process.execPath,['scripts/runPr1gApplicationPortfolioParityBridge.mjs',parityPath],{stdio:'inherit'})}finally{await unlink(parityPath)}
+    await writeTemporaryFile(parityPath,JSON.stringify(bridgeFixtures));
+    try{execFileSync(process.execPath,['scripts/runPr1gApplicationPortfolioParityBridge.mjs',parityPath],{stdio:'inherit'})}finally{await removeTemporaryFile(parityPath)}
   });
   await scenario('client-authored authority fields are rejected', async () => {
     for (const field of ['dimensions', 'recommendations', 'confidence', 'bands', 'gates', 'dispositions']) {
@@ -845,8 +889,8 @@ try {
     assert(projection.importReceipts.some((row) => row.id === importReceiptId), 'PROJECTION_IMPORT_RECEIPT_MISSING');
     assert(projection.rowOutcomes.filter((row) => row.importReceiptId === importReceiptId).length === 10, 'PROJECTION_ROW_OUTCOMES_MISSING');
     const projectionPath=`/tmp/avalaos-pr1g-projection-${process.pid}.json`;
-    await writeFile(projectionPath,JSON.stringify(projection),{mode:0o600});
-    try{execFileSync(process.execPath,['scripts/runPr1gProjectionDecoderBridge.mjs',projectionPath,ORG,WS],{stdio:'inherit'})}finally{await unlink(projectionPath)}
+    await writeTemporaryFile(projectionPath,JSON.stringify(projection));
+    try{execFileSync(process.execPath,['scripts/runPr1gProjectionDecoderBridge.mjs',projectionPath,ORG,WS],{stdio:'inherit'})}finally{await removeTemporaryFile(projectionPath)}
   });
   const incompleteApp=await createApplication('Incomplete latest decisions');
   const incompleteMeta=await createMetadata(incompleteApp,canonicalMetadata('Incomplete latest decisions'),evidenceFor());
@@ -1021,15 +1065,231 @@ try {
     actor:OTHER_ACTOR,type:'application.assessment.save',expected:999,payload:{...replayPayload,assessmentVersionId:nextUuid(),assessmentVersion:1000},
   }));
 
+  const applicationDomainTables = [
+    'assess_application_assets',
+    'assess_application_metadata_versions',
+    'assess_application_source_evidence',
+    'assess_process_application_links',
+    'assess_application_dependencies',
+    'assess_application_assessment_versions',
+    'assess_application_dimension_results',
+    'assess_application_modernization_recommendations',
+    'assess_application_review_resolutions',
+    'assess_application_portfolio_snapshots',
+    'assess_application_import_receipts',
+    'assess_application_import_row_outcomes',
+    'assess_command_receipts',
+    'privileged_audit_events',
+  ];
+  const applicationStateFingerprint = async workspaceId => {
+    const entries = [];
+    for (const table of applicationDomainTables) {
+      const rows = await client.query(
+        `SELECT to_jsonb(t) row FROM public.${table} t WHERE org_id=$1 AND workspace_id=$2 ORDER BY to_jsonb(t)::text`,
+        [ORG, workspaceId],
+      );
+      entries.push([table, rows.rows.map(row => row.row)]);
+    }
+    return Object.fromEntries(entries);
+  };
+  const applicationCommandEffects = async (applicationId, key) => (await client.query(
+    `SELECT
+      (SELECT count(*)::int FROM assess_application_assets WHERE id=$1 AND org_id=$2 AND workspace_id=$3) applications,
+      (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND command_type='application.create' AND idempotency_key=$5) receipts,
+      (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND action='application.create' AND resource_id=$1) audits`,
+    [applicationId, ORG, WS, ACTOR, key],
+  )).rows[0];
+
+  await acceptanceScenario('APPS-001', 'authorized application create with receipt and audit', async () => {
+    const applicationId = nextUuid();
+    const key = `apps-001-${nextUuid()}`;
+    const before = await applicationCommandEffects(applicationId, key);
+    const result = await rpc(client, {
+      type: 'application.create', key,
+      payload: { applicationId, name: 'APPS-001 application', description: 'APPS-001 acceptance fixture' },
+    });
+    const after = await applicationCommandEffects(applicationId, key);
+    const persisted = (await client.query(
+      'SELECT id,name,normalized_name,description FROM assess_application_assets WHERE id=$1 AND org_id=$2 AND workspace_id=$3',
+      [applicationId, ORG, WS],
+    )).rows[0];
+    const receipt = (await client.query(
+      `SELECT id,request_id,status,response FROM assess_command_receipts
+       WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type='application.create' AND idempotency_key=$4`,
+      [ORG, WS, ACTOR, key],
+    )).rows[0];
+    const audits = await client.query(
+      `SELECT request_id,action,resource_type,resource_id,outcome,resource_version
+       FROM privileged_audit_events WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND request_id=$4`,
+      [ORG, WS, ACTOR, receipt.request_id],
+    );
+    assert(after.applications - before.applications === 1, 'APPS001_APPLICATION_COUNT');
+    assert(after.receipts - before.receipts === 1, 'APPS001_RECEIPT_COUNT');
+    assert(after.audits - before.audits === 1, 'APPS001_AUDIT_COUNT');
+    assert(result.resource.id === applicationId && result.resource.version === 1 && result.resource.status === 'draft', 'APPS001_RESOURCE_RESPONSE');
+    assert(persisted.id === applicationId && persisted.name === 'APPS-001 application' && persisted.normalized_name === 'apps-001 application', 'APPS001_PERSISTED_RESOURCE');
+    assert(receipt.status === 'succeeded' && receipt.response.resource.id === applicationId, 'APPS001_RECEIPT_BINDING');
+    assert(audits.rowCount === 1 && audits.rows[0].action === 'application.create' && audits.rows[0].resource_type === 'assess_application' && audits.rows[0].resource_id === applicationId && audits.rows[0].outcome === 'succeeded' && Number(audits.rows[0].resource_version) === 1, 'APPS001_AUDIT_BINDING');
+    acceptanceActuals['APPS-001'] = {
+      applicationMutationCount: 1, receiptDelta: 1, auditDelta: 1,
+      serviceRpcBoundary: true, resourceBound: true, receiptBound: true, auditBound: true,
+    };
+  });
+
+  await acceptanceScenario('APPS-002', 'assessment snapshot binds metadata dimensions and recommendation', async () => {
+    const applicationId = await createApplication('APPS-002 application');
+    const metadataVersionId = await createMetadata(applicationId, canonicalMetadata('APPS-002 application', { interfaces: ['UI-only'] }), evidenceFor());
+    const assessmentVersionId = nextUuid();
+    const key = `apps-002-${nextUuid()}`;
+    const before = (await client.query(
+      `SELECT
+        (SELECT count(*)::int FROM assess_application_assessment_versions WHERE id=$1) assessments,
+        (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) receipts,
+        (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$1) audits`,
+      [assessmentVersionId, ORG, WS, ACTOR, key],
+    )).rows[0];
+    await rpc(client, {
+      type: 'application.assessment.save', expected: 0, key,
+      payload: { assessmentVersionId, applicationId, metadataVersion: 1, assessmentVersion: 1, processLinks: [], dependencies: [] },
+    });
+    const after = (await client.query(
+      `SELECT
+        (SELECT count(*)::int FROM assess_application_assessment_versions WHERE id=$1) assessments,
+        (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) receipts,
+        (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$1) audits`,
+      [assessmentVersionId, ORG, WS, ACTOR, key],
+    )).rows[0];
+    const aggregate = (await client.query(
+      `SELECT a.application_id,a.metadata_version_id,a.version,
+        (SELECT count(*)::int FROM assess_application_dimension_results d WHERE d.assessment_version_id=a.id) dimensions,
+        (SELECT array_agg(d.dimension ORDER BY d.dimension) FROM assess_application_dimension_results d WHERE d.assessment_version_id=a.id) dimension_names,
+        (SELECT count(*)::int FROM assess_application_modernization_recommendations r WHERE r.assessment_version_id=a.id AND r.application_id=a.application_id) recommendations
+       FROM assess_application_assessment_versions a WHERE a.id=$1`,
+      [assessmentVersionId],
+    )).rows[0];
+    assert(after.assessments - before.assessments === 1, 'APPS002_ASSESSMENT_COUNT');
+    assert(after.receipts - before.receipts === 1, 'APPS002_RECEIPT_COUNT');
+    assert(after.audits - before.audits === 1, 'APPS002_AUDIT_COUNT');
+    assert(aggregate.application_id === applicationId && aggregate.metadata_version_id === metadataVersionId && Number(aggregate.version) === 1, 'APPS002_METADATA_BINDING');
+    assert(aggregate.dimensions === 7, 'APPS002_DIMENSION_COUNT');
+    assert(JSON.stringify(aggregate.dimension_names) === JSON.stringify([...canonicalDimensions].sort()), 'APPS002_CANONICAL_DIMENSIONS');
+    assert(aggregate.recommendations === 1, 'APPS002_RECOMMENDATION_BINDING');
+    acceptanceActuals['APPS-002'] = {
+      assessmentMutationCount: 1, receiptDelta: 1, auditDelta: 1,
+      metadataBound: true, dimensionCount: 7, recommendationCount: 1,
+      canonicalDimensions: true, recommendationBound: true, serverDerived: true,
+    };
+  });
+
+  await acceptanceScenario('APPS-003', 'exact server-derived modernization disposition', async () => {
+    const applicationId = await createApplication('APPS-003 application');
+    await createMetadata(applicationId, canonicalMetadata('APPS-003 application', {
+      businessCriticality: 'high', lifecycleState: 'active', sourceCode: 'available_legal_access',
+      documentationQuality: 'high', automatedTestMaturity: 'high', deploymentRepeatability: 'deterministic',
+      observability: 'high', regulatedData: false, interfaces: ['REST/GraphQL'],
+      realTime: true, eventDriven: true, synchronous: true, batch: false, aiControls: completeAi,
+    }), evidenceFor());
+    const assessmentVersionId = nextUuid();
+    const key = `apps-003-${nextUuid()}`;
+    const before = (await client.query(
+      `SELECT
+        (SELECT count(*)::int FROM assess_application_assessment_versions WHERE id=$1) assessments,
+        (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) receipts,
+        (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$1) audits`,
+      [assessmentVersionId, ORG, WS, ACTOR, key],
+    )).rows[0];
+    await rpc(client, {
+      type: 'application.assessment.save', expected: 0, key,
+      payload: { assessmentVersionId, applicationId, metadataVersion: 1, assessmentVersion: 1, processLinks: [], dependencies: [] },
+    });
+    const after = (await client.query(
+      `SELECT
+        (SELECT count(*)::int FROM assess_application_assessment_versions WHERE id=$1) assessments,
+        (SELECT count(*)::int FROM assess_command_receipts WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND command_type='application.assessment.save' AND idempotency_key=$5) receipts,
+        (SELECT count(*)::int FROM privileged_audit_events WHERE org_id=$2 AND workspace_id=$3 AND actor_id=$4 AND action='application.assessment.save' AND resource_id=$1) audits`,
+      [assessmentVersionId, ORG, WS, ACTOR, key],
+    )).rows[0];
+    const recommendation = (await client.query(
+      `SELECT disposition,evidence_confidence,prerequisites,alternatives_rejected,
+        COALESCE((SELECT array_agg(gate ORDER BY gate) FROM assess_application_dimension_results d CROSS JOIN LATERAL unnest(d.hard_gates) gate WHERE d.assessment_version_id=$1),'{}'::text[]) hard_gates
+       FROM assess_application_modernization_recommendations WHERE assessment_version_id=$1`,
+      [assessmentVersionId],
+    )).rows[0];
+    assert(after.assessments - before.assessments === 1, 'APPS003_ASSESSMENT_COUNT');
+    assert(after.receipts - before.receipts === 1, 'APPS003_RECEIPT_COUNT');
+    assert(after.audits - before.audits === 1, 'APPS003_AUDIT_COUNT');
+    assert(recommendation.disposition === 'Enable native API/event integration', 'APPS003_DISPOSITION');
+    assert(recommendation.evidence_confidence === 'Partially Evidenced', 'APPS003_CONFIDENCE');
+    assert(JSON.stringify(recommendation.hard_gates) === '[]', 'APPS003_HARD_GATES');
+    assert(JSON.stringify(recommendation.prerequisites) === '[]', 'APPS003_PREREQUISITES');
+    assert(JSON.stringify(recommendation.alternatives_rejected) === JSON.stringify(['No rejected alternative without evidence.']), 'APPS003_ALTERNATIVES_REJECTED');
+    acceptanceActuals['APPS-003'] = {
+      assessmentMutationCount: 1, receiptDelta: 1, auditDelta: 1,
+      disposition: 'Enable native API/event integration', confidence: 'Partially Evidenced',
+      hardGates: [], prerequisites: [], alternativesRejected: ['No rejected alternative without evidence.'],
+    };
+  });
+
+  await acceptanceScenario('APPS-004', 'cross-workspace denial preserves complete scoped state', async () => {
+    const applicationId = nextUuid();
+    const key = `apps-004-${nextUuid()}`;
+    const payload = { applicationId, name: 'APPS-004 source application', description: 'APPS-004 source fixture' };
+    await rpc(client, { type: 'application.create', key, payload });
+    const sourceBefore = await applicationStateFingerprint(WS);
+    const targetBefore = await applicationStateFingerprint(WS_B);
+    await expectSqlRejection('PR1B_IDEMPOTENCY_CONFLICT', () => rpc(client, {
+      workspace: WS_B, type: 'application.create', key, payload,
+    }));
+    const sourceAfter = await applicationStateFingerprint(WS);
+    const targetAfter = await applicationStateFingerprint(WS_B);
+    assert(JSON.stringify(sourceAfter) === JSON.stringify(sourceBefore), 'APPS004_SOURCE_STATE_CHANGED');
+    assert(JSON.stringify(targetAfter) === JSON.stringify(targetBefore), 'APPS004_TARGET_STATE_CHANGED');
+    acceptanceActuals['APPS-004'] = {
+      applicationMutationCount: 0, receiptDelta: 0, auditDelta: 0,
+      foreignWorkspaceDenied: true, denialCode: 'PR1B_IDEMPOTENCY_CONFLICT',
+      sourceStateUnchanged: true, targetStateUnchanged: true,
+    };
+  });
+
+  await acceptanceScenario('APPS-005', 'exact replay and changed-payload conflict have zero extra effects', async () => {
+    const applicationId = nextUuid();
+    const key = `apps-005-${nextUuid()}`;
+    const payload = { applicationId, name: 'APPS-005 application', description: 'APPS-005 acceptance fixture' };
+    const before = await applicationCommandEffects(applicationId, key);
+    const first = await rpc(client, { type: 'application.create', key, payload });
+    const afterFirst = await applicationCommandEffects(applicationId, key);
+    const stateAfterFirst = await applicationStateFingerprint(WS);
+    const replay = await rpc(client, { type: 'application.create', key, payload });
+    const afterReplay = await applicationCommandEffects(applicationId, key);
+    const stateAfterReplay = await applicationStateFingerprint(WS);
+    await expectSqlRejection('PR1B_IDEMPOTENCY_CONFLICT', () => rpc(client, {
+      type: 'application.create', key, payload: { ...payload, description: 'APPS-005 changed payload' },
+    }));
+    const afterConflict = await applicationCommandEffects(applicationId, key);
+    const stateAfterConflict = await applicationStateFingerprint(WS);
+    assert(afterFirst.applications - before.applications === 1, 'APPS005_APPLICATION_COUNT');
+    assert(afterFirst.receipts - before.receipts === 1, 'APPS005_RECEIPT_COUNT');
+    assert(afterFirst.audits - before.audits === 1, 'APPS005_AUDIT_COUNT');
+    assert(JSON.stringify(replay) === JSON.stringify(first), 'APPS005_REPLAY_RESPONSE');
+    assert(JSON.stringify(afterReplay) === JSON.stringify(afterFirst), 'APPS005_REPLAY_EFFECT');
+    assert(JSON.stringify(afterConflict) === JSON.stringify(afterFirst), 'APPS005_CONFLICT_EFFECT');
+    assert(JSON.stringify(stateAfterReplay) === JSON.stringify(stateAfterFirst), 'APPS005_REPLAY_STATE_CHANGED');
+    assert(JSON.stringify(stateAfterConflict) === JSON.stringify(stateAfterFirst), 'APPS005_CONFLICT_STATE_CHANGED');
+    acceptanceActuals['APPS-005'] = {
+      applicationMutationCount: 1, receiptDelta: 1, auditDelta: 1,
+      exactReplay: true, changedPayloadConflict: true,
+      replayEffectDelta: 0, conflictEffectDelta: 0,
+    };
+  });
+
   const concurrentApp = await createApplication('Concurrent review');
   await createMetadata(concurrentApp, canonicalMetadata('Concurrent review'), evidenceFor());
   const concurrentDraft = nextUuid();
   await saveAssessment(concurrentApp, concurrentDraft);
   const concurrentReady = (await finalizeAssessment(concurrentApp, concurrentDraft, 1)).resource;
   await scenario('concurrent review resolution using separate PostgreSQL sessions', async () => {
-    const reviewerOne = new pg.Client({ connectionString: url });
-    const reviewerTwo = new pg.Client({ connectionString: url });
-    await Promise.all([reviewerOne.connect(), reviewerTwo.connect()]);
+    const reviewerOne = await connectClient();
+    const reviewerTwo = await connectClient();
     try {
       const outcomes = await Promise.allSettled([
         resolveReview(reviewerOne, REVIEWER_A, concurrentApp, concurrentReady.id, 2, `concurrent-review-a-${nextUuid()}`, 'approved'),
@@ -1043,15 +1303,14 @@ try {
       const persisted = await client.query('SELECT count(*)::int n FROM public.assess_application_review_resolutions WHERE assessment_version_id=$1', [concurrentReady.id]);
       assert(persisted.rows[0].n === 1, 'CONCURRENT_REVIEW_RESOLUTION_COUNT_FAILED');
     } finally {
-      await Promise.all([reviewerOne.end(), reviewerTwo.end()]);
+      await Promise.all([closeClient(reviewerOne), closeClient(reviewerTwo)]);
     }
   });
   const concurrentAssessmentApp=await createApplication('Concurrent assessment');
   await createMetadata(concurrentAssessmentApp,canonicalMetadata('Concurrent assessment'),evidenceFor());
   await scenario('concurrent assessment saves advance from committed application version',async()=>{
-    const writerOne=new pg.Client({connectionString:url});
-    const writerTwo=new pg.Client({connectionString:url});
-    await Promise.all([writerOne.connect(),writerTwo.connect()]);
+    const writerOne=await connectClient();
+    const writerTwo=await connectClient();
     const save=(connection,id,key)=>rpc(connection,{
       type:'application.assessment.save',expected:0,key,
       payload:{assessmentVersionId:id,applicationId:concurrentAssessmentApp,metadataVersion:1,
@@ -1068,12 +1327,11 @@ try {
       assert(String(failures[0].reason?.message).includes('PR1G_VERSION_CONFLICT'),'CONCURRENT_ASSESSMENT_WRONG_FAILURE');
       const persisted=await client.query('SELECT count(*)::int n,max(version)::int version FROM public.assess_application_assessment_versions WHERE application_id=$1',[concurrentAssessmentApp]);
       assert(persisted.rows[0].n===1&&persisted.rows[0].version===1,'CONCURRENT_ASSESSMENT_VERSION_AUTHORITY_FAILED');
-    }finally{await Promise.all([writerOne.end(),writerTwo.end()])}
+    }finally{await Promise.all([closeClient(writerOne),closeClient(writerTwo)])}
   });
   await scenario('concurrent snapshot allocation commits exactly one version under independent sessions', async () => {
-    const snapshotOne = new pg.Client({ connectionString: url });
-    const snapshotTwo = new pg.Client({ connectionString: url });
-    await Promise.all([snapshotOne.connect(), snapshotTwo.connect()]);
+    const snapshotOne = await connectClient();
+    const snapshotTwo = await connectClient();
     const snapshotRpc=(connection,id,key)=>rpc(connection,{
       type:'application.portfolio.snapshot.create',
       expected:2,
@@ -1096,11 +1354,11 @@ try {
       );
       assert(persisted.rows[0].n===1&&Number(persisted.rows[0].min_version)===3&&Number(persisted.rows[0].max_version)===3,'CONCURRENT_SNAPSHOT_VERSION_AUTHORITY_FAILED');
     } finally {
-      await Promise.all([snapshotOne.end(),snapshotTwo.end()]);
+      await Promise.all([closeClient(snapshotOne),closeClient(snapshotTwo)]);
     }
   });
 
-  console.log(`PR 1G PostgreSQL 16 executable behavioral scenarios passed: ${executed.length} passed, 0 failed.`);
+  console.log(`PR 1G PostgreSQL 16 executable behavioral scenarios passed: ${executed.length} passed, ${Object.keys(acceptanceFailures).length} Application Portfolio acceptance failures.`);
   console.log('Internal function ACL scenarios: all PR 1G helpers deny PUBLIC, anon, authenticated and service-role direct execution; authenticated projection and service-role command remain executable.');
   console.log('Direct helper denial scenarios: anon, authenticated, capability-limited and cross-tenant invocations are permission denied without rows or mutations.');
   console.log('Capability-isolation scenarios: direct table and projection/RPC access for applications.read, portfolio.read, both, neither, revoked/inactive and cross-tenant authority.');
@@ -1116,5 +1374,40 @@ try {
   console.log('Concurrent snapshot allocation: one committed version 3 and one deterministic PR1G_VERSION_CONFLICT under independent PostgreSQL sessions.');
   console.log(`Scenario detail: ${executed.join('; ')}.`);
 } finally {
-  await client.end();
+  for (const path of [...temporaryFiles]) {
+    try {
+      await removeTemporaryFile(path);
+    } catch {
+      cleanupErrors.push('temporary-file');
+    }
+  }
+  for (const connection of [...connectedClients].reverse()) {
+    try {
+      await closeClient(connection);
+    } catch {
+      cleanupErrors.push('client');
+    }
+  }
+  cleanupVerified = cleanupErrors.length === 0 && temporaryFiles.size === 0 && connectedClients.size === 0;
+  if (!cleanupVerified) {
+    console.error(`PR 1G acceptance cleanup failed (${cleanupErrors.length} bounded errors).`);
+    process.exitCode = 1;
+  }
 }
+
+if (process.env.RETAINED_TEST_ID_RESULTS && cleanupVerified) {
+  writeApplicationPortfolioAcceptanceProducer(process.env.RETAINED_TEST_ID_RESULTS, {
+    actualByTestId: acceptanceActuals,
+    failuresByTestId: acceptanceFailures,
+    cleanupVerified,
+    command: process.env.RETAINED_SUITE_COMMAND,
+    identity: {
+      releaseSha: process.env.RELEASE_SHA,
+      workflowRunId: process.env.GITHUB_RUN_ID,
+      workflowAttempt: process.env.GITHUB_RUN_ATTEMPT,
+      environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT,
+      workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH,
+    },
+  });
+}
+if (Object.keys(acceptanceFailures).length > 0) process.exitCode = 1;

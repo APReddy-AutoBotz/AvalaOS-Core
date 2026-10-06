@@ -23,6 +23,12 @@
     "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
     "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
     "scripts/testTrustAssurancePostgres.mjs": "sha256:2728bb802d4e9e351972079f7166274df2627fcdb803d915a1d9d2cefd03e37a",
+    "scripts/testPr1gMigrations.mjs": "sha256:abecbc36707c5896b451284306220c662dacb476980f92def045dd9fc6efd8f8",
+    "scripts/applicationPortfolioAcceptanceEvidence.mjs": "sha256:7677f20187513102f676e1ab86489209c439a0bbc1b32e6a8e6a36657ebfbef5",
+    "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql": "sha256:91b3d358235b684c4c7b614440bf5f4fab722f37c543bf64cba6ea07e4979a22",
+    "supabase/migrations/20260722120000_pr1g_application_portfolio.sql": "sha256:65bae8086d855bd0da1888bad7683bbfde8afd15d2f1cea269f198ba27fb0e06",
+    "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql": "sha256:f84a3be28e639d53a2770ccf97342f8359d965b693a44e6aa315d6d6bb379d77",
+    "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql": "sha256:f48dde0aad8a065dbcf649976174f4c52a411e8910b14b842b75ff840ce29026",
     "scripts/testPilotOperationsMigration.mjs": "sha256:59622919796a25646d76707d8cd29258300036ca1a501fe1a3c8bdbb6a942f61",
     "scripts/testTranscriptFlowPostgres.mjs": "sha256:aafb979adc5652268d24d4660f1327d9364161cb3afcc528ceb368c5d2bbcd13",
     "scripts/transcriptFlowEvidenceContract.mjs": "sha256:410fca06f0b3861802b503b8ce555afeffa5ff315e4742d5cf029e304b745582",
@@ -323,7 +329,13 @@
       "branchId": "APPS-APPLICATION_CREATE",
       "testId": "APPS-001",
       "sourceReferences": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "ownership": [
         {
@@ -334,17 +346,23 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-application-portfolio-postgresql-v1",
+        "organizationId": "22222222-2222-4222-8222-222222222222",
+        "workspaceId": "33333333-3333-4333-8333-333333333333"
       }
     },
     {
       "branchId": "APPS-ASSESSMENT_SNAPSHOT",
       "testId": "APPS-002",
       "sourceReferences": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "ownership": [
         {
@@ -355,17 +373,23 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-application-portfolio-postgresql-v1",
+        "organizationId": "22222222-2222-4222-8222-222222222222",
+        "workspaceId": "33333333-3333-4333-8333-333333333333"
       }
     },
     {
       "branchId": "APPS-CROSS_WORKSPACE_DENIAL",
       "testId": "APPS-004",
       "sourceReferences": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "ownership": [
         {
@@ -376,17 +400,23 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-application-portfolio-postgresql-v1",
+        "organizationId": "22222222-2222-4222-8222-222222222222",
+        "workspaceId": "33333333-3333-4333-8333-333333333333"
       }
     },
     {
       "branchId": "APPS-MODERNIZATION_DISPOSITION",
       "testId": "APPS-003",
       "sourceReferences": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "ownership": [
         {
@@ -397,17 +427,23 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-application-portfolio-postgresql-v1",
+        "organizationId": "22222222-2222-4222-8222-222222222222",
+        "workspaceId": "33333333-3333-4333-8333-333333333333"
       }
     },
     {
       "branchId": "APPS-REPLAY",
       "testId": "APPS-005",
       "sourceReferences": [
-        "services/assessV2/applicationPortfolio.ts"
+        "scripts/testPr1gMigrations.mjs",
+        "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+        "services/assessV2/applicationPortfolio.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+        "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+        "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql"
       ],
       "ownership": [
         {
@@ -418,10 +454,10 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-application-portfolio-postgresql-v1",
+        "organizationId": "22222222-2222-4222-8222-222222222222",
+        "workspaceId": "33333333-3333-4333-8333-333333333333"
       }
     },
     {

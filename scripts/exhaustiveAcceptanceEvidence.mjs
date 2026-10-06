@@ -1,5 +1,9 @@
 import { verifyFullPageContrastAttachments } from './acceptanceExecutionProfile.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import {
+  APPLICATION_PORTFOLIO_SUITE_ID,
+  validateApplicationPortfolioAcceptanceProducer,
+} from './applicationPortfolioAcceptanceEvidence.mjs';
 import { TRUST_SUITE_ID, validateTrustAcceptanceProducer } from './trustAcceptanceEvidence.mjs';
 
 export const normalizePlaywrightStatus = status => {
@@ -48,6 +52,11 @@ export const validateRetainedProducerResults = ({ suite, emitted, identity, prov
     if (item?.status === 'PASS' && !passEligibleScope(item?.scope)) errors.push(`producer-scope-not-executed:${key}`);
   }
   if (suite?.suiteId === TRUST_SUITE_ID) errors.push(...validateTrustAcceptanceProducer({
+    emitted,
+    identity,
+    command: suite.command.join(' '),
+  }));
+  if (suite?.suiteId === APPLICATION_PORTFOLIO_SUITE_ID) errors.push(...validateApplicationPortfolioAcceptanceProducer({
     emitted,
     identity,
     command: suite.command.join(' '),
@@ -116,6 +125,12 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     emitted: { schemaVersion: 2, results: trustResults },
     identity: expected,
     command: expected.canonicalCommandBySuiteId?.get(TRUST_SUITE_ID),
+  }).map(error => `retained-${error}`));
+  const applicationPortfolioResults = (manifest?.results ?? []).filter(item => item?.suiteId === APPLICATION_PORTFOLIO_SUITE_ID);
+  if (applicationPortfolioResults.length) errors.push(...validateApplicationPortfolioAcceptanceProducer({
+    emitted: { schemaVersion: 2, results: applicationPortfolioResults },
+    identity: expected,
+    command: expected.canonicalCommandBySuiteId?.get(APPLICATION_PORTFOLIO_SUITE_ID),
   }).map(error => `retained-${error}`));
   return errors;
 };
