@@ -56,6 +56,10 @@ Local PostgreSQL execution is `not run` because the managed workstation has no a
 
 The merged PR #273 tree is the source-identical baseline. Its post-merge Core CI dependency-audit failure is a separate inherited package-lock maintenance matter pending its own approval and owned by the controller; it does not change this slice's behavior or evidence criteria.
 
+### First CI fixture correction
+
+PR #274 candidate `00f423e7` executed 118 PostgreSQL scenarios successfully, including APPS-001, APPS-002, APPS-004 and APPS-005. APPS-003 failed with `PR1G_INVALID_COMMAND` because its new metadata fixture used unsupported enum values. The fixture now uses the existing contract values `current`, `executable_acceptance` and `strong`; no runtime rule, expected recommendation or acceptance criterion changed. A new exact-head database run is required.
+
 ## Proof limits
 
 Successful exact execution would move only these five cases from `BLOCKED` to `PASS`, producing 24 `PASS`, 0 `FAIL`, and 84 `BLOCKED` while the other 103 case definitions and statuses remain unchanged. This does not prove hosted execution, production configuration, external providers, availability, performance, or overall product readiness.

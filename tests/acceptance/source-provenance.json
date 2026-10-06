@@ -23,7 +23,7 @@
     "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
     "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
     "scripts/testTrustAssurancePostgres.mjs": "sha256:2728bb802d4e9e351972079f7166274df2627fcdb803d915a1d9d2cefd03e37a",
-    "scripts/testPr1gMigrations.mjs": "sha256:abecbc36707c5896b451284306220c662dacb476980f92def045dd9fc6efd8f8",
+    "scripts/testPr1gMigrations.mjs": "sha256:d1caa7e6868dafaac5aa1e94eaa78a9fc6bc556af7451cfff550196975d97bb1",
     "scripts/applicationPortfolioAcceptanceEvidence.mjs": "sha256:7677f20187513102f676e1ab86489209c439a0bbc1b32e6a8e6a36657ebfbef5",
     "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql": "sha256:91b3d358235b684c4c7b614440bf5f4fab722f37c543bf64cba6ea07e4979a22",
     "supabase/migrations/20260722120000_pr1g_application_portfolio.sql": "sha256:65bae8086d855bd0da1888bad7683bbfde8afd15d2f1cea269f198ba27fb0e06",

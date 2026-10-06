@@ -1184,9 +1184,9 @@ try {
   await acceptanceScenario('APPS-003', 'exact server-derived modernization disposition', async () => {
     const applicationId = await createApplication('APPS-003 application');
     await createMetadata(applicationId, canonicalMetadata('APPS-003 application', {
-      businessCriticality: 'high', lifecycleState: 'active', sourceCode: 'available_legal_access',
-      documentationQuality: 'high', automatedTestMaturity: 'high', deploymentRepeatability: 'deterministic',
-      observability: 'high', regulatedData: false, interfaces: ['REST/GraphQL'],
+      businessCriticality: 'high', lifecycleState: 'current', sourceCode: 'available_legal_access',
+      documentationQuality: 'high', automatedTestMaturity: 'executable_acceptance', deploymentRepeatability: 'deterministic',
+      observability: 'strong', regulatedData: false, interfaces: ['REST/GraphQL'],
       realTime: true, eventDriven: true, synchronous: true, batch: false, aiControls: completeAi,
     }), evidenceFor());
     const assessmentVersionId = nextUuid();
