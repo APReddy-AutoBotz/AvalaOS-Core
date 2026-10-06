@@ -3891,7 +3891,10 @@
       "feature": "claim",
       "ruleRequirement": "claim evidence selection",
       "sourceReference": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "branchIds": [
         "TRUST-CLAIM_EVIDENCE_SELECTION"
@@ -3900,7 +3903,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-trust-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -3941,7 +3944,10 @@
       "feature": "publication",
       "ruleRequirement": "publication sod",
       "sourceReference": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "branchIds": [
         "TRUST-PUBLICATION_SOD"
@@ -3950,7 +3956,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-trust-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -3991,7 +3997,10 @@
       "feature": "immutable",
       "ruleRequirement": "immutable evidence",
       "sourceReference": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "branchIds": [
         "TRUST-IMMUTABLE_EVIDENCE"
@@ -4000,7 +4009,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-trust-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -4041,7 +4050,10 @@
       "feature": "cross",
       "ruleRequirement": "cross tenant denial",
       "sourceReference": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "branchIds": [
         "TRUST-CROSS_TENANT_DENIAL"
@@ -4050,7 +4062,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-trust-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -4091,7 +4103,10 @@
       "feature": "audit",
       "ruleRequirement": "audit truth",
       "sourceReference": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "branchIds": [
         "TRUST-AUDIT_TRUTH"
@@ -4100,7 +4115,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-trust-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",

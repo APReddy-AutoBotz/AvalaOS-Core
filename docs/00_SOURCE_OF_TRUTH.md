@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Current Trust acceptance evidence slice (2026-10-05)
+
+PR #272 merged as `89e5fcfa99c5407c3de5f31b5307d9852a2a7739` with its tested tree unchanged. Candidate checks, preview and post-merge Core CI run `37317817804` passed; exact acceptance run `37311948360` attempt 1 records 14 PASS, 0 FAIL and 94 BLOCKED. These executed results supersede the candidate-pending statements below without establishing hosted or full-product readiness. AP authorized merge and continuation with TRUST-001 through TRUST-005 under `docs/planning/trust-acceptance-evidence.md`. Use the existing disposable PostgreSQL harness and retained orchestration to prove the five current criteria with actual per-case assertions, tenant scope, mutation/audit counts and exact execution identity. Other acceptance criteria and runtime behavior remain unchanged. No paid call, hosted operation, deployment or production action is included.
+
 ## Current deterministic scoring acceptance correction (2026-10-05)
 
 AP approved correcting ASSESS-005 through ASSESS-017 to calculation-only acceptance with zero persistent mutations. The previous exhaustive report records 1 PASS and 107 BLOCKED, despite green aggregate feature gates; its thirteen independent-oracle/production scoring comparisons passed but did not establish tenant-scoped state changes. Those historical results remain unchanged. `docs/planning/deterministic-oracle-acceptance.md` governs the implemented catalog, comparator and evidence-validation correction. Focused producer, adversarial validator, catalog and five report-integration checks passed locally; the actual producer-to-report test proves exactly 13 PASS while the other 95 stay BLOCKED. Scoring behavior and other case criteria remain unchanged. Candidate CI is pending at publication; no hosted, paid or production-readiness claim follows.

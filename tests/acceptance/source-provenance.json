@@ -22,11 +22,13 @@
     "scripts/runTranscriptFlowCoverage.mjs": "sha256:c0c50a83f8837f11d471414d227d01f6ef315e6aa55f61d82ac1017a5ad5d076",
     "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
     "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
+    "scripts/testTrustAssurancePostgres.mjs": "sha256:2728bb802d4e9e351972079f7166274df2627fcdb803d915a1d9d2cefd03e37a",
     "scripts/testPilotOperationsMigration.mjs": "sha256:59622919796a25646d76707d8cd29258300036ca1a501fe1a3c8bdbb6a942f61",
     "scripts/testTranscriptFlowPostgres.mjs": "sha256:aafb979adc5652268d24d4660f1327d9364161cb3afcc528ceb368c5d2bbcd13",
     "scripts/transcriptFlowEvidenceContract.mjs": "sha256:410fca06f0b3861802b503b8ce555afeffa5ff315e4742d5cf029e304b745582",
     "scripts/transcriptFlowEvidenceContract.test.mjs": "sha256:198306d83d32724bcf4840bf50d8df8865a8cbd51ca9a9e09cd34bcf30c63d44",
     "scripts/transcriptFlowEvidenceScope.mjs": "sha256:36525be958a8e448c7248ce79dd6b66de082be013335442d1dee5b94bb279f9c",
+    "scripts/trustAcceptanceEvidence.mjs": "sha256:73ad241675694a42075e3acc73df6bd3b0735a075fc97525910408652edf91d5",
     "scripts/verifyTranscriptFlowEvidence.mjs": "sha256:15ab6e9fd011cde0bf8025b82eeb300158936b385cbf0ef98911558e7320436e",
     "services/enterpriseIntelligence.test.ts": "sha256:3b2584cd5f67a9f16b0fba2ff09a3818b710bf75949da72174b9f53c078ec307",
     "services/enterpriseIntelligenceClient.ts": "sha256:f7f92ffdf5a3998fc456330408555bedc59fe833a3214225f8c6447fbecbc011",
@@ -52,6 +54,7 @@
     "supabase/functions/_shared/supabase.ts": "sha256:13070ece3bd1cd761c32e7758321c29ecf1fb796664f7a05ca67799ea1fa382f",
     "supabase/functions/_shared/transcriptSourceSetMigration.test.mjs": "sha256:2489cfcde1109c169a5cdfee9e54586a03891bf8c381bf26b513fd3467f86265",
     "supabase/migrations/20260825165350_governed_transcript_source_sets_assess.sql": "sha256:c656d515ab8805fe01d42ec3baa7a6c2784527a97d655101a838bfcce2b898a4",
+    "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql": "sha256:4a467829152ae7b7afbffb71320e3b899f8d9c563ac66f889704ad32c934afb6",
     "supabase/migrations/20260825165401_unified_provider_budget_authority.sql": "sha256:eee73c54ff3538ce78d2179cc5c5ad269a7c9581ad17b47b317616f00ea7989b",
     "supabase/migrations/20260826151538_governed_transcript_authority_forward_fix.sql": "sha256:b2cbc07ae7917bf7dc6bd887cea7f0b5ae45207d1f0723f2b339e3d1b1586cf1",
     "supabase/migrations/20260827173000_governed_transcript_hosted_identity_convergence.sql": "sha256:175058deb005500c8e5c66db2be06ead69c0335e18096f5441292bbcd6f4f646",
@@ -2347,7 +2350,10 @@
       "branchId": "TRUST-AUDIT_TRUTH",
       "testId": "TRUST-005",
       "sourceReferences": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "ownership": [
         {
@@ -2358,17 +2364,20 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-trust-postgresql-v1",
+        "organizationId": "88000000-0000-4000-8000-000000000010",
+        "workspaceId": "88000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "TRUST-CLAIM_EVIDENCE_SELECTION",
       "testId": "TRUST-001",
       "sourceReferences": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "ownership": [
         {
@@ -2379,17 +2388,20 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-trust-postgresql-v1",
+        "organizationId": "88000000-0000-4000-8000-000000000010",
+        "workspaceId": "88000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "TRUST-CROSS_TENANT_DENIAL",
       "testId": "TRUST-004",
       "sourceReferences": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "ownership": [
         {
@@ -2400,17 +2412,20 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-trust-postgresql-v1",
+        "organizationId": "88000000-0000-4000-8000-000000000010",
+        "workspaceId": "88000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "TRUST-IMMUTABLE_EVIDENCE",
       "testId": "TRUST-003",
       "sourceReferences": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "ownership": [
         {
@@ -2421,17 +2436,20 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-trust-postgresql-v1",
+        "organizationId": "88000000-0000-4000-8000-000000000010",
+        "workspaceId": "88000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "TRUST-PUBLICATION_SOD",
       "testId": "TRUST-002",
       "sourceReferences": [
-        "services/trustAssurance/domain.ts"
+        "scripts/testTrustAssurancePostgres.mjs",
+        "scripts/trustAcceptanceEvidence.mjs",
+        "services/trustAssurance/domain.ts",
+        "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql"
       ],
       "ownership": [
         {
@@ -2442,10 +2460,10 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-trust-postgresql-v1",
+        "organizationId": "88000000-0000-4000-8000-000000000010",
+        "workspaceId": "88000000-0000-4000-8000-000000000011"
       }
     }
   ]

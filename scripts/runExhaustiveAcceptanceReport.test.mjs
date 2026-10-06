@@ -342,3 +342,65 @@ test.after(() => {
     scenarios: [...passedControlScriptScenarios].sort().map(name => ({ name, status: 'passed' })),
   }), { flag: 'wx' });
 });
+
+test('Trust report validates only the five exact cases and rejects post-ingestion substitutions', async () => {
+  const { buildTrustAcceptanceProducer } = await import('./trustAcceptanceEvidence.mjs');
+  const suite = loadExecutionBindings().retainedSuites.find(item => item.suiteId === 'trust-authority');
+  const command = suite.command.join(' ');
+  const identity = { releaseSha, workflowRunId: '123456', workflowAttempt: '2', environment: 'pull-request', workflowPath };
+  // Unit-level report inputs, not an assertion that PostgreSQL ran in this test.
+  const makeProducer = failure => {
+    const actualByTestId = JSON.parse(readFileSync('tests/acceptance/fixtures/trust-evidence-unit-results.json', 'utf8'));
+    const failuresByTestId = {};
+    if (failure) {
+      delete actualByTestId['TRUST-004'];
+      failuresByTestId['TRUST-004'] = { failureCode: 'assertion_failed' };
+    }
+    return buildTrustAcceptanceProducer({ actualByTestId, failuresByTestId, identity, command, cleanupVerified: true });
+  };
+  const variants = [
+    ['valid', () => {}, false, 5, 0],
+    ['source substitution', manifest => { const item = manifest.results[0]; item.sourceDigests[Object.keys(item.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
+    ['result substitution', manifest => { manifest.results[4].actual.semanticAudit = false; }, false, 0, 0],
+    ['cleanup substitution', manifest => { manifest.results[0].cleanupVerified = false; }, false, 0, 0],
+    ['partial artifact', manifest => { manifest.results.pop(); }, false, 0, 0],
+    ['executed failure despite aggregate success', () => {}, true, 4, 1],
+    ['failed aggregate', manifest => { manifest.suites[0].status = 'FAIL'; }, true, 0, 5],
+    ['aggregate-only', manifest => { manifest.results = []; }, false, 0, 0],
+  ];
+  for (const [name, mutate, failure, passed, failed] of variants) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-trust-report-'));
+    try {
+      const retainedPath = path.join(temp, 'retained.json');
+      const manifest = {
+        schemaVersion: 3, manifestKind: 'retained', ...identity,
+        suites: [{ suiteId: suite.suiteId, status: 'PASS', command, requiredGate: true, testIds: suite.testIds }],
+        results: structuredClone(makeProducer(failure).results),
+      };
+      mutate(manifest);
+      writeFileSync(retainedPath, JSON.stringify(manifest));
+      const resultsDir = path.join(temp, 'report');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: identity.workflowRunId,
+          GITHUB_RUN_ATTEMPT: identity.workflowAttempt, ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+          ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request', ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
+          ACCEPTANCE_RESULTS_DIR: resultsDir, RETAINED_RESULTS_MANIFEST: retainedPath,
+          ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+          SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+          PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
+        },
+      });
+      const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.equal(report.summary.PASS, passed, `${name}: ${report.results.find(item => item.testId === 'TRUST-001')?.failureReason ?? report.summary.preflightFailure ?? run.stderr}`);
+      assert.equal(report.summary.FAIL, failed, name);
+      assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
+      assert.ok(report.results.filter(item => item.status === 'PASS').every(item => item.testId.startsWith('TRUST-')), name);
+      if (failed) assert.equal(report.results.find(item => item.testId === 'TRUST-004').status, 'FAIL', name);
+      if (passed === 5) assert.equal(run.status, 0, run.stderr);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }
+});
