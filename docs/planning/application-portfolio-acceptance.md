@@ -54,11 +54,19 @@ Local PostgreSQL execution is `not run` because the managed workstation has no a
 - `git diff --check`: `PASS` (line-ending notices only).
 - Disposable PostgreSQL 16 harness: `not run` locally; exact-candidate CI required.
 
-The merged PR #273 tree is the source-identical baseline. Its post-merge Core CI dependency-audit failure is a separate inherited package-lock maintenance matter pending its own approval and owned by the controller; it does not change this slice's behavior or evidence criteria.
+The merged PR #273 tree is the source-identical baseline. Its post-merge Core CI dependency-audit failure is a separate inherited package-lock maintenance matter subsequently approved by AP and owned by the controller; it does not change this slice's behavior or evidence criteria.
 
 ### First CI fixture correction
 
 PR #274 candidate `00f423e7` executed 118 PostgreSQL scenarios successfully, including APPS-001, APPS-002, APPS-004 and APPS-005. APPS-003 failed with `PR1G_INVALID_COMMAND` because its new metadata fixture used unsupported enum values. The fixture now uses the existing contract values `current`, `executable_acceptance` and `strong`; no runtime rule, expected recommendation or acceptance criterion changed. A new exact-head database run is required.
+
+### Executed database evidence and approved dependency patches
+
+Candidate `4f6b26e72d57b34505d39eacc266fd1d16367573` passed exact acceptance run `37427839627` attempt 1 with 24 PASS, 0 FAIL and 84 BLOCKED. All five APPS producer results were independently verified for source/run/command/scope/actuals/cleanup; all other 103 statuses were unchanged. Application Portfolio workflow `37427839579` passed 119 PostgreSQL scenarios plus browser, contract and build checks. These results do not transfer automatically to the next candidate.
+
+AP explicitly approved DOMPurify 3.4.13 to 3.4.16 and source-map-js 1.2.1 to 1.2.2 in this same PR. Only those two package-lock records change; no dependency range, audit exception, workflow gate or product criterion changes. Dependencies are installed independently in this worktree to preserve the shared baseline installation. Executed local verification: `npm audit --audit-level=low` reports zero vulnerabilities; `npm run test:unsafe-rendering` passes both sanitization and HTML export suites; `npm run build` passes; the retained hostile Markdown/SVG browser case passes 2/2 on desktop and mobile Chromium. The installed versions match the two patched lockfile entries. Fresh exact-head CI remains required.
+
+Rollback of the patch is a revert of the two lockfile records, which restores the known audit findings and blocks merging; it is not an approved deployment fallback. No hosted deployment is included.
 
 ## Proof limits
 
