@@ -97,7 +97,7 @@
     "services/scoringEngine.ts": "sha256:c06bd2ddab219755d13d45ee55793b2245da52e2e7ee1dc82cb0fb5d2d326c90",
     "services/studioArtifacts/contracts.ts": "sha256:3c403bf735296f2ffd8c8ee625c392b3a3cd51c129246b439083b19854483ac8",
     "services/trustAssurance/domain.ts": "sha256:09bafbe1692cdf10324064e0ba8f7effd4a1364def0addb8736d7b05a3a9e864",
-    "scripts/testPr1dMigrations.mjs": "sha256:17ef870c0dd91b851ae061779c48914e9fe68c91d2196a25d68ab22666621a8c",
+    "scripts/testPr1dMigrations.mjs": "sha256:59db5ba1a6fb523b1324acc7a3f040915555eac500a9a3df301d66ba56f039fa",
     "scripts/assessV2AcceptanceEvidence.mjs": "sha256:8156a9f964f77dbbf7348098fec5b69ee4282e6059b3588000d91df189192a93",
     "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql": "sha256:6c2771c019b1fd9b6b1d48f884453ce20d7ffb9a8802e3eadda520a4f6e93be4",
     "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql": "sha256:7f49d7944a1195e0564826494ce5fb02d052b6a7ca687f1124bcdc26bf205209",

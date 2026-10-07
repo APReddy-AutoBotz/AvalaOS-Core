@@ -47,6 +47,10 @@ The harness compares full scoped case/version/child/receipt/audit snapshots. It 
 
 Candidate `39f958f4` stopped before PostgreSQL execution in run `37629646635`: the historical PR #255 charter test hard-coded the old fifteen hosted exclusions. The current bindings correctly include three additional blocked Assess V2 cases. The test now preserves the immutable charter and its exact fifteen exclusions, while requiring the current bindings to equal those exclusions plus ASSESS-018/019/020. The related report and browser-declaration contracts likewise require 36 explicit skipped project cases (18 cases across two viewports), while the 38 executable declarations remain unchanged. This changes no acceptance criterion and grants no hosted credit.
 
+## Final race-payload review correction
+
+Candidate `68c83800` passed all applicable CI and independently verified 26 PASS / 0 FAIL / 82 BLOCKED in run `37630618436` attempt 1. Final review identified a confirmed test defect: the concurrent-case name assertion accepted either input, without tying the stored name to the committed request. The assertion now requires the exact input selected by `winnerIndex`. Since the two input payloads otherwise match, this closes the loser-payload substitution gap without changing a product rule or acceptance criterion. Fresh exact-head CI is required for this correction.
+
 ## Rollback
 
 Revert only this slice's instrumentation, producer/validator, bindings and generated source metadata together. Both cases return to BLOCKED. No runtime schema rollback or hosted change is required. The controller will report exact candidate evidence at the PR boundary under the user-authorized continuation. Hosted operations, production changes and new paid effects remain outside this slice.

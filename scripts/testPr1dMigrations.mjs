@@ -950,7 +950,8 @@ try {
     );
     assert.equal(after.headVersionId, outcomes[winnerIndex].resource.headVersionId);
     assert.equal(after.versionRows.at(-1).id, after.headVersionId);
-    assert.ok(['Concurrent draft A', 'Concurrent draft B'].includes(after.versionRows.at(-1).name));
+    assert.equal(after.versionRows.at(-1).name, ['Concurrent draft A', 'Concurrent draft B'][winnerIndex],
+      'the persisted draft payload must belong to the committed request');
     assert.equal(winnerReceipt.status, 'succeeded');
     assert.equal(winnerReceipt.response.id, ACCEPT_VERSION_CASE);
     assert.equal(Number(winnerReceipt.response.version), 2);
