@@ -46,6 +46,36 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "selector": "export const APPLICATION_PORTFOLIO_MODEL_VERSION = 'assess-v2-application-portfolio-2026-07';"
   },
   {
+    "anchorId": "application-portfolio-acceptance-harness",
+    "sourceReference": "scripts/testPr1gMigrations.mjs",
+    "selector": "await acceptanceScenario('APPS-001', 'authorized application create with receipt and audit'"
+  },
+  {
+    "anchorId": "application-portfolio-acceptance-evidence",
+    "sourceReference": "scripts/applicationPortfolioAcceptanceEvidence.mjs",
+    "selector": "export const APPLICATION_PORTFOLIO_TEST_IDS"
+  },
+  {
+    "anchorId": "application-portfolio-pr1b-base",
+    "sourceReference": "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+    "selector": "CREATE TABLE IF NOT EXISTS public.assess_command_receipts"
+  },
+  {
+    "anchorId": "application-portfolio-pr1g-migration",
+    "sourceReference": "supabase/migrations/20260722120000_pr1g_application_portfolio.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command("
+  },
+  {
+    "anchorId": "application-portfolio-pr1g-authority-correction",
+    "sourceReference": "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.pr1g_execute_application_command("
+  },
+  {
+    "anchorId": "application-portfolio-pr1b-fixture-authority-fix",
+    "sourceReference": "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.pr1b_enforce_organization_membership_role_scope()"
+  },
+  {
     "anchorId": "assess-review-domain",
     "sourceReference": "services/assessV2/reviewDomain.ts",
     "selector": "export const ASSESS_V2_REVIEW_VERSION = 'assess-v2-review-2026-07' as const;"
@@ -141,9 +171,8 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
       "test:pr1d"
     ],
     "application-portfolio": [
-      "npm",
-      "run",
-      "test:pr1g"
+      "node",
+      "scripts/testPr1gMigrations.mjs"
     ],
     "govern-authority": [
       "npm",
@@ -431,10 +460,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-APPLICATION_CREATE",
-    "testId": "APPS-001",
-    "sourceAnchorIds": [
-      "application-portfolio"
-    ],
+      "testId": "APPS-001",
+      "sourceAnchorIds": [
+        "application-portfolio-acceptance-harness",
+        "application-portfolio-acceptance-evidence",
+        "application-portfolio",
+        "application-portfolio-pr1b-base",
+        "application-portfolio-pr1g-migration",
+        "application-portfolio-pr1g-authority-correction",
+        "application-portfolio-pr1b-fixture-authority-fix"
+      ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -446,10 +481,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-ASSESSMENT_SNAPSHOT",
-    "testId": "APPS-002",
-    "sourceAnchorIds": [
-      "application-portfolio"
-    ],
+      "testId": "APPS-002",
+      "sourceAnchorIds": [
+        "application-portfolio-acceptance-harness",
+        "application-portfolio-acceptance-evidence",
+        "application-portfolio",
+        "application-portfolio-pr1b-base",
+        "application-portfolio-pr1g-migration",
+        "application-portfolio-pr1g-authority-correction",
+        "application-portfolio-pr1b-fixture-authority-fix"
+      ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -461,10 +502,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-CROSS_WORKSPACE_DENIAL",
-    "testId": "APPS-004",
-    "sourceAnchorIds": [
-      "application-portfolio"
-    ],
+      "testId": "APPS-004",
+      "sourceAnchorIds": [
+        "application-portfolio-acceptance-harness",
+        "application-portfolio-acceptance-evidence",
+        "application-portfolio",
+        "application-portfolio-pr1b-base",
+        "application-portfolio-pr1g-migration",
+        "application-portfolio-pr1g-authority-correction",
+        "application-portfolio-pr1b-fixture-authority-fix"
+      ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -476,10 +523,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-MODERNIZATION_DISPOSITION",
-    "testId": "APPS-003",
-    "sourceAnchorIds": [
-      "application-portfolio"
-    ],
+      "testId": "APPS-003",
+      "sourceAnchorIds": [
+        "application-portfolio-acceptance-harness",
+        "application-portfolio-acceptance-evidence",
+        "application-portfolio",
+        "application-portfolio-pr1b-base",
+        "application-portfolio-pr1g-migration",
+        "application-portfolio-pr1g-authority-correction",
+        "application-portfolio-pr1b-fixture-authority-fix"
+      ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -491,10 +544,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-REPLAY",
-    "testId": "APPS-005",
-    "sourceAnchorIds": [
-      "application-portfolio"
-    ],
+      "testId": "APPS-005",
+      "sourceAnchorIds": [
+        "application-portfolio-acceptance-harness",
+        "application-portfolio-acceptance-evidence",
+        "application-portfolio",
+        "application-portfolio-pr1b-base",
+        "application-portfolio-pr1g-migration",
+        "application-portfolio-pr1g-authority-correction",
+        "application-portfolio-pr1b-fixture-authority-fix"
+      ],
     "ownership": [
       {
         "kind": "retained-assertion",

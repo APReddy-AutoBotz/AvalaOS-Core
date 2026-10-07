@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:application-portfolio-acceptance-evidence": "node --test scripts/applicationPortfolioAcceptanceEvidence.test.mjs",
     "test:trust-acceptance-evidence": "node --test scripts/trustAcceptanceEvidence.test.mjs",
     "test:studio-output-contract": "node scripts/runEnterpriseIntelligenceTest.mjs supabase/functions/_shared/studioArtifactTemplateContract.ts supabase/functions/_shared/studioArtifactTemplateContract.test.ts && node scripts/runEnterpriseIntelligenceTest.mjs supabase/functions/_shared/studioArtifactProvider.ts supabase/functions/_shared/studioArtifactProvider.test.ts && node scripts/runEnterpriseIntelligenceTest.mjs supabase/functions/_shared/studioArtifactGeneration.ts supabase/functions/_shared/studioArtifactGeneration.test.ts",
     "test:synthetic-ai-budget": "node --test scripts/syntheticAiCampaignBudget.test.mjs scripts/syntheticAiCampaignFixtures.test.mjs scripts/syntheticAiCampaignOracle.test.mjs",
