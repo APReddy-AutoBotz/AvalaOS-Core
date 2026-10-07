@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Studio lifecycle acceptance evidence boundary (2026-10-07)
+
+The focused `studio-postgres-acceptance` owner may prove only STUDIO-004, STUDIO-005, STUDIO-006, STUDIO-008, STUDIO-009, STUDIO-010 and STUDIO-011. Apply the current migration chain in one disposable database; execute real authorized command/lifecycle RPCs against isolated synthetic fixtures. Measure the target transition separately from setup, immutable ancestry, receipts, audits and zero-effect denials/replays. Storage simulations are explicitly separate from hosted Storage proof. Exact source/run/command identity and verified cleanup are required before evidence emission and at report consumption. Product authority remains in the governed/private Studio architecture documents; implementation and rollback are in `docs/planning/studio-lifecycle-acceptance.md`.
+
 ## Assess V2 conflict evidence boundary (2026-10-07)
 
 Only ASSESS-021 and ASSESS-022 gain proof from the existing PR1D disposable PostgreSQL harness. Two concurrent service-role draft commands must produce one committed transition and one VERSION_CONFLICT; real original execution followed by a changed canonical payload with the same key must produce IDEMPOTENCY_CONFLICT without altering the original receipt or state. Scoped head/version/receipt/audit comparisons and verified cleanup bind each result to exact source, run and command identity. SQL RPC evidence does not prove deployed Edge, PostgREST, browser or hosted behavior. Hosted ASSESS-018 through ASSESS-020 remain blocked. See `docs/planning/assess-v2-conflict-acceptance.md`; product authority stays in the Assess V2 architecture.

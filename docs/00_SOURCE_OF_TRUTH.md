@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Current Studio lifecycle acceptance slice (2026-10-07)
+
+PR #275 merged as `e8fdd7047f95665edf594bbf4535692c4d153f56` with its tested candidate tree unchanged. All 14 applicable candidate workflows and post-merge Core CI `37640299836` passed. Exact acceptance run `37635652518` attempt 1 records 26 PASS / 0 FAIL / 82 BLOCKED / 0 UNCOVERED. These executed results supersede the candidate-pending statements below. AP authorized continued testing and verified merges without routine reapproval. The next substantial slice proves seven Studio lifecycle cases under `docs/planning/studio-lifecycle-acceptance.md`, preserving all behavior criteria. Its new execution remains planned verification. Hosted execution stays NOT_EXECUTED and overall acceptance INCOMPLETE_COVERAGE.
+
 ## Current Assess V2 conflict acceptance slice (2026-10-07)
 
 PR #274 merged as `a69707afddc4b17804e37e9bbdaa44f6bf1cb7a2`, identical to tested candidate `f7a8f9571cd0f77d46a06fdc3b4765713c97570f`. All 14 applicable PR workflows passed, including the unchanged dependency audit. Exact acceptance run `37430088371` attempt 1 records 24 PASS / 0 FAIL / 84 BLOCKED / 0 UNCOVERED. These executed results supersede candidate-pending statements below. AP approved merge and continued testing without routine reapproval. The next bounded slice proves ASSESS-021 and ASSESS-022 using real disposable PostgreSQL commands under `docs/planning/assess-v2-conflict-acceptance.md`; all behavior criteria remain unchanged. ASSESS-018 through ASSESS-020 require hosted execution and remain BLOCKED. New database execution is planned verification; hosted execution stays NOT_EXECUTED and overall acceptance INCOMPLETE_COVERAGE.

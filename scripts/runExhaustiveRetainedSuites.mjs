@@ -58,6 +58,7 @@ for (const suite of bindings.retainedSuites ?? []) {
       ...(suite.suiteId === 'trust-authority' ? { DATABASE_URL: process.env.TRUST_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
       ...(suite.suiteId === 'application-portfolio' ? { DATABASE_URL: process.env.APPLICATION_PORTFOLIO_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
       ...(suite.suiteId === 'assess-v2-authority' ? { PR1D_MIGRATION_DATABASE_URL: process.env.ASSESS_V2_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
+      ...(suite.suiteId === 'studio-postgres-acceptance' ? { STUDIO_ACCEPTANCE_DATABASE_URL: process.env.STUDIO_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
     },
     stdio: 'inherit',
     shell: useWindowsCommandShim,
@@ -86,11 +87,15 @@ for (const suite of bindings.retainedSuites ?? []) {
 }
 
 const failed = manifest.suites.filter(item => item.status !== 'PASS');
+// A completed producer can carry independent PASS, FAIL and BLOCKED outcomes.
+// Keep its transport status intact for reporting, but fail CI on unsuccessful evidence.
+const unsuccessfulResults = manifest.results.filter(item => item.status !== 'PASS');
 console.log(JSON.stringify({
   retainedSuites: manifest.suites.length,
   passed: manifest.suites.length - failed.length,
   failed: failed.map(item => item.suiteId),
   exactTestIdResults: manifest.results.length,
+  unsuccessfulTestIds: unsuccessfulResults.map(item => item.testId),
   manifest: manifestPath,
 }));
-if (failed.length) process.exitCode = 1;
+if (failed.length || unsuccessfulResults.length) process.exitCode = 1;

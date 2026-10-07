@@ -194,6 +194,51 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "assess-v2-visibility",
     "sourceReference": "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql",
     "selector": "CREATE POLICY pr1d_cases_read"
+  },
+  {
+    "anchorId": "studio-acceptance-teststudioacceptancepostgres-mjs",
+    "sourceReference": "scripts/testStudioAcceptancePostgres.mjs",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "studio-acceptance-studioacceptanceevidence-mjs",
+    "sourceReference": "scripts/studioAcceptanceEvidence.mjs",
+    "selector": "export const STUDIO_ACCEPTANCE_TEST_IDS = ["
+  },
+  {
+    "anchorId": "studio-acceptance-studioartifactpostgresfixture-mjs",
+    "sourceReference": "scripts/studioArtifactPostgresFixture.mjs",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+    "sourceReference": "scripts/studioPrivateArtifactPostgresFixture.mjs",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+    "sourceReference": "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+    "selector": "export const SYNTHETIC_AI_TERMINAL_JOURNAL_MIGRATION ="
+  },
+  {
+    "anchorId": "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+    "sourceReference": "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_reject_immutable()"
+  },
+  {
+    "anchorId": "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+    "sourceReference": "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_private_reject_immutable()"
+  },
+  {
+    "anchorId": "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+    "sourceReference": "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_private_state_timestamp()"
+  },
+  {
+    "anchorId": "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql",
+    "sourceReference": "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_pr_b_json_structure_safe(value jsonb)"
   }
 ]);
 export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
@@ -275,6 +320,10 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
       "npm",
       "run",
       "test:pilot-operations"
+    ],
+    "studio-postgres-acceptance": [
+      "node",
+      "scripts/testStudioAcceptancePostgres.mjs"
     ]
   },
   "serverCommands": {
@@ -1867,13 +1916,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-DELETION",
     "testId": "STUDIO-010",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-private",
-        "assertionId": "studio-private::STUDIO-010",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-010",
         "scenarioId": "STUDIO-010::retained-contract"
       }
     ]
@@ -1882,13 +1940,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-DELETION_RECONCILIATION",
     "testId": "STUDIO-011",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-private",
-        "assertionId": "studio-private::STUDIO-011",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-011",
         "scenarioId": "STUDIO-011::retained-contract"
       }
     ]
@@ -1957,13 +2024,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-LEGAL_HOLD",
     "testId": "STUDIO-009",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-private",
-        "assertionId": "studio-private::STUDIO-009",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-009",
         "scenarioId": "STUDIO-009::retained-contract"
       }
     ]
@@ -1972,13 +2048,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-PRIVATE_RENDITION",
     "testId": "STUDIO-006",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-private",
-        "assertionId": "studio-private::STUDIO-006",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-006",
         "scenarioId": "STUDIO-006::retained-contract"
       }
     ]
@@ -1987,13 +2072,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-RETENTION",
     "testId": "STUDIO-008",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-private",
-        "assertionId": "studio-private::STUDIO-008",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-008",
         "scenarioId": "STUDIO-008::retained-contract"
       }
     ]
@@ -2002,13 +2096,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-REVISION_IMMUTABILITY",
     "testId": "STUDIO-004",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-governed",
-        "assertionId": "studio-governed::STUDIO-004",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-004",
         "scenarioId": "STUDIO-004::retained-contract"
       }
     ]
@@ -2017,13 +2120,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-THREE_PERSON_APPROVAL",
     "testId": "STUDIO-005",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-acceptance-teststudioacceptancepostgres-mjs",
+      "studio-acceptance-studioacceptanceevidence-mjs",
+      "studio-acceptance-studioartifactpostgresfixture-mjs",
+      "studio-acceptance-studioprivateartifactpostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "studio-artifact-contracts",
+      "studio-acceptance-20260727120000-studio-governed-artifact-authority-sql",
+      "studio-acceptance-20260729163251-studio-private-artifact-authority-sql",
+      "studio-acceptance-20260730190000-pr217-studio-private-artifact-runtime-forward-fix-sql",
+      "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "studio-governed",
-        "assertionId": "studio-governed::STUDIO-005",
+        "ownerId": "studio-postgres-acceptance",
+        "assertionId": "studio-postgres-acceptance::STUDIO-005",
         "scenarioId": "STUDIO-005::retained-contract"
       }
     ]
