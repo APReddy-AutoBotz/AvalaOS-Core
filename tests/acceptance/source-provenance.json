@@ -115,7 +115,7 @@
     "supabase/migrations/20260729163251_studio_private_artifact_authority.sql": "sha256:8c2e093372e5c4c6c3a47ba9d6e55785ddd8182ed6d316cde5c2674cd90b8bae",
     "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql": "sha256:847e8e74865903e69828119a282419d0bf3862fa455ae67c1587acc69cff49b6",
     "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql": "sha256:f6a35c27f1cd2cdfa686b796aba7963d5b6000d40bf49cd47deb698d165b878c",
-    "scripts/testGovernAcceptancePostgres.mjs": "sha256:a48256f63c08ff516769ea47f0425d275e6faf6a13b82ae879655af749c15c44",
+    "scripts/testGovernAcceptancePostgres.mjs": "sha256:20f8d9d76ebe72985ab7c95ea5fc1e3450ef767339d6df57809825c94c05f844",
     "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
     "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
     "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b"

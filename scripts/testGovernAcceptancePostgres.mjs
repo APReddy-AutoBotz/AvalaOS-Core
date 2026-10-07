@@ -345,12 +345,12 @@ const commonDenials = async (client, fixture, command) => {
 const inspectCommit = async (client, fixture, command, committed, before, after) => {
   const resolution = await row(client,
     `SELECT org_id,workspace_id,case_id,source_version_id,decision_id,review_resolution_id,
-      resolver_id,resolver_authorization_version,receipt_id,audit_event_id,required_controls
+      resolver_id,resolver_authorization_version,request_id,receipt_id,audit_event_id,required_controls
      FROM public.assess_v2_govern_resolutions WHERE case_id=$1::uuid`,
     [fixture.caseId],
   );
   const receipt = await row(client,
-    `SELECT id,org_id,workspace_id,actor_id,command_type,idempotency_key,status,response
+    `SELECT id,org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,status,response
      FROM public.assess_command_receipts
      WHERE org_id=$1::uuid AND actor_id=$2::uuid AND command_type='assessment_v2.govern.resolve'
        AND idempotency_key=$3`,
@@ -373,15 +373,15 @@ const inspectCommit = async (client, fixture, command, committed, before, after)
   const lineageBound = JSON.stringify([
     resolution.org_id, resolution.workspace_id, resolution.case_id,
     resolution.source_version_id, resolution.decision_id, resolution.review_resolution_id,
-    resolution.resolver_id, Number(resolution.resolver_authorization_version), resolution.receipt_id,
+    resolution.resolver_id, Number(resolution.resolver_authorization_version), resolution.request_id, resolution.receipt_id,
     receipt.org_id, receipt.workspace_id, receipt.actor_id, receipt.command_type,
-    receipt.idempotency_key,
+    receipt.idempotency_key, receipt.request_id,
   ]) === JSON.stringify([
     fixture.org, fixture.workspace, fixture.caseId, fixture.sourceVersionId,
     fixture.decisionId, fixture.reviewResolutionId, fixture.resolver,
-    Number(command.authorizationVersion), receipt.id,
+    Number(command.authorizationVersion), command.requestId, receipt.id,
     fixture.org, fixture.workspace, fixture.resolver, 'assessment_v2.govern.resolve',
-    command.idempotencyKey,
+    command.idempotencyKey, command.requestId,
   ]);
   assert.equal(lineageBound, true);
   const auditBound = JSON.stringify([
