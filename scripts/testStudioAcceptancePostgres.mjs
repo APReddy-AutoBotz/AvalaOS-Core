@@ -10,29 +10,24 @@ import {
 } from './studioPrivateArtifactPostgresFixture.mjs';
 import {
   STUDIO_ACCEPTANCE_EXACT_ACTUAL,
-  STUDIO_ACCEPTANCE_TEST_IDS,
+  classifyStudioAcceptanceCaseFailure,
+  completeStudioAcceptanceSetupBlocked,
+  finalizeStudioAcceptanceExecution,
   writeStudioAcceptanceProducer,
 } from './studioAcceptanceEvidence.mjs';
 
 const { Client } = pg;
 const adminUrl = process.env.STUDIO_ACCEPTANCE_DATABASE_URL;
-if (!adminUrl) {
-  console.error('STUDIO_ACCEPTANCE_DATABASE_URL is required.');
-  process.exit(1);
-}
 
 const uuid = ordinal => `99000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
 const foreignOrg = uuid(998);
 const foreignWorkspace = uuid(999);
-const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 const requiredMigrations = [
   '20260727120000_studio_governed_artifact_authority.sql',
   '20260729163251_studio_private_artifact_authority.sql',
   '20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql',
   '20260828120000_governed_multisource_studio_pr_b.sql',
 ];
-for (const migration of requiredMigrations) assert.ok(migrations.includes(migration), `missing ${migration}`);
-assert.ok(migrations.indexOf(requiredMigrations[3]) > migrations.indexOf(requiredMigrations[2]));
 
 const dbName = `studio_accept_${process.pid}_${Date.now()}`;
 const createdRoles = [];
@@ -44,6 +39,8 @@ let studioScopedTables = [];
 let activeCasePhase = 'not-started';
 const actualByTestId = {};
 const failuresByTestId = {};
+const blockedByTestId = {};
+let setupFailurePhase = null;
 
 const urlFor = name => {
   const url = new URL(adminUrl);
@@ -296,8 +293,8 @@ const prepareRendition = async (client, { retentionDays, ordinal }) => {
   return { fixture, generationInput, generation, claim, metadata, fakeStorage, rendition };
 };
 const runCase = async (testId, operation) => {
+  activeCasePhase = 'setup-fixture';
   await db.query('BEGIN');
-  activeCasePhase = 'fixture';
   try {
     await seedForeignTenant(db);
     const actual = await operation();
@@ -305,8 +302,10 @@ const runCase = async (testId, operation) => {
     actualByTestId[testId] = actual;
     console.log(`PASS ${testId}`);
   } catch {
-    failuresByTestId[testId] = { failureCode: 'assertion_failed' };
-    console.error(`FAIL ${testId} phase=${activeCasePhase} assertion_failed`);
+    const failure = classifyStudioAcceptanceCaseFailure(activeCasePhase);
+    const target = failure.status === 'BLOCKED' ? blockedByTestId : failuresByTestId;
+    target[testId] = { failureCode: failure.failureCode };
+    console.error(`${failure.status} ${testId} phase=${activeCasePhase} ${failure.failureCode}`);
   } finally {
     try {
       await db.query('ROLLBACK');
@@ -316,8 +315,15 @@ const runCase = async (testId, operation) => {
   }
 };
 
+activeCasePhase = 'setup-foundation-config';
 try {
+  assert.ok(adminUrl, 'STUDIO_ACCEPTANCE_DATABASE_URL is required.');
+  const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
+  for (const migration of requiredMigrations) assert.ok(migrations.includes(migration), `missing ${migration}`);
+  assert.ok(migrations.indexOf(requiredMigrations[3]) > migrations.indexOf(requiredMigrations[2]));
+  activeCasePhase = 'setup-foundation-connect';
   admin = await connect(adminUrl);
+  activeCasePhase = 'setup-foundation-roles';
   for (const [roleName, attributes] of [
     ['anon', 'NOLOGIN'],
     ['authenticated', 'NOLOGIN'],
@@ -335,6 +341,7 @@ try {
   await admin.query(`CREATE DATABASE ${dbName}`);
   databaseCreated = true;
   db = await connect(urlFor(dbName));
+  activeCasePhase = 'setup-foundation-migrations';
   await migrationTransaction(db, 'auth-bootstrap', `
     CREATE SCHEMA auth;
     CREATE TABLE auth.users(id uuid PRIMARY KEY);
@@ -348,6 +355,7 @@ try {
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
       () => migrationTransaction(db, migration, sql));
   }
+  activeCasePhase = 'setup-foundation-discovery';
   studioScopedTables = (await db.query(`
     SELECT table_name
     FROM information_schema.columns
@@ -452,7 +460,7 @@ try {
 
   await runCase('STUDIO-005', async () => {
     const fixture = await createCommittedStudioFixture(db);
-    markPhase('approval-prerequisites');
+    markPhase('setup-approval-prerequisites');
     await artifactCommand(db, fixture, 'studio.artifact.review.submit', fixture.requester,
       { artifactId: fixture.artifactId, artifactVersionId: fixture.version.id }, 'accept-submit', 501);
     await artifactCommand(db, fixture, 'studio.artifact.review.assign', fixture.requester,
@@ -759,8 +767,9 @@ try {
     const foreignTenantDenied = await expectFailure(() => privateClaim(db, foreignInput), /PR1B_|RESOURCE_NOT_AVAILABLE|AUTHORIZATION/u);
     const denialAfter = await tenantPairFingerprint(db, prepared.fixture.org, prepared.fixture.workspace);
     const deniedEffectDelta = exactZeroEffect(denialBefore, denialAfter);
-    markPhase('deletion-prerequisites');
+    markPhase('setup-deletion-prerequisites');
     const deletion = await prepareDeletionFromExisting(db, prepared, 1010);
+    markPhase('deletion-storage-effect');
     let fakeStorageDeleteCount = 0;
     assert.equal(deletion.execution.objectKey, prepared.metadata.objectKey);
     if (prepared.fakeStorage.delete(deletion.execution.objectKey)) fakeStorageDeleteCount += 1;
@@ -828,8 +837,9 @@ try {
     const foreignTenantDenied = await expectFailure(() => privateClaim(db, foreignInput), /PR1B_|RESOURCE_NOT_AVAILABLE|AUTHORIZATION/u);
     const denialAfter = await tenantPairFingerprint(db, prepared.fixture.org, prepared.fixture.workspace);
     const deniedEffectDelta = exactZeroEffect(denialBefore, denialAfter);
-    markPhase('unknown-outcome-prerequisite');
+    markPhase('setup-deletion-prerequisites');
     const deletion = await prepareDeletionFromExisting(db, prepared, 1110);
+    markPhase('unknown-outcome-transition');
     let fakeStorageDeleteCount = 0;
     let fakeStorageProbeCount = 0;
     let fakeStorageRecoveryDeleteCount = 0;
@@ -915,6 +925,11 @@ try {
       hostedStorageNotRun: true,
     };
   });
+} catch {
+  setupFailurePhase = String(activeCasePhase).startsWith('setup-')
+    ? activeCasePhase
+    : 'setup-foundation';
+  console.error(`BLOCKED studio acceptance phase=${setupFailurePhase} setup_failed`);
 } finally {
   if (db) {
     try { await db.end(); } catch { cleanupErrors.push('database-client-close'); }
@@ -937,11 +952,25 @@ try {
 }
 
 if (cleanupErrors.length) throw new Error(`STUDIO_ACCEPTANCE_CLEANUP_FAILED:${cleanupErrors.join(',')}`);
+if (setupFailurePhase) {
+  Object.assign(blockedByTestId, completeStudioAcceptanceSetupBlocked({
+    actualByTestId,
+    failuresByTestId,
+    blockedByTestId,
+  }));
+}
 const retainedResultPath = process.env.RETAINED_TEST_ID_RESULTS;
+const finalization = finalizeStudioAcceptanceExecution({
+  actualByTestId,
+  failuresByTestId,
+  blockedByTestId,
+  retainedResultPath,
+});
 if (retainedResultPath) {
   writeStudioAcceptanceProducer(retainedResultPath, {
     actualByTestId,
     failuresByTestId,
+    blockedByTestId,
     identity: {
       releaseSha: process.env.RELEASE_SHA,
       workflowRunId: process.env.GITHUB_RUN_ID,
@@ -953,9 +982,8 @@ if (retainedResultPath) {
     cleanupVerified: true,
   });
 }
-if (Object.keys(failuresByTestId).length) throw new Error('STUDIO_ACCEPTANCE_ASSERTION_FAILED');
-assert.deepEqual(Object.keys(actualByTestId).sort(), [...STUDIO_ACCEPTANCE_TEST_IDS].sort());
-console.log('Studio lifecycle PostgreSQL acceptance passed: 7 passed, 0 failed; hosted storage not run.');
+if (finalization.shouldFailProcess) throw new Error('STUDIO_ACCEPTANCE_STANDALONE_INCOMPLETE');
+console.log(`Studio lifecycle PostgreSQL acceptance completed: ${finalization.counts.passed} passed, ${finalization.counts.failed} failed, ${finalization.counts.blocked} blocked; hosted storage not run.`);
 
 async function prepareDeletionFromExisting(client, prepared, ordinal) {
   const requestInput = privateInput(prepared.fixture, 'studio.rendition.deletion.request', {

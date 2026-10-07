@@ -87,11 +87,15 @@ for (const suite of bindings.retainedSuites ?? []) {
 }
 
 const failed = manifest.suites.filter(item => item.status !== 'PASS');
+// A completed producer can carry independent PASS, FAIL and BLOCKED outcomes.
+// Keep its transport status intact for reporting, but fail CI on unsuccessful evidence.
+const unsuccessfulResults = manifest.results.filter(item => item.status !== 'PASS');
 console.log(JSON.stringify({
   retainedSuites: manifest.suites.length,
   passed: manifest.suites.length - failed.length,
   failed: failed.map(item => item.suiteId),
   exactTestIdResults: manifest.results.length,
+  unsuccessfulTestIds: unsuccessfulResults.map(item => item.testId),
   manifest: manifestPath,
 }));
-if (failed.length) process.exitCode = 1;
+if (failed.length || unsuccessfulResults.length) process.exitCode = 1;

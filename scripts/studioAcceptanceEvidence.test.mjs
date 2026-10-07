@@ -6,7 +6,10 @@ import {
   STUDIO_ACCEPTANCE_SOURCE_REFERENCES,
   STUDIO_ACCEPTANCE_TEST_IDS,
   buildStudioAcceptanceProducer,
+  classifyStudioAcceptanceCaseFailure,
+  completeStudioAcceptanceSetupBlocked,
   currentStudioAcceptanceSourceDigests,
+  finalizeStudioAcceptanceExecution,
   validateStudioAcceptanceActuals,
   validateStudioAcceptanceProducer,
 } from './studioAcceptanceEvidence.mjs';
@@ -57,6 +60,103 @@ test('Studio producer preserves genuine assertion failures as FAIL', () => {
   assert.deepEqual(validateStudioAcceptanceProducer({ emitted, identity, command }), []);
 });
 
+test('Studio producer preserves setup failures as BLOCKED without actual proof', () => {
+  const actualByTestId = structuredClone(fixtureActuals);
+  delete actualByTestId['STUDIO-010'];
+  const emitted = buildStudioAcceptanceProducer({
+    actualByTestId,
+    blockedByTestId: { 'STUDIO-010': { failureCode: 'setup_failed' } },
+    identity,
+    command,
+    cleanupVerified: true,
+  });
+  const result = emitted.results.find(item => item.testId === 'STUDIO-010');
+  assert.deepEqual({
+    status: result.status,
+    actual: result.actual,
+    failureCode: result.failureCode,
+    assertionOutcomes: result.assertionOutcomes,
+  }, {
+    status: 'BLOCKED',
+    actual: null,
+    failureCode: 'setup_failed',
+    assertionOutcomes: [{ assertionId: 'studio-postgres-acceptance::STUDIO-010', status: 'BLOCKED' }],
+  });
+  assert.deepEqual(validateStudioAcceptanceProducer({ emitted, identity, command }), []);
+});
+
+test('Studio case failure classification distinguishes setup from tested behavior', () => {
+  assert.deepEqual(classifyStudioAcceptanceCaseFailure('setup-fixture'), {
+    status: 'BLOCKED', failureCode: 'setup_failed',
+  });
+  assert.deepEqual(classifyStudioAcceptanceCaseFailure('setup-deletion-prerequisites'), {
+    status: 'BLOCKED', failureCode: 'setup_failed',
+  });
+  assert.deepEqual(classifyStudioAcceptanceCaseFailure('deletion-completion'), {
+    status: 'FAIL', failureCode: 'assertion_failed',
+  });
+  assert.deepEqual(classifyStudioAcceptanceCaseFailure('exact-replay'), {
+    status: 'FAIL', failureCode: 'assertion_failed',
+  });
+});
+
+test('Studio foundation setup failure blocks only tests without an existing result', () => {
+  const actualByTestId = { 'STUDIO-004': fixtureActuals['STUDIO-004'] };
+  const failuresByTestId = { 'STUDIO-005': { failureCode: 'assertion_failed' } };
+  const blockedByTestId = completeStudioAcceptanceSetupBlocked({
+    actualByTestId,
+    failuresByTestId,
+  });
+  assert.deepEqual(Object.keys(blockedByTestId), STUDIO_ACCEPTANCE_TEST_IDS.slice(2));
+  assert.ok(Object.values(blockedByTestId).every(value => value.failureCode === 'setup_failed'));
+  assert.deepEqual(finalizeStudioAcceptanceExecution({
+    actualByTestId,
+    failuresByTestId,
+    blockedByTestId,
+    retainedResultPath: 'retained-results.json',
+  }), {
+    counts: { passed: 1, failed: 1, blocked: 5 },
+    shouldFailProcess: false,
+  });
+});
+
+test('Studio execution finalization preserves complete per-case results for retained evidence', () => {
+  const failedActuals = structuredClone(fixtureActuals);
+  delete failedActuals['STUDIO-010'];
+  assert.deepEqual(finalizeStudioAcceptanceExecution({
+    actualByTestId: failedActuals,
+    failuresByTestId: { 'STUDIO-010': { failureCode: 'assertion_failed' } },
+    retainedResultPath: 'retained-results.json',
+  }), {
+    counts: { passed: 6, failed: 1, blocked: 0 },
+    shouldFailProcess: false,
+  });
+  assert.equal(finalizeStudioAcceptanceExecution({
+    actualByTestId: failedActuals,
+    failuresByTestId: { 'STUDIO-010': { failureCode: 'assertion_failed' } },
+  }).shouldFailProcess, true);
+
+  const blockedActuals = structuredClone(fixtureActuals);
+  delete blockedActuals['STUDIO-011'];
+  assert.deepEqual(finalizeStudioAcceptanceExecution({
+    actualByTestId: blockedActuals,
+    blockedByTestId: { 'STUDIO-011': { failureCode: 'setup_failed' } },
+    retainedResultPath: 'retained-results.json',
+  }), {
+    counts: { passed: 6, failed: 0, blocked: 1 },
+    shouldFailProcess: false,
+  });
+  assert.equal(finalizeStudioAcceptanceExecution({
+    actualByTestId: blockedActuals,
+    blockedByTestId: { 'STUDIO-011': { failureCode: 'setup_failed' } },
+  }).shouldFailProcess, true);
+
+  const incomplete = structuredClone(fixtureActuals);
+  delete incomplete['STUDIO-011'];
+  assert.throws(() => finalizeStudioAcceptanceExecution({ actualByTestId: incomplete }),
+    /STUDIO_ACCEPTANCE_RESULTS_INCOMPLETE/u);
+});
+
 test('Studio producer fails closed on mutated actuals, missing cleanup and stale source digest', () => {
   const changed = structuredClone(fixtureActuals);
   changed['STUDIO-006'].fakeStorageUploadCount = 0;
@@ -100,6 +200,7 @@ test('Studio producer rejects identity, scope, binding and result-set substituti
     ['partial', value => { value.results.pop(); }, 'studio-result-count'],
     ['malformed-pass', value => { value.results[0].actual = null; }, 'studio-actual:STUDIO-004'],
     ['malformed-fail', value => { value.results[0].status = 'FAIL'; value.results[0].failureCode = null; }, 'studio-failure:STUDIO-004'],
+    ['malformed-blocked', value => { value.results[0].status = 'BLOCKED'; value.results[0].failureCode = 'assertion_failed'; value.results[0].actual = null; }, 'studio-blocked:STUDIO-004'],
   ];
   for (const [label, mutate, expected] of adversarial) {
     const emitted = fresh();
@@ -119,4 +220,9 @@ test('Studio actual validation rejects unknown, duplicate-source and partial res
   assert.ok(validateStudioAcceptanceActuals(fixtureActuals, {
     'STUDIO-004': { failureCode: 'assertion_failed' },
   }).includes('studio-result-ambiguous:STUDIO-004'));
+  const blocked = structuredClone(fixtureActuals);
+  delete blocked['STUDIO-011'];
+  assert.ok(validateStudioAcceptanceActuals(blocked, {}, {
+    'STUDIO-011': { failureCode: 'assertion_failed' },
+  }).includes('studio-blocked:STUDIO-011'));
 });

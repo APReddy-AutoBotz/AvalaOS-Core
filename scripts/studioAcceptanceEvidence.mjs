@@ -106,32 +106,81 @@ const safeIdentity = identity => ({
   workflowPath: String(identity.workflowPath),
 });
 
-export const validateStudioAcceptanceActuals = (actualByTestId, failuresByTestId = {}) => {
+export const classifyStudioAcceptanceCaseFailure = phase => (
+  String(phase).startsWith('setup-')
+    ? { status: 'BLOCKED', failureCode: 'setup_failed' }
+    : { status: 'FAIL', failureCode: 'assertion_failed' }
+);
+
+export const completeStudioAcceptanceSetupBlocked = ({
+  actualByTestId = {},
+  failuresByTestId = {},
+  blockedByTestId = {},
+}) => {
+  const completed = { ...blockedByTestId };
+  for (const testId of STUDIO_ACCEPTANCE_TEST_IDS) {
+    if (!Object.hasOwn(actualByTestId, testId)
+      && !Object.hasOwn(failuresByTestId, testId)
+      && !Object.hasOwn(completed, testId)) {
+      completed[testId] = { failureCode: 'setup_failed' };
+    }
+  }
+  return completed;
+};
+
+export const validateStudioAcceptanceActuals = (
+  actualByTestId,
+  failuresByTestId = {},
+  blockedByTestId = {},
+) => {
   const errors = [];
   const keys = [...new Set([
     ...Object.keys(actualByTestId ?? {}),
     ...Object.keys(failuresByTestId ?? {}),
+    ...Object.keys(blockedByTestId ?? {}),
   ])].sort();
   if (!sameObject(keys, [...STUDIO_ACCEPTANCE_TEST_IDS].sort())) errors.push('studio-result-set');
   for (const testId of STUDIO_ACCEPTANCE_TEST_IDS) {
     const actual = actualByTestId?.[testId];
     const failure = failuresByTestId?.[testId];
-    if (actual && failure) errors.push(`studio-result-ambiguous:${testId}`);
+    const blocked = blockedByTestId?.[testId];
+    if ([actual, failure, blocked].filter(Boolean).length > 1) errors.push(`studio-result-ambiguous:${testId}`);
     else if (actual && !sameObject(actual, STUDIO_ACCEPTANCE_EXACT_ACTUAL[testId])) errors.push(`studio-actual:${testId}`);
     else if (failure && !sameObject(failure, { failureCode: 'assertion_failed' })) errors.push(`studio-failure:${testId}`);
-    else if (!actual && !failure) errors.push(`studio-result-missing:${testId}`);
+    else if (blocked && !sameObject(blocked, { failureCode: 'setup_failed' })) errors.push(`studio-blocked:${testId}`);
+    else if (!actual && !failure && !blocked) errors.push(`studio-result-missing:${testId}`);
   }
   return errors;
+};
+
+export const finalizeStudioAcceptanceExecution = ({
+  actualByTestId,
+  failuresByTestId = {},
+  blockedByTestId = {},
+  retainedResultPath,
+}) => {
+  const errors = validateStudioAcceptanceActuals(actualByTestId, failuresByTestId, blockedByTestId);
+  if (errors.length) throw new Error(`STUDIO_ACCEPTANCE_RESULTS_INCOMPLETE:${errors.join(',')}`);
+  const counts = {
+    passed: Object.keys(actualByTestId ?? {}).length,
+    failed: Object.keys(failuresByTestId ?? {}).length,
+    blocked: Object.keys(blockedByTestId ?? {}).length,
+  };
+  return {
+    counts,
+    shouldFailProcess: !retainedResultPath && (counts.failed > 0 || counts.blocked > 0),
+  };
 };
 
 export const buildStudioAcceptanceProducer = ({
   actualByTestId,
   failuresByTestId = {},
+  blockedByTestId = {},
   identity,
   command,
   cleanupVerified,
 }) => {
-  const errors = validateStudioAcceptanceActuals(actualByTestId, failuresByTestId);
+  const errors = validateStudioAcceptanceActuals(actualByTestId, failuresByTestId, blockedByTestId);
   if (cleanupVerified !== true) errors.push('studio-cleanup');
   if (!/^[0-9a-f]{40}$/u.test(String(identity?.releaseSha ?? ''))) errors.push('studio-release-sha');
   if (!command) errors.push('studio-command');
@@ -141,7 +190,7 @@ export const buildStudioAcceptanceProducer = ({
   return {
     schemaVersion: 2,
     results: STUDIO_ACCEPTANCE_TEST_IDS.map(testId => {
-      const status = failuresByTestId[testId] ? 'FAIL' : 'PASS';
+      const status = failuresByTestId[testId] ? 'FAIL' : blockedByTestId[testId] ? 'BLOCKED' : 'PASS';
       return {
         suiteId: STUDIO_ACCEPTANCE_SUITE_ID,
         testId,
@@ -157,7 +206,7 @@ export const buildStudioAcceptanceProducer = ({
         scope: STUDIO_ACCEPTANCE_SCOPE,
         assertionOutcomes: [{ assertionId: `${STUDIO_ACCEPTANCE_SUITE_ID}::${testId}`, status }],
         actual: actualByTestId[testId] ?? null,
-        failureCode: failuresByTestId[testId]?.failureCode ?? null,
+        failureCode: failuresByTestId[testId]?.failureCode ?? blockedByTestId[testId]?.failureCode ?? null,
         cleanupVerified: true,
       };
     }),
@@ -179,7 +228,7 @@ export const validateStudioAcceptanceProducer = ({ emitted, identity, command })
     const testId = item?.testId;
     if (!STUDIO_ACCEPTANCE_TEST_IDS.includes(testId) || seen.has(testId)) errors.push(`studio-result-identity:${testId ?? 'missing'}`);
     seen.add(testId);
-    if (item?.suiteId !== STUDIO_ACCEPTANCE_SUITE_ID || !['PASS', 'FAIL'].includes(item?.status)) errors.push(`studio-result-status:${testId ?? 'missing'}`);
+    if (item?.suiteId !== STUDIO_ACCEPTANCE_SUITE_ID || !['PASS', 'FAIL', 'BLOCKED'].includes(item?.status)) errors.push(`studio-result-status:${testId ?? 'missing'}`);
     if (item?.command !== command) errors.push(`studio-command:${testId ?? 'missing'}`);
     for (const [field, expected] of Object.entries(safeIdentity(identity))) {
       if (String(item?.[field]) !== expected) errors.push(`studio-${field}:${testId ?? 'missing'}`);
@@ -194,7 +243,9 @@ export const validateStudioAcceptanceProducer = ({ emitted, identity, command })
     if (item?.cleanupVerified !== true) errors.push(`studio-cleanup:${testId ?? 'missing'}`);
     if (item?.status === 'PASS') {
       if (!sameObject(item?.actual, STUDIO_ACCEPTANCE_EXACT_ACTUAL[testId]) || item?.failureCode !== null) errors.push(`studio-actual:${testId ?? 'missing'}`);
-    } else if (item?.actual !== null || item?.failureCode !== 'assertion_failed') errors.push(`studio-failure:${testId ?? 'missing'}`);
+    } else if (item?.status === 'FAIL') {
+      if (item?.actual !== null || item?.failureCode !== 'assertion_failed') errors.push(`studio-failure:${testId ?? 'missing'}`);
+    } else if (item?.actual !== null || item?.failureCode !== 'setup_failed') errors.push(`studio-blocked:${testId ?? 'missing'}`);
   }
   for (const testId of STUDIO_ACCEPTANCE_TEST_IDS) if (!seen.has(testId)) errors.push(`studio-result-missing:${testId}`);
   return errors;

@@ -557,11 +557,13 @@ test('Studio PostgreSQL report promotes only seven lifecycle cases and rejects s
     // Explicit unit inputs: this report test does not execute PostgreSQL or Storage.
     const actualByTestId = JSON.parse(readFileSync('tests/acceptance/fixtures/studio-evidence-unit-results.json', 'utf8'));
     const failuresByTestId = {};
+    const blockedByTestId = {};
     if (failure) {
       delete actualByTestId['STUDIO-011'];
-      failuresByTestId['STUDIO-011'] = { failureCode: 'assertion_failed' };
+      if (failure === 'blocked') blockedByTestId['STUDIO-011'] = { failureCode: 'setup_failed' };
+      else failuresByTestId['STUDIO-011'] = { failureCode: 'assertion_failed' };
     }
-    return buildStudioAcceptanceProducer({ actualByTestId, failuresByTestId, identity, command, cleanupVerified: true });
+    return buildStudioAcceptanceProducer({ actualByTestId, failuresByTestId, blockedByTestId, identity, command, cleanupVerified: true });
   };
   const variants = [
     ['valid', () => {}, false, 7, 0],
@@ -571,6 +573,7 @@ test('Studio PostgreSQL report promotes only seven lifecycle cases and rejects s
     ['cleanup substitution', m => { m.results[0].cleanupVerified = false; }, false, 0, 0],
     ['partial artifact', m => { m.results.pop(); }, false, 0, 0],
     ['executed failure despite aggregate success', () => {}, true, 6, 1],
+    ['setup blocked without product failure', () => {}, 'blocked', 6, 0],
     ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 7],
     ['aggregate-only', m => { m.results = []; }, false, 0, 0],
   ];
@@ -612,5 +615,82 @@ test('Studio PostgreSQL report promotes only seven lifecycle cases and rejects s
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
+  }
+});
+
+
+test('Studio actual harness emits BLOCKED for missing configuration without database access', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-studio-missing-config-'));
+  try {
+    const resultPath = path.join(temp, 'result.json');
+    const run = spawnSync(process.execPath, ['scripts/testStudioAcceptancePostgres.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: {
+        ...process.env, STUDIO_ACCEPTANCE_DATABASE_URL: '', RELEASE_SHA: releaseSha,
+        GITHUB_RUN_ID: '123456', GITHUB_RUN_ATTEMPT: '2',
+        ACCEPTANCE_WORKFLOW_PATH: workflowPath, ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+        RETAINED_TEST_ID_RESULTS: resultPath,
+        RETAINED_SUITE_COMMAND: 'node scripts/testStudioAcceptancePostgres.mjs',
+      },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const emitted = JSON.parse(readFileSync(resultPath, 'utf8'));
+    assert.equal(emitted.results.length, 7);
+    assert.ok(emitted.results.every(item => item.status === 'BLOCKED'
+      && item.failureCode === 'setup_failed' && item.actual === null && item.cleanupVerified === true));
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('Studio retained runner keeps per-case outcomes while failing the CI gate', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-studio-retained-runner-'));
+  try {
+    const producerPath = path.join(temp, 'unit-producer.mjs');
+    const helperUrl = new URL('./studioAcceptanceEvidence.mjs', import.meta.url).href;
+    // Test-only producer inputs exercise process/result transport; no PostgreSQL claim.
+    writeFileSync(producerPath, `
+      import fs from 'node:fs';
+      import { writeStudioAcceptanceProducer } from ${JSON.stringify(helperUrl)};
+      const actualByTestId = JSON.parse(fs.readFileSync('tests/acceptance/fixtures/studio-evidence-unit-results.json', 'utf8'));
+      const failuresByTestId = {}, blockedByTestId = {};
+      if (process.env.STUDIO_UNIT_OUTCOME !== 'PASS') {
+        delete actualByTestId['STUDIO-011'];
+        if (process.env.STUDIO_UNIT_OUTCOME === 'FAIL') failuresByTestId['STUDIO-011'] = { failureCode: 'assertion_failed' };
+        else blockedByTestId['STUDIO-011'] = { failureCode: 'setup_failed' };
+      }
+      writeStudioAcceptanceProducer(process.env.RETAINED_TEST_ID_RESULTS, {
+        actualByTestId, failuresByTestId, blockedByTestId, cleanupVerified: true,
+        command: process.env.RETAINED_SUITE_COMMAND,
+        identity: {
+          releaseSha: process.env.RELEASE_SHA, workflowRunId: process.env.GITHUB_RUN_ID,
+          workflowAttempt: process.env.GITHUB_RUN_ATTEMPT, environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT,
+          workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH,
+        },
+      });
+    `);
+    const suite = loadExecutionBindings().retainedSuites.find(i => i.suiteId === 'studio-postgres-acceptance');
+    const bindingsPath = path.join(temp, 'bindings.json');
+    writeFileSync(bindingsPath, JSON.stringify({ retainedSuites: [{ ...suite, command: [process.execPath, producerPath] }] }));
+    for (const outcome of ['PASS', 'FAIL', 'BLOCKED']) {
+      const manifestPath = path.join(temp, `retained-${outcome}.json`);
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveRetainedSuites.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: '123456', GITHUB_RUN_ATTEMPT: '2',
+          ACCEPTANCE_WORKFLOW_PATH: workflowPath, ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+          ACCEPTANCE_BINDINGS: bindingsPath, RETAINED_RESULTS_MANIFEST: manifestPath,
+          STUDIO_UNIT_OUTCOME: outcome,
+        },
+      });
+      assert.equal(run.status, outcome === 'PASS' ? 0 : 1, `${outcome}: ${run.stderr}`);
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      assert.equal(manifest.suites[0].status, 'PASS', 'producer execution completed and emitted validated independent outcomes');
+      assert.equal(manifest.results.length, 7);
+      assert.equal(manifest.results.find(i => i.testId === 'STUDIO-011').status, outcome);
+      assert.equal(manifest.results.filter(i => i.testId !== 'STUDIO-011' && i.status === 'PASS').length, 6);
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
   }
 });

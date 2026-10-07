@@ -57,6 +57,12 @@ Candidate `fb9e0a64fa58d4ecab45c4e4c017634e5ba6e412` passed all seven Studio Pos
 
 PR C run `37646219943` failed its provenance preflight because this plan's local-verification section was added after the generated digest. Refreshing the generated bindings after the final documentation update corrects that packaging error without changing a test, runtime behavior or acceptance criterion. The result above remains bound to its original candidate; fresh exact-head CI is required for this correction.
 
+## Review corrections and focused verification
+
+Review identified two confirmed evidence defects: a single failed case caused all seven cases to be reported FAIL, and fixture errors were labeled as behavioral failures. The producer now emits complete independent PASS/FAIL/BLOCKED results after successful cleanup. Setup/configuration failures are BLOCKED; evaluated behavioral failures are FAIL. The retained orchestrator preserves these exact outcomes and still exits unsuccessfully when any emitted case is FAIL or BLOCKED. Cleanup failures remain fatal and cannot emit an artifact.
+
+Executed local verification: all ten producer/classification/finalization tests passed; report integration preserved six PASS plus one FAIL or BLOCKED; the actual retained-runner subprocess passed all three outcome variants while enforcing its exit gate; and the actual harness emitted seven BLOCKED results for missing configuration without database access. The retained subprocess test needed the existing Windows temporary-file permission retry and passed unchanged. Fresh exact-candidate PostgreSQL execution and all applicable CI gates remain required before merge. No criterion, runtime, migration or hosted behavior changed.
+
 ## Rollback and remaining boundaries
 
 Revert this slice's harness, producer, tests, binding and provenance together; the seven cases return to BLOCKED. No schema/runtime rollback or hosted change is needed. The other ten unproven PostgreSQL cases and 65 hosted cases remain separate work; EI-003 has a read-only/one-mutation criterion mismatch that cannot be padded with a setup write. Paid AI, production actions, hosted deployment and any criteria correction remain outside this package.
