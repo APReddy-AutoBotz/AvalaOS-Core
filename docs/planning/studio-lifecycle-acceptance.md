@@ -51,6 +51,12 @@ Local PostgreSQL execution is unavailable. Exact-candidate CI must run the focus
 - An initial local metadata generation error changed two SQL source selectors; correcting those literal selectors restored catalog validation before publication. No runtime source or criterion changed.
 - Real PostgreSQL execution is **not run locally**. Exact-candidate CI and artifact verification remain pending. Simulated storage counters and database evidence cannot establish hosted Storage behavior.
 
+## First exact-candidate execution and packaging correction
+
+Candidate `fb9e0a64fa58d4ecab45c4e4c017634e5ba6e412` passed all seven Studio PostgreSQL cases in exact acceptance run `37646219897`, attempt 1. Independent validation of artifact `11494433025` (archive SHA-256 `a3e61a20d35a332aebc2e67755c27eb58ece9473d8b5fcd85f57d07d93c26168`) confirms 33 PASS / 0 FAIL / 75 BLOCKED / 0 UNCOVERED, the other 101 statuses unchanged, exact source/run/scope/actuals/cleanup, hosted NOT_EXECUTED and overall INCOMPLETE_COVERAGE.
+
+PR C run `37646219943` failed its provenance preflight because this plan's local-verification section was added after the generated digest. Refreshing the generated bindings after the final documentation update corrects that packaging error without changing a test, runtime behavior or acceptance criterion. The result above remains bound to its original candidate; fresh exact-head CI is required for this correction.
+
 ## Rollback and remaining boundaries
 
 Revert this slice's harness, producer, tests, binding and provenance together; the seven cases return to BLOCKED. No schema/runtime rollback or hosted change is needed. The other ten unproven PostgreSQL cases and 65 hosted cases remain separate work; EI-003 has a read-only/one-mutation criterion mismatch that cannot be padded with a setup write. Paid AI, production actions, hosted deployment and any criteria correction remain outside this package.
