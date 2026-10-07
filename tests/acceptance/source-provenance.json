@@ -105,7 +105,16 @@
     "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql": "sha256:1dd9596aa600577ad1354ab85829a0b341860a05444e455930c4f1f8c7ad4ca3",
     "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql": "sha256:783e858dcdca87e1eafd7c6a02d03eceec0ac199f098f28bf41149f24e2a53ea",
     "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql": "sha256:6d9e910c4ca4b355b5b7060c450be3b5698a27627aa64c618f52085404a3b0ad",
-    "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql": "sha256:696a2b45b6e4ccbcdbbfd67db51e5dfd3c608577d2ae0d9387f8e6803e2aff61"
+    "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql": "sha256:696a2b45b6e4ccbcdbbfd67db51e5dfd3c608577d2ae0d9387f8e6803e2aff61",
+    "scripts/testStudioAcceptancePostgres.mjs": "sha256:939e2b32700605ca9d5925eb06dc34f3deb3a43742c10b4b31f26cf501fbff6a",
+    "scripts/studioAcceptanceEvidence.mjs": "sha256:5fd169bcbb641a8f4d8f5e95b533ead401cea133ebc79f630af03d6c8850b351",
+    "scripts/studioArtifactPostgresFixture.mjs": "sha256:db6edca27a9643a4392abfad6fa2eb18ca36c2a13f143883aac92415f5093f25",
+    "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",
+    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:05dd461a35e6f2272365d48fa01e91c0678022edcd774c561613fbbcf3e29402",
+    "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql": "sha256:f2891b336ca4990f79a89f5880522f928c9b569bd0dfce4dce9009316cae72c1",
+    "supabase/migrations/20260729163251_studio_private_artifact_authority.sql": "sha256:8c2e093372e5c4c6c3a47ba9d6e55785ddd8182ed6d316cde5c2674cd90b8bae",
+    "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql": "sha256:847e8e74865903e69828119a282419d0bf3862fa455ae67c1587acc69cff49b6",
+    "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql": "sha256:f6a35c27f1cd2cdfa686b796aba7963d5b6000d40bf49cd47deb698d165b878c"
   },
   "contracts": [
     {
@@ -2176,42 +2185,60 @@
       "branchId": "STUDIO-DELETION",
       "testId": "STUDIO-010",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-private",
-          "assertionId": "studio-private::STUDIO-010",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-010",
           "scenarioId": "STUDIO-010::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "STUDIO-DELETION_RECONCILIATION",
       "testId": "STUDIO-011",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-private",
-          "assertionId": "studio-private::STUDIO-011",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-011",
           "scenarioId": "STUDIO-011::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
@@ -2302,105 +2329,150 @@
       "branchId": "STUDIO-LEGAL_HOLD",
       "testId": "STUDIO-009",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-private",
-          "assertionId": "studio-private::STUDIO-009",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-009",
           "scenarioId": "STUDIO-009::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "STUDIO-PRIVATE_RENDITION",
       "testId": "STUDIO-006",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-private",
-          "assertionId": "studio-private::STUDIO-006",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-006",
           "scenarioId": "STUDIO-006::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "STUDIO-RETENTION",
       "testId": "STUDIO-008",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-private",
-          "assertionId": "studio-private::STUDIO-008",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-008",
           "scenarioId": "STUDIO-008::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "STUDIO-REVISION_IMMUTABILITY",
       "testId": "STUDIO-004",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-governed",
-          "assertionId": "studio-governed::STUDIO-004",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-004",
           "scenarioId": "STUDIO-004::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "STUDIO-THREE_PERSON_APPROVAL",
       "testId": "STUDIO-005",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "studio-governed",
-          "assertionId": "studio-governed::STUDIO-005",
+          "ownerId": "studio-postgres-acceptance",
+          "assertionId": "studio-postgres-acceptance::STUDIO-005",
           "scenarioId": "STUDIO-005::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-studio-lifecycle-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {

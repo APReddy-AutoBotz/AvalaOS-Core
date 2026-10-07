@@ -546,3 +546,71 @@ test('Assess V2 report promotes only 021 and 022 and rejects partial, substitute
     }
   }
 });
+
+
+test('Studio PostgreSQL report promotes only seven lifecycle cases and rejects substituted evidence', async () => {
+  const { buildStudioAcceptanceProducer, STUDIO_ACCEPTANCE_TEST_IDS } = await import('./studioAcceptanceEvidence.mjs');
+  const suite = loadExecutionBindings().retainedSuites.find(item => item.suiteId === 'studio-postgres-acceptance');
+  const command = suite.command.join(' ');
+  const identity = { releaseSha, workflowRunId: '123456', workflowAttempt: '2', environment: 'pull-request', workflowPath };
+  const makeProducer = failure => {
+    // Explicit unit inputs: this report test does not execute PostgreSQL or Storage.
+    const actualByTestId = JSON.parse(readFileSync('tests/acceptance/fixtures/studio-evidence-unit-results.json', 'utf8'));
+    const failuresByTestId = {};
+    if (failure) {
+      delete actualByTestId['STUDIO-011'];
+      failuresByTestId['STUDIO-011'] = { failureCode: 'assertion_failed' };
+    }
+    return buildStudioAcceptanceProducer({ actualByTestId, failuresByTestId, identity, command, cleanupVerified: true });
+  };
+  const variants = [
+    ['valid', () => {}, false, 7, 0],
+    ['source substitution', m => { const i = m.results[0]; i.sourceDigests[Object.keys(i.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
+    ['result substitution', m => { m.results[0].actual.logicalMutationCount = 0; }, false, 0, 0],
+    ['hosted case substitution', m => { m.results[0].testId = 'STUDIO-007'; }, false, 0, 0],
+    ['cleanup substitution', m => { m.results[0].cleanupVerified = false; }, false, 0, 0],
+    ['partial artifact', m => { m.results.pop(); }, false, 0, 0],
+    ['executed failure despite aggregate success', () => {}, true, 6, 1],
+    ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 7],
+    ['aggregate-only', m => { m.results = []; }, false, 0, 0],
+  ];
+  for (const [name, mutate, failure, passed, failed] of variants) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-studio-report-'));
+    try {
+      const retainedPath = path.join(temp, 'retained.json');
+      const manifest = {
+        schemaVersion: 3, manifestKind: 'retained', ...identity,
+        suites: [{ suiteId: suite.suiteId, status: 'PASS', command, requiredGate: true, testIds: suite.testIds }],
+        results: structuredClone(makeProducer(failure).results),
+      };
+      mutate(manifest);
+      writeFileSync(retainedPath, JSON.stringify(manifest));
+      const resultsDir = path.join(temp, 'report');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: identity.workflowRunId,
+          GITHUB_RUN_ATTEMPT: identity.workflowAttempt, ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+          ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request', ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
+          ACCEPTANCE_RESULTS_DIR: resultsDir, RETAINED_RESULTS_MANIFEST: retainedPath,
+          ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+          SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+          PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
+        },
+      });
+      const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.equal(report.summary.PASS, passed, `${name}: ${report.summary.preflightFailure ?? run.stderr}`);
+      assert.equal(report.summary.FAIL, failed, name);
+      assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
+      assert.deepEqual(report.results.filter(i => i.status === 'PASS').map(i => i.testId).sort(),
+        passed === 7 ? [...STUDIO_ACCEPTANCE_TEST_IDS].sort() : passed === 6 ? STUDIO_ACCEPTANCE_TEST_IDS.filter(id => id !== 'STUDIO-011').sort() : [], name);
+      for (const item of report.results.filter(i => !STUDIO_ACCEPTANCE_TEST_IDS.includes(i.testId))) {
+        assert.equal(item.status, 'BLOCKED', `${name}:${item.testId}`);
+      }
+      if (failed) assert.equal(report.results.find(i => i.testId === 'STUDIO-011').status, 'FAIL', name);
+      if (passed === 7) assert.equal(run.status, 0, run.stderr);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }
+});

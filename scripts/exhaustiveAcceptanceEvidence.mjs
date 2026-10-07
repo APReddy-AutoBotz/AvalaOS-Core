@@ -9,6 +9,7 @@ import {
   validateAssessV2AcceptanceProducer,
 } from './assessV2AcceptanceEvidence.mjs';
 import { TRUST_SUITE_ID, validateTrustAcceptanceProducer } from './trustAcceptanceEvidence.mjs';
+import { STUDIO_ACCEPTANCE_SUITE_ID, validateStudioAcceptanceProducer } from './studioAcceptanceEvidence.mjs';
 
 export const normalizePlaywrightStatus = status => {
   if (status === 'passed') return 'PASS';
@@ -66,6 +67,11 @@ export const validateRetainedProducerResults = ({ suite, emitted, identity, prov
     command: suite.command.join(' '),
   }));
   if (suite?.suiteId === ASSESS_V2_ACCEPTANCE_SUITE_ID) errors.push(...validateAssessV2AcceptanceProducer({
+    emitted,
+    identity,
+    command: suite.command.join(' '),
+  }));
+  if (suite?.suiteId === STUDIO_ACCEPTANCE_SUITE_ID) errors.push(...validateStudioAcceptanceProducer({
     emitted,
     identity,
     command: suite.command.join(' '),
@@ -146,6 +152,12 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     emitted: { schemaVersion: 2, results: assessV2Results },
     identity: expected,
     command: expected.canonicalCommandBySuiteId?.get(ASSESS_V2_ACCEPTANCE_SUITE_ID),
+  }).map(error => `retained-${error}`));
+  const studioResults = (manifest?.results ?? []).filter(item => item?.suiteId === STUDIO_ACCEPTANCE_SUITE_ID);
+  if (studioResults.length) errors.push(...validateStudioAcceptanceProducer({
+    emitted: { schemaVersion: 2, results: studioResults },
+    identity: expected,
+    command: expected.canonicalCommandBySuiteId?.get(STUDIO_ACCEPTANCE_SUITE_ID),
   }).map(error => `retained-${error}`));
   return errors;
 };

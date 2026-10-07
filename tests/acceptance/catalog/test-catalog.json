@@ -2688,7 +2688,16 @@
       "feature": "revision",
       "ruleRequirement": "revision immutability",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-REVISION_IMMUTABILITY"
@@ -2697,7 +2706,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2738,7 +2747,16 @@
       "feature": "three",
       "ruleRequirement": "three person approval",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-THREE_PERSON_APPROVAL"
@@ -2747,7 +2765,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2788,7 +2806,16 @@
       "feature": "private",
       "ruleRequirement": "private rendition",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-PRIVATE_RENDITION"
@@ -2797,7 +2824,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2888,7 +2915,16 @@
       "feature": "retention",
       "ruleRequirement": "retention",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-RETENTION"
@@ -2897,7 +2933,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2938,7 +2974,16 @@
       "feature": "legal",
       "ruleRequirement": "legal hold",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-LEGAL_HOLD"
@@ -2947,7 +2992,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2988,7 +3033,16 @@
       "feature": "deletion",
       "ruleRequirement": "deletion",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-DELETION"
@@ -2997,7 +3051,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -3038,7 +3092,16 @@
       "feature": "deletion",
       "ruleRequirement": "deletion reconciliation",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "scripts/testStudioAcceptancePostgres.mjs",
+        "scripts/studioAcceptanceEvidence.mjs",
+        "scripts/studioArtifactPostgresFixture.mjs",
+        "scripts/studioPrivateArtifactPostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/studioArtifacts/contracts.ts",
+        "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql",
+        "supabase/migrations/20260729163251_studio_private_artifact_authority.sql",
+        "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql",
+        "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql"
       ],
       "branchIds": [
         "STUDIO-DELETION_RECONCILIATION"
@@ -3047,7 +3110,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-studio-lifecycle-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",

@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Studio lifecycle acceptance continuation (2026-10-07)
+
+PR #275 is merged with its tested tree unchanged, 26 PASS / 82 BLOCKED and green candidate/post-merge CI. AP authorized continued testing and verified merges. The three architecture, security and quality reviews are complete and closed. Wave 2 now uses the fixed workspace-write profile for one focused seven-case Studio lifecycle implementation. One implementation worker owns the new PostgreSQL harness, narrow producer and focused tests; the root owns shared integration, provenance, documentation, verification and the single PR. Follow `docs/planning/studio-lifecycle-acceptance.md`. Preserve runtime, schema, scoring, dependencies and acceptance criteria; no broader local regression, hosted operation or paid effect. The remaining read-only EI tenant-isolation case has a one-mutation catalog mismatch and stays BLOCKED pending a separate correction.
+
 ## Assess V2 conflict acceptance continuation (2026-10-07)
 
 AP approved merging PR #274 and continuing the reviewed ASSESS-021/022 slice. Its merged tree matches the verified candidate with 24 PASS / 84 BLOCKED and all applicable workflows green. Read-only architecture, security and quality reviews are complete and closed. Wave 2 proceeds under the fixed workspace-write profile: one implementation worker owns the existing PR1D harness, narrow producer and retained CI wiring; the controller owns catalog/provenance metadata, canonical documents, integration, evidence and the single PR. Follow `docs/planning/assess-v2-conflict-acceptance.md`. Preserve criteria, runtime, migrations, scoring and dependencies. Run focused evidence checks and existing PostgreSQL CI; no additional broad local regression, hosted or paid action.

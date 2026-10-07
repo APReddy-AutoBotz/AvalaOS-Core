@@ -76,9 +76,7 @@
       "testIds": [
         "STUDIO-001",
         "STUDIO-002",
-        "STUDIO-003",
-        "STUDIO-004",
-        "STUDIO-005"
+        "STUDIO-003"
       ],
       "requiredGate": true
     },
@@ -90,8 +88,20 @@
         "test:studio-private-artifacts"
       ],
       "testIds": [
+        "STUDIO-007"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "studio-postgres-acceptance",
+      "command": [
+        "node",
+        "scripts/testStudioAcceptancePostgres.mjs"
+      ],
+      "testIds": [
+        "STUDIO-004",
+        "STUDIO-005",
         "STUDIO-006",
-        "STUDIO-007",
         "STUDIO-008",
         "STUDIO-009",
         "STUDIO-010",
