@@ -122,7 +122,7 @@ const fullInventoryHostedReport = () => {
   const executable = hostedBindings.filter(binding => binding.scenario).length * 2;
   const skipped = hostedBindings.filter(binding => !binding.scenario).length * 2;
   assert.equal(executable, 38);
-  assert.equal(skipped, 30);
+  assert.equal(skipped, 36);
   return {
     config: { metadata },
     errors: [],
@@ -196,7 +196,7 @@ test('green hosted execution cannot promote a planned fixture scope', () => {
     });
     assert.notEqual(run.status, 0, 'planned coverage remains intentionally incomplete');
     const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
-    assert.deepEqual(report.summary.browserEvidenceErrors, [], 'the complete 68-result ordinary hosted inventory is provenance-valid');
+    assert.deepEqual(report.summary.browserEvidenceErrors, [], 'the complete 74-result ordinary hosted inventory is provenance-valid');
     const sandbox = report.results.find(item => item.testId === 'SANDBOX-001');
     assert.equal(sandbox.status, 'BLOCKED');
     assert.match(sandbox.failureReason, /no separately validated same-run executed fixture scope/u);

@@ -43,6 +43,10 @@ Expected after successful exact execution: 26 PASS / 0 FAIL / 82 BLOCKED, with a
 
 The harness compares full scoped case/version/child/receipt/audit snapshots. It binds the winner to its successful receipt and audit and confirms the loser has neither. The evidence carries measured deltas and fixed repository-defined synthetic scope, without raw snapshots or generated identifiers. There are no harness temporary files; all created clients, the disposable database and created roles are tracked for cleanup. Runtime, migrations, dependencies and scoring remain unchanged.
 
+## CI preflight compatibility correction
+
+Candidate `39f958f4` stopped before PostgreSQL execution in run `37629646635`: the historical PR #255 charter test hard-coded the old fifteen hosted exclusions. The current bindings correctly include three additional blocked Assess V2 cases. The test now preserves the immutable charter and its exact fifteen exclusions, while requiring the current bindings to equal those exclusions plus ASSESS-018/019/020. The related report and browser-declaration contracts likewise require 36 explicit skipped project cases (18 cases across two viewports), while the 38 executable declarations remain unchanged. This changes no acceptance criterion and grants no hosted credit.
+
 ## Rollback
 
 Revert only this slice's instrumentation, producer/validator, bindings and generated source metadata together. Both cases return to BLOCKED. No runtime schema rollback or hosted change is required. The controller will report exact candidate evidence at the PR boundary under the user-authorized continuation. Hosted operations, production changes and new paid effects remain outside this slice.

@@ -157,7 +157,7 @@ const catalogUnboundProjectCases = executionBindings.hostedTests
   .filter(binding => !binding.scenario)
   .reduce((count, binding) => count + binding.projects.length, 0);
 assert.equal(executableProjectCases, 38, 'local Sandbox regression must execute all 38 scenario-bound project cases');
-assert.equal(catalogUnboundProjectCases, 30, 'the 30 catalog-unbound project cases must remain explicit not_run skips');
+assert.equal(catalogUnboundProjectCases, 36, 'the 36 catalog-unbound project cases must remain explicit not_run skips');
 assert.match(hostedSpec, /decodeAcceptanceExecutionProfile\(process\.env/u, 'the shared Sandbox spec must require an explicit execution profile');
 assert.match(hostedSpec, /createFullPageContrastAttachment,[\s\S]*decodeAcceptanceExecutionProfile,[\s\S]*summarizeFullPageColorContrast,[\s\S]*from '\.\.\/\.\.\/scripts\/acceptanceExecutionProfile\.mjs'/u, 'full-page browser evidence must use the shared summary and attachment contract');
 assert.match(executionProfileSource, /export\s+(?:const|function)\s+summarizeFullPageColorContrast\b/u, 'the execution-profile boundary must export the shared full-page contrast classifier');
