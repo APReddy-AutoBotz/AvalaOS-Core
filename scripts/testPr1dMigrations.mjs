@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import { writeAssessV2AcceptanceProducer } from './assessV2AcceptanceEvidence.mjs';
 
 const { Client } = pg;
 const adminUrl = process.env.PR1D_MIGRATION_DATABASE_URL
@@ -15,6 +16,9 @@ if (!adminUrl) {
 
 const dbName = 'avalaos_pr1d_authority_test';
 const createdRoles = [];
+const activeClients = new Map();
+const cleanupErrors = [];
+let clientSequence = 0;
 const migrations = fs.readdirSync('supabase/migrations').filter((file) => file.endsWith('.sql')).sort();
 const pr1b = '20260712120000_pr1b_identity_rbac_rls_assess.sql';
 const pr1c = '20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql';
@@ -28,7 +32,31 @@ const baseline = migrations.slice(0, migrations.indexOf(pr1b));
 const source = (name) => fs.readFileSync(path.join('supabase/migrations', name), 'utf8');
 const fixture = fs.readFileSync('supabase/tests/migration-harness/pr1b_legacy_assess_fixture.sql', 'utf8');
 const urlFor = (name) => { const url = new URL(adminUrl); url.pathname = `/${name}`; return url.toString(); };
-const connect = async (url) => { const client = new Client({ connectionString: url }); await client.connect(); return client; };
+const connect = async (url, label = `auxiliary-${++clientSequence}`) => {
+  const client = new Client({ connectionString: url });
+  try {
+    await client.connect();
+  } catch (error) {
+    try {
+      await client.end();
+    } catch {
+      cleanupErrors.push(`client-close:${label}`);
+    }
+    throw error;
+  }
+  activeClients.set(client, label);
+  return client;
+};
+const closeTrackedClient = async (client, cleanupErrors) => {
+  if (!client || !activeClients.has(client)) return;
+  const label = activeClients.get(client);
+  try {
+    await client.end();
+    activeClients.delete(client);
+  } catch {
+    cleanupErrors.push(`client-close:${label}`);
+  }
+};
 const tx = async (client, sql) => {
   await client.query('BEGIN');
   try { await client.query(sql); await client.query('COMMIT'); } catch (error) { await client.query('ROLLBACK'); throw error; }
@@ -75,6 +103,10 @@ const WB = '22000000-0000-4000-8000-000000000022';
 const V1B = '22000000-0000-4000-8000-000000000025';
 const CASE = '31000000-0000-4000-8000-000000000001';
 const CASE2 = '31000000-0000-4000-8000-000000000002';
+const ACCEPT_VERSION_CASE = '31000000-0000-4000-8000-000000000200';
+const ACCEPT_VERSION_PROCESS = '12000000-0000-4000-8000-000000000200';
+const ACCEPT_IDEMPOTENCY_CASE = '31000000-0000-4000-8000-000000000201';
+const ACCEPT_IDEMPOTENCY_PROCESS = '12000000-0000-4000-8000-000000000201';
 const CLONE = '31000000-0000-4000-8000-000000000003';
 const NEG_DIGEST = '31000000-0000-4000-8000-000000000004';
 const NEG_BINDING = '31000000-0000-4000-8000-000000000005';
@@ -126,8 +158,17 @@ const insertEvidencePayload = (client, id, caseId, payload) => client.query(`
 
 let admin;
 let test;
+const acceptanceActuals = {};
+const acceptanceFailures = {};
+const runAcceptanceCase = async (testId, run) => {
+  try {
+    acceptanceActuals[testId] = await run();
+  } catch {
+    acceptanceFailures[testId] = { failureCode: 'assertion_failed' };
+  }
+};
 try {
-  admin = await connect(adminUrl);
+  admin = await connect(adminUrl, 'admin');
   for (const [role, attributes] of [
     ['anon', 'NOLOGIN'],
     ['authenticated', 'NOLOGIN'],
@@ -141,7 +182,7 @@ try {
   }
   await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
   await admin.query(`CREATE DATABASE ${dbName}`);
-  test = await connect(urlFor(dbName));
+  test = await connect(urlFor(dbName), 'main');
   await tx(test, `
     CREATE SCHEMA auth;
     CREATE TABLE auth.users(id uuid primary key);
@@ -373,8 +414,8 @@ try {
       callCreate(CREATE_RACE_CASE, 'create-same-key-race', 113, CREATE_RACE_PROCESS, createRaceB),
     ]).then((results) => results.map(value));
   } finally {
-    await createRaceA.end();
-    await createRaceB.end();
+    await closeTrackedClient(createRaceA, cleanupErrors);
+    await closeTrackedClient(createRaceB, cleanupErrors);
   }
   assert.equal(createRace.filter((result) => result.outcome === 'committed').length, 1);
   assert.equal(createRace.filter((result) => result.outcome === 'replayed').length, 1);
@@ -803,6 +844,199 @@ try {
     'decisions',(SELECT count(*) FROM assess_v2_decision_versions WHERE case_id=c.id),
     'draftAudits',(SELECT count(*) FROM privileged_audit_events WHERE resource_id=c.id AND action='assessment_v2.draft.upsert')
   ) value FROM assess_v2_cases c WHERE c.id=$1`, [caseId]));
+  const acceptanceDraft = (caseId, name) => ({
+    caseId,
+    name,
+    description: '',
+    primitives: [],
+    edges: [],
+    decisionPoints: [],
+    exceptionPaths: [],
+    assets: [],
+    interactions: [],
+    evidence: [],
+    agentNecessity: structuredClone(canonicalUnknownAgentNecessity),
+  });
+  const acceptanceState = async (caseId, keys) => {
+    const caseSnapshot = (await test.query('SELECT to_jsonb(c) snapshot FROM assess_v2_cases c WHERE c.id=$1', [caseId])).rows[0].snapshot;
+    const rows = async (table, orderBy = 'id') => (await test.query(
+      `SELECT to_jsonb(entry) snapshot FROM ${table} entry WHERE case_id=$1 ORDER BY ${orderBy}`,
+      [caseId],
+    )).rows.map(item => item.snapshot);
+    const versionRows = await rows('assess_v2_case_versions', 'version,id');
+    const receiptRows = (await test.query(`SELECT to_jsonb(receipt) snapshot
+      FROM assess_command_receipts receipt
+      WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3
+        AND command_type='assessment_v2.draft.upsert' AND idempotency_key=ANY($4::text[])
+      ORDER BY idempotency_key,id`, [O, W, A, keys])).rows.map(item => item.snapshot);
+    const auditRows = (await test.query(`SELECT to_jsonb(audit) snapshot
+      FROM privileged_audit_events audit
+      WHERE org_id=$1 AND workspace_id=$2 AND resource_id=$3 AND action='assessment_v2.draft.upsert'
+      ORDER BY id`, [O, W, caseId])).rows.map(item => item.snapshot);
+    return {
+      version: Number(caseSnapshot.version),
+      headVersionId: caseSnapshot.head_version_id,
+      versionCount: versionRows.length,
+      receiptCount: receiptRows.length,
+      auditCount: auditRows.length,
+      caseSnapshot,
+      versionRows,
+      receiptRows,
+      auditRows,
+      childRows: {
+        primitives: await rows('assess_v2_primitives'),
+        edges: await rows('assess_v2_edges'),
+        decisionPoints: await rows('assess_v2_decision_points'),
+        exceptionPaths: await rows('assess_v2_exception_paths'),
+        assets: await rows('assess_v2_application_assets'),
+        interactions: await rows('assess_v2_application_interactions'),
+        evidence: await rows('assess_v2_evidence_links'),
+        decisions: await rows('assess_v2_decision_versions'),
+      },
+    };
+  };
+  const omitKeys = (object, keys) => Object.fromEntries(Object.entries(object).filter(([key]) => !keys.includes(key)));
+  const callAcceptanceUpsert = (client, caseId, expectedVersion, draft, requestNumber, key) => asRole(
+    client,
+    'service_role',
+    () => client.query(
+      'SELECT pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+      [A, O, W, caseId, expectedVersion, draft, req(requestNumber), key, authorizationVersion],
+    ),
+  );
+
+  await runAcceptanceCase('ASSESS-021', async () => {
+    const keys = ['accept-assess-021-a', 'accept-assess-021-b'];
+    await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [ACCEPT_VERSION_PROCESS, O, W, 'Acceptance version conflict', 'Draft']);
+    const created = value(await callCreate(ACCEPT_VERSION_CASE, 'accept-assess-021-create', 200, ACCEPT_VERSION_PROCESS));
+    assert.equal(created.outcome, 'committed');
+    const before = await acceptanceState(ACCEPT_VERSION_CASE, keys);
+    const clientA = await connect(urlFor(dbName), 'assess-021-a');
+    const clientB = await connect(urlFor(dbName), 'assess-021-b');
+    let outcomes;
+    try {
+      outcomes = await Promise.all([
+        callAcceptanceUpsert(clientA, ACCEPT_VERSION_CASE, 1, acceptanceDraft(ACCEPT_VERSION_CASE, 'Concurrent draft A'), 201, keys[0]),
+        callAcceptanceUpsert(clientB, ACCEPT_VERSION_CASE, 1, acceptanceDraft(ACCEPT_VERSION_CASE, 'Concurrent draft B'), 202, keys[1]),
+      ]).then(results => results.map(value));
+    } finally {
+      await closeTrackedClient(clientA, cleanupErrors);
+      await closeTrackedClient(clientB, cleanupErrors);
+    }
+    const after = await acceptanceState(ACCEPT_VERSION_CASE, keys);
+    assert.equal(outcomes.filter(result => result.outcome === 'committed' && Number(result.resource?.version) === 2).length, 1);
+    assert.equal(outcomes.filter(result => result.errorCode === 'VERSION_CONFLICT').length, 1);
+    const versionDelta = after.version - before.version;
+    const versionRowDelta = after.versionCount - before.versionCount;
+    const receiptDelta = after.receiptCount - before.receiptCount;
+    const auditDelta = after.auditCount - before.auditCount;
+    const committedCount = outcomes.filter(result => result.outcome === 'committed').length;
+    const versionConflictCount = outcomes.filter(result => result.errorCode === 'VERSION_CONFLICT').length;
+    const winnerIndex = outcomes.findIndex(result => result.outcome === 'committed');
+    const loserIndex = outcomes.findIndex(result => result.errorCode === 'VERSION_CONFLICT');
+    const winnerReceipt = after.receiptRows.find(row => row.idempotency_key === keys[winnerIndex]);
+    const winnerAudit = after.auditRows.find(row => row.request_id === req(201 + winnerIndex));
+    assert.equal(versionDelta, 1);
+    assert.equal(versionRowDelta, 1);
+    assert.equal(receiptDelta, 1);
+    assert.equal(auditDelta, 1);
+    assert.equal(committedCount, 1);
+    assert.equal(versionConflictCount, 1);
+    assert.deepEqual(after.versionRows.slice(0, before.versionRows.length), before.versionRows);
+    assert.deepEqual(after.childRows, before.childRows);
+    assert.deepEqual(
+      omitKeys(after.caseSnapshot, ['version', 'head_version_id', 'updated_at']),
+      omitKeys(before.caseSnapshot, ['version', 'head_version_id', 'updated_at']),
+    );
+    assert.equal(after.headVersionId, outcomes[winnerIndex].resource.headVersionId);
+    assert.equal(after.versionRows.at(-1).id, after.headVersionId);
+    assert.equal(after.versionRows.at(-1).name, ['Concurrent draft A', 'Concurrent draft B'][winnerIndex],
+      'the persisted draft payload must belong to the committed request');
+    assert.equal(winnerReceipt.status, 'succeeded');
+    assert.equal(winnerReceipt.response.id, ACCEPT_VERSION_CASE);
+    assert.equal(Number(winnerReceipt.response.version), 2);
+    assert.equal(winnerAudit.request_id, req(201 + winnerIndex));
+    assert.equal(after.receiptRows.some(row => row.idempotency_key === keys[loserIndex]), false);
+    assert.equal(after.auditRows.some(row => row.request_id === req(201 + loserIndex)), false);
+    const rejectedEffectDelta = (versionRowDelta - 1) + (receiptDelta - 1) + (auditDelta - 1);
+    assert.equal(rejectedEffectDelta, 0);
+    return {
+      logicalMutationCount: versionRowDelta,
+      versionDelta,
+      receiptDelta,
+      auditDelta,
+      committedCount,
+      versionConflictCount,
+      rejectedEffectDelta,
+    };
+  });
+
+  await runAcceptanceCase('ASSESS-022', async () => {
+    const key = 'accept-assess-022-upsert';
+    const keys = [key];
+    await test.query('INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,$5)', [ACCEPT_IDEMPOTENCY_PROCESS, O, W, 'Acceptance idempotency conflict', 'Draft']);
+    const created = value(await callCreate(ACCEPT_IDEMPOTENCY_CASE, 'accept-assess-022-create', 203, ACCEPT_IDEMPOTENCY_PROCESS));
+    assert.equal(created.outcome, 'committed');
+    const before = await acceptanceState(ACCEPT_IDEMPOTENCY_CASE, keys);
+    const committed = value(await callAcceptanceUpsert(
+      test,
+      ACCEPT_IDEMPOTENCY_CASE,
+      1,
+      acceptanceDraft(ACCEPT_IDEMPOTENCY_CASE, 'Original idempotent draft'),
+      204,
+      key,
+    ));
+    assert.equal(committed.outcome, 'committed');
+    const afterCommit = await acceptanceState(ACCEPT_IDEMPOTENCY_CASE, keys);
+    const receiptBeforeConflict = (await test.query(`SELECT request_hash,response,status,completed_at
+      FROM assess_command_receipts
+      WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3
+        AND command_type='assessment_v2.draft.upsert' AND idempotency_key=$4`, [O, W, A, key])).rows[0];
+    const conflict = value(await callAcceptanceUpsert(
+      test,
+      ACCEPT_IDEMPOTENCY_CASE,
+      1,
+      acceptanceDraft(ACCEPT_IDEMPOTENCY_CASE, 'Changed idempotent draft'),
+      204,
+      key,
+    ));
+    assert.equal(conflict.errorCode, 'IDEMPOTENCY_CONFLICT');
+    const afterConflict = await acceptanceState(ACCEPT_IDEMPOTENCY_CASE, keys);
+    const receiptAfterConflict = (await test.query(`SELECT request_hash,response,status,completed_at
+      FROM assess_command_receipts
+      WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3
+        AND command_type='assessment_v2.draft.upsert' AND idempotency_key=$4`, [O, W, A, key])).rows[0];
+    const versionDelta = afterCommit.version - before.version;
+    const versionRowDelta = afterCommit.versionCount - before.versionCount;
+    const receiptDelta = afterCommit.receiptCount - before.receiptCount;
+    const auditDelta = afterCommit.auditCount - before.auditCount;
+    assert.equal(versionDelta, 1);
+    assert.equal(versionRowDelta, 1);
+    assert.equal(receiptDelta, 1);
+    assert.equal(auditDelta, 1);
+    assert.equal(afterCommit.receiptRows[0].status, 'succeeded');
+    assert.equal(afterCommit.receiptRows[0].response.id, ACCEPT_IDEMPOTENCY_CASE);
+    assert.equal(Number(afterCommit.receiptRows[0].response.version), 2);
+    assert.deepEqual(afterConflict, afterCommit);
+    assert.deepEqual(receiptAfterConflict, receiptBeforeConflict);
+    assert.equal(afterConflict.versionRows.at(-1).name, 'Original idempotent draft');
+    const conflictEffectDelta = (
+      afterConflict.versionCount - afterCommit.versionCount
+      + afterConflict.receiptCount - afterCommit.receiptCount
+      + afterConflict.auditCount - afterCommit.auditCount
+    );
+    assert.equal(conflictEffectDelta, 0);
+    return {
+      logicalMutationCount: versionRowDelta,
+      versionDelta,
+      receiptDelta,
+      auditDelta,
+      idempotencyConflict: conflict.errorCode === 'IDEMPOTENCY_CONFLICT',
+      originalReceiptPreserved: JSON.stringify(receiptAfterConflict) === JSON.stringify(receiptBeforeConflict),
+      committedStatePreserved: JSON.stringify(afterConflict) === JSON.stringify(afterCommit),
+      conflictEffectDelta,
+    };
+  });
   const withoutKey = (object, key) => Object.fromEntries(Object.entries(object).filter(([entry]) => entry !== key));
   const invalidAuthoringAttempts = [
     {
@@ -885,8 +1119,8 @@ try {
   try {
     race = await Promise.all([upsert(raceA, 'race-a', 40), upsert(raceB, 'race-b', 41)]).then((results) => results.map(value));
   } finally {
-    await raceA.end();
-    await raceB.end();
+    await closeTrackedClient(raceA, cleanupErrors);
+    await closeTrackedClient(raceB, cleanupErrors);
   }
   assert.equal(race.filter((result) => result.resource?.version === 2).length, 1);
   assert.equal(race.filter((result) => result.errorCode === 'VERSION_CONFLICT').length, 1);
@@ -911,8 +1145,8 @@ try {
   try {
     sameUpsertRace = await Promise.all([sameKeyUpsert(sameUpsertA), sameKeyUpsert(sameUpsertB)]).then((results) => results.map(value));
   } finally {
-    await sameUpsertA.end();
-    await sameUpsertB.end();
+    await closeTrackedClient(sameUpsertA, cleanupErrors);
+    await closeTrackedClient(sameUpsertB, cleanupErrors);
   }
   assert.equal(sameUpsertRace.filter((result) => result.outcome === 'committed').length, 1);
   assert.equal(sameUpsertRace.filter((result) => result.outcome === 'replayed').length, 1);
@@ -1260,8 +1494,8 @@ try {
       finalize(CASE2, 2, 'same-finalize', 59, sameFinalizeRequest, finalizeRaceB),
     ]).then((results) => results.map(value));
   } finally {
-    await finalizeRaceA.end();
-    await finalizeRaceB.end();
+    await closeTrackedClient(finalizeRaceA, cleanupErrors);
+    await closeTrackedClient(finalizeRaceB, cleanupErrors);
   }
   assert.equal(sameFinalizeRace.filter((result) => result.outcome === 'committed').length, 1);
   assert.equal(sameFinalizeRace.filter((result) => result.outcome === 'replayed').length, 1);
@@ -1386,12 +1620,43 @@ try {
   )));
   assert.equal(resubmitted.resource.status, 'In Review');
 
-  console.log('PR 1D additive PostgreSQL ACL, RLS, clone, canonical digest, atomicity, idempotency, concurrency, compatibility, and immutability tests passed.');
 } finally {
-  if (test) await test.end().catch(() => {});
-  if (admin) {
-    await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => {});
-    for (const role of createdRoles.reverse()) await admin.query(`DROP ROLE IF EXISTS ${role}`).catch(() => {});
-    await admin.end().catch(() => {});
+  for (const client of [...activeClients.keys()]) {
+    if (client !== admin) await closeTrackedClient(client, cleanupErrors);
   }
+  if (admin && activeClients.has(admin)) {
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+    } catch {
+      cleanupErrors.push('database-drop');
+    }
+    for (const role of createdRoles.reverse()) {
+      try {
+        await admin.query(`DROP ROLE IF EXISTS ${role}`);
+      } catch {
+        cleanupErrors.push('role-drop');
+      }
+    }
+    await closeTrackedClient(admin, cleanupErrors);
+  }
+  if (cleanupErrors.length) throw new Error(`PR1D_CLEANUP_FAILED:${[...new Set(cleanupErrors)].join(',')}`);
 }
+
+const retainedResultPath = process.env.RETAINED_TEST_ID_RESULTS;
+if (retainedResultPath) {
+  writeAssessV2AcceptanceProducer(retainedResultPath, {
+    actualByTestId: acceptanceActuals,
+    failuresByTestId: acceptanceFailures,
+    identity: {
+      releaseSha: process.env.RELEASE_SHA,
+      workflowRunId: process.env.GITHUB_RUN_ID,
+      workflowAttempt: process.env.GITHUB_RUN_ATTEMPT,
+      environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT,
+      workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH,
+    },
+    command: process.env.RETAINED_SUITE_COMMAND,
+    cleanupVerified: true,
+  });
+}
+if (Object.keys(acceptanceFailures).length) throw new Error('ASSESS_V2_ACCEPTANCE_ASSERTION_FAILED');
+console.log('PR 1D additive PostgreSQL ACL, RLS, clone, canonical digest, atomicity, idempotency, concurrency, compatibility, and immutability tests passed.');

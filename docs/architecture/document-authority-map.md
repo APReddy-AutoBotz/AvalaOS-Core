@@ -30,6 +30,8 @@ Read only this sequence unless the active task requires more:
 
 ## Active Authority
 
+The approved two-case Assess V2 conflict acceptance implementation, focused verification and rollback are governed by `docs/planning/assess-v2-conflict-acceptance.md`. Product authority remains `docs/architecture/assess-v2-decision-intelligence-architecture.md`.
+
 The approved five-case Application Portfolio PostgreSQL acceptance implementation, focused verification and rollback are governed by `docs/planning/application-portfolio-acceptance.md`. Product authority remains `docs/architecture/application-portfolio-assessment-architecture.md`.
 
 The approved five-case Trust disposable-PostgreSQL acceptance implementation, focused checks and rollback are governed by `docs/planning/trust-acceptance-evidence.md`. Trust product authority remains `docs/architecture/trust-assurance-evidence-hub.md`.

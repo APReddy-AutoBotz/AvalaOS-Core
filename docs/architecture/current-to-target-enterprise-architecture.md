@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Assess V2 conflict evidence boundary (2026-10-07)
+
+Only ASSESS-021 and ASSESS-022 gain proof from the existing PR1D disposable PostgreSQL harness. Two concurrent service-role draft commands must produce one committed transition and one VERSION_CONFLICT; real original execution followed by a changed canonical payload with the same key must produce IDEMPOTENCY_CONFLICT without altering the original receipt or state. Scoped head/version/receipt/audit comparisons and verified cleanup bind each result to exact source, run and command identity. SQL RPC evidence does not prove deployed Edge, PostgREST, browser or hosted behavior. Hosted ASSESS-018 through ASSESS-020 remain blocked. See `docs/planning/assess-v2-conflict-acceptance.md`; product authority stays in the Assess V2 architecture.
+
 ## Application Portfolio acceptance producer boundary (2026-10-06)
 
 Only APPS-001 through APPS-005 may gain proof from this slice. Reuse the existing PR1G PostgreSQL harness and retained orchestration; asserted operations traverse the service-only RPC with fresh actor, tenant, workspace and version authority. Prove creation, persisted assessment dimensions, server-derived modernization disposition, cross-workspace denial, and original-plus-replay atomicity from exact stored state, receipts and audits. Bind actual synthetic scope, source chain, command, head/run/attempt and verified cleanup; validate both ingestion and final report. Aggregate unit success is insufficient. Runtime, schema, recommendation law and acceptance criteria remain unchanged. See `docs/planning/application-portfolio-acceptance.md`; product authority remains the Application Portfolio architecture.

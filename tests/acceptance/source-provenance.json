@@ -7,7 +7,7 @@
     "components/enterprise/AssessTranscriptCandidateReview.tsx": "sha256:d8f20fedb16ee3d9d600fde6b3c2ddd779f7d23899d8bb6d54dbd1cf4b39b6d4",
     "components/enterprise/EnterpriseIntelligenceView.tsx": "sha256:132f10c6e47ec2357a479e7011e9ef0aa2f28701fa3e183cc5a368ffe37f5f84",
     "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
-    "package.json": "sha256:b62895bc264428aad0188c1970affa4884801146a9f0f61d23c0587cdf5a0d6a",
+    "package.json": "sha256:b72a72bed69683331b3652ad2211bb329c326129e82b7362ad88002a6d988948",
     "vite.config.ts": "sha256:3692e5623118c7ac6af652c0c5a5730124212fe25e97759425229a29c14f2fef",
     "playwright.config.ts": "sha256:50987b86f28316d46530c6a32dc95008f8894b2975aa50bac4669fe237a831ad",
     "playwright.enterprise-intelligence.config.ts": "sha256:9e949021cb7abe0678ea9eb662543aa073c43857da6dff689087a7afa67d28f9",
@@ -96,7 +96,16 @@
     "services/persistenceTransition.ts": "sha256:190843d1c54e84f2bfc2d448a48539b44baa06adc8ea934ba96bb384ed3aeb2c",
     "services/scoringEngine.ts": "sha256:c06bd2ddab219755d13d45ee55793b2245da52e2e7ee1dc82cb0fb5d2d326c90",
     "services/studioArtifacts/contracts.ts": "sha256:3c403bf735296f2ffd8c8ee625c392b3a3cd51c129246b439083b19854483ac8",
-    "services/trustAssurance/domain.ts": "sha256:09bafbe1692cdf10324064e0ba8f7effd4a1364def0addb8736d7b05a3a9e864"
+    "services/trustAssurance/domain.ts": "sha256:09bafbe1692cdf10324064e0ba8f7effd4a1364def0addb8736d7b05a3a9e864",
+    "scripts/testPr1dMigrations.mjs": "sha256:59db5ba1a6fb523b1324acc7a3f040915555eac500a9a3df301d66ba56f039fa",
+    "scripts/assessV2AcceptanceEvidence.mjs": "sha256:8156a9f964f77dbbf7348098fec5b69ee4282e6059b3588000d91df189192a93",
+    "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql": "sha256:6c2771c019b1fd9b6b1d48f884453ce20d7ffb9a8802e3eadda520a4f6e93be4",
+    "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql": "sha256:7f49d7944a1195e0564826494ce5fb02d052b6a7ca687f1124bcdc26bf205209",
+    "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql": "sha256:fb46353079b50c004aa826618008eeec892f46e7794fa79617e519621f083bbd",
+    "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql": "sha256:1dd9596aa600577ad1354ab85829a0b341860a05444e455930c4f1f8c7ad4ca3",
+    "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql": "sha256:783e858dcdca87e1eafd7c6a02d03eceec0ac199f098f28bf41149f24e2a53ea",
+    "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql": "sha256:6d9e910c4ca4b355b5b7060c450be3b5698a27627aa64c618f52085404a3b0ad",
+    "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql": "sha256:696a2b45b6e4ccbcdbbfd67db51e5dfd3c608577d2ae0d9387f8e6803e2aff61"
   },
   "contracts": [
     {
@@ -866,10 +875,8 @@
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "assess-v2-authority",
-          "assertionId": "assess-v2-authority::ASSESS-018",
-          "scenarioId": "ASSESS-018::retained-contract"
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-018"
         }
       ],
       "scope": {
@@ -887,10 +894,8 @@
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "assess-v2-authority",
-          "assertionId": "assess-v2-authority::ASSESS-020",
-          "scenarioId": "ASSESS-020::retained-contract"
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-020"
         }
       ],
       "scope": {
@@ -908,10 +913,8 @@
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "assess-v2-authority",
-          "assertionId": "assess-v2-authority::ASSESS-019",
-          "scenarioId": "ASSESS-019::retained-contract"
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-019"
         }
       ],
       "scope": {
@@ -925,7 +928,16 @@
       "branchId": "ASSESS-V2_IDEMPOTENCY_CONFLICT",
       "testId": "ASSESS-022",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "scripts/testPr1dMigrations.mjs",
+        "scripts/assessV2AcceptanceEvidence.mjs",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql",
+        "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql",
+        "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql",
+        "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql",
+        "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql"
       ],
       "ownership": [
         {
@@ -936,17 +948,26 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-assess-v2-postgresql-v1",
+        "organizationId": "11000000-0000-4000-8000-000000000010",
+        "workspaceId": "11000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "ASSESS-V2_VERSION_CONFLICT",
       "testId": "ASSESS-021",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "scripts/testPr1dMigrations.mjs",
+        "scripts/assessV2AcceptanceEvidence.mjs",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql",
+        "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql",
+        "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql",
+        "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql",
+        "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql"
       ],
       "ownership": [
         {
@@ -957,10 +978,10 @@
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-assess-v2-postgresql-v1",
+        "organizationId": "11000000-0000-4000-8000-000000000010",
+        "workspaceId": "11000000-0000-4000-8000-000000000011"
       }
     },
     {

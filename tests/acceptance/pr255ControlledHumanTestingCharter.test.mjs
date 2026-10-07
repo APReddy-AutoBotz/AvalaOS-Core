@@ -5,9 +5,11 @@ const charter = fs.readFileSync(new URL('../../docs/quality/pr255-controlled-hum
 const bindings = JSON.parse(fs.readFileSync(new URL('./execution-bindings.json', import.meta.url), 'utf8'));
 const blockedHostedIds = bindings.hostedTests.filter(item => item.scenario === null).map(item => item.testId).sort();
 
-assert.equal(blockedHostedIds.length, 15, 'the charter exclusion contract must track exactly the 15 blocked hosted/server-authority cases');
 const charterExcludedIds = [...charter.matchAll(/^- `([A-Z0-9]+-[0-9]{3})`$/gmu)].map(([, id]) => id).sort();
-assert.deepEqual(charterExcludedIds, blockedHostedIds, 'the charter exclusions must exactly match the canonical blocked hosted bindings');
+assert.equal(charterExcludedIds.length, 15, "preserve the historical charter's fifteen exclusions");
+const subsequentlyBlockedAssessIds = ['ASSESS-018', 'ASSESS-019', 'ASSESS-020'];
+assert.deepEqual([...charterExcludedIds, ...subsequentlyBlockedAssessIds].sort(), blockedHostedIds,
+  'current blocked hosted bindings must preserve the historical exclusions and the three explicitly blocked Assess V2 cases');
 
 assert.match(charter, /Status: prepared, not executed\./u, 'preparation must not be represented as executed human evidence');
 assert.match(charter, /synthetic, non-evidentiary UX and product exploration/u, 'human testing must remain non-evidentiary product exploration');

@@ -22,9 +22,8 @@
   "commandContracts": {
     "retainedCommands": {
       "assess-v2-authority": [
-        "npm",
-        "run",
-        "test:pr1d"
+        "node",
+        "scripts/testPr1dMigrations.mjs"
       ],
       "application-portfolio": [
         "node",
@@ -297,6 +296,51 @@
       "anchorId": "hosted-exact-run-scenarios",
       "sourceReference": "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
       "selector": "CREATE FUNCTION public.hosted_pilot_execute_assertion_scenario("
+    },
+    {
+      "anchorId": "assess-v2-conflict-harness",
+      "sourceReference": "scripts/testPr1dMigrations.mjs",
+      "selector": "const dbName = 'avalaos_pr1d_authority_test';"
+    },
+    {
+      "anchorId": "assess-v2-conflict-evidence",
+      "sourceReference": "scripts/assessV2AcceptanceEvidence.mjs",
+      "selector": "export const ASSESS_V2_TEST_IDS"
+    },
+    {
+      "anchorId": "assess-v2-pr1c",
+      "sourceReference": "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql",
+      "selector": "CREATE TABLE IF NOT EXISTS public.assessment_studio_handoffs ("
+    },
+    {
+      "anchorId": "assess-v2-pr1d",
+      "sourceReference": "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+      "selector": "CREATE TABLE public.assess_v2_cases("
+    },
+    {
+      "anchorId": "assess-v2-integrity",
+      "sourceReference": "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql",
+      "selector": "CREATE OR REPLACE FUNCTION public.pr1d_upsert_assess_v2_draft("
+    },
+    {
+      "anchorId": "assess-v2-attestation",
+      "sourceReference": "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql",
+      "selector": "CREATE OR REPLACE FUNCTION public.pr1d_reject_author_attestation()"
+    },
+    {
+      "anchorId": "assess-v2-fact-validation",
+      "sourceReference": "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql",
+      "selector": "CREATE OR REPLACE FUNCTION public.pr1d_upsert_assess_v2_draft("
+    },
+    {
+      "anchorId": "assess-v2-source-hardening",
+      "sourceReference": "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql",
+      "selector": "CREATE OR REPLACE FUNCTION public.pr1d_author_fact_valid("
+    },
+    {
+      "anchorId": "assess-v2-visibility",
+      "sourceReference": "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql",
+      "selector": "CREATE POLICY pr1d_cases_read"
     }
   ],
   "contracts": [
@@ -888,10 +932,8 @@
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "assess-v2-authority",
-          "assertionId": "assess-v2-authority::ASSESS-018",
-          "scenarioId": "ASSESS-018::retained-contract"
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-018"
         }
       ]
     },
@@ -903,10 +945,8 @@
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "assess-v2-authority",
-          "assertionId": "assess-v2-authority::ASSESS-020",
-          "scenarioId": "ASSESS-020::retained-contract"
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-020"
         }
       ]
     },
@@ -918,10 +958,8 @@
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "assess-v2-authority",
-          "assertionId": "assess-v2-authority::ASSESS-019",
-          "scenarioId": "ASSESS-019::retained-contract"
+          "kind": "hosted-scenario",
+          "ownerId": "blocked:ASSESS-019"
         }
       ]
     },
@@ -929,7 +967,16 @@
       "branchId": "ASSESS-V2_IDEMPOTENCY_CONFLICT",
       "testId": "ASSESS-022",
       "sourceAnchorIds": [
-        "assess-v1-scoring"
+        "assess-v2-conflict-harness",
+        "assess-v2-conflict-evidence",
+        "application-portfolio-pr1b-base",
+        "assess-v2-pr1c",
+        "assess-v2-pr1d",
+        "assess-v2-integrity",
+        "assess-v2-attestation",
+        "assess-v2-fact-validation",
+        "assess-v2-source-hardening",
+        "assess-v2-visibility"
       ],
       "ownership": [
         {
@@ -944,7 +991,16 @@
       "branchId": "ASSESS-V2_VERSION_CONFLICT",
       "testId": "ASSESS-021",
       "sourceAnchorIds": [
-        "assess-v1-scoring"
+        "assess-v2-conflict-harness",
+        "assess-v2-conflict-evidence",
+        "application-portfolio-pr1b-base",
+        "assess-v2-pr1c",
+        "assess-v2-pr1d",
+        "assess-v2-integrity",
+        "assess-v2-attestation",
+        "assess-v2-fact-validation",
+        "assess-v2-source-hardening",
+        "assess-v2-visibility"
       ],
       "ownership": [
         {
