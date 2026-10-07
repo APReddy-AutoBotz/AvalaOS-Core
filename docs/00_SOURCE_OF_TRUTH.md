@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Current Govern authority acceptance slice (2026-10-07)
+
+PR #276 merged as `a317f9b243185751e37b80354796f5b9dd5a2d68` with its tested tree unchanged. All 14 applicable candidate workflows and post-merge Core CI `37654895042` passed. Exact acceptance run `37648815609` attempt 1 records 33 PASS / 0 FAIL / 75 BLOCKED / 0 UNCOVERED. These executed results supersede the candidate-pending statements below. AP authorized continued acceptance work and verified merges. The next focused slice proves GOVERN-008/009/010 through the real Govern command under `docs/planning/govern-authority-acceptance.md`, preserving all criteria. DELIVERY-007/008 stay BLOCKED because their legacy import/task-lineage meaning cannot be silently replaced by the newer PR C handoff/package path. New Govern execution is planned verification; hosted execution remains NOT_EXECUTED and overall acceptance INCOMPLETE_COVERAGE.
+
 ## Current Studio lifecycle acceptance slice (2026-10-07)
 
 PR #275 merged as `e8fdd7047f95665edf594bbf4535692c4d153f56` with its tested candidate tree unchanged. All 14 applicable candidate workflows and post-merge Core CI `37640299836` passed. Exact acceptance run `37635652518` attempt 1 records 26 PASS / 0 FAIL / 82 BLOCKED / 0 UNCOVERED. These executed results supersede the candidate-pending statements below. AP authorized continued testing and verified merges without routine reapproval. The next substantial slice proves seven Studio lifecycle cases under `docs/planning/studio-lifecycle-acceptance.md`, preserving all behavior criteria. Its new execution remains planned verification. Hosted execution stays NOT_EXECUTED and overall acceptance INCOMPLETE_COVERAGE.

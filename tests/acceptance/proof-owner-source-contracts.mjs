@@ -239,6 +239,26 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "studio-acceptance-20260828120000-governed-multisource-studio-pr-b-sql",
     "sourceReference": "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql",
     "selector": "CREATE OR REPLACE FUNCTION public.studio_pr_b_json_structure_safe(value jsonb)"
+  },
+  {
+    "anchorId": "govern-acceptance-testgovernacceptancepostgres-mjs",
+    "sourceReference": "scripts/testGovernAcceptancePostgres.mjs",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "govern-acceptance-governacceptanceevidence-mjs",
+    "sourceReference": "scripts/governAcceptanceEvidence.mjs",
+    "selector": "export const GOVERN_ACCEPTANCE_TEST_IDS = ["
+  },
+  {
+    "anchorId": "govern-acceptance-20260720160000-pr1e-assess-v2-governed-review-handoff-sql",
+    "sourceReference": "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.pr1e_can_read_lineage(p_org uuid,p_workspace uuid,p_case uuid,p_decision uuid)"
+  },
+  {
+    "anchorId": "govern-acceptance-20260923142120-pr1e-govern-control-alias-binding-sql",
+    "sourceReference": "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql",
+    "selector": "  new_expression text := 'SELECT COALESCE(jsonb_agg(required.control ORDER BY required.control->>''controlId''),''[]'') INTO v_required_controls FROM (';"
   }
 ]);
 export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
@@ -324,6 +344,10 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
     "studio-postgres-acceptance": [
       "node",
       "scripts/testStudioAcceptancePostgres.mjs"
+    ],
+    "govern-postgres-acceptance": [
+      "node",
+      "scripts/testGovernAcceptancePostgres.mjs"
     ]
   },
   "serverCommands": {
@@ -1403,13 +1427,20 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-DUPLICATE_DECISION",
     "testId": "GOVERN-010",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "govern-acceptance-testgovernacceptancepostgres-mjs",
+      "govern-acceptance-governacceptanceevidence-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "assess-review-domain",
+      "application-portfolio-pr1b-base",
+      "assess-v2-pr1d",
+      "govern-acceptance-20260720160000-pr1e-assess-v2-governed-review-handoff-sql",
+      "govern-acceptance-20260923142120-pr1e-govern-control-alias-binding-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-010",
+        "ownerId": "govern-postgres-acceptance",
+        "assertionId": "govern-postgres-acceptance::GOVERN-010",
         "scenarioId": "GOVERN-010::retained-contract"
       }
     ]
@@ -1463,13 +1494,20 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-REVOKED_AUTHORITY",
     "testId": "GOVERN-009",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "govern-acceptance-testgovernacceptancepostgres-mjs",
+      "govern-acceptance-governacceptanceevidence-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "assess-review-domain",
+      "application-portfolio-pr1b-base",
+      "assess-v2-pr1d",
+      "govern-acceptance-20260720160000-pr1e-assess-v2-governed-review-handoff-sql",
+      "govern-acceptance-20260923142120-pr1e-govern-control-alias-binding-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-009",
+        "ownerId": "govern-postgres-acceptance",
+        "assertionId": "govern-postgres-acceptance::GOVERN-009",
         "scenarioId": "GOVERN-009::retained-contract"
       }
     ]
@@ -1508,13 +1546,20 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-STALE_AUTHORITY",
     "testId": "GOVERN-008",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "govern-acceptance-testgovernacceptancepostgres-mjs",
+      "govern-acceptance-governacceptanceevidence-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "assess-review-domain",
+      "application-portfolio-pr1b-base",
+      "assess-v2-pr1d",
+      "govern-acceptance-20260720160000-pr1e-assess-v2-governed-review-handoff-sql",
+      "govern-acceptance-20260923142120-pr1e-govern-control-alias-binding-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-008",
+        "ownerId": "govern-postgres-acceptance",
+        "assertionId": "govern-postgres-acceptance::GOVERN-008",
         "scenarioId": "GOVERN-008::retained-contract"
       }
     ]

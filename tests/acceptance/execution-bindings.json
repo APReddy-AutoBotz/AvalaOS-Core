@@ -59,7 +59,17 @@
         "GOVERN-004",
         "GOVERN-005",
         "GOVERN-006",
-        "GOVERN-007",
+        "GOVERN-007"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "govern-postgres-acceptance",
+      "command": [
+        "node",
+        "scripts/testGovernAcceptancePostgres.mjs"
+      ],
+      "testIds": [
         "GOVERN-008",
         "GOVERN-009",
         "GOVERN-010"

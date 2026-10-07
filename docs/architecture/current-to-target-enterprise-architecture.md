@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Govern authority acceptance evidence boundary (2026-10-07)
+
+Only GOVERN-008/009/010 gain a `govern-postgres-acceptance` producer. Use the real service-only `pr1e_resolve_assess_v2_govern` command after the complete current migration chain; active membership/capability/authorization-version checks must precede receipt disclosure. Measure one genuine resolution, case transition, exact receipt/audit binding and zero-effect stale/revoked/duplicate attempts. Prerequisite approved-review fixtures are setup only. Exact source/run/command identity and verified cleanup remain mandatory. Preserve all catalog behavior criteria and other owners. The routed Govern/Assess V2 documents retain product authority; `docs/planning/govern-authority-acceptance.md` owns implementation, verification and rollback.
+
 ## Studio lifecycle acceptance evidence boundary (2026-10-07)
 
 The focused `studio-postgres-acceptance` owner may prove only STUDIO-004, STUDIO-005, STUDIO-006, STUDIO-008, STUDIO-009, STUDIO-010 and STUDIO-011. Apply the current migration chain in one disposable database; execute real authorized command/lifecycle RPCs against isolated synthetic fixtures. Measure the target transition separately from setup, immutable ancestry, receipts, audits and zero-effect denials/replays. Storage simulations are explicitly separate from hosted Storage proof. Exact source/run/command identity and verified cleanup are required before evidence emission and at report consumption. Product authority remains in the governed/private Studio architecture documents; implementation and rollback are in `docs/planning/studio-lifecycle-acceptance.md`.

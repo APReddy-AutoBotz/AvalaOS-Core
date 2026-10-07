@@ -59,6 +59,7 @@ for (const suite of bindings.retainedSuites ?? []) {
       ...(suite.suiteId === 'application-portfolio' ? { DATABASE_URL: process.env.APPLICATION_PORTFOLIO_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
       ...(suite.suiteId === 'assess-v2-authority' ? { PR1D_MIGRATION_DATABASE_URL: process.env.ASSESS_V2_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
       ...(suite.suiteId === 'studio-postgres-acceptance' ? { STUDIO_ACCEPTANCE_DATABASE_URL: process.env.STUDIO_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
+      ...(suite.suiteId === 'govern-postgres-acceptance' ? { GOVERN_ACCEPTANCE_DATABASE_URL: process.env.GOVERN_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
     },
     stdio: 'inherit',
     shell: useWindowsCommandShim,

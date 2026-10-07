@@ -30,7 +30,9 @@ Read only this sequence unless the active task requires more:
 
 ## Active Authority
 
-The current seven-case Studio lifecycle disposable-PostgreSQL acceptance implementation, focused verification and rollback are governed by `docs/planning/studio-lifecycle-acceptance.md`. Governed and private Studio product authority remain in their routed architecture documents.
+The current three-case Govern authority disposable-PostgreSQL acceptance implementation, focused verification and rollback are governed by `docs/planning/govern-authority-acceptance.md`. Govern/Assess V2 product authority remains in the routed domain documents. The legacy Delivery catalog meaning is not changed by this slice.
+
+The seven-case Studio lifecycle disposable-PostgreSQL acceptance implementation, focused verification and rollback are governed by `docs/planning/studio-lifecycle-acceptance.md`. Governed and private Studio product authority remain in their routed architecture documents.
 
 The approved two-case Assess V2 conflict acceptance implementation, focused verification and rollback are governed by `docs/planning/assess-v2-conflict-acceptance.md`. Product authority remains `docs/architecture/assess-v2-decision-intelligence-architecture.md`.
 
