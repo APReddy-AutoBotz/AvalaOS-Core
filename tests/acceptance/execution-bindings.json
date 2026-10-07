@@ -21,14 +21,10 @@
     {
       "suiteId": "assess-v2-authority",
       "command": [
-        "npm",
-        "run",
-        "test:pr1d"
+        "node",
+        "scripts/testPr1dMigrations.mjs"
       ],
       "testIds": [
-        "ASSESS-018",
-        "ASSESS-019",
-        "ASSESS-020",
         "ASSESS-021",
         "ASSESS-022"
       ],
@@ -659,6 +655,33 @@
         "desktop-chromium",
         "pixel-7-chromium"
       ]
+    },
+    {
+      "testId": "ASSESS-018",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "ASSESS-018 requires hosted_sandbox execution. Aggregate source checks and disposable PostgreSQL conflict evidence cannot prove its hosted authoring or decision lifecycle; keep BLOCKED until the declared hosted path is exercised."
+    },
+    {
+      "testId": "ASSESS-019",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "ASSESS-019 requires hosted_sandbox execution. Aggregate source checks and disposable PostgreSQL conflict evidence cannot prove its hosted authoring or decision lifecycle; keep BLOCKED until the declared hosted path is exercised."
+    },
+    {
+      "testId": "ASSESS-020",
+      "scenario": null,
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "blockedReason": "ASSESS-020 requires hosted_sandbox execution. Aggregate source checks and disposable PostgreSQL conflict evidence cannot prove its hosted authoring or decision lifecycle; keep BLOCKED until the declared hosted path is exercised."
     }
   ]
 }

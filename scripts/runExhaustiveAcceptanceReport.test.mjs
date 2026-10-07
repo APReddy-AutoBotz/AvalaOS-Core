@@ -466,3 +466,83 @@ test('Application Portfolio report validates only the five exact cases and rejec
     }
   }
 });
+
+test('Assess V2 report promotes only 021 and 022 and rejects partial, substituted and aggregate-only evidence', async () => {
+  const { buildAssessV2AcceptanceProducer } = await import('./assessV2AcceptanceEvidence.mjs');
+  const suite = loadExecutionBindings().retainedSuites.find(item => item.suiteId === 'assess-v2-authority');
+  const command = suite.command.join(' ');
+  const identity = { releaseSha, workflowRunId: '123456', workflowAttempt: '2', environment: 'pull-request', workflowPath };
+  // Unit-level report inputs, not an assertion that PostgreSQL ran in this test.
+  const makeProducer = failure => {
+    const actualByTestId = {
+      'ASSESS-021': {
+        logicalMutationCount: 1, versionDelta: 1, receiptDelta: 1, auditDelta: 1,
+        committedCount: 1, versionConflictCount: 1, rejectedEffectDelta: 0,
+      },
+      'ASSESS-022': {
+        logicalMutationCount: 1, versionDelta: 1, receiptDelta: 1, auditDelta: 1,
+        idempotencyConflict: true, originalReceiptPreserved: true,
+        committedStatePreserved: true, conflictEffectDelta: 0,
+      },
+    };
+    const failuresByTestId = {};
+    if (failure) {
+      delete actualByTestId['ASSESS-022'];
+      failuresByTestId['ASSESS-022'] = { failureCode: 'assertion_failed' };
+    }
+    return buildAssessV2AcceptanceProducer({ actualByTestId, failuresByTestId, identity, command, cleanupVerified: true });
+  };
+  const variants = [
+    ['valid', () => {}, false, 2, 0],
+    ['source substitution', manifest => { const item = manifest.results[0]; item.sourceDigests[Object.keys(item.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
+    ['result substitution', manifest => { manifest.results[0].actual.versionConflictCount = 0; }, false, 0, 0],
+    ['hosted case substitution', manifest => { manifest.results[0].testId = 'ASSESS-018'; }, false, 0, 0],
+    ['cleanup substitution', manifest => { manifest.results[0].cleanupVerified = false; }, false, 0, 0],
+    ['partial artifact', manifest => { manifest.results.pop(); }, false, 0, 0],
+    ['executed failure despite aggregate success', () => {}, true, 1, 1],
+    ['failed aggregate', manifest => { manifest.suites[0].status = 'FAIL'; }, true, 0, 2],
+    ['aggregate-only', manifest => { manifest.results = []; }, false, 0, 0],
+  ];
+  for (const [name, mutate, failure, passed, failed] of variants) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-assess-v2-report-'));
+    try {
+      const retainedPath = path.join(temp, 'retained.json');
+      const manifest = {
+        schemaVersion: 3, manifestKind: 'retained', ...identity,
+        suites: [{ suiteId: suite.suiteId, status: 'PASS', command, requiredGate: true, testIds: suite.testIds }],
+        results: structuredClone(makeProducer(failure).results),
+      };
+      mutate(manifest);
+      writeFileSync(retainedPath, JSON.stringify(manifest));
+      const resultsDir = path.join(temp, 'report');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: identity.workflowRunId,
+          GITHUB_RUN_ATTEMPT: identity.workflowAttempt, ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+          ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request', ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
+          ACCEPTANCE_RESULTS_DIR: resultsDir, RETAINED_RESULTS_MANIFEST: retainedPath,
+          ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+          SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+          PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
+        },
+      });
+      const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.equal(report.summary.PASS, passed, `${name}: ${report.results.find(item => item.testId === 'ASSESS-021')?.failureReason ?? report.summary.preflightFailure ?? run.stderr}`);
+      assert.equal(report.summary.FAIL, failed, name);
+      assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
+      assert.deepEqual(
+        report.results.filter(item => item.status === 'PASS').map(item => item.testId).sort(),
+        passed === 2 ? ['ASSESS-021', 'ASSESS-022'] : passed === 1 ? ['ASSESS-021'] : [],
+        name,
+      );
+      for (const hostedId of ['ASSESS-018', 'ASSESS-019', 'ASSESS-020']) {
+        assert.equal(report.results.find(item => item.testId === hostedId).status, 'BLOCKED', `${name}:${hostedId}`);
+      }
+      if (failed) assert.equal(report.results.find(item => item.testId === 'ASSESS-022').status, 'FAIL', name);
+      if (passed === 2) assert.equal(run.status, 0, run.stderr);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }
+});

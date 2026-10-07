@@ -1640,7 +1640,16 @@
       "feature": "v2",
       "ruleRequirement": "v2 version conflict",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "scripts/testPr1dMigrations.mjs",
+        "scripts/assessV2AcceptanceEvidence.mjs",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql",
+        "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql",
+        "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql",
+        "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql",
+        "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql"
       ],
       "branchIds": [
         "ASSESS-V2_VERSION_CONFLICT"
@@ -1649,7 +1658,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-assess-v2-postgresql-v1",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",
@@ -1690,7 +1699,16 @@
       "feature": "v2",
       "ruleRequirement": "v2 idempotency conflict",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "scripts/testPr1dMigrations.mjs",
+        "scripts/assessV2AcceptanceEvidence.mjs",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql",
+        "supabase/migrations/20260717120000_pr1d_evidence_attestation_boundary.sql",
+        "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql",
+        "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql",
+        "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql"
       ],
       "branchIds": [
         "ASSESS-V2_IDEMPOTENCY_CONFLICT"
@@ -1699,7 +1717,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-assess-v2-postgresql-v1",
       "transcript": "clean-straight-through",
       "preconditions": [
         "Synthetic data only",

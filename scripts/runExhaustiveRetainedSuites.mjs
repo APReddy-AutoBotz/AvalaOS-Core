@@ -57,6 +57,7 @@ for (const suite of bindings.retainedSuites ?? []) {
       RETAINED_TEST_ID_RESULTS: resultPath,
       ...(suite.suiteId === 'trust-authority' ? { DATABASE_URL: process.env.TRUST_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
       ...(suite.suiteId === 'application-portfolio' ? { DATABASE_URL: process.env.APPLICATION_PORTFOLIO_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
+      ...(suite.suiteId === 'assess-v2-authority' ? { PR1D_MIGRATION_DATABASE_URL: process.env.ASSESS_V2_ACCEPTANCE_DATABASE_URL ?? '' } : {}),
     },
     stdio: 'inherit',
     shell: useWindowsCommandShim,

@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Assess V2 evidence gap and prior gate closure (2026-10-07)
+
+Executed evidence: PR #274 merged with its tested tree unchanged; all 14 applicable candidate workflows passed, including the dependency audit after the two approved patches. Exact acceptance run `37430088371` attempt 1 proves 24 PASS / 0 FAIL / 84 BLOCKED. This closes the candidate verification and dependency gates described below without establishing hosted exposure or readiness. Confirmed source defects: the retained Assess V2 owner invokes an aggregate command without real per-case database evidence, and the existing PostgreSQL harness announces success before cleanup while swallowing cleanup errors. The approved two-case slice adds isolated measured conflict outcomes and fail-closed cleanup. Fixture contamination is a suspected defect requiring deeper validation, addressed by isolated records and scoped snapshots. Planned verification and rollback: `docs/planning/assess-v2-conflict-acceptance.md`. No product authorization bypass was established.
+
 ## Post-merge dependency audit gate (2026-10-06)
 
 Executed evidence: Core CI `37423006311` reports a high source-map-js advisory (GHSA-68fv-2mgg-jv7q) and low DOMPurify advisories (GHSA-p98j-92pf-mc4p, GHSA-6688-9rhm-gjv2). Locked versions are 1.2.1 and 3.4.13; advisory patch versions are 1.2.2 and 3.4.16. Candidate PR #273 was green before merge and its merged tree is identical, but the current dependency gate is failed. No application exploit or hosted exposure was established. AP subsequently explicitly approved the two compatible patch updates. The lockfile now changes only those two package records; audit enforcement is unchanged. Local `npm audit --audit-level=low` reports zero vulnerabilities. Fresh exact-head CI remains planned verification until executed; no hosted deployment or exposure claim follows.
