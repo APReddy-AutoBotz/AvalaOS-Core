@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
+import { createHostedSandboxAcceptanceAttachment } from './hostedSandboxAcceptanceEvidence.mjs';
 import {
   canonicalHostedTitle,
   loadCatalog,
@@ -46,6 +47,7 @@ const hostedMetadata = () => ({
   sourcePaths: [
     'tests/browser/exhaustiveHostedAcceptance.spec.ts',
     'tests/browser/productNavigationReadiness.ts',
+    'scripts/hostedSandboxAcceptanceEvidence.mjs',
   ],
   exactHead: releaseSha,
   targetOrigin: 'https://avalaos-pilot.netlify.app',
@@ -121,8 +123,8 @@ const fullInventoryHostedReport = () => {
   }));
   const executable = hostedBindings.filter(binding => binding.scenario).length * 2;
   const skipped = hostedBindings.filter(binding => !binding.scenario).length * 2;
-  assert.equal(executable, 38);
-  assert.equal(skipped, 36);
+  assert.equal(executable, 36);
+  assert.equal(skipped, 38);
   return {
     config: { metadata },
     errors: [],
@@ -199,10 +201,89 @@ test('green hosted execution cannot promote a planned fixture scope', () => {
     assert.deepEqual(report.summary.browserEvidenceErrors, [], 'the complete 74-result ordinary hosted inventory is provenance-valid');
     const sandbox = report.results.find(item => item.testId === 'SANDBOX-001');
     assert.equal(sandbox.status, 'BLOCKED');
-    assert.match(sandbox.failureReason, /no separately validated same-run executed fixture scope/u);
+    assert.match(sandbox.failureReason, /same-run measured Sandbox fixture evidence is missing or invalid/u);
     passedControlScriptScenarios.add('exhaustive-report-planned-scope-blocked');
   } finally {
     rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('same-run measured Sandbox evidence promotes only the 18 supported browser cases', () => {
+  const catalog = loadCatalog();
+  const bindings = loadExecutionBindings();
+  const targetActions = {
+    'SANDBOX-002': ['process-analyst','ap-process-owner','delivery-lead','control-reviewer','automation-contributor','buyer-viewer','platform-admin'].map(persona => `persona-entry:${persona}`),
+    'SAFETY-004': ['initial-stale-boards','stale-delivery-pack','missing-delivery-pack','malformed-delivery-pack'].map(scope => `invalid-scope-reconstruction:${scope}`),
+    'ASSESS-001': ['process-create'],
+    'ASSESS-004': ['incomplete-process-create'],
+  };
+  const makeMeasuredReport = () => {
+    const report = fullInventoryHostedReport();
+    for (const spec of report.suites[0].specs) {
+      const id = /^\[([^\]]+)\]/u.exec(spec.title)[1];
+      const binding = bindings.hostedTests.find(item => item.testId === id);
+      if (!binding.scenario) continue;
+      const testCase = catalog.cases.find(item => item.testId === id);
+      for (const execution of spec.tests) {
+        const attempt = execution.results[0];
+        attempt.startTime = '2026-09-08T12:00:00.000Z';
+        attempt.duration = 10_000;
+        const attachment = createHostedSandboxAcceptanceAttachment({
+          testCase, binding, metadata: report.config.metadata, project: execution.projectName,
+          observedAt: '2026-09-08T12:00:01.000Z',
+          measurement: { targetActions: targetActions[id] ?? [], supportingActions: id === 'ASSESS-004' ? ['draft-save'] : [] },
+        });
+        attempt.attachments.push({ ...attachment, body: Buffer.from(attachment.body).toString('base64') });
+      }
+    }
+    return report;
+  };
+  const attachmentFor = (report, id = 'SANDBOX-001') => report.suites[0].specs.find(spec => spec.title.startsWith(`[${id}]`)).tests[0].results[0].attachments.find(a => a.name === 'hosted-sandbox-acceptance-v1');
+  const substitute = (report, change) => {
+    const attachment = attachmentFor(report);
+    const body = JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8'));
+    change(body);
+    attachment.body = Buffer.from(JSON.stringify(body)).toString('base64');
+  };
+  const variants = [
+    ['measured', () => {}, 18],
+    ['missing attachment', report => { attachmentFor(report).name = 'unrelated-evidence'; }, 17],
+    ['wrong run', report => substitute(report, body => { body.workflow.runId = '999'; }), 17],
+    ['wrong deployment', report => substitute(report, body => { body.profile.deployId = 'f'.repeat(24); }), 17],
+    ['wrong project', report => substitute(report, body => { body.project = 'pixel-7-chromium'; }), 17],
+    ['fake tenant scope', report => substitute(report, body => { body.scope.organizationId = '11111111-1111-4111-8111-111111111111'; }), 17],
+    ['unmeasured mutation', report => substitute(report, body => { body.actual.targetMutationCount = 1; }), 17],
+    ['outside attempt', report => substitute(report, body => { body.observedAt = '2026-09-07T12:00:01.000Z'; }), 17],
+    ['executed assertion failure', report => {
+      const execution = report.suites[0].specs[0].tests[0];
+      execution.status = 'unexpected'; execution.results[0].status = 'failed';
+    }, 17, 1],
+  ];
+  for (const [name, mutate, passCount, failCount = 0] of variants) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-hosted-measured-report-'));
+    try {
+      const report = makeMeasuredReport();
+      mutate(report);
+      const playwrightPath = path.join(temp, 'playwright.json');
+      writeFileSync(playwrightPath, JSON.stringify(report));
+      const resultsDir = path.join(temp, 'results');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: { ...process.env, ...hostedEnvironment(), ACCEPTANCE_RESULTS_DIR: resultsDir, PLAYWRIGHT_JSON: playwrightPath,
+          RETAINED_RESULTS_MANIFEST: path.join(temp, 'absent-retained.json'), ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'), SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json') },
+      });
+      assert.notEqual(run.status, 0, name + ': incomplete coverage remains visible');
+      const output = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.deepEqual(output.summary.browserEvidenceErrors, [], name);
+      assert.equal(output.summary.PASS, passCount, name);
+      assert.equal(output.summary.FAIL, failCount, name);
+      assert.equal(output.summary.BLOCKED, 108 - passCount - failCount, name);
+      assert.equal(output.results.find(item => item.testId === 'ADMIN-001').status, 'BLOCKED', name);
+      for (const item of output.results.filter(item => item.status === 'PASS')) {
+        assert.deepEqual(item.executedScope, { evidenceScope: 'executed-hosted-sandbox-local', fixtureId: 'synthetic-default' });
+        assert.equal(item.actualResult.logicalMutationCount, item.expectedMutationCount);
+      }
+    } finally { rmSync(temp, { recursive: true, force: true }); }
   }
 });
 
@@ -717,6 +798,7 @@ test('Govern PostgreSQL report promotes only three authority cases and rejects s
     ['source substitution', m => { const i = m.results[0]; i.sourceDigests[Object.keys(i.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
     ['result substitution', m => { m.results[0].actual.logicalMutationCount = 0; }, false, 0, 0],
     ['hosted case substitution', m => { m.results[0].testId = 'GOVERN-007'; }, false, 0, 0],
+    ['retained PASS cannot satisfy a hosted environment', () => {}, false, 2, 0, true],
     ['cleanup substitution', m => { m.results[0].cleanupVerified = false; }, false, 0, 0],
     ['partial artifact', m => { m.results.pop(); }, false, 0, 0],
     ['executed failure despite aggregate success', () => {}, true, 2, 1],
@@ -724,7 +806,7 @@ test('Govern PostgreSQL report promotes only three authority cases and rejects s
     ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 3],
     ['aggregate-only', m => { m.results = []; }, false, 0, 0],
   ];
-  for (const [name, mutate, failure, passed, failed] of variants) {
+  for (const [name, mutate, failure, passed, failed, hostedRequirement = false] of variants) {
     const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-govern-report-'));
     try {
       const retainedPath = path.join(temp, 'retained.json');
@@ -735,6 +817,10 @@ test('Govern PostgreSQL report promotes only three authority cases and rejects s
       };
       mutate(manifest);
       writeFileSync(retainedPath, JSON.stringify(manifest));
+      const catalogPath = path.join(temp, 'catalog.json');
+      const catalog = loadCatalog();
+      if (hostedRequirement) catalog.cases.find(item => item.testId === 'GOVERN-008').environment = 'hosted_sandbox';
+      writeFileSync(catalogPath, JSON.stringify(catalog));
       const resultsDir = path.join(temp, 'report');
       const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
         cwd: process.cwd(), encoding: 'utf8',
@@ -743,6 +829,7 @@ test('Govern PostgreSQL report promotes only three authority cases and rejects s
           GITHUB_RUN_ATTEMPT: identity.workflowAttempt, ACCEPTANCE_WORKFLOW_PATH: workflowPath,
           ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request', ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
           ACCEPTANCE_RESULTS_DIR: resultsDir, RETAINED_RESULTS_MANIFEST: retainedPath,
+          ACCEPTANCE_CATALOG: catalogPath,
           ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
           SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
           PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
@@ -753,7 +840,8 @@ test('Govern PostgreSQL report promotes only three authority cases and rejects s
       assert.equal(report.summary.FAIL, failed, name);
       assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
       assert.deepEqual(report.results.filter(i => i.status === 'PASS').map(i => i.testId).sort(),
-        passed === 3 ? [...GOVERN_ACCEPTANCE_TEST_IDS].sort() : passed === 2 ? GOVERN_ACCEPTANCE_TEST_IDS.filter(id => id !== 'GOVERN-010').sort() : [], name);
+        passed === 3 ? [...GOVERN_ACCEPTANCE_TEST_IDS].sort() : passed === 2 ? GOVERN_ACCEPTANCE_TEST_IDS.filter(id => id !== (hostedRequirement ? 'GOVERN-008' : 'GOVERN-010')).sort() : [], name);
+      if (hostedRequirement) assert.match(report.results.find(item => item.testId === 'GOVERN-008').failureReason, /retained authority evidence alone is insufficient/u);
       for (const item of report.results.filter(i => !GOVERN_ACCEPTANCE_TEST_IDS.includes(i.testId))) {
         assert.equal(item.status, 'BLOCKED', `${name}:${item.testId}`);
       }

@@ -477,7 +477,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "ownership": [
       {
         "kind": "hosted-scenario",
-        "ownerId": "admin-navigation"
+        "ownerId": "blocked:ADMIN-001"
       }
     ]
   },

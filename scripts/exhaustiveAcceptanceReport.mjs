@@ -23,6 +23,7 @@ import {
   validateHostedPlaywrightReport,
 } from './exhaustiveAcceptanceEvidence.mjs';
 import { deriveExpectedHostedAcceptanceMetadata } from './hostedAcceptanceReportProvenance.mjs';
+import { verifyHostedSandboxAttachments } from './hostedSandboxAcceptanceEvidence.mjs';
 import { ASSESS_V1_EXPECTED_OUTPUTS, loadAssessV1OracleEvidence } from './assessV1OracleEvidence.mjs';
 
 const root = process.cwd();
@@ -61,6 +62,7 @@ const hostedConfigPath = 'playwright.exhaustive-acceptance.config.ts';
 const hostedSourcePaths = [
   'tests/browser/exhaustiveHostedAcceptance.spec.ts',
   'tests/browser/productNavigationReadiness.ts',
+  'scripts/hostedSandboxAcceptanceEvidence.mjs',
 ];
 const workflowPath = process.env.ACCEPTANCE_WORKFLOW_PATH || '.github/workflows/exhaustive-acceptance.yml';
 let browserEvidenceErrors = [];
@@ -130,11 +132,32 @@ const serverResultIndex = new Map((serverManifest?.results ?? []).map(item => [`
 const oracleIndex = new Map((oracleManifest?.results ?? []).map(item => [item.testId, item]));
 const oracleMap = oracleBindingMap(bindings);
 
+// Browser-local execution scope is produced by this run, never inferred from
+// static planned provenance or a retained server suite.
+const evaluateBrowserCase = (testCase, binding) => {
+  if (!binding?.scenario || executionDisposition !== 'EXECUTED') {
+    return { status: 'BLOCKED', reason: binding?.blockedReason || 'Required hosted execution is missing.', evidenceReferences: [] };
+  }
+  const evaluation = evaluateHostedTest({
+    title: canonicalHostedTitle(testCase),
+    requiredProjects: binding.projects,
+    reportValidation: browserReportValidation,
+  });
+  if (evaluation.status !== 'PASS') return evaluation;
+  try {
+    const measured = verifyHostedSandboxAttachments({ testCase, binding, executions: browserReportValidation.executions });
+    return { ...evaluation, ...measured };
+  } catch {
+    return { status: 'BLOCKED', reason: 'Hosted assertion passed, but its same-run measured Sandbox fixture evidence is missing or invalid.', evidenceReferences: [] };
+  }
+};
+
 const results = (catalog.cases ?? []).map(testCase => {
   let evaluation;
   let actualResult = null;
   let evidenceReferences = [];
   let executionKind = 'unbound';
+  let executedScope = null;
 
   if (serverMap.has(testCase.testId)) {
     const binding = serverMap.get(testCase.testId);
@@ -149,17 +172,7 @@ const results = (catalog.cases ?? []).map(testCase => {
     const serverActual = serverResultIndex.get(`${binding.suiteId}:${testCase.testId}`)?.status ?? 'MISSING';
     if (binding.components?.includes('hosted')) {
       const hostedBinding = hostedMap.get(testCase.testId);
-      const hostedEvaluation = hostedBinding?.scenario && executionDisposition === 'EXECUTED'
-        ? evaluateHostedTest({
-            title: canonicalHostedTitle(testCase),
-            requiredProjects: hostedBinding.projects,
-            reportValidation: browserReportValidation,
-          })
-        : { status: 'BLOCKED', reason: 'Required hosted composite component is missing.' };
-      if (hostedEvaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
-        hostedEvaluation.status = 'BLOCKED';
-        hostedEvaluation.reason = 'Hosted assertion passed, but no separately validated same-run executed fixture scope was supplied.';
-      }
+      const hostedEvaluation = evaluateBrowserCase(testCase, hostedBinding);
       evaluation = evaluateCompositeTest([{ name: 'server', ...serverEvaluation }, { name: 'hosted', ...hostedEvaluation }]);
       actualResult = {
         server: { status: serverActual, reason: serverEvaluation.reason ?? null },
@@ -208,20 +221,18 @@ const results = (catalog.cases ?? []).map(testCase => {
     } else if (!binding.scenario) {
       evaluation = { status: 'BLOCKED', reason: binding.blockedReason || 'No deterministic hosted scenario is exposed.', evidenceReferences: [] };
     } else {
-      evaluation = evaluateHostedTest({
-        title: canonicalHostedTitle(testCase),
-        requiredProjects: binding.projects,
-        reportValidation: browserReportValidation,
-      });
-      if (evaluation.status === 'PASS' && provenanceByTestId.get(testCase.testId)?.scope?.evidenceScope !== 'executed-fixture') {
-        evaluation.status = 'BLOCKED';
-        evaluation.reason = 'Hosted assertion passed, but no separately validated same-run executed fixture scope was supplied.';
-      }
+      evaluation = evaluateBrowserCase(testCase, binding);
     }
     evidenceReferences = (evaluation.evidenceReferences ?? []).map(file => path.relative(root, file));
-    actualResult = evaluation.status;
+    actualResult = evaluation.actual ?? evaluation.status;
+    executedScope = evaluation.scope ?? null;
   } else {
     evaluation = { status: 'BLOCKED', reason: 'No execution binding declared.' };
+  }
+
+  if (testCase.environment === 'hosted_sandbox' && evaluation.status === 'PASS' && !executedScope) {
+    // Retained-only evidence cannot silently satisfy a hosted requirement.
+    evaluation = { status: 'BLOCKED', reason: 'Hosted scope requires same-run browser execution; retained authority evidence alone is insufficient.' };
   }
 
   return {
@@ -233,6 +244,7 @@ const results = (catalog.cases ?? []).map(testCase => {
     workflowAttempt,
     executionTimestamp: timestamp,
     actualResult,
+    ...(executedScope ? { executedScope } : {}),
     status: evaluation.status,
     failureReason: evaluation.reason ?? null,
     evidenceReferences,

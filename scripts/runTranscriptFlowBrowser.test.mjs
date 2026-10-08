@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -452,6 +452,14 @@ test('PR #264 synthetic regression modes own distinct loopback configs and full 
   assert.equal(navigation.localAcceptance.inventory, 'navigation');
   assert.ok(navigation.localAcceptance.sourcePaths.includes('tests/browser/productNavigationReadiness.ts'));
   assert.notEqual(sandbox.localAcceptance.reportArea, navigation.localAcceptance.reportArea);
+  for (const mode of [sandbox, navigation]) {
+    const config = readFileSync(mode.config, 'utf8');
+    const block = config.match(/sourcePaths:\s*\[([\s\S]*?)\]/u)?.[1];
+    assert.ok(block, `${mode.config} must declare its source binding`);
+    const configuredPaths = [...block.matchAll(/'([^']+)'/gu)].map(match => match[1]);
+    assert.deepEqual(configuredPaths, mode.localAcceptance.sourcePaths,
+      `${mode.config}: browser report and runner verifier must use the same source paths`);
+  }
 });
 
 test('local synthetic regression resolves the exact real checkout SHA and rejects partial CLI filters', async () => {

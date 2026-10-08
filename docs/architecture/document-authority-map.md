@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Hosted Sandbox acceptance correction (2026-10-08)
+
+The current browser-local hosted acceptance evidence correction, approved 14 mutation-definition changes, verification and rollback are governed by `docs/planning/hosted-sandbox-acceptance.md`; the release acceptance framework remains `docs/quality/exhaustive-hosted-product-acceptance.md`. PR #278 is merged with its two approved database corrections, so earlier pending-exception wording below is superseded. No further database or product authority change is included.
+
 The local AI-output correction and subsequent isolated synthetic AI release are
 governed by `docs/planning/assess-studio-ai-output-correction.md`.
 

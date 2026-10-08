@@ -7,9 +7,9 @@ const blockedHostedIds = bindings.hostedTests.filter(item => item.scenario === n
 
 const charterExcludedIds = [...charter.matchAll(/^- `([A-Z0-9]+-[0-9]{3})`$/gmu)].map(([, id]) => id).sort();
 assert.equal(charterExcludedIds.length, 15, "preserve the historical charter's fifteen exclusions");
-const subsequentlyBlockedAssessIds = ['ASSESS-018', 'ASSESS-019', 'ASSESS-020'];
-assert.deepEqual([...charterExcludedIds, ...subsequentlyBlockedAssessIds].sort(), blockedHostedIds,
-  'current blocked hosted bindings must preserve the historical exclusions and the three explicitly blocked Assess V2 cases');
+const subsequentlyBlockedIds = ['ASSESS-018', 'ASSESS-019', 'ASSESS-020', 'ADMIN-001'];
+assert.deepEqual([...charterExcludedIds, ...subsequentlyBlockedIds].sort(), blockedHostedIds,
+  'preserve historical exclusions plus the explicit Assess V2 and privileged Admin audit blocks');
 
 assert.match(charter, /Status: prepared, not executed\./u, 'preparation must not be represented as executed human evidence');
 assert.match(charter, /synthetic, non-evidentiary UX and product exploration/u, 'human testing must remain non-evidentiary product exploration');

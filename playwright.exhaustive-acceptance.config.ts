@@ -22,6 +22,7 @@ const reportMetadata = createAcceptanceReportMetadata({
   sourcePaths: [
     'tests/browser/exhaustiveHostedAcceptance.spec.ts',
     'tests/browser/productNavigationReadiness.ts',
+    'scripts/hostedSandboxAcceptanceEvidence.mjs',
   ],
 });
 const workflowPath = resolveHostedAcceptanceWorkflowPath({
