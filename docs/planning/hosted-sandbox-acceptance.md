@@ -49,6 +49,8 @@ Executed: attachment producer/validator tests (5/5), browser source contract, fo
 
 ## Rollback and next boundary
 
+Candidate `b9479a6e09dc56a72eaf8fa8ed2e10971041bffc` passed exact acceptance run `37794716004` and preview run `37794715998`. The preview artifact ZIP digest matched GitHub's recorded `sha256:b28198f4a256c5c0d2b52340246de5830810a0dee99ffefa425c3f925ede1d07`; independent validation verified all 18 measured cases across 36 project executions, including seven persona entries and four reconstruction transitions, with 38 explicit project skips. This is preview proof, not stable hosted acceptance. The Governed Delivery gate exposed an omitted refresh of its current source-digest index; refreshing that derived index restores the local contract check without changing tests or authority. Fresh final-head CI and artifact verification are required before merge.
+
 Revert browser evidence, catalog correction, bindings/provenance and report integration together. The safe fallback is the existing 40 PASS / 68 BLOCKED with hosted cases blocked; never flip static planned provenance to executed.
 
 After merge, separately authorize read-only stable identity inspection and one exact-main hosted workflow dispatch. If deployment identity differs, stop for the separately authorized deployment decision. Remaining blocked cases keep the full release gate incomplete even when all 18 supported browser cases pass. No paid AI or production operation is authorized.
