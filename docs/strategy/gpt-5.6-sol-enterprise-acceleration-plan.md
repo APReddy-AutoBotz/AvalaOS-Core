@@ -2,6 +2,8 @@
 
 ## Enterprise Intelligence acceptance continuation (2026-10-08)
 
+AP additionally approved the service-role-only authority-RPC permission correction exposed by actual-role acceptance run `37719047040`. Keep it in the existing unmerged migration, with browser denial and current-authority negative checks. This narrow exception supersedes the goal's runtime/schema exclusions for the size and authority-call corrections only. All remaining candidate workflows and preview passed on `2f53f369`; the four new EI cases remained BLOCKED. Fresh candidate evidence is required after this correction.
+
 PR #277 is merged with its tested tree unchanged, 36 PASS / 72 BLOCKED and successful candidate/post-merge CI. AP requested continued acceptance work. Architecture, security and quality read-only reviews are complete. Wave 2 uses the fixed workspace-write profile: one worker owns a dedicated four-case EI harness, producer and focused tests; the root owns shared integration, current documentation, verification and the single PR. Follow `docs/planning/enterprise-intelligence-acceptance.md`. Reuse the Enterprise fixture and current-chain guard, but avoid duplicating its broad seven-database regression matrix. A confirmed database size-limit mismatch prevents EI-001 PASS; AP explicitly approved its bounded forward constraint correction on 2026-10-08. Migration `20261008022445` and its compatible/incompatible-history checks remain confined to disposable PostgreSQL; this supersedes only the goal’s no-schema clause. No hosted operation, provider effect or scoring change is included.
 
 ## Govern authority acceptance continuation (2026-10-07)

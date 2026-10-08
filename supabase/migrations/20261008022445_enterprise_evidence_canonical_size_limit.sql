@@ -51,6 +51,15 @@ BEGIN
     RAISE EXCEPTION 'ENTERPRISE_SOURCE_SIZE_HISTORY_REQUIRES_REVIEW';
   END IF;
 
+  -- The Enterprise Intelligence Edge command boundary performs its final
+  -- current-version authority check through this existing server function.
+  -- Keep browser roles denied while making that exact check callable by the
+  -- server-held service role. This changes no function body or capability.
+  REVOKE EXECUTE ON FUNCTION public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)
+    FROM PUBLIC,anon,authenticated;
+  GRANT EXECUTE ON FUNCTION public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)
+    TO service_role;
+
   ALTER TABLE public.enterprise_evidence_source_versions
     ADD CONSTRAINT enterprise_evidence_source_versions_size_limit_check
     CHECK (content_bytes > 0 AND content_bytes <= 12000000);

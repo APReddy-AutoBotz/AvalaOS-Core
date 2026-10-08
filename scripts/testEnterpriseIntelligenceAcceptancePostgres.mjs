@@ -88,7 +88,7 @@ const markPhase = phase => { activeCasePhase = phase; };
 
 const boundaryCall = async (client, role, boundary, operation) => {
   assert.match(boundary, /^[a-z_]+$/u);
-  assert.ok(['service_role', 'authenticated'].includes(role));
+  assert.ok(['service_role', 'authenticated', 'anon'].includes(role));
   await client.query(`SAVEPOINT ${boundary}`);
   await client.query(`SET LOCAL ROLE ${role}`);
   try {
@@ -113,8 +113,17 @@ const authenticatedCall = (client, actorId, operation) => boundaryCall(
     return operation();
   },
 );
+const anonymousCall = (client, operation) => boundaryCall(
+  client,
+  'anon',
+  'ei_anonymous_boundary',
+  async () => {
+    await client.query("SELECT set_config('request.jwt.claim.sub','',true)");
+    return operation();
+  },
+);
 const expectRejectedWithoutEffect = async (client, label, operation, pattern, fingerprint) => {
-  assert.match(label, /^[a-z_]+$/u);
+  assert.match(label, /^[a-z_][a-z0-9_]*$/u);
   const before = await fingerprint();
   await client.query(`SAVEPOINT ${label}`);
   let rejected = false;
@@ -228,6 +237,105 @@ const assertAuthority = async (client, actorId, orgId, workspaceId, capability, 
   ),
 );
 
+const authorityPrivilege = async (client, role) => (await row(
+  client,
+  `SELECT has_function_privilege(
+    $1,'public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)','EXECUTE'
+  ) allowed`,
+  [role],
+)).allowed;
+
+const assertBrowserAuthorityDenied = async (client, actorId, orgId, workspaceId, capability, version) => {
+  const fingerprint = () => targetFingerprint(client, orgId, workspaceId);
+  const authenticatedDenied = await expectRejectedWithoutEffect(client, 'ei_browser_authenticated',
+    () => authenticatedCall(client, actorId, () => client.query(
+      'SELECT public.pr1b_assert_command_authority($1,$2,$3,$4,$5)',
+      [actorId, orgId, workspaceId, capability, version],
+    )), /permission denied|does not exist/u, fingerprint);
+  const anonymousDenied = await expectRejectedWithoutEffect(client, 'ei_browser_anon',
+    () => anonymousCall(client, () => client.query(
+      'SELECT public.pr1b_assert_command_authority($1,$2,$3,$4,$5)',
+      [actorId, orgId, workspaceId, capability, version],
+    )), /permission denied|does not exist/u, fingerprint);
+  return authenticatedDenied && anonymousDenied;
+};
+
+const assertStaleAndRemovedMembershipDenied = async (client, actorId, orgId, workspaceId, capability, version) => {
+  const before = await targetFingerprint(client, orgId, workspaceId);
+  await client.query('SAVEPOINT ei_authority_version_denials');
+  try {
+    const bumped = await client.query(
+      `UPDATE public.workspace_memberships SET status=status
+       WHERE user_id=$1 AND org_id=$2 AND workspace_id=$3`,
+      [actorId, orgId, workspaceId],
+    );
+    assert.equal(bumped.rowCount, 1);
+    const currentVersion = await authorizationVersion(client, orgId, actorId);
+    assert.ok(currentVersion > version);
+    await assert.rejects(
+      assertAuthority(client, actorId, orgId, workspaceId, capability, version),
+      /PR1B_AUTHORIZATION_STALE/u,
+    );
+    await assertAuthority(client, actorId, orgId, workspaceId, capability, currentVersion);
+    assert.deepEqual(await targetFingerprint(client, orgId, workspaceId), before);
+  } finally {
+    await client.query('ROLLBACK TO SAVEPOINT ei_authority_version_denials');
+    await client.query('RELEASE SAVEPOINT ei_authority_version_denials');
+  }
+
+  await client.query('SAVEPOINT ei_membership_denial');
+  try {
+    const removed = await client.query(
+      `DELETE FROM public.workspace_memberships
+       WHERE user_id=$1 AND org_id=$2 AND workspace_id=$3`,
+      [actorId, orgId, workspaceId],
+    );
+    assert.equal(removed.rowCount, 1);
+    const removedVersion = await authorizationVersion(client, orgId, actorId);
+    assert.ok(removedVersion > version);
+    await assert.rejects(
+      assertAuthority(client, actorId, orgId, workspaceId, capability, removedVersion),
+      /PR1B_NOT_FOUND/u,
+    );
+    assert.deepEqual(await targetFingerprint(client, orgId, workspaceId), before);
+  } finally {
+    await client.query('ROLLBACK TO SAVEPOINT ei_membership_denial');
+    await client.query('RELEASE SAVEPOINT ei_membership_denial');
+  }
+  return true;
+};
+
+const insertHistoricalOversizedSource = async client => {
+  const sourceId = uuid(901);
+  const sourceVersionId = uuid(902);
+  const contentHash = '9'.repeat(64);
+  const contentBytes = 12_000_001;
+  const parserKind = 'text_native';
+  const parserVersion = 'enterprise-parser-1';
+  const provenanceHash = await serverHash(client, {
+    sourceId, sourceVersionId, version: 1,
+    organizationId: fixture.org, workspaceId: fixture.workspace,
+    mimeType: 'text/plain', contentHash, contentBytes, parserKind, parserVersion,
+  });
+  await client.query(
+    `INSERT INTO public.enterprise_evidence_sources(
+      id,org_id,workspace_id,display_name,source_kind,mime_type,current_version,status,created_by
+    ) VALUES($1,$2,$3,'EI predecessor oversized history','upload','text/plain',1,'uploaded',$4)`,
+    [sourceId, fixture.org, fixture.workspace, fixture.requester],
+  );
+  await client.query(
+    `INSERT INTO public.enterprise_evidence_source_versions(
+      id,source_id,org_id,workspace_id,version,original_filename,content_hash,content_bytes,
+      storage_bucket,storage_path,extracted_text_hash,extracted_character_count,
+      parser_kind,parser_version,provenance_hash,created_by
+    ) VALUES($1,$2,$3,$4,1,'predecessor-oversized.txt',$5,12000001,
+      'source-uploads',$6,NULL,NULL,$7,$8,$9,$10)`,
+    [sourceVersionId, sourceId, fixture.org, fixture.workspace, contentHash,
+      `${fixture.org}/${fixture.workspace}/enterprise-evidence/${sourceId}.bin`,
+      parserKind, parserVersion, provenanceHash, fixture.requester],
+  );
+};
+
 const runSourceCommand = async (client, options) => {
   const orgId = options.orgId ?? fixture.org;
   const workspaceId = options.workspaceId ?? fixture.workspace;
@@ -257,9 +365,9 @@ const runSourceCommand = async (client, options) => {
   const requestHash = await serverHash(client, requestPayload);
   await assertAuthority(client, actorId, orgId, workspaceId, 'evidence.write', options.authorizationVersion);
   const receipt = (await serviceCall(client, () => client.query(
-    `SELECT (public.enterprise_ai_claim_command(
+    `SELECT * FROM public.enterprise_ai_claim_command(
       $1,$2,$3,'evidence.source.create',$4,$5,$6,NULL,$7
-    )).*`,
+    )`,
     [actorId, orgId, workspaceId, options.idempotencyKey, options.requestId, requestHash, options.executionToken],
   ))).rows[0];
   await serviceCall(client, () => client.query(
@@ -295,7 +403,7 @@ const runSourceCommand = async (client, options) => {
       receipt.execution_fence, JSON.stringify(finalResult)],
   ));
   const completed = (await serviceCall(client, () => client.query(
-    'SELECT (public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)).*',
+    'SELECT * FROM public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)',
     [receipt.id, orgId, workspaceId, receipt.execution_token, receipt.execution_fence,
       JSON.stringify(finalResult), options.sourceId],
   ))).rows[0];
@@ -333,9 +441,9 @@ const attemptRejectedSourceRecord = async (client, options) => {
 const replayCommand = async (client, command, authorization, capability = 'evidence.write') => {
   await assertAuthority(client, command.actorId, command.orgId, command.workspaceId, capability, authorization);
   return (await serviceCall(client, () => client.query(
-    `SELECT (public.enterprise_ai_claim_command(
+    `SELECT * FROM public.enterprise_ai_claim_command(
       $1,$2,$3,$4,$5,$6,$7,NULL,$8
-    )).*`,
+    )`,
     [command.actorId, command.orgId, command.workspaceId, command.commandType,
       command.idempotencyKey, command.requestId, command.requestHash, command.executionToken],
   ))).rows[0];
@@ -532,12 +640,19 @@ try {
 
   // Exercise the exact successor from its predecessor, before fixture rows exist.
   const sizeSql = await readFile(join('supabase/migrations', sizeLimitMigration), 'utf8');
+  assert.equal(await authorityPrivilege(db, 'service_role'), false);
+  assert.equal(await authorityPrivilege(db, 'authenticated'), false);
+  assert.equal(await authorityPrivilege(db, 'anon'), false);
   activeCasePhase = 'setup-empty-size-upgrade';
   await db.query('BEGIN');
   try {
     await db.query(sizeSql);
     assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261008022445');
+    assert.equal(await authorityPrivilege(db, 'service_role'), true);
+    assert.equal(await authorityPrivilege(db, 'authenticated'), false);
+    assert.equal(await authorityPrivilege(db, 'anon'), false);
   } finally { await db.query('ROLLBACK'); }
+  assert.equal(await authorityPrivilege(db, 'service_role'), false);
 
   // Shared SQL-only prerequisites simulate completed provider output. They make
   // no HTTP/provider call and are not target mutations. Disable both runtimes
@@ -563,17 +678,15 @@ try {
   activeCasePhase = 'setup-incompatible-size-upgrade';
   await db.query('BEGIN');
   try {
-    await runSourceCommand(db, {
-      sourceId: uuid(901), sourceVersionId: uuid(902), requestId: uuid(903),
-      executionToken: uuid(904), idempotencyKey: 'ei-001-historical-limit-fixture',
-      authorizationVersion: await authorizationVersion(db, fixture.org, fixture.requester),
-      contentBytes: 12_000_001,
-    });
+    // Predecessor-only history prerequisite. This owner-level fixture write is
+    // rolled back and is not evidence for any target acceptance operation.
+    await insertHistoricalOversizedSource(db);
     const incompatibleBefore = await targetFingerprint(db, fixture.org, fixture.workspace);
     await db.query('SAVEPOINT size_migration_attempt');
     await assert.rejects(db.query(sizeSql), /ENTERPRISE_SOURCE_SIZE_HISTORY_REQUIRES_REVIEW/u);
     await db.query('ROLLBACK TO SAVEPOINT size_migration_attempt');
     await db.query('RELEASE SAVEPOINT size_migration_attempt');
+    assert.equal(await authorityPrivilege(db, 'service_role'), false);
     assert.deepEqual(await targetFingerprint(db, fixture.org, fixture.workspace), incompatibleBefore);
     const oldConstraint = await row(db, `SELECT pg_get_constraintdef(oid) definition
       FROM pg_constraint WHERE conrelid='public.enterprise_evidence_source_versions'::regclass
@@ -593,6 +706,9 @@ try {
       AND pg_get_constraintdef(oid) LIKE '%content_bytes%'`)).rows.map(item => item.definition).join(' ');
   assert.match(contentBytesConstraint, /content_bytes\s*<=\s*12000000/u);
   assert.doesNotMatch(contentBytesConstraint, /12582912/u);
+  assert.equal(await authorityPrivilege(db, 'service_role'), true);
+  assert.equal(await authorityPrivilege(db, 'authenticated'), false);
+  assert.equal(await authorityPrivilege(db, 'anon'), false);
   assert.equal((await row(db, "SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).allowed, true);
   assert.equal((await row(db, "SELECT has_function_privilege('authenticated','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).allowed, false);
   assert.equal(await providerDisabled(db), true);
@@ -616,6 +732,12 @@ try {
     assert.equal(inspected.version.extraction_status, 'parsed');
     assert.equal(inspected.version.extracted_text_hash, parserActual.extractedTextHash);
     assert.equal(committed.receipt.status, 'committed');
+
+    markPhase('authority-boundary-denials');
+    assert.equal(await assertBrowserAuthorityDenied(db, fixture.requester, fixture.org,
+      fixture.workspace, 'evidence.write', authVersion), true);
+    assert.equal(await assertStaleAndRemovedMembershipDenied(db, fixture.requester, fixture.org,
+      fixture.workspace, 'evidence.write', authVersion), true);
 
     markPhase('oversize-denial');
     const oversizeRejected = await expectRejectedWithoutEffect(db, 'ei_001_oversize',
@@ -872,9 +994,9 @@ try {
     const providerBefore = await providerFootprint(db, fixture.org, fixture.workspace);
     await assertAuthority(db, fixture.requester, fixture.org, fixture.workspace, 'assemble.manage', authVersion);
     const receipt = (await serviceCall(db, () => db.query(
-      `SELECT (public.enterprise_ai_claim_command(
+      `SELECT * FROM public.enterprise_ai_claim_command(
         $1,$2,$3,'assemble.blueprint.create',$4,$5,$6,NULL,$7
-      )).*`,
+      )`,
       [fixture.requester, fixture.org, fixture.workspace, 'ei-005-draft-blueprint',
         uuid(5013), requestHash, uuid(5014)],
     ))).rows[0];
@@ -897,7 +1019,7 @@ try {
     ))).rows[0].value;
     assert.deepEqual(committed, finalResult);
     const completed = (await serviceCall(db, () => db.query(
-      'SELECT (public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)).*',
+      'SELECT * FROM public.enterprise_ai_complete_command($1,$2,$3,$4,$5,$6::jsonb,$7)',
       [receipt.id, fixture.org, fixture.workspace, receipt.execution_token,
         receipt.execution_fence, JSON.stringify(finalResult), blueprintId],
     ))).rows[0];
@@ -955,10 +1077,12 @@ try {
       hostedExecutionNotRun: true,
     };
   });
-} catch {
+} catch (error) {
   setupFailurePhase = String(activeCasePhase).startsWith('setup-')
     ? activeCasePhase : 'setup-foundation';
-  console.error(`BLOCKED Enterprise Intelligence acceptance phase=${setupFailurePhase} setup_failed`);
+  const sqlState = typeof error?.code === 'string' && /^[0-9A-Z]{5}$/u.test(error.code)
+    ? error.code : 'unknown';
+  console.error(`BLOCKED Enterprise Intelligence acceptance phase=${setupFailurePhase} setup_failed sqlstate=${sqlState}`);
 } finally {
   if (parserTempDirectory) {
     try { await removeParserOutput(); }

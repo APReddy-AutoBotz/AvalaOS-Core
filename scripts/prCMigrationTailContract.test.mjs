@@ -97,11 +97,14 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
 });
 
-test('canonical source-size successor advances only exact current identity consumers', () => {
+test('canonical source-size successor advances exact identity and only approved authority access', () => {
   const sql = readFileSync(
     'supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql', 'utf8',
   ).replaceAll('\r\n', '\n');
+  const authorityGrant = 'GRANT EXECUTE ON FUNCTION public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)\n    TO service_role;';
+  const authorityRevoke = 'REVOKE EXECUTE ON FUNCTION public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)\n    FROM PUBLIC,anon,authenticated;';
   const required = [
+    authorityGrant, authorityRevoke,
     "marker.migration_tip<>'20261004112232'",
     "marker_constraint<>'(migration_tip = ''20261004112232''::text)'",
     "old_not_equal text:='marker.migration_tip<>''20261004112232'''",
@@ -126,11 +129,13 @@ test('canonical source-size successor advances only exact current identity consu
   ];
   for (const marker of required) assert.ok(sql.includes(marker), `missing source-size identity contract: ${marker}`);
   assert.match(sql, /CHECK\(migration_tip IN\([^)]*'20261004112232','20261008022445'\)\)/u);
-  assert.doesNotMatch(sql.replace(/^--.*$/gmu, ''), /(?:GRANT|CREATE ROLE|ALTER ROLE|DROP TABLE)/iu);
+  const hasOnlyApprovedGrant = candidate => candidate.split(authorityGrant).length === 2
+    && !/(?:GRANT|CREATE ROLE|ALTER ROLE|DROP TABLE)/iu.test(candidate.replace(authorityGrant, '').replace(/^\s*--.*$/gmu, ''));
+  assert.ok(hasOnlyApprovedGrant(sql));
   assert.doesNotMatch(sql, /UPDATE public\.(?:enterprise_intelligence|studio_artifact)_runtime_control/iu);
   const validates = candidate => required.every(marker => candidate.includes(marker))
     && /CHECK\(migration_tip IN\([^)]*'20261004112232','20261008022445'\)\)/u.test(candidate)
-    && !/(?:GRANT|CREATE ROLE|ALTER ROLE|DROP TABLE)/iu.test(candidate.replace(/^--.*$/gmu, ''))
+    && hasOnlyApprovedGrant(candidate)
     && !/UPDATE public\.(?:enterprise_intelligence|studio_artifact)_runtime_control/iu.test(candidate);
   assert.equal(validates(sql), true);
   for (const hostile of [
@@ -139,6 +144,9 @@ test('canonical source-size successor advances only exact current identity consu
     sql.replace("CHECK(migration_tip='20261008022445')", "CHECK(migration_tip='20261004112232')"),
     sql.replace("'20261004112232','20261008022445'", "'20261008022445'"),
     `${sql}\nGRANT EXECUTE ON FUNCTION public.pr_c_controlled_human_assert_marker() TO authenticated;`,
+    sql.replace(authorityGrant, authorityGrant.replace('TO service_role;', 'TO authenticated;')),
+    sql.replace(authorityGrant, authorityGrant.replace('TO service_role;', 'TO service_role, PUBLIC;')),
+    `${sql}\n${authorityGrant}`,
     `${sql}\nUPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true;`,
   ]) assert.equal(validates(hostile), false);
 });
