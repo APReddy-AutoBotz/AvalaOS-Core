@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Govern authority acceptance continuation (2026-10-07)
+
+PR #276 is merged with its tested tree unchanged, 33 PASS / 75 BLOCKED and green candidate/post-merge CI. AP requested the next tasks under existing authority for focused acceptance work and verified merges. Architecture, security and quality reviews are complete and closed. Wave 2 uses the fixed workspace-write profile for GOVERN-008/009/010 only; one worker owns the narrow Govern harness/producer/tests, and the root owns shared integration, canonical documentation, verification and one PR. Follow `docs/planning/govern-authority-acceptance.md`. One real authorized decision plus zero-effect authority/replay challenges preserves each criterion; fixture and revocation writes are not target mutations. Delivery legacy import/retained-task cases require an explicit authority/meaning decision before a different command can count as proof. No runtime, schema, scoring, hosted or paid changes are included.
+
 ## Studio lifecycle acceptance continuation (2026-10-07)
 
 PR #275 is merged with its tested tree unchanged, 26 PASS / 82 BLOCKED and green candidate/post-merge CI. AP authorized continued testing and verified merges. The three architecture, security and quality reviews are complete and closed. Wave 2 now uses the fixed workspace-write profile for one focused seven-case Studio lifecycle implementation. One implementation worker owns the new PostgreSQL harness, narrow producer and focused tests; the root owns shared integration, provenance, documentation, verification and the single PR. Follow `docs/planning/studio-lifecycle-acceptance.md`. Preserve runtime, schema, scoring, dependencies and acceptance criteria; no broader local regression, hosted operation or paid effect. The remaining read-only EI tenant-isolation case has a one-mutation catalog mismatch and stays BLOCKED pending a separate correction.

@@ -694,3 +694,150 @@ test('Studio retained runner keeps per-case outcomes while failing the CI gate',
     rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('Govern PostgreSQL report promotes only three authority cases and rejects substituted evidence', async () => {
+  const { buildGovernAcceptanceProducer, GOVERN_ACCEPTANCE_TEST_IDS } = await import('./governAcceptanceEvidence.mjs');
+  const suite = loadExecutionBindings().retainedSuites.find(item => item.suiteId === 'govern-postgres-acceptance');
+  const command = suite.command.join(' ');
+  const identity = { releaseSha, workflowRunId: '123456', workflowAttempt: '2', environment: 'pull-request', workflowPath };
+  const makeProducer = failure => {
+    // Explicit unit inputs: this report test does not execute PostgreSQL or Storage.
+    const actualByTestId = JSON.parse(readFileSync('tests/acceptance/fixtures/govern-evidence-unit-results.json', 'utf8'));
+    const failuresByTestId = {};
+    const blockedByTestId = {};
+    if (failure) {
+      delete actualByTestId['GOVERN-010'];
+      if (failure === 'blocked') blockedByTestId['GOVERN-010'] = { failureCode: 'setup_failed' };
+      else failuresByTestId['GOVERN-010'] = { failureCode: 'assertion_failed' };
+    }
+    return buildGovernAcceptanceProducer({ actualByTestId, failuresByTestId, blockedByTestId, identity, command, cleanupVerified: true });
+  };
+  const variants = [
+    ['valid', () => {}, false, 3, 0],
+    ['source substitution', m => { const i = m.results[0]; i.sourceDigests[Object.keys(i.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
+    ['result substitution', m => { m.results[0].actual.logicalMutationCount = 0; }, false, 0, 0],
+    ['hosted case substitution', m => { m.results[0].testId = 'GOVERN-007'; }, false, 0, 0],
+    ['cleanup substitution', m => { m.results[0].cleanupVerified = false; }, false, 0, 0],
+    ['partial artifact', m => { m.results.pop(); }, false, 0, 0],
+    ['executed failure despite aggregate success', () => {}, true, 2, 1],
+    ['setup blocked without product failure', () => {}, 'blocked', 2, 0],
+    ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 3],
+    ['aggregate-only', m => { m.results = []; }, false, 0, 0],
+  ];
+  for (const [name, mutate, failure, passed, failed] of variants) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-govern-report-'));
+    try {
+      const retainedPath = path.join(temp, 'retained.json');
+      const manifest = {
+        schemaVersion: 3, manifestKind: 'retained', ...identity,
+        suites: [{ suiteId: suite.suiteId, status: 'PASS', command, requiredGate: true, testIds: suite.testIds }],
+        results: structuredClone(makeProducer(failure).results),
+      };
+      mutate(manifest);
+      writeFileSync(retainedPath, JSON.stringify(manifest));
+      const resultsDir = path.join(temp, 'report');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: identity.workflowRunId,
+          GITHUB_RUN_ATTEMPT: identity.workflowAttempt, ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+          ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request', ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
+          ACCEPTANCE_RESULTS_DIR: resultsDir, RETAINED_RESULTS_MANIFEST: retainedPath,
+          ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+          SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+          PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
+        },
+      });
+      const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.equal(report.summary.PASS, passed, `${name}: ${report.summary.preflightFailure ?? run.stderr}`);
+      assert.equal(report.summary.FAIL, failed, name);
+      assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
+      assert.deepEqual(report.results.filter(i => i.status === 'PASS').map(i => i.testId).sort(),
+        passed === 3 ? [...GOVERN_ACCEPTANCE_TEST_IDS].sort() : passed === 2 ? GOVERN_ACCEPTANCE_TEST_IDS.filter(id => id !== 'GOVERN-010').sort() : [], name);
+      for (const item of report.results.filter(i => !GOVERN_ACCEPTANCE_TEST_IDS.includes(i.testId))) {
+        assert.equal(item.status, 'BLOCKED', `${name}:${item.testId}`);
+      }
+      if (failed) assert.equal(report.results.find(i => i.testId === 'GOVERN-010').status, 'FAIL', name);
+      if (passed === 3) assert.equal(run.status, 0, run.stderr);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }
+});
+
+
+test('Govern actual harness emits BLOCKED for missing configuration without database access', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-govern-missing-config-'));
+  try {
+    const resultPath = path.join(temp, 'result.json');
+    const run = spawnSync(process.execPath, ['scripts/testGovernAcceptancePostgres.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: {
+        ...process.env, GOVERN_ACCEPTANCE_DATABASE_URL: '', RELEASE_SHA: releaseSha,
+        GITHUB_RUN_ID: '123456', GITHUB_RUN_ATTEMPT: '2',
+        ACCEPTANCE_WORKFLOW_PATH: workflowPath, ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+        RETAINED_TEST_ID_RESULTS: resultPath,
+        RETAINED_SUITE_COMMAND: 'node scripts/testGovernAcceptancePostgres.mjs',
+      },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const emitted = JSON.parse(readFileSync(resultPath, 'utf8'));
+    assert.equal(emitted.results.length, 3);
+    assert.ok(emitted.results.every(item => item.status === 'BLOCKED'
+      && item.failureCode === 'setup_failed' && item.actual === null && item.cleanupVerified === true));
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('Govern retained runner keeps per-case outcomes while failing the CI gate', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-govern-retained-runner-'));
+  try {
+    const producerPath = path.join(temp, 'unit-producer.mjs');
+    const helperUrl = new URL('./governAcceptanceEvidence.mjs', import.meta.url).href;
+    // Test-only producer inputs exercise process/result transport; no PostgreSQL claim.
+    writeFileSync(producerPath, `
+      import fs from 'node:fs';
+      import { writeGovernAcceptanceProducer } from ${JSON.stringify(helperUrl)};
+      const actualByTestId = JSON.parse(fs.readFileSync('tests/acceptance/fixtures/govern-evidence-unit-results.json', 'utf8'));
+      const failuresByTestId = {}, blockedByTestId = {};
+      if (process.env.GOVERN_UNIT_OUTCOME !== 'PASS') {
+        delete actualByTestId['GOVERN-010'];
+        if (process.env.GOVERN_UNIT_OUTCOME === 'FAIL') failuresByTestId['GOVERN-010'] = { failureCode: 'assertion_failed' };
+        else blockedByTestId['GOVERN-010'] = { failureCode: 'setup_failed' };
+      }
+      writeGovernAcceptanceProducer(process.env.RETAINED_TEST_ID_RESULTS, {
+        actualByTestId, failuresByTestId, blockedByTestId, cleanupVerified: true,
+        command: process.env.RETAINED_SUITE_COMMAND,
+        identity: {
+          releaseSha: process.env.RELEASE_SHA, workflowRunId: process.env.GITHUB_RUN_ID,
+          workflowAttempt: process.env.GITHUB_RUN_ATTEMPT, environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT,
+          workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH,
+        },
+      });
+    `);
+    const suite = loadExecutionBindings().retainedSuites.find(i => i.suiteId === 'govern-postgres-acceptance');
+    const bindingsPath = path.join(temp, 'bindings.json');
+    writeFileSync(bindingsPath, JSON.stringify({ retainedSuites: [{ ...suite, command: [process.execPath, producerPath] }] }));
+    for (const outcome of ['PASS', 'FAIL', 'BLOCKED']) {
+      const manifestPath = path.join(temp, `retained-${outcome}.json`);
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveRetainedSuites.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: '123456', GITHUB_RUN_ATTEMPT: '2',
+          ACCEPTANCE_WORKFLOW_PATH: workflowPath, ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+          ACCEPTANCE_BINDINGS: bindingsPath, RETAINED_RESULTS_MANIFEST: manifestPath,
+          GOVERN_UNIT_OUTCOME: outcome,
+        },
+      });
+      assert.equal(run.status, outcome === 'PASS' ? 0 : 1, `${outcome}: ${run.stderr}`);
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      assert.equal(manifest.suites[0].status, 'PASS', 'producer execution completed and emitted validated independent outcomes');
+      assert.equal(manifest.results.length, 3);
+      assert.equal(manifest.results.find(i => i.testId === 'GOVERN-010').status, outcome);
+      assert.equal(manifest.results.filter(i => i.testId !== 'GOVERN-010' && i.status === 'PASS').length, 2);
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});

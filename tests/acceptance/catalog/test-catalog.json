@@ -2388,7 +2388,14 @@
       "feature": "stale",
       "ruleRequirement": "stale authority",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "scripts/testGovernAcceptancePostgres.mjs",
+        "scripts/governAcceptanceEvidence.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/assessV2/reviewDomain.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql",
+        "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql"
       ],
       "branchIds": [
         "GOVERN-STALE_AUTHORITY"
@@ -2397,7 +2404,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-govern-authority-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2438,7 +2445,14 @@
       "feature": "revoked",
       "ruleRequirement": "revoked authority",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "scripts/testGovernAcceptancePostgres.mjs",
+        "scripts/governAcceptanceEvidence.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/assessV2/reviewDomain.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql",
+        "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql"
       ],
       "branchIds": [
         "GOVERN-REVOKED_AUTHORITY"
@@ -2447,7 +2461,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-govern-authority-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -2488,7 +2502,14 @@
       "feature": "duplicate",
       "ruleRequirement": "duplicate decision",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "scripts/testGovernAcceptancePostgres.mjs",
+        "scripts/governAcceptanceEvidence.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/assessV2/reviewDomain.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql",
+        "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql",
+        "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql"
       ],
       "branchIds": [
         "GOVERN-DUPLICATE_DECISION"
@@ -2497,7 +2518,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-govern-authority-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
