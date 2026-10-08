@@ -18,7 +18,7 @@
     "scripts/hostedPilotActivation.mjs": "sha256:375a869fb088b4581bd26b95ecf523da050cc8b01266bef81375fd2ba4d43449",
     "scripts/hostedPilotActivation.test.mjs": "sha256:ed6856426b58472beb3a0488f3f85da8f139627d97ebd4ff6a61f34481c2f9b9",
     "scripts/runTranscriptFlowBrowser.mjs": "sha256:80bc32eb5535adbd4db23b776333685016a9b33a0e471436b97134abd26450ca",
-    "scripts/runTranscriptFlowBrowser.test.mjs": "sha256:50bfc3c225a5d5e341346e08783c5b4ea8d1a9e820fb02b153415c17eb277e70",
+    "scripts/runTranscriptFlowBrowser.test.mjs": "sha256:09e25dfb5e390ab753795f46c50bb33730eba5b4458b501fd87471f5653176ef",
     "scripts/runTranscriptFlowCoverage.mjs": "sha256:c0c50a83f8837f11d471414d227d01f6ef315e6aa55f61d82ac1017a5ad5d076",
     "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
     "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
