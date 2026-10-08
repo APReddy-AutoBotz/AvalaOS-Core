@@ -60,6 +60,7 @@ export const browserModeByFlag = new Map([
       sourcePaths: [
         'tests/browser/exhaustiveHostedAcceptance.spec.ts',
         'tests/browser/productNavigationReadiness.ts',
+        'scripts/hostedSandboxAcceptanceEvidence.mjs',
         'tests/acceptance/execution-bindings.json',
         'tests/acceptance/catalog/test-catalog.json',
       ],

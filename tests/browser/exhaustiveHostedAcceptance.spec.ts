@@ -8,6 +8,10 @@ import {
   decodeAcceptanceExecutionProfile,
   summarizeFullPageColorContrast,
 } from '../../scripts/acceptanceExecutionProfile.mjs';
+import {
+  HOSTED_SANDBOX_ACCEPTANCE_CASES,
+  createHostedSandboxAcceptanceAttachment,
+} from '../../scripts/hostedSandboxAcceptanceEvidence.mjs';
 import { createAuthorityRequestObserver } from './authorityRequestObserver';
 import { openProductNavigation } from './productNavigationReadiness';
 
@@ -61,6 +65,38 @@ type MainAnimationRestoreState = {
   playbackRate: number;
   playState: AnimationPlayState;
 };
+type HostedSandboxMeasurement = {
+  testId: string;
+  targetActions: string[];
+  supportingActions: string[];
+  target: (action: string) => void;
+  support: (action: string) => void;
+};
+
+const createHostedSandboxMeasurement = (testId: string): HostedSandboxMeasurement => {
+  if (!Object.hasOwn(HOSTED_SANDBOX_ACCEPTANCE_CASES, testId)) {
+    throw new Error(`Hosted Sandbox measurement does not own ${testId}`);
+  }
+  const targetActions: string[] = [];
+  const supportingActions: string[] = [];
+  const record = (collection: string[], action: string) => {
+    expect(action, 'measured Hosted Sandbox actions must use sanitized fixed tokens')
+      .toMatch(/^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$/u);
+    expect(collection, `duplicate measured Hosted Sandbox action ${action}`).not.toContain(action);
+    collection.push(action);
+  };
+  return {
+    testId,
+    targetActions,
+    supportingActions,
+    target: action => record(targetActions, action),
+    support: action => record(supportingActions, action),
+  };
+};
+
+const personaActionToken = (prefix: 'persona-entry' | 'persona-session', label: string) => (
+  `${prefix}:${label.toLowerCase().replaceAll(' ', '-')}`
+);
 
 type NetworkViolationCategory = 'credential-header' | 'non-read-method' | 'unexpected-origin' | 'unexpected-document-route' | 'authority-request' | 'unexpected-resource';
 type NetworkViolation = { method: string; category: NetworkViolationCategory; resourceType: string; originClass: string; staticDiagnostic?: ReturnType<typeof rejectedStaticRequestDiagnostic> };
@@ -737,7 +773,12 @@ const runObservedPersonaJourney = async (
   observer.assertSafe();
 };
 
-const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => {
+const runScenario = async (
+  scenario: string,
+  page: Page,
+  testInfo: TestInfo,
+  measurement: HostedSandboxMeasurement,
+) => {
   switch (scenario) {
     case 'sandbox-access':
       await openSandbox(page);
@@ -751,17 +792,20 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await page.getByRole('button', { name: `Enter sandbox as ${label}` }).click();
         await assertActivePersona(page, userName);
         await signOutToSandbox(page);
+        measurement.target(personaActionToken('persona-entry', label));
       }
       return;
     case 'local-authority': {
       for (const [label, userName] of personas) {
         await runObservedPersonaJourney(page, label, userName);
+        measurement.support(personaActionToken('persona-session', label));
       }
       return;
     }
     case 'network-safety': {
       for (const [label, userName] of personas) {
         await runObservedPersonaJourney(page, label, userName);
+        measurement.support(personaActionToken('persona-session', label));
       }
       return;
     }
@@ -780,6 +824,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await assertActivePersona(page, userName);
         await assertNoOverflow(page);
         await signOutToSandbox(page);
+        measurement.support(personaActionToken('persona-session', label));
       }
       return;
     case 'keyboard-a11y': {
@@ -804,6 +849,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         await assertMainScreenAnimationTimeline(page, 'reduce');
         if (personaIndex === 0) await assertContrastOracleRejectsOccludedMotion(page);
         await signOutToSandbox(page);
+        measurement.support(personaActionToken('persona-session', label));
       }
       return;
     }
@@ -828,6 +874,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'process-create': {
       await enterPersona(page, 'Process Analyst');
+      measurement.support('persona-session:process-analyst');
       await clickProductNav(page, 'Assess');
       await expect(page.getByTestId('process-catalog-view')).toBeVisible();
       await page.getByRole('button', { name: 'New process' }).click();
@@ -838,6 +885,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByLabel('Assessed Criticality').selectOption('High');
       await page.getByRole('button', { name: 'Create Process' }).click();
       await expect(page.getByText(name, { exact: true })).toBeVisible();
+      measurement.target('process-create');
       return;
     }
     case 'completed-assessment': {
@@ -850,6 +898,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'incomplete-assessment': {
       await enterPersona(page, 'Process Analyst');
+      measurement.support('persona-session:process-analyst');
       await clickProductNav(page, 'Assess');
       await page.getByRole('button', { name: 'New process' }).click();
       const name = `QA Incomplete ${releaseSha?.slice(0, 7)}`;
@@ -857,6 +906,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByRole('button', { name: 'Create Process' }).click();
       const row = page.getByRole('row').filter({ hasText: name });
       await expect(row).toContainText('Not Started');
+      measurement.target('incomplete-process-create');
       await row.getByRole('button', { name, exact: true }).click();
       await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
       await expect(page.getByText('In discovery', { exact: true })).toBeVisible();
@@ -869,6 +919,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await page.getByPlaceholder('Example: invoice exceptions wait for AP manager review; vendor master mismatches require manual email follow-up.').fill('Synthetic bottleneck discovered during intake.');
       await page.getByRole('button', { name: 'Save Draft *', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save Draft', exact: true })).toBeVisible();
+      measurement.support('draft-save');
       await page.getByRole('button', { name: 'Back to Process', exact: true }).click();
       await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
       await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
@@ -972,8 +1023,14 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       await assertAdminWorkbenchAndDeniedIntelligence(page);
       return;
     case 'reload-reconstruction': {
+      const recordInvalidScope = (action: string) => {
+        if (measurement.testId === 'SAFETY-004') measurement.target(action);
+        else measurement.support(action);
+      };
       await enterPersona(page, 'Delivery Lead');
+      measurement.support('persona-session:delivery-lead');
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
+      measurement.support('scope-selection:initial-project');
       await assertActivePersona(page, 'Alicia Morgan');
       await expect.poll(
         () => readDurableProjectNavigation(page),
@@ -986,7 +1043,9 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       }));
       assertHostedResponseIdentity(invalidBoardsResponse);
       await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
+      recordInvalidScope('invalid-scope-reconstruction:initial-stale-boards');
       await selectProjectScope(page, 'AP Invoice Exception Workflow');
+      measurement.support('scope-restoration:boards');
       await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalBoardsNavigation);
       await clickProductNav(page, 'Delivery');
       await clickProductNav(page, 'Delivery Pack');
@@ -1000,15 +1059,28 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
       expect(canonicalPersistedScope, 'the canonical project scope must exist before stale-scope rejection coverage').not.toBeNull();
       const canonicalUrl = page.url();
       const invalidPersistedScopes = [
-        JSON.stringify({ type: 'project', id: 'stale-different-project', name: 'Stale Different Project' }),
-        null,
-        '{malformed',
+        {
+          value: JSON.stringify({ type: 'project', id: 'stale-different-project', name: 'Stale Different Project' }),
+          action: 'invalid-scope-reconstruction:stale-delivery-pack',
+          restoration: 'scope-restoration:stale-delivery-pack',
+        },
+        {
+          value: null,
+          action: 'invalid-scope-reconstruction:missing-delivery-pack',
+          restoration: 'scope-restoration:missing-delivery-pack',
+        },
+        {
+          value: '{malformed',
+          action: 'invalid-scope-reconstruction:malformed-delivery-pack',
+          restoration: 'scope-restoration:malformed-delivery-pack',
+        },
       ];
       for (const invalidScope of invalidPersistedScopes) {
-        const invalidResponse = await reloadWithPersistedScopeAtDocumentStart(page, invalidScope);
+        const invalidResponse = await reloadWithPersistedScopeAtDocumentStart(page, invalidScope.value);
         assertHostedResponseIdentity(invalidResponse);
         await expect(page).not.toHaveURL(/projectId=/u, { timeout: 15_000 });
         await expect(page.getByRole('heading', { name: 'AP Invoice Exception Workflow Governed Delivery Pack', exact: true })).toHaveCount(0);
+        recordInvalidScope(invalidScope.action);
 
         await page.evaluate(scope => {
           localStorage.setItem('avalaos-core-v1-scope', scope!);
@@ -1017,6 +1089,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
         const setupResponse = await page.goto(canonicalUrl, { waitUntil: 'domcontentloaded' });
         assertHostedResponseIdentity(setupResponse);
         await expect.poll(() => readDurableProjectNavigation(page)).toEqual(canonicalDeliveryPackNavigation);
+        measurement.support(invalidScope.restoration);
       }
 
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
@@ -1033,6 +1106,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
     }
     case 'horizontal-overflow':
       await enterPersona(page, 'Process Analyst');
+      measurement.support('persona-session:process-analyst');
       await assertNoOverflow(page);
       return;
     case 'serious-critical-a11y': {
@@ -1042,6 +1116,7 @@ const runScenario = async (scenario: string, page: Page, testInfo: TestInfo) => 
           await retainFullPageColorContrastEvidence(results, testInfo, label, 'representative-surface');
           expect(results.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
         });
+        measurement.support(personaActionToken('persona-session', label));
       }
       return;
     }
@@ -1061,6 +1136,24 @@ for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: 
     test.skip(!binding.scenario, binding.blockedReason || 'No deterministic hosted scenario exposed.');
     if (binding.scenario && SEVEN_PERSONA_SCENARIOS.has(binding.scenario)) testInfo.setTimeout(180_000);
     if (binding.scenario === 'admin-navigation') testInfo.setTimeout(180_000);
-    await runScenario(binding.scenario!, page, testInfo);
+    const measurement = createHostedSandboxMeasurement(binding.testId);
+    await runScenario(binding.scenario!, page, testInfo, measurement);
+    if (executionProfile.executionKind === 'hosted_preview') {
+      const attachment = createHostedSandboxAcceptanceAttachment({
+        testCase,
+        binding,
+        metadata: testInfo.config.metadata,
+        project: testInfo.project.name,
+        measurement: {
+          targetActions: measurement.targetActions,
+          supportingActions: measurement.supportingActions,
+        },
+        observedAt: new Date().toISOString(),
+      });
+      await testInfo.attach(attachment.name, {
+        body: Buffer.from(attachment.body, 'utf8'),
+        contentType: attachment.contentType,
+      });
+    }
   });
 }

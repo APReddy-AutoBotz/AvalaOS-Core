@@ -17,7 +17,7 @@
     "scripts/checkEnterpriseIntelligenceBoundaries.mjs": "sha256:d0cee03ab6df6bf4f86ffade590e562a15b4394ca1beda1989652a22a555474c",
     "scripts/hostedPilotActivation.mjs": "sha256:375a869fb088b4581bd26b95ecf523da050cc8b01266bef81375fd2ba4d43449",
     "scripts/hostedPilotActivation.test.mjs": "sha256:ed6856426b58472beb3a0488f3f85da8f139627d97ebd4ff6a61f34481c2f9b9",
-    "scripts/runTranscriptFlowBrowser.mjs": "sha256:7f52f183e0fc5dafa882922268ec3fcbbeb15ce955f9badf506baad2a5d85d1f",
+    "scripts/runTranscriptFlowBrowser.mjs": "sha256:80bc32eb5535adbd4db23b776333685016a9b33a0e471436b97134abd26450ca",
     "scripts/runTranscriptFlowBrowser.test.mjs": "sha256:50bfc3c225a5d5e341346e08783c5b4ea8d1a9e820fb02b153415c17eb277e70",
     "scripts/runTranscriptFlowCoverage.mjs": "sha256:c0c50a83f8837f11d471414d227d01f6ef315e6aa55f61d82ac1017a5ad5d076",
     "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
@@ -140,7 +140,7 @@
       "ownership": [
         {
           "kind": "hosted-scenario",
-          "ownerId": "admin-navigation"
+          "ownerId": "blocked:ADMIN-001"
         }
       ],
       "scope": {

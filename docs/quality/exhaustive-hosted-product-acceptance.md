@@ -2,6 +2,10 @@
 
 This suite is the release-bound acceptance layer for the AvalaOS hosted synthetic Sandbox. It does not authorize production, customer data, external users, DNS changes, or real AI-provider/BYOK egress.
 
+## Current approved correction (2026-10-08)
+
+The source/CI baseline is 40 PASS / 68 BLOCKED after merged PR #278. AP approved the focused correction in `docs/planning/hosted-sandbox-acceptance.md`. The 18 supported browser cases require exact same-run measured browser-local fixture attachments as well as valid Playwright results. Static source provenance remains planned; it must not invent tenant UUIDs. ADMIN-001 retains its privileged mutation/audit criterion and has no executable browser binding. Retained-only results cannot satisfy hosted requirements. No corrected stable execution has run.
+
 ## Evidence model
 
 The canonical business catalog remains `tests/acceptance/catalog/test-catalog.json`. Execution ownership is separate in `tests/acceptance/execution-bindings.json` so a Test ID is never called a browser test merely because it exists in the catalog.
@@ -32,7 +36,7 @@ The report distinguishes:
 - **Proven source-backed coverage**: source-backed branches whose required exact evidence passed.
 - **Uncovered requirements**: explicit known source/behavior limitations with a remediation action.
 
-Current source-backed coverage is intentionally zero until provenance is added defensibly. The framework must prefer a lower truthful number over an inflated coverage percentage.
+All 108 current catalog branches have reviewed source provenance. Source mapping is still distinct from execution: the current exact source/CI artifact proves 40 cases, while 68 remain blocked. The framework must prefer a lower truthful number over an inflated coverage percentage.
 
 ## Current execution ownership
 

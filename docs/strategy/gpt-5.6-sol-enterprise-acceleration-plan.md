@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Hosted Sandbox acceptance correction (2026-10-08)
+
+PR #278 is merged with 40 PASS / 68 BLOCKED, successful candidate CI and post-merge Core CI `37729275716`. AP approved the next bounded browser evidence correction. All three Wave 1 reviewers are complete; the root reconciled their findings, including the planned-scope blocker and unsupported Admin audit claim. Wave 2 uses the managed workspace-write profile with one worker on browser measurement/attachments and the root on report, catalog, provenance, documentation and integration. `docs/planning/hosted-sandbox-acceptance.md` owns this one implementation PR. Only the 14 reviewed mutation definitions change; no runtime, schema, scoring, paid or hosted operation is included.
+
 ## Enterprise Intelligence acceptance continuation (2026-10-08)
 
 AP additionally approved the service-role-only authority-RPC permission correction exposed by actual-role acceptance run `37719047040`. Keep it in the existing unmerged migration, with browser denial and current-authority negative checks. This narrow exception supersedes the goal's runtime/schema exclusions for the size and authority-call corrections only. All remaining candidate workflows and preview passed on `2f53f369`; the four new EI cases remained BLOCKED. Fresh candidate evidence is required after this correction.

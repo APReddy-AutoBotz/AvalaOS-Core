@@ -13,6 +13,7 @@ const indexHtml = fs.readFileSync(new URL('../../index.html', import.meta.url), 
 const indexEntry = fs.readFileSync(new URL('../../index.tsx', import.meta.url), 'utf8');
 const indexCss = fs.readFileSync(new URL('../../index.css', import.meta.url), 'utf8');
 const executionProfileSource = fs.readFileSync(new URL('../../scripts/acceptanceExecutionProfile.mjs', import.meta.url), 'utf8');
+const hostedSandboxEvidenceSource = fs.readFileSync(new URL('../../scripts/hostedSandboxAcceptanceEvidence.mjs', import.meta.url), 'utf8');
 const localSandboxConfig = fs.readFileSync(new URL('../../playwright.local-sandbox-regression.config.ts', import.meta.url), 'utf8');
 const localNavigationConfig = fs.readFileSync(new URL('../../playwright.local-navigation-regression.config.ts', import.meta.url), 'utf8');
 const hostedAcceptanceConfig = fs.readFileSync(new URL('../../playwright.exhaustive-acceptance.config.ts', import.meta.url), 'utf8');
@@ -156,8 +157,8 @@ const executableProjectCases = executionBindings.hostedTests
 const catalogUnboundProjectCases = executionBindings.hostedTests
   .filter(binding => !binding.scenario)
   .reduce((count, binding) => count + binding.projects.length, 0);
-assert.equal(executableProjectCases, 38, 'local Sandbox regression must execute all 38 scenario-bound project cases');
-assert.equal(catalogUnboundProjectCases, 36, 'the 36 catalog-unbound project cases must remain explicit not_run skips');
+assert.equal(executableProjectCases, 36, 'local Sandbox regression must execute all 36 supported scenario-bound project cases');
+assert.equal(catalogUnboundProjectCases, 38, 'ADMIN-001 plus the 36 catalog-unbound project cases must remain explicit not_run skips');
 assert.match(hostedSpec, /decodeAcceptanceExecutionProfile\(process\.env/u, 'the shared Sandbox spec must require an explicit execution profile');
 assert.match(hostedSpec, /createFullPageContrastAttachment,[\s\S]*decodeAcceptanceExecutionProfile,[\s\S]*summarizeFullPageColorContrast,[\s\S]*from '\.\.\/\.\.\/scripts\/acceptanceExecutionProfile\.mjs'/u, 'full-page browser evidence must use the shared summary and attachment contract');
 assert.match(executionProfileSource, /export\s+(?:const|function)\s+summarizeFullPageColorContrast\b/u, 'the execution-profile boundary must export the shared full-page contrast classifier');
@@ -238,7 +239,7 @@ assert.match(
 );
 assert.match(
   hostedSpec,
-  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*null,[\s\S]*'\{malformed'[\s\S]*reloadWithPersistedScopeAtDocumentStart\(page, invalidScope\)/u,
+  /invalidPersistedScopes = \[[\s\S]*stale-different-project[\s\S]*value: null,[\s\S]*value: '\{malformed'[\s\S]*reloadWithPersistedScopeAtDocumentStart\(page, invalidScope\.value\)/u,
   'SAFETY-004 must retain stale, missing, and malformed persisted projects through reconstruction',
 );
 assert.match(
@@ -578,5 +579,30 @@ assert.doesNotMatch(
   /type NetworkViolation = \{[^\n]*\borigin:\s*string/u,
   'violation evidence schema must not acquire a literal origin field',
 );
+
+assert.match(hostedSpec, /HOSTED_SANDBOX_ACCEPTANCE_CASES,[\s\S]*createHostedSandboxAcceptanceAttachment/u,
+  'the browser runner must use the shared reviewed Hosted Sandbox attachment contract');
+assert.match(hostedSpec, /const measurement = createHostedSandboxMeasurement\(binding\.testId\);[\s\S]*await runScenario\(binding\.scenario!, page, testInfo, measurement\);[\s\S]*executionProfile\.executionKind === 'hosted_preview'[\s\S]*createHostedSandboxAcceptanceAttachment\([\s\S]*testInfo\.attach/u,
+  'same-run measured attachments must be emitted only after the hosted scenario succeeds and only for hosted preview');
+assert.doesNotMatch(hostedSpec, /createHostedSandboxAcceptanceAttachment\([\s\S]*expectedMutationCount/u,
+  'the browser producer must not derive actuals from expected catalog counts');
+assert.match(hostedSpec, /case 'persona-matrix':[\s\S]*measurement\.target\(personaActionToken\('persona-entry', label\)\)/u,
+  'SANDBOX-002 must record each successful persona entry inside the scenario');
+assert.match(hostedSpec, /recordInvalidScope\('invalid-scope-reconstruction:initial-stale-boards'\)[\s\S]*invalid-scope-reconstruction:stale-delivery-pack[\s\S]*invalid-scope-reconstruction:missing-delivery-pack[\s\S]*invalid-scope-reconstruction:malformed-delivery-pack/u,
+  'SAFETY-004 must record all four observed invalid-scope reconstructions');
+assert.match(hostedSpec, /case 'process-create':[\s\S]*measurement\.target\('process-create'\)/u,
+  'ASSESS-001 must record its one browser-local process creation');
+assert.match(hostedSpec, /case 'incomplete-assessment':[\s\S]*measurement\.target\('incomplete-process-create'\)[\s\S]*Save Draft \*[\s\S]*measurement\.support\('draft-save'\)/u,
+  'ASSESS-004 must preserve draft-save behavior while counting only its process creation as the target mutation');
+assert.match(hostedSandboxEvidenceSource, /export const HOSTED_SANDBOX_ACCEPTANCE_CASES = Object\.freeze\(\{[\s\S]*'SANDBOX-001'[\s\S]*'SAFETY-007'/u,
+  'the evidence validator must expose the fixed reviewed case allowlist');
+assert.equal((hostedSandboxEvidenceSource.match(/caseDefinition\('/gu) ?? []).length, 18,
+  'the source must contain exactly 18 reviewed case definitions');
+assert.match(hostedSandboxEvidenceSource, /evidenceScope: EVIDENCE_SCOPE, fixtureId: FIXTURE_ID/u,
+  'executed Hosted Sandbox scope must use the browser-local fixture identity without tenant identifiers');
+assert.doesNotMatch(hostedSandboxEvidenceSource, /organizationId|workspaceId|tenantId/u,
+  'Hosted Sandbox local evidence must not invent a server tenant identity');
+assert.match(hostedSandboxEvidenceSource, /attempt\.retry[\s\S]*attachments\.length === 1[\s\S]*HOSTED_SANDBOX_CROSS_EXECUTION_BINDING_INVALID/u,
+  'validation must reject retries, missing or duplicate attachments and cross-project binding replay');
 
 console.log('Exhaustive hosted acceptance contract checks passed.');

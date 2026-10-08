@@ -584,11 +584,12 @@
     },
     {
       "testId": "ADMIN-001",
-      "scenario": "admin-navigation",
+      "scenario": null,
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"
-      ]
+      ],
+      "blockedReason": "Browser-local Admin navigation cannot prove the required privileged mutation and audit. Keep ADMIN-001 BLOCKED until the authoritative action and its audit are exercised."
     },
     {
       "testId": "ADMIN-002",

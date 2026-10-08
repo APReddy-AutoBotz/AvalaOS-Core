@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Hosted Sandbox acceptance correction (2026-10-08)
+
+The accepted source baseline is PR #278 / `766cd7fa7cc479f9d366537df89c498fdddda0d1`, with 40 exact acceptance cases passed and 68 blocked. The current test-only change separates executed browser-local Sandbox fixture evidence from server tenant execution scope. Static declarations stay planned. Same-run measured browser attachments must bind source, deployment, workflow and both projects; they cannot prove tenant authorization, privileged audit or hosted database effects. ADMIN-001 remains blocked under its existing requirement. See `docs/planning/hosted-sandbox-acceptance.md`; no product architecture or runtime boundary changes.
+
 ## Enterprise Intelligence acceptance evidence boundary (2026-10-08)
 
 The current migration chain lacks service-role EXECUTE on the existing authority RPC called directly by Enterprise Intelligence's Edge command. AP approved granting only `service_role` on that exact five-argument function in the same unmerged migration; PUBLIC/anon/authenticated remain denied and no function body changes. Target acceptance must execute as the real service role. Historical-row fixture setup is a clearly isolated prerequisite and cannot count as product-command proof. Verify current authority succeeds while stale version, removed membership/capability and foreign-tenant selectors deny without effects.

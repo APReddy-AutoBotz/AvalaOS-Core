@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Hosted Sandbox acceptance correction (2026-10-08)
+
+Executed baseline: PR #278 merged with identical tested tree; acceptance run `37726540790` attempt 1 records 40 PASS / 0 FAIL / 68 BLOCKED, and post-merge Core CI `37729275716` passed. Confirmed source defects in acceptance tooling: browser-local hosted results have no valid executed fixture path; navigation cannot prove ADMIN-001 privileged audit; retained-only hosted ownership could otherwise bypass the hosted requirement. AP approved the 14 bounded mutation-definition corrections and truthful execution-evidence integration under `docs/planning/hosted-sandbox-acceptance.md`. Focused verification and candidate CI are planned. No stable hosted inspection/execution occurred; deployment status remains unknown and no readiness is inferred.
+
 ## Enterprise ingestion size boundary and acceptance gap (2026-10-08)
 
 Confirmed source defect: production directly invokes `pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)`, but no current migration grants EXECUTE to `service_role`. Actual-role acceptance run `37719047040` exposes permission denial during setup; all four EI cases remain BLOCKED, with baseline 36 PASS / 72 BLOCKED unchanged. Earlier privileged database calls and mocked Edge RPCs did not prove this service boundary. AP approved a service-role-only grant, preserving browser denial and the function body, in the current unmerged migration. Focused real-role positive/negative proof remains planned; hosted deployment status is unknown.

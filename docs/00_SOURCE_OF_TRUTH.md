@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Hosted Sandbox acceptance correction (2026-10-08)
+
+PR #278 merged as `766cd7fa7cc479f9d366537df89c498fdddda0d1` with its tested tree unchanged. Exact acceptance run `37726540790` attempt 1 proves 40 PASS / 0 FAIL / 68 BLOCKED / 0 UNCOVERED; post-merge Core CI `37729275716` passed. These executed results supersede the candidate-pending statements below. AP approved correcting the 14 reviewed browser mutation definitions and adding same-run browser-local fixture evidence for 18 supported cases. Follow `docs/planning/hosted-sandbox-acceptance.md`. ADMIN-001 keeps its privileged mutation/audit requirement and becomes explicitly BLOCKED. Product behavior, schema, scoring and all other criteria are unchanged. Hosted execution is NOT_EXECUTED and overall acceptance remains INCOMPLETE_COVERAGE; new evidence verification is planned, not a readiness claim.
+
 ## Current Enterprise Intelligence acceptance slice (2026-10-08)
 
 AP additionally approved the confirmed authority-RPC permission correction: grant only `service_role` EXECUTE on the existing `pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)` called by the production Edge command. Keep browser roles denied and the function body unchanged. Include this in the same unmerged migration and prove actual-role tenant, capability, membership and stale-version denials in disposable PostgreSQL. The two approved database corrections supersede the active goal's runtime/schema exclusions only within this bounded scope; no hosted deployment or paid effect is authorized.

@@ -506,9 +506,17 @@ export const verifyFullPageContrastAttachments = ({ testId, title, project, atte
     ? `[SYNTHETIC-REGRESSION:${testId}] `
     : `[${testId}] `;
   if (typeof title !== 'string' || !title.startsWith(titlePrefix)) throw new Error('FULL_PAGE_CONTRAST_TEST_INVALID');
-  if (!isPlainObject(attempt) || !Array.isArray(attempt.attachments) || attempt.attachments.length !== FULL_PAGE_CONTRAST_PERSONAS.length) {
+  if (!isPlainObject(attempt) || !Array.isArray(attempt.attachments)) {
     throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
   }
+  // The separate Sandbox validator owns the measured fixture attachment. It
+  // cannot replace a persona's contrast proof or admit arbitrary extra files.
+  const fixtureAttachments = attempt.attachments.filter(item => item?.name === 'hosted-sandbox-acceptance-v1');
+  if (fixtureAttachments.length > 1 || (fixtureAttachments.length && metadata?.executionKind !== 'hosted_preview')) {
+    throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
+  }
+  const contrastAttachments = attempt.attachments.filter(item => item?.name !== 'hosted-sandbox-acceptance-v1');
+  if (contrastAttachments.length !== FULL_PAGE_CONTRAST_PERSONAS.length) throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
   const attemptStart = canonicalUtcTimestamp(attempt.startTime).epoch;
   if (typeof attempt.duration !== 'number' || !Number.isFinite(attempt.duration) || attempt.duration < 0) {
     throw new Error('FULL_PAGE_CONTRAST_ATTEMPT_TIME_INVALID');
@@ -521,7 +529,7 @@ export const verifyFullPageContrastAttachments = ({ testId, title, project, atte
   )));
   const seenPersonas = new Set();
   let unresolvedPersonaCount = 0;
-  for (const attachment of attempt.attachments) {
+  for (const attachment of contrastAttachments) {
     if (
       !exactKeys(attachment, ['body', 'contentType', 'name'])
       || typeof attachment.name !== 'string'

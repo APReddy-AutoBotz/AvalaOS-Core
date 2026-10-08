@@ -84,12 +84,16 @@ for (const item of bindings.hostedTests ?? []) {
   const boundProjects = [...item.projects].sort();
   if (JSON.stringify(boundProjects) !== JSON.stringify(requiredProjects)) fail(`${item.testId} hosted projects must exactly match catalog viewports`);
   if (!item.scenario && !item.blockedReason) fail(`${item.testId} has neither executable scenario nor explicit blocked reason`);
+  if (item.scenario && catalogCase.expectedAudit === 'required for privileged mutation'
+    && !(bindings.serverTests ?? []).some(server => server.testId === item.testId && server.components?.includes('hosted'))) {
+    fail(`${item.testId} cannot use browser-only navigation as privileged mutation/audit proof`);
+  }
 }
 const requiredExplicitBlocks = [
   'ASSESS-003',
   'DELIVERY-009',
   'MONITOR-001','MONITOR-002','MONITOR-003','MONITOR-004',
-  'ADMIN-002','ADMIN-003',
+  'ADMIN-001','ADMIN-002','ADMIN-003',
 ];
 for (const testId of requiredExplicitBlocks) {
   const binding = (bindings.hostedTests ?? []).find(item => item.testId === testId);
