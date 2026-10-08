@@ -118,7 +118,17 @@
     "scripts/testGovernAcceptancePostgres.mjs": "sha256:20f8d9d76ebe72985ab7c95ea5fc1e3450ef767339d6df57809825c94c05f844",
     "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
     "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
-    "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b"
+    "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:1bc81c5d246827cdc885c63311c879df4468a6d8d49bfe45a6efc08e51d6ab0b",
+    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:a803d8f217623ec66ccfe4441e0482fa4dac4deff13f9b4f694bc1510bcc032d",
+    "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
+    "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
+    "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts": "sha256:0c703027f8d41c676f90109db53899fdc89c56d132f835bb9804a99b95429710",
+    "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql": "sha256:15c4713f240a71c0ed3db954aa511aabff946e81caee384bdb4c3c2d98c7a1eb",
+    "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql": "sha256:768abe5b7e6abddadde060998a548f5c8f70b44c221a458cad5176b5118abe35",
+    "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql": "sha256:e844a748667c55d6c62c787561f084b99e0af3e077d729e517b0fa160a7e748f",
+    "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql": "sha256:6c29886a31c7763f3f1fe72a6708f1987966ecfe129e99ed9cc4541883fbf838",
+    "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:e42b0c797f750fefdda5b83648617cb48c4a1c079de8b7d2954cee9ab749eb05"
   },
   "contracts": [
     {
@@ -1339,84 +1349,136 @@
       "branchId": "EI-ASSEMBLE_PHASE1_NONEXECUTION",
       "testId": "EI-005",
       "sourceReferences": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "enterprise-intelligence",
-          "assertionId": "enterprise-intelligence::EI-005",
+          "ownerId": "enterprise-intelligence-postgres-acceptance",
+          "assertionId": "enterprise-intelligence-postgres-acceptance::EI-005",
           "scenarioId": "EI-005::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-enterprise-intelligence-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "EI-COMMAND_REPLAY",
       "testId": "EI-004",
       "sourceReferences": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "enterprise-intelligence",
-          "assertionId": "enterprise-intelligence::EI-004",
+          "ownerId": "enterprise-intelligence-postgres-acceptance",
+          "assertionId": "enterprise-intelligence-postgres-acceptance::EI-004",
           "scenarioId": "EI-004::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-enterprise-intelligence-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "EI-INGESTION_LINEAGE",
       "testId": "EI-002",
       "sourceReferences": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "enterprise-intelligence",
-          "assertionId": "enterprise-intelligence::EI-002",
+          "ownerId": "enterprise-intelligence-postgres-acceptance",
+          "assertionId": "enterprise-intelligence-postgres-acceptance::EI-002",
           "scenarioId": "EI-002::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-enterprise-intelligence-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "EI-INGESTION_VALIDATION",
       "testId": "EI-001",
       "sourceReferences": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "enterprise-intelligence",
-          "assertionId": "enterprise-intelligence::EI-001",
+          "ownerId": "enterprise-intelligence-postgres-acceptance",
+          "assertionId": "enterprise-intelligence-postgres-acceptance::EI-001",
           "scenarioId": "EI-001::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-enterprise-intelligence-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {

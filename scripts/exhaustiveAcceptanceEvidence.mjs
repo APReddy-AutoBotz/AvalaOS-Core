@@ -11,6 +11,7 @@ import {
 import { TRUST_SUITE_ID, validateTrustAcceptanceProducer } from './trustAcceptanceEvidence.mjs';
 import { STUDIO_ACCEPTANCE_SUITE_ID, validateStudioAcceptanceProducer } from './studioAcceptanceEvidence.mjs';
 import { GOVERN_ACCEPTANCE_SUITE_ID, validateGovernAcceptanceProducer } from './governAcceptanceEvidence.mjs';
+import { EI_ACCEPTANCE_SUITE_ID, validateEnterpriseIntelligenceAcceptanceProducer } from './enterpriseIntelligenceAcceptanceEvidence.mjs';
 
 export const normalizePlaywrightStatus = status => {
   if (status === 'passed') return 'PASS';
@@ -21,6 +22,11 @@ export const normalizePlaywrightStatus = status => {
 const sorted = values => [...values].sort();
 const sameValues = (left, right) => JSON.stringify(sorted(left ?? [])) === JSON.stringify(sorted(right ?? []));
 const sameObject = (left, right) => JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
+// This public repository filename describes a secret-handling migration; it is
+// not a credential. Keep the exception exact, with provenance/digest checks below.
+const publicSourcePathsWithSensitiveWords = new Set([
+  'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql',
+]);
 const passEligibleScope = scope => scope?.evidenceScope === 'executed-fixture' && Boolean(scope.organizationId) && Boolean(scope.workspaceId);
 const assertionStatus = outcomes => (outcomes ?? []).some(outcome => outcome?.status === 'FAIL')
   ? 'FAIL'
@@ -82,6 +88,11 @@ export const validateRetainedProducerResults = ({ suite, emitted, identity, prov
     identity,
     command: suite.command.join(' '),
   }));
+  if (suite?.suiteId === EI_ACCEPTANCE_SUITE_ID) errors.push(...validateEnterpriseIntelligenceAcceptanceProducer({
+    emitted,
+    identity,
+    command: suite.command.join(' '),
+  }));
   return errors;
 };
 
@@ -122,7 +133,8 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
       const values = item?.[field];
       if (!Array.isArray(values) || !values.length || new Set(values).size !== values.length) errors.push(`result-${field}:${key}`);
     }
-    if ((item?.sourceReferences ?? []).some(ref => typeof ref !== 'string' || ref.startsWith('/') || ref.includes('..') || /https?:|secret|token|password/iu.test(ref))) errors.push(`result-unsafe-source:${key}`);
+    if ((item?.sourceReferences ?? []).some(ref => typeof ref !== 'string' || ref.startsWith('/') || ref.includes('..') || /https?:/iu.test(ref)
+      || (/secret|token|password/iu.test(ref) && !publicSourcePathsWithSensitiveWords.has(ref)))) errors.push(`result-unsafe-source:${key}`);
     if (!(retainedBindings.get(item?.testId) ?? []).includes(item?.suiteId)) errors.push(`result-binding-mismatch:${key}`);
     const expectedBranches = expected.branchIdsByTestId?.get(item?.testId);
     if (expectedBranches && JSON.stringify([...item.branchIds].sort()) !== JSON.stringify([...expectedBranches].sort())) errors.push(`result-branch-mismatch:${key}`);
@@ -170,6 +182,12 @@ export const validateRetainedManifest = (manifest, expected, retainedBindings = 
     emitted: { schemaVersion: 2, results: governResults },
     identity: expected,
     command: expected.canonicalCommandBySuiteId?.get(GOVERN_ACCEPTANCE_SUITE_ID),
+  }).map(error => `retained-${error}`));
+  const enterpriseIntelligenceResults = (manifest?.results ?? []).filter(item => item?.suiteId === EI_ACCEPTANCE_SUITE_ID);
+  if (enterpriseIntelligenceResults.length) errors.push(...validateEnterpriseIntelligenceAcceptanceProducer({
+    emitted: { schemaVersion: 2, results: enterpriseIntelligenceResults },
+    identity: expected,
+    command: expected.canonicalCommandBySuiteId?.get(EI_ACCEPTANCE_SUITE_ID),
   }).map(error => `retained-${error}`));
   return errors;
 };

@@ -90,7 +90,7 @@ test('fresh-chain identity derives only from the validated approved successor ta
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
   assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261004112232')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 99)'));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 100)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
   assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261004112232'/u);

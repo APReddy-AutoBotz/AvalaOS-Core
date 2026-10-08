@@ -34,10 +34,11 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const json=value=>JSON.stringify(value);
 const uuid=()=>crypto.randomUUID();
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(migrations.at(-4),'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
-assert.equal(migrations.at(-3),'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-assert.equal(migrations.at(-2), '20261004025101_studio_brd_source_fact_retention_v3.sql');
-assert.equal(migrations.at(-1), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
+assert.equal(migrations.at(-5),'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
+assert.equal(migrations.at(-4),'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
+assert.equal(migrations.at(-3), '20261004025101_studio_brd_source_fact_retention_v3.sql');
+assert.equal(migrations.at(-2), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
+assert.equal(migrations.at(-1), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const EXPECTED_ASSERTIONS=[
  'MAP-PG-BUDGET-001-legacy-domain-preserved',

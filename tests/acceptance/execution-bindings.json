@@ -178,9 +178,19 @@
         "test:enterprise-intelligence"
       ],
       "testIds": [
+        "EI-003"
+      ],
+      "requiredGate": true
+    },
+    {
+      "suiteId": "enterprise-intelligence-postgres-acceptance",
+      "command": [
+        "node",
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs"
+      ],
+      "testIds": [
         "EI-001",
         "EI-002",
-        "EI-003",
         "EI-004",
         "EI-005"
       ],

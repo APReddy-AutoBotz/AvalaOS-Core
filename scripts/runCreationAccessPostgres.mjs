@@ -63,7 +63,7 @@ try {
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
   assert.equal(approvedFullChainTip(migrations), '20261004112232');
-  assert.equal(migrations.length, 99);
+  assert.equal(migrations.length, 100);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -96,7 +96,8 @@ try {
   assert.equal(migrations[renewalIndex + 15], '20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
   assert.equal(migrations[renewalIndex + 16], '20261004025101_studio_brd_source_fact_retention_v3.sql');
   assert.equal(migrations[renewalIndex + 17], '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
-  assert.equal(renewalIndex, migrations.length - 18);
+  assert.equal(migrations[renewalIndex + 18], '20261008022445_enterprise_evidence_canonical_size_limit.sql');
+  assert.equal(renewalIndex, migrations.length - 19);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');

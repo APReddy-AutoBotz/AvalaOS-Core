@@ -82,6 +82,7 @@ jobs:
           node scripts/assessV2AcceptanceEvidence.test.mjs
           node scripts/studioAcceptanceEvidence.test.mjs
           node scripts/governAcceptanceEvidence.test.mjs
+          node scripts/enterpriseIntelligenceAcceptanceEvidence.test.mjs
           node scripts/produceExhaustiveServerEvidence.test.mjs
           npm run test:hosted-evidence-family-attestations
           npm run test:acceptance:network-observer
@@ -97,6 +98,7 @@ jobs:
           ASSESS_V2_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           STUDIO_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           GOVERN_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          ENTERPRISE_INTELLIGENCE_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
         run: node scripts/runExhaustiveRetainedSuites.mjs
 
       - name: Run independent assessment oracle against production scoring
