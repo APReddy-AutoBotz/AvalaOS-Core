@@ -259,6 +259,61 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "govern-acceptance-20260923142120-pr1e-govern-control-alias-binding-sql",
     "sourceReference": "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql",
     "selector": "  new_expression text := 'SELECT COALESCE(jsonb_agg(required.control ORDER BY required.control->>''controlId''),''[]'') INTO v_required_controls FROM (';"
+  },
+  {
+    "anchorId": "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
+    "sourceReference": "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
+    "sourceReference": "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+    "selector": "export const EI_ACCEPTANCE_TEST_IDS = ['EI-001', 'EI-002', 'EI-004', 'EI-005'];"
+  },
+  {
+    "anchorId": "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
+    "sourceReference": "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+    "sourceReference": "scripts/enterpriseIntelligencePostgresFixture.mjs",
+    "selector": "import assert from 'node:assert/strict';"
+  },
+  {
+    "anchorId": "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
+    "sourceReference": "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+    "selector": "export const isRecoverableEnterpriseCommandError = (error: unknown): error is RecoverableEnterpriseCommandError => ("
+  },
+  {
+    "anchorId": "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+    "sourceReference": "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+    "selector": "export const MAX_EVIDENCE_BYTES = 12_000_000;"
+  },
+  {
+    "anchorId": "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
+    "sourceReference": "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.enterprise_command_runtime_area("
+  },
+  {
+    "anchorId": "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
+    "sourceReference": "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.enterprise_provider_route_role_guard()"
+  },
+  {
+    "anchorId": "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
+    "sourceReference": "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.enterprise_ai_plan_command("
+  },
+  {
+    "anchorId": "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
+    "sourceReference": "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.enterprise_source_version_derive()"
+  },
+  {
+    "anchorId": "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
+    "sourceReference": "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+    "selector": "DO $source_size_limit$"
   }
 ]);
 export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
@@ -348,6 +403,10 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
     "govern-postgres-acceptance": [
       "node",
       "scripts/testGovernAcceptancePostgres.mjs"
+    ],
+    "enterprise-intelligence-postgres-acceptance": [
+      "node",
+      "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs"
     ]
   },
   "serverCommands": {
@@ -1322,13 +1381,26 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-ASSEMBLE_PHASE1_NONEXECUTION",
     "testId": "EI-005",
     "sourceAnchorIds": [
-      "enterprise-intelligence"
+      "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
+      "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "enterprise-intelligence",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "application-portfolio-pr1b-base",
+      "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
+      "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
+      "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
+      "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "enterprise-intelligence",
-        "assertionId": "enterprise-intelligence::EI-005",
+        "ownerId": "enterprise-intelligence-postgres-acceptance",
+        "assertionId": "enterprise-intelligence-postgres-acceptance::EI-005",
         "scenarioId": "EI-005::retained-contract"
       }
     ]
@@ -1337,13 +1409,26 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-COMMAND_REPLAY",
     "testId": "EI-004",
     "sourceAnchorIds": [
-      "enterprise-intelligence"
+      "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
+      "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "enterprise-intelligence",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "application-portfolio-pr1b-base",
+      "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
+      "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
+      "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
+      "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "enterprise-intelligence",
-        "assertionId": "enterprise-intelligence::EI-004",
+        "ownerId": "enterprise-intelligence-postgres-acceptance",
+        "assertionId": "enterprise-intelligence-postgres-acceptance::EI-004",
         "scenarioId": "EI-004::retained-contract"
       }
     ]
@@ -1352,13 +1437,26 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-INGESTION_LINEAGE",
     "testId": "EI-002",
     "sourceAnchorIds": [
-      "enterprise-intelligence"
+      "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
+      "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "enterprise-intelligence",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "application-portfolio-pr1b-base",
+      "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
+      "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
+      "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
+      "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "enterprise-intelligence",
-        "assertionId": "enterprise-intelligence::EI-002",
+        "ownerId": "enterprise-intelligence-postgres-acceptance",
+        "assertionId": "enterprise-intelligence-postgres-acceptance::EI-002",
         "scenarioId": "EI-002::retained-contract"
       }
     ]
@@ -1367,13 +1465,26 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-INGESTION_VALIDATION",
     "testId": "EI-001",
     "sourceAnchorIds": [
-      "enterprise-intelligence"
+      "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
+      "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "enterprise-intelligence",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "application-portfolio-pr1b-base",
+      "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
+      "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
+      "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
+      "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "enterprise-intelligence",
-        "assertionId": "enterprise-intelligence::EI-001",
+        "ownerId": "enterprise-intelligence-postgres-acceptance",
+        "assertionId": "enterprise-intelligence-postgres-acceptance::EI-001",
         "scenarioId": "EI-001::retained-contract"
       }
     ]

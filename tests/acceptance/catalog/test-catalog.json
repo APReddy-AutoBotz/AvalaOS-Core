@@ -4589,7 +4589,20 @@
       "feature": "ingestion",
       "ruleRequirement": "ingestion validation",
       "sourceReference": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -4598,7 +4611,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-enterprise-intelligence-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -4639,7 +4652,20 @@
       "feature": "ingestion",
       "ruleRequirement": "ingestion lineage",
       "sourceReference": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -4648,7 +4674,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-enterprise-intelligence-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -4739,7 +4765,20 @@
       "feature": "command",
       "ruleRequirement": "command replay",
       "sourceReference": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -4748,7 +4787,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-enterprise-intelligence-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -4789,7 +4828,20 @@
       "feature": "assemble",
       "ruleRequirement": "assemble phase1 nonexecution",
       "sourceReference": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"
@@ -4798,7 +4850,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-enterprise-intelligence-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",

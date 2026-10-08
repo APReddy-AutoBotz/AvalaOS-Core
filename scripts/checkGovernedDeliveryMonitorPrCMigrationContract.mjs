@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
-import {assertPrCMigrationTail} from './prCMigrationTailContract.mjs';
+import {assertPrCMigrationTail,approvedFullChainTip} from './prCMigrationTailContract.mjs';
 
 const migrationName='20260831062024_governed_delivery_monitor_pr_c.sql';
 const controlledHumanMigrationName='20260904120000_pr_c_controlled_human_exercise_authority.sql';
@@ -28,16 +28,18 @@ assert.equal(migrations.filter(name=>name===studioSourceMigrationName).length,1)
 assert.equal(migrations.filter(name=>name===syntheticAcceptanceMigrationName).length,1);
 assert.equal(migrations.filter(name=>name===syntheticStudioFixtureMigrationName).length,1);
 assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
-assert.equal(migrations.at(-9),syntheticAcceptanceMigrationName);
-assert.equal(migrations.at(-8),syntheticStudioFixtureMigrationName);
-assert.equal(migrations.at(-7),'20260928060000_pr_c_synthetic_direct_planning_generation.sql');
-assert.equal(migrations.at(-6),'20261003015246_synthetic_ai_final_paid_validation_continuation.sql');
-assert.equal(migrations.at(-5),'20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
-assert.equal(migrations.at(-4),'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
-assert.equal(migrations.at(-3),'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-assert.equal(migrations.at(-2), '20261004025101_studio_brd_source_fact_retention_v3.sql');
-assert.equal(migrations.at(-1), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
+assert.equal(migrations.at(-10),syntheticAcceptanceMigrationName);
+assert.equal(migrations.at(-9),syntheticStudioFixtureMigrationName);
+assert.equal(migrations.at(-8),'20260928060000_pr_c_synthetic_direct_planning_generation.sql');
+assert.equal(migrations.at(-7),'20261003015246_synthetic_ai_final_paid_validation_continuation.sql');
+assert.equal(migrations.at(-6),'20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
+assert.equal(migrations.at(-5),'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
+assert.equal(migrations.at(-4),'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
+assert.equal(migrations.at(-3), '20261004025101_studio_brd_source_fact_retention_v3.sql');
+assert.equal(migrations.at(-2), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
+assert.equal(migrations.at(-1), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
 assertPrCMigrationTail(migrations);
+assert.equal(approvedFullChainTip(migrations),'20261008022445');
 assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
 assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);
 assert.match(deferredAuthoritySql,/SET CONSTRAINTS public\.enterprise_pr_c_package_binding, public\.enterprise_pr_c_item_current_binding, public\.enterprise_pr_c_baseline_item_binding, public\.enterprise_pr_c_baseline_manifest_binding IMMEDIATE;/u);

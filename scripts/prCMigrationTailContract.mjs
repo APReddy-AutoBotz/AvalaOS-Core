@@ -29,6 +29,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql',
   '20261004025101_studio_brd_source_fact_retention_v3.sql',
   '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql',
+  '20261008022445_enterprise_evidence_canonical_size_limit.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -37,13 +38,14 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, and one-use BRD-v3 quality-validation successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, and canonical source-size correction successors may follow the PR C controlled-human frozen tip');
 };
 
-// Full fresh-chain runners must validate the approved tail before deriving its
-// marker. This does not advance the separately frozen controlled-human target
-// or a partial PR C-only upgrade to a migration it has not applied.
+// Full fresh-chain runners validate every approved migration before reading the
+// latest identity-bearing tip. The source-size correction advances only the
+// exact hosted-pilot identity and its already-authorized current consumers; it
+// grants no hosted exercise, provider, or spending authority.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return PR_C_APPROVED_SUCCESSOR_TAIL.at(-1).slice(0, 14);
+  return '20261008022445';
 };

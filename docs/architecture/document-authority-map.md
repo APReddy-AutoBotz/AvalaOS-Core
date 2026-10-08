@@ -30,6 +30,8 @@ Read only this sequence unless the active task requires more:
 
 ## Active Authority
 
+The current four-case Enterprise Intelligence disposable-PostgreSQL acceptance implementation, focused verification, proposed source-size correction and rollback are governed by `docs/planning/enterprise-intelligence-acceptance.md`. Product authority remains `docs/architecture/enterprise-intelligence-authority.md`. The bounded schema exception is pending; hosted requirements and other acceptance criteria are unchanged.
+
 The current three-case Govern authority disposable-PostgreSQL acceptance implementation, focused verification and rollback are governed by `docs/planning/govern-authority-acceptance.md`. Govern/Assess V2 product authority remains in the routed domain documents. The legacy Delivery catalog meaning is not changed by this slice.
 
 The seven-case Studio lifecycle disposable-PostgreSQL acceptance implementation, focused verification and rollback are governed by `docs/planning/studio-lifecycle-acceptance.md`. Governed and private Studio product authority remain in their routed architecture documents.

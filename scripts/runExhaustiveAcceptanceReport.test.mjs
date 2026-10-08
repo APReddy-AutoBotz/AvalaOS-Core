@@ -841,3 +841,150 @@ test('Govern retained runner keeps per-case outcomes while failing the CI gate',
     rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('Enterprise Intelligence PostgreSQL report promotes only four ingestion and Assemble cases and rejects substituted evidence', async () => {
+  const { buildEnterpriseIntelligenceAcceptanceProducer, EI_ACCEPTANCE_TEST_IDS } = await import('./enterpriseIntelligenceAcceptanceEvidence.mjs');
+  const suite = loadExecutionBindings().retainedSuites.find(item => item.suiteId === 'enterprise-intelligence-postgres-acceptance');
+  const command = suite.command.join(' ');
+  const identity = { releaseSha, workflowRunId: '123456', workflowAttempt: '2', environment: 'pull-request', workflowPath };
+  const makeProducer = failure => {
+    // Explicit unit inputs: this report test does not execute PostgreSQL or Storage.
+    const actualByTestId = JSON.parse(readFileSync('tests/acceptance/fixtures/enterprise-intelligence-evidence-unit-results.json', 'utf8'));
+    const failuresByTestId = {};
+    const blockedByTestId = {};
+    if (failure) {
+      delete actualByTestId['EI-005'];
+      if (failure === 'blocked') blockedByTestId['EI-005'] = { failureCode: 'setup_failed' };
+      else failuresByTestId['EI-005'] = { failureCode: 'assertion_failed' };
+    }
+    return buildEnterpriseIntelligenceAcceptanceProducer({ actualByTestId, failuresByTestId, blockedByTestId, identity, command, cleanupVerified: true });
+  };
+  const variants = [
+    ['valid', () => {}, false, 4, 0],
+    ['source substitution', m => { const i = m.results[0]; i.sourceDigests[Object.keys(i.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
+    ['result substitution', m => { m.results[0].actual.logicalMutationCount = 0; }, false, 0, 0],
+    ['unselected case substitution', m => { m.results[0].testId = 'EI-003'; }, false, 0, 0],
+    ['cleanup substitution', m => { m.results[0].cleanupVerified = false; }, false, 0, 0],
+    ['partial artifact', m => { m.results.pop(); }, false, 0, 0],
+    ['executed failure despite aggregate success', () => {}, true, 3, 1],
+    ['setup blocked without product failure', () => {}, 'blocked', 3, 0],
+    ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 4],
+    ['aggregate-only', m => { m.results = []; }, false, 0, 0],
+  ];
+  for (const [name, mutate, failure, passed, failed] of variants) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-ei-report-'));
+    try {
+      const retainedPath = path.join(temp, 'retained.json');
+      const manifest = {
+        schemaVersion: 3, manifestKind: 'retained', ...identity,
+        suites: [{ suiteId: suite.suiteId, status: 'PASS', command, requiredGate: true, testIds: suite.testIds }],
+        results: structuredClone(makeProducer(failure).results),
+      };
+      mutate(manifest);
+      writeFileSync(retainedPath, JSON.stringify(manifest));
+      const resultsDir = path.join(temp, 'report');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: identity.workflowRunId,
+          GITHUB_RUN_ATTEMPT: identity.workflowAttempt, ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+          ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request', ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED',
+          ACCEPTANCE_RESULTS_DIR: resultsDir, RETAINED_RESULTS_MANIFEST: retainedPath,
+          ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+          SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+          PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
+        },
+      });
+      const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.equal(report.summary.PASS, passed, `${name}: ${report.summary.preflightFailure ?? run.stderr}; ${report.results.find(i => EI_ACCEPTANCE_TEST_IDS.includes(i.testId))?.failureReason ?? ''}`);
+      assert.equal(report.summary.FAIL, failed, name);
+      assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
+      assert.deepEqual(report.results.filter(i => i.status === 'PASS').map(i => i.testId).sort(),
+        passed === 4 ? [...EI_ACCEPTANCE_TEST_IDS].sort() : passed === 3 ? EI_ACCEPTANCE_TEST_IDS.filter(id => id !== 'EI-005').sort() : [], name);
+      for (const item of report.results.filter(i => !EI_ACCEPTANCE_TEST_IDS.includes(i.testId))) {
+        assert.equal(item.status, 'BLOCKED', `${name}:${item.testId}`);
+      }
+      if (failed) assert.equal(report.results.find(i => i.testId === 'EI-005').status, 'FAIL', name);
+      if (passed === 4) assert.equal(run.status, 0, run.stderr);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }
+});
+
+
+test('Enterprise Intelligence actual harness emits BLOCKED for missing configuration without database access', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-ei-missing-config-'));
+  try {
+    const resultPath = path.join(temp, 'result.json');
+    const run = spawnSync(process.execPath, ['scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: {
+        ...process.env, ENTERPRISE_INTELLIGENCE_ACCEPTANCE_DATABASE_URL: '', RELEASE_SHA: releaseSha,
+        GITHUB_RUN_ID: '123456', GITHUB_RUN_ATTEMPT: '2',
+        ACCEPTANCE_WORKFLOW_PATH: workflowPath, ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+        RETAINED_TEST_ID_RESULTS: resultPath,
+        RETAINED_SUITE_COMMAND: 'node scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs',
+      },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const emitted = JSON.parse(readFileSync(resultPath, 'utf8'));
+    assert.equal(emitted.results.length, 4);
+    assert.ok(emitted.results.every(item => item.status === 'BLOCKED'
+      && item.failureCode === 'setup_failed' && item.actual === null && item.cleanupVerified === true));
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('Enterprise Intelligence retained runner keeps per-case outcomes while failing the CI gate', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-ei-retained-runner-'));
+  try {
+    const producerPath = path.join(temp, 'unit-producer.mjs');
+    const helperUrl = new URL('./enterpriseIntelligenceAcceptanceEvidence.mjs', import.meta.url).href;
+    // Test-only producer inputs exercise process/result transport; no PostgreSQL claim.
+    writeFileSync(producerPath, `
+      import fs from 'node:fs';
+      import { writeEnterpriseIntelligenceAcceptanceProducer } from ${JSON.stringify(helperUrl)};
+      const actualByTestId = JSON.parse(fs.readFileSync('tests/acceptance/fixtures/enterprise-intelligence-evidence-unit-results.json', 'utf8'));
+      const failuresByTestId = {}, blockedByTestId = {};
+      if (process.env.EI_UNIT_OUTCOME !== 'PASS') {
+        delete actualByTestId['EI-005'];
+        if (process.env.EI_UNIT_OUTCOME === 'FAIL') failuresByTestId['EI-005'] = { failureCode: 'assertion_failed' };
+        else blockedByTestId['EI-005'] = { failureCode: 'setup_failed' };
+      }
+      writeEnterpriseIntelligenceAcceptanceProducer(process.env.RETAINED_TEST_ID_RESULTS, {
+        actualByTestId, failuresByTestId, blockedByTestId, cleanupVerified: true,
+        command: process.env.RETAINED_SUITE_COMMAND,
+        identity: {
+          releaseSha: process.env.RELEASE_SHA, workflowRunId: process.env.GITHUB_RUN_ID,
+          workflowAttempt: process.env.GITHUB_RUN_ATTEMPT, environment: process.env.ACCEPTANCE_EVIDENCE_ENVIRONMENT,
+          workflowPath: process.env.ACCEPTANCE_WORKFLOW_PATH,
+        },
+      });
+    `);
+    const suite = loadExecutionBindings().retainedSuites.find(i => i.suiteId === 'enterprise-intelligence-postgres-acceptance');
+    const bindingsPath = path.join(temp, 'bindings.json');
+    writeFileSync(bindingsPath, JSON.stringify({ retainedSuites: [{ ...suite, command: [process.execPath, producerPath] }] }));
+    for (const outcome of ['PASS', 'FAIL', 'BLOCKED']) {
+      const manifestPath = path.join(temp, `retained-${outcome}.json`);
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveRetainedSuites.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, RELEASE_SHA: releaseSha, GITHUB_RUN_ID: '123456', GITHUB_RUN_ATTEMPT: '2',
+          ACCEPTANCE_WORKFLOW_PATH: workflowPath, ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request',
+          ACCEPTANCE_BINDINGS: bindingsPath, RETAINED_RESULTS_MANIFEST: manifestPath,
+          EI_UNIT_OUTCOME: outcome,
+        },
+      });
+      assert.equal(run.status, outcome === 'PASS' ? 0 : 1, `${outcome}: ${run.stderr}`);
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      assert.equal(manifest.suites[0].status, 'PASS', 'producer execution completed and emitted validated independent outcomes');
+      assert.equal(manifest.results.length, 4);
+      assert.equal(manifest.results.find(i => i.testId === 'EI-005').status, outcome);
+      assert.equal(manifest.results.filter(i => i.testId !== 'EI-005' && i.status === 'PASS').length, 3);
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});

@@ -75,7 +75,7 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261004112232');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261008022445');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -89,12 +89,66 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
-  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261004112232')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 99)'));
+  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261008022445')"));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 100)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
-  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261004112232'/u);
+  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261008022445'/u);
   assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
+});
+
+test('canonical source-size successor advances exact identity and only approved authority access', () => {
+  const sql = readFileSync(
+    'supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql', 'utf8',
+  ).replaceAll('\r\n', '\n');
+  const authorityGrant = 'GRANT EXECUTE ON FUNCTION public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)\n    TO service_role;';
+  const authorityRevoke = 'REVOKE EXECUTE ON FUNCTION public.pr1b_assert_command_authority(uuid,uuid,uuid,text,bigint)\n    FROM PUBLIC,anon,authenticated;';
+  const required = [
+    authorityGrant, authorityRevoke,
+    "marker.migration_tip<>'20261004112232'",
+    "marker_constraint<>'(migration_tip = ''20261004112232''::text)'",
+    "old_not_equal text:='marker.migration_tip<>''20261004112232'''",
+    "new_not_equal text:='marker.migration_tip<>''20261008022445'''",
+    "old_equal text:='marker.migration_tip=''20261004112232'''",
+    "new_equal text:='marker.migration_tip=''20261008022445'''",
+    "old_assert text:='marker.migration_tip = ''20261004112232'''",
+    "new_assert text:='marker.migration_tip = ''20261008022445'''",
+    'synthetic_ai_campaign_activate_final_continuation',
+    'synthetic_ai_campaign_bootstrap',
+    'pr_c_controlled_human_assert_marker',
+    'synthetic_ai_campaign_activate_brd_v3_quality_validation',
+    "(length(final_activation_definition)-length(replace(final_activation_definition,old_not_equal,'')))/length(old_not_equal)<>1",
+    "(length(bootstrap_definition)-length(replace(bootstrap_definition,old_equal,'')))/length(old_equal)<>1",
+    "(length(assert_marker_definition)-length(replace(assert_marker_definition,old_assert,'')))/length(old_assert)<>1",
+    "(length(brd_v3_activation_definition)-length(replace(brd_v3_activation_definition,old_not_equal,'')))/length(old_not_equal)<>1",
+    "EXISTS(SELECT 1 FROM public.pr_c_controlled_human_exercises WHERE lifecycle<>'deprovisioned')",
+    'WHERE content_bytes <= 0 OR content_bytes > 12000000',
+    'CHECK (content_bytes > 0 AND content_bytes <= 12000000)',
+    "UPDATE public.hosted_pilot_environment_identity SET migration_tip='20261008022445' WHERE singleton",
+    "CHECK(migration_tip='20261008022445')",
+  ];
+  for (const marker of required) assert.ok(sql.includes(marker), `missing source-size identity contract: ${marker}`);
+  assert.match(sql, /CHECK\(migration_tip IN\([^)]*'20261004112232','20261008022445'\)\)/u);
+  const hasOnlyApprovedGrant = candidate => candidate.split(authorityGrant).length === 2
+    && !/(?:GRANT|CREATE ROLE|ALTER ROLE|DROP TABLE)/iu.test(candidate.replace(authorityGrant, '').replace(/^\s*--.*$/gmu, ''));
+  assert.ok(hasOnlyApprovedGrant(sql));
+  assert.doesNotMatch(sql, /UPDATE public\.(?:enterprise_intelligence|studio_artifact)_runtime_control/iu);
+  const validates = candidate => required.every(marker => candidate.includes(marker))
+    && /CHECK\(migration_tip IN\([^)]*'20261004112232','20261008022445'\)\)/u.test(candidate)
+    && hasOnlyApprovedGrant(candidate)
+    && !/UPDATE public\.(?:enterprise_intelligence|studio_artifact)_runtime_control/iu.test(candidate);
+  assert.equal(validates(sql), true);
+  for (const hostile of [
+    ...required.map(marker => sql.replace(marker, 'removed_contract_marker')),
+    sql.replace("marker.migration_tip<>'20261004112232'", "marker.migration_tip<>'20261004025101'"),
+    sql.replace("CHECK(migration_tip='20261008022445')", "CHECK(migration_tip='20261004112232')"),
+    sql.replace("'20261004112232','20261008022445'", "'20261008022445'"),
+    `${sql}\nGRANT EXECUTE ON FUNCTION public.pr_c_controlled_human_assert_marker() TO authenticated;`,
+    sql.replace(authorityGrant, authorityGrant.replace('TO service_role;', 'TO authenticated;')),
+    sql.replace(authorityGrant, authorityGrant.replace('TO service_role;', 'TO service_role, PUBLIC;')),
+    `${sql}\n${authorityGrant}`,
+    `${sql}\nUPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true;`,
+  ]) assert.equal(validates(hostile), false);
 });
 
 test('projection RPC volatility successor is exact and adversarially bound', () => {
