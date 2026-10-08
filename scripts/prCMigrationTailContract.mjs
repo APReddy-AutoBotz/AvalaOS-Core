@@ -42,10 +42,10 @@ export const assertPrCMigrationTail = migrationNames => {
 };
 
 // Full fresh-chain runners validate every approved migration before reading the
-// latest identity-bearing tip. The source-size CHECK correction is identity-neutral:
-// it grants no new hosted exercise/provider authority and changes no marker table.
-// The full ordered chain remains bound separately by its exact names and hashes.
+// latest identity-bearing tip. The source-size correction advances only the
+// exact hosted-pilot identity and its already-authorized current consumers; it
+// grants no hosted exercise, provider, or spending authority.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return '20261004112232';
+  return '20261008022445';
 };

@@ -522,91 +522,84 @@ try {
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
   `);
+  assert.equal(migrations.at(-1), sizeLimitMigration);
   for (const migration of migrations) {
+    if (migration === sizeLimitMigration) continue;
     const sql = await readFile(join('supabase/migrations', migration), 'utf8');
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
       () => migrationTransaction(db, migration, sql));
   }
 
-  activeCasePhase = 'setup-foundation-contract';
-  const contentBytesConstraint = (await db.query(
-    `SELECT pg_get_constraintdef(constraint_row.oid) definition
-     FROM pg_constraint constraint_row
-     JOIN pg_class relation ON relation.oid=constraint_row.conrelid
-     JOIN pg_namespace schema ON schema.oid=relation.relnamespace
-     WHERE schema.nspname='public' AND relation.relname='enterprise_evidence_source_versions'
-       AND pg_get_constraintdef(constraint_row.oid) LIKE '%content_bytes%'`,
-  )).rows.map(item => item.definition).join(' ');
-  assert.match(contentBytesConstraint, /content_bytes\s*<=\s*12000000/u);
-  assert.doesNotMatch(contentBytesConstraint, /12582912/u);
-  assert.equal((await row(db,
-    "SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed",
-  )).allowed, true);
-  assert.equal((await row(db,
-    "SELECT has_function_privilege('authenticated','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed",
-  )).allowed, false);
+  // Exercise the exact successor from its predecessor, before fixture rows exist.
+  const sizeSql = await readFile(join('supabase/migrations', sizeLimitMigration), 'utf8');
+  activeCasePhase = 'setup-empty-size-upgrade';
+  await db.query('BEGIN');
+  try {
+    await db.query(sizeSql);
+    assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261008022445');
+  } finally { await db.query('ROLLBACK'); }
 
-  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
-  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
-  assert.equal(await providerDisabled(db), true);
+  // Shared SQL-only prerequisites simulate completed provider output. They make
+  // no HTTP/provider call and are not target mutations. Disable both runtimes
+  // immediately after constructing them, before upgrade proof and all EI cases.
   activeCasePhase = 'setup-foundation-fixture';
   fixture = await createEnterpriseIntelligenceFixture(db);
   assert.equal(fixture.org, EI_ACCEPTANCE_SCOPE.organizationId);
   assert.equal(fixture.workspace, EI_ACCEPTANCE_SCOPE.workspaceId);
-  await db.query(
-    "INSERT INTO public.organizations(id,name,slug) VALUES($1,'EI foreign acceptance','ei-foreign-acceptance')",
-    [foreignOrg],
-  );
-  await db.query(
-    "INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'EI foreign acceptance','ei-foreign-acceptance')",
-    [foreignWorkspace, foreignOrg],
-  );
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
   assert.equal(await providerDisabled(db), true);
-  console.log('FOUNDATION PASS one full current ordered migration chain and one reusable fixture');
+  await db.query("INSERT INTO public.organizations(id,name,slug) VALUES($1,'EI foreign acceptance','ei-foreign-acceptance')", [foreignOrg]);
+  await db.query("INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'EI foreign acceptance','ei-foreign-acceptance')", [foreignWorkspace, foreignOrg]);
 
-  await runCase('EI-001', async () => {
-    markPhase('migration-compatible-history');
-    const sizeSql = await readFile(join('supabase/migrations', sizeLimitMigration), 'utf8');
-    const restoreHistoricalLimit = async () => db.query(`
-      ALTER TABLE public.enterprise_evidence_source_versions
-        DROP CONSTRAINT enterprise_evidence_source_versions_size_limit_check;
-      ALTER TABLE public.enterprise_evidence_source_versions
-        ADD CONSTRAINT enterprise_evidence_source_versions_content_bytes_check
-        CHECK (content_bytes > 0 AND content_bytes <= 12582912);
-    `);
-    const compatibleBefore = await targetFingerprint(db, fixture.org, fixture.workspace);
-    await restoreHistoricalLimit();
+  activeCasePhase = 'setup-compatible-size-upgrade';
+  const compatibleBefore = await targetFingerprint(db, fixture.org, fixture.workspace);
+  await db.query('BEGIN');
+  try {
     await db.query(sizeSql);
     assert.deepEqual(await targetFingerprint(db, fixture.org, fixture.workspace), compatibleBefore);
+  } finally { await db.query('ROLLBACK'); }
 
-    markPhase('migration-incompatible-history');
-    await db.query('SAVEPOINT historical_size_fixture');
-    try {
-      await restoreHistoricalLimit();
-      await runSourceCommand(db, {
-        sourceId: uuid(901), sourceVersionId: uuid(902), requestId: uuid(903),
-        executionToken: uuid(904), idempotencyKey: 'ei-001-historical-limit-fixture',
-        authorizationVersion: await authorizationVersion(db, fixture.org, fixture.requester),
-        contentBytes: 12_000_001,
-      });
-      const incompatibleBefore = await targetFingerprint(db, fixture.org, fixture.workspace);
-      await db.query('SAVEPOINT size_migration_attempt');
-      await assert.rejects(db.query(sizeSql), /ENTERPRISE_SOURCE_SIZE_HISTORY_REQUIRES_REVIEW/u);
-      await db.query('ROLLBACK TO SAVEPOINT size_migration_attempt');
-      await db.query('RELEASE SAVEPOINT size_migration_attempt');
-      assert.deepEqual(await targetFingerprint(db, fixture.org, fixture.workspace), incompatibleBefore);
-      const oldConstraint = await row(db, `SELECT pg_get_constraintdef(oid) definition
-        FROM pg_constraint WHERE conrelid='public.enterprise_evidence_source_versions'::regclass
-          AND conname='enterprise_evidence_source_versions_content_bytes_check'`);
-      assert.match(oldConstraint.definition, /12582912/u);
-      assert.equal(Number((await row(db, `SELECT count(*) n FROM pg_constraint
-        WHERE conrelid='public.enterprise_evidence_source_versions'::regclass
-          AND conname='enterprise_evidence_source_versions_size_limit_check'`)).n), 0);
-    } finally {
-      await db.query('ROLLBACK TO SAVEPOINT historical_size_fixture');
-      await db.query('RELEASE SAVEPOINT historical_size_fixture');
-    }
-    assert.deepEqual(await targetFingerprint(db, fixture.org, fixture.workspace), compatibleBefore);
+  activeCasePhase = 'setup-incompatible-size-upgrade';
+  await db.query('BEGIN');
+  try {
+    await runSourceCommand(db, {
+      sourceId: uuid(901), sourceVersionId: uuid(902), requestId: uuid(903),
+      executionToken: uuid(904), idempotencyKey: 'ei-001-historical-limit-fixture',
+      authorizationVersion: await authorizationVersion(db, fixture.org, fixture.requester),
+      contentBytes: 12_000_001,
+    });
+    const incompatibleBefore = await targetFingerprint(db, fixture.org, fixture.workspace);
+    await db.query('SAVEPOINT size_migration_attempt');
+    await assert.rejects(db.query(sizeSql), /ENTERPRISE_SOURCE_SIZE_HISTORY_REQUIRES_REVIEW/u);
+    await db.query('ROLLBACK TO SAVEPOINT size_migration_attempt');
+    await db.query('RELEASE SAVEPOINT size_migration_attempt');
+    assert.deepEqual(await targetFingerprint(db, fixture.org, fixture.workspace), incompatibleBefore);
+    const oldConstraint = await row(db, `SELECT pg_get_constraintdef(oid) definition
+      FROM pg_constraint WHERE conrelid='public.enterprise_evidence_source_versions'::regclass
+        AND conname='enterprise_evidence_source_versions_content_bytes_check'`);
+    assert.match(oldConstraint.definition, /12582912/u);
+    assert.equal(Number((await row(db, `SELECT count(*) n FROM pg_constraint
+      WHERE conrelid='public.enterprise_evidence_source_versions'::regclass
+        AND conname='enterprise_evidence_source_versions_size_limit_check'`)).n), 0);
+    assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261004112232');
+  } finally { await db.query('ROLLBACK'); }
+  assert.deepEqual(await targetFingerprint(db, fixture.org, fixture.workspace), compatibleBefore);
+
+  activeCasePhase = 'setup-current-size-upgrade';
+  await migrationTransaction(db, sizeLimitMigration, sizeSql);
+  const contentBytesConstraint = (await db.query(`SELECT pg_get_constraintdef(oid) definition
+    FROM pg_constraint WHERE conrelid='public.enterprise_evidence_source_versions'::regclass
+      AND pg_get_constraintdef(oid) LIKE '%content_bytes%'`)).rows.map(item => item.definition).join(' ');
+  assert.match(contentBytesConstraint, /content_bytes\s*<=\s*12000000/u);
+  assert.doesNotMatch(contentBytesConstraint, /12582912/u);
+  assert.equal((await row(db, "SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).allowed, true);
+  assert.equal((await row(db, "SELECT has_function_privilege('authenticated','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).allowed, false);
+  assert.equal(await providerDisabled(db), true);
+  console.log('FOUNDATION PASS full current chain; empty, compatible and incompatible size upgrades; SQL-only fixture');
+
+  await runCase('EI-001', async () => {
+
     markPhase('canonical-boundary-source');
     const authVersion = await authorizationVersion(db, fixture.org, fixture.requester);
     const before = await targetCounts(db, fixture.org, fixture.workspace, 'evidence.source.create');

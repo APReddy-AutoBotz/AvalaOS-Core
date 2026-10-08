@@ -119,7 +119,7 @@
     "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
     "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
     "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b",
-    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:1bc81c5d246827cdc885c63311c879df4468a6d8d49bfe45a6efc08e51d6ab0b",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:3a0e51ed52070d417b3b029f094ead46d1ce62577548862e70713985573cb215",
     "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:a803d8f217623ec66ccfe4441e0482fa4dac4deff13f9b4f694bc1510bcc032d",
     "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
     "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
@@ -128,7 +128,7 @@
     "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql": "sha256:768abe5b7e6abddadde060998a548f5c8f70b44c221a458cad5176b5118abe35",
     "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql": "sha256:e844a748667c55d6c62c787561f084b99e0af3e077d729e517b0fa160a7e748f",
     "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql": "sha256:6c29886a31c7763f3f1fe72a6708f1987966ecfe129e99ed9cc4541883fbf838",
-    "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:e42b0c797f750fefdda5b83648617cb48c4a1c079de8b7d2954cee9ab749eb05"
+    "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:18ad71bcc83b381575b03b961bb168a9580b47c837b44b3ff9d9be5ed6b90315"
   },
   "contracts": [
     {

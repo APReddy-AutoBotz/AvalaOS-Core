@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
-import {assertPrCMigrationTail} from './prCMigrationTailContract.mjs';
+import {assertPrCMigrationTail,approvedFullChainTip} from './prCMigrationTailContract.mjs';
 
 const migrationName='20260831062024_governed_delivery_monitor_pr_c.sql';
 const controlledHumanMigrationName='20260904120000_pr_c_controlled_human_exercise_authority.sql';
@@ -39,6 +39,7 @@ assert.equal(migrations.at(-3), '20261004025101_studio_brd_source_fact_retention
 assert.equal(migrations.at(-2), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
 assert.equal(migrations.at(-1), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
 assertPrCMigrationTail(migrations);
+assert.equal(approvedFullChainTip(migrations),'20261008022445');
 assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
 assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);
 assert.match(deferredAuthoritySql,/SET CONSTRAINTS public\.enterprise_pr_c_package_binding, public\.enterprise_pr_c_item_current_binding, public\.enterprise_pr_c_baseline_item_binding, public\.enterprise_pr_c_baseline_manifest_binding IMMEDIATE;/u);
