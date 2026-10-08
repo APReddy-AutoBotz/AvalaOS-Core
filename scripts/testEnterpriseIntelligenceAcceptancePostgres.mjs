@@ -835,11 +835,13 @@ try {
       () => serviceCall(db, () => db.query(
         'UPDATE public.enterprise_evidence_source_versions SET content_hash=$1 WHERE id=$2',
         ['f'.repeat(64), uuid(2002)],
-      )), /IMMUTABLE|immutable/u, () => targetFingerprint(db, fixture.org, fixture.workspace));
+      )), /IMMUTABLE|immutable|^permission denied for table enterprise_evidence_source_versions$/u,
+      () => targetFingerprint(db, fixture.org, fixture.workspace));
     const deleteDenied = await expectRejectedWithoutEffect(db, 'ei_002_delete',
       () => serviceCall(db, () => db.query(
         'DELETE FROM public.enterprise_evidence_source_versions WHERE id=$1', [uuid(2002)],
-      )), /IMMUTABLE|immutable/u, () => targetFingerprint(db, fixture.org, fixture.workspace));
+      )), /IMMUTABLE|immutable|^permission denied for table enterprise_evidence_source_versions$/u,
+      () => targetFingerprint(db, fixture.org, fixture.workspace));
     return {
       logicalMutationCount: 1,
       sourceDelta: after.sources - before.sources,
@@ -1041,7 +1043,7 @@ try {
       () => serviceCall(db, () => db.query(
         'UPDATE public.enterprise_assemble_blueprints SET deployment_enabled=true WHERE id=$1',
         [blueprintId],
-      )), /check constraint|IMMUTABLE|immutable/u, fingerprint);
+      )), /check constraint|IMMUTABLE|immutable|^permission denied for table enterprise_assemble_blueprints$/u, fingerprint);
     markPhase('blueprint-exact-replay');
     const replayBefore = await targetCounts(db, fixture.org, fixture.workspace, 'assemble.blueprint.create');
     const replay = await replayCommand(db, {

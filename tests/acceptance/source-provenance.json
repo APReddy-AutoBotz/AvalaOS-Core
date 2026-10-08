@@ -119,7 +119,7 @@
     "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
     "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
     "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b",
-    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:110ee02892419cb4937d0441f720187256a584856e152c94824f538e1d19c052",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:c509d96da93a45761eb7360aa7c8f518135697c5caf91c83f15cd09ab77aba16",
     "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:a803d8f217623ec66ccfe4441e0482fa4dac4deff13f9b4f694bc1510bcc032d",
     "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
     "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",

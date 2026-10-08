@@ -61,6 +61,8 @@ AP explicitly approved the correction on 2026-10-08: grant EXECUTE on that one e
 
 ## Rollback and fallback
 
+Candidate `4378ef9b` executed the corrected full-chain, empty/compatible/incompatible-history and real-role authority checks successfully. EI-001 and EI-004 passed. EI-002 and EI-005 reached their mutation-denial checks, where PostgreSQL correctly rejected direct table writes before a constraint/immutability trigger ran; the harness incorrectly accepted only the later error wording. The corrected matcher also accepts the exact expected table-permission error while retaining unchanged-row fingerprints. These prove denial at the actual service-role boundary; they do not claim trigger execution. Fresh candidate evidence must prove all four complete cases before merge.
+
 Revert acceptance harness, producer, owner bindings and metadata together to return the four cases to BLOCKED. When the approved constraint correction is merged, retain immutable history and correct future issues with an additive forward migration; do not weaken the canonical limit or rewrite data as a test rollback. No hosted rollback is authorized or needed by this repository-only package.
 
 If the authority grant must be withdrawn later, a separately authorized forward migration may revoke only its service-role EXECUTE grant; Enterprise commands then fail closed at their authority check. Keep the byte limit and browser-role denial intact. Do not alter historical migrations or silently substitute a privileged test caller.
