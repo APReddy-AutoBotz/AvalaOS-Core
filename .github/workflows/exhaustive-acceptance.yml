@@ -21,6 +21,7 @@ permissions:
   contents: read
 
 env:
+  ACCEPTANCE_WORKFLOW_PATH: .github/workflows/exhaustive-acceptance.yml
   ACCEPTANCE_EXECUTION_KIND: hosted_preview
   RELEASE_SHA: ${{ inputs.release_sha || github.event.pull_request.head.sha }}
   NETLIFY_DEPLOY_ID: ${{ inputs.netlify_deploy_id || 'pull-request-not-deployed' }}
@@ -113,7 +114,6 @@ jobs:
         env:
           PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           CANDIDATE_SHA: ${{ env.RELEASE_SHA }}
-          ACCEPTANCE_WORKFLOW_PATH: .github/workflows/exhaustive-acceptance.yml
         run: |
           npm run test:migrations:pilot-operations:postgres
           node scripts/produceExhaustiveServerEvidence.mjs

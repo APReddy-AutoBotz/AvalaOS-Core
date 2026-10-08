@@ -1,5 +1,9 @@
 # Exhaustive hosted product acceptance
 
+## Dispatch identity correction (2026-10-09)
+
+PR #279 is merged and its candidate preview proved all 18 supported browser cases. The subsequent approved stable run `37845645704` stopped before browser execution because the dispatch caller was not recognized by the provenance contract. Its retained producer also recorded the caller path instead of the canonical reusable workflow path; the immutable report therefore records 14 PASS / 94 BLOCKED despite 26 exact retained results executing successfully. The active plan owns a repository-only correction that preserves the real caller ref and consistently binds producer artifacts to `.github/workflows/exhaustive-acceptance.yml`. Planned verification is not a fresh stable PASS; the full release gate remains incomplete and a further hosted attempt needs its own authority.
+
 This suite is the release-bound acceptance layer for the AvalaOS hosted synthetic Sandbox. It does not authorize production, customer data, external users, DNS changes, or real AI-provider/BYOK egress.
 
 ## Current approved correction (2026-10-08)

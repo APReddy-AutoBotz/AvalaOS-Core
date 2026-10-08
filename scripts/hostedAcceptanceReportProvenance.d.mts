@@ -8,10 +8,12 @@ export interface HostedAcceptanceWorkflowRuntime {
   runAttempt: string;
   workflowSha: string;
   releaseSha: string;
+  callerWorkflowPath?: string;
 }
 
 export const EXHAUSTIVE_ACCEPTANCE_WORKFLOW: '.github/workflows/exhaustive-acceptance.yml';
 export const PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW: '.github/workflows/preview-exhaustive-browser-qa.yml';
+export const EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW: '.github/workflows/exhaustive-acceptance-dispatch-bridge.yml';
 
 export function resolveHostedAcceptanceWorkflowPath(input: {
   environment: Record<string, string | undefined>;

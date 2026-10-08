@@ -39,6 +39,11 @@ const exhaustiveWorkflow = parseWorkflowYaml(
   'exhaustive-acceptance.yml',
 );
 const exhaustiveSteps = exhaustiveWorkflow.jobs.acceptance.steps;
+assert.equal(
+  exhaustiveWorkflow.env?.ACCEPTANCE_WORKFLOW_PATH,
+  '.github/workflows/exhaustive-acceptance.yml',
+  'the reusable workflow must own canonical producer identity even when invoked through the dispatch bridge',
+);
 const exhaustiveCheckout = exhaustiveSteps.find(step => step.uses === 'actions/checkout@v4');
 assert.equal(exhaustiveCheckout?.with?.['fetch-depth'], 0, 'retained PR1D authority requires immutable baseline history');
 const exhaustiveHostedStep = exhaustiveSteps.find(step => step.name === 'Run exhaustive real hosted Sandbox acceptance');

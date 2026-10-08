@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Stable acceptance dispatch identity defect (2026-10-09)
+
+Executed evidence: PR #279 merged with its tested tree unchanged, all 14 candidate workflows passed, and post-merge Core CI `37805242661` passed. AP's one approved stable attempt `37845645704` failed declaration loading with `HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED`; deployment verification and hosted browser execution were skipped. Its digest-verified artifact records 14 PASS / 0 FAIL / 94 BLOCKED / 0 UNCOVERED. All 16 retained gates and all 26 exact retained results passed, but the report rejected those 26 for a workflow-path mismatch. Confirmed source defect: the caller dispatch bridge is confused with the canonical reusable producer. The existing checks fail closed; no false PASS or product authorization bypass was demonstrated. Planned verification must cover the actual dispatch-shaped declaration loader, canonical producer/report agreement and caller substitution rejection. The failed artifact remains unchanged, and no new hosted execution or production-readiness claim follows from the repository correction.
+
 ## Hosted Sandbox acceptance correction (2026-10-08)
 
 Executed baseline: PR #278 merged with identical tested tree; acceptance run `37726540790` attempt 1 records 40 PASS / 0 FAIL / 68 BLOCKED, and post-merge Core CI `37729275716` passed. Confirmed source defects in acceptance tooling: browser-local hosted results have no valid executed fixture path; navigation cannot prove ADMIN-001 privileged audit; retained-only hosted ownership could otherwise bypass the hosted requirement. AP approved the 14 bounded mutation-definition corrections and truthful execution-evidence integration under `docs/planning/hosted-sandbox-acceptance.md`. Focused verification and candidate CI are planned. No stable hosted inspection/execution occurred; deployment status remains unknown and no readiness is inferred.

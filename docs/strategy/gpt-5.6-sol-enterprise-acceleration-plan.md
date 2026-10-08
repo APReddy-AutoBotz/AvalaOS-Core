@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Acceptance dispatch identity continuation (2026-10-09)
+
+PR #279 and post-merge Core CI are verified. The separately approved stable run `37845645704` exposed a caller/callee workflow identity mismatch before browser execution; its 14 PASS / 94 BLOCKED report remains immutable. Architecture, security and quality findings are complete and closed. The root resolved the correction to one fixed producer workflow setting plus strict recognition of the existing authorized dispatch caller, preserving its raw runtime ref. Wave 2 uses the managed workspace-write profile with one worker owning workflow/provenance code and focused tests; the root owns active documentation, derived source indexes, integration and the single PR. Follow `docs/planning/hosted-sandbox-acceptance.md`. No criteria, product runtime, schema, scoring, hosted settings, deployment or paid actions are included. The consumed hosted run does not authorize a retry.
+
 ## Hosted Sandbox acceptance correction (2026-10-08)
 
 PR #278 is merged with 40 PASS / 68 BLOCKED, successful candidate CI and post-merge Core CI `37729275716`. AP approved the next bounded browser evidence correction. All three Wave 1 reviewers are complete; the root reconciled their findings, including the planned-scope blocker and unsupported Admin audit claim. Wave 2 uses the managed workspace-write profile with one worker on browser measurement/attachments and the root on report, catalog, provenance, documentation and integration. `docs/planning/hosted-sandbox-acceptance.md` owns this one implementation PR. Only the 14 reviewed mutation definitions change; no runtime, schema, scoring, paid or hosted operation is included.

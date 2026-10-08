@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Acceptance caller and producer identity (2026-10-09)
+
+The stable dispatch bridge and reusable acceptance workflow have different legitimate identities. `GITHUB_WORKFLOW_REF` identifies the actual caller; retained, oracle, server and report evidence must consistently identify `.github/workflows/exhaustive-acceptance.yml` as their canonical producer. Preserve both meanings rather than rewriting the raw caller ref. Admit only the exact existing bridge/callee pairing with its repository, controller, create-event, branch, release and deployment bindings; declaration-only loading must remain network-free. Stable run `37845645704` failed closed on this mismatch before browser execution. The correction is test infrastructure only, governed by `docs/planning/hosted-sandbox-acceptance.md`; no product trust or runtime boundary changes.
+
 ## Hosted Sandbox acceptance correction (2026-10-08)
 
 The accepted source baseline is PR #278 / `766cd7fa7cc479f9d366537df89c498fdddda0d1`, with 40 exact acceptance cases passed and 68 blocked. The current test-only change separates executed browser-local Sandbox fixture evidence from server tenant execution scope. Static declarations stay planned. Same-run measured browser attachments must bind source, deployment, workflow and both projects; they cannot prove tenant authorization, privileged audit or hosted database effects. ADMIN-001 remains blocked under its existing requirement. See `docs/planning/hosted-sandbox-acceptance.md`; no product architecture or runtime boundary changes.

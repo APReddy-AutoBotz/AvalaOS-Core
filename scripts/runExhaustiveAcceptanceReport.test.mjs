@@ -86,11 +86,10 @@ const hostedReport = (metadata = hostedMetadata()) => ({
   stats: { expected: 2, unexpected: 0, skipped: 0 },
 });
 
-const fullInventoryHostedReport = () => {
+const fullInventoryHostedReport = (metadata = hostedMetadata()) => {
   const catalog = loadCatalog();
   const catalogByTestId = new Map(catalog.cases.map(item => [item.testId, item]));
   const hostedBindings = loadExecutionBindings().hostedTests;
-  const metadata = hostedMetadata();
   const contrastProfiles = new Map([['SANDBOX-009', 'initial-entry'], ['SAFETY-007', 'representative-surface']]);
   const withContrastSummaries = (binding, projectName) => {
     const value = hostedTestResult(projectName);
@@ -131,6 +130,40 @@ const fullInventoryHostedReport = () => {
     suites: [{ title: 'tests/browser/exhaustiveHostedAcceptance.spec.ts', specs }],
     stats: { expected: executable, unexpected: 0, skipped },
   };
+};
+
+const measuredTargetActions = {
+  'SANDBOX-002': ['process-analyst','ap-process-owner','delivery-lead','control-reviewer','automation-contributor','buyer-viewer','platform-admin'].map(persona => `persona-entry:${persona}`),
+  'SAFETY-004': ['initial-stale-boards','stale-delivery-pack','missing-delivery-pack','malformed-delivery-pack'].map(scope => `invalid-scope-reconstruction:${scope}`),
+  'ASSESS-001': ['process-create'],
+  'ASSESS-004': ['incomplete-process-create'],
+};
+
+const measuredHostedReport = (metadata = hostedMetadata()) => {
+  const catalog = loadCatalog();
+  const bindings = loadExecutionBindings();
+  const report = fullInventoryHostedReport(metadata);
+  for (const spec of report.suites[0].specs) {
+    const id = /^\[([^\]]+)\]/u.exec(spec.title)[1];
+    const binding = bindings.hostedTests.find(item => item.testId === id);
+    if (!binding.scenario) continue;
+    const testCase = catalog.cases.find(item => item.testId === id);
+    for (const execution of spec.tests) {
+      const attempt = execution.results[0];
+      attempt.startTime = '2026-09-08T12:00:00.000Z';
+      attempt.duration = 10_000;
+      const attachment = createHostedSandboxAcceptanceAttachment({
+        testCase, binding, metadata: report.config.metadata, project: execution.projectName,
+        observedAt: '2026-09-08T12:00:01.000Z',
+        measurement: {
+          targetActions: measuredTargetActions[id] ?? [],
+          supportingActions: id === 'ASSESS-004' ? ['draft-save'] : [],
+        },
+      });
+      attempt.attachments.push({ ...attachment, body: Buffer.from(attachment.body).toString('base64') });
+    }
+  }
+  return report;
 };
 
 test('declaration parse failure emits sanitized fail-closed report artifacts', () => {
@@ -209,35 +242,6 @@ test('green hosted execution cannot promote a planned fixture scope', () => {
 });
 
 test('same-run measured Sandbox evidence promotes only the 18 supported browser cases', () => {
-  const catalog = loadCatalog();
-  const bindings = loadExecutionBindings();
-  const targetActions = {
-    'SANDBOX-002': ['process-analyst','ap-process-owner','delivery-lead','control-reviewer','automation-contributor','buyer-viewer','platform-admin'].map(persona => `persona-entry:${persona}`),
-    'SAFETY-004': ['initial-stale-boards','stale-delivery-pack','missing-delivery-pack','malformed-delivery-pack'].map(scope => `invalid-scope-reconstruction:${scope}`),
-    'ASSESS-001': ['process-create'],
-    'ASSESS-004': ['incomplete-process-create'],
-  };
-  const makeMeasuredReport = () => {
-    const report = fullInventoryHostedReport();
-    for (const spec of report.suites[0].specs) {
-      const id = /^\[([^\]]+)\]/u.exec(spec.title)[1];
-      const binding = bindings.hostedTests.find(item => item.testId === id);
-      if (!binding.scenario) continue;
-      const testCase = catalog.cases.find(item => item.testId === id);
-      for (const execution of spec.tests) {
-        const attempt = execution.results[0];
-        attempt.startTime = '2026-09-08T12:00:00.000Z';
-        attempt.duration = 10_000;
-        const attachment = createHostedSandboxAcceptanceAttachment({
-          testCase, binding, metadata: report.config.metadata, project: execution.projectName,
-          observedAt: '2026-09-08T12:00:01.000Z',
-          measurement: { targetActions: targetActions[id] ?? [], supportingActions: id === 'ASSESS-004' ? ['draft-save'] : [] },
-        });
-        attempt.attachments.push({ ...attachment, body: Buffer.from(attachment.body).toString('base64') });
-      }
-    }
-    return report;
-  };
   const attachmentFor = (report, id = 'SANDBOX-001') => report.suites[0].specs.find(spec => spec.title.startsWith(`[${id}]`)).tests[0].results[0].attachments.find(a => a.name === 'hosted-sandbox-acceptance-v1');
   const substitute = (report, change) => {
     const attachment = attachmentFor(report);
@@ -262,7 +266,7 @@ test('same-run measured Sandbox evidence promotes only the 18 supported browser 
   for (const [name, mutate, passCount, failCount = 0] of variants) {
     const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-hosted-measured-report-'));
     try {
-      const report = makeMeasuredReport();
+      const report = measuredHostedReport();
       mutate(report);
       const playwrightPath = path.join(temp, 'playwright.json');
       writeFileSync(playwrightPath, JSON.stringify(report));
@@ -284,6 +288,144 @@ test('same-run measured Sandbox evidence promotes only the 18 supported browser 
         assert.equal(item.actualResult.logicalMutationCount, item.expectedMutationCount);
       }
     } finally { rmSync(temp, { recursive: true, force: true }); }
+  }
+});
+
+test('dispatch bridge retains canonical producer identity for same-run measured Sandbox evidence', () => {
+  const dispatchDeployId = '0123456789abcdef01234567';
+  const dispatchBranch = `exhaustive-acceptance-dispatch--${dispatchDeployId}`;
+  const dispatchWorkflowPath = '.github/workflows/exhaustive-acceptance-dispatch-bridge.yml';
+  const dispatchWorkflowRef = `APReddy-AutoBotz/AvalaOS-Core/${dispatchWorkflowPath}@refs/heads/${dispatchBranch}`;
+  const environment = {
+    ...hostedEnvironment(),
+    RELEASE_SHA: releaseSha,
+    ACCEPTANCE_RELEASE_SHA: releaseSha,
+    EXPECTED_RELEASE_SHA: releaseSha,
+    NETLIFY_DEPLOY_ID: dispatchDeployId,
+    GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+    GITHUB_WORKFLOW_REF: dispatchWorkflowRef,
+    GITHUB_EVENT_NAME: 'create',
+    GITHUB_SHA: releaseSha,
+    GITHUB_REF_TYPE: 'branch',
+    GITHUB_REF: `refs/heads/${dispatchBranch}`,
+    GITHUB_ACTOR: 'APReddy-AutoBotz',
+    GITHUB_TRIGGERING_ACTOR: 'APReddy-AutoBotz',
+  };
+  const metadata = {
+    ...hostedMetadata(),
+    exactHead: releaseSha,
+    deployId: dispatchDeployId,
+    workflowRuntime: {
+      authority: 'github-actions',
+      workflowPath,
+      workflowRef: dispatchWorkflowRef,
+      repository: 'APReddy-AutoBotz/AvalaOS-Core',
+      eventName: 'create',
+      runId: '123456',
+      runAttempt: '2',
+      workflowSha: releaseSha,
+      releaseSha,
+      callerWorkflowPath: dispatchWorkflowPath,
+    },
+  };
+  for (const [name, reportMutation, environmentMutation, expectedPasses] of [
+    ['valid dispatch', () => {}, {}, 18],
+    ['wrong caller', report => { report.config.metadata.workflowRuntime.callerWorkflowPath = '.github/workflows/substituted.yml'; }, {}, 0],
+    ['corrupt canonical producer', () => {}, { ACCEPTANCE_WORKFLOW_PATH: dispatchWorkflowPath }, 0],
+  ]) {
+    const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-dispatch-report-'));
+    try {
+      const report = measuredHostedReport(structuredClone(metadata));
+      reportMutation(report);
+      const playwrightPath = path.join(temp, 'playwright.json');
+      writeFileSync(playwrightPath, JSON.stringify(report));
+      const resultsDir = path.join(temp, 'results');
+      const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8',
+        env: {
+          ...process.env, ...environment, ...environmentMutation,
+          ACCEPTANCE_RESULTS_DIR: resultsDir, PLAYWRIGHT_JSON: playwrightPath,
+          RETAINED_RESULTS_MANIFEST: path.join(temp, 'absent-retained.json'),
+          ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+          SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+        },
+      });
+      assert.notEqual(run.status, 0, `${name}: incomplete coverage remains visible`);
+      const output = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+      assert.equal(output.summary.PASS, expectedPasses, name);
+      assert.equal(output.summary.FAIL, 0, name);
+      assert.equal(output.summary.BLOCKED, 108 - expectedPasses, name);
+      if (expectedPasses === 18) assert.deepEqual(output.summary.browserEvidenceErrors, [], name);
+      else assert.ok(output.summary.browserEvidenceErrors.length > 0, name);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }
+});
+
+test('dispatch bridge canonical workflow path survives retained producer, runner and report transport', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-dispatch-retained-'));
+  try {
+    const bindings = loadExecutionBindings();
+    const suite = bindings.retainedSuites.find(item => item.suiteId === 'govern-postgres-acceptance');
+    const runnerBindingsPath = path.join(temp, 'runner-bindings.json');
+    writeFileSync(runnerBindingsPath, JSON.stringify({ retainedSuites: [suite] }));
+    const retainedPath = path.join(temp, 'retained.json');
+    const dispatchDeployId = '0123456789abcdef01234567';
+    const dispatchBranch = `exhaustive-acceptance-dispatch--${dispatchDeployId}`;
+    const dispatchEnvironment = {
+      ...process.env,
+      RELEASE_SHA: releaseSha,
+      GITHUB_ACTIONS: 'true',
+      GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+      GITHUB_WORKFLOW_REF: `APReddy-AutoBotz/AvalaOS-Core/.github/workflows/exhaustive-acceptance-dispatch-bridge.yml@refs/heads/${dispatchBranch}`,
+      GITHUB_EVENT_NAME: 'create',
+      GITHUB_REF_TYPE: 'branch',
+      GITHUB_REF: `refs/heads/${dispatchBranch}`,
+      GITHUB_ACTOR: 'APReddy-AutoBotz',
+      GITHUB_TRIGGERING_ACTOR: 'APReddy-AutoBotz',
+      GITHUB_SHA: releaseSha,
+      GITHUB_RUN_ID: '123456',
+      GITHUB_RUN_ATTEMPT: '2',
+      ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+      ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'stable-release',
+      GOVERN_ACCEPTANCE_DATABASE_URL: '',
+    };
+    const retainedRun = spawnSync(process.execPath, ['scripts/runExhaustiveRetainedSuites.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: { ...dispatchEnvironment, ACCEPTANCE_BINDINGS: runnerBindingsPath, RETAINED_RESULTS_MANIFEST: retainedPath },
+    });
+    assert.equal(retainedRun.status, 1, retainedRun.stderr);
+    const retained = JSON.parse(readFileSync(retainedPath, 'utf8'));
+    assert.equal(retained.workflowPath, workflowPath);
+    assert.deepEqual(retained.results.map(item => item.testId).sort(), ['GOVERN-008', 'GOVERN-009', 'GOVERN-010']);
+    assert.ok(retained.results.every(item => item.workflowPath === workflowPath
+      && item.environment === 'stable-release' && item.status === 'BLOCKED'));
+
+    const resultsDir = path.join(temp, 'report');
+    const reportRun = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: {
+        ...dispatchEnvironment,
+        ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED', ACCEPTANCE_RESULTS_DIR: resultsDir,
+        RETAINED_RESULTS_MANIFEST: retainedPath,
+        ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+        SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+        PLAYWRIGHT_JSON: path.join(temp, 'absent-browser.json'),
+      },
+    });
+    assert.equal(reportRun.status, 0, reportRun.stderr);
+    const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+    for (const testId of ['GOVERN-008', 'GOVERN-009', 'GOVERN-010']) {
+      const result = report.results.find(item => item.testId === testId);
+      assert.equal(result.status, 'BLOCKED');
+      assert.equal(result.failureReason, 'Exact retained Test ID assertions were skipped or blocked: govern-postgres-acceptance');
+      assert.doesNotMatch(result.failureReason, /workflow|provenance invalid/u,
+        `${testId} must retain its producer outcome without caller-path substitution`);
+    }
+    assert.equal(report.summary.BLOCKED, 108);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
   }
 });
 
