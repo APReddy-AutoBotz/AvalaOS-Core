@@ -186,6 +186,30 @@ test('validator rejects stale run, cross-project replay, retries and timestamps 
   assert.throws(() => verifyHostedSandboxAttachments(late), /OUTSIDE_ATTEMPT/u);
 });
 
+test('validator accounts for one millisecond of reporter truncation without permitting clock skew', () => {
+  for (const [offsetMs, accepted] of [[0, true], [1, true], [2, false], [1_000, false]]) {
+    const input = validInput('SANDBOX-001');
+    const attempt = input.executions[0].results[0];
+    // Reproduce the independently verified preview boundary: 914 wall-clock
+    // milliseconds since start, with a reported integer duration of 913.
+    attempt.startTime = '2026-10-08T21:45:54.974Z';
+    attempt.duration = 913;
+    mutateAttachmentBody(input, 0, body => {
+      body.observedAt = new Date(Date.parse(attempt.startTime) + attempt.duration + offsetMs).toISOString();
+    });
+    if (accepted) assert.doesNotThrow(() => verifyHostedSandboxAttachments(input));
+    else assert.throws(() => verifyHostedSandboxAttachments(input), /OUTSIDE_ATTEMPT/u);
+  }
+  const early = validInput('SANDBOX-001');
+  mutateAttachmentBody(early, 0, body => {
+    body.observedAt = new Date(Date.parse(startTime) - 1).toISOString();
+  });
+  assert.throws(() => verifyHostedSandboxAttachments(early), /OUTSIDE_ATTEMPT/u);
+  const fractional = validInput('SANDBOX-001');
+  fractional.executions[0].results[0].duration = 1_000.5;
+  assert.throws(() => verifyHostedSandboxAttachments(fractional), /OUTSIDE_ATTEMPT/u);
+});
+
 test('validator rejects missing projects, duplicate projects, local execution and unsupported cases', () => {
   const missing = validInput('PUBLIC-001');
   missing.executions.pop();

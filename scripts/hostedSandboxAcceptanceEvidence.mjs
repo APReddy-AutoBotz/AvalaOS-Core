@@ -7,6 +7,10 @@ const SCHEMA_VERSION = 'hosted-sandbox-acceptance-v1';
 const SOURCE_IDENTITY = 'committed_exact_head';
 const EVIDENCE_SCOPE = 'executed-hosted-sandbox-local';
 const FIXTURE_ID = 'synthetic-default';
+// Playwright truncates elapsed duration to integer milliseconds, while its
+// start time and our observation use wall-clock milliseconds. Their endpoint
+// can differ by one reporting quantum; this is not a general clock-skew grace.
+const REPORTER_DURATION_RESOLUTION_MS = 1;
 const REQUIRED_SOURCE_PATHS = Object.freeze([
   'tests/browser/exhaustiveHostedAcceptance.spec.ts',
   'scripts/hostedSandboxAcceptanceEvidence.mjs',
@@ -218,8 +222,9 @@ const validateAttachmentBody = ({ body, testCase, binding, execution, attempt })
   'HOSTED_SANDBOX_ACTUAL_INVALID');
   const observedEpoch = canonicalTimestamp(body.observedAt, 'HOSTED_SANDBOX_OBSERVED_AT_INVALID');
   const startEpoch = Date.parse(attempt.startTime);
-  assert(Number.isFinite(startEpoch) && Number.isFinite(attempt.duration) && attempt.duration >= 0
-    && observedEpoch >= startEpoch && observedEpoch <= startEpoch + attempt.duration,
+  assert(Number.isFinite(startEpoch) && Number.isSafeInteger(attempt.duration) && attempt.duration >= 0
+    && observedEpoch >= startEpoch
+    && observedEpoch <= startEpoch + attempt.duration + REPORTER_DURATION_RESOLUTION_MS,
   'HOSTED_SANDBOX_OBSERVED_AT_OUTSIDE_ATTEMPT');
   return body;
 };
