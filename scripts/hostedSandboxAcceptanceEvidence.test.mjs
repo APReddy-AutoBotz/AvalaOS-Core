@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import test from 'node:test';
@@ -250,7 +250,9 @@ test('validator rejects missing projects, duplicate projects, local execution an
 });
 
 test('actual Playwright reporter records a wall-clock window across excluded setup time', () => {
-  const directory = mkdtempSync(path.join(process.cwd(), 'output', 'sandbox-window-'));
+  const outputDirectory = path.join(process.cwd(), 'output');
+  mkdirSync(outputDirectory, {recursive:true});
+  const directory = mkdtempSync(path.join(outputDirectory, 'sandbox-window-'));
   try {
     const fixture = validInput('SANDBOX-001');
     const title = fixture.executions[0].title;
