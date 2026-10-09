@@ -9,7 +9,7 @@
     "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
     "package.json": "sha256:75f9f2281bf28421bdaa94caf77e7c925b5719da1b83be419b57928bb4301bf3",
     "vite.config.ts": "sha256:3692e5623118c7ac6af652c0c5a5730124212fe25e97759425229a29c14f2fef",
-    "playwright.config.ts": "sha256:50987b86f28316d46530c6a32dc95008f8894b2975aa50bac4669fe237a831ad",
+    "playwright.config.ts": "sha256:7191461a1c160ea01f0807c5e67cc747d59c1d603a2db882cb4b98b050d403d2",
     "playwright.enterprise-intelligence.config.ts": "sha256:9e949021cb7abe0678ea9eb662543aa073c43857da6dff689087a7afa67d28f9",
     "playwright.pr1d.config.ts": "sha256:8ee945e3f94281f01a95be428eccb8f4b67d1bec42064e5b309764e52fd9db9f",
     "playwright.studio-artifacts.config.ts": "sha256:e4610e44c89d3d89a259d15205946534196f39c44a6e9a80a9cde5dcdc30bc65",
@@ -128,7 +128,8 @@
     "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql": "sha256:768abe5b7e6abddadde060998a548f5c8f70b44c221a458cad5176b5118abe35",
     "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql": "sha256:e844a748667c55d6c62c787561f084b99e0af3e077d729e517b0fa160a7e748f",
     "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql": "sha256:6c29886a31c7763f3f1fe72a6708f1987966ecfe129e99ed9cc4541883fbf838",
-    "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:88cdaa839edb8a00bc1a210d85c2ee110dfea1afdf11d4b89817e9b5473620cb"
+    "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:88cdaa839edb8a00bc1a210d85c2ee110dfea1afdf11d4b89817e9b5473620cb",
+    "supabase/migrations/20261009162752_govern_immutable_action_authority.sql": "sha256:0bd84ee3df629548a55c27aec3dd859e9d12b448d4ba5b356fee2d121a7110f7"
   },
   "contracts": [
     {
@@ -1362,7 +1363,8 @@
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
-        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
       ],
       "ownership": [
         {
@@ -1396,7 +1398,8 @@
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
-        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
       ],
       "ownership": [
         {
@@ -1430,7 +1433,8 @@
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
-        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
       ],
       "ownership": [
         {
@@ -1464,7 +1468,8 @@
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
-        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql"
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
       ],
       "ownership": [
         {

@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { extractCreatedRoutines } from './hostedPilotActivation.mjs';
 
 const migrationPath = new URL('../supabase/migrations/20261009162752_govern_immutable_action_authority.sql', import.meta.url);
 const sql = (await readFile(migrationPath, 'utf8')).replaceAll('\r\n', '\n');
 
 const count = needle => sql.split(needle).length - 1;
+assert.deepEqual(extractCreatedRoutines(sql), [
+  'public.pr1e_govern_actions_match(jsonb, jsonb, jsonb)',
+  'public.pr1e_govern_requires_independent_resolver(jsonb, jsonb)',
+  'public.pr1e_normalize_govern_actions(jsonb, jsonb)',
+], 'canonical inventory must see all private helpers inside the atomic migration');
 
 assert.equal(count('DO $govern_action_authority$'), 1, 'migration must have one atomic statement');
 assert.equal(count('$govern_action_authority$;'), 1, 'atomic statement must close once');

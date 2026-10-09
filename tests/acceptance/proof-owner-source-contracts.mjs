@@ -314,6 +314,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
     "sourceReference": "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
     "selector": "DO $source_size_limit$"
+  },
+  {
+    "anchorId": "ei-acceptance-govern-immutable-action-authority",
+    "sourceReference": "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+    "selector": "DO $govern_action_authority$"
   }
 ]);
 export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
@@ -1394,7 +1399,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
-      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
+      "ei-acceptance-govern-immutable-action-authority"
     ],
     "ownership": [
       {
@@ -1422,7 +1428,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
-      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
+      "ei-acceptance-govern-immutable-action-authority"
     ],
     "ownership": [
       {
@@ -1450,7 +1457,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
-      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
+      "ei-acceptance-govern-immutable-action-authority"
     ],
     "ownership": [
       {
@@ -1478,7 +1486,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
-      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql"
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
+      "ei-acceptance-govern-immutable-action-authority"
     ],
     "ownership": [
       {

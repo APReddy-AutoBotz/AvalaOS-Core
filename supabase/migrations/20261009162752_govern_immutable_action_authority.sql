@@ -96,7 +96,6 @@ BEGIN
     RAISE EXCEPTION 'PR1E_GOVERN_ACTION_AUTHORITY_SOURCE_MISMATCH';
   END IF;
 
-  EXECUTE $create_normalizer$
     CREATE OR REPLACE FUNCTION public.pr1e_normalize_govern_actions(
       p_input_snapshot jsonb,
       p_output_snapshot jsonb
@@ -246,10 +245,8 @@ BEGIN
       END IF;
       RAISE EXCEPTION 'PR1E_GOVERN_ACTION_AUTHORITY_INVALID';
     END
-    $function$
-  $create_normalizer$;
+    $function$;
 
-  EXECUTE $create_matcher$
     CREATE OR REPLACE FUNCTION public.pr1e_govern_actions_match(
       p_input_snapshot jsonb,
       p_output_snapshot jsonb,
@@ -271,10 +268,8 @@ BEGIN
         jsonb_build_object('actionControls',p_stored_actions)
       )=public.pr1e_normalize_govern_actions(p_input_snapshot,p_output_snapshot);
     END
-    $function$
-  $create_matcher$;
+    $function$;
 
-  EXECUTE $create_separation$
     CREATE OR REPLACE FUNCTION public.pr1e_govern_requires_independent_resolver(
       p_input_snapshot jsonb,
       p_output_snapshot jsonb
@@ -299,8 +294,7 @@ BEGIN
       RETURN EXISTS(SELECT 1 FROM jsonb_array_elements(normalized) action
         WHERE action->>'category'='approval-bound');
     END
-    $function$
-  $create_separation$;
+    $function$;
 
   FOR decision_record IN
     SELECT d.id,d.input_snapshot,d.output_snapshot
