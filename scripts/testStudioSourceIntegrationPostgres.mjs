@@ -33,7 +33,7 @@ assert.equal(migrations.at(-5), '20261003123459_studio_brd_prompt_v2_semantic_fi
 assert.equal(migrations.at(-4), '20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
 assert.equal(migrations.at(-3), '20261004025101_studio_brd_source_fact_retention_v3.sql');
 assert.equal(migrations.at(-2), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
-assert.equal(migrations.at(-1), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
+assert.equal(migrations.at(-1), '20261009162752_govern_immutable_action_authority.sql');
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -169,10 +169,10 @@ try {
     WHERE org_id=$1 AND workspace_id=$2`, [fixture.org, fixture.workspace])).studio_source_integration_enabled, false);
 
   const identity = await one(db, `SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`);
-  assert.equal(identity.migration_tip, '20261008022445');
+  assert.equal(identity.migration_tip, '20261009162752');
   const identityConstraint = await one(db, `SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
     WHERE conrelid='public.hosted_pilot_environment_identity'::regclass AND conname='hosted_pilot_environment_identity_migration_tip_check'`);
-  assert.equal(identityConstraint.expression, "(migration_tip = '20261008022445'::text)");
+  assert.equal(identityConstraint.expression, "(migration_tip = '20261009162752'::text)");
   const role = fixed(331);
   const orgRole = fixed(332);
   const packageActor = fixed(333);

@@ -15,10 +15,37 @@ declare const __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__: boolean;
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const syntheticBrowserServerConfigured = typeof __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ !== 'undefined'
-  && __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ === true
-  && supabaseUrl === 'https://127.0.0.1:59999'
-  && isSafePublicSupabaseCredential(supabaseAnonKey);
+export const isSyntheticBrowserLoopbackServerConfiguration = (
+  urlValue: unknown,
+  anonKeyValue: unknown,
+  syntheticBrowserTestBuild: boolean,
+): boolean => {
+  if (!syntheticBrowserTestBuild || !isSafePublicSupabaseCredential(anonKeyValue)) return false;
+  if (typeof urlValue !== 'string') return false;
+  if (urlValue === 'https://127.0.0.1:59999') return true;
+  if (!/^http:\/\/127[.]0[.]0[.]1:\d+\/?$/u.test(urlValue)) return false;
+  try {
+    const url = new URL(urlValue);
+    return url.protocol === 'http:'
+      && url.hostname === '127.0.0.1'
+      && /^\d+$/u.test(url.port)
+      && Number(url.port) >= 1
+      && Number(url.port) <= 65535
+      && url.username === ''
+      && url.password === ''
+      && url.pathname === '/'
+      && url.search === ''
+      && url.hash === '';
+  } catch {
+    return false;
+  }
+};
+const syntheticBrowserServerConfigured = isSyntheticBrowserLoopbackServerConfiguration(
+  supabaseUrl,
+  supabaseAnonKey,
+  typeof __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ !== 'undefined'
+    && __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ === true,
+);
 const serverConfigured = isValidServerConfiguration(supabaseUrl, supabaseAnonKey)
   || syntheticBrowserServerConfigured;
 const hostedSandboxEnabled = import.meta.env.VITE_AVALA_HOSTED_SANDBOX_ENABLED === 'true';

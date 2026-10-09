@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import spec from '../config/pilot-acceptance-spec.json' with { type: 'json' };
+import {
+  CONNECTED_LIFECYCLE_GATE_ID,
+  verifyEnterpriseLifecycleManifestFile,
+} from './enterpriseLifecycleAcceptanceEvidence.mjs';
 
 const authoritative = process.argv.includes('--authoritative');
 const checkedOutHead = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -152,7 +156,7 @@ if (authoritative && candidateMatches && hasAuthoritativeContext) {
 }
 const gates = spec.requiredGates.map(id => {
   const evidence = supplied[id];
-  const wellFormed = evidence !== null
+  const baseWellFormed = evidence !== null
     && !Array.isArray(evidence)
     && typeof evidence === 'object'
     && ['passed', 'failed'].includes(evidence.result)
@@ -160,12 +164,51 @@ const gates = spec.requiredGates.map(id => {
     && evidence.command.trim().length > 0
     && typeof evidence.runId === 'string'
     && evidence.runId.length > 0;
+  const connectedLifecycle = id === CONNECTED_LIFECYCLE_GATE_ID;
+  const connectedWellFormed = !connectedLifecycle || (
+    typeof evidence?.runAttempt === 'string'
+    && evidence.runAttempt.length > 0
+    && typeof evidence?.headSha === 'string'
+    && evidence.headSha.length > 0
+    && typeof evidence?.evidencePath === 'string'
+    && evidence.evidencePath.length > 0
+    && typeof evidence?.evidenceDigest === 'string'
+    && evidence.evidenceDigest.length > 0
+  );
+  const wellFormed = baseWellFormed && connectedWellFormed;
   const provenanceMatches = wellFormed && evidence.runId === run.id;
+  let connectedEvidenceMatches = !connectedLifecycle;
+  if (connectedLifecycle && wellFormed && evidence.result === 'passed') {
+    try {
+      connectedEvidenceMatches = evidence.headSha === head
+        && evidence.runAttempt === run.attempt
+        && verifyEnterpriseLifecycleManifestFile({
+          manifestPath: evidence.evidencePath,
+          manifestDigest: evidence.evidenceDigest,
+          expected: { headSha: head, runId: run.id, runAttempt: run.attempt },
+        });
+    } catch {
+      connectedEvidenceMatches = false;
+    }
+  }
   const accepted = evidence?.result === 'passed'
+    && connectedEvidenceMatches
     && (!authoritative || (candidateMatches && hasAuthoritativeContext && hasVerifiedActionsRun && provenanceMatches && !parseError));
 
   if (accepted) {
-    return { id, classification: 'proven_disposable_pilot_evidence', result: 'passed', command: evidence.command, runId: evidence.runId };
+    return {
+      id,
+      classification: 'proven_disposable_pilot_evidence',
+      result: 'passed',
+      command: evidence.command,
+      runId: evidence.runId,
+      ...(connectedLifecycle ? {
+        runAttempt: evidence.runAttempt,
+        headSha: evidence.headSha,
+        evidencePath: evidence.evidencePath,
+        evidenceDigest: evidence.evidenceDigest,
+      } : {}),
+    };
   }
 
   return {

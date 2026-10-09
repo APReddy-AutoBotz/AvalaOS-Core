@@ -322,7 +322,9 @@ assert.ok(
 
 const supabaseClientSource = readFileSync('services/supabaseClient.ts', 'utf8');
 assert.doesNotMatch(supabaseClientSource, /service[_-]?role|secret[_-]?key/i);
-assert.match(supabaseClientSource, /typeof __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ !== 'undefined'[\s\S]*__AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ === true[\s\S]*supabaseUrl === 'https:\/\/127[.]0[.]0[.]1:59999'[\s\S]*isSafePublicSupabaseCredential\(supabaseAnonKey\)/u);
+assert.match(supabaseClientSource, /isSyntheticBrowserLoopbackServerConfiguration = \([\s\S]*syntheticBrowserTestBuild: boolean/u);
+assert.match(supabaseClientSource, /isSafePublicSupabaseCredential\(anonKeyValue\)[\s\S]*urlValue === 'https:\/\/127[.]0[.]0[.]1:59999'[\s\S]*url[.]protocol === 'http:'[\s\S]*url[.]hostname === '127[.]0[.]0[.]1'/u);
+assert.match(supabaseClientSource, /typeof __AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ !== 'undefined'[\s\S]*__AVALA_SYNTHETIC_BROWSER_TEST_BUILD__ === true/u);
 assert.doesNotMatch(supabaseClientSource, /VITE_[A-Z0-9_]*BROWSER_TEST/u, 'the loopback adapter must not be activatable by a public runtime variable');
 const viteConfigurationSource = readFileSync('vite.config.ts', 'utf8');
 assert.match(viteConfigurationSource, /'__AVALA_SYNTHETIC_BROWSER_TEST_BUILD__': JSON[.]stringify\(syntheticBrowserTestBuild\)/u);

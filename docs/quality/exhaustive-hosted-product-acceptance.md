@@ -1,5 +1,11 @@
 # Exhaustive hosted product acceptance
 
+## Verified stable baseline and connected continuation (2026-10-09)
+
+Merged PR #280 is independently verified on stable run `37891394223`, attempt 1: **58 PASS / 0 FAIL / 50 BLOCKED / 0 UNCOVERED**. All 18 supported cases pass on both required browser projects. Overall acceptance remains `INCOMPLETE_COVERAGE`; this supersedes earlier pending execution statements without rewriting their immutable artifacts. The separate one-run hosted allowance is consumed.
+
+The next substantial workstream is `docs/planning/connected-enterprise-lifecycle-acceptance.md`. Its actual local application/handler/PostgreSQL journey supplies integration evidence for the Assess/Govern/Studio path; it does not alter this catalog, its hosted definition, mutation criteria or current dispositions. Forty-seven blocked cases still require hosted proof, and three disposable cases retain their legacy-authority/criteria gaps. A green local connected artifact cannot promote them to hosted PASS.
+
 ## Dispatch identity correction (2026-10-09)
 
 PR #279 is merged and its candidate preview proved all 18 supported browser cases. The subsequent approved stable run `37845645704` stopped before browser execution because the dispatch caller was not recognized by the provenance contract. Its retained producer also recorded the caller path instead of the canonical reusable workflow path; the immutable report therefore records 14 PASS / 94 BLOCKED despite 26 exact retained results executing successfully. The active plan owns a repository-only correction that preserves the real caller ref and consistently binds producer artifacts to `.github/workflows/exhaustive-acceptance.yml`. Planned verification is not a fresh stable PASS; the full release gate remains incomplete and a further hosted attempt needs its own authority.

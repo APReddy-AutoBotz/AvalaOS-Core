@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Connected lifecycle acceptance (2026-10-09)
+
+`docs/planning/connected-enterprise-lifecycle-acceptance.md` owns the current local browser/production-handler/disposable-PostgreSQL Assess/Govern/Studio journey, focused verification, CI artifact and rollback. The exhaustive catalog and hosted proof contract remain owned by `docs/quality/exhaustive-hosted-product-acceptance.md`; no hosted-required criterion or legacy Delivery meaning changes. Existing Assess V2 and Studio domain architecture documents retain product authority.
+
 ## Acceptance dispatch identity correction (2026-10-09)
 
 `docs/planning/hosted-sandbox-acceptance.md` also owns the focused caller/callee workflow identity correction exposed by the separately approved stable run after PR #279. It preserves the canonical acceptance criteria and governs the strict dispatch binding, focused verification and blocked rollback. The consumed hosted attempt is not authority for another dispatch or deployment.

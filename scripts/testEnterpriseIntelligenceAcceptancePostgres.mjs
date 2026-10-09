@@ -630,9 +630,10 @@ try {
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
   `);
-  assert.equal(migrations.at(-1), sizeLimitMigration);
-  for (const migration of migrations) {
-    if (migration === sizeLimitMigration) continue;
+  const sizeIndex = migrations.indexOf(sizeLimitMigration);
+  assert.ok(sizeIndex > 0);
+  assert.equal(migrations.at(-1), '20261009162752_govern_immutable_action_authority.sql');
+  for (const migration of migrations.slice(0, sizeIndex)) {
     const sql = await readFile(join('supabase/migrations', migration), 'utf8');
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
       () => migrationTransaction(db, migration, sql));
@@ -712,6 +713,12 @@ try {
   assert.equal((await row(db, "SELECT has_function_privilege('service_role','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).allowed, true);
   assert.equal((await row(db, "SELECT has_function_privilege('authenticated','public.enterprise_create_evidence_source_record(jsonb,jsonb,uuid,uuid,bigint,jsonb)','EXECUTE') allowed")).allowed, false);
   assert.equal(await providerDisabled(db), true);
+  for (const migration of migrations.slice(sizeIndex + 1)) {
+    const sql = await readFile(join('supabase/migrations', migration), 'utf8');
+    await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
+      () => migrationTransaction(db, migration, sql));
+  }
+  assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261009162752');
   console.log('FOUNDATION PASS full current chain; empty, compatible and incompatible size upgrades; SQL-only fixture');
 
   await runCase('EI-001', async () => {

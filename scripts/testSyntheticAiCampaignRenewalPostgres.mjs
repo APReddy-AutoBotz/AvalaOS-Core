@@ -34,7 +34,7 @@ assert.equal(migrations[renewalIndex+14],'20261003123459_studio_brd_prompt_v2_se
 assert.equal(migrations[renewalIndex+15],'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
 assert.equal(migrations.at(-3),'20261004025101_studio_brd_source_fact_retention_v3.sql');
 assert.equal(migrations.at(-2), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
-assert.equal(migrations.at(-1), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
+assert.equal(migrations.at(-1), '20261009162752_govern_immutable_action_authority.sql');
 const migrationSql=await readFile(join('supabase/migrations',migrationName),'utf8');
 const {Client}=pg;
 const names=[`ai_renewal_fresh_${process.pid}_${Date.now()}`,`ai_renewal_upgrade_${process.pid}_${Date.now()}`];
