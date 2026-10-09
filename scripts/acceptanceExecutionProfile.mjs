@@ -1,3 +1,4 @@
+import { readHostedSandboxAttemptWindow } from './hostedSandboxAcceptanceEvidence.mjs';
 import { createHash } from 'node:crypto';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
@@ -515,13 +516,19 @@ export const verifyFullPageContrastAttachments = ({ testId, title, project, atte
   if (fixtureAttachments.length > 1 || (fixtureAttachments.length && metadata?.executionKind !== 'hosted_preview')) {
     throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
   }
-  const contrastAttachments = attempt.attachments.filter(item => item?.name !== 'hosted-sandbox-acceptance-v1');
+  const windowAttachments = attempt.attachments.filter(item => item?.name === 'hosted-sandbox-attempt-window-v1');
+  if (windowAttachments.length > 1 || (windowAttachments.length && fixtureAttachments.length !== 1)) {
+    throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
+  }
+  const contrastAttachments = attempt.attachments.filter(item => !['hosted-sandbox-acceptance-v1', 'hosted-sandbox-attempt-window-v1'].includes(item?.name));
   if (contrastAttachments.length !== FULL_PAGE_CONTRAST_PERSONAS.length) throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
   const attemptStart = canonicalUtcTimestamp(attempt.startTime).epoch;
   if (typeof attempt.duration !== 'number' || !Number.isFinite(attempt.duration) || attempt.duration < 0) {
     throw new Error('FULL_PAGE_CONTRAST_ATTEMPT_TIME_INVALID');
   }
-  const attemptEnd = attemptStart + attempt.duration;
+  const attemptEnd = windowAttachments.length
+    ? readHostedSandboxAttemptWindow({attempt, title, project}).endEpoch
+    : attemptStart + attempt.duration;
   if (!Number.isSafeInteger(attemptEnd)) throw new Error('FULL_PAGE_CONTRAST_ATTEMPT_TIME_INVALID');
   const digest = executionBindingDigest({ metadata, project, title });
   const expectedNames = new Set(FULL_PAGE_CONTRAST_PERSONAS.map(persona => (

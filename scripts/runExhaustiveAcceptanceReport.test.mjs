@@ -161,6 +161,9 @@ const measuredHostedReport = (metadata = hostedMetadata()) => {
         },
       });
       attempt.attachments.push({ ...attachment, body: Buffer.from(attachment.body).toString('base64') });
+      attempt.attachments.push({ name: 'hosted-sandbox-attempt-window-v1', contentType: 'application/json',
+        body: Buffer.from(JSON.stringify({startTime: attempt.startTime, endedAt: '2026-09-08T12:00:10.000Z',
+          retry: attempt.retry, title: spec.title, project: execution.projectName})).toString('base64') });
     }
   }
   return report;

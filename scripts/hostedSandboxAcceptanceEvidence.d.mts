@@ -55,3 +55,9 @@ export function verifyHostedSandboxAttachments(input: {
     }>>>;
   }>;
 }>;
+
+export function readHostedSandboxAttemptWindow(input: {
+  attempt: { startTime: string; retry: number; attachments: unknown[] };
+  title: string;
+  project: string;
+}): { startEpoch: number; endEpoch: number };

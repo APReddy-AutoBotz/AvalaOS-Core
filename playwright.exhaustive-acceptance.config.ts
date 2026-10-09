@@ -51,6 +51,7 @@ export default defineConfig({
   timeout: 60_000,
   outputDir: 'artifacts/exhaustive-acceptance/playwright-output',
   reporter: [
+    ['./scripts/hostedSandboxAcceptanceEvidence.mjs'],
     ['list'],
     ['json', { outputFile: 'artifacts/exhaustive-acceptance/playwright-results.json' }],
     ['junit', { outputFile: 'artifacts/exhaustive-acceptance/junit.xml' }],
