@@ -7,6 +7,7 @@ const SCHEMA_VERSION = 'hosted-sandbox-acceptance-v1';
 const SOURCE_IDENTITY = 'committed_exact_head';
 const EVIDENCE_SCOPE = 'executed-hosted-sandbox-local';
 const FIXTURE_ID = 'synthetic-default';
+const ATTEMPT_WINDOW_NAME = 'hosted-sandbox-attempt-window-v1';
 const REQUIRED_SOURCE_PATHS = Object.freeze([
   'tests/browser/exhaustiveHostedAcceptance.spec.ts',
   'scripts/hostedSandboxAcceptanceEvidence.mjs',
@@ -217,9 +218,8 @@ const validateAttachmentBody = ({ body, testCase, binding, execution, attempt })
     && body.actual.supportingActionCount === measured.supportingActions.length,
   'HOSTED_SANDBOX_ACTUAL_INVALID');
   const observedEpoch = canonicalTimestamp(body.observedAt, 'HOSTED_SANDBOX_OBSERVED_AT_INVALID');
-  const startEpoch = Date.parse(attempt.startTime);
-  assert(Number.isFinite(startEpoch) && Number.isFinite(attempt.duration) && attempt.duration >= 0
-    && observedEpoch >= startEpoch && observedEpoch <= startEpoch + attempt.duration,
+  const { startEpoch, endEpoch } = readHostedSandboxAttemptWindow({attempt, title: execution.title, project: execution.project});
+  assert(observedEpoch >= startEpoch && observedEpoch <= endEpoch,
   'HOSTED_SANDBOX_OBSERVED_AT_OUTSIDE_ATTEMPT');
   return body;
 };
@@ -277,4 +277,42 @@ export const verifyHostedSandboxAttachments = ({ testCase, binding, executions }
       byProject: Object.freeze(orderedActualByProject),
     }),
   });
+};
+
+// JSON result.duration excludes some worker setup and hooks. Record the actual
+// wall-clock completion in the controller reporter, before JSON serialization.
+export default class HostedSandboxAttemptWindowReporter {
+  onTestEnd(test, result) {
+    if (!result.attachments.some(item => item.name === ATTACHMENT_NAME)) return;
+    result.attachments.push({
+      name: ATTEMPT_WINDOW_NAME,
+      contentType: 'application/json',
+      body: Buffer.from(JSON.stringify({
+        startTime: result.startTime.toISOString(),
+        endedAt: new Date().toISOString(),
+        retry: result.retry,
+        title: test.title,
+        project: test.parent.project().name,
+      })),
+    });
+  }
+}
+
+export const readHostedSandboxAttemptWindow = ({attempt, title, project}) => {
+  const windows = (attempt.attachments ?? []).filter(item => item?.name === ATTEMPT_WINDOW_NAME);
+  assert(windows.length === 1, 'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  const windowAttachment = windows[0];
+  assert(windowAttachment.contentType === 'application/json' && typeof windowAttachment.body === 'string',
+    'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  const windowBytes = Buffer.from(windowAttachment.body, 'base64');
+  assert(windowBytes.toString('base64') === windowAttachment.body, 'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  const window = JSON.parse(windowBytes.toString('utf8'));
+  exactKeys(window, ['startTime', 'endedAt', 'retry', 'title', 'project'], 'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  assert(window.startTime === attempt.startTime && window.retry === attempt.retry
+    && window.title === title && window.project === project,
+  'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  const startEpoch = canonicalTimestamp(window.startTime, 'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  const endEpoch = canonicalTimestamp(window.endedAt, 'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  assert(endEpoch >= startEpoch, 'HOSTED_SANDBOX_ATTEMPT_WINDOW_INVALID');
+  return {startEpoch, endEpoch};
 };

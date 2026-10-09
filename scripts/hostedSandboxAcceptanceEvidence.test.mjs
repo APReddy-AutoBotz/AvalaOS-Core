@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import test from 'node:test';
 import {
   HOSTED_SANDBOX_ACCEPTANCE_CASES,
@@ -74,7 +76,11 @@ const executionFor = (testId, project, overrides = {}) => {
     reportMetadata: structuredClone(metadata),
     results: [{
       status: 'passed', retry: 0, startTime, duration: 1_000,
-      attachments: [reportAttachment(attachment)],
+      attachments: [reportAttachment(attachment), {
+        name: 'hosted-sandbox-attempt-window-v1', contentType: 'application/json',
+        body: Buffer.from(JSON.stringify({startTime, endedAt: '2026-10-08T12:00:01.000Z', retry: 0,
+          title: `[${testId}] ${testCase.title}`, project})).toString('base64'),
+      }],
     }],
     ...overrides,
   };
@@ -186,6 +192,43 @@ test('validator rejects stale run, cross-project replay, retries and timestamps 
   assert.throws(() => verifyHostedSandboxAttachments(late), /OUTSIDE_ATTEMPT/u);
 });
 
+test('validator uses recorded wall-clock completion and rejects stale or substituted windows', () => {
+  const input = validInput('SANDBOX-001');
+  // Accumulated runner duration can exclude setup before the body starts.
+  input.executions[0].results[0].duration = 1;
+  assert.doesNotThrow(() => verifyHostedSandboxAttachments(input));
+  const mutateWindow = (value, change) => {
+    const attachment = value.executions[0].results[0].attachments[1];
+    const window = JSON.parse(Buffer.from(attachment.body, 'base64'));
+    change(window);
+    attachment.body = Buffer.from(JSON.stringify(window)).toString('base64');
+  };
+  for (const observed of [startTime, '2026-10-08T12:00:01.000Z']) {
+    const value = structuredClone(input);
+    mutateAttachmentBody(value, 0, body => { body.observedAt = observed; });
+    assert.doesNotThrow(() => verifyHostedSandboxAttachments(value));
+  }
+  for (const observed of ['2026-10-08T11:59:59.999Z', '2026-10-08T12:00:01.001Z']) {
+    const value = structuredClone(input);
+    mutateAttachmentBody(value, 0, body => { body.observedAt = observed; });
+    assert.throws(() => verifyHostedSandboxAttachments(value), /OUTSIDE_ATTEMPT/u);
+  }
+  for (const change of [w => { w.project = 'wrong'; }, w => { w.title = 'wrong'; },
+    w => { w.retry = 1; }, w => { w.startTime = observedAt; },
+    w => { w.endedAt = '2026-10-08T11:59:59.999Z'; }]) {
+    const value = structuredClone(input);
+    mutateWindow(value, change);
+    assert.throws(() => verifyHostedSandboxAttachments(value), /ATTEMPT_WINDOW_INVALID|OUTSIDE_ATTEMPT/u);
+  }
+  for (const duplicate of [false, true]) {
+    const value = structuredClone(input);
+    const attachments = value.executions[0].results[0].attachments;
+    if (duplicate) attachments.push(structuredClone(attachments[1]));
+    else attachments.pop();
+    assert.throws(() => verifyHostedSandboxAttachments(value), /ATTEMPT_WINDOW_INVALID/u);
+  }
+});
+
 test('validator rejects missing projects, duplicate projects, local execution and unsupported cases', () => {
   const missing = validInput('PUBLIC-001');
   missing.executions.pop();
@@ -204,4 +247,48 @@ test('validator rejects missing projects, duplicate projects, local execution an
     binding: bindingById.get('ADMIN-001'),
     executions: [],
   }), /TEST_ID_UNSUPPORTED/u);
+});
+
+test('actual Playwright reporter records a wall-clock window across excluded setup time', () => {
+  const outputDirectory = path.join(process.cwd(), 'output');
+  mkdirSync(outputDirectory, {recursive:true});
+  const directory = mkdtempSync(path.join(outputDirectory, 'sandbox-window-'));
+  try {
+    const fixture = validInput('SANDBOX-001');
+    const title = fixture.executions[0].title;
+    const bodies = fixture.executions.map(e => JSON.parse(Buffer.from(e.results[0].attachments[0].body, 'base64')));
+    const reportPath = path.join(directory, 'results.json');
+    const configPath = path.join(directory, 'playwright.config.mjs');
+    writeFileSync(path.join(directory, 'window.spec.mjs'), `
+      import { test } from '@playwright/test';
+      test.beforeAll(async () => { await new Promise(resolve => setTimeout(resolve, 150)); });
+      test(${JSON.stringify(title)}, async ({}, testInfo) => {
+        const body = ${JSON.stringify(bodies)}.find(item => item.project === testInfo.project.name);
+        body.observedAt = new Date().toISOString();
+        await testInfo.attach('hosted-sandbox-acceptance-v1', {contentType:'application/json', body:Buffer.from(JSON.stringify(body))});
+      });
+    `);
+    writeFileSync(configPath, `export default {
+      testDir: ${JSON.stringify(directory)}, testMatch: 'window.spec.mjs', workers:1, retries:0,
+      outputDir: ${JSON.stringify(path.join(directory,'output'))},
+      reporter: [[${JSON.stringify(path.resolve('scripts/hostedSandboxAcceptanceEvidence.mjs'))}], ['json', {outputFile:${JSON.stringify(reportPath)}}]],
+      projects: ${JSON.stringify(projects.map(name => ({name})))},
+    };`);
+    const run = spawnSync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', configPath],
+      {cwd:process.cwd(), encoding:'utf8', timeout:60_000, env:{...process.env, FORCE_COLOR:'0'}});
+    assert.equal(run.status, 0, (run.stderr ?? '').slice(-2000));
+    const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+    const tests = report.suites.flatMap(suite => suite.specs).flatMap(spec => spec.tests);
+    assert.equal(tests.length, 2);
+    for (const execution of fixture.executions) {
+      const result = tests.find(item => item.projectName === execution.project).results[0];
+      execution.results = [result];
+      const observation = JSON.parse(Buffer.from(result.attachments[0].body, 'base64'));
+      assert.ok(Date.parse(observation.observedAt) - Date.parse(result.startTime) > result.duration,
+        'fixture must reproduce excluded beforeAll time');
+    }
+    assert.doesNotThrow(() => verifyHostedSandboxAttachments(fixture));
+  } finally {
+    rmSync(directory, {recursive:true, force:true});
+  }
 });

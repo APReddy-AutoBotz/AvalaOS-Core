@@ -5,6 +5,12 @@ const RUN_ATTEMPT = /^[1-9][0-9]*$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 export const EXHAUSTIVE_ACCEPTANCE_WORKFLOW = '.github/workflows/exhaustive-acceptance.yml';
 export const PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW = '.github/workflows/preview-exhaustive-browser-qa.yml';
+export const EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW = '.github/workflows/exhaustive-acceptance-dispatch-bridge.yml';
+
+const STABLE_REPOSITORY = 'APReddy-AutoBotz/AvalaOS-Core';
+const STABLE_ACTOR = 'APReddy-AutoBotz';
+const STABLE_ORIGIN = 'https://avalaos-pilot.netlify.app';
+const DISPATCH_BRANCH_PREFIX = 'exhaustive-acceptance-dispatch--';
 
 const requiredString = (value, code) => {
   if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) throw new Error(code);
@@ -32,6 +38,56 @@ const exactOrigin = value => {
   return parsed.origin;
 };
 
+const workflowRefParts = ({ repository, workflowRef }) => {
+  const prefix = `${repository}/`;
+  const separator = workflowRef.indexOf('@refs/', prefix.length);
+  if (!workflowRef.startsWith(prefix) || separator < 0) {
+    throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+  }
+  const workflowPath = workflowRef.slice(prefix.length, separator);
+  const ref = workflowRef.slice(separator + 1);
+  if (!workflowPath || !ref) throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+  return Object.freeze({ workflowPath, ref });
+};
+
+const releaseShaFromEnvironment = environment => {
+  const supplied = [
+    environment.RELEASE_SHA,
+    environment.EXPECTED_RELEASE_SHA,
+    environment.ACCEPTANCE_RELEASE_SHA,
+  ].filter(value => value !== undefined && value !== '');
+  if (supplied.length === 0 || supplied.some(value => !SHA.test(value)) || new Set(supplied).size !== 1) {
+    throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+  }
+  return supplied[0];
+};
+
+const validateDispatchBridgeRuntime = ({ environment, repository, workflowRef, releaseSha }) => {
+  const deployId = workflowRef.slice(workflowRef.lastIndexOf(DISPATCH_BRANCH_PREFIX) + DISPATCH_BRANCH_PREFIX.length);
+  const branch = `${DISPATCH_BRANCH_PREFIX}${deployId}`;
+  const declarationOnly = environment.ACCEPTANCE_EXECUTION_KIND === 'declaration_only';
+  if (
+    repository !== STABLE_REPOSITORY
+    || environment.ACCEPTANCE_WORKFLOW_PATH !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW
+    || environment.ACCEPTANCE_EVIDENCE_ENVIRONMENT !== 'stable-release'
+    || environment.GITHUB_EVENT_NAME !== 'create'
+    || environment.GITHUB_REF_TYPE !== 'branch'
+    || environment.GITHUB_ACTOR !== STABLE_ACTOR
+    || environment.GITHUB_TRIGGERING_ACTOR !== STABLE_ACTOR
+    || !DEPLOY_ID.test(deployId)
+    || workflowRef !== `${repository}/${EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW}@refs/heads/${branch}`
+    || environment.GITHUB_REF !== `refs/heads/${branch}`
+    || environment.GITHUB_SHA !== releaseSha
+    || releaseShaFromEnvironment(environment) !== releaseSha
+    || (!declarationOnly && environment.NETLIFY_DEPLOY_ID !== deployId)
+    || (!declarationOnly && environment.HOSTED_PILOT_URL !== STABLE_ORIGIN)
+    || (declarationOnly && (environment.NETLIFY_DEPLOY_ID || environment.HOSTED_PILOT_URL))
+  ) {
+    throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+  }
+  return Object.freeze({ callerWorkflowPath: EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW, deployId });
+};
+
 export const createHostedAcceptanceWorkflowRuntime = ({ environment, workflowPath, releaseSha }) => {
   if (environment.GITHUB_ACTIONS !== 'true') return null;
   const repository = requiredString(environment.GITHUB_REPOSITORY, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
@@ -40,9 +96,14 @@ export const createHostedAcceptanceWorkflowRuntime = ({ environment, workflowPat
   const runId = requiredString(environment.GITHUB_RUN_ID, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   const runAttempt = requiredString(environment.GITHUB_RUN_ATTEMPT, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   const workflowSha = requiredString(environment.GITHUB_SHA, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+  const caller = workflowRefParts({ repository, workflowRef });
+  const bridge = caller.workflowPath === EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW
+    ? validateDispatchBridgeRuntime({ environment, repository, workflowRef, releaseSha })
+    : null;
   if (
     !REPOSITORY.test(repository)
-    || !workflowRef.startsWith(`${repository}/${workflowPath}@refs/`)
+    || (bridge !== null && workflowPath !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW)
+    || (bridge === null && caller.workflowPath !== workflowPath)
     || !RUN_ID.test(runId)
     || !RUN_ATTEMPT.test(runAttempt)
     || !SHA.test(workflowSha)
@@ -60,6 +121,7 @@ export const createHostedAcceptanceWorkflowRuntime = ({ environment, workflowPat
     runAttempt,
     workflowSha,
     releaseSha,
+    ...(bridge ? { callerWorkflowPath: bridge.callerWorkflowPath } : {}),
   });
 };
 
@@ -71,7 +133,23 @@ export const resolveHostedAcceptanceWorkflowPath = ({ environment, allowedWorkfl
   const repository = requiredString(environment.GITHUB_REPOSITORY, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   const workflowRef = requiredString(environment.GITHUB_WORKFLOW_REF, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   if (!REPOSITORY.test(repository)) throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
-  const matches = allowedWorkflowPaths.filter(path => workflowRef.startsWith(`${repository}/${path}@refs/`));
+  const caller = workflowRefParts({ repository, workflowRef });
+  const matches = allowedWorkflowPaths.filter(path => caller.workflowPath === path);
+  if (matches.length === 1) {
+    const declaredWorkflowPath = environment.ACCEPTANCE_WORKFLOW_PATH;
+    if (declaredWorkflowPath !== undefined && declaredWorkflowPath !== matches[0]) {
+      throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+    }
+    return matches[0];
+  }
+  if (
+    caller.workflowPath === EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW
+    && allowedWorkflowPaths.includes(EXHAUSTIVE_ACCEPTANCE_WORKFLOW)
+  ) {
+    const releaseSha = releaseShaFromEnvironment(environment);
+    validateDispatchBridgeRuntime({ environment, repository, workflowRef, releaseSha });
+    return EXHAUSTIVE_ACCEPTANCE_WORKFLOW;
+  }
   if (matches.length !== 1) throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   return matches[0];
 };

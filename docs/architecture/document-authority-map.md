@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Acceptance dispatch identity correction (2026-10-09)
+
+`docs/planning/hosted-sandbox-acceptance.md` also owns the focused caller/callee workflow identity correction exposed by the separately approved stable run after PR #279. It preserves the canonical acceptance criteria and governs the strict dispatch binding, focused verification and blocked rollback. The consumed hosted attempt is not authority for another dispatch or deployment.
+
 ## Hosted Sandbox acceptance correction (2026-10-08)
 
 The current browser-local hosted acceptance evidence correction, approved 14 mutation-definition changes, verification and rollback are governed by `docs/planning/hosted-sandbox-acceptance.md`; the release acceptance framework remains `docs/quality/exhaustive-hosted-product-acceptance.md`. PR #278 is merged with its two approved database corrections, so earlier pending-exception wording below is superseded. No further database or product authority change is included.

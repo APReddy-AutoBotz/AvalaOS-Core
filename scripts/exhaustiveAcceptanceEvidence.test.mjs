@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createFullPageContrastAttachment } from './acceptanceExecutionProfile.mjs';
@@ -15,6 +16,8 @@ import {
   validateServerManifest,
 } from './exhaustiveAcceptanceEvidence.mjs';
 import {
+  createHostedAcceptanceWorkflowRuntime,
+  EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW,
   EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
   PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW,
   resolveHostedAcceptanceWorkflowPath,
@@ -36,6 +39,97 @@ assert.throws(() => resolveHostedAcceptanceWorkflowPath({
   environment: workflowEnvironment('.github/workflows/substituted.yml'),
   allowedWorkflowPaths: hostedWorkflowAllowlist,
 }), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/u);
+
+const dispatchReleaseSha = '1'.repeat(40);
+const dispatchDeployId = '0123456789abcdef01234567';
+const dispatchBranch = `exhaustive-acceptance-dispatch--${dispatchDeployId}`;
+const dispatchEnvironment = ({ declarationOnly = false } = {}) => ({
+  GITHUB_ACTIONS: 'true',
+  GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+  GITHUB_WORKFLOW_REF: `APReddy-AutoBotz/AvalaOS-Core/${EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW}@refs/heads/${dispatchBranch}`,
+  GITHUB_EVENT_NAME: 'create',
+  GITHUB_RUN_ID: '37845645704',
+  GITHUB_RUN_ATTEMPT: '1',
+  GITHUB_SHA: dispatchReleaseSha,
+  GITHUB_REF_TYPE: 'branch',
+  GITHUB_REF: `refs/heads/${dispatchBranch}`,
+  GITHUB_ACTOR: 'APReddy-AutoBotz',
+  GITHUB_TRIGGERING_ACTOR: 'APReddy-AutoBotz',
+  RELEASE_SHA: dispatchReleaseSha,
+  EXPECTED_RELEASE_SHA: dispatchReleaseSha,
+  ACCEPTANCE_RELEASE_SHA: dispatchReleaseSha,
+  ACCEPTANCE_WORKFLOW_PATH: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'stable-release',
+  ACCEPTANCE_EXECUTION_KIND: declarationOnly ? 'declaration_only' : 'hosted_preview',
+  NETLIFY_DEPLOY_ID: declarationOnly ? '' : dispatchDeployId,
+  HOSTED_PILOT_URL: declarationOnly ? '' : 'https://avalaos-pilot.netlify.app',
+});
+
+const dispatchEnvironmentValue = dispatchEnvironment();
+assert.equal(resolveHostedAcceptanceWorkflowPath({
+  environment: dispatchEnvironmentValue,
+  allowedWorkflowPaths: hostedWorkflowAllowlist,
+}), EXHAUSTIVE_ACCEPTANCE_WORKFLOW);
+assert.deepEqual(createHostedAcceptanceWorkflowRuntime({
+  environment: dispatchEnvironmentValue,
+  workflowPath: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  releaseSha: dispatchReleaseSha,
+}), {
+  authority: 'github-actions',
+  workflowPath: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  workflowRef: dispatchEnvironmentValue.GITHUB_WORKFLOW_REF,
+  repository: dispatchEnvironmentValue.GITHUB_REPOSITORY,
+  eventName: 'create',
+  runId: '37845645704',
+  runAttempt: '1',
+  workflowSha: dispatchReleaseSha,
+  releaseSha: dispatchReleaseSha,
+  callerWorkflowPath: EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW,
+});
+for (const substitutedProducer of [PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW, '.github/workflows/substituted.yml']) {
+  assert.throws(() => createHostedAcceptanceWorkflowRuntime({
+    environment: dispatchEnvironmentValue,
+    workflowPath: substitutedProducer,
+    releaseSha: dispatchReleaseSha,
+  }), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/u, substitutedProducer);
+}
+
+for (const [name, mutation] of [
+  ['repository', { GITHUB_REPOSITORY: 'owner/repository' }],
+  ['actor', { GITHUB_ACTOR: 'substituted-actor' }],
+  ['triggering actor', { GITHUB_TRIGGERING_ACTOR: 'substituted-actor' }],
+  ['event', { GITHUB_EVENT_NAME: 'workflow_call' }],
+  ['ref type', { GITHUB_REF_TYPE: 'tag' }],
+  ['ref', { GITHUB_REF: `refs/heads/${dispatchBranch}-substituted` }],
+  ['workflow ref', { GITHUB_WORKFLOW_REF: `APReddy-AutoBotz/AvalaOS-Core/${EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW}@refs/heads/${dispatchBranch}-substituted` }],
+  ['head', { GITHUB_SHA: '2'.repeat(40) }],
+  ['release', { EXPECTED_RELEASE_SHA: '2'.repeat(40) }],
+  ['deploy', { NETLIFY_DEPLOY_ID: 'f'.repeat(24) }],
+  ['origin', { HOSTED_PILOT_URL: 'https://preview.example.invalid' }],
+  ['environment', { ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'pull-request' }],
+  ['canonical workflow', { ACCEPTANCE_WORKFLOW_PATH: EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW }],
+]) {
+  assert.throws(() => resolveHostedAcceptanceWorkflowPath({
+    environment: { ...dispatchEnvironmentValue, ...mutation },
+    allowedWorkflowPaths: hostedWorkflowAllowlist,
+  }), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/u, name);
+}
+
+const declarationEnvironment = dispatchEnvironment({ declarationOnly: true });
+assert.equal(resolveHostedAcceptanceWorkflowPath({
+  environment: declarationEnvironment,
+  allowedWorkflowPaths: hostedWorkflowAllowlist,
+}), EXHAUSTIVE_ACCEPTANCE_WORKFLOW);
+const declarationList = spawnSync(process.execPath, [
+  'node_modules/@playwright/test/cli.js', 'test',
+  '--config=playwright.exhaustive-acceptance.config.ts', '--list', '--reporter=list',
+], {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+  env: { ...process.env, ...declarationEnvironment },
+});
+assert.equal(declarationList.status, 0, declarationList.stderr || declarationList.stdout);
+assert.match(declarationList.stdout, /Total:\s+74 tests in 1 file/u);
 
 const scope = { evidenceScope: 'executed-fixture', fixtureId: 'fixture-1', organizationId: '10000000-0000-4000-8000-000000000001', workspaceId: '20000000-0000-4000-8000-000000000001' };
 const provenance = {

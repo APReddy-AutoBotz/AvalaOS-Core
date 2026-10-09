@@ -26,6 +26,12 @@ assert.doesNotMatch(bridge, /avalaos\.com/u);
 assert.match(acceptance, /^  workflow_call:$/mu);
 assert.match(acceptance, /^  pull_request:$/mu);
 assert.doesNotMatch(acceptance, /^  workflow_dispatch:$/mu);
+assert.match(acceptance, /^env:\n  ACCEPTANCE_WORKFLOW_PATH: \.github\/workflows\/exhaustive-acceptance\.yml$/mu);
+assert.equal(
+  acceptance.match(/ACCEPTANCE_WORKFLOW_PATH:/gu)?.length,
+  1,
+  'the reusable producer must own one canonical workflow path for every retained and browser evidence step',
+);
 
 const validNames = [
   'exhaustive-acceptance-dispatch--0123456789abcdef01234567',
