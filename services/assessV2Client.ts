@@ -129,9 +129,16 @@ export const projectImmutableCloneEvidence = (
   return { evidence, importedEvidenceClaimIds };
 };
 
-const defaultTransport: AssessV2Transport = {
+export const shouldReadAssessV2DraftHead = (
+  currentCase: { status: unknown; head_version_id: unknown },
+  latestDecision: { source_version_id: unknown } | null,
+): boolean => latestDecision === null
+  || currentCase.status === 'draft'
+  || currentCase.head_version_id !== latestDecision.source_version_id;
+
+export const createAssessV2DefaultTransport = (client = supabase): AssessV2Transport => ({
   async invoke(body) {
-    const { data, error } = await supabase.functions.invoke('assess-v2-command', { body });
+    const { data, error } = await client.functions.invoke('assess-v2-command', { body });
     if (error) {
       let payload: unknown;
       try { payload = await (error as any).context?.clone?.().json(); } catch { payload = undefined; }
@@ -140,16 +147,16 @@ const defaultTransport: AssessV2Transport = {
     return data;
   },
   async readCase(caseId) {
-    const { data: activeCase, error: activeCaseError } = await supabase
+    const { data: activeCase, error: activeCaseError } = await client
       .from('assess_v2_cases')
-      .select('id')
+      .select('id,org_id,workspace_id,process_id,owner_id,status,version,schema_version,rule_set_version,source_v1_assessment_id,source_v1_score_version,created_at,updated_at,head_version_id')
       .eq('id', caseId)
       .is('deleted_at', null)
       .maybeSingle();
     if (activeCaseError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
     if (!activeCase) return null;
 
-    const { data: decision, error: decisionError } = await supabase
+    const { data: decision, error: decisionError } = await client
       .from('assess_v2_decision_versions')
       .select('id,case_id,source_version_id,schema_version,rule_set_version,decision_version,validation_status,input_snapshot,evidence_snapshot,output_snapshot,input_hash,evidence_hash,output_hash,input_canonical,evidence_canonical,output_canonical,supersedes_decision_id,created_by,created_at')
       .eq('case_id', caseId)
@@ -157,20 +164,13 @@ const defaultTransport: AssessV2Transport = {
       .limit(1)
       .maybeSingle();
     if (decisionError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-    if (!decision) {
-      const { data: currentCase, error: caseError } = await supabase.from('assess_v2_cases')
-        .select('id,org_id,workspace_id,process_id,owner_id,status,version,schema_version,rule_set_version,source_v1_assessment_id,source_v1_score_version,created_at,updated_at,head_version_id')
-        .eq('id', caseId)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (caseError) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-      if (!currentCase) return null;
-      const { data: head, error: headError } = await supabase.from('assess_v2_case_versions')
+    if (shouldReadAssessV2DraftHead(activeCase, decision)) {
+      const { data: head, error: headError } = await client.from('assess_v2_case_versions')
         .select('name,description,agent_necessity,imported_facts')
-        .eq('id', currentCase.head_version_id).maybeSingle();
+        .eq('id', activeCase.head_version_id).maybeSingle();
       if (headError || !head) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-      const child = async (table: string, versionId: string = currentCase.head_version_id) => {
-        const { data, error } = await supabase.from(table).select('payload').eq('version_id', versionId);
+      const child = async (table: string, versionId: string = activeCase.head_version_id) => {
+        const { data, error } = await client.from(table).select('payload').eq('version_id', versionId);
         if (error) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
         return (data ?? []).map(row => row.payload);
       };
@@ -180,12 +180,12 @@ const defaultTransport: AssessV2Transport = {
       ]);
       let immutableCloneVersion: { id: string; source_snapshot: unknown; created_at: string } | null = null;
       let importedEvidence: unknown[] = [];
-      if (currentCase.source_v1_assessment_id) {
-        const { data, error } = await supabase.from('assess_v2_case_versions')
+      if (activeCase.source_v1_assessment_id) {
+        const { data, error } = await client.from('assess_v2_case_versions')
           .select('id,source_snapshot,created_at')
-          .eq('case_id', currentCase.id)
-          .eq('org_id', currentCase.org_id)
-          .eq('workspace_id', currentCase.workspace_id)
+          .eq('case_id', activeCase.id)
+          .eq('org_id', activeCase.org_id)
+          .eq('workspace_id', activeCase.workspace_id)
           .eq('version', 1)
           .eq('source_kind', 'v1_clone')
           .maybeSingle();
@@ -200,18 +200,18 @@ const defaultTransport: AssessV2Transport = {
         ? immutableCloneVersion.source_snapshot
         : null;
       return { case_id: caseId, name: head.name, description: head.description, case_snapshot: {
-        id: currentCase.id,
-        organizationId: currentCase.org_id,
-        workspaceId: currentCase.workspace_id,
-        sourceProcessId: currentCase.process_id,
-        ownerId: currentCase.owner_id,
-        status: currentCase.status === 'reviewer_ready' ? 'reviewer-ready' : currentCase.status,
-        version: currentCase.version,
-        schemaVersion: currentCase.schema_version,
-        ruleSetVersion: currentCase.rule_set_version,
-        ...(currentCase.source_v1_assessment_id ? { sourceV1: {
-          assessmentId: currentCase.source_v1_assessment_id,
-          scoreVersion: currentCase.source_v1_score_version,
+        id: activeCase.id,
+        organizationId: activeCase.org_id,
+        workspaceId: activeCase.workspace_id,
+        sourceProcessId: activeCase.process_id,
+        ownerId: activeCase.owner_id,
+        status: activeCase.status === 'reviewer_ready' ? 'reviewer-ready' : activeCase.status,
+        version: activeCase.version,
+        schemaVersion: activeCase.schema_version,
+        ruleSetVersion: activeCase.rule_set_version,
+        ...(activeCase.source_v1_assessment_id ? { sourceV1: {
+          assessmentId: activeCase.source_v1_assessment_id,
+          scoreVersion: activeCase.source_v1_score_version,
           clonedAt: cloneSource && typeof cloneSource.clonedAt === 'string'
             ? cloneSource.clonedAt
             : immutableCloneVersion!.created_at,
@@ -221,11 +221,11 @@ const defaultTransport: AssessV2Transport = {
         importedFacts: head.imported_facts ?? [],
         primitives, edges, decisionPoints, exceptionPaths, assets, interactions, evidence,
         agentNecessity: head.agent_necessity,
-        createdAt: currentCase.created_at,
-        updatedAt: currentCase.updated_at,
+        createdAt: activeCase.created_at,
+        updatedAt: activeCase.updated_at,
       }, decision_snapshot: null };
     }
-    const { data: version, error: versionError } = await supabase
+    const { data: version, error: versionError } = await client
       .from('assess_v2_case_versions')
       .select('name,description')
       .eq('id', decision.source_version_id)
@@ -260,7 +260,7 @@ const defaultTransport: AssessV2Transport = {
     };
   },
   async findCaseForProcess({ organizationId, workspaceId, processId }) {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('assess_v2_cases')
       .select('id')
       .eq('org_id', organizationId)
@@ -274,7 +274,10 @@ const defaultTransport: AssessV2Transport = {
       .maybeSingle();
     if (error) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
     return data;
-  },};
+  },
+});
+
+const defaultTransport = createAssessV2DefaultTransport();
 
 const command = async (
   transport: AssessV2Transport,

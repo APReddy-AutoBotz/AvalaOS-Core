@@ -89,28 +89,40 @@
     {
       "pattern": "localStorage",
       "path": "scripts/prCSyntheticBrowserReadOnly.test.mjs",
-      "lines": [139, 140, 253, 285],
+      "lines": [
+        139,
+        140,
+        253,
+        285
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep these inert Playwright storage-state and deliberate retained-session negative fixtures confined to the isolated final-phase regression. They are not server authorization or hosted acceptance evidence."
     },
     {
       "pattern": "localStorage",
       "path": "scripts/prCSyntheticAcceptanceBrowser.test.mjs",
-      "lines": [207, 216],
+      "lines": [
+        207,
+        216
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep synthetic browser session setup and storage-state verification in this test only; never use browser storage as server authorization."
     },
     {
       "pattern": "GROQ_API_KEY",
       "path": "scripts/prCControlledHumanCredentialPreflight.test.mjs",
-      "lines": [198],
+      "lines": [
+        198
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep this name only in the no-PAT preflight rejection fixture, which supplies a fixed synthetic non-key value and proves that provider credentials reject before access. Never load a real provider key."
     },
     {
       "pattern": "GEMINI_API_KEY",
       "path": "scripts/prCControlledHumanCredentialPreflight.test.mjs",
-      "lines": [198],
+      "lines": [
+        198
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep this name only in the no-PAT preflight rejection fixture, which supplies a fixed synthetic non-key value and proves that provider credentials reject before access. Never load a real provider key."
     },
@@ -483,6 +495,17 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep this provider-key name only in the provider-free synthetic-generation source rejection test; never read or supply a key."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+      "lines": [
+        73,
+        74,
+        75
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Confine these writes to synthetic loopback caller sessions and non-secret view/scope state. Keep real provider and service credentials out of the browser; production handlers and PostgreSQL remain authorization authority."
     }
   ]
 }

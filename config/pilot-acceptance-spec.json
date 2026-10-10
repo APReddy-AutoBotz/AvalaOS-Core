@@ -5,7 +5,8 @@
   "requiredGates": [
     "canonical-journey", "tenant-adversarial", "recovery-rollback",
     "studio-private-artifacts", "postgres-fresh-upgrade", "browser-desktop",
-    "browser-pixel7", "accessibility-performance", "security-hygiene"
+    "browser-pixel7", "accessibility-performance", "security-hygiene",
+    "connected-enterprise-lifecycle"
   ],
   "limitations": [
     "No hosted or live infrastructure was inspected or mutated.",

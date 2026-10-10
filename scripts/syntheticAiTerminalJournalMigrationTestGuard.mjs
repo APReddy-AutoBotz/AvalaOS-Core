@@ -12,6 +12,9 @@ export const STUDIO_BRD_PROMPT_V3_MIGRATION =
 export const STUDIO_BRD_V3_QUALITY_VALIDATION_MIGRATION =
   '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql';
 
+export const GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION =
+  '20261009162752_govern_immutable_action_authority.sql';
+
 const PROVIDER_OFF_MIGRATIONS = new Set([
   STUDIO_BRD_V3_QUALITY_VALIDATION_MIGRATION,
   STUDIO_BRD_PROMPT_V3_MIGRATION,
@@ -21,6 +24,18 @@ const PROVIDER_OFF_MIGRATIONS = new Set([
 ]);
 
 export async function applySyntheticAiTerminalJournalMigrationForTest(client, migrationName, applyMigration) {
+  if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION) {
+    // Disposable runners establish the committed read-only installation window.
+    // Production migration never changes runtime controls itself.
+    const state = await client.query('SELECT read_only FROM public.assess_v2_runtime_control WHERE singleton');
+    if (state.rowCount !== 1) throw new Error('GOVERN_ACTION_AUTHORITY_TEST_RUNTIME_STATE_MISSING');
+    await client.query('UPDATE public.assess_v2_runtime_control SET read_only=true WHERE singleton');
+    try {
+      return await applyMigration();
+    } finally {
+      await client.query('UPDATE public.assess_v2_runtime_control SET read_only=$1 WHERE singleton', [state.rows[0].read_only]);
+    }
+  }
   if (!PROVIDER_OFF_MIGRATIONS.has(migrationName)) return applyMigration();
 
   const state = await client.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio

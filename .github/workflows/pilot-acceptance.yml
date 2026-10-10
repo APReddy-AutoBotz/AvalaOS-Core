@@ -85,6 +85,27 @@ jobs:
           npm run test:migrations:enterprise-intelligence:postgres
           npm run test:migrations:studio-private-artifacts
           node scripts/testTrustAssurancePostgres.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Immutable Govern action authority and upgrade safety
+        env:
+          GOVERN_ACTION_AUTHORITY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+        run: node scripts/testGovernImmutableActionAuthorityPostgres.mjs
+      - name: Connected Assess Govern Studio lifecycle evidence
+        env:
+          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+          PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
+        run: |
+          node scripts/testEnterpriseLifecycleAcceptancePostgres.mjs --output output/acceptance/enterprise-lifecycle/backend-evidence.json
+          node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs
+      - name: Upload connected enterprise lifecycle evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: connected-enterprise-lifecycle-${{ env.CANDIDATE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/acceptance/enterprise-lifecycle/backend-evidence.json
+            output/acceptance/enterprise-lifecycle/browser-evidence.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Prove teardown is independent of runner state
         if: always()
         run: dropdb --if-exists -h 127.0.0.1 -U postgres avalaos_pilot_synthetic
@@ -122,18 +143,42 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
+      - name: Download connected enterprise lifecycle evidence
+        id: lifecycle_download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: connected-enterprise-lifecycle-${{ env.CANDIDATE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/acceptance/enterprise-lifecycle
+      - name: Validate actual connected enterprise lifecycle evidence
+        id: lifecycle_evidence
+        if: steps.lifecycle_download.outcome == 'success'
+        continue-on-error: true
+        env:
+          PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
+        run: npm run verify:enterprise-lifecycle-acceptance-evidence -- --backend output/acceptance/enterprise-lifecycle/backend-evidence.json --browser output/acceptance/enterprise-lifecycle/browser-evidence.json --output output/acceptance/enterprise-lifecycle/connected-evidence.json
       - name: Generate exact-head pilot gate results
         env:
           PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
           SOURCE_RESULT: ${{ needs.source-and-journey.result }}
           POSTGRES_RESULT: ${{ needs.disposable-postgresql-16.result }}
           BROWSER_RESULT: ${{ needs.browser-desktop-pixel7.result }}
+          LIFECYCLE_EVIDENCE_RESULT: ${{ steps.lifecycle_evidence.outcome }}
         run: |
           node - <<'NODE' >> "$GITHUB_ENV"
           const source = process.env.SOURCE_RESULT === 'success';
           const pg = process.env.POSTGRES_RESULT === 'success';
           const browser = process.env.BROWSER_RESULT === 'success';
+          const lifecycle = process.env.LIFECYCLE_EVIDENCE_RESULT === 'success';
           const pass = (ok, command) => ({result: ok ? 'passed' : 'failed', command, runId: process.env.GITHUB_RUN_ID});
+          const lifecyclePath = 'output/acceptance/enterprise-lifecycle/connected-evidence.json';
+          const lifecycleEvidence = lifecycle ? {
+            ...pass(true, 'npm run verify:enterprise-lifecycle-acceptance-evidence'),
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            headSha: process.env.PILOT_ACCEPTANCE_HEAD,
+            evidencePath: lifecyclePath,
+            evidenceDigest: `sha256:${require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync(lifecyclePath)).digest('hex')}`,
+          } : pass(false, 'npm run verify:enterprise-lifecycle-acceptance-evidence');
           const result = {
             'canonical-journey': pass(source, 'npm run test:pilot-acceptance-model'),
             'tenant-adversarial': pass(source && pg, 'pilot model + PostgreSQL authority suites'),
@@ -143,7 +188,8 @@ jobs:
             'browser-desktop': pass(browser, 'retained Chromium desktop projects'),
             'browser-pixel7': pass(browser, 'retained Pixel 7 projects'),
             'accessibility-performance': pass(browser, 'retained Playwright axe/viewport/budget assertions'),
-            'security-hygiene': pass(source, 'AI boundary and secret hygiene')
+            'security-hygiene': pass(source, 'AI boundary and secret hygiene'),
+            'connected-enterprise-lifecycle': lifecycleEvidence
           };
           process.stdout.write(`PILOT_ACCEPTANCE_GATE_RESULTS=${JSON.stringify(result)}\n`);
           NODE

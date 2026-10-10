@@ -116,23 +116,40 @@ const laterCloneProjection = projectImmutableCloneEvidence(
 assert.deepEqual(laterCloneProjection.evidence, [immutableImportedEvidence, authoredEvidence]);
 assert.deepEqual(laterCloneProjection.importedEvidenceClaimIds, ['v1.evidence.legacy-evidence-1']);
 
+const draftHeadSource = clientSource.match(/export const shouldReadAssessV2DraftHead = \([\s\S]*?;\r?\n/)?.[0];
+assert.ok(draftHeadSource, 'the current-head projection decision must remain directly testable');
+const draftHeadModule = { exports: {} as Record<string, unknown> };
+new Function('exports', 'module', ts.transpileModule(draftHeadSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText)(draftHeadModule.exports, draftHeadModule);
+const shouldReadAssessV2DraftHead = draftHeadModule.exports.shouldReadAssessV2DraftHead as (
+  currentCase: { status: unknown; head_version_id: unknown },
+  latestDecision: { source_version_id: unknown } | null,
+) => boolean;
+assert.equal(shouldReadAssessV2DraftHead({ status: 'draft', head_version_id: 'revision-v2' }, { source_version_id: 'decision-v1' }), true);
+assert.equal(shouldReadAssessV2DraftHead({ status: 'draft', head_version_id: 'revision-v2' }, { source_version_id: 'revision-v2' }), true);
+assert.equal(shouldReadAssessV2DraftHead({ status: 'reviewer_ready', head_version_id: 'revision-v2' }, { source_version_id: 'decision-v1' }), true);
+assert.equal(shouldReadAssessV2DraftHead({ status: 'approved', head_version_id: 'decision-v1' }, { source_version_id: 'decision-v1' }), false);
+assert.equal(shouldReadAssessV2DraftHead({ status: 'draft', head_version_id: 'revision-v1' }, null), true);
+
 assert.match(clientSource, /readEnterpriseErrorCode\(payload,/);
 assert.match(clientSource, /evidenceIds\.has\(evidence\.id\)/);
 assert.match(clientSource, /throw new EnterpriseBoundaryError\('COMMAND_UNAVAILABLE'\)/);
 assert.match(clientSource, /assertUniqueAssessV2EvidenceIds\(value\.case_snapshot\)/);
 assert.match(clientSource, /findAssessV2CaseForProcess/);
 assert.match(clientSource, /async readCase\(caseId\) \{[\s\S]*data: activeCase[\s\S]*\.from\('assess_v2_cases'\)[\s\S]*\.is\('deleted_at', null\)[\s\S]*if \(!activeCase\) return null;/);
+assert.match(clientSource, /shouldReadAssessV2DraftHead\(activeCase, decision\)[\s\S]*\.eq\('id', activeCase\.head_version_id\)/);
 assert.match(clientSource, /capabilities\.includes\(ASSESS_V2_CAPABILITIES\.read\)/);
 assert.match(clientSource, /\.eq\('org_id', organizationId\)/);
 assert.match(clientSource, /\.eq\('workspace_id', workspaceId\)/);
 assert.match(clientSource, /\.eq\('process_id', processId\)/);
 assert.match(clientSource, /\.is\('deleted_at', null\)/);
-const discoverySource = clientSource.match(/async findCaseForProcess\(\{ organizationId, workspaceId, processId \}\) \{([\s\S]*?)\n  \},\};/)?.[1] ?? '';
+const discoverySource = clientSource.match(/async findCaseForProcess\(\{ organizationId, workspaceId, processId \}\) \{([\s\S]*?)\n  \},\r?\n\}\);/)?.[1] ?? '';
 assert.ok(discoverySource, 'the process-bound V2 discovery query must exist');
 assert.doesNotMatch(discoverySource, /\.in\('status'/, 'review, approved, changes-requested, Govern, and handoff states must remain discoverable');
 assert.match(discoverySource, /\.is\('deleted_at', null\)/, 'soft-deleted cases remain excluded');
 assert.match(discoverySource, /\.neq\('status', 'superseded'\)/, 'superseded historical cases must not displace the active lifecycle');
-assert.match(clientSource, /\.eq\('case_id', currentCase\.id\)[\s\S]*\.eq\('org_id', currentCase\.org_id\)[\s\S]*\.eq\('workspace_id', currentCase\.workspace_id\)[\s\S]*\.eq\('version', 1\)[\s\S]*\.eq\('source_kind', 'v1_clone'\)/);
+assert.match(clientSource, /\.eq\('case_id', activeCase\.id\)[\s\S]*\.eq\('org_id', activeCase\.org_id\)[\s\S]*\.eq\('workspace_id', activeCase\.workspace_id\)[\s\S]*\.eq\('version', 1\)[\s\S]*\.eq\('source_kind', 'v1_clone'\)/);
 assert.match(clientSource, /child\('assess_v2_evidence_links', immutableCloneVersion\.id\)/);
 assert.match(clientSource, /clonedAt: cloneSource && typeof cloneSource\.clonedAt === 'string'/);
 assert.match(clientSource, /importedEvidenceClaimIds,/);
