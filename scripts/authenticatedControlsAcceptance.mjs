@@ -86,4 +86,3 @@ export const validateAuthenticatedControlFrames = frames => {
   }
   return errors;
 };
-

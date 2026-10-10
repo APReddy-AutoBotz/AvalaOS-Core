@@ -22,4 +22,3 @@ test('AI-004 adapter composes the production receipt, transition and completion 
   assert.doesNotMatch(source, /to_jsonb\([^)]*\)\s*-/u);
   assert.doesNotMatch(source, /return \{[^}]*secretRef/u);
 });
-

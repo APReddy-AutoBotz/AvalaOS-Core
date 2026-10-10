@@ -21,7 +21,7 @@
     "scripts/authenticatedAcceptanceCases.mjs": "sha256:dcfc746d3d7e45cc6f857c514e64885992b2adc86c1719a6808cee4219ec09f0",
     "scripts/authenticatedAcceptanceEvidence.mjs": "sha256:5a5f0ce9b206f8961d996698e6c5ca34a8413b99b6a904d96783ddf8c055c459",
     "scripts/authenticatedAcceptanceProfile.mjs": "sha256:2240a799815a5a0809140a855164da892e758fcee0c92602a25b3071ac8ae924",
-    "scripts/authenticatedControlsAcceptance.mjs": "sha256:7fe983098f644bb56df986f09408af6a6b846ae3310b71ce2800c6c5ec685507",
+    "scripts/authenticatedControlsAcceptance.mjs": "sha256:9986a55ae3f4d40f8a5d9fb1a3b62155ef0e6f75422f9094092d224da4d5f937",
     "scripts/authenticatedControlsFixture.mjs": "sha256:a1d33b141895f11a0dd893a35a8ba06c7a42a7dd9716f8f79e7a07d13c0f982b",
     "scripts/authenticatedControlsPostgresAdapter.mjs": "sha256:77ec198f700fbccc9238faf93933e56ed976a8b10f3ad281f3827cce5c057f27",
     "scripts/authenticatedControlsProductionLoader.mjs": "sha256:374f069a5713dd96f7a5d0a4d0abd2d54031d0b23814fd191610ddb480372bc9",

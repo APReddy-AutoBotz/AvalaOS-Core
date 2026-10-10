@@ -52,4 +52,3 @@ test('missing or mismatched measurements block requested PASS assertions', () =>
   mismatched.measurements.delta.receiptWrites += 1;
   assert.match(validateAuthenticatedControlFrames([mismatched]).join(','), /ai004-effects/u);
 });
-

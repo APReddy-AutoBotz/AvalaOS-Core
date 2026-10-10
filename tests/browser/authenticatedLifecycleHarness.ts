@@ -211,4 +211,3 @@ export const authenticatedLifecycleFinalizeDecisionPack = async (page: Page) => 
   await expect(button).toBeEnabled({ timeout: 15_000 });
   await button.click();
 };
-
