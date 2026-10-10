@@ -25,6 +25,24 @@ import {
 
 const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_CONTROLLED_HUMAN_FROZEN_TIP];
 
+test('retained Studio and synthetic runners validate the entire approved tail before database setup', () => {
+  const migrations = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
+  for (const file of ['testStudioSourceIntegrationPostgres.mjs', 'testSyntheticAiCampaignRenewalPostgres.mjs',
+    'testSyntheticAiFinalContinuationPostgres.mjs', 'assessStudioBudgetPipelinePostgres.mjs']) {
+    const source = readFileSync(`scripts/${file}`, 'utf8');
+    assert.match(source, /import \{ approvedFullChainTip \} from '\.\/prCMigrationTailContract\.mjs'/u);
+    const statement = source.match(/assert\.equal\(approvedFullChainTip\(migrations\), '[0-9]+'\);/u)?.[0];
+    assert.ok(statement, `${file} must execute the shared exact-chain preflight`);
+    assert.doesNotMatch(source, /migrations\.at\(-[0-9]+\)/u);
+    const execute = files => runInNewContext(statement, { assert, approvedFullChainTip, migrations: files });
+    assert.doesNotThrow(() => execute(migrations));
+    for (const files of [migrations.slice(0, -1), migrations.filter(name => !name.includes('legacy_delivery_authority')),
+      [...migrations, '20990101000000_unapproved.sql'], [...migrations.slice(0, -2), migrations.at(-1), migrations.at(-2)]]) {
+      assert.throws(() => execute(files), { code: 'ERR_ASSERTION' });
+    }
+  }
+});
+
 test('creation PostgreSQL runner executes the real migration-order preflight with the synthetic acceptance successor last', () => {
   const source = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
   const start = source.indexOf('  assert.equal(migrations.length,');

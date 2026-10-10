@@ -79,6 +79,26 @@ export type AssessmentScenarioCaseResult = Readonly<{
 
 const expectDigest = (value: string) => expect(value).toMatch(/^sha256:[a-f0-9]{64}$/u);
 type ObservedProductionResponse = Readonly<{ route: string; status: number }>;
+type StudioArtifactCommandType =
+  | 'studio.artifact.review.submit'
+  | 'studio.artifact.review.assign'
+  | 'studio.artifact.review.resolve'
+  | 'studio.artifact.approval.resolve';
+const waitForStudioArtifactCommand = (page: Page, commandType: StudioArtifactCommandType) => page.waitForResponse(response => {
+  if (new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command' || response.request().method() !== 'POST') return false;
+  try { return (response.request().postDataJSON() as { commandType?: unknown }).commandType === commandType; }
+  catch { return false; }
+});
+const commitStudioArtifactCommand = async (
+  page: Page,
+  commandType: StudioArtifactCommandType,
+  click: () => Promise<void>,
+  committedMessage: string,
+) => {
+  const [response] = await Promise.all([waitForStudioArtifactCommand(page, commandType), click()]);
+  expect(response.status()).toBe(201);
+  await expect(page.getByText(committedMessage, { exact: true })).toBeVisible();
+};
 const measuredResponses = (log: readonly ObservedProductionResponse[], start: number, routes: readonly string[]) => {
   const observed = log.slice(start).filter(item => routes.includes(item.route));
   for (const route of routes) {
@@ -161,26 +181,53 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await review.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click();
   await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
 
-  await enterStudioAs(page, setup.actors.approver); await commitHandoff(page, 'Request handoff');
-  await enterStudioAs(page, setup.actors.reviewer); await commitHandoff(page, 'Approve review', 'Independent scenario handoff review approved.');
-  await enterStudioAs(page, setup.actors.author); await commitHandoff(page, 'Final accept', 'Independent final acceptance for the scenario.');
-  await enterStudioAs(page, setup.actors.approver); await commitHandoff(page, 'Start Studio draft', undefined, 'Outbox');
+  await enterStudioAs(page, setup.actors.approver);
+  await commitHandoff(page, 'Request handoff');
+  await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+  await enterStudioAs(page, setup.actors.reviewer);
+  await commitHandoff(page, 'Approve review', 'Independent scenario handoff review approved.');
+  await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+  await enterStudioAs(page, setup.actors.author);
+  await commitHandoff(page, 'Final accept', 'Independent final acceptance for the scenario.');
+  await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+  await enterStudioAs(page, setup.actors.approver);
+  await commitHandoff(page, 'Start Studio draft', undefined, 'Outbox');
+  await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\. Approval alone did not create a document\./u)).toBeVisible();
   const studio = page.getByTestId('studio-artifact-workspace');
   const template = studio.getByLabel('Exact approved Studio template', { exact: true });
   await template.selectOption({ index: 1 });
   await studio.getByRole('button', { name: 'Generate governed package draft', exact: true }).click();
   await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
-  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+  await commitStudioArtifactCommand(
+    page,
+    'studio.artifact.review.submit',
+    () => page.getByRole('button', { name: 'Submit for review', exact: true }).click(),
+    'Reviewer ready committed.',
+  );
   await enterStudioAs(page, setup.actors.author);
   await page.getByLabel('Eligible independent reviewer', { exact: true }).selectOption(setup.actors.reviewer.user.id);
-  await page.getByRole('button', { name: 'Assign reviewer', exact: true }).click();
+  await commitStudioArtifactCommand(
+    page,
+    'studio.artifact.review.assign',
+    () => page.getByRole('button', { name: 'Assign reviewer', exact: true }).click(),
+    'In review committed.',
+  );
   await enterStudioAs(page, setup.actors.reviewer);
   await page.getByLabel('Rationale', { exact: true }).fill('Independent scenario Studio review approved.');
-  await page.getByRole('button', { name: 'Approve review', exact: true }).click();
+  await commitStudioArtifactCommand(
+    page,
+    'studio.artifact.review.resolve',
+    () => page.getByRole('button', { name: 'Approve review', exact: true }).click(),
+    'Approval ready committed.',
+  );
   await enterStudioAs(page, setup.actors.author);
   await page.getByLabel('Rationale', { exact: true }).fill('Final approval binds the exact scenario version.');
-  await page.getByRole('button', { name: 'Final approve', exact: true }).click();
-  await expect(page.getByText('Approved committed.', { exact: true })).toBeVisible();
+  await commitStudioArtifactCommand(
+    page,
+    'studio.artifact.approval.resolve',
+    () => page.getByRole('button', { name: 'Final approve', exact: true }).click(),
+    'Approved committed.',
+  );
 };
 
 const countDelta = (before: StudioDeliveryDownstreamFrame, after: StudioDeliveryDownstreamFrame) => Object.fromEntries(
