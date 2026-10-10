@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "catalogId": "avalaos-hosted-acceptance-2026-08",
   "cases": [
     {
@@ -716,12 +716,22 @@
       "feature": "process",
       "ruleRequirement": "process edit denial",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "ASSESS-PROCESS_EDIT_DENIAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -766,12 +776,22 @@
       "feature": "discovery",
       "ruleRequirement": "discovery complete",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "ASSESS-DISCOVERY_COMPLETE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -1490,12 +1510,22 @@
       "feature": "v2",
       "ruleRequirement": "v2 create",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "ASSESS-V2_CREATE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -1540,12 +1570,22 @@
       "feature": "v2",
       "ruleRequirement": "v2 finalize",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "ASSESS-V2_FINALIZE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -1590,12 +1630,22 @@
       "feature": "v2",
       "ruleRequirement": "v2 feature disabled",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "ASSESS-V2_FEATURE_DISABLED"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2038,12 +2088,19 @@
       "feature": "review",
       "ruleRequirement": "review assignment",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-REVIEW_ASSIGNMENT"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2088,12 +2145,19 @@
       "feature": "independent",
       "ruleRequirement": "independent attestation",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-INDEPENDENT_ATTESTATION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2138,12 +2202,19 @@
       "feature": "changes",
       "ruleRequirement": "changes requested",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-CHANGES_REQUESTED"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2188,12 +2259,19 @@
       "feature": "rework",
       "ruleRequirement": "rework resubmit",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-REWORK_RESUBMIT"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2238,12 +2316,19 @@
       "feature": "approval",
       "ruleRequirement": "approval",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-APPROVAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2288,12 +2373,19 @@
       "feature": "rejection",
       "ruleRequirement": "rejection",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-REJECTION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2338,12 +2430,19 @@
       "feature": "separation",
       "ruleRequirement": "separation of duty",
       "sourceReference": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "GOVERN-SEPARATION_OF_DUTY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2559,12 +2658,23 @@
       "feature": "handoff",
       "ruleRequirement": "handoff lineage",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "STUDIO-HANDOFF_LINEAGE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2609,12 +2719,19 @@
       "feature": "governed",
       "ruleRequirement": "governed generation",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "STUDIO-GOVERNED_GENERATION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2659,12 +2776,19 @@
       "feature": "generation",
       "ruleRequirement": "generation failure",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "STUDIO-GENERATION_FAILURE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -2886,12 +3010,23 @@
       "feature": "download",
       "ruleRequirement": "download denial",
       "sourceReference": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "STUDIO-DOWNLOAD_DENIAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3172,12 +3307,23 @@
       "feature": "handoff",
       "ruleRequirement": "handoff import",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-HANDOFF_IMPORT"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3222,12 +3368,23 @@
       "feature": "task",
       "ruleRequirement": "task create",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-TASK_CREATE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3272,12 +3429,23 @@
       "feature": "task",
       "ruleRequirement": "task update own",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-TASK_UPDATE_OWN"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3322,12 +3490,23 @@
       "feature": "task",
       "ruleRequirement": "task delete denial",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-TASK_DELETE_DENIAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3372,12 +3551,23 @@
       "feature": "status",
       "ruleRequirement": "status transition",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-STATUS_TRANSITION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3422,12 +3612,23 @@
       "feature": "invalid",
       "ruleRequirement": "invalid transition",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-INVALID_TRANSITION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3480,7 +3681,9 @@
         "services/deliveryWorkflowPolicy.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "DELIVERY-DUPLICATE_IMPORT"
@@ -3538,7 +3741,9 @@
         "services/deliveryWorkflowPolicy.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "DELIVERY-RETAINED_LINEAGE"
@@ -3588,12 +3793,23 @@
       "feature": "delivery",
       "ruleRequirement": "delivery pack",
       "sourceReference": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "DELIVERY-DELIVERY_PACK"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3638,12 +3854,23 @@
       "feature": "lineage",
       "ruleRequirement": "lineage visibility",
       "sourceReference": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "MONITOR-LINEAGE_VISIBILITY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3657,12 +3884,12 @@
         "Exercise lineage visibility through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": "preserved and tenant scoped",
@@ -3688,12 +3915,23 @@
       "feature": "value",
       "ruleRequirement": "value signal",
       "sourceReference": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "MONITOR-VALUE_SIGNAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3707,12 +3945,12 @@
         "Exercise value signal through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": "preserved and tenant scoped",
@@ -3738,12 +3976,23 @@
       "feature": "blocker",
       "ruleRequirement": "blocker visibility",
       "sourceReference": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "MONITOR-BLOCKER_VISIBILITY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3757,12 +4006,12 @@
         "Exercise blocker visibility through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": "preserved and tenant scoped",
@@ -3788,12 +4037,23 @@
       "feature": "unavailable",
       "ruleRequirement": "unavailable projection",
       "sourceReference": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "MONITOR-UNAVAILABLE_PROJECTION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3838,12 +4098,23 @@
       "feature": "admin",
       "ruleRequirement": "admin navigation",
       "sourceReference": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "ADMIN-ADMIN_NAVIGATION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3857,17 +4128,17 @@
         "Exercise admin navigation through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
-      "expectedAudit": "required for privileged mutation",
+      "expectedAudit": "not applicable",
       "viewport": [
         "desktop-chromium",
         "pixel-7-chromium"
@@ -3888,12 +4159,23 @@
       "feature": "non",
       "ruleRequirement": "non admin denial",
       "sourceReference": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "ADMIN-NON_ADMIN_DENIAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3938,12 +4220,23 @@
       "feature": "role",
       "ruleRequirement": "role capability view",
       "sourceReference": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "ADMIN-ROLE_CAPABILITY_VIEW"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -3957,17 +4250,17 @@
         "Exercise role capability view through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
-      "expectedAudit": "required for privileged mutation",
+      "expectedAudit": "not applicable",
       "viewport": [
         "desktop-chromium",
         "pixel-7-chromium"
@@ -3989,12 +4282,23 @@
       "ruleRequirement": "pilot operations read only",
       "sourceReference": [
         "services/adminWorkbenchModel.ts",
-        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "ADMIN-PILOT_OPERATIONS_READ_ONLY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4008,17 +4312,17 @@
         "Exercise pilot operations read only through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": null,
       "expectedEvidence": "sanitized deterministic evidence",
-      "expectedAudit": "required for privileged mutation",
+      "expectedAudit": "not applicable",
       "viewport": [
         "desktop-chromium",
         "pixel-7-chromium"
@@ -4304,12 +4608,23 @@
       "feature": "no",
       "ruleRequirement": "no byok",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "AI-NO_BYOK"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4354,12 +4669,23 @@
       "feature": "provider",
       "ruleRequirement": "provider disabled",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "AI-PROVIDER_DISABLED"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4404,12 +4730,23 @@
       "feature": "provider",
       "ruleRequirement": "provider capability denial",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "AI-PROVIDER_CAPABILITY_DENIAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4454,12 +4791,23 @@
       "feature": "provider",
       "ruleRequirement": "provider secret boundary",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "AI-PROVIDER_SECRET_BOUNDARY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4504,12 +4852,23 @@
       "feature": "provider",
       "ruleRequirement": "provider unavailable",
       "sourceReference": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "AI-PROVIDER_UNAVAILABLE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4555,12 +4914,23 @@
       "ruleRequirement": "no browser secret",
       "sourceReference": [
         "services/aiMode.ts",
-        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "branchIds": [
         "AI-NO_BROWSER_SECRET"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -4609,10 +4979,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -4620,7 +4993,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -4674,10 +5049,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -4685,7 +5063,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -4735,7 +5115,27 @@
       "feature": "query",
       "ruleRequirement": "query tenant isolation",
       "sourceReference": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "EI-QUERY_TENANT_ISOLATION"
@@ -4744,7 +5144,7 @@
       "persona": [
         "role_appropriate"
       ],
-      "fixture": "synthetic-default",
+      "fixture": "synthetic-enterprise-intelligence-postgresql-v1",
       "transcript": null,
       "preconditions": [
         "Synthetic data only",
@@ -4754,12 +5154,12 @@
         "Exercise query tenant isolation through the declared environment"
       ],
       "expectedResult": "Deterministic policy outcome matches the declared source rule",
-      "expectedMutation": "declared synthetic state transition",
-      "expectedMutationCount": 1,
+      "expectedMutation": "none",
+      "expectedMutationCount": 0,
       "expectedDenial": false,
       "expectedErrorCode": null,
       "expectedStateBefore": "declared precondition state",
-      "expectedStateAfter": "unchanged on denial/failure; declared next state on success",
+      "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation.",
       "expectedScore": null,
       "expectedClassification": null,
       "expectedLineage": "preserved and tenant scoped",
@@ -4789,10 +5189,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -4800,7 +5203,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -4854,10 +5259,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -4865,7 +5273,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"
@@ -4916,12 +5326,23 @@
       "ruleRequirement": "canonical happy",
       "sourceReference": [
         "services/handoffLedgerService.ts",
-        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-CANONICAL_HAPPY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -4966,12 +5387,23 @@
       "feature": "requested",
       "ruleRequirement": "requested changes loop",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-REQUESTED_CHANGES_LOOP"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -5016,12 +5448,23 @@
       "feature": "authority",
       "ruleRequirement": "authority denial",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-AUTHORITY_DENIAL"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -5066,12 +5509,23 @@
       "feature": "stale",
       "ruleRequirement": "stale replay recovery",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-STALE_REPLAY_RECOVERY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -5116,12 +5570,23 @@
       "feature": "low",
       "ruleRequirement": "low suitability",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-LOW_SUITABILITY"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -5166,12 +5631,23 @@
       "feature": "strong",
       "ruleRequirement": "strong automation",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-STRONG_AUTOMATION"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -5216,12 +5692,23 @@
       "feature": "hitl",
       "ruleRequirement": "hitl compliance",
       "sourceReference": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "branchIds": [
         "E2E-HITL_COMPLIANCE"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "all_sandbox_personas"
       ],
@@ -5266,12 +5753,22 @@
       "feature": "offline",
       "ruleRequirement": "offline no false success",
       "sourceReference": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "SAFETY-OFFLINE_NO_FALSE_SUCCESS"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -5316,12 +5813,22 @@
       "feature": "server",
       "ruleRequirement": "server error no false success",
       "sourceReference": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -5366,12 +5873,22 @@
       "feature": "timeout",
       "ruleRequirement": "timeout no false success",
       "sourceReference": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "branchIds": [
         "SAFETY-TIMEOUT_NO_FALSE_SUCCESS"
       ],
-      "environment": "hosted_sandbox",
+      "environment": "hosted_authenticated_synthetic",
       "persona": [
         "role_appropriate"
       ],
@@ -5610,5 +6127,169 @@
         "status": "automated"
       }
     }
-  ]
+  ],
+  "criteriaRevision": "authenticated-synthetic-2026-10-10-v2",
+  "criteriaChanges": {
+    "authority": "AP-approved-full-scope-remaining-acceptance-plan",
+    "environmentChange": {
+      "from": "hosted_sandbox",
+      "to": "hosted_authenticated_synthetic",
+      "testIds": [
+        "ASSESS-002",
+        "ASSESS-003",
+        "ASSESS-018",
+        "ASSESS-019",
+        "ASSESS-020",
+        "GOVERN-001",
+        "GOVERN-002",
+        "GOVERN-003",
+        "GOVERN-004",
+        "GOVERN-005",
+        "GOVERN-006",
+        "GOVERN-007",
+        "STUDIO-001",
+        "STUDIO-002",
+        "STUDIO-003",
+        "STUDIO-007",
+        "DELIVERY-001",
+        "DELIVERY-002",
+        "DELIVERY-003",
+        "DELIVERY-004",
+        "DELIVERY-005",
+        "DELIVERY-006",
+        "DELIVERY-009",
+        "MONITOR-001",
+        "MONITOR-002",
+        "MONITOR-003",
+        "MONITOR-004",
+        "ADMIN-001",
+        "ADMIN-002",
+        "ADMIN-003",
+        "ADMIN-004",
+        "AI-001",
+        "AI-002",
+        "AI-003",
+        "AI-004",
+        "AI-005",
+        "AI-006",
+        "E2E-001",
+        "E2E-002",
+        "E2E-003",
+        "E2E-004",
+        "E2E-005",
+        "E2E-006",
+        "E2E-007",
+        "SAFETY-001",
+        "SAFETY-002",
+        "SAFETY-003"
+      ]
+    },
+    "readOnlyChanges": [
+      {
+        "testId": "EI-003",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      },
+      {
+        "testId": "ADMIN-001",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "required for privileged mutation",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      },
+      {
+        "testId": "ADMIN-003",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "required for privileged mutation",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      },
+      {
+        "testId": "ADMIN-004",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "required for privileged mutation",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      },
+      {
+        "testId": "MONITOR-001",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      },
+      {
+        "testId": "MONITOR-002",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      },
+      {
+        "testId": "MONITOR-003",
+        "before": {
+          "expectedMutation": "declared synthetic state transition",
+          "expectedMutationCount": 1,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "unchanged on denial/failure; declared next state on success"
+        },
+        "after": {
+          "expectedMutation": "none",
+          "expectedMutationCount": 0,
+          "expectedAudit": "not applicable",
+          "expectedStateAfter": "Unchanged persisted state during the measured read; fixture setup precedes observation."
+        }
+      }
+    ]
+  }
 }

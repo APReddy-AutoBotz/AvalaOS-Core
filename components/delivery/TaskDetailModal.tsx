@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Task, Project, Epic, User, TaskStatus, TaskPriority, UserStory, AcceptanceCriterion, Attachment, Comment as TaskComment, ALL_STATUSES, ALL_PRIORITIES } from '../../types';
 import Modal from '../shared/Modal';
 import { renderSafeMarkdown } from '../../services/safeMarkdown';
+import type { StudioDeliveryAssignee } from '../../services/productAcceptanceBridge/contracts';
 
 import {
     SparklesIcon, ArrowPathIcon, EyeIcon, FireIcon, CheckCircleIcon, BanIcon, ClockIcon,
@@ -23,6 +24,9 @@ interface TaskDetailModalProps {
     onUpdateTask: (task: Task) => void | boolean | Promise<boolean>;
     onAddTask: (task: Task) => void | boolean | Promise<boolean>;
     onDeleteTask: (taskId: string) => void;
+    outcomeEditor?: React.ReactNode;
+    loadAssigneeOptions?: (projectId: string) => Promise<StudioDeliveryAssignee[]>;
+    assigneeEditingEnabled?: boolean;
 }
 
 type ModalTab = 'Details' | 'Subtasks' | 'User Stories' | 'Comments' | 'History';
@@ -69,13 +73,42 @@ const formatRelativeTime = (dateString: string) => {
 // ===================================
 // Main Component
 // ===================================
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, project, epic, users, currentUser, onClose, onUpdateTask, onAddTask, onDeleteTask }) => {
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, project, epic, users, currentUser, onClose, onUpdateTask, onAddTask, onDeleteTask,
+    outcomeEditor, loadAssigneeOptions, assigneeEditingEnabled = true }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [activeTab, setActiveTab] = useState<ModalTab>('Details');
     const [newComment, setNewComment] = useState("");
     const [savingDetails, setSavingDetails] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [remoteAssignees, setRemoteAssignees] = useState<StudioDeliveryAssignee[]>([]);
+    const [assigneeDirectoryState, setAssigneeDirectoryState] = useState<'local' | 'loading' | 'ready' | 'error'>(loadAssigneeOptions ? 'loading' : 'local');
+
+    useEffect(() => {
+        if (!loadAssigneeOptions) {
+            setRemoteAssignees([]);
+            setAssigneeDirectoryState('local');
+            return;
+        }
+        if (!project?.id) {
+            setRemoteAssignees([]);
+            setAssigneeDirectoryState('error');
+            return;
+        }
+        let current = true;
+        setRemoteAssignees([]);
+        setAssigneeDirectoryState('loading');
+        loadAssigneeOptions(project.id).then(items => {
+            if (!current) return;
+            setRemoteAssignees(items);
+            setAssigneeDirectoryState('ready');
+        }).catch(() => {
+            if (!current) return;
+            setRemoteAssignees([]);
+            setAssigneeDirectoryState('error');
+        });
+        return () => { current = false; };
+    }, [loadAssigneeOptions, project?.id]);
 
     useEffect(() => {
         // Only reset the whole modal state if the task ID changes (i.e., a new task is selected)
@@ -132,11 +165,17 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
     };
 
     const subtasks = allTasks.filter(t => t.parentId === task.id);
+    const assigneeOptions: StudioDeliveryAssignee[] = assigneeDirectoryState === 'local' && assigneeEditingEnabled
+        ? users.map(user => ({ id: user.id, displayName: user.name }))
+        : remoteAssignees;
 
     const renderContent = () => {
         switch (activeTab) {
             case 'Details':
-                return <DetailsTab task={task} epic={epic} project={project} users={users} isEditing={isEditing} editedTask={editedTask} setEditedTask={setEditedTask} onSave={() => void handleSaveDetails()} onCancel={handleCancelEdit} onSetEditing={setIsEditing} onDeleteTask={onDeleteTask} saving={savingDetails} />;
+                return <DetailsTab task={task} epic={epic} project={project} assigneeOptions={assigneeOptions}
+                    assigneeDirectoryState={assigneeDirectoryState} assigneeEditingEnabled={assigneeEditingEnabled}
+                    isEditing={isEditing} editedTask={editedTask} setEditedTask={setEditedTask} onSave={() => void handleSaveDetails()}
+                    onCancel={handleCancelEdit} onSetEditing={setIsEditing} onDeleteTask={onDeleteTask} saving={savingDetails} />;
             case 'Subtasks':
                 return <SubtasksTab parentTask={editedTask} subtasks={subtasks} onUpdateParent={handleUpdateAndSave} onAddTask={onAddTask} onUpdateSubtask={onUpdateTask} onDeleteSubtask={onDeleteTask} />;
             case 'User Stories':
@@ -191,6 +230,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
             </div>
             <div className="px-6 py-6">
                 {renderContent()}
+                {activeTab === 'Details' && outcomeEditor}
             </div>
         </Modal>
     );
@@ -203,7 +243,9 @@ interface DetailsTabProps {
     task: Task;
     epic: Epic | undefined;
     project: Project | undefined;
-    users: User[];
+    assigneeOptions: StudioDeliveryAssignee[];
+    assigneeDirectoryState: 'local' | 'loading' | 'ready' | 'error';
+    assigneeEditingEnabled: boolean;
     isEditing: boolean;
     editedTask: Task;
     setEditedTask: React.Dispatch<React.SetStateAction<Task>>;
@@ -213,8 +255,9 @@ interface DetailsTabProps {
     onDeleteTask: (taskId: string) => void;
     saving: boolean;
 }
-const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing, editedTask, setEditedTask, onSave, onCancel, onSetEditing, onDeleteTask, saving }) => {
-    const assignees = users.filter(u => task.assigneeIds.includes(u.id));
+const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions, assigneeDirectoryState, assigneeEditingEnabled,
+    isEditing, editedTask, setEditedTask, onSave, onCancel, onSetEditing, onDeleteTask, saving }) => {
+    const assignees = assigneeOptions.filter(option => task.assigneeIds.includes(option.id));
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -269,12 +312,19 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Assignees</label>
                     <div className="mt-2 space-y-2 p-3 bg-slate-50 dark:bg-abz-ink-900 rounded-lg max-h-32 overflow-y-auto">
-                        {users.map(user => (
-                            <label key={user.id} className="flex items-center cursor-pointer">
-                                <input type="checkbox" checked={editedTask.assigneeIds.includes(user.id)} onChange={() => handleAssigneeChange(user.id)} className="h-4 w-4 rounded border-gray-300 dark:border-gray-500 text-abz-primary focus:ring-abz-primary bg-transparent" />
-                                <span className="ml-2 text-sm text-slate-600 dark:text-slate-300">{user.name}</span>
+                        {assigneeEditingEnabled && assigneeDirectoryState === 'loading' && <p className="text-sm text-slate-500">Loading eligible assignees…</p>}
+                        {assigneeEditingEnabled && assigneeDirectoryState === 'error' && (
+                            <p role="alert" className="text-sm text-red-700 dark:text-red-300">Assignee choices could not be loaded. Existing assignments will be preserved.</p>
+                        )}
+                        {!assigneeEditingEnabled && <p className="text-sm text-slate-500">You can edit task details, but assignment changes require assignment permission.</p>}
+                        {assigneeEditingEnabled && ['local', 'ready'].includes(assigneeDirectoryState) && assigneeOptions.map(option => (
+                            <label key={option.id} className="flex items-center cursor-pointer">
+                                <input type="checkbox" checked={editedTask.assigneeIds.includes(option.id)} onChange={() => handleAssigneeChange(option.id)} className="h-4 w-4 rounded border-gray-300 dark:border-gray-500 text-abz-primary focus:ring-abz-primary bg-transparent" />
+                                <span className="ml-2 text-sm text-slate-600 dark:text-slate-300">{option.displayName}</span>
                             </label>
                         ))}
+                        {assigneeEditingEnabled && ['local', 'ready'].includes(assigneeDirectoryState) && assigneeOptions.length === 0
+                            && <p className="text-sm text-slate-500">No active eligible workspace members found.</p>}
                     </div>
                 </div>
                 <div className="flex justify-end gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-gray-700">
@@ -327,10 +377,14 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
                     {assignees.map(user => (
                         <div key={user.id} className="flex items-center gap-2">
                             <UserCircleIcon className="w-8 h-8 text-slate-400" />
-                            <span className="text-sm font-medium">{user.name}</span>
+                            <span className="text-sm font-medium">{user.displayName}</span>
                         </div>
                     ))}
-                    {assignees.length === 0 && <p className="text-sm text-slate-500">Unassigned</p>}
+                    {assignees.length === 0 && task.assigneeIds.length === 0 && <p className="text-sm text-slate-500">Unassigned</p>}
+                    {assignees.length === 0 && task.assigneeIds.length > 0 && assigneeDirectoryState === 'loading'
+                        && <p className="text-sm text-slate-500">Loading assignee details…</p>}
+                    {assignees.length === 0 && task.assigneeIds.length > 0 && assigneeDirectoryState !== 'loading'
+                        && <p className="text-sm text-slate-500">Assigned member details are unavailable.</p>}
                 </div>
             </div>
         </div>

@@ -8,6 +8,7 @@ import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTe
 
 const { Client } = pg;
 const AUTHORITY_MIGRATION = '20261010025331_legacy_delivery_authority.sql';
+const CURRENT_CHAIN_TIP = '20261010051413_authenticated_process_update_authority.sql';
 const DUPLICATE_SAFE_MIGRATIONS = new Set([
   '20260923133000_pr1e_evidence_claim_operator_binding.sql',
   '20260923142120_pr1e_govern_control_alias_binding.sql',
@@ -96,7 +97,7 @@ async function applyChain(client, throughMigration) {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;`);
   const migrations = (await readdir(join('supabase', 'migrations'))).filter(name => name.endsWith('.sql')).sort();
-  assert.equal(migrations.at(-1), AUTHORITY_MIGRATION, 'legacy Delivery migration must be current tip');
+  assert.equal(migrations.at(-1), CURRENT_CHAIN_TIP, 'legacy Delivery fixture must recognize the current migration tip');
   const last = migrations.indexOf(throughMigration);
   assert.notEqual(last, -1, `migration not found: ${throughMigration}`);
   for (const name of migrations.slice(0, last + 1)) {
@@ -172,7 +173,7 @@ export async function createLegacyDeliveryPostgresFixture(options = {}) {
     databaseCreated = true;
     db = new Client({ connectionString: databaseUrl(resolved.url, database), connectionTimeoutMillis: 10_000 });
     await db.connect();
-    await applyChain(db, options.throughMigration ?? AUTHORITY_MIGRATION);
+    await applyChain(db, options.throughMigration ?? CURRENT_CHAIN_TIP);
     const artifacts = options.seed === false ? null : await seed(db);
     const authorizationVersion = async actor => Number((await db.query(
       'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [LEGACY_DELIVERY_FIXTURE_IDS.organization, actor],

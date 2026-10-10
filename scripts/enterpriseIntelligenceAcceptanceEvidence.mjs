@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 
-export const EI_ACCEPTANCE_TEST_IDS = ['EI-001', 'EI-002', 'EI-004', 'EI-005'];
+export const EI_ACCEPTANCE_TEST_IDS = ['EI-001', 'EI-002', 'EI-003', 'EI-004', 'EI-005'];
 export const EI_ACCEPTANCE_SUITE_ID = 'enterprise-intelligence-postgres-acceptance';
 export const EI_ACCEPTANCE_SCOPE = Object.freeze({
   evidenceScope: 'executed-fixture',
@@ -15,10 +15,13 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'scripts/enterpriseIntelligenceAcceptanceEvidence.mjs',
   'scripts/enterpriseIntelligenceAcceptanceParser.test.ts',
   'scripts/enterpriseIntelligencePostgresFixture.mjs',
+  'scripts/authenticatedControlsProductionLoader.mjs',
   'scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs',
   'services/enterpriseIntelligence.ts',
   'supabase/functions/_shared/enterpriseIntelligenceCommand.ts',
   'supabase/functions/_shared/enterpriseIntelligenceIngestion.ts',
+  'supabase/functions/_shared/enterpriseIntelligenceQuery.ts',
+  'supabase/functions/_shared/tenantAuthority.ts',
   'supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql',
   'supabase/migrations/20260804120000_enterprise_intelligence_authority.sql',
   'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql',
@@ -27,10 +30,13 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql',
   'supabase/migrations/20261009162752_govern_immutable_action_authority.sql',
   'supabase/migrations/20261010025331_legacy_delivery_authority.sql',
+  'supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql',
+  'supabase/migrations/20261010051413_authenticated_process_update_authority.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',
   'EI-002': 'EI-INGESTION_LINEAGE',
+  'EI-003': 'EI-QUERY_TENANT_ISOLATION',
   'EI-004': 'EI-COMMAND_REPLAY',
   'EI-005': 'EI-ASSEMBLE_PHASE1_NONEXECUTION',
 });
@@ -52,6 +58,14 @@ export const EI_ACCEPTANCE_EXACT_ACTUAL = Object.freeze({
     projectionVisible: true, projectionRedacted: true,
     foreignProjectionDenied: true, immutable: true, providerDisabled: true,
     providerJobUsageReservationDelta: 0, hostedStorageNotRun: true,
+  }),
+  'EI-003': Object.freeze({
+    logicalMutationCount: 0, targetWriteDelta: 0,
+    actualQueryHandlerExecuted: true, authorityRpcExecuted: true,
+    currentTenantProjectionVisible: true, currentTenantProjectionScoped: true,
+    foreignTenantDenied: true, foreignProjectionLoadCount: 0,
+    beforeAfterSnapshotEqual: true, providerDisabled: true,
+    providerEffectDelta: 0,
   }),
   'EI-004': Object.freeze({
     logicalMutationCount: 1, sourceDelta: 1, versionDelta: 1,

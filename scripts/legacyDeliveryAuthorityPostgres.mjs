@@ -89,7 +89,7 @@ export async function runLegacyDeliveryAuthorityPostgres(options = {}) {
   let primaryCleanupVerified = false;
   try {
     assert.equal(fixture.version, LEGACY_DELIVERY_FIXTURE_VERSION);
-    assert.equal((await fixture.db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip, '20261010025331');
+    assert.equal((await fixture.db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip, '20261010051413');
     assert.equal((await fixture.db.query('SELECT count(*)::int n FROM public.legacy_delivery_workspace_controls')).rows[0].n, 0);
     const disabled = await fixture.callCommand({ key: 'disabled-import-0001', action: 'import', payload: {
       projectId: x.project, sourceGenerationId: x.generation, expectedSourceDigest: `sha256:${'0'.repeat(64)}`, sourceItemIndices: [0, 1, 2],

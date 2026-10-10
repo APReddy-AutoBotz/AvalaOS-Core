@@ -6,6 +6,7 @@ import StatusBadge, { type StatusBadgeTone } from './ui/StatusBadge';
 import { MonitorApprovedBaselinePanel } from '../delivery/GovernedDeliveryWorkspace';
 import type { MonitorApprovedBaselinesProjection } from '../../services/deliveryMonitor';
 import { enterpriseIntelligenceClient } from '../../services/enterpriseIntelligenceClient';
+import DeliveryOutcomeMonitorPanel, { type DeliveryOutcomeMonitorPanelProps } from './DeliveryOutcomeMonitorPanel';
 
 interface PortfolioViewProps {
   projects: Project[];
@@ -25,6 +26,7 @@ interface PortfolioViewProps {
   canonicalMonitorProjection?: MonitorApprovedBaselinesProjection;
   canonicalMonitorContext?: { actorId: string; organizationId: string; workspaceId: string; expectedAuthorizationVersion?: number };
   loadCanonicalMonitorProjection?: (context: NonNullable<PortfolioViewProps['canonicalMonitorContext']>) => Promise<MonitorApprovedBaselinesProjection>;
+  authoritativeDeliveryOutcomes?: DeliveryOutcomeMonitorPanelProps;
 }
 
 const loadDefaultCanonicalMonitorProjection = (
@@ -41,7 +43,7 @@ const healthTone: Record<Project['healthStatus'], StatusBadgeTone> = {
   'Off Track': 'danger',
 };
 
-const PortfolioView: React.FC<PortfolioViewProps> = ({ projects, tasks, users, onScopeChange, onViewChange, captureMode = false, outcomeSignal, canonicalMonitorProjection, canonicalMonitorContext, loadCanonicalMonitorProjection = loadDefaultCanonicalMonitorProjection }) => {
+const PortfolioView: React.FC<PortfolioViewProps> = ({ projects, tasks, users, onScopeChange, onViewChange, captureMode = false, outcomeSignal, canonicalMonitorProjection, canonicalMonitorContext, loadCanonicalMonitorProjection = loadDefaultCanonicalMonitorProjection, authoritativeDeliveryOutcomes }) => {
   const [loadedCanonicalProjection, setLoadedCanonicalProjection] = useState<{ contextKey: string; projection: MonitorApprovedBaselinesProjection } | null>(null);
   const [canonicalProjectionState, setCanonicalProjectionState] = useState<'idle' | 'loading' | 'loaded' | 'unavailable'>('idle');
   const canonicalContextKey = canonicalMonitorContext ? `${canonicalMonitorContext.actorId}:${canonicalMonitorContext.organizationId}:${canonicalMonitorContext.workspaceId}:${canonicalMonitorContext.expectedAuthorizationVersion ?? 'current'}` : '';
@@ -78,6 +80,7 @@ const PortfolioView: React.FC<PortfolioViewProps> = ({ projects, tasks, users, o
     {authoritativeMonitorProjection && <MonitorApprovedBaselinePanel projection={authoritativeMonitorProjection} heading="Canonical Delivery baselines" />}
     {!authoritativeMonitorProjection && canonicalProjectionState === 'loading' && <p role="status" className="av-surface p-5 font-bold">Loading the canonical approved-baseline projection.</p>}
     {!authoritativeMonitorProjection && canonicalProjectionState === 'unavailable' && <p role="alert" className="av-surface p-5 font-bold">The canonical approved-baseline projection is unavailable. Legacy operational values below are not substituted as Monitor authority.</p>}
+    {authoritativeDeliveryOutcomes && <DeliveryOutcomeMonitorPanel {...authoritativeDeliveryOutcomes}/>}
 
     <section className="rounded-2xl border border-dashed border-[var(--av-color-border-strong)] bg-[var(--av-color-bg-subtle)] p-4" aria-labelledby="legacy-monitor-title">
       <h2 id="legacy-monitor-title" className="font-black text-[var(--av-color-text)]">Legacy operational indicators — non-authoritative</h2>

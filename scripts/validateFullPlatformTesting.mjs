@@ -347,6 +347,9 @@ export const validateRunEvidence = (run, definition = loadCampaignDefinition()) 
       continue;
     }
     const expectedBindings = expectedRunBindings(result.testId, definition.bindings ?? {});
+    if (result.status === 'executed evidence' && expectedBindings.length === 0) {
+      errors.push(`unbound-test-evidence:${result.testId}`);
+    }
     const bindingResults = result.bindingResults ?? [];
     const expectedByKey = new Map(expectedBindings.map(binding => [canonicalBindingKey(binding), binding]));
     const actualKeys = bindingResults.map(canonicalBindingKey);

@@ -1,5 +1,13 @@
 # Exhaustive hosted product acceptance
 
+## Approved authenticated profile and read-only corrections (2026-10-10)
+
+AP approved the separate `hosted_authenticated_synthetic` profile for the 47 previously blocked hosted requirements and explicit zero-write corrections for EI-003, ADMIN-001/003/004 and MONITOR-001/002/003. Preserve all 108 IDs and business meanings, exact Monitor human outcomes, legacy task/import semantics, AI-004's single synthetic privileged configuration write, and conditional audits for real privileged mutations. The public Sandbox's 18 supported cases retain their existing profile and network boundary.
+
+The executable integration and rollback belong in `docs/planning/authenticated-product-acceptance.md`. Authenticated cases require actual same-run browser actions on Desktop Chrome and Pixel 7 plus independent server state measurements and exact release/deployment/backend/migration/exercise/source/workflow/actor/session bindings. Local `fixture_transport` execution is preparation only, never canonical hosted PASS. Missing evidence, cleanup, source or identity mismatch remains BLOCKED/FAIL. Repository-only PR #282 evidence is 42 PASS / 66 BLOCKED; historical stable evidence remains 58 PASS / 50 BLOCKED. The completed local integration independently verifies all 94 actual-UI records (47 per browser), current source bindings and complete cleanup. Those local results cannot change the canonical hosted dispositions. Exact-candidate CI is pending; no fresh hosted execution is authorized here.
+
+For STUDIO-003, zero business mutation means unchanged artifact content, lifecycle, lineage, current/approved pointers and complete version rows. The existing reservation advances its aggregate concurrency version once and updates its timestamp; explicitly measure that increment separately from the unchanged business target. Its failed attempt, command receipt and terminal audit history must also be reported separately (one attempt, one receipt, two audits). This does not relax the seven approved read-only cases, which require zero writes throughout observation. DELIVERY-009 retains its original saved-result requirement; viewing the computed pack or reusing an earlier import cannot satisfy it.
+
 ## Verified stable baseline and connected continuation (2026-10-09)
 
 Merged PR #280 is independently verified on stable run `37891394223`, attempt 1: **58 PASS / 0 FAIL / 50 BLOCKED / 0 UNCOVERED**. All 18 supported cases pass on both required browser projects. Overall acceptance remains `INCOMPLETE_COVERAGE`; this supersedes earlier pending execution statements without rewriting their immutable artifacts. The separate one-run hosted allowance is consumed.

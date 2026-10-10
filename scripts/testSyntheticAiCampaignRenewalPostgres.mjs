@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import pg from 'pg';
+import { approvedFullChainTip } from './prCMigrationTailContract.mjs';
 import {validateAssessImportDatabaseUrl} from './assessImportValidationContract.mjs';
 import {createEnterpriseIntelligenceFixture} from './enterpriseIntelligencePostgresFixture.mjs';
 
@@ -32,11 +33,7 @@ assert.equal(migrations[renewalIndex+12],'20261003015246_synthetic_ai_final_paid
 assert.equal(migrations[renewalIndex+13],'20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
 assert.equal(migrations[renewalIndex+14],'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
 assert.equal(migrations[renewalIndex+15],'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-assert.equal(migrations.at(-5),'20261004025101_studio_brd_source_fact_retention_v3.sql');
-assert.equal(migrations.at(-4), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
-assert.equal(migrations.at(-3), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
-assert.equal(migrations.at(-2), '20261009162752_govern_immutable_action_authority.sql');
-assert.equal(migrations.at(-1), '20261010025331_legacy_delivery_authority.sql');
+assert.equal(approvedFullChainTip(migrations), '20261010051413');
 const migrationSql=await readFile(join('supabase/migrations',migrationName),'utf8');
 const {Client}=pg;
 const names=[`ai_renewal_fresh_${process.pid}_${Date.now()}`,`ai_renewal_upgrade_${process.pid}_${Date.now()}`];

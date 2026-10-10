@@ -242,9 +242,16 @@ test('validator rejects missing projects, duplicate projects, local execution an
   local.executions[0].executionKind = 'local_source_fixture';
   assert.throws(() => verifyHostedSandboxAttachments(local), /EXECUTION_INVALID/u);
 
+  // ADMIN-001 now belongs exclusively to the authenticated profile. Reject its
+  // absent public binding, and independently reject a forged public binding.
   assert.throws(() => verifyHostedSandboxAttachments({
     testCase: catalogById.get('ADMIN-001'),
     binding: bindingById.get('ADMIN-001'),
+    executions: [],
+  }), /CASE_BINDING_INVALID/u);
+  assert.throws(() => verifyHostedSandboxAttachments({
+    testCase: catalogById.get('ADMIN-001'),
+    binding: { ...bindingById.get('PUBLIC-001'), testId: 'ADMIN-001' },
     executions: [],
   }), /TEST_ID_UNSUPPORTED/u);
 });

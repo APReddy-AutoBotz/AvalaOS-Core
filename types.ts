@@ -122,6 +122,8 @@ export type CriticalityLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 
 export interface AssessProcess {
     id: string;
+    /** Positive server concurrency version for authoritative process edits. */
+    version?: number;
     orgId: string;
     workspaceId?: string;
     name: string;
@@ -614,6 +616,14 @@ export type DeliveryPackBlockerSeverity = 'Low' | 'Medium' | 'High' | 'Critical'
 export type DeliverySourceLineageCompleteness = 'complete' | 'partial' | 'missing';
 
 export interface TaskSourceLineageMetadata {
+    schemaVersion?: 'legacy-delivery-lineage.v1';
+    importId?: string;
+    documentSourceDigest?: string;
+    sourceItemIndex?: number;
+    sourceProcessId?: string;
+    sourceAssessmentId?: string;
+    sourceEpicIndex?: number | null;
+    sourceEpicTitle?: string | null;
     deliveryPackId?: string;
     processId?: string;
     assessmentId?: string;
@@ -671,6 +681,9 @@ export interface DeliveryPackDocumentRef {
     artifactKeys: string[];
     qualityGateStatus: DeliveryPackChecklistStatus;
     approvalStatus: DeliveryPackChecklistStatus;
+    qualityGateDetail: string;
+    approvalDetail: string;
+    publishedFromStudio: boolean;
     summary: string;
     sectionCount: number;
     workItemCount: number;
@@ -1129,6 +1142,8 @@ export interface WorkItem {
 }
 
 export interface GeneratedArtifacts {
+    schemaVersion?: 'studio-approved-work-items.v1';
+    approvedStudioContent?: Record<string, unknown>;
     brd: DocumentArtifact;
     frd: DocumentArtifact;
     pdd: DocumentArtifact;

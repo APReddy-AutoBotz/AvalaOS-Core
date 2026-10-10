@@ -25,6 +25,24 @@ import {
 
 const frozenPrefix = ['20260831062024_governed_delivery_monitor_pr_c.sql', PR_C_CONTROLLED_HUMAN_FROZEN_TIP];
 
+test('retained Studio and synthetic runners validate the entire approved tail before database setup', () => {
+  const migrations = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
+  for (const file of ['testStudioSourceIntegrationPostgres.mjs', 'testSyntheticAiCampaignRenewalPostgres.mjs',
+    'testSyntheticAiFinalContinuationPostgres.mjs', 'assessStudioBudgetPipelinePostgres.mjs']) {
+    const source = readFileSync(`scripts/${file}`, 'utf8');
+    assert.match(source, /import \{ approvedFullChainTip \} from '\.\/prCMigrationTailContract\.mjs'/u);
+    const statement = source.match(/assert\.equal\(approvedFullChainTip\(migrations\), '[0-9]+'\);/u)?.[0];
+    assert.ok(statement, `${file} must execute the shared exact-chain preflight`);
+    assert.doesNotMatch(source, /migrations\.at\(-[0-9]+\)/u);
+    const execute = files => runInNewContext(statement, { assert, approvedFullChainTip, migrations: files });
+    assert.doesNotThrow(() => execute(migrations));
+    for (const files of [migrations.slice(0, -1), migrations.filter(name => !name.includes('legacy_delivery_authority')),
+      [...migrations, '20990101000000_unapproved.sql'], [...migrations.slice(0, -2), migrations.at(-1), migrations.at(-2)]]) {
+      assert.throws(() => execute(files), { code: 'ERR_ASSERTION' });
+    }
+  }
+});
+
 test('creation PostgreSQL runner executes the real migration-order preflight with the synthetic acceptance successor last', () => {
   const source = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
   const start = source.indexOf('  assert.equal(migrations.length,');
@@ -75,7 +93,7 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261010025331');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261010051413');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -89,11 +107,11 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
-  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261010025331')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 102)'));
+  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261010051413')"));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 104)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
-  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261010025331'/u);
+  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261010051413'/u);
   assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
 });
 

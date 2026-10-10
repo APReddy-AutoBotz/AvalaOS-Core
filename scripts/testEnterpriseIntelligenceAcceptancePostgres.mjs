@@ -7,6 +7,7 @@ import { isDeepStrictEqual } from 'node:util';
 import pg from 'pg';
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
 import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
+import { createAuthenticatedControlsProductionLoader } from './authenticatedControlsProductionLoader.mjs';
 import {
   EI_ACCEPTANCE_EXACT_ACTUAL,
   EI_ACCEPTANCE_SCOPE,
@@ -42,6 +43,11 @@ let parserTempDirectory;
 let databaseCreated = false;
 let activeCasePhase = 'not-started';
 let setupFailurePhase = null;
+const productionEffects = { egressAttempts: 0 };
+const loadProductionModule = createAuthenticatedControlsProductionLoader({ effects: productionEffects });
+const enterpriseQueryModule = loadProductionModule(
+  resolve('supabase/functions/_shared/enterpriseIntelligenceQuery.ts'),
+);
 
 const parserOutputRoot = resolve('output', 'test-runs', 'enterprise-intelligence-acceptance-parser');
 const checkedParserRoot = async () => {
@@ -176,6 +182,11 @@ const providerFootprint = async (client, orgId, workspaceId) => ({
 });
 const footprintDelta = (before, after) => Object.keys(before)
   .reduce((total, key) => total + after[key] - before[key], 0);
+const transactionWriteCount = async client => Number((await row(
+  client,
+  `SELECT COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0) writes
+     FROM pg_stat_xact_user_tables`,
+)).writes);
 
 const targetCounts = async (client, orgId, workspaceId, commandType) => ({
   sources: await count(client,
@@ -227,6 +238,50 @@ const targetFingerprint = async (client, orgId, workspaceId) => {
     values[relation] = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
   }
   return values;
+};
+
+const emptyEnterpriseQueryRows = () => ({
+  providerConfigs: [], providerRoutes: [], providerRoleOptions: [], providerRoleCapabilities: [],
+  evidenceSources: [], evidenceVersions: [], evidenceCandidates: [], assessDrafts: [],
+  applications: [], applicationAssessments: [], studioAggregates: [], studioVersions: [],
+  studioHandoffs: [], deliveryPackages: [], deliveryVersions: [], deliveryItems: [],
+  monitorBaselines: [], deliveryWorkspace: null, monitorApprovedBaselines: null,
+  modernizationAssessments: [], modernizationDecisions: [], blueprints: [], reviewEvents: [],
+  approvals: [], commandReceipts: [], transcriptFlags: [], transcriptSources: [],
+  transcriptSourceVersions: [], transcriptCandidates: [], transcriptSourceSets: [],
+  transcriptSourceSetVersions: [], transcriptSourceSetItems: [], transcriptInputBundles: [],
+  transcriptInputBundleVersions: [], transcriptInputBundleItems: [], transcriptJourneys: [],
+  transcriptApplyPreviews: [], transcriptApplyPreviewBatches: [], transcriptCandidateApplications: [],
+  transcriptCandidateRelationships: [], transcriptConflicts: [], transcriptConflictResolutions: [],
+  transcriptExtractionBindings: [], transcriptJobs: [], transcriptStalenessEvents: [],
+  studioSourceFlags: [], studioSourceOwnerships: [], studioExtractionJobClassifications: [],
+  studioSources: [], studioSourceVersions: [], studioSourceCandidates: [], studioSourceSets: [],
+  studioSourceSetVersions: [], studioSourceSetItems: [], studioInputBundles: [],
+  studioInputBundleVersions: [], studioInputBundleItems: [], studioExtractionRuns: [],
+  studioExtractionBindings: [], studioCandidateEdits: [], studioProviderRoutes: [],
+  mappingCatalogs: [], mappingTargets: [], mappingRuns: [], mappingRunSources: [],
+  mappingProposals: [], mappingReviews: [], mappingPreviewBatches: [], mappingPreviewManifests: [],
+  mappingPreviewItems: [], mappingConflicts: [], mappingConflictResolutions: [], mappingApplications: [],
+});
+
+const enterpriseQueryRows = async (client, authority) => {
+  const rows = emptyEnterpriseQueryRows();
+  rows.evidenceSources = (await client.query(
+    `SELECT id,display_name,mime_type,current_version,status,created_by,created_at
+       FROM public.enterprise_evidence_sources
+      WHERE org_id=$1 AND workspace_id=$2 AND deleted_at IS NULL
+      ORDER BY created_at DESC,id DESC LIMIT 200`,
+    [authority.organizationId, authority.workspaceId],
+  )).rows;
+  rows.evidenceVersions = (await client.query(
+    `SELECT id,source_id,version,content_hash,extracted_text_hash,extracted_character_count,
+            extraction_status,created_at
+       FROM public.enterprise_evidence_source_versions
+      WHERE org_id=$1 AND workspace_id=$2
+      ORDER BY created_at DESC,id DESC LIMIT 1000`,
+    [authority.organizationId, authority.workspaceId],
+  )).rows;
+  return rows;
 };
 
 const assertAuthority = async (client, actorId, orgId, workspaceId, capability, version) => serviceCall(
@@ -632,7 +687,7 @@ try {
   `);
   const sizeIndex = migrations.indexOf(sizeLimitMigration);
   assert.ok(sizeIndex > 0);
-  assert.equal(migrations.at(-1), '20261010025331_legacy_delivery_authority.sql');
+  assert.equal(migrations.at(-1), '20261010051413_authenticated_process_update_authority.sql');
   for (const migration of migrations.slice(0, sizeIndex)) {
     const sql = await readFile(join('supabase/migrations', migration), 'utf8');
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
@@ -718,8 +773,141 @@ try {
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
       () => migrationTransaction(db, migration, sql));
   }
-  assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261010025331');
+  assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261010051413');
   console.log('FOUNDATION PASS full current chain; empty, compatible and incompatible size upgrades; SQL-only fixture');
+
+  await runCase('EI-003', async () => {
+    markPhase('setup-tenant-query-fixtures');
+    const ownSourceId = uuid(3001);
+    const foreignSourceId = uuid(3002);
+    await db.query(`INSERT INTO public.enterprise_evidence_sources(
+      id,org_id,workspace_id,display_name,source_kind,mime_type,current_version,status,created_by
+    ) VALUES
+      ($1,$2,$3,'EI-003 own tenant source','upload','text/plain',1,'uploaded',$4),
+      ($5,$6,$7,'EI-003 foreign tenant source','upload','text/plain',1,'uploaded',$4)`,
+    [ownSourceId, fixture.org, fixture.workspace, fixture.requester,
+      foreignSourceId, foreignOrg, foreignWorkspace]);
+    for (const [ordinal, sourceId, orgId, workspaceId] of [
+      [3011, ownSourceId, fixture.org, fixture.workspace],
+      [3012, foreignSourceId, foreignOrg, foreignWorkspace],
+    ]) {
+      await db.query(`INSERT INTO public.enterprise_evidence_source_versions(
+        id,source_id,org_id,workspace_id,version,original_filename,content_hash,content_bytes,
+        storage_bucket,storage_path,parser_kind,parser_version,provenance_hash,created_by
+      ) VALUES($1,$2,$3,$4,1,'ei-003.txt',$5,8,'source-uploads',$6,
+        'text_native','enterprise-parser-1',$7,$8)`, [uuid(ordinal), sourceId, orgId, workspaceId,
+        String(ordinal).padStart(64, '0'), `${orgId}/${workspaceId}/enterprise-evidence/${sourceId}.bin`,
+        String(ordinal + 1).padStart(64, '0'), fixture.requester]);
+    }
+    markPhase('tenant-query-handler');
+    const currentVersion = await authorizationVersion(db, fixture.org, fixture.requester);
+    const beforeFingerprint = {
+      current: await targetFingerprint(db, fixture.org, fixture.workspace),
+      foreign: await targetFingerprint(db, foreignOrg, foreignWorkspace),
+    };
+    const providerBefore = await providerFootprint(db, fixture.org, fixture.workspace);
+    const writesBefore = await transactionWriteCount(db);
+    let authorityRpcCalls = 0;
+    let projectionLoadCount = 0;
+    let foreignProjectionLoadCount = 0;
+    let projectionLoadFailureSignal = 'none';
+    const bearer = 'fixture-transport-enterprise-query';
+    const authorityDatabase = {
+      loadFreshProjection: async input => {
+        authorityRpcCalls += 1;
+        return authenticatedCall(db, fixture.requester, async () => (
+          await row(db, 'SELECT public.get_tenant_context($1,$2) value', [
+            input.organizationId, input.workspaceId,
+          ])
+        ).value);
+      },
+    };
+    const queryDatabase = {
+      loadProjectionRows: async authority => {
+        projectionLoadCount += 1;
+        if (authority.organizationId !== fixture.org || authority.workspaceId !== fixture.workspace) {
+          foreignProjectionLoadCount += 1;
+          throw new Error('FOREIGN_PROJECTION_LOAD_FORBIDDEN');
+        }
+        try {
+          // Production Edge projection reads use the server PostgREST boundary
+          // after the authenticated get_tenant_context decision. Mirror that
+          // split here: actor authority first, then strictly scoped service read.
+          return await serviceCall(db, () => enterpriseQueryRows(db, authority));
+        } catch (error) {
+          projectionLoadFailureSignal = /^[0-9A-Z]{5}$/u.test(String(error?.code ?? ''))
+            ? `sqlstate-${error.code}` : 'non-sql-projection-load';
+          throw error;
+        }
+      },
+    };
+    const requestFor = (organizationId, workspaceId) => new Request(
+      'http://127.0.0.1/enterprise-intelligence-query',
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ organizationId, workspaceId, expectedAuthorizationVersion: currentVersion }),
+      },
+    );
+    const dependencies = {
+      authenticate: async request => {
+        if (request.headers.get('authorization') !== `Bearer ${bearer}`) throw new Error('AUTHENTICATION_REQUIRED');
+        return { id: fixture.requester };
+      },
+      authorityDatabase,
+      queryDatabase,
+      now: () => new Date('2026-10-10T00:00:00.000Z'),
+    };
+    const response = await enterpriseQueryModule.handleEnterpriseIntelligenceQuery(
+      requestFor(fixture.org, fixture.workspace), dependencies,
+    );
+    markPhase(`tenant-query-status-${response.status}-${projectionLoadFailureSignal}`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    markPhase('tenant-query-scope');
+    assert.equal(body.projection.organizationId, fixture.org);
+    assert.equal(body.projection.workspaceId, fixture.workspace);
+    assert.equal(body.projection.authorizationVersion, currentVersion);
+    markPhase('tenant-query-own-row');
+    assert.equal(body.projection.evidenceSources.some(item => item.id === ownSourceId), true);
+    markPhase('tenant-query-foreign-row-excluded');
+    assert.equal(body.projection.evidenceSources.some(item => item.id === foreignSourceId), false);
+    markPhase('tenant-query-load-count');
+    assert.equal(projectionLoadCount, 1);
+
+    markPhase('foreign-tenant-query-denial');
+    const denied = await enterpriseQueryModule.handleEnterpriseIntelligenceQuery(
+      requestFor(foreignOrg, foreignWorkspace), dependencies,
+    );
+    assert.equal(denied.status, 403);
+    assert.deepEqual(await denied.json(), { code: 'TENANT_ACCESS_DENIED' });
+    assert.equal(projectionLoadCount, 1);
+    assert.equal(foreignProjectionLoadCount, 0);
+    const writesAfter = await transactionWriteCount(db);
+    const providerAfter = await providerFootprint(db, fixture.org, fixture.workspace);
+    const afterFingerprint = {
+      current: await targetFingerprint(db, fixture.org, fixture.workspace),
+      foreign: await targetFingerprint(db, foreignOrg, foreignWorkspace),
+    };
+    assert.deepEqual(afterFingerprint, beforeFingerprint);
+    assert.equal(writesAfter - writesBefore, 0);
+    assert.equal(productionEffects.egressAttempts, 0);
+    return {
+      logicalMutationCount: 0,
+      targetWriteDelta: writesAfter - writesBefore,
+      actualQueryHandlerExecuted: true,
+      authorityRpcExecuted: authorityRpcCalls === 2,
+      currentTenantProjectionVisible: body.projection.evidenceSources.some(item => item.id === ownSourceId),
+      currentTenantProjectionScoped: body.projection.organizationId === fixture.org
+        && body.projection.workspaceId === fixture.workspace
+        && body.projection.evidenceSources.every(item => item.id !== foreignSourceId),
+      foreignTenantDenied: denied.status === 403,
+      foreignProjectionLoadCount,
+      beforeAfterSnapshotEqual: isDeepStrictEqual(afterFingerprint, beforeFingerprint),
+      providerDisabled: await providerDisabled(db),
+      providerEffectDelta: footprintDelta(providerBefore, providerAfter),
+    };
+  });
 
   await runCase('EI-001', async () => {
 

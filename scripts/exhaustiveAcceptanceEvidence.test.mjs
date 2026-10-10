@@ -129,7 +129,9 @@ const declarationList = spawnSync(process.execPath, [
   env: { ...process.env, ...declarationEnvironment },
 });
 assert.equal(declarationList.status, 0, declarationList.stderr || declarationList.stdout);
-assert.match(declarationList.stdout, /Total:\s+74 tests in 1 file/u);
+// Public Sandbox discovery excludes the 47 separately authenticated cases.
+assert.match(declarationList.stdout, /Total:\s+36 tests in 1 file/u);
+assert.doesNotMatch(declarationList.stdout, /\[(?:ADMIN-001|MONITOR-002|AI-004)\]/u);
 
 const scope = { evidenceScope: 'executed-fixture', fixtureId: 'fixture-1', organizationId: '10000000-0000-4000-8000-000000000001', workspaceId: '20000000-0000-4000-8000-000000000001' };
 const provenance = {

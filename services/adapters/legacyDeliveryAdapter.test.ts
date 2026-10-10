@@ -96,6 +96,14 @@ assert.equal(mapped.version, 3);
 assert.equal(mapped.readOnlyHistorical, false);
 assert.equal(mapped.epicId, 'legacy-source-epic:55555555-5555-4555-8555-555555555555:0');
 assert.deepEqual(mapped.assigneeIds, projection.assigneeIds);
+assert.deepEqual(mapped.sourceLineage, {
+  ...projection.sourceLineage,
+  processId: projection.sourceLineage?.sourceProcessId,
+  assessmentId: projection.sourceLineage?.sourceAssessmentId,
+}, 'canonical server lineage is retained while exact UI aliases are mapped explicitly');
+assert.equal(mapped.sourceLineage?.processId, projection.sourceLineage?.sourceProcessId);
+assert.equal(mapped.sourceLineage?.assessmentId, projection.sourceLineage?.sourceAssessmentId);
+assert.equal(mapped.sourceLineage?.documentGenerationId, projection.sourceLineage?.documentGenerationId);
 
 const historical = mapLegacyDeliveryTask({ ...projection, version: null, mutable: false, sourceLineage: null, sourceEpicIndex: null, sourceEpicTitle: null });
 assert.equal(historical.version, undefined);

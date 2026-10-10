@@ -163,6 +163,24 @@ const authoritativeEpicId = (task: LegacyDeliveryTaskProjection) => {
   return `legacy-source-epic:${lineageGenerationId(task) || task.projectId}:${task.sourceEpicIndex}`;
 };
 
+const mapLegacyDeliveryLineage = (projection: LegacyDeliveryTaskProjection): Task['sourceLineage'] => {
+  const lineage = projection.sourceLineage;
+  if (!lineage) return undefined;
+  return {
+    schemaVersion: lineage.schemaVersion,
+    importId: lineage.importId,
+    documentGenerationId: lineage.documentGenerationId,
+    documentSourceDigest: lineage.documentSourceDigest,
+    sourceItemIndex: lineage.sourceItemIndex,
+    sourceProcessId: lineage.sourceProcessId,
+    sourceAssessmentId: lineage.sourceAssessmentId,
+    sourceEpicIndex: lineage.sourceEpicIndex,
+    sourceEpicTitle: lineage.sourceEpicTitle,
+    processId: lineage.sourceProcessId,
+    assessmentId: lineage.sourceAssessmentId,
+  };
+};
+
 export const mapLegacyDeliveryTask = (projection: LegacyDeliveryTaskProjection): Task => ({
   id: projection.id,
   version: projection.version ?? undefined,
@@ -180,7 +198,7 @@ export const mapLegacyDeliveryTask = (projection: LegacyDeliveryTaskProjection):
   startDate: '',
   dueDate: '',
   dependencyIds: projection.dependencyIds,
-  sourceLineage: projection.sourceLineage as Task['sourceLineage'],
+  sourceLineage: mapLegacyDeliveryLineage(projection),
   deletionState: projection.retentionState === 'active' ? 'active' : projection.retentionState,
   deletionMode: projection.retentionState === 'active' ? undefined : projection.retentionState === 'retained' ? 'retained_lineage' : 'soft_delete',
   deletionRequestedAt: projection.deletionRequestedAt ?? undefined,

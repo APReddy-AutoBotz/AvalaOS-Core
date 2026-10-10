@@ -158,7 +158,14 @@ const catalogUnboundProjectCases = executionBindings.hostedTests
   .filter(binding => !binding.scenario)
   .reduce((count, binding) => count + binding.projects.length, 0);
 assert.equal(executableProjectCases, 36, 'local Sandbox regression must execute all 36 supported scenario-bound project cases');
-assert.equal(catalogUnboundProjectCases, 38, 'ADMIN-001 plus the 36 catalog-unbound project cases must remain explicit not_run skips');
+assert.equal(catalogUnboundProjectCases, 0, 'public Sandbox bindings contain only supported public scenarios');
+assert.equal(executionBindings.authenticatedTests.length, 47,
+  'all 47 authenticated requirements must remain separately bound');
+assert.ok(executionBindings.authenticatedTests.some(binding => binding.testId === 'ADMIN-001'),
+  'ADMIN-001 requires the separate authenticated profile');
+assert.equal(executionBindings.hostedTests.some(binding => executionBindings.authenticatedTests
+  .some(authenticated => authenticated.testId === binding.testId)), false,
+  'authenticated cases cannot borrow public Sandbox execution');
 assert.match(hostedSpec, /decodeAcceptanceExecutionProfile\(process\.env/u, 'the shared Sandbox spec must require an explicit execution profile');
 assert.match(hostedSpec, /createFullPageContrastAttachment,[\s\S]*decodeAcceptanceExecutionProfile,[\s\S]*summarizeFullPageColorContrast,[\s\S]*from '\.\.\/\.\.\/scripts\/acceptanceExecutionProfile\.mjs'/u, 'full-page browser evidence must use the shared summary and attachment contract');
 assert.match(executionProfileSource, /export\s+(?:const|function)\s+summarizeFullPageColorContrast\b/u, 'the execution-profile boundary must export the shared full-page contrast classifier');

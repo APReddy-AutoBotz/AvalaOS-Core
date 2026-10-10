@@ -11,6 +11,7 @@ import {
   oracleBindingMap,
   retainedBindingMap,
   hostedBindingMap,
+  authenticatedBindingMap,
   serverBindingMap,
 } from './exhaustiveAcceptanceModel.mjs';
 import {
@@ -25,6 +26,10 @@ import {
 import { deriveExpectedHostedAcceptanceMetadata } from './hostedAcceptanceReportProvenance.mjs';
 import { verifyHostedSandboxAttachments } from './hostedSandboxAcceptanceEvidence.mjs';
 import { ASSESS_V1_EXPECTED_OUTPUTS, loadAssessV1OracleEvidence } from './assessV1OracleEvidence.mjs';
+import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { validateAuthenticatedCatalogRevision } from './authenticatedAcceptanceCriteria.mjs';
+import { authenticatedProfileFromEnvironment } from './authenticatedAcceptanceProfile.mjs';
+import { evaluateAuthenticatedAcceptanceCase, validateAuthenticatedAcceptanceManifest } from './authenticatedAcceptanceEvidence.mjs';
 
 const root = process.cwd();
 const out = path.resolve(process.env.ACCEPTANCE_RESULTS_DIR || 'acceptance-results');
@@ -35,11 +40,13 @@ const loadOptional = file => {
 };
 
 const catalog = loadCatalog();
+if (validateAuthenticatedCatalogRevision(catalog).length) throw new Error('AUTHENTICATED_CATALOG_REVISION_INVALID');
 const bindings = loadExecutionBindings();
 const provenanceDocument = loadSourceProvenance();
 const inventory = deriveInventory(catalog, loadInventoryDocument(), provenanceDocument, bindings);
 const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [item.testId, item]));
 const hostedMap = hostedBindingMap(bindings);
+const authenticatedMap = authenticatedBindingMap(bindings);
 const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
 const deployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
@@ -54,6 +61,23 @@ const retainedManifest = loadOptional(process.env.RETAINED_RESULTS_MANIFEST || '
 const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acceptance-results/oracle-results.json');
 const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
 const serverManifest = loadOptional(process.env.SERVER_RESULTS_MANIFEST || 'acceptance-results/server-results.json');
+const authenticatedManifest = loadOptional(process.env.AUTHENTICATED_RESULTS_MANIFEST || 'acceptance-results/authenticated-results.json');
+let authenticatedExpected = null;
+if (authenticatedManifest) {
+  try {
+    authenticatedExpected = authenticatedProfileFromEnvironment({
+      ...process.env,
+      AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST: canonicalDigest(catalog),
+      AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST: canonicalDigest(provenanceDocument.sourceDigests),
+    }, {
+      startedAt: process.env.AUTHENTICATED_ACCEPTANCE_STARTED_AT,
+      completedAt: process.env.AUTHENTICATED_ACCEPTANCE_COMPLETED_AT,
+    });
+  } catch { /* Missing independent hosted identity cannot promote local proof. */ }
+}
+const authenticatedErrors = authenticatedExpected
+  ? validateAuthenticatedAcceptanceManifest(authenticatedManifest, authenticatedExpected, catalog)
+  : ['authenticated-execution-not-bound'];
 const browserExecutionKind = typeof playwright?.config?.metadata?.executionKind === 'string'
   ? playwright.config.metadata.executionKind
   : 'unbound';
@@ -159,7 +183,15 @@ const results = (catalog.cases ?? []).map(testCase => {
   let executionKind = 'unbound';
   let executedScope = null;
 
-  if (serverMap.has(testCase.testId)) {
+  if (authenticatedMap.has(testCase.testId)) {
+    executionKind = 'authenticated';
+    evaluation = executionDisposition === 'EXECUTED'
+      ? evaluateAuthenticatedAcceptanceCase({ testCase, manifest: authenticatedManifest,
+        expected: authenticatedExpected, catalog, manifestErrors: authenticatedErrors })
+      : { status: 'BLOCKED', reason: 'Authenticated hosted execution was not run.' };
+    actualResult = evaluation.actual ?? null;
+    executedScope = evaluation.scope ?? null;
+  } else if (serverMap.has(testCase.testId)) {
     const binding = serverMap.get(testCase.testId);
     executionKind = binding.components?.length > 1 ? 'composite' : 'server';
     const serverEvaluation = evaluateRetainedTest({
@@ -233,6 +265,10 @@ const results = (catalog.cases ?? []).map(testCase => {
   if (testCase.environment === 'hosted_sandbox' && evaluation.status === 'PASS' && !executedScope) {
     // Retained-only evidence cannot silently satisfy a hosted requirement.
     evaluation = { status: 'BLOCKED', reason: 'Hosted scope requires same-run browser execution; retained authority evidence alone is insufficient.' };
+  }
+  if (testCase.environment === 'hosted_authenticated_synthetic' && evaluation.status === 'PASS'
+    && executedScope?.evidenceScope !== 'executed-hosted-authenticated-synthetic') {
+    evaluation = { status: 'BLOCKED', reason: 'Authenticated hosted scope requires exact same-run real-auth browser and server evidence.' };
   }
 
   return {

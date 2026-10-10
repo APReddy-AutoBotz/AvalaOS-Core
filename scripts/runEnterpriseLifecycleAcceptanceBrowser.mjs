@@ -30,7 +30,10 @@ export const ENTERPRISE_LIFECYCLE_BROWSER_SOURCES = Object.freeze([
   'services/supabaseClient.ts',
   'services/supabaseClient.enterpriseLifecycleBoundary.test.mjs',
 ]);
-const outputDirectory = path.join('output', 'acceptance', 'enterprise-lifecycle');
+const authenticatedProductAcceptance = process.argv.includes('--authenticated');
+const outputDirectory = authenticatedProductAcceptance
+  ? path.join('output', 'acceptance', 'authenticated-product', 'browser')
+  : path.join('output', 'acceptance', 'enterprise-lifecycle');
 const sha256 = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 
 export const resolveEnterpriseLifecycleExecutionIdentity = (environment = process.env) => ({
@@ -181,6 +184,10 @@ const digestSources = async (fixtureSourcePaths = []) => Promise.all([...new Set
 const main = async () => {
   const startedAt = new Date().toISOString();
   const execution = resolveEnterpriseLifecycleExecutionIdentity();
+  const localEvidence = authenticatedProductAcceptance
+    ? await import('./verifyAuthenticatedLocalEvidence.mjs')
+    : null;
+  const authenticatedSourceDigests = localEvidence?.authenticatedLocalSourceDigests();
   const databaseUrl = process.env.ENTERPRISE_LIFECYCLE_DATABASE_URL;
   if (!databaseUrl) throw new Error('ENTERPRISE_LIFECYCLE_DATABASE_URL_REQUIRED');
   await mkdir(outputDirectory, { recursive: true });
@@ -220,12 +227,18 @@ const main = async () => {
         ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: fixture.controlToken,
         ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY: fixture.authStorageKey,
         ENTERPRISE_LIFECYCLE_OUTPUT_DIR: outputDirectory,
+        ENTERPRISE_LIFECYCLE_AUTHENTICATED: authenticatedProductAcceptance ? 'true' : 'false',
       },
     });
-    const browserCases = (await fixture.db.query('SELECT id::text FROM assess_v2_cases ORDER BY id')).rows.map(row => row.id);
-    if (browserCases.length !== ENTERPRISE_LIFECYCLE_BROWSER_PROJECTS.length) {
-      throw new Error(`ENTERPRISE_LIFECYCLE_BROWSER_CASE_INVENTORY_INVALID:${browserCases.length}`);
+    const browserCaseRows = (await fixture.db.query('SELECT id::text,process_id::text FROM assess_v2_cases ORDER BY id')).rows;
+    const expectedCaseProcesses = fixture.expectedBrowserCaseProcesses();
+    const actualProcessIds = browserCaseRows.map(row => row.process_id).sort();
+    const expectedProcessIds = expectedCaseProcesses.map(item => item.processId).sort();
+    if (browserCaseRows.length !== expectedCaseProcesses.length
+      || JSON.stringify(actualProcessIds) !== JSON.stringify(expectedProcessIds)) {
+      throw new Error(`ENTERPRISE_LIFECYCLE_BROWSER_CASE_INVENTORY_INVALID:${browserCaseRows.length}:${expectedCaseProcesses.length}`);
     }
+    const browserCases = browserCaseRows.map(row => row.id);
     browserScope = {
       executionHash: fixture.evidence.scope.executionHash,
       organizationHash: fixture.evidence.scope.organizationHash,
@@ -258,6 +271,42 @@ const main = async () => {
   });
   evidence.sourceDigests = await digestSources(enterpriseLifecycleSourcePaths);
   await writeFile(path.join(outputDirectory, 'browser-evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+  if (authenticatedProductAcceptance) {
+    const localExecution = {
+      headSha: execution.headSha,
+      runId: String(execution.runId),
+      runAttempt: String(execution.runAttempt),
+      executionId: fixture.evidence.execution.executionId.replace(/^sha256:/u, ''),
+      startedAt,
+      completedAt,
+    };
+    const sourceDigestSetHash = localEvidence.authenticatedLocalDigest(authenticatedSourceDigests);
+    const projects = { 'chromium-desktop': 'desktop-chromium', 'chromium-mobile': 'pixel-7-chromium' };
+    const cases = fragments.flatMap(fragment => (fragment.authenticatedCases ?? []).map(row => ({
+      ...row,
+      project: projects[fragment.project],
+      sourceBinding: { executionId: localExecution.executionId, sourceDigestSetHash },
+    })));
+    const manifest = localEvidence.createAuthenticatedLocalManifest({
+      execution: localExecution,
+      sourceDigests: authenticatedSourceDigests,
+      cases,
+      cleanup: { database: cleanupSucceeded, server: cleanupSucceeded, preview: previewStopped,
+        browserState: playwrightPassed, secretBackend: cleanupSucceeded },
+    });
+    const manifestDirectory = path.join('output', 'acceptance', 'authenticated-product');
+    await mkdir(manifestDirectory, { recursive: true });
+    const manifestPath = path.join(manifestDirectory, 'local-evidence.json');
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    const completedSourceDigests = localEvidence.authenticatedLocalSourceDigests();
+    const validationErrors = localEvidence.validateAuthenticatedLocalEvidence(manifest, {
+      execution: localExecution,
+      sourceDigests: completedSourceDigests,
+    });
+    if (validationErrors.length) {
+      throw new Error(`AUTHENTICATED_LOCAL_EVIDENCE_INCOMPLETE:${validationErrors.join(',')}`);
+    }
+  }
   console.log('ENTERPRISE_LIFECYCLE_BROWSER_ACCEPTANCE_PASS');
 };
 

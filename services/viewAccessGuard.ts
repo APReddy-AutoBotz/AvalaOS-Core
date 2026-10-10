@@ -180,7 +180,7 @@ export const VIEW_ACCESS_METADATA: Record<View, ViewAccessMetadata> = {
   [View.PORTFOLIO]: {
     view: View.PORTFOLIO,
     module: 'monitor',
-    allowedScopes: [ScopeType.MY_WORK],
+    allowedScopes: [ScopeType.MY_WORK, ScopeType.PROJECT],
     requiredPermissions: ['portfolio.read', 'strategy.read'],
     status: 'active',
     fallbackView: View.DASHBOARD,

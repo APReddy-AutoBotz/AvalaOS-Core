@@ -13,6 +13,7 @@ import { StorageKeys, StorageService } from '../storage';
 
 type AssessProcessRow = {
   id: string;
+  authority_version?: number | null;
   org_id: string;
   workspace_id?: string | null;
   name: string;
@@ -56,6 +57,7 @@ export interface AssessmentReviewAuditInput {
 
 const fromProcessRow = (row: AssessProcessRow): AssessProcess => ({
   id: row.id,
+  version: row.authority_version ?? undefined,
   orgId: row.org_id,
   workspaceId: row.workspace_id || undefined,
   name: row.name,

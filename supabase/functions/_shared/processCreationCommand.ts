@@ -18,10 +18,9 @@ const failed = (code: ProcessCreateError['code']) => jsonResponse({ ok: false, e
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const outcomes = new Set(['committed', 'replayed']);
 
-export const handleProcessCreationRequest = async (request: Request, dependencies: ProcessCreationDependencies) => {
-  if (request.method !== 'POST') return jsonResponse({ ok: false, error: { code: 'METHOD_NOT_ALLOWED' } }, 405);
+export const executeProcessCreationRequest = async (request: Request, body: unknown, dependencies: ProcessCreationDependencies) => {
   let envelope: ProcessCreateEnvelope;
-  try { envelope = parseProcessCreateEnvelope(await readBoundedCreationJson(request, { maxBytes: 32768 })); }
+  try { envelope = parseProcessCreateEnvelope(body); }
   catch { return failed('INVALID_COMMAND'); }
 
   let actor: { id: string };
@@ -42,4 +41,12 @@ export const handleProcessCreationRequest = async (request: Request, dependencie
     try { parseProcessCreateResource(outcome.resource, envelope, actor.id); } catch { return failed('COMMAND_UNAVAILABLE'); }
     return jsonResponse(outcome);
   } catch { return failed('COMMAND_UNAVAILABLE'); }
+};
+
+export const handleProcessCreationRequest = async (request: Request, dependencies: ProcessCreationDependencies) => {
+  if (request.method !== 'POST') return jsonResponse({ ok: false, error: { code: 'METHOD_NOT_ALLOWED' } }, 405);
+  let body: unknown;
+  try { body = await readBoundedCreationJson(request, { maxBytes: 32768 }); }
+  catch { return failed('INVALID_COMMAND'); }
+  return executeProcessCreationRequest(request, body, dependencies);
 };

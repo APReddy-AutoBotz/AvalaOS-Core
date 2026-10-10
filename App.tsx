@@ -46,6 +46,7 @@ import { canApplyDefaultNavigation, createProductNavigationController, type Prod
 import { resolveProductActionPolicy, type ProductAction, type ProductActionContext } from './services/productActionPolicy';
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
+import { queryStudioDeliveryAssignees } from './services/productAcceptanceBridge/client';
 import { resolveGovernPresentationAccess } from './services/governPresentationAccess';
 import {
   isApplicationPortfolioMarketingCapture,
@@ -72,6 +73,8 @@ const DocsForgeView = React.lazy(() => import('./components/docs/DocsForgeView')
 const TemplateStudioView = React.lazy(() => import('./components/docs/TemplateManagerView'));
 const DocsView = React.lazy(() => import('./components/docs/DocsView'));
 const GovernedStudioRoute = React.lazy(() => import('./components/docs/GovernedStudioRoute'));
+const DeliveryTaskOutcome = React.lazy(() => import('./components/delivery/DeliveryTaskOutcome'));
+const DeliveryPackSnapshotAction = React.lazy(() => import('./components/delivery/DeliveryPackSnapshotAction'));
 const CustomDashboardView = React.lazy(() => import('./components/shared/CustomDashboardView'));
 const PortfolioView = React.lazy(() => import('./components/shared/PortfolioView'));
 const OrganizationSetupView = React.lazy(() => import('./components/auth/OrganizationSetupView'));
@@ -200,6 +203,13 @@ function App() {
   const navigationController = useRef(createProductNavigationController(explicitNavigationIntent));
   const pendingNavigationTransition = useRef<ProductNavigationTransition | null>(null);
   const navigationAuthorityKey = [currentUser?.id ?? 'anonymous', currentOrganization?.id ?? 'no-organization', currentWorkspace?.id ?? 'no-workspace', tenantContext?.authorizationVersion ?? 'no-authorization', sessionState].join(':');
+  const canAssignDeliveryTasks = Boolean(dataAccess === 'server' && sessionState === 'ready' && tenantContext
+    && ['task.assign', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => tenantContext.capabilities.includes(value)));
+  const loadDeliveryAssigneeOptions = useCallback(async (projectId: string) => {
+    if (dataAccess !== 'server' || sessionState !== 'ready' || !tenantContext || !canAssignDeliveryTasks) throw new Error('ASSIGNEE_DIRECTORY_UNAVAILABLE');
+    return (await queryStudioDeliveryAssignees({ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,
+      workspaceId: tenantContext.workspaceId, authorizationVersion: tenantContext.authorizationVersion }, projectId)).items;
+  }, [canAssignDeliveryTasks, dataAccess, sessionState, tenantContext]);
   const previousNavigationAuthorityKey = useRef(navigationAuthorityKey);
   const marketingCapture = useMemo(() => resolveMarketingCapture(
     typeof window === 'undefined' ? '' : window.location.search,
@@ -1265,8 +1275,8 @@ function App() {
       return <OrganizationSetupView currentUser={currentUser} allUsers={users} />;
     }
 
-    const governedCreationSurface = resolveGovernedCreationSurface(dataAccess, currentView);
-    if (governedCreationSurface === 'studio') return <GovernedStudioRoute />;
+    const governedCreationSurface = resolveGovernedCreationSurface(dataAccess, currentView, currentScope.type);
+    if (governedCreationSurface === 'studio') return <GovernedStudioRoute projectId={currentScope.type === ScopeType.PROJECT ? currentScope.id : undefined} />;
     if (governedCreationSurface === 'delivery') return <EnterpriseIntelligenceView
       key={`delivery:${currentUser.id}:${currentOrganization?.id}:${currentWorkspace?.id}:${tenantContext?.authorizationVersion}`}
       organization={currentOrganization}
@@ -1288,6 +1298,12 @@ function App() {
           onViewChange={handleViewChange}
           captureMode={productMarketingCapture}
           outcomeSignal={productMarketingCapture ? MARKETING_CAPTURE_MONITOR_SIGNAL : undefined}
+          authoritativeDeliveryOutcomes={!productMarketingCapture && dataAccess === 'server'
+            && tenantContext && currentScope.type === ScopeType.PROJECT ? {
+              scope: { actorId: tenantContext.userId, organizationId: tenantContext.organizationId,
+                workspaceId: tenantContext.workspaceId, authorizationVersion: tenantContext.authorizationVersion },
+              projectId: currentScope.id,
+            } : undefined}
           canonicalMonitorContext={!productMarketingCapture && currentOrganization?.id && currentWorkspace?.id ? {
             actorId: currentUser.id,
             organizationId: currentOrganization.id,
@@ -1354,7 +1370,17 @@ function App() {
         }
         // Template finding might be less reliable for global generations
         const templateId = activeGeneration?.templateId || 'brd.v1';
-        const template = docTemplates.find(t => t.id === templateId) || docTemplates[0] || (dataAccess === 'server' ? {
+        const publishedArtifactKey = artifactsToShow.schemaVersion === 'studio-approved-work-items.v1'
+          ? (['brd', 'frd', 'pdd'] as const).find(key => templateId === `studio-approved-${key}`) : undefined;
+        const template = publishedArtifactKey ? {
+          id: templateId,
+          title: 'Published Studio document',
+          description: 'Document content from the exact approved Studio version.',
+          artifactKey: publishedArtifactKey,
+          sections: (artifactsToShow[publishedArtifactKey]?.sections || []).map(section => ({
+            key: section.key, title: section.title, description: section.title, required: true,
+          })),
+        } : docTemplates.find(t => t.id === templateId) || docTemplates[0] || (dataAccess === 'server' ? {
           id: templateId,
           title: 'Persisted generated document',
           description: 'Read-only projection of a persisted generated document.',
@@ -1483,6 +1509,13 @@ function App() {
             users={users} currentUser={currentUser} automations={automationsForScope} timesheetEntries={timesheetsForScope}
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
             handoffEntries={handoffEntries}
+            deliveryPackSnapshot={dataAccess === 'server' && tenantContext ? <DeliveryPackSnapshotAction
+              key={`${navigationAuthorityKey}:${projectsForScope[0].id}`}
+              scope={{ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,
+                workspaceId: tenantContext.workspaceId, authorizationVersion: tenantContext.authorizationVersion }}
+              projectId={projectsForScope[0].id}
+              disabled={sessionState !== 'ready' || !['delivery.pack.snapshot', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => tenantContext.capabilities.includes(value))}
+            /> : undefined}
             deliveryPackArtifactPolicy={{
               exportMarkdown: resolveArtifactExportPolicy({
                 action: 'delivery_pack.export',
@@ -1637,6 +1670,7 @@ function App() {
       <React.Suspense fallback={null}>
         {selectedTask && (
           <TaskDetailModal
+            key={`${navigationAuthorityKey}:${selectedTask.id}`}
             task={selectedTask}
             allTasks={tasks}
             project={projects.find(p => p.id === selectedTask.projectId)}
@@ -1647,6 +1681,16 @@ function App() {
             onUpdateTask={handleUpdateTask}
             onAddTask={handleAddTask}
             onDeleteTask={handleDeleteTask}
+            loadAssigneeOptions={canAssignDeliveryTasks ? loadDeliveryAssigneeOptions : undefined}
+            assigneeEditingEnabled={dataAccess !== 'server' || canAssignDeliveryTasks}
+            outcomeEditor={dataAccess === 'server' && tenantContext && selectedTask.version
+              && selectedTask.sourceLineage?.documentGenerationId ? <DeliveryTaskOutcome
+                key={`${navigationAuthorityKey}:${selectedTask.id}`}
+                scope={{ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,
+                  workspaceId: tenantContext.workspaceId, authorizationVersion: tenantContext.authorizationVersion }}
+                task={tasks.find(task => task.id === selectedTask.id) ?? selectedTask}
+                readOnly={sessionState !== 'ready' || !['delivery.outcomes.record', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => tenantContext.capabilities.includes(value))}
+              /> : undefined}
           />
         )}
         {isImportProjectSelectorOpen && (

@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "bindingId": "avalaos-exhaustive-acceptance-bindings-v2",
+  "schemaVersion": 3,
+  "bindingId": "avalaos-exhaustive-acceptance-bindings-v3",
   "oracleExecution": {
     "command": [
       "node",
@@ -52,15 +52,7 @@
         "run",
         "test:pr1e"
       ],
-      "testIds": [
-        "GOVERN-001",
-        "GOVERN-002",
-        "GOVERN-003",
-        "GOVERN-004",
-        "GOVERN-005",
-        "GOVERN-006",
-        "GOVERN-007"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -83,11 +75,7 @@
         "run",
         "test:studio-artifacts"
       ],
-      "testIds": [
-        "STUDIO-001",
-        "STUDIO-002",
-        "STUDIO-003"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -97,9 +85,7 @@
         "run",
         "test:studio-private-artifacts"
       ],
-      "testIds": [
-        "STUDIO-007"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -138,14 +124,7 @@
         "run",
         "test:delivery-workflow-policy"
       ],
-      "testIds": [
-        "DELIVERY-001",
-        "DELIVERY-002",
-        "DELIVERY-003",
-        "DELIVERY-004",
-        "DELIVERY-005",
-        "DELIVERY-006"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -170,14 +149,7 @@
         "run",
         "test:pr1a"
       ],
-      "testIds": [
-        "AI-001",
-        "AI-002",
-        "AI-003",
-        "AI-004",
-        "AI-005",
-        "AI-006"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -187,9 +159,7 @@
         "run",
         "test:enterprise-intelligence"
       ],
-      "testIds": [
-        "EI-003"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -201,6 +171,7 @@
       "testIds": [
         "EI-001",
         "EI-002",
+        "EI-003",
         "EI-004",
         "EI-005"
       ],
@@ -213,9 +184,7 @@
         "run",
         "test:false-success"
       ],
-      "testIds": [
-        "SAFETY-002"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -225,11 +194,7 @@
         "run",
         "test:pilot-acceptance"
       ],
-      "testIds": [
-        "E2E-001",
-        "E2E-003",
-        "E2E-004"
-      ],
+      "testIds": [],
       "requiredGate": true
     },
     {
@@ -253,9 +218,7 @@
         "run",
         "test:pilot-operations"
       ],
-      "testIds": [
-        "ADMIN-004"
-      ],
+      "testIds": [],
       "requiredGate": true
     }
   ],
@@ -263,95 +226,23 @@
     {
       "testId": "SAFETY-005",
       "suiteId": "server-disposable-postgresql",
-      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
+      "command": [
+        "npm",
+        "run",
+        "test:migrations:pilot-operations:postgres"
+      ],
       "assertionIds": [
         "pilot-operations-postgres--responseLossExactReplayVerified",
         "pilot-operations-postgres--responseLossExactlyOneEffectVerified",
         "pilot-operations-postgres--responseLossConflictRejected",
         "pilot-operations-postgres--responseLossForeignTenantNonDisclosure"
       ],
-      "scenarioIds": ["production-command-response-lost-after-durable-commit"],
-      "components": ["server"]
-    },
-    {
-      "testId": "ASSESS-002",
-      "suiteId": "server-assess-process-edit-denial",
-      "command": ["npm", "run", "test:migrations:pr1b"],
-      "assertionIds": ["assess-postgres--process-edit-authority-denied"],
-      "scenarioIds": ["assess-process-edit-authority-denial"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "DELIVERY-009",
-      "suiteId": "server-delivery-lineage-tenant-boundary",
-      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
-      "assertionIds": ["delivery-postgres--exact-pack-ancestry", "delivery-postgres--foreign-tenant-denied"],
-      "scenarioIds": ["delivery-lineage-tenant-boundary"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "MONITOR-001",
-      "suiteId": "server-monitor-lineage",
-      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
-      "assertionIds": ["monitor-postgres--lineage-projection", "monitor-postgres--foreign-tenant-denied"],
-      "scenarioIds": ["monitor-lineage-tenant-boundary"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "MONITOR-002",
-      "suiteId": "server-monitor-outcome",
-      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
-      "assertionIds": ["monitor-postgres--outcome-projection", "monitor-postgres--foreign-tenant-denied"],
-      "scenarioIds": ["monitor-outcome-tenant-boundary"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "MONITOR-003",
-      "suiteId": "server-monitor-blocker",
-      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
-      "assertionIds": ["monitor-postgres--blocker-projection", "monitor-postgres--foreign-tenant-denied"],
-      "scenarioIds": ["monitor-blocker-tenant-boundary"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "MONITOR-004",
-      "suiteId": "server-monitor-unavailable",
-      "command": ["npm", "run", "test:migrations:enterprise-intelligence:postgres"],
-      "assertionIds": ["monitor-postgres--unavailable-projection", "monitor-postgres--foreign-tenant-denied"],
-      "scenarioIds": ["monitor-unavailable-tenant-boundary"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "ADMIN-002",
-      "suiteId": "server-admin-non-admin-denial",
-      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
-      "assertionIds": ["admin-postgres--non-admin-denied"],
-      "scenarioIds": ["admin-non-admin-authority-denial"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "ADMIN-003",
-      "suiteId": "server-admin-capability-matrix",
-      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
-      "assertionIds": ["admin-postgres--capability-matrix"],
-      "scenarioIds": ["admin-capability-matrix"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "SAFETY-001",
-      "suiteId": "server-offline-false-success",
-      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
-      "assertionIds": ["safety-postgres--offline-mutation-no-false-success"],
-      "scenarioIds": ["offline-mutation-no-false-success"],
-      "components": ["server", "hosted"]
-    },
-    {
-      "testId": "SAFETY-003",
-      "suiteId": "server-timeout-false-success",
-      "command": ["npm", "run", "test:migrations:pilot-operations:postgres"],
-      "assertionIds": ["safety-postgres--timeout-mutation-no-false-success"],
-      "scenarioIds": ["timeout-mutation-no-false-success"],
-      "components": ["server", "hosted"]
+      "scenarioIds": [
+        "production-command-response-lost-after-durable-commit"
+      ],
+      "components": [
+        "server"
+      ]
     }
   ],
   "oracleTests": [
@@ -522,156 +413,12 @@
       ]
     },
     {
-      "testId": "ASSESS-002",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The Sandbox exposes process creation authority but no deterministic process-edit control matching this rule; create denial is not accepted as edit-denial evidence."
-    },
-    {
-      "testId": "ASSESS-003",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The current hosted assessment check reads a seeded Completed/High row and does not execute the catalog-declared discovery transition or production scoring. Keep ASSESS-003 BLOCKED until the hosted discovery flow is driven to completion and its production result is asserted."
-    },
-    {
       "testId": "ASSESS-004",
       "scenario": "incomplete-assessment",
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"
       ]
-    },
-    {
-      "testId": "DELIVERY-009",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The hosted Delivery Pack scenario proves rendering and export controls but does not prove exact ancestry identifiers or a negative tenant-scope boundary. Keep DELIVERY-009 BLOCKED until tenant-scoped lineage is exercised authoritatively."
-    },
-    {
-      "testId": "MONITOR-001",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "Rendering the Handoff lineage label does not prove exact ancestry identifiers or a negative tenant boundary. Keep MONITOR-001 BLOCKED until exact synthetic lineage and cross-tenant denial are exercised authoritatively."
-    },
-    {
-      "testId": "MONITOR-002",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The existing Monitor value check can pass on the Recorded outcome fallback when no real outcome signal exists. Keep MONITOR-002 BLOCKED until the exact seeded outcome label, detail, status, and required tenant lineage are asserted."
-    },
-    {
-      "testId": "MONITOR-003",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "Blocker labels alone do not prove the canonical preserved-and-tenant-scoped lineage contract. Keep MONITOR-003 BLOCKED until exact blocker data, ancestry, and tenant scope are exercised authoritatively."
-    },
-    {
-      "testId": "MONITOR-004",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The canonical Sandbox seed does not expose a deterministic missing/unavailable Monitor projection toggle; do not infer this failure branch from a populated projection."
-    },
-    {
-      "testId": "ADMIN-001",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "Browser-local Admin navigation cannot prove the required privileged mutation and audit. Keep ADMIN-001 BLOCKED until the authoritative action and its audit are exercised."
-    },
-    {
-      "testId": "ADMIN-002",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "Hiding Admin / Intelligence navigation for a non-admin persona is UI evidence, not server-authoritative denial. Keep ADMIN-002 BLOCKED until an unauthorized admin read or mutation is rejected by the authoritative boundary."
-    },
-    {
-      "testId": "ADMIN-003",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "A generic Admin page text match does not prove the canonical role/capability matrix. Keep ADMIN-003 BLOCKED until exact authorized and unauthorized capabilities are asserted against the governed Admin model."
-    },
-    {
-      "testId": "E2E-002",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The retained review-domain regression proves the requested-changes lifecycle mechanics but does not exercise the catalog-declared hosted ledger journey. Keep the canonical E2E Test ID BLOCKED until the Sandbox exposes that exact end-to-end path."
-    },
-    {
-      "testId": "E2E-005",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this low-suitability fixture through the full declared journey."
-    },
-    {
-      "testId": "E2E-006",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this strong-automation fixture through the full declared journey."
-    },
-    {
-      "testId": "E2E-007",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The independent scoring oracle is not end-to-end classification and handoff evidence. The hosted Sandbox does not yet expose this HITL/compliance fixture through the full declared journey."
-    },
-    {
-      "testId": "SAFETY-001",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "The hosted Sandbox uses local synthetic persistence, so going offline does not create a server-persistence failure. A reload-only check is not accepted as no-false-success mutation evidence."
-    },
-    {
-      "testId": "SAFETY-003",
-      "scenario": null,
-      "projects": [
-        "desktop-chromium",
-        "pixel-7-chromium"
-      ],
-      "blockedReason": "Hosted Sandbox uses local synthetic authority and exposes no real server mutation whose timeout can be deterministically injected without adding a test-only product hook."
     },
     {
       "testId": "SAFETY-004",
@@ -696,33 +443,431 @@
         "desktop-chromium",
         "pixel-7-chromium"
       ]
+    }
+  ],
+  "authenticatedTests": [
+    {
+      "testId": "ASSESS-002",
+      "scenario": "authenticated-assess-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "ASSESS-003",
+      "scenario": "authenticated-assess-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
     },
     {
       "testId": "ASSESS-018",
-      "scenario": null,
+      "scenario": "authenticated-assess-018",
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"
       ],
-      "blockedReason": "ASSESS-018 requires hosted_sandbox execution. Aggregate source checks and disposable PostgreSQL conflict evidence cannot prove its hosted authoring or decision lifecycle; keep BLOCKED until the declared hosted path is exercised."
+      "requiredEnvironment": "hosted_authenticated_synthetic"
     },
     {
       "testId": "ASSESS-019",
-      "scenario": null,
+      "scenario": "authenticated-assess-019",
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"
       ],
-      "blockedReason": "ASSESS-019 requires hosted_sandbox execution. Aggregate source checks and disposable PostgreSQL conflict evidence cannot prove its hosted authoring or decision lifecycle; keep BLOCKED until the declared hosted path is exercised."
+      "requiredEnvironment": "hosted_authenticated_synthetic"
     },
     {
       "testId": "ASSESS-020",
-      "scenario": null,
+      "scenario": "authenticated-assess-020",
       "projects": [
         "desktop-chromium",
         "pixel-7-chromium"
       ],
-      "blockedReason": "ASSESS-020 requires hosted_sandbox execution. Aggregate source checks and disposable PostgreSQL conflict evidence cannot prove its hosted authoring or decision lifecycle; keep BLOCKED until the declared hosted path is exercised."
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-001",
+      "scenario": "authenticated-govern-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-002",
+      "scenario": "authenticated-govern-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-003",
+      "scenario": "authenticated-govern-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-004",
+      "scenario": "authenticated-govern-004",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-005",
+      "scenario": "authenticated-govern-005",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-006",
+      "scenario": "authenticated-govern-006",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "GOVERN-007",
+      "scenario": "authenticated-govern-007",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "STUDIO-001",
+      "scenario": "authenticated-studio-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "STUDIO-002",
+      "scenario": "authenticated-studio-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "STUDIO-003",
+      "scenario": "authenticated-studio-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "STUDIO-007",
+      "scenario": "authenticated-studio-007",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-001",
+      "scenario": "authenticated-delivery-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-002",
+      "scenario": "authenticated-delivery-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-003",
+      "scenario": "authenticated-delivery-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-004",
+      "scenario": "authenticated-delivery-004",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-005",
+      "scenario": "authenticated-delivery-005",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-006",
+      "scenario": "authenticated-delivery-006",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "DELIVERY-009",
+      "scenario": "authenticated-delivery-009",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "MONITOR-001",
+      "scenario": "authenticated-monitor-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "MONITOR-002",
+      "scenario": "authenticated-monitor-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "MONITOR-003",
+      "scenario": "authenticated-monitor-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "MONITOR-004",
+      "scenario": "authenticated-monitor-004",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "ADMIN-001",
+      "scenario": "authenticated-admin-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "ADMIN-002",
+      "scenario": "authenticated-admin-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "ADMIN-003",
+      "scenario": "authenticated-admin-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "ADMIN-004",
+      "scenario": "authenticated-admin-004",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "AI-001",
+      "scenario": "authenticated-ai-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "AI-002",
+      "scenario": "authenticated-ai-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "AI-003",
+      "scenario": "authenticated-ai-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "AI-004",
+      "scenario": "authenticated-ai-004",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "AI-005",
+      "scenario": "authenticated-ai-005",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "AI-006",
+      "scenario": "authenticated-ai-006",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-001",
+      "scenario": "authenticated-e2e-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-002",
+      "scenario": "authenticated-e2e-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-003",
+      "scenario": "authenticated-e2e-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-004",
+      "scenario": "authenticated-e2e-004",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-005",
+      "scenario": "authenticated-e2e-005",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-006",
+      "scenario": "authenticated-e2e-006",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "E2E-007",
+      "scenario": "authenticated-e2e-007",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "SAFETY-001",
+      "scenario": "authenticated-safety-001",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "SAFETY-002",
+      "scenario": "authenticated-safety-002",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
+    },
+    {
+      "testId": "SAFETY-003",
+      "scenario": "authenticated-safety-003",
+      "projects": [
+        "desktop-chromium",
+        "pixel-7-chromium"
+      ],
+      "requiredEnvironment": "hosted_authenticated_synthetic"
     }
   ]
 }

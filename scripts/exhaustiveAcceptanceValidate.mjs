@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { validateAuthenticatedCatalogRevision } from './authenticatedAcceptanceCriteria.mjs';
+import { AUTHENTICATED_ACCEPTANCE_TEST_IDS, authenticatedAcceptanceScenario } from './authenticatedAcceptanceCases.mjs';
 import {
   classifyExecutionBindings,
   deriveInventory,
@@ -20,6 +22,8 @@ const provenanceDocument = loadSourceProvenance();
 const exhaustivePlaywrightConfig = fs.readFileSync(path.join(repoRoot, 'playwright.exhaustive-acceptance.config.ts'), 'utf8');
 if (!/\btrace:\s*['"]off['"]/u.test(exhaustivePlaywrightConfig)) fail('exhaustive hosted Playwright traces must remain disabled so raw request data cannot enter uploaded evidence');
 const cases = catalog.cases ?? [];
+const revisionErrors = validateAuthenticatedCatalogRevision(catalog);
+if (revisionErrors.length) fail(revisionErrors.join(', '));
 const ids = new Set();
 
 for (const [index, item] of cases.entries()) {
@@ -80,6 +84,7 @@ for (const item of bindings.hostedTests ?? []) {
   for (const project of item.projects) if (!['desktop-chromium','pixel-7-chromium'].includes(project)) fail(`${item.testId} has unsupported project ${project}`);
   if (new Set(item.projects).size !== item.projects.length) fail(`${item.testId} hosted binding has duplicate projects`);
   const catalogCase = cases.find(testCase => testCase.testId === item.testId);
+  if (catalogCase.environment !== 'hosted_sandbox') fail(`${item.testId} cannot use public Sandbox evidence for authenticated behavior`);
   const requiredProjects = [...new Set(catalogCase?.viewport ?? [])].sort();
   const boundProjects = [...item.projects].sort();
   if (JSON.stringify(boundProjects) !== JSON.stringify(requiredProjects)) fail(`${item.testId} hosted projects must exactly match catalog viewports`);
@@ -89,16 +94,18 @@ for (const item of bindings.hostedTests ?? []) {
     fail(`${item.testId} cannot use browser-only navigation as privileged mutation/audit proof`);
   }
 }
-const requiredExplicitBlocks = [
-  'ASSESS-003',
-  'DELIVERY-009',
-  'MONITOR-001','MONITOR-002','MONITOR-003','MONITOR-004',
-  'ADMIN-001','ADMIN-002','ADMIN-003',
-];
-for (const testId of requiredExplicitBlocks) {
-  const binding = (bindings.hostedTests ?? []).find(item => item.testId === testId);
-  if (!binding || binding.scenario !== null || !binding.blockedReason) fail(`${testId} must remain explicitly BLOCKED until its full canonical authority/lineage/persona contract is executable`);
+const authenticatedIds = new Set();
+for (const binding of bindings.authenticatedTests ?? []) {
+  const item = cases.find(testCase => testCase.testId === binding.testId);
+  if (!item || authenticatedIds.has(binding.testId) || item.environment !== 'hosted_authenticated_synthetic'
+    || binding.requiredEnvironment !== item.environment
+    || binding.scenario !== authenticatedAcceptanceScenario(binding.testId)
+    || JSON.stringify([...binding.projects].sort()) !== JSON.stringify([...item.viewport].sort())) {
+    fail(`invalid authenticated binding ${binding.testId}`);
+  }
+  authenticatedIds.add(binding.testId);
 }
+if (authenticatedIds.size !== AUTHENTICATED_ACCEPTANCE_TEST_IDS.length) fail('authenticated binding set is incomplete');
 
 const classification = classifyExecutionBindings(catalog, bindings);
 for (const testCase of cases) {
@@ -116,6 +123,7 @@ const retainedTestIds = [...classification.entries()].filter(([, kinds]) => kind
 const oracleTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('oracle')).length;
 const hostedTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('hosted')).length;
 const serverTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('server')).length;
+const authenticatedTestIds = [...classification.entries()].filter(([, kinds]) => kinds.includes('authenticated')).length;
 const compositeTestIds = [...classification.entries()].filter(([, kinds]) => kinds.length > 1).length;
 const executableHosted = (bindings.hostedTests ?? []).filter(item => item.scenario).length;
 const blockedHosted = hostedTestIds - executableHosted;
@@ -134,6 +142,7 @@ console.log(JSON.stringify({
   oracleTestIds,
   hostedTestIds,
   serverTestIds,
+  authenticatedTestIds,
   compositeTestIds,
   executableHosted,
   blockedHosted,

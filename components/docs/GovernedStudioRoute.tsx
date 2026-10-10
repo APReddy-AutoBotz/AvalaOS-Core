@@ -4,9 +4,11 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { bindAuthoritativePresentationCapabilities } from '../../services/viewAccessGuard';
 import { getRuntimeDataAccess } from '../../services/supabaseClient';
 import StudioArtifactWorkspace from './StudioArtifactWorkspace';
+import { useDocs } from './DocsProvider';
 
 /** Main Studio navigation opens canonical source/template/artifact commands. */
-export default function GovernedStudioRoute() {
+export default function GovernedStudioRoute({ projectId }: { projectId?: string }) {
+  const { refresh } = useDocs();
   const { user } = useAuth();
   const { tenantContext, currentOrganization, currentWorkspace, sessionState } = useOrganizationContext();
   const capabilities = bindAuthoritativePresentationCapabilities({
@@ -30,6 +32,8 @@ export default function GovernedStudioRoute() {
       context={tenantContext}
       capabilities={capabilities}
       online={sessionState === 'ready'}
+      publicationProjectId={projectId}
+      onPublished={refresh}
     />
   </div>;
 }

@@ -39,6 +39,7 @@ import StudioSourceIntakeReview from './StudioSourceIntakeReview';
 import StatusBadge from '../shared/ui/StatusBadge';
 import { validateStudioDraftContent } from '../../services/studioArtifacts/draftValidation';
 import { isControlledHumanRuntimeEnabled } from '../../services/supabaseClient';
+import StudioApprovedArtifactPublish from './StudioApprovedArtifactPublish';
 import { executePrCControlledHumanSyntheticGeneration, PrCControlledHumanSyntheticGenerationBoundaryError } from '../../services/studioArtifacts/prCControlledHumanSyntheticGeneration';
 
 interface Props {
@@ -47,6 +48,8 @@ interface Props {
   context: TenantContextProjection;
   capabilities?: readonly string[];
   online?: boolean;
+  publicationProjectId?: string;
+  onPublished?: () => void | Promise<void>;
   captureMode?: boolean;
   transport?: StudioArtifactTransport;
   sourceFlowTransport?:{
@@ -126,7 +129,7 @@ const stateForError = (error: unknown, generation = false): { state: ViewState; 
 
 const sequence: StudioArtifactProjectionDto['lifecycle'][] = ['draft', 'reviewer_ready', 'in_review', 'approval_ready', 'approved'];
 
-export default function StudioArtifactWorkspace({ context, capabilities = context.capabilities, online = true, captureMode = false, transport, sourceFlowTransport }: Props) {
+export default function StudioArtifactWorkspace({ context, capabilities = context.capabilities, online = true, captureMode = false, transport, sourceFlowTransport, publicationProjectId, onPublished }: Props) {
   const [handoffs, setHandoffs] = useState<StudioHandoffOption[]>([]);
   const [handoffId, setHandoffId] = useState('');
   const [artifactType, setArtifactType] = useState<StudioArtifactType>('brd');
@@ -558,6 +561,17 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         </div>
       </div>
       {artifact?.currentApprovedVersion ? <StudioArtifactRenditions context={context} artifact={artifact} capabilities={capabilities} online={online} /> : <p className="mx-4 mb-4 rounded-xl border border-[var(--av-color-border)] bg-[var(--av-color-bg-subtle)] p-3 text-sm font-semibold text-[var(--av-color-text-muted)] sm:mx-5">Private export and governed download require an approved canonical artifact version. The restriction applies only to non-approved versions.</p>}
+      {publicationProjectId && artifact?.lifecycle === 'approved'
+        && artifact.currentApprovedVersion?.id === artifact.currentVersion.id
+        && (!artifact.sourcePackage || ['assess_handoff', 'assess_plus_transcript_bundle'].includes(artifact.sourcePackage.sourceMode))
+        && <StudioApprovedArtifactPublish
+          key={`${authorityIdentity}:${publicationProjectId}:${artifact.id}:${artifact.currentVersion.id}`}
+          scope={{ actorId: context.userId, organizationId: context.organizationId, workspaceId: context.workspaceId, authorizationVersion: context.authorizationVersion }}
+          projectId={publicationProjectId}
+          artifact={{ artifactId: artifact.id, artifactVersionId: artifact.currentVersion.id, aggregateVersion: artifact.aggregateVersion, title: artifact.artifactType.toUpperCase(), lifecycle: 'approved' }}
+          disabled={blocked || !['studio.artifacts.publish', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => capabilities.includes(value))}
+          onPublished={onPublished}
+        />}
       {receipt && <p className="sr-only">Last committed receipt {receipt.receiptId}; resource {receipt.resourceId}</p>}
     </section>
   );

@@ -185,12 +185,31 @@ test('oracle-only result binds the canonical scenario assertion and execution co
 
 test('composite evidence rejects an omitted hosted or server component', () => {
   const definition = loadCampaignDefinition();
-  const composite = definition.bindings.serverTests.find(server => definition.bindings.hostedTests.some(hosted => hosted.testId === server.testId));
-  assert.ok(composite, 'canonical bindings must retain at least one composite case');
-  const run = createValidRun(definition, composite.testId);
-  assert.equal(run.testResults[0].bindingResults.length, 2);
-  run.testResults[0].bindingResults.pop();
-  expectError(validateRunEvidence(run, definition), 'composite-binding-incomplete');
+  // Composite validation remains supported, but the live catalog now routes
+  // authenticated requirements through their separate profile. Exercise a
+  // synthetic composite without changing any canonical acceptance binding.
+  definition.bindings.serverTests.push({
+    testId: 'SANDBOX-001', suiteId: 'synthetic-composite-server',
+    command: ['node', 'synthetic-composite-fixture.mjs'], assertionIds: ['synthetic-server-assertion'],
+  });
+  const complete = createValidRun(definition, 'SANDBOX-001');
+  assert.equal(complete.testResults[0].bindingResults.length, 2);
+  assert.deepEqual(validateRunEvidence(complete, definition), []);
+  for (const omitted of ['hosted-scenario', 'server-assertion']) {
+    const run = clone(complete);
+    run.testResults[0].bindingResults = run.testResults[0].bindingResults.filter(binding => binding.bindingKind !== omitted);
+    expectError(validateRunEvidence(run, definition), 'composite-binding-incomplete');
+  }
+});
+
+test('authenticated cases cannot gain executed evidence from an empty legacy binding set', () => {
+  const definition = loadCampaignDefinition();
+  assert.equal(definition.bindings.authenticatedTests.length, 47);
+  for (const binding of definition.bindings.authenticatedTests) {
+    const run = createValidRun(definition, binding.testId);
+    assert.equal(run.testResults[0].bindingResults.length, 0);
+    expectError(validateRunEvidence(run, definition), `unbound-test-evidence:${binding.testId}`);
+  }
 });
 
 test('fake source proof is rejected', () => {

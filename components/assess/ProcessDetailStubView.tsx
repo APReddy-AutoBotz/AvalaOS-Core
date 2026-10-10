@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useProcessService } from '../../services/processService';
 import { useOrganization } from '../../services/organizationService';
 import { useTemplateService } from '../../services/templateService';
@@ -17,6 +17,7 @@ import {
 } from './decisionPackRenderModel';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { isModuleEnabled } from '../../constants/moduleConfig';
+import { ProcessUpdateError } from '../../services/processUpdateContract';
 import {
     ArrowLeftIcon,
     ChartPieIcon,
@@ -38,11 +39,19 @@ interface ProcessDetailStubViewProps {
 const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs, captureMode = false }) => {
     const { currentOrganization } = useOrganization();
     const { currentOrganization: orgContext } = useOrganizationContext();
-    const { processes, getProcessById, loading } = useProcessService();
+    const { processes, getProcessById, loading, updateProcess, canUpdateProcess } = useProcessService();
     const { getTemplateById } = useTemplateService();
     const { getAssessmentForProcess } = useAssessmentService();
     const [assessment, setAssessment] = useState<Assessment | null>(null);
     const [assessmentLoading, setAssessmentLoading] = useState(false);
+    const process = currentOrganization ? getProcessById(processId, currentOrganization.id) : null;
+    const [editingProcess, setEditingProcess] = useState(false);
+    const [processDraft, setProcessDraft] = useState({ name: '', description: '', department: '', criticality: 'Medium' as 'Low' | 'Medium' | 'High' | 'Critical' });
+    const [processSaving, setProcessSaving] = useState(false);
+    const [processMessage, setProcessMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+    const activeScopeKey = `${currentOrganization?.id ?? ''}:${processId}`;
+    const activeProcessScopeRef = useRef(activeScopeKey);
+    activeProcessScopeRef.current = activeScopeKey;
 
     useEffect(() => {
         let active = true;
@@ -59,9 +68,41 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
         };
     }, [getAssessmentForProcess, processId]);
 
-    if (!currentOrganization) return null;
+    useEffect(() => {
+        if (!process || editingProcess) return;
+        setProcessDraft({ name: process.name, description: process.description, department: process.department, criticality: process.criticality });
+    }, [editingProcess, process]);
 
-    const process = getProcessById(processId, currentOrganization.id);
+    useEffect(() => {
+        setEditingProcess(false);
+        setProcessSaving(false);
+        setProcessMessage(null);
+    }, [activeScopeKey]);
+
+    const saveProcessDetails = async () => {
+        if (!process) return;
+        const saveScopeKey = activeScopeKey;
+        setProcessSaving(true);
+        setProcessMessage(null);
+        try {
+            await updateProcess(process.id, processDraft);
+            if (saveScopeKey !== activeProcessScopeRef.current) return;
+            setEditingProcess(false);
+            setProcessMessage({ tone: 'success', text: 'Process details saved.' });
+        } catch (error) {
+            if (saveScopeKey !== activeProcessScopeRef.current) return;
+            setProcessMessage({
+                tone: 'error',
+                text: error instanceof ProcessUpdateError && error.code === 'PERMISSION_DENIED'
+                    ? 'Process update denied. No changes were saved.'
+                    : 'Process update could not be confirmed. Your edits are still available to retry.',
+            });
+        } finally {
+            if (saveScopeKey === activeProcessScopeRef.current) setProcessSaving(false);
+        }
+    };
+
+    if (!currentOrganization) return null;
 
     if (loading || processes.length === 0) {
         return <div className="p-8 text-center text-slate-500">Loading process...</div>;
@@ -168,6 +209,49 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                     </div>
                 </div>
             </div>
+
+            <section className="premium-surface rounded-3xl p-6" data-testid="process-details-authority">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Assess process authority</p>
+                        <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Process details</h2>
+                        <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">Changes are committed through the workspace process command and verified by a fresh read.</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => { setEditingProcess(value => !value); setProcessMessage(null); }}
+                        disabled={captureMode || !canUpdateProcess || !Number.isSafeInteger(process.version) || processSaving}
+                        title={captureMode ? 'Synthetic marketing capture is read-only.' : !canUpdateProcess ? 'Process editing is not authorized for this role.' : !Number.isSafeInteger(process.version) ? 'This historical process remains read-only until an explicit migration establishes version authority.' : undefined}
+                        className="rounded-xl px-4 py-2 text-sm font-black btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {editingProcess ? 'Cancel editing' : 'Edit process details'}
+                    </button>
+                </div>
+                {editingProcess && (
+                    <div className="mt-5 grid gap-4 md:grid-cols-2" data-testid="process-edit-form">
+                        <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Process name
+                            <input aria-label="Process name" maxLength={200} disabled={processSaving} value={processDraft.name} onChange={event => setProcessDraft(value => ({ ...value, name: event.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" />
+                        </label>
+                        <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Department
+                            <input aria-label="Process department" maxLength={200} disabled={processSaving} value={processDraft.department} onChange={event => setProcessDraft(value => ({ ...value, department: event.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" />
+                        </label>
+                        <label className="text-sm font-bold text-slate-700 dark:text-slate-200 md:col-span-2">Description
+                            <textarea aria-label="Process description" maxLength={4000} rows={3} disabled={processSaving} value={processDraft.description} onChange={event => setProcessDraft(value => ({ ...value, description: event.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" />
+                        </label>
+                        <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Criticality
+                            <select aria-label="Process criticality" disabled={processSaving} value={processDraft.criticality} onChange={event => setProcessDraft(value => ({ ...value, criticality: event.target.value as typeof value.criticality }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                                {(['Low','Medium','High','Critical'] as const).map(value => <option key={value}>{value}</option>)}
+                            </select>
+                        </label>
+                        <div className="flex items-end">
+                            <button type="button" onClick={() => void saveProcessDetails()} disabled={processSaving || !processDraft.name.trim()} className="rounded-xl bg-[#ffbc03] px-5 py-2.5 text-sm font-black text-[#002C4B] disabled:cursor-not-allowed disabled:opacity-50">
+                                {processSaving ? 'Verifying process update…' : 'Save process details'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                {processMessage && <p role={processMessage.tone === 'error' ? 'alert' : 'status'} className={`mt-4 rounded-xl p-3 text-sm font-bold ${processMessage.tone === 'error' ? 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'}`}>{processMessage.text}</p>}
+            </section>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {stats.map(({ label, value, icon: Icon }) => (
