@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Authenticated acceptance integration (2026-10-10)
+
+PR #282 merged as `44323be96187798923b90ca4d6c68d1b18633b8f`, with its tested tree unchanged. All 48 applicable candidate checks and post-merge Core CI `38025488632` and Legacy Delivery Authority `38025488637` passed. Independent candidate evidence proves the original DELIVERY-007/008 cases and actual desktop/Pixel 7 task journeys. The repository-only catalog report is 42 PASS / 0 FAIL / 66 BLOCKED; the historical stable 58 PASS / 50 BLOCKED result remains immutable and is not combined across releases.
+
+Continue the already approved second substantial boundary under `docs/planning/authenticated-product-acceptance.md`: all 47 authenticated hosted requirements plus EI-003. Three read-only reviews are complete. Implement the missing trusted approved-Studio-to-legacy-Docs bridge and exact human-recorded Delivery outcome for read-only Monitor, integrate real production lifecycle/control paths, and version the separate authenticated profile and seven approved zero-write corrections. Local fixture authentication remains preparation-only and cannot establish hosted PASS. Executed local verification on 2026-10-10: all 12 connected browser journeys passed (six desktop and six Pixel 7). The independent verifier accepted all 94 actual-UI case records, exactly 47 per browser, against 197 current source digests. Database, server, preview, browser-state and synthetic-secret cleanup all passed; measured real-provider and paid-call deltas were zero. This is fixture-transport preparation, not hosted acceptance. Exact committed-candidate CI remains planned verification. No hosted action, production change or additional paid effect is authorized.
+
 ## Approved legacy Delivery authority continuation (2026-10-10)
 
 PR #281 merged as `2ea259e24d6ca27c95f69f7018fad970f6f4e581` with the tested tree unchanged. All 49 applicable candidate checks and post-merge Core CI `38016322009` passed; 15 candidate checks were intentionally skipped. Independently verified connected evidence proves 16 backend stages and four desktop/mobile tests. These results supersede the pending candidate statements below; they do not change the last stable **58 PASS / 50 BLOCKED** acceptance result.

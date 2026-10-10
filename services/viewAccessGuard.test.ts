@@ -291,6 +291,7 @@ for (const [view, scope, capability] of [
   [View.DOCS, projectScope, 'studio.artifacts.review'],
   [View.BOARDS, projectScope, 'project.read'],
   [View.PORTFOLIO, myWorkScope, 'monitor.read'],
+  [View.PORTFOLIO, projectScope, 'monitor.read'],
 ] as const) {
   const result = resolveViewAccess({
     user: capabilityOnlyUser,
@@ -313,6 +314,17 @@ const monitorCannotOpenDelivery = resolveViewAccess({
 });
 assert.equal(monitorCannotOpenDelivery.allowed, false);
 assert.equal(monitorCannotOpenDelivery.reason, 'missing_permission');
+
+const projectScopeDoesNotGrantMonitor = resolveViewAccess({
+  user: capabilityOnlyUser,
+  authLoading: false,
+  organization: makeOrganization(),
+  authoritativeCapabilities: ['project.read'],
+  view: View.PORTFOLIO,
+  scope: projectScope,
+});
+assert.equal(projectScopeDoesNotGrantMonitor.allowed, false);
+assert.equal(projectScopeDoesNotGrantMonitor.reason, 'missing_permission');
 
 const studioApprovalPresentationOnly = resolveViewAccess({
   user: capabilityOnlyUser,

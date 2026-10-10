@@ -38,6 +38,19 @@
     "providerJobUsageReservationDelta": 0,
     "hostedStorageNotRun": true
   },
+  "EI-003": {
+    "logicalMutationCount": 0,
+    "targetWriteDelta": 0,
+    "actualQueryHandlerExecuted": true,
+    "authorityRpcExecuted": true,
+    "currentTenantProjectionVisible": true,
+    "currentTenantProjectionScoped": true,
+    "foreignTenantDenied": true,
+    "foreignProjectionLoadCount": 0,
+    "beforeAfterSnapshotEqual": true,
+    "providerDisabled": true,
+    "providerEffectDelta": 0
+  },
   "EI-004": {
     "logicalMutationCount": 1,
     "sourceDelta": 1,

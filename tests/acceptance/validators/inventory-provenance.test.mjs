@@ -232,10 +232,14 @@ assert.notEqual(substitutedCommand.status, 0);
 assert.match(substitutedCommand.stderr, /proof-owner-command-source-contract/u, 'coordinated canonical command substitution must fail against the independent source contract');
 
 const partialComposite = structuredClone(bindings);
-partialComposite.serverTests.find(item => item.testId === 'ASSESS-002').components = ['server'];
+// ASSESS-002 now owns the authenticated profile. A stale server component
+// cannot be appended to bypass that exact, independently registered owner.
+partialComposite.serverTests.push({ ...structuredClone(bindings.serverTests[0]),
+  testId: 'ASSESS-002', components: ['server'] });
 const partialCompositeResult = run(inventory, partialComposite);
 assert.notEqual(partialCompositeResult.status, 0);
-assert.match(partialCompositeResult.stderr, /composite execution kinds must exactly match/u);
+assert.match(partialCompositeResult.stderr, /source provenance invalid/u,
+  'authenticated cases reject a substituted legacy server component');
 
 const sandboxDescendant = JSON.parse(readFileSync(catalogPath, 'utf8')).cases.find(item => item.testId === 'SANDBOX-006');
 assert.equal(sandboxDescendant.branchIds[0], 'SANDBOX-ACCEPTED_DESCENDANT_ROUTE');

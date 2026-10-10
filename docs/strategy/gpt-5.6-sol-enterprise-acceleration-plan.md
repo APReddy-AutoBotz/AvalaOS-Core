@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Authenticated acceptance integration execution (2026-10-10)
+
+PR #282 and its post-merge workflows are verified; follow `docs/planning/authenticated-product-acceptance.md` for the approved second substantial integration PR. All three Wave 1 reviewers are closed and findings reconciled. Under the fixed managed workspace-write profile, workers own production publish/outcome authority, connected lifecycle/browser preparation, and EI/Admin/AI/private-download controls. Root owns shared catalog/profile/report/provenance, migration-chain integration, documentation, CI and the single PR. Implementation ownership is closed; root independently verified 12/12 browser journeys, 94/94 actual-UI records, all cleanup and zero real-provider effects, and now owns exact-candidate CI and the verified merge. No nested delegation. Preserve the original 108 business requirements and separate PR C package semantics; hosted execution and paid/production effects remain excluded. No catalog-only or closure-only PR.
+
 ## Approved remaining-acceptance authority work (2026-10-10)
 
 PR #281 is merged with its tested tree unchanged and successful post-merge Core CI `38016322009`. AP approved preserving the full legacy task business scope, implementing its missing server authority, introducing a separate authenticated synthetic test profile and explicitly correcting seven read-only criteria. The three read-only reviews are complete. Under the fixed managed workspace-write profile, the controller assigns separate database/fixture, Edge/client and application/browser implementation tracks; root owns acceptance evidence, documentation, CI and integration. No nested agents or hosted/paid actions are authorized.

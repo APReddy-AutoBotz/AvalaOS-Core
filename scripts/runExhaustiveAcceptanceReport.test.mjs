@@ -123,7 +123,7 @@ const fullInventoryHostedReport = (metadata = hostedMetadata()) => {
   const executable = hostedBindings.filter(binding => binding.scenario).length * 2;
   const skipped = hostedBindings.filter(binding => !binding.scenario).length * 2;
   assert.equal(executable, 36);
-  assert.equal(skipped, 38);
+  assert.equal(skipped, 0);
   return {
     config: { metadata },
     errors: [],
@@ -234,7 +234,7 @@ test('green hosted execution cannot promote a planned fixture scope', () => {
     });
     assert.notEqual(run.status, 0, 'planned coverage remains intentionally incomplete');
     const report = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
-    assert.deepEqual(report.summary.browserEvidenceErrors, [], 'the complete 74-result ordinary hosted inventory is provenance-valid');
+    assert.deepEqual(report.summary.browserEvidenceErrors, [], 'the complete 36-result public hosted inventory is provenance-valid');
     const sandbox = report.results.find(item => item.testId === 'SANDBOX-001');
     assert.equal(sandbox.status, 'BLOCKED');
     assert.match(sandbox.failureReason, /same-run measured Sandbox fixture evidence is missing or invalid/u);
@@ -1075,7 +1075,7 @@ test('Govern retained runner keeps per-case outcomes while failing the CI gate',
   }
 });
 
-test('Enterprise Intelligence PostgreSQL report promotes only four ingestion and Assemble cases and rejects substituted evidence', async () => {
+test('Enterprise Intelligence PostgreSQL report promotes five query, ingestion and Assemble cases and rejects substituted evidence', async () => {
   const { buildEnterpriseIntelligenceAcceptanceProducer, EI_ACCEPTANCE_TEST_IDS } = await import('./enterpriseIntelligenceAcceptanceEvidence.mjs');
   const suite = loadExecutionBindings().retainedSuites.find(item => item.suiteId === 'enterprise-intelligence-postgres-acceptance');
   const command = suite.command.join(' ');
@@ -1093,15 +1093,15 @@ test('Enterprise Intelligence PostgreSQL report promotes only four ingestion and
     return buildEnterpriseIntelligenceAcceptanceProducer({ actualByTestId, failuresByTestId, blockedByTestId, identity, command, cleanupVerified: true });
   };
   const variants = [
-    ['valid', () => {}, false, 4, 0],
+    ['valid', () => {}, false, 5, 0],
     ['source substitution', m => { const i = m.results[0]; i.sourceDigests[Object.keys(i.sourceDigests)[0]] = '0'.repeat(64); }, false, 0, 0],
     ['result substitution', m => { m.results[0].actual.logicalMutationCount = 0; }, false, 0, 0],
-    ['unselected case substitution', m => { m.results[0].testId = 'EI-003'; }, false, 0, 0],
+    ['unselected case substitution', m => { m.results[0].testId = 'EI-999'; }, false, 0, 0],
     ['cleanup substitution', m => { m.results[0].cleanupVerified = false; }, false, 0, 0],
     ['partial artifact', m => { m.results.pop(); }, false, 0, 0],
-    ['executed failure despite aggregate success', () => {}, true, 3, 1],
-    ['setup blocked without product failure', () => {}, 'blocked', 3, 0],
-    ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 4],
+    ['executed failure despite aggregate success', () => {}, true, 4, 1],
+    ['setup blocked without product failure', () => {}, 'blocked', 4, 0],
+    ['failed aggregate', m => { m.suites[0].status = 'FAIL'; }, true, 0, 5],
     ['aggregate-only', m => { m.results = []; }, false, 0, 0],
   ];
   for (const [name, mutate, failure, passed, failed] of variants) {
@@ -1133,12 +1133,12 @@ test('Enterprise Intelligence PostgreSQL report promotes only four ingestion and
       assert.equal(report.summary.FAIL, failed, name);
       assert.equal(report.summary.BLOCKED, 108 - passed - failed, name);
       assert.deepEqual(report.results.filter(i => i.status === 'PASS').map(i => i.testId).sort(),
-        passed === 4 ? [...EI_ACCEPTANCE_TEST_IDS].sort() : passed === 3 ? EI_ACCEPTANCE_TEST_IDS.filter(id => id !== 'EI-005').sort() : [], name);
+        passed === 5 ? [...EI_ACCEPTANCE_TEST_IDS].sort() : passed === 4 ? EI_ACCEPTANCE_TEST_IDS.filter(id => id !== 'EI-005').sort() : [], name);
       for (const item of report.results.filter(i => !EI_ACCEPTANCE_TEST_IDS.includes(i.testId))) {
         assert.equal(item.status, 'BLOCKED', `${name}:${item.testId}`);
       }
       if (failed) assert.equal(report.results.find(i => i.testId === 'EI-005').status, 'FAIL', name);
-      if (passed === 4) assert.equal(run.status, 0, run.stderr);
+      if (passed === 5) assert.equal(run.status, 0, run.stderr);
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
@@ -1162,7 +1162,7 @@ test('Enterprise Intelligence actual harness emits BLOCKED for missing configura
     });
     assert.equal(run.status, 0, run.stderr);
     const emitted = JSON.parse(readFileSync(resultPath, 'utf8'));
-    assert.equal(emitted.results.length, 4);
+    assert.equal(emitted.results.length, 5);
     assert.ok(emitted.results.every(item => item.status === 'BLOCKED'
       && item.failureCode === 'setup_failed' && item.actual === null && item.cleanupVerified === true));
   } finally {
@@ -1213,9 +1213,9 @@ test('Enterprise Intelligence retained runner keeps per-case outcomes while fail
       assert.equal(run.status, outcome === 'PASS' ? 0 : 1, `${outcome}: ${run.stderr}`);
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
       assert.equal(manifest.suites[0].status, 'PASS', 'producer execution completed and emitted validated independent outcomes');
-      assert.equal(manifest.results.length, 4);
+      assert.equal(manifest.results.length, 5);
       assert.equal(manifest.results.find(i => i.testId === 'EI-005').status, outcome);
-      assert.equal(manifest.results.filter(i => i.testId !== 'EI-005' && i.status === 'PASS').length, 3);
+      assert.equal(manifest.results.filter(i => i.testId !== 'EI-005' && i.status === 'PASS').length, 4);
     }
   } finally {
     rmSync(temp, { recursive: true, force: true });

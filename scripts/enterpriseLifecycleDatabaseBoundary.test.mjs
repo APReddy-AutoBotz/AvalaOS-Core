@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateEnterpriseLifecycleDatabaseUrl } from './enterpriseLifecyclePostgresFixture.mjs';
+import { PassThrough } from 'node:stream';
+import {
+  readEnterpriseLifecycleRequestBody,
+  validateEnterpriseLifecycleDatabaseUrl,
+} from './enterpriseLifecyclePostgresFixture.mjs';
 
 test('disposable database runner rejects remote targets and connection overrides before connecting', () => {
   for (const value of [
@@ -23,4 +27,31 @@ test('disposable database runner accepts only explicit loopback with the declare
     'postgres://fixture:fixture@127.0.0.1:5432/avalaos_pilot_synthetic',
     'postgresql://fixture:fixture@[::1]:55471/postgres',
   ]) assert.equal(validateEnterpriseLifecycleDatabaseUrl(value), value);
+});
+
+test('aborted fixture request bodies release the serialized request tail', async () => {
+  let releasePrevious;
+  let requestTail = new Promise(resolve => { releasePrevious = resolve; });
+  const aborted = new PassThrough();
+  const bodyResult = readEnterpriseLifecycleRequestBody(aborted).then(
+    body => ({ body, error: null }),
+    error => ({ body: null, error }),
+  );
+  const abortedRun = requestTail.then(async () => {
+    const result = await bodyResult;
+    if (result.error) throw result.error;
+    return result.body;
+  });
+  requestTail = abortedRun.catch(() => {});
+  aborted.write('{"partial":');
+  aborted.emit('aborted');
+  aborted.emit('error', new Error('ECONNRESET'));
+  releasePrevious();
+  await assert.rejects(abortedRun, /ENTERPRISE_LIFECYCLE_REQUEST_ABORTED/u);
+  await requestTail;
+
+  const next = new PassThrough();
+  const nextRead = readEnterpriseLifecycleRequestBody(next);
+  next.end('{"next":true}');
+  assert.equal((await nextRead).toString('utf8'), '{"next":true}');
 });

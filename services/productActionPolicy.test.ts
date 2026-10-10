@@ -124,6 +124,9 @@ describe('productActionPolicy', () => {
     }
     for (const view of [View.DOCS, View.WORKSPACE]) assert.equal(resolveGovernedCreationSurface('server', view), null);
     for (const view of [View.BOARDS, View.LIST, View.DELIVERY_PACK]) assert.equal(resolveGovernedCreationSurface('server', view), 'delivery');
+    assert.equal(resolveGovernedCreationSurface('server', View.DELIVERY_PACK, ScopeType.PROJECT), null);
+    assert.equal(resolveGovernedCreationSurface('server', View.DELIVERY_PACK, ScopeType.MY_WORK), 'delivery');
+    for (const view of [View.BOARDS, View.LIST]) assert.equal(resolveGovernedCreationSurface('server', view, ScopeType.PROJECT), 'delivery');
     assert.equal(resolveGovernedCreationSurface('server', View.PROCESS_CATALOG), null);
   });
   it('fails closed for unknown actions, unauthenticated users, and missing org context', () => {

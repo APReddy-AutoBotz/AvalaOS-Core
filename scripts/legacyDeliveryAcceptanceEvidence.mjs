@@ -19,7 +19,9 @@ export const LEGACY_DELIVERY_ACCEPTANCE_SOURCE_REFERENCES = [
   "services/deliveryWorkflowPolicy.ts",
   "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
   "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
-  "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+  "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+  "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+  "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
 ];
 export const LEGACY_DELIVERY_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   "DELIVERY-007": "DELIVERY-DUPLICATE_IMPORT",

@@ -33,6 +33,7 @@ export const retainedBindingMap = bindings => {
 
 export const oracleBindingMap = bindings => new Map((bindings.oracleTests ?? []).map(item => [item.testId, item]));
 export const hostedBindingMap = bindings => new Map((bindings.hostedTests ?? []).map(item => [item.testId, item]));
+export const authenticatedBindingMap = bindings => new Map((bindings.authenticatedTests ?? []).map(item => [item.testId, item]));
 export const serverBindingMap = bindings => new Map((bindings.serverTests ?? []).map(item => [item.testId, item]));
 
 const sortedUnique = values => [...new Set(values)].sort();
@@ -75,6 +76,9 @@ export const expectedExecutionOwnership = (testId, bindings) => {
       kind: 'hosted-scenario',
       ownerId: item.scenario ?? `blocked:${testId}`,
     });
+  }
+  for (const item of bindings.authenticatedTests ?? []) {
+    if (item.testId === testId) owners.push({ kind: 'authenticated-scenario', ownerId: item.scenario });
   }
   for (const item of bindings.serverTests ?? []) {
     if (item.testId === testId) owners.push({
@@ -295,6 +299,7 @@ export const classifyExecutionBindings = (catalog, bindings) => {
   const retained = retainedBindingMap(bindings);
   const oracle = oracleBindingMap(bindings);
   const hosted = hostedBindingMap(bindings);
+  const authenticated = authenticatedBindingMap(bindings);
   const server = serverBindingMap(bindings);
   const result = new Map();
   for (const testCase of catalog.cases ?? []) {
@@ -302,6 +307,7 @@ export const classifyExecutionBindings = (catalog, bindings) => {
     if (retained.has(testCase.testId)) kinds.push('retained');
     if (oracle.has(testCase.testId)) kinds.push('oracle');
     if (hosted.has(testCase.testId)) kinds.push('hosted');
+    if (authenticated.has(testCase.testId)) kinds.push('authenticated');
     if (server.has(testCase.testId)) kinds.push('server');
     result.set(testCase.testId, kinds);
   }

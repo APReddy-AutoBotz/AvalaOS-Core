@@ -8,6 +8,8 @@ import pg from 'pg';
 import ts from 'typescript';
 import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 import { createEnterpriseLifecycleStudioGeneration } from './enterpriseLifecycleStudioGeneration.mjs';
+import { createAuthenticatedControlsFixture } from './authenticatedControlsFixture.mjs';
+import { createAuthenticatedControlsPostgresAdapter } from './authenticatedControlsPostgresAdapter.mjs';
 
 const { Client } = pg;
 const root = process.cwd();
@@ -109,11 +111,42 @@ const asRole = async (client, role, operation) => {
   }
 };
 
-const readBody = request => new Promise((resolve, reject) => {
+export const readEnterpriseLifecycleRequestBody = request => new Promise((resolve, reject) => {
   const chunks = [];
+  let settled = false;
+  const finish = (callback, value) => {
+    if (settled) return;
+    settled = true;
+    request.off('end', onEnd);
+    request.off('error', onError);
+    request.off('aborted', onAborted);
+    request.off('close', onClose);
+    callback(value);
+  };
+  const onEnd = () => finish(resolve, Buffer.concat(chunks));
+  const onError = error => {
+    if (settled) {
+      request.off('close', onClose);
+      return;
+    }
+    finish(reject, error);
+  };
+  const onAborted = () => {
+    if (settled) return;
+    settled = true;
+    request.off('end', onEnd);
+    request.off('aborted', onAborted);
+    reject(new Error('ENTERPRISE_LIFECYCLE_REQUEST_ABORTED'));
+  };
+  const onClose = () => {
+    if (!request.complete) onAborted();
+    request.off('error', onError);
+  };
   request.on('data', chunk => chunks.push(chunk));
-  request.once('end', () => resolve(Buffer.concat(chunks)));
-  request.once('error', reject);
+  request.once('end', onEnd);
+  request.once('error', onError);
+  request.once('aborted', onAborted);
+  request.once('close', onClose);
 });
 
 const requestHeaders = incoming => {
@@ -213,7 +246,7 @@ export async function createEnterpriseLifecycleFixture({
       organization: uuid(1), workspace: uuid(2), foreignOrganization: uuid(3), foreignWorkspace: uuid(4),
       author: uuid(10), reviewer: uuid(11), approver: uuid(12), outsider: uuid(13),
       role: uuid(20), process: uuid(21), case: uuid(22), rejectCase: uuid(23), deniedCase: uuid(24),
-      providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27),
+      providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27), deliveryRestrictedRole: uuid(28),
     };
     const tokens = new Map([
       ['enterprise-author-token', ids.author], ['enterprise-reviewer-token', ids.reviewer],
@@ -238,18 +271,23 @@ export async function createEnterpriseLifecycleFixture({
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Enterprise lifecycle','enterprise-lifecycle'),($2,'Foreign tenant','foreign-lifecycle')", [ids.organization, ids.foreignOrganization]);
     await db.query("INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,'Lifecycle workspace','lifecycle'),($3,$4,'Foreign workspace','foreign-lifecycle')", [ids.workspace, ids.organization, ids.foreignWorkspace, ids.foreignOrganization]);
     await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Lifecycle authority','lifecycle-authority','organization','[]')", [ids.role, ids.organization]);
-    await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('org.admin','assess.read') OR capability_key LIKE 'assess.v2.%' OR capability_key LIKE 'studio.%'", [ids.role]);
+    await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Restricted Delivery operator','restricted-delivery-operator','organization','[]')", [ids.deliveryRestrictedRole, ids.organization]);
+    await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('org.admin','assess.read','assess.create','assess.response.write','assess.finalize','assess.process.update','govern.resolve','studio.handoff.create','workitems.import','project.read','project.manage','backlog.read','backlog.manage','monitor.read') OR capability_key LIKE 'assess.v2.%' OR capability_key LIKE 'studio.%' OR capability_key LIKE 'task.%' OR capability_key LIKE 'delivery.%'", [ids.role]);
+    await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read')", [ids.deliveryRestrictedRole]);
     for (const actor of [ids.author, ids.reviewer, ids.approver]) {
       await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [ids.organization, actor, ids.role]);
       await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [ids.organization, ids.workspace, actor]);
     }
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Outsider tenant','outsider-tenant') ON CONFLICT DO NOTHING", [ids.foreignOrganization]);
-    await db.query("INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,'Connected lifecycle','Draft')", [ids.process, ids.organization, ids.workspace]);
+    await db.query("INSERT INTO assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by) VALUES($1,$2,$3,'Connected lifecycle','Draft',$4,$4,$4)", [ids.process, ids.organization, ids.workspace, ids.author]);
+    await db.query("INSERT INTO process_update_workspace_controls(org_id,workspace_id,enabled,read_only) VALUES($1,$2,true,false)", [ids.organization, ids.workspace]);
     await db.query(`INSERT INTO public.enterprise_transcript_workspace_flags(
       org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,updated_by
     ) VALUES($1,$2,true,true,true,$3) ON CONFLICT(org_id,workspace_id) DO UPDATE SET
       unified_byok_gateway_enabled=true,studio_multisource_enabled=true,module_handoffs_enabled=true,updated_by=$3`, [ids.organization, ids.workspace, ids.author]);
     await db.query('UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=true WHERE singleton');
+    await db.query("INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true) ON CONFLICT(org_id,workspace_id) DO UPDATE SET writes_enabled=true,updated_at=statement_timestamp()", [ids.organization, ids.workspace]);
+    await db.query("INSERT INTO public.studio_delivery_workspace_controls(org_id,workspace_id,publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled) VALUES($1,$2,true,true,true) ON CONFLICT(org_id,workspace_id) DO UPDATE SET publication_writes_enabled=true,outcome_writes_enabled=true,pack_writes_enabled=true,updated_at=statement_timestamp()", [ids.organization, ids.workspace]);
     await db.query(`INSERT INTO public.ai_provider_key_refs(
       id,org_id,provider,resolver_type,secret_ref,safe_label,status,created_by
     ) VALUES($1,$2,'openai','server_reference','fixture/provider/reference','Lifecycle synthetic adapter','active',$3)`, [ids.providerKeyRef, ids.organization, ids.author]);
@@ -265,6 +303,8 @@ export async function createEnterpriseLifecycleFixture({
 
     const commandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessV2Command.ts'));
     const handlerModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessV2Handlers.ts'));
+    const assessCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessCommand.ts'));
+    const assessRouterModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessRouter.ts'));
     const reviewCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessV2ReviewCommand.ts'));
     const reviewHandlerModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessV2ReviewHandlers.ts'));
     const studioHandlerModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactHandler.ts'));
@@ -274,6 +314,11 @@ export async function createEnterpriseLifecycleFixture({
     const studioProviderModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactProvider.ts'));
     const templateModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactTemplateContract.ts'));
     const tenantAuthorityModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'tenantAuthority.ts'));
+    const processCommandRouterModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'processCommandRouter.ts'));
+    const studioDeliveryCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioDeliveryCommand.ts'));
+    const studioDeliveryQueryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioDeliveryOutcomeQuery.ts'));
+    const legacyDeliveryCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryCommand.ts'));
+    const legacyDeliveryQueryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryQuery.ts'));
     const fixtureModule = loadProductionModule(path.join(root, 'services', 'assessV2', 'fixture.ts'));
 
     const actorFromRequest = request => {
@@ -327,6 +372,24 @@ export async function createEnterpriseLifecycleFixture({
       return value;
     };
     const serviceQuery = (sql, values) => asRole(db, 'service_role', () => db.query(sql, values));
+    const fixtureQuery = (sql, values) => db.query(sql, values);
+    const actorQuery = (actorId, sql, values = []) => actorTransaction(actorId, () => db.query(sql, values));
+    const fixtureActors = {
+      author: { token: 'enterprise-author-token', user: { id: ids.author, email: 'author@fixture.invalid' } },
+      reviewer: { token: 'enterprise-reviewer-token', user: { id: ids.reviewer, email: 'reviewer@fixture.invalid' } },
+      approver: { token: 'enterprise-approver-token', user: { id: ids.approver, email: 'approver@fixture.invalid' } },
+      outsider: { token: 'enterprise-outsider-token', user: { id: ids.outsider, email: 'outsider@fixture.invalid' } },
+    };
+    const controlsFixture = createAuthenticatedControlsFixture({
+      scope: { organizationId: ids.organization, workspaceId: ids.workspace, providerConfigId: ids.providerConfig },
+      actors: fixtureActors, serviceQuery, actorQuery,
+      fixtureQuery, loadProductionModule,
+    });
+    const controlsPostgres = await createAuthenticatedControlsPostgresAdapter({
+      scope: { organizationId: ids.organization, workspaceId: ids.workspace },
+      actorId: ids.author, serviceQuery, actorQuery, fixtureQuery, loadProductionModule,
+    });
+    controlsFixture.mountPostgresAdapter(controlsPostgres);
     const studioGeneration = createEnterpriseLifecycleStudioGeneration({
       serviceQuery, providerEffects: evidence.providerEffects, studioDbModule, studioGenerationModule,
       providerBudgetModule, studioProviderModule, templateModule,
@@ -353,6 +416,54 @@ export async function createEnterpriseLifecycleFixture({
         return controlled(result.rows[0]?.value, commandModule.AssessV2Error, {
           NOT_FOUND: 'RESOURCE_NOT_AVAILABLE', AUTHORIZATION_STALE: 'AUTHORITY_STALE',
         });
+      },
+    };
+    const assessV1Dependencies = {
+      authenticate: assessDependencies.authenticate,
+      loadFreshAuthority: async input => {
+        const authority = await authorityFor(input.actorId,input.organizationId,input.workspaceId);
+        return authority ? { ...authority,permissions: authority.capabilities } : null;
+      },
+      loadAssessmentForFinalize: async input => {
+        const row = (await serviceQuery(`SELECT id,process_id,version,responses FROM public.assessments
+          WHERE id=$1 AND org_id=$2 AND workspace_id=$3 AND deleted_at IS NULL`,
+        [input.assessmentId,input.organizationId,input.workspaceId])).rows[0];
+        if (!row) return null;
+        if (Number(row.version) !== input.expectedVersion) throw new assessCommandModule.AssessCommandError('VERSION_CONFLICT');
+        const aggregate = row.responses;
+        if (!aggregate || typeof aggregate !== 'object' || Array.isArray(aggregate)
+          || !aggregate.responses || typeof aggregate.responses !== 'object' || Array.isArray(aggregate.responses)
+          || !aggregate.metadata || typeof aggregate.metadata !== 'object' || Array.isArray(aggregate.metadata)) return null;
+        return {
+          assessmentId: row.id, processId: row.process_id, version: Number(row.version),
+          responses: aggregate.responses, metadata: aggregate.metadata,
+          evidenceItems: Array.isArray(aggregate.evidenceItems) ? aggregate.evidenceItems : [],
+          assumptions: Array.isArray(aggregate.assumptions) ? aggregate.assumptions : [],
+        };
+      },
+      executeAtomicCommand: async command => {
+        const common = [command.actorId,command.organizationId,command.workspaceId];
+        let result;
+        if (command.commandType === 'assessment.create') {
+          result = await serviceQuery('SELECT public.pr1b_create_assessment($1,$2,$3,$4,$5,$6,$7,$8) value',
+            [...common,command.payload.processId,command.resourceId,command.requestId,command.idempotencyKey,command.authorizationVersion]);
+        } else if (command.commandType === 'assessment.response.upsert') {
+          result = await serviceQuery('SELECT public.pr1b_upsert_assessment_responses($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9) value',
+            [...common,command.resourceId,JSON.stringify(command.payload),command.expectedVersion,command.requestId,command.idempotencyKey,command.authorizationVersion]);
+        } else if (command.commandType === 'assessment.finalize') {
+          const scores = command.payload.scores;
+          result = await serviceQuery('SELECT public.pr1b_finalize_assessment($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10) value',
+            [...common,command.resourceId,JSON.stringify(scores),scores.scoreVersion,command.expectedVersion,command.requestId,command.idempotencyKey,command.authorizationVersion]);
+        } else throw new assessCommandModule.AssessCommandError('COMMAND_NOT_SUPPORTED');
+        const value = result.rows[0]?.value;
+        const mapping = { VERSION_CONFLICT: 'VERSION_CONFLICT',IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
+          AUTHORIZATION_STALE: 'AUTHORITY_STALE',NOT_FOUND: 'RESOURCE_NOT_AVAILABLE',
+          INVALID_COMMAND: 'INVALID_COMMAND',INVALID_SCORE_VERSION: 'INVALID_COMMAND' };
+        if (value?.errorCode) throw new assessCommandModule.AssessCommandError(mapping[value.errorCode] ?? 'COMMAND_UNAVAILABLE');
+        if (!value || !['committed','replayed'].includes(value.outcome) || !value.resource) {
+          throw new assessCommandModule.AssessCommandError('COMMAND_UNAVAILABLE');
+        }
+        return { outcome: value.outcome,resource: value.resource };
       },
     };
     const reviewRpc = {
@@ -386,6 +497,65 @@ export async function createEnterpriseLifecycleFixture({
       executeAtomicCommand: command => studioDbModule.executeStudioAtomicCommand(command, studioGeneration.invoke),
       executeClaimedGeneration: studioGeneration.executeClaimedGeneration,
     };
+    const processDependencies = {
+      creation: {
+        authenticate: assessDependencies.authenticate,
+        authority: (request, actorId, envelope) => authorityFor(actorId,envelope.organizationId,envelope.workspaceId),
+        atomic: async () => { throw new Error('COMMAND_UNAVAILABLE'); },
+      },
+      update: {
+        authenticate: assessDependencies.authenticate,
+        authority: async (request, actorId, envelope) => {
+          const authority = await authorityFor(actorId,envelope.organizationId,envelope.workspaceId);
+          return authority ? { ...authority, userId: authority.actorId } : null;
+        },
+        atomic: async (actorId,envelope) => (await serviceQuery(
+          'SELECT public.update_assess_process($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) value',
+          [actorId,envelope.organizationId,envelope.workspaceId,envelope.authorizationVersion,envelope.requestId,
+            envelope.idempotencyKey,envelope.expectedVersion,envelope.payload.processId,envelope.payload.name,
+            envelope.payload.description,envelope.payload.department,envelope.payload.criticality],
+        )).rows[0]?.value,
+      },
+    };
+    const studioDeliveryDependencies = request => ({
+      authenticate: async () => ({ id: actorFromRequest(request) }),
+      authority: async (actorId, organizationId, workspaceId, expectedAuthorizationVersion) => {
+        const authority = await authorityFor(actorId,organizationId,workspaceId);
+        if (!authority || authority.authorizationVersion !== expectedAuthorizationVersion) throw new Error('AUTHORIZATION_STALE');
+        return { ...authority, userId: authority.actorId, roleNames: ['Lifecycle authority'] };
+      },
+      apply: async (actorId, command) => (await serviceQuery(
+        'SELECT public.studio_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        [actorId,command.organizationId,command.workspaceId,command.expectedAuthorizationVersion,command.requestId,
+          command.idempotencyKey,command.action,JSON.stringify(command.payload)],
+      )).rows[0]?.value,
+      query: async (actorId, query) => (await serviceQuery(
+        'SELECT public.studio_delivery_outcome_query($1,$2,$3,$4,$5,$6,$7) value',
+        [actorId,query.organizationId,query.workspaceId,query.expectedAuthorizationVersion,query.projectId,query.limit,query.cursor],
+      )).rows[0]?.value,
+      packQuery: async (actorId, query) => (await serviceQuery(
+        'SELECT public.studio_delivery_pack_snapshot_query($1,$2,$3,$4,$5) value',
+        [actorId,query.organizationId,query.workspaceId,query.expectedAuthorizationVersion,query.projectId],
+      )).rows[0]?.value,
+      assigneeQuery: async (actorId, query) => (await serviceQuery(
+        'SELECT public.studio_delivery_assignee_query($1,$2,$3,$4,$5) value',
+        [actorId,query.organizationId,query.workspaceId,query.expectedAuthorizationVersion,query.projectId],
+      )).rows[0]?.value,
+    });
+    const legacyDeliveryDependencies = request => ({
+      authenticate: async () => ({ id: actorFromRequest(request) }),
+      authority: studioDeliveryDependencies(request).authority,
+      apply: async (actorId, command) => (await serviceQuery(
+        'SELECT public.legacy_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        [actorId,command.organizationId,command.workspaceId,command.expectedAuthorizationVersion,command.requestId,
+          command.idempotencyKey,command.action,JSON.stringify(command.payload)],
+      )).rows[0]?.value,
+      query: async (actorId, query) => (await serviceQuery(
+        'SELECT public.legacy_delivery_query($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        [actorId,query.organizationId,query.workspaceId,query.expectedAuthorizationVersion,query.projectId,
+          query.limit,query.cursor,query.sourceGenerationId,query.includeRetained],
+      )).rows[0]?.value,
+    });
 
     const executeAssess = async (body, token = 'enterprise-author-token') => {
       const request = new Request('http://fixture/functions/v1/assess-v2-command', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -411,7 +581,7 @@ export async function createEnterpriseLifecycleFixture({
     const selectRows = async (pathname, searchParams, actor) => {
       const relation = pathname.replace('/rest/v1/', '');
       if (![
-        'assess_processes', 'assessments', 'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_decision_versions',
+        'projects', 'document_generations', 'delivery_work_items', 'assess_processes', 'assessments', 'assess_v2_cases', 'assess_v2_case_versions', 'assess_v2_decision_versions',
         'assess_v2_primitives', 'assess_v2_edges', 'assess_v2_decision_points', 'assess_v2_exception_paths',
         'assess_v2_application_assets', 'assess_v2_application_interactions', 'assess_v2_evidence_links',
       ].includes(relation)) throw new Error('PROJECTION_UNAVAILABLE');
@@ -424,6 +594,12 @@ export async function createEnterpriseLifecycleFixture({
         if (['select', 'order', 'limit'].includes(key)) continue;
         if (!/^[a-z_][a-z0-9_]*$/u.test(key)) throw new Error('PROJECTION_UNAVAILABLE');
         if (raw === 'is.null') { filters.push(`${key} IS NULL`); continue; }
+        const inMatch = /^in\.\(([a-z0-9_]+(?:,[a-z0-9_]+)*)\)$/iu.exec(raw);
+        if (inMatch) {
+          values.push(inMatch[1].split(','));
+          filters.push(`${key}::text=ANY($${values.length}::text[])`);
+          continue;
+        }
         const match = /^(eq|neq)\.(.+)$/u.exec(raw);
         if (!match) throw new Error('PROJECTION_UNAVAILABLE');
         values.push(match[2]); filters.push(`${key}${match[1] === 'eq' ? '=' : '<>'}$${values.length}`);
@@ -454,6 +630,8 @@ export async function createEnterpriseLifecycleFixture({
       if (name === 'assess_v2_eligible_reviewers') return actorTransaction(actor, async () => (await db.query('SELECT public.assess_v2_eligible_reviewers($1,$2,$3,$4) value', [body.p_org_id, body.p_workspace_id, body.p_case_id, body.p_decision_id])).rows.map(row => row.value));
       if (name === 'studio_artifact_handoffs') return actorTransaction(actor, async () => (await db.query('SELECT public.studio_artifact_handoffs($1,$2) value', [body.p_org_id, body.p_workspace_id])).rows.map(row => row.value));
       if (name === 'studio_artifact_projection') return actorTransaction(actor, async () => (await db.query('SELECT public.studio_artifact_projection($1,$2,$3,$4) value', [body.p_org_id, body.p_workspace_id, body.p_handoff_id, body.p_artifact_type])).rows[0]?.value ?? null);
+      if (name === 'studio_artifact_eligible_reviewers') return actorTransaction(actor, async () => (await db.query('SELECT public.studio_artifact_eligible_reviewers($1,$2,$3,$4) value', [body.p_org_id, body.p_workspace_id, body.p_artifact_id, body.p_artifact_version_id])).rows.map(row => row.value));
+      if (name === 'studio_private_artifact_projection') return actorTransaction(actor, async () => (await db.query('SELECT public.studio_private_artifact_projection($1,$2,$3) value', [body.p_org, body.p_workspace, body.p_artifact_version])).rows[0]?.value ?? null);
       const studioProjection = {
         enterprise_transcript_module_projection: ['SELECT public.enterprise_transcript_module_projection($1,$2,$3) value', [body.p_org, body.p_workspace, body.p_owner_module]],
         studio_tenant_template_projection: ['SELECT public.studio_tenant_template_projection($1,$2) value', [body.p_org, body.p_workspace]],
@@ -469,6 +647,218 @@ export async function createEnterpriseLifecycleFixture({
 
     let setupSequence = 0;
     const projectSetups = new Map();
+    const foreignOutcomeProbes = new Map();
+
+    const downstreamFrame = async projectName => {
+      const setup = projectSetups.get(projectName);
+      if (!setup) return null;
+      const publication = (await db.query(`SELECT
+          publication.id publication_id,publication.document_generation_id,publication.project_id,
+          publication.studio_artifact_id,publication.studio_artifact_version_id,
+          publication.source_process_id,publication.source_assessment_id,
+          publication.work_item_digest,publication.work_item_count
+        FROM public.studio_delivery_publications publication
+        WHERE publication.org_id=$1 AND publication.workspace_id=$2 AND publication.project_id=$3
+        ORDER BY publication.published_at DESC,publication.id DESC LIMIT 1`,
+      [ids.organization,ids.workspace,setup.projectId])).rows[0] ?? null;
+      const tasks = (await db.query(`SELECT item.id,item.authority_version version,item.title,item.description,item.status,item.project_id,
+          item.document_generation_id,item.legacy_import_id import_id,item.source_process_id,item.source_assessment_id,
+          item.source_item_index,item.retention_state,
+          COALESCE((SELECT jsonb_agg(binding.assignee_id ORDER BY binding.assignee_id)
+            FROM public.legacy_delivery_work_item_assignees binding WHERE binding.work_item_id=item.id),'[]'::jsonb) assignee_ids
+        FROM public.delivery_work_items item
+        WHERE item.org_id=$1 AND item.workspace_id=$2 AND item.project_id=$3 AND item.authority_version IS NOT NULL
+        ORDER BY item.source_item_index NULLS LAST,item.id`, [ids.organization,ids.workspace,setup.projectId])).rows;
+      const outcomes = (await db.query(`SELECT aggregate.id outcome_id,version.version,version.task_id,version.task_version,
+          version.status,version.label,version.detail,version.document_generation_id,version.legacy_import_id import_id,
+          version.studio_artifact_version_id
+        FROM public.legacy_delivery_outcome_aggregates aggregate
+        JOIN public.legacy_delivery_outcome_versions version ON version.outcome_id=aggregate.id
+        WHERE aggregate.org_id=$1 AND aggregate.workspace_id=$2 AND aggregate.project_id=$3
+        ORDER BY aggregate.id,version.version`, [ids.organization,ids.workspace,setup.projectId])).rows;
+      const latestPack = (await db.query(`SELECT id,version,project_id,task_count,bound_task_count,task_set_hash,receipt_id,audit_event_id
+        FROM public.legacy_delivery_pack_snapshots
+        WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3
+        ORDER BY version DESC,id DESC LIMIT 1`, [ids.organization,ids.workspace,setup.projectId])).rows[0] ?? null;
+      const counts = (await db.query(`SELECT
+          (SELECT count(*)::int FROM public.studio_delivery_publications WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3) publications,
+          (SELECT count(*)::int FROM public.document_generations WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3 AND studio_delivery_publication_id IS NOT NULL) document_generations,
+          (SELECT count(*)::int FROM public.legacy_delivery_imports WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3) imports,
+          (SELECT count(*)::int FROM public.delivery_work_items WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3 AND authority_version IS NOT NULL AND retention_state='active') active_tasks,
+          (SELECT count(*)::int FROM public.delivery_work_items WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3 AND authority_version IS NOT NULL AND retention_state IN('soft_deleted','retained')) retained_tasks,
+          (SELECT count(*)::int FROM public.legacy_delivery_outcome_aggregates WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3) outcome_aggregates,
+          (SELECT count(*)::int FROM public.legacy_delivery_outcome_versions WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3) outcome_versions,
+          (SELECT count(*)::int FROM public.legacy_delivery_pack_snapshots WHERE org_id=$1 AND workspace_id=$2 AND project_id=$3) pack_snapshots,
+          (SELECT count(*)::int FROM public.studio_delivery_command_receipts receipt WHERE receipt.org_id=$1 AND receipt.workspace_id=$2 AND receipt.resource_id IN(
+             SELECT id FROM public.studio_delivery_publications WHERE project_id=$3
+             UNION SELECT id FROM public.legacy_delivery_outcome_versions WHERE project_id=$3
+             UNION SELECT id FROM public.legacy_delivery_pack_snapshots WHERE project_id=$3
+           ))+(SELECT count(*)::int FROM public.legacy_delivery_command_receipts receipt WHERE receipt.org_id=$1 AND receipt.workspace_id=$2 AND receipt.resource_id IN(
+             SELECT id FROM public.legacy_delivery_imports WHERE project_id=$3
+             UNION SELECT id FROM public.delivery_work_items WHERE project_id=$3
+           )) command_receipts,
+          (SELECT count(*)::int FROM public.privileged_audit_events audit WHERE audit.org_id=$1 AND audit.workspace_id=$2 AND audit.resource_id IN(
+             SELECT id FROM public.studio_delivery_publications WHERE project_id=$3
+             UNION SELECT id FROM public.legacy_delivery_outcome_versions WHERE project_id=$3
+             UNION SELECT id FROM public.legacy_delivery_pack_snapshots WHERE project_id=$3
+             UNION SELECT id FROM public.legacy_delivery_imports WHERE project_id=$3
+             UNION SELECT id FROM public.delivery_work_items WHERE project_id=$3
+           )) audits`, [ids.organization,ids.workspace,setup.projectId])).rows[0];
+      const lineage = (await db.query(`SELECT
+          count(task.id)::int chain_count,
+          count(task.id) FILTER(WHERE publication.source_process_id=project.source_process_id
+            AND publication.source_assessment_id=project.source_assessment_id
+            AND generation.id=publication.document_generation_id
+            AND imported.source_generation_id=generation.id
+            AND imported.source_process_id=publication.source_process_id
+            AND imported.source_assessment_id=publication.source_assessment_id
+            AND task.document_generation_id=generation.id
+            AND task.legacy_import_id=imported.id
+            AND task.source_process_id=publication.source_process_id
+            AND task.source_assessment_id=publication.source_assessment_id)::int complete_count
+        FROM public.projects project
+        LEFT JOIN public.studio_delivery_publications publication ON publication.project_id=project.id
+        LEFT JOIN public.document_generations generation ON generation.id=publication.document_generation_id
+        LEFT JOIN public.legacy_delivery_imports imported ON imported.source_generation_id=generation.id AND imported.project_id=project.id
+        LEFT JOIN public.delivery_work_items task ON task.legacy_import_id=imported.id AND task.project_id=project.id
+        WHERE project.id=$1 AND project.org_id=$2`, [setup.projectId,ids.organization])).rows[0];
+      const protections = (await db.query(`SELECT
+          EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.studio_delivery_publications'::regclass AND tgname='studio_delivery_publication_immutable' AND NOT tgisinternal) publication_immutable,
+          EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.legacy_delivery_outcome_versions'::regclass AND tgname='legacy_delivery_outcome_version_immutable' AND NOT tgisinternal) outcome_version_immutable,
+          EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.legacy_delivery_imports'::regclass AND contype='f') import_lineage_protected`, [])).rows[0];
+      const state = { publication, tasks, outcomes, latestPack };
+      return {
+        projectName,
+        counts: {
+          publications: counts.publications, documentGenerations: counts.document_generations, imports: counts.imports,
+          activeTasks: counts.active_tasks, retainedTasks: counts.retained_tasks,
+          outcomeAggregates: counts.outcome_aggregates, outcomeVersions: counts.outcome_versions,
+          commandReceipts: counts.command_receipts, audits: counts.audits, packSnapshots: counts.pack_snapshots,
+        },
+        publication: publication ? {
+          publicationId: publication.publication_id, documentGenerationId: publication.document_generation_id,
+          projectId: publication.project_id, artifactId: publication.studio_artifact_id,
+          artifactVersionId: publication.studio_artifact_version_id, sourceProcessId: publication.source_process_id,
+          sourceAssessmentId: publication.source_assessment_id, workItemDigest: publication.work_item_digest,
+          workItemCount: publication.work_item_count,
+        } : null,
+        tasks: tasks.map(item => ({
+          id: item.id, version: Number(item.version), title: item.title, description: item.description, status: item.status,
+          assigneeIds: item.assignee_ids, projectId: item.project_id, documentGenerationId: item.document_generation_id,
+          importId: item.import_id, sourceProcessId: item.source_process_id, sourceAssessmentId: item.source_assessment_id,
+          sourceItemIndex: item.source_item_index, retentionState: item.retention_state,
+        })),
+        outcomes: outcomes.map(item => ({
+          outcomeId: item.outcome_id, version: Number(item.version), taskId: item.task_id,
+          taskVersion: Number(item.task_version), status: item.status, label: item.label, detail: item.detail,
+          documentGenerationId: item.document_generation_id, importId: item.import_id,
+          artifactVersionId: item.studio_artifact_version_id,
+        })),
+        latestPack: latestPack ? {
+          id: latestPack.id, version: Number(latestPack.version), projectId: latestPack.project_id,
+          taskCount: latestPack.task_count, boundTaskCount: latestPack.bound_task_count,
+          taskSetHash: latestPack.task_set_hash, receiptId: latestPack.receipt_id,
+          auditEventId: latestPack.audit_event_id,
+        } : null,
+        lineage: {
+          chainCount: lineage.chain_count,
+          completeCount: lineage.complete_count,
+          complete: lineage.chain_count > 0 && lineage.chain_count === lineage.complete_count,
+          digest: sha256(JSON.stringify(state)),
+        },
+        protections: {
+          publicationImmutable: protections.publication_immutable === true,
+          outcomeVersionImmutable: protections.outcome_version_immutable === true,
+          importLineageProtected: protections.import_lineage_protected === true,
+        },
+        foreignProbe: foreignOutcomeProbes.get(setup.projectId) ?? null,
+        writeFingerprint: sha256(JSON.stringify(state)),
+      };
+    };
+
+    const assessV2Frame = async projectName => {
+      const setup = projectSetups.get(projectName);
+      if (!setup) return null;
+      const cases = (await db.query(`SELECT id,status,version,head_version_id,rule_set_version,source_v1_assessment_id
+        FROM public.assess_v2_cases
+        WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL
+        ORDER BY id`, [ids.organization,ids.workspace,setup.processId])).rows;
+      const caseIds = cases.map(item => item.id);
+      const versions = caseIds.length ? (await db.query(`SELECT id,case_id,version,name,description
+        FROM public.assess_v2_case_versions WHERE case_id=ANY($1::uuid[]) ORDER BY case_id,version`, [caseIds])).rows : [];
+      const decisions = caseIds.length ? (await db.query(`SELECT id,case_id,source_version_id,decision_version,input_hash,evidence_hash,output_hash
+        FROM public.assess_v2_decision_versions WHERE case_id=ANY($1::uuid[]) ORDER BY case_id,created_at,id`, [caseIds])).rows : [];
+      const counts = (await db.query(`SELECT
+        (SELECT count(*)::int FROM public.assess_command_receipts WHERE org_id=$1 AND workspace_id=$2) receipts,
+        (SELECT count(*)::int FROM public.privileged_audit_events WHERE org_id=$1 AND workspace_id=$2) audits`,
+      [ids.organization,ids.workspace])).rows[0];
+      return {
+        caseCount: cases.length,
+        decisionCount: decisions.length,
+        receipts: counts.receipts,
+        audits: counts.audits,
+        targetHash: sha256(JSON.stringify({ cases,versions,decisions })),
+      };
+    };
+
+    const lifecycleFrame = async projectName => {
+      const setup = projectSetups.get(projectName);
+      if (!setup) return null;
+      const row = (await db.query(`WITH project_cases AS(
+          SELECT id FROM public.assess_v2_cases WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL
+        ), project_artifacts AS(
+          SELECT artifact.id FROM public.studio_artifact_aggregates artifact JOIN project_cases assessed ON assessed.id=artifact.case_id
+        ), state AS(
+          SELECT jsonb_build_object(
+            'v1Assessments',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.created_at,item.id),'[]'::jsonb) FROM public.assessments item WHERE item.org_id=$1 AND item.workspace_id=$2 AND item.process_id=$3 AND item.deleted_at IS NULL),
+            'cases',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.id),'[]'::jsonb) FROM public.assess_v2_cases item JOIN project_cases scope ON scope.id=item.id),
+            'versions',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.version),'[]'::jsonb) FROM public.assess_v2_case_versions item JOIN project_cases scope ON scope.id=item.case_id),
+            'decisions',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.created_at,item.id),'[]'::jsonb) FROM public.assess_v2_decision_versions item JOIN project_cases scope ON scope.id=item.case_id),
+            'assignments',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.assigned_at,item.id),'[]'::jsonb) FROM public.assess_v2_review_assignments item JOIN project_cases scope ON scope.id=item.case_id),
+            'attestations',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.reviewed_at,item.id),'[]'::jsonb) FROM public.assess_v2_evidence_attestations item JOIN project_cases scope ON scope.id=item.case_id),
+            'reviews',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.resolved_at,item.id),'[]'::jsonb) FROM public.assess_v2_review_resolutions item JOIN project_cases scope ON scope.id=item.case_id),
+            'govern',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.resolved_at,item.id),'[]'::jsonb) FROM public.assess_v2_govern_resolutions item JOIN project_cases scope ON scope.id=item.case_id),
+            'handoffs',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.case_id,item.handed_off_at,item.id),'[]'::jsonb) FROM public.assess_v2_studio_handoffs item JOIN project_cases scope ON scope.id=item.case_id),
+            'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.created_at,item.id),'[]'::jsonb) FROM public.studio_artifact_source_packages item JOIN project_artifacts artifact ON artifact.id=item.artifact_id),
+            'artifacts',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.created_at,item.id),'[]'::jsonb) FROM public.studio_artifact_aggregates item JOIN project_artifacts artifact ON artifact.id=item.id),
+            'artifactVersions',(SELECT COALESCE(jsonb_agg(to_jsonb(item) ORDER BY item.artifact_id,item.version),'[]'::jsonb) FROM public.studio_artifact_versions item JOIN project_artifacts artifact ON artifact.id=item.artifact_id)
+          ) value
+        ) SELECT
+          (SELECT count(*)::int FROM public.assessments item WHERE item.org_id=$1 AND item.workspace_id=$2 AND item.process_id=$3 AND item.deleted_at IS NULL) v1_assessments,
+          (SELECT COALESCE(sum(item.version),0)::int FROM public.assessments item WHERE item.org_id=$1 AND item.workspace_id=$2 AND item.process_id=$3 AND item.deleted_at IS NULL) v1_assessment_versions,
+          (SELECT count(*)::int FROM public.assessments item WHERE item.org_id=$1 AND item.workspace_id=$2 AND item.process_id=$3 AND item.deleted_at IS NULL AND item.status='Ready for Review' AND item.scores IS NOT NULL) v1_ready_assessments,
+          (SELECT count(*)::int FROM project_cases) cases,
+          (SELECT count(*)::int FROM public.assess_v2_case_versions item JOIN project_cases scope ON scope.id=item.case_id) case_versions,
+          (SELECT count(*)::int FROM public.assess_v2_decision_versions item JOIN project_cases scope ON scope.id=item.case_id) decisions,
+          (SELECT count(*)::int FROM public.assess_v2_review_assignments item JOIN project_cases scope ON scope.id=item.case_id) assignments,
+          (SELECT count(*)::int FROM public.assess_v2_evidence_attestations item JOIN project_cases scope ON scope.id=item.case_id) attestations,
+          (SELECT count(*)::int FROM public.assess_v2_review_resolutions item JOIN project_cases scope ON scope.id=item.case_id WHERE item.resolution='changes_requested') changes_requested,
+          (SELECT count(*)::int FROM public.assess_v2_review_resolutions item JOIN project_cases scope ON scope.id=item.case_id WHERE item.resolution='rejected') rejected_reviews,
+          (SELECT count(*)::int FROM public.assess_v2_review_resolutions item JOIN project_cases scope ON scope.id=item.case_id WHERE item.resolution='approved') approved_reviews,
+          (SELECT count(*)::int FROM public.assess_v2_govern_resolutions item JOIN project_cases scope ON scope.id=item.case_id) govern_resolutions,
+          (SELECT count(*)::int FROM public.assess_v2_studio_handoffs item JOIN project_cases scope ON scope.id=item.case_id) handoffs,
+          (SELECT count(*)::int FROM public.studio_artifact_source_packages item JOIN project_artifacts artifact ON artifact.id=item.artifact_id) source_packages,
+          (SELECT count(*)::int FROM project_artifacts) artifacts,
+          (SELECT count(*)::int FROM public.studio_artifact_generation_attempts item JOIN project_artifacts artifact ON artifact.id=item.artifact_id) generation_attempts,
+          (SELECT count(*)::int FROM public.studio_artifact_versions item JOIN project_artifacts artifact ON artifact.id=item.artifact_id) artifact_versions,
+          ((SELECT count(*) FROM public.assess_command_receipts WHERE org_id=$1 AND workspace_id=$2)
+            +(SELECT count(*) FROM public.studio_artifact_command_receipts WHERE org_id=$1 AND workspace_id=$2))::int receipts,
+          (SELECT count(*)::int FROM public.privileged_audit_events WHERE org_id=$1 AND workspace_id=$2) audits,
+          (SELECT value FROM state) target
+        `, [ids.organization,ids.workspace,setup.processId])).rows[0];
+      return {
+        v1Assessments: row.v1_assessments, v1AssessmentVersions: row.v1_assessment_versions,
+        v1ReadyAssessments: row.v1_ready_assessments,
+        cases: row.cases, caseVersions: row.case_versions, decisions: row.decisions,
+        assignments: row.assignments, attestations: row.attestations,
+        changesRequested: row.changes_requested, rejectedReviews: row.rejected_reviews,
+        approvedReviews: row.approved_reviews, governResolutions: row.govern_resolutions,
+        handoffs: row.handoffs, sourcePackages: row.source_packages,
+        artifacts: row.artifacts, generationAttempts: row.generation_attempts, artifactVersions: row.artifact_versions,
+        receipts: row.receipts, audits: row.audits,
+        targetHash: sha256(JSON.stringify(row.target)),
+      };
+    };
 
     const route = async request => {
       const url = new URL(request.url);
@@ -482,14 +872,192 @@ export async function createEnterpriseLifecycleFixture({
           setupSequence += 1;
           const projectName = typeof setup.projectName === 'string' && setup.projectName.trim() ? setup.projectName.trim() : `project-${setupSequence}`;
           const projectProcessId = randomUUID();
-          await db.query("INSERT INTO assess_processes(id,org_id,workspace_id,name,status) VALUES($1,$2,$3,$4,'Draft')", [projectProcessId, ids.organization, ids.workspace, `${projectName} connected lifecycle`]);
-          projectSetups.set(projectName, { processId: projectProcessId });
+          const deliveryProjectId = randomUUID();
+          const controlsReset = controlsPostgres.resetProjectState();
+          if (!controlsReset.secretBackendCleared) throw new Error('AUTHENTICATED_CONTROLS_PROJECT_RESET_FAILED');
+          await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
+            [ids.organization,ids.reviewer,ids.role]);
+          await db.query("DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key='operations.read'", [ids.role]);
+          await db.query(`UPDATE public.ai_provider_key_refs SET
+            resolver_type='server_reference',secret_ref='fixture/provider/reference',safe_label='Lifecycle synthetic adapter',status='active'
+            WHERE id=$1 AND org_id=$2`, [ids.providerKeyRef,ids.organization]);
+          await db.query(`UPDATE public.ai_provider_configs SET
+            provider='openai',display_name='Lifecycle synthetic adapter',key_ref_id=$3,
+            default_model='fixture-model',model_allowlist=ARRAY['fixture-model'],endpoint_url='https://invalid.example',
+            allowed_modes=ARRAY['pilot'],allowed_operations=ARRAY['generate_document'],status='active',deleted_at=NULL
+            WHERE id=$1 AND org_id=$2`, [ids.providerConfig,ids.organization,ids.providerKeyRef]);
+          await db.query(`UPDATE public.enterprise_ai_capability_routes SET
+            provider_config_id=$4,capability='studio.document.generate',model='fixture-model',enabled=true,
+            allowed_roles=ARRAY[$5::text],version=1,deleted_at=NULL
+            WHERE id=$1 AND org_id=$2 AND workspace_id=$3`,
+          [ids.studioRoute,ids.organization,ids.workspace,ids.providerConfig,ids.role]);
+          await db.query(`DELETE FROM public.pilot_operations_environments
+            WHERE org_id=$1 AND workspace_id=$2 AND environment_type='pilot_candidate'`,
+          [ids.organization,ids.workspace]);
+          await db.query("INSERT INTO assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by) VALUES($1,$2,$3,$4,'Draft',$5,$5,$5)", [projectProcessId, ids.organization, ids.workspace, `${projectName} connected lifecycle`, ids.author]);
+          await db.query("INSERT INTO projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id) VALUES($1,$2,$3,$4,$5,$5,$5,$6)", [deliveryProjectId, ids.organization, ids.workspace, `${projectName} delivery project`, ids.author, projectProcessId]);
+          projectSetups.set(projectName, { processId: projectProcessId, projectId: deliveryProjectId });
           const projectAliases = Object.fromEntries(Object.entries(aliases).map(([key, value]) => [key, `${value}-${setupSequence}`]));
-          return json({ executionId, journeyBinding, projectName, projectSequence: setupSequence, aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, actors: {
+          return json({ executionId, journeyBinding, projectName, projectSequence: setupSequence,
+            deliveryProject: { id: deliveryProjectId, name: `${projectName} delivery project` },
+            aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, actors: {
           author: { token: 'enterprise-author-token', user: { id: ids.author, email: 'author@fixture.invalid' } },
           reviewer: { token: 'enterprise-reviewer-token', user: { id: ids.reviewer, email: 'reviewer@fixture.invalid' } },
           approver: { token: 'enterprise-approver-token', user: { id: ids.approver, email: 'approver@fixture.invalid' } },
+          outsider: { token: 'enterprise-outsider-token', user: { id: ids.outsider, email: 'outsider@fixture.invalid' } },
           } }, 200, cors);
+        }
+        if (url.pathname === '/control/process-update-capability') {
+          const input = await request.json().catch(() => ({}));
+          if (input.enabled === true) await db.query("INSERT INTO role_capabilities(role_id,capability_key) VALUES($1,'assess.process.update') ON CONFLICT DO NOTHING", [ids.role]);
+          else if (input.enabled === false) await db.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.process.update'", [ids.role]);
+          else return json({ error: 'CONTROL_INVALID' },400,cors);
+          return json({ enabled: input.enabled },200,cors);
+        }
+        if (url.pathname === '/control/process-frame') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!setup) return json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+          const value = (await db.query(`SELECT
+              to_jsonb(process) target,
+              (SELECT count(*)::int FROM public.assess_command_receipts WHERE command_type='process.update') receipts,
+              (SELECT count(*)::int FROM public.privileged_audit_events WHERE action='process.update') audits
+            FROM public.assess_processes process WHERE process.id=$1`, [setup.processId])).rows[0];
+          return json({ receipts:value.receipts,audits:value.audits,targetHash:sha256(JSON.stringify(value.target)) },200,cors);
+        }
+        if (url.pathname === '/control/assess-v2-runtime') {
+          const input = await request.json().catch(() => ({}));
+          if (typeof input.enabled !== 'boolean') return json({ error: 'CONTROL_INVALID' },400,cors);
+          await db.query('UPDATE public.assess_v2_runtime_control SET enabled=$1 WHERE singleton=true', [input.enabled]);
+          return json({ enabled: input.enabled },200,cors);
+        }
+        if (url.pathname === '/control/assess-v2-frame') {
+          const input = await request.json().catch(() => ({}));
+          const frame = await assessV2Frame(input.projectName);
+          return frame ? json(frame,200,cors) : json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+        }
+        if (url.pathname === '/control/lifecycle-frame') {
+          const input = await request.json().catch(() => ({}));
+          const frame = await lifecycleFrame(input.projectName);
+          return frame ? json(frame,200,cors) : json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+        }
+        if (url.pathname === '/control/fail-next-studio-provider') {
+          studioGeneration.failNextProviderCall();
+          return json({ armed: true },200,cors);
+        }
+        if (url.pathname === '/control/studio-failure-frame') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!setup) return json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+          const value = (await db.query(`WITH artifacts AS(
+              SELECT artifact.* FROM public.studio_artifact_aggregates artifact
+              JOIN public.assess_v2_cases assessed ON assessed.id=artifact.case_id
+              WHERE assessed.process_id=$1 AND artifact.org_id=$2 AND artifact.workspace_id=$3
+            ), target AS(
+              SELECT (to_jsonb(artifact)-'aggregate_version'-'updated_at')||jsonb_build_object(
+                'versions',(SELECT COALESCE(jsonb_agg(to_jsonb(version) ORDER BY version.version),'[]'::jsonb)
+                  FROM public.studio_artifact_versions version WHERE version.artifact_id=artifact.id)) value
+              FROM artifacts artifact ORDER BY artifact.id LIMIT 1
+            ) SELECT
+              (SELECT count(*)::int FROM artifacts) artifacts,
+              COALESCE((SELECT aggregate_version FROM artifacts ORDER BY id LIMIT 1),0)::int aggregate_version,
+              (SELECT count(*)::int FROM public.studio_artifact_versions version JOIN artifacts artifact ON artifact.id=version.artifact_id) versions,
+              (SELECT count(*)::int FROM public.studio_artifact_generation_attempts attempt JOIN artifacts artifact ON artifact.id=attempt.artifact_id) attempts,
+              (SELECT count(*)::int FROM public.studio_artifact_command_receipts receipt WHERE receipt.resource_id IN(
+                SELECT id FROM artifacts UNION SELECT attempt.id FROM public.studio_artifact_generation_attempts attempt JOIN artifacts artifact ON artifact.id=attempt.artifact_id
+              )) receipts,
+              (SELECT count(*)::int FROM public.privileged_audit_events audit WHERE audit.resource_id IN(
+                SELECT id FROM artifacts UNION SELECT attempt.id FROM public.studio_artifact_generation_attempts attempt JOIN artifacts artifact ON artifact.id=attempt.artifact_id
+              )) audits,
+              COALESCE((SELECT value FROM target),'{}'::jsonb) target`,
+          [setup.processId,ids.organization,ids.workspace])).rows[0];
+          return json({ artifacts:value.artifacts,aggregateVersion:value.aggregate_version,versions:value.versions,generationAttempts:value.attempts,
+            receipts:value.receipts,audits:value.audits,targetHash:sha256(JSON.stringify(value.target)) },200,cors);
+        }
+        if (url.pathname === '/control/bind-delivery-project-source') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!setup) return json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+          const sources = (await db.query(`SELECT id assessment_id FROM public.assessments
+            WHERE process_id=$1 AND org_id=$2 AND workspace_id=$3 AND deleted_at IS NULL
+              AND status='Ready for Review' AND scores IS NOT NULL AND score_version='assess-core-2026-05'
+            ORDER BY id`, [setup.processId,ids.organization,ids.workspace])).rows;
+          if (sources.length !== 1) return json({ error: sources.length ? 'ASSESSMENT_SOURCE_AMBIGUOUS' : 'ASSESSMENT_NOT_FOUND' },409,cors);
+          const source = sources[0];
+          const project = (await db.query(`UPDATE public.projects SET source_assessment_id=$2,updated_by=$3,updated_at=statement_timestamp()
+            WHERE id=$1 AND org_id=$4 AND workspace_id=$5 AND source_process_id=$6 RETURNING id`,
+          [setup.projectId,source.assessment_id,ids.author,ids.organization,ids.workspace,setup.processId])).rows[0];
+          if (!project) return json({ error: 'PROJECT_SOURCE_MISMATCH' },409,cors);
+          return json({ bound: true,project:{id:project.id},source:{processId:setup.processId,assessmentId:source.assessment_id} },200,cors);
+        }
+        if (url.pathname === '/control/restricted-delete') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!setup || typeof input.enabled !== 'boolean') return json({ error: 'CONTROL_INVALID' },400,cors);
+          if (input.enabled) {
+            const restrictedCapabilities = new Set((await db.query(
+              'SELECT capability_key FROM public.role_capabilities WHERE role_id=$1', [ids.deliveryRestrictedRole],
+            )).rows.map(row => row.capability_key));
+            const required = ['assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read'];
+            const forbidden = ['task.update','task.assign','task.delete'];
+            if (required.some(capability => !restrictedCapabilities.has(capability))
+              || forbidden.some(capability => restrictedCapabilities.has(capability))) {
+              return json({ error: 'CONTROL_RESTRICTED_ROLE_INVALID' },500,cors);
+            }
+          }
+          await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
+            [ids.organization,ids.reviewer,input.enabled ? ids.deliveryRestrictedRole : ids.role]);
+          return json({
+            enabled: input.enabled, actor: 'reviewer', authorizationVersion: await authorizationVersion(ids.reviewer),
+            organizationId: ids.organization, workspaceId: ids.workspace,
+          },200,cors);
+        }
+        if (url.pathname === '/control/downstream-frame') {
+          const input = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
+          const projectName = typeof input.projectName === 'string' ? input.projectName : [...projectSetups.keys()].at(-1);
+          const frame = projectName ? await downstreamFrame(projectName) : null;
+          return frame ? json(frame,200,cors) : json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+        }
+        if (url.pathname === '/control/scenario-decision') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!setup) return json({ error: 'PROJECT_NOT_FOUND' },404,cors);
+          const decision = (await db.query(`SELECT decision.id,decision.decision_version,decision.rule_set_version,
+              decision.validation_status,decision.output_hash,decision.input_snapshot,decision.output_snapshot
+            FROM public.assess_v2_decision_versions decision
+            JOIN public.assess_v2_cases assessed ON assessed.id=decision.case_id
+             AND assessed.org_id=decision.org_id AND assessed.workspace_id=decision.workspace_id
+             AND assessed.head_version_id=decision.source_version_id
+            WHERE assessed.org_id=$1 AND assessed.workspace_id=$2 AND assessed.process_id=$3 AND assessed.deleted_at IS NULL
+            ORDER BY decision.created_at DESC,decision.id DESC LIMIT 1`,
+          [ids.organization,ids.workspace,setup.processId])).rows[0];
+          if (!decision) return json({ error: 'DECISION_NOT_FOUND' },409,cors);
+          const output = decision.output_snapshot;
+          const sourceInteractions = Array.isArray(decision.input_snapshot?.interactions)
+            ? decision.input_snapshot.interactions.map(item => ({
+              interactionId: item.id, mode: item.mode,
+              highImpact: item.facts?.highImpact ?? null,
+              financialAction: item.facts?.financialAction ?? null,
+            })) : [];
+          const persisted = {
+            decisionId: decision.id, decisionVersion: decision.decision_version,
+            ruleSetVersion: decision.rule_set_version, validationStatus: decision.validation_status,
+            outputHash: decision.output_hash, confidence: output.confidence,
+            processReadiness: output.processReadiness, candidateEvaluations: output.candidateEvaluations,
+            gateResults: output.gateResults, interactionDecisions: output.interactionDecisions,
+            controlRequirements: output.controlRequirements, sourceInteractions,
+          };
+          return json({ ...persisted, targetHash: sha256(JSON.stringify(persisted)) },200,cors);
+        }
+        if (url.pathname === '/control/authenticated-controls/prepare') {
+          const input = await request.json().catch(() => ({}));
+          if (typeof input.testId !== 'string') return json({ error: 'CONTROL_INVALID' },400,cors);
+          return json(await controlsFixture.prepareCase(input.testId),200,cors);
+        }
+        if (url.pathname === '/control/authenticated-controls/frame') {
+          const input = await request.json().catch(() => ({}));
+          if (typeof input.testId !== 'string') return json({ error: 'CONTROL_INVALID' },400,cors);
+          return json(await controlsFixture.readFrame(input.testId),200,cors);
         }
         if (url.pathname === '/control/snapshot') {
           const snapshot = (await db.query(`SELECT
@@ -574,8 +1142,48 @@ export async function createEnterpriseLifecycleFixture({
         }
         return json({ error: 'NOT_FOUND' }, 404, cors);
       }
+      const controlsResponse = await controlsFixture.handle(request);
+      if (controlsResponse) return new Response(controlsResponse.body, {
+        status: controlsResponse.status, statusText: controlsResponse.statusText,
+        headers: { ...Object.fromEntries(controlsResponse.headers.entries()), ...cors },
+      });
       let actor;
       try { actor = actorFromRequest(request); } catch { return json({ message: 'Invalid token' }, 401, cors); }
+      if (url.pathname === '/functions/v1/process-command') return processCommandRouterModule.handleProcessCommandRequest(request,processDependencies);
+      if (url.pathname === '/functions/v1/assess-command') {
+        const response = await assessRouterModule.handleAssessRequest(request,assessV1Dependencies);
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        return response;
+      }
+      if (url.pathname === '/functions/v1/studio-delivery-authority-command') {
+        const response = await studioDeliveryCommandModule.handleStudioDeliveryCommand(request,studioDeliveryDependencies(request));
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        return response;
+      }
+      if (url.pathname === '/functions/v1/studio-delivery-outcome-query') {
+        const queryInput = await request.clone().json().catch(() => ({}));
+        const response = await studioDeliveryQueryModule.handleStudioDeliveryOutcomeQuery(request,studioDeliveryDependencies(request));
+        if (actor === ids.outsider && typeof queryInput?.projectId === 'string') {
+          const body = await response.clone().json().catch(() => ({}));
+          foreignOutcomeProbes.set(queryInput.projectId, {
+            status: response.status,
+            disclosedIdentifiers: JSON.stringify(body).includes(queryInput.projectId),
+            disclosedBlocker: /blocker/iu.test(JSON.stringify(body)),
+          });
+        }
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        return response;
+      }
+      if (url.pathname === '/functions/v1/legacy-delivery-command') {
+        const response = await legacyDeliveryCommandModule.handleLegacyDeliveryCommand(request,legacyDeliveryDependencies(request));
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        return response;
+      }
+      if (url.pathname === '/functions/v1/legacy-delivery-query') {
+        const response = await legacyDeliveryQueryModule.handleLegacyDeliveryQuery(request,legacyDeliveryDependencies(request));
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        return response;
+      }
       if (url.pathname === '/auth/v1/user') {
         const profile = (await db.query('SELECT email,full_name FROM profiles WHERE id=$1', [actor])).rows[0];
         return json({ id: actor, aud: 'authenticated', role: 'authenticated', email: profile.email, user_metadata: {}, app_metadata: { provider: 'fixture' } }, 200, cors);
@@ -612,10 +1220,18 @@ export async function createEnterpriseLifecycleFixture({
 
     let requestTail = Promise.resolve();
     server = createServer((incoming, outgoing) => {
+      const bodyResult = ['GET', 'HEAD'].includes(incoming.method ?? 'GET')
+        ? Promise.resolve({ body: undefined, error: null })
+        : readEnterpriseLifecycleRequestBody(incoming).then(
+          body => ({ body, error: null }),
+          error => ({ body: undefined, error }),
+        );
       const run = requestTail.then(async () => {
         try {
           const address = server.address();
-          const body = ['GET', 'HEAD'].includes(incoming.method ?? 'GET') ? undefined : await readBody(incoming);
+          const bodyState = await bodyResult;
+          if (bodyState.error) throw bodyState.error;
+          const body = bodyState.body;
           const request = new Request(`http://127.0.0.1:${address.port}${incoming.url ?? '/'}`, { method: incoming.method, headers: requestHeaders(incoming), body: body?.length ? body : undefined });
           await responseToNode(await route(request), outgoing);
         } catch {
@@ -633,6 +1249,8 @@ export async function createEnterpriseLifecycleFixture({
       cleanupAttempted = true;
       evidence.cleanup.attempted = true;
       const errors = [];
+      await controlsFixture.cleanup().catch(error => errors.push(error));
+      await controlsPostgres.cleanup().catch(error => errors.push(error));
       if (server) await new Promise(resolve => server.close(error => { if (error) errors.push(error); resolve(); }));
       await requestTail;
       await actorTransactionTail;
@@ -656,11 +1274,21 @@ export async function createEnterpriseLifecycleFixture({
         author: { token: 'enterprise-author-token', user: { id: ids.author, email: 'author@fixture.invalid' } },
         reviewer: { token: 'enterprise-reviewer-token', user: { id: ids.reviewer, email: 'reviewer@fixture.invalid' } },
         approver: { token: 'enterprise-approver-token', user: { id: ids.approver, email: 'approver@fixture.invalid' } },
+        outsider: { token: 'enterprise-outsider-token', user: { id: ids.outsider, email: 'outsider@fixture.invalid' } },
       },
       ids, db, evidence, executeAssess, executeStudio, authorizationVersion,
+      actorQuery,
+      serviceQuery,
+      readDownstreamFrame: downstreamFrame,
+      expectedBrowserCaseProcesses: () => [...projectSetups.entries()].map(([projectName, item]) => ({
+        projectName, processId: item.processId,
+      })).sort((left, right) => left.projectName.localeCompare(right.projectName)),
+      controls: controlsFixture,
+      controlsPostgres,
       failNextProviderCall: studioGeneration.failNextProviderCall,
       getLastStudioRpcError: studioGeneration.getLastRpcError,
-      production: { fixtureModule, commandModule, handlerModule, reviewCommandModule, reviewHandlerModule, studioHandlerModule },
+      production: { fixtureModule, commandModule, handlerModule, reviewCommandModule, reviewHandlerModule, studioHandlerModule,
+        studioDeliveryCommandModule,studioDeliveryQueryModule,legacyDeliveryCommandModule,legacyDeliveryQueryModule },
       close: cleanup,
     };
   } catch (error) {
@@ -677,6 +1305,8 @@ export const enterpriseLifecycleSourcePaths = Object.freeze([...new Set([
   'scripts/enterpriseLifecyclePostgresFixture.mjs',
   'scripts/enterpriseLifecyclePersistenceAssertions.mjs',
   'scripts/enterpriseLifecycleStudioGeneration.mjs',
+  'scripts/authenticatedControlsFixture.mjs',
+  'scripts/authenticatedControlsPostgresAdapter.mjs',
   'scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs',
   'scripts/testEnterpriseLifecycleAcceptancePostgres.mjs',
   'supabase/functions/_shared/assessV2Command.ts',
@@ -691,6 +1321,17 @@ export const enterpriseLifecycleSourcePaths = Object.freeze([...new Set([
   'supabase/functions/_shared/studioArtifactTemplateContract.ts',
   'supabase/functions/_shared/providerBudget.ts',
   'supabase/functions/_shared/tenantAuthority.ts',
+  'services/processUpdateContract.ts',
+  'services/processUpdateClient.ts',
+  'supabase/functions/_shared/processCommandRouter.ts',
+  'supabase/functions/_shared/processUpdateCommand.ts',
+  'supabase/functions/_shared/processUpdateDb.ts',
+  'services/productAcceptanceBridge/contracts.ts',
+  'services/productAcceptanceBridge/client.ts',
+  'supabase/functions/_shared/studioDeliveryCommand.ts',
+  'supabase/functions/_shared/studioDeliveryOutcomeQuery.ts',
+  'supabase/functions/_shared/legacyDeliveryCommand.ts',
+  'supabase/functions/_shared/legacyDeliveryQuery.ts',
   'services/assessV2/decisionVersion.ts',
   'services/assessV2/fixture.ts',
   'supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql',

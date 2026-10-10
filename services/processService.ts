@@ -8,11 +8,14 @@ import { createContextRequestGate } from './contextRequestGate';
 import { getRuntimeDataAccess, isLocalRuntimeEnabled } from './supabaseClient';
 import { createProcessViaCommand } from './processCreationClient';
 import { ProcessCreateError, PROCESS_CREATE_CAPABILITY, type ProcessCreateInput } from './processCreationContract';
+import { updateProcessViaCommand } from './processUpdateClient';
+import { PROCESS_UPDATE_CAPABILITY, ProcessUpdateError, type ProcessUpdateInput } from './processUpdateContract';
 import { announceProcessCreation, creationCompletionMatchesAuthority, processReadAuthorityKey, processScopeKey, subscribeProcessCreation, visibleProcessesForAuthority } from './processCreationServiceFence';
 
 // Uncertain requests retain their original fields/key per actor/workspace, even
 // if a different workspace is visited before exact replay can be reconciled.
 const pendingProcessCreations = new Map<string,{ inputKey: string; anchor: { requestId: string; idempotencyKey: string; processId: string } }>();
+const pendingProcessUpdates = new Map<string,{ inputKey: string; anchor: { requestId: string; idempotencyKey: string } }>();
 
 export function useProcessService() {
     const { currentOrganization, currentWorkspace, tenantContext, sessionState } = useOrganizationContext();
@@ -135,10 +138,43 @@ export function useProcessService() {
             (process.workspaceId === currentWorkspace?.id || (isLocalRuntimeEnabled() && !process.workspaceId))) || null;
     }, [visibleProcesses,currentWorkspace?.id]);
 
-    const updateProcess = useCallback(async (processId: string, updates: Partial<AssessProcess>) => {
-        // Implement via adapter if needed, for now local update + sync
-        setProcesses(prev => prev.map(p => p.id === processId ? { ...p, ...updates } : p));
-    }, []);
+    const canUpdateProcess = Boolean(!isLocalRuntimeEnabled() && sessionState === 'ready' && tenantContext && user &&
+        tenantContext.userId === user.id && tenantContext.organizationId === currentOrganization?.id &&
+        tenantContext.workspaceId === currentWorkspace?.id && tenantContext.capabilities.includes('assess.read') &&
+        tenantContext.capabilities.includes(PROCESS_UPDATE_CAPABILITY));
+
+    const updateProcess = useCallback(async (processId: string, updates: Partial<ProcessUpdateInput>) => {
+        const current = visibleProcesses.find(item => item.id === processId);
+        if (!current || !currentOrganization || !currentWorkspace || !user || !requestContext) throw new ProcessUpdateError('PERMISSION_DENIED');
+        const input: ProcessUpdateInput = {
+            name: updates.name ?? current.name,
+            description: updates.description ?? current.description,
+            department: updates.department ?? current.department,
+            criticality: updates.criticality ?? current.criticality,
+        };
+        if (getRuntimeDataAccess() === 'local') {
+            const saved = { ...current, ...input, version: (current.version ?? 0) + 1, updatedAt: new Date().toISOString() };
+            setProcesses(prev => prev.map(item => item.id === processId ? saved : item));
+            return saved;
+        }
+        if (!canUpdateProcess || !tenantContext || !authorizedKey || !scopeKey) throw new ProcessUpdateError('PERMISSION_DENIED');
+        const pendingKey = `${scopeKey}:${processId}`;
+        const inputKey = JSON.stringify({ version: current.version, ...input });
+        const pending = pendingProcessUpdates.get(pendingKey);
+        if (pending && pending.inputKey !== inputKey) throw new ProcessUpdateError('COMMAND_UNAVAILABLE');
+        const anchor = pending?.anchor ?? { requestId: crypto.randomUUID(), idempotencyKey: `process.update.${crypto.randomUUID()}` };
+        pendingProcessUpdates.set(pendingKey,{ inputKey, anchor });
+        try {
+            const { process } = await updateProcessViaCommand(tenantContext,current,input,undefined,anchor);
+            if (!creationCompletionMatchesAuthority(authorizedKey,latestAuthorityKey.current)) throw new ProcessUpdateError('AUTHORITY_STALE');
+            if (pendingProcessUpdates.get(pendingKey)?.anchor.requestId === anchor.requestId) pendingProcessUpdates.delete(pendingKey);
+            setProcesses(prev => prev.map(item => item.id === processId ? process : item));
+            return process;
+        } catch (error) {
+            if (!(error instanceof ProcessUpdateError && error.code === 'COMMAND_UNAVAILABLE') && pendingProcessUpdates.get(pendingKey)?.anchor.requestId === anchor.requestId) pendingProcessUpdates.delete(pendingKey);
+            throw error;
+        }
+    }, [authorizedKey,canUpdateProcess,currentOrganization,currentWorkspace,requestContext,scopeKey,tenantContext,user,visibleProcesses]);
 
     return {
         processes: visibleProcesses,
@@ -147,6 +183,7 @@ export function useProcessService() {
         createProcessFromTemplate,
         getProcessById,
         updateProcess,
+        canUpdateProcess,
         refreshProcesses: fetchProcesses
     };
 }

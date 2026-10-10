@@ -268,7 +268,7 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
   {
     "anchorId": "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
     "sourceReference": "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
-    "selector": "export const EI_ACCEPTANCE_TEST_IDS = ['EI-001', 'EI-002', 'EI-004', 'EI-005'];"
+    "selector": "export const EI_ACCEPTANCE_TEST_IDS = ['EI-001', 'EI-002', 'EI-003', 'EI-004', 'EI-005'];"
   },
   {
     "anchorId": "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -349,21 +349,133 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
     "sourceReference": "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
     "selector": "CREATE OR REPLACE FUNCTION public.legacy_delivery_apply_command("
+  },
+  {
+    "anchorId": "authenticated-controls-loader",
+    "sourceReference": "scripts/authenticatedControlsProductionLoader.mjs",
+    "selector": "export const createAuthenticatedControlsProductionLoader"
+  },
+  {
+    "anchorId": "ei-production-query",
+    "sourceReference": "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+    "selector": "export const handleEnterpriseIntelligenceQuery"
+  },
+  {
+    "anchorId": "tenant-authority",
+    "sourceReference": "supabase/functions/_shared/tenantAuthority.ts",
+    "selector": "export const resolveTenantAuthority"
+  },
+  {
+    "anchorId": "authenticated-scripts-authenticatedacceptancecases-mjs",
+    "sourceReference": "scripts/authenticatedAcceptanceCases.mjs",
+    "selector": "export const AUTHENTICATED_ACCEPTANCE_PROJECTS = Object.freeze(['desktop-chromium', 'pixel-7-chromium']);"
+  },
+  {
+    "anchorId": "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+    "sourceReference": "scripts/authenticatedAcceptanceProfile.mjs",
+    "selector": "export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v1';"
+  },
+  {
+    "anchorId": "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+    "sourceReference": "scripts/authenticatedAcceptanceEvidence.mjs",
+    "selector": "export function validateAuthenticatedAcceptanceManifest(manifest, expected, catalog) {"
+  },
+  {
+    "anchorId": "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+    "sourceReference": "scripts/enterpriseLifecyclePostgresFixture.mjs",
+    "selector": "export const validateEnterpriseLifecycleDatabaseUrl = value => {"
+  },
+  {
+    "anchorId": "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+    "sourceReference": "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+    "selector": "test.describe.configure({ mode: 'serial' });"
+  },
+  {
+    "anchorId": "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+    "sourceReference": "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+    "selector": "CREATE TABLE public.studio_delivery_workspace_controls("
+  },
+  {
+    "anchorId": "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+    "sourceReference": "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+    "selector": "CREATE TABLE IF NOT EXISTS public.process_update_workspace_controls("
+  },
+  {
+    "anchorId": "authenticated-services-processupdatecontract-ts",
+    "sourceReference": "services/processUpdateContract.ts",
+    "selector": "export const PROCESS_UPDATE_CAPABILITY = 'assess.process.update' as const;"
+  },
+  {
+    "anchorId": "authenticated-services-processupdateclient-ts",
+    "sourceReference": "services/processUpdateClient.ts",
+    "selector": "export const defaultProcessUpdateTransport: ProcessUpdateTransport = {"
+  },
+  {
+    "anchorId": "authenticated-supabase-functions-shared-processupdatecommand-ts",
+    "sourceReference": "supabase/functions/_shared/processUpdateCommand.ts",
+    "selector": "export const executeProcessUpdateRequest = async (request: Request, body: unknown, dependencies: ProcessUpdateDependencies) => {"
+  },
+  {
+    "anchorId": "authenticated-services-productacceptancebridge-contracts-ts",
+    "sourceReference": "services/productAcceptanceBridge/contracts.ts",
+    "selector": "export const STUDIO_DELIVERY_COMMAND_SCHEMA_VERSION = 'studio-delivery-command.v1' as const;"
+  },
+  {
+    "anchorId": "authenticated-services-productacceptancebridge-client-ts",
+    "sourceReference": "services/productAcceptanceBridge/client.ts",
+    "selector": "export const studioDeliveryDefaultTransport: StudioDeliveryTransport = {"
+  },
+  {
+    "anchorId": "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+    "sourceReference": "supabase/functions/_shared/studioDeliveryCommand.ts",
+    "selector": "export const handleStudioDeliveryCommand = async (request: Request, dependencies: StudioDeliveryCommandDependencies): Promise<Response> => {"
+  },
+  {
+    "anchorId": "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+    "sourceReference": "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+    "selector": "export const handleStudioDeliveryOutcomeQuery = async (request: Request, dependencies: StudioDeliveryOutcomeQueryDependencies): Promise<Response> => {"
+  },
+  {
+    "anchorId": "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+    "sourceReference": "scripts/authenticatedControlsFixture.mjs",
+    "selector": "export const createAuthenticatedControlsFixture = ({"
+  },
+  {
+    "anchorId": "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+    "sourceReference": "scripts/authenticatedControlsAcceptance.mjs",
+    "selector": "export const AUTHENTICATED_CONTROL_CASE_IDS = Object.freeze(["
+  },
+  {
+    "anchorId": "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+    "sourceReference": "scripts/authenticatedControlsPostgresAdapter.mjs",
+    "selector": "export const createAuthenticatedControlsPostgresAdapter = async ({"
+  },
+  {
+    "anchorId": "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+    "sourceReference": "tests/browser/authenticatedControlsAcceptance.ts",
+    "selector": "export async function observeAuthenticatedAdminControls("
   }
 ]);
 
 export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
-  oracle: Object.freeze({
-    command: Object.freeze(['node', 'scripts/runAssessV1AcceptanceOracle.mjs']),
-    environments: Object.freeze(['pull-request', 'stable-release']),
-    workflowPath: '.github/workflows/exhaustive-acceptance.yml',
-    assertionIdFormat: 'assess-v1-oracle::{testId}::{scenario}',
-  }),
-  server: Object.freeze({
-    environment: 'disposable-ci',
-    workflowPath: '.github/workflows/exhaustive-acceptance.yml',
-  }),
+  "oracle": {
+    "command": [
+      "node",
+      "scripts/runAssessV1AcceptanceOracle.mjs"
+    ],
+    "environments": [
+      "pull-request",
+      "stable-release"
+    ],
+    "workflowPath": ".github/workflows/exhaustive-acceptance.yml",
+    "assertionIdFormat": "assess-v1-oracle::{testId}::{scenario}"
+  },
+  "server": {
+    "environment": "disposable-ci",
+    "workflowPath": ".github/workflows/exhaustive-acceptance.yml"
+  }
 });
+
 export const PROOF_COMMAND_CONTRACTS = Object.freeze({
   "retainedCommands": {
     "assess-v2-authority": [
@@ -454,56 +566,6 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
       "npm",
       "run",
       "test:migrations:pilot-operations:postgres"
-    ],
-    "server-assess-process-edit-denial": [
-      "npm",
-      "run",
-      "test:migrations:pr1b"
-    ],
-    "server-delivery-lineage-tenant-boundary": [
-      "npm",
-      "run",
-      "test:migrations:enterprise-intelligence:postgres"
-    ],
-    "server-monitor-lineage": [
-      "npm",
-      "run",
-      "test:migrations:enterprise-intelligence:postgres"
-    ],
-    "server-monitor-outcome": [
-      "npm",
-      "run",
-      "test:migrations:enterprise-intelligence:postgres"
-    ],
-    "server-monitor-blocker": [
-      "npm",
-      "run",
-      "test:migrations:enterprise-intelligence:postgres"
-    ],
-    "server-monitor-unavailable": [
-      "npm",
-      "run",
-      "test:migrations:enterprise-intelligence:postgres"
-    ],
-    "server-admin-non-admin-denial": [
-      "npm",
-      "run",
-      "test:migrations:pilot-operations:postgres"
-    ],
-    "server-admin-capability-matrix": [
-      "npm",
-      "run",
-      "test:migrations:pilot-operations:postgres"
-    ],
-    "server-offline-false-success": [
-      "npm",
-      "run",
-      "test:migrations:pilot-operations:postgres"
-    ],
-    "server-timeout-false-success": [
-      "npm",
-      "run",
-      "test:migrations:pilot-operations:postgres"
     ]
   }
 });
@@ -513,12 +575,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ADMIN-ADMIN_NAVIGATION",
     "testId": "ADMIN-001",
     "sourceAnchorIds": [
-      "admin-workbench"
+      "admin-workbench",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ADMIN-001"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-admin-001"
       }
     ]
   },
@@ -526,22 +599,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ADMIN-NON_ADMIN_DENIAL",
     "testId": "ADMIN-002",
     "sourceAnchorIds": [
-      "admin-workbench"
+      "admin-workbench",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ADMIN-002"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-admin-non-admin-denial",
-        "scenarioIds": [
-          "admin-non-admin-authority-denial"
-        ],
-        "assertionIds": [
-          "admin-postgres--non-admin-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-admin-002"
       }
     ]
   },
@@ -550,14 +624,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "testId": "ADMIN-004",
     "sourceAnchorIds": [
       "admin-workbench",
-      "hosted-exact-run-scenarios"
+      "hosted-exact-run-scenarios",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "pilot-operations",
-        "assertionId": "pilot-operations::ADMIN-004",
-        "scenarioId": "ADMIN-004::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-admin-004"
       }
     ]
   },
@@ -565,22 +648,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ADMIN-ROLE_CAPABILITY_VIEW",
     "testId": "ADMIN-003",
     "sourceAnchorIds": [
-      "admin-workbench"
+      "admin-workbench",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ADMIN-003"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-admin-capability-matrix",
-        "scenarioIds": [
-          "admin-capability-matrix"
-        ],
-        "assertionIds": [
-          "admin-postgres--capability-matrix"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-admin-003"
       }
     ]
   },
@@ -589,14 +673,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "testId": "AI-006",
     "sourceAnchorIds": [
       "ai-runtime-mode",
-      "hosted-exact-run-scenarios"
+      "hosted-exact-run-scenarios",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "ai-boundary",
-        "assertionId": "ai-boundary::AI-006",
-        "scenarioId": "AI-006::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-ai-006"
       }
     ]
   },
@@ -604,14 +697,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "AI-NO_BYOK",
     "testId": "AI-001",
     "sourceAnchorIds": [
-      "ai-runtime-mode"
+      "ai-runtime-mode",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "ai-boundary",
-        "assertionId": "ai-boundary::AI-001",
-        "scenarioId": "AI-001::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-ai-001"
       }
     ]
   },
@@ -619,14 +721,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "AI-PROVIDER_CAPABILITY_DENIAL",
     "testId": "AI-003",
     "sourceAnchorIds": [
-      "ai-runtime-mode"
+      "ai-runtime-mode",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "ai-boundary",
-        "assertionId": "ai-boundary::AI-003",
-        "scenarioId": "AI-003::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-ai-003"
       }
     ]
   },
@@ -634,14 +745,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "AI-PROVIDER_DISABLED",
     "testId": "AI-002",
     "sourceAnchorIds": [
-      "ai-runtime-mode"
+      "ai-runtime-mode",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "ai-boundary",
-        "assertionId": "ai-boundary::AI-002",
-        "scenarioId": "AI-002::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-ai-002"
       }
     ]
   },
@@ -649,14 +769,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "AI-PROVIDER_SECRET_BOUNDARY",
     "testId": "AI-004",
     "sourceAnchorIds": [
-      "ai-runtime-mode"
+      "ai-runtime-mode",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "ai-boundary",
-        "assertionId": "ai-boundary::AI-004",
-        "scenarioId": "AI-004::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-ai-004"
       }
     ]
   },
@@ -664,29 +793,38 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "AI-PROVIDER_UNAVAILABLE",
     "testId": "AI-005",
     "sourceAnchorIds": [
-      "ai-runtime-mode"
+      "ai-runtime-mode",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "ai-boundary",
-        "assertionId": "ai-boundary::AI-005",
-        "scenarioId": "AI-005::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-ai-005"
       }
     ]
   },
   {
     "branchId": "APPS-APPLICATION_CREATE",
-      "testId": "APPS-001",
-      "sourceAnchorIds": [
-        "application-portfolio-acceptance-harness",
-        "application-portfolio-acceptance-evidence",
-        "application-portfolio",
-        "application-portfolio-pr1b-base",
-        "application-portfolio-pr1g-migration",
-        "application-portfolio-pr1g-authority-correction",
-        "application-portfolio-pr1b-fixture-authority-fix"
-      ],
+    "testId": "APPS-001",
+    "sourceAnchorIds": [
+      "application-portfolio-acceptance-harness",
+      "application-portfolio-acceptance-evidence",
+      "application-portfolio",
+      "application-portfolio-pr1b-base",
+      "application-portfolio-pr1g-migration",
+      "application-portfolio-pr1g-authority-correction",
+      "application-portfolio-pr1b-fixture-authority-fix"
+    ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -698,16 +836,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-ASSESSMENT_SNAPSHOT",
-      "testId": "APPS-002",
-      "sourceAnchorIds": [
-        "application-portfolio-acceptance-harness",
-        "application-portfolio-acceptance-evidence",
-        "application-portfolio",
-        "application-portfolio-pr1b-base",
-        "application-portfolio-pr1g-migration",
-        "application-portfolio-pr1g-authority-correction",
-        "application-portfolio-pr1b-fixture-authority-fix"
-      ],
+    "testId": "APPS-002",
+    "sourceAnchorIds": [
+      "application-portfolio-acceptance-harness",
+      "application-portfolio-acceptance-evidence",
+      "application-portfolio",
+      "application-portfolio-pr1b-base",
+      "application-portfolio-pr1g-migration",
+      "application-portfolio-pr1g-authority-correction",
+      "application-portfolio-pr1b-fixture-authority-fix"
+    ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -719,16 +857,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-CROSS_WORKSPACE_DENIAL",
-      "testId": "APPS-004",
-      "sourceAnchorIds": [
-        "application-portfolio-acceptance-harness",
-        "application-portfolio-acceptance-evidence",
-        "application-portfolio",
-        "application-portfolio-pr1b-base",
-        "application-portfolio-pr1g-migration",
-        "application-portfolio-pr1g-authority-correction",
-        "application-portfolio-pr1b-fixture-authority-fix"
-      ],
+    "testId": "APPS-004",
+    "sourceAnchorIds": [
+      "application-portfolio-acceptance-harness",
+      "application-portfolio-acceptance-evidence",
+      "application-portfolio",
+      "application-portfolio-pr1b-base",
+      "application-portfolio-pr1g-migration",
+      "application-portfolio-pr1g-authority-correction",
+      "application-portfolio-pr1b-fixture-authority-fix"
+    ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -740,16 +878,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-MODERNIZATION_DISPOSITION",
-      "testId": "APPS-003",
-      "sourceAnchorIds": [
-        "application-portfolio-acceptance-harness",
-        "application-portfolio-acceptance-evidence",
-        "application-portfolio",
-        "application-portfolio-pr1b-base",
-        "application-portfolio-pr1g-migration",
-        "application-portfolio-pr1g-authority-correction",
-        "application-portfolio-pr1b-fixture-authority-fix"
-      ],
+    "testId": "APPS-003",
+    "sourceAnchorIds": [
+      "application-portfolio-acceptance-harness",
+      "application-portfolio-acceptance-evidence",
+      "application-portfolio",
+      "application-portfolio-pr1b-base",
+      "application-portfolio-pr1g-migration",
+      "application-portfolio-pr1g-authority-correction",
+      "application-portfolio-pr1b-fixture-authority-fix"
+    ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -761,16 +899,16 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   },
   {
     "branchId": "APPS-REPLAY",
-      "testId": "APPS-005",
-      "sourceAnchorIds": [
-        "application-portfolio-acceptance-harness",
-        "application-portfolio-acceptance-evidence",
-        "application-portfolio",
-        "application-portfolio-pr1b-base",
-        "application-portfolio-pr1g-migration",
-        "application-portfolio-pr1g-authority-correction",
-        "application-portfolio-pr1b-fixture-authority-fix"
-      ],
+    "testId": "APPS-005",
+    "sourceAnchorIds": [
+      "application-portfolio-acceptance-harness",
+      "application-portfolio-acceptance-evidence",
+      "application-portfolio",
+      "application-portfolio-pr1b-base",
+      "application-portfolio-pr1g-migration",
+      "application-portfolio-pr1g-authority-correction",
+      "application-portfolio-pr1b-fixture-authority-fix"
+    ],
     "ownership": [
       {
         "kind": "retained-assertion",
@@ -784,12 +922,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-DISCOVERY_COMPLETE",
     "testId": "ASSESS-003",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ASSESS-003"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-assess-003"
       }
     ]
   },
@@ -823,22 +971,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-PROCESS_EDIT_DENIAL",
     "testId": "ASSESS-002",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ASSESS-002"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-assess-process-edit-denial",
-        "scenarioIds": [
-          "assess-process-edit-authority-denial"
-        ],
-        "assertionIds": [
-          "assess-postgres--process-edit-authority-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-assess-002"
       }
     ]
   },
@@ -1093,12 +1241,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-V2_CREATE",
     "testId": "ASSESS-018",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ASSESS-018"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-assess-018"
       }
     ]
   },
@@ -1106,12 +1264,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-V2_FEATURE_DISABLED",
     "testId": "ASSESS-020",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ASSESS-020"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-assess-020"
       }
     ]
   },
@@ -1119,12 +1287,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-V2_FINALIZE",
     "testId": "ASSESS-019",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:ASSESS-019"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-assess-019"
       }
     ]
   },
@@ -1180,23 +1358,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-DELIVERY_PACK",
     "testId": "DELIVERY-009",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:DELIVERY-009"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-delivery-lineage-tenant-boundary",
-        "scenarioIds": [
-          "delivery-lineage-tenant-boundary"
-        ],
-        "assertionIds": [
-          "delivery-postgres--exact-pack-ancestry",
-          "delivery-postgres--foreign-tenant-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-009"
       }
     ]
   },
@@ -1212,7 +1390,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "delivery-workflow-policy",
       "application-portfolio-pr1b-base",
       "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
-      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
@@ -1227,14 +1407,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-HANDOFF_IMPORT",
     "testId": "DELIVERY-001",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-001",
-        "scenarioId": "DELIVERY-001::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-001"
       }
     ]
   },
@@ -1242,14 +1431,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-INVALID_TRANSITION",
     "testId": "DELIVERY-006",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-006",
-        "scenarioId": "DELIVERY-006::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-006"
       }
     ]
   },
@@ -1265,7 +1463,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "delivery-workflow-policy",
       "application-portfolio-pr1b-base",
       "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
-      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
@@ -1280,14 +1480,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-STATUS_TRANSITION",
     "testId": "DELIVERY-005",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-005",
-        "scenarioId": "DELIVERY-005::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-005"
       }
     ]
   },
@@ -1295,14 +1504,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-TASK_CREATE",
     "testId": "DELIVERY-002",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-002",
-        "scenarioId": "DELIVERY-002::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-002"
       }
     ]
   },
@@ -1310,14 +1528,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-TASK_DELETE_DENIAL",
     "testId": "DELIVERY-004",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-004",
-        "scenarioId": "DELIVERY-004::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-004"
       }
     ]
   },
@@ -1325,14 +1552,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-TASK_UPDATE_OWN",
     "testId": "DELIVERY-003",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "delivery-workflow-policy",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-003",
-        "scenarioId": "DELIVERY-003::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-delivery-003"
       }
     ]
   },
@@ -1340,14 +1576,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "E2E-AUTHORITY_DENIAL",
     "testId": "E2E-003",
     "sourceAnchorIds": [
-      "handoff-ledger"
+      "handoff-ledger",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "canonical-pilot-journey",
-        "assertionId": "canonical-pilot-journey::E2E-003",
-        "scenarioId": "E2E-003::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-003"
       }
     ]
   },
@@ -1356,14 +1601,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "testId": "E2E-001",
     "sourceAnchorIds": [
       "handoff-ledger",
-      "hosted-exact-run-scenarios"
+      "hosted-exact-run-scenarios",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "canonical-pilot-journey",
-        "assertionId": "canonical-pilot-journey::E2E-001",
-        "scenarioId": "E2E-001::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-001"
       }
     ]
   },
@@ -1371,12 +1625,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "E2E-HITL_COMPLIANCE",
     "testId": "E2E-007",
     "sourceAnchorIds": [
-      "handoff-ledger"
+      "handoff-ledger",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:E2E-007"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-007"
       }
     ]
   },
@@ -1384,12 +1649,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "E2E-LOW_SUITABILITY",
     "testId": "E2E-005",
     "sourceAnchorIds": [
-      "handoff-ledger"
+      "handoff-ledger",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:E2E-005"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-005"
       }
     ]
   },
@@ -1397,12 +1673,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "E2E-REQUESTED_CHANGES_LOOP",
     "testId": "E2E-002",
     "sourceAnchorIds": [
-      "handoff-ledger"
+      "handoff-ledger",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:E2E-002"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-002"
       }
     ]
   },
@@ -1410,14 +1697,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "E2E-STALE_REPLAY_RECOVERY",
     "testId": "E2E-004",
     "sourceAnchorIds": [
-      "handoff-ledger"
+      "handoff-ledger",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "canonical-pilot-journey",
-        "assertionId": "canonical-pilot-journey::E2E-004",
-        "scenarioId": "E2E-004::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-004"
       }
     ]
   },
@@ -1425,12 +1721,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "E2E-STRONG_AUTOMATION",
     "testId": "E2E-006",
     "sourceAnchorIds": [
-      "handoff-ledger"
+      "handoff-ledger",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:E2E-006"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-e2e-006"
       }
     ]
   },
@@ -1442,10 +1749,13 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
       "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "authenticated-controls-loader",
       "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
       "enterprise-intelligence",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "ei-production-query",
+      "tenant-authority",
       "application-portfolio-pr1b-base",
       "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
@@ -1453,7 +1763,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
       "ei-acceptance-govern-immutable-action-authority",
-      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
@@ -1472,10 +1784,13 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
       "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "authenticated-controls-loader",
       "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
       "enterprise-intelligence",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "ei-production-query",
+      "tenant-authority",
       "application-portfolio-pr1b-base",
       "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
@@ -1483,7 +1798,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
       "ei-acceptance-govern-immutable-action-authority",
-      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
@@ -1502,10 +1819,13 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
       "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "authenticated-controls-loader",
       "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
       "enterprise-intelligence",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "ei-production-query",
+      "tenant-authority",
       "application-portfolio-pr1b-base",
       "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
@@ -1513,7 +1833,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
       "ei-acceptance-govern-immutable-action-authority",
-      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
@@ -1532,10 +1854,13 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
       "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "authenticated-controls-loader",
       "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
       "enterprise-intelligence",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
       "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "ei-production-query",
+      "tenant-authority",
       "application-portfolio-pr1b-base",
       "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
       "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
@@ -1543,7 +1868,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
       "ei-acceptance-govern-immutable-action-authority",
-      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
@@ -1558,13 +1885,33 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-QUERY_TENANT_ISOLATION",
     "testId": "EI-003",
     "sourceAnchorIds": [
-      "enterprise-intelligence"
+      "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
+      "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
+      "ei-acceptance-enterpriseintelligencepostgresfixture-mjs",
+      "authenticated-controls-loader",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "enterprise-intelligence",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligencecommand-ts",
+      "ei-acceptance-supabase-functions-shared-enterpriseintelligenceingestion-ts",
+      "ei-production-query",
+      "tenant-authority",
+      "application-portfolio-pr1b-base",
+      "ei-acceptance-20260804120000-enterprise-intelligence-authority-sql",
+      "ei-acceptance-20260805130000-provider-secret-write-intent-recovery-sql",
+      "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
+      "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
+      "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
+      "ei-acceptance-govern-immutable-action-authority",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "enterprise-intelligence",
-        "assertionId": "enterprise-intelligence::EI-003",
+        "ownerId": "enterprise-intelligence-postgres-acceptance",
+        "assertionId": "enterprise-intelligence-postgres-acceptance::EI-003",
         "scenarioId": "EI-003::retained-contract"
       }
     ]
@@ -1573,14 +1920,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-APPROVAL",
     "testId": "GOVERN-005",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-005",
-        "scenarioId": "GOVERN-005::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-005"
       }
     ]
   },
@@ -1588,14 +1940,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-CHANGES_REQUESTED",
     "testId": "GOVERN-003",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-003",
-        "scenarioId": "GOVERN-003::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-003"
       }
     ]
   },
@@ -1625,14 +1982,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-INDEPENDENT_ATTESTATION",
     "testId": "GOVERN-002",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-002",
-        "scenarioId": "GOVERN-002::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-002"
       }
     ]
   },
@@ -1640,14 +2002,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-REJECTION",
     "testId": "GOVERN-006",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-006",
-        "scenarioId": "GOVERN-006::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-006"
       }
     ]
   },
@@ -1655,14 +2022,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-REVIEW_ASSIGNMENT",
     "testId": "GOVERN-001",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-001",
-        "scenarioId": "GOVERN-001::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-001"
       }
     ]
   },
@@ -1692,14 +2064,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-REWORK_RESUBMIT",
     "testId": "GOVERN-004",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-004",
-        "scenarioId": "GOVERN-004::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-004"
       }
     ]
   },
@@ -1707,14 +2084,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "GOVERN-SEPARATION_OF_DUTY",
     "testId": "GOVERN-007",
     "sourceAnchorIds": [
-      "assess-review-domain"
+      "assess-review-domain",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "govern-authority",
-        "assertionId": "govern-authority::GOVERN-007",
-        "scenarioId": "GOVERN-007::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-govern-007"
       }
     ]
   },
@@ -1744,23 +2126,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "MONITOR-BLOCKER_VISIBILITY",
     "testId": "MONITOR-003",
     "sourceAnchorIds": [
-      "docs-delivery-lineage"
+      "docs-delivery-lineage",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:MONITOR-003"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-monitor-blocker",
-        "scenarioIds": [
-          "monitor-blocker-tenant-boundary"
-        ],
-        "assertionIds": [
-          "monitor-postgres--blocker-projection",
-          "monitor-postgres--foreign-tenant-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-monitor-003"
       }
     ]
   },
@@ -1768,23 +2150,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "MONITOR-LINEAGE_VISIBILITY",
     "testId": "MONITOR-001",
     "sourceAnchorIds": [
-      "docs-delivery-lineage"
+      "docs-delivery-lineage",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:MONITOR-001"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-monitor-lineage",
-        "scenarioIds": [
-          "monitor-lineage-tenant-boundary"
-        ],
-        "assertionIds": [
-          "monitor-postgres--lineage-projection",
-          "monitor-postgres--foreign-tenant-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-monitor-001"
       }
     ]
   },
@@ -1792,23 +2174,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "MONITOR-UNAVAILABLE_PROJECTION",
     "testId": "MONITOR-004",
     "sourceAnchorIds": [
-      "docs-delivery-lineage"
+      "docs-delivery-lineage",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:MONITOR-004"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-monitor-unavailable",
-        "scenarioIds": [
-          "monitor-unavailable-tenant-boundary"
-        ],
-        "assertionIds": [
-          "monitor-postgres--unavailable-projection",
-          "monitor-postgres--foreign-tenant-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-monitor-004"
       }
     ]
   },
@@ -1816,23 +2198,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "MONITOR-VALUE_SIGNAL",
     "testId": "MONITOR-002",
     "sourceAnchorIds": [
-      "docs-delivery-lineage"
+      "docs-delivery-lineage",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:MONITOR-002"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-monitor-outcome",
-        "scenarioIds": [
-          "monitor-outcome-tenant-boundary"
-        ],
-        "assertionIds": [
-          "monitor-postgres--outcome-projection",
-          "monitor-postgres--foreign-tenant-denied"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-monitor-002"
       }
     ]
   },
@@ -1905,22 +2287,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SAFETY-OFFLINE_NO_FALSE_SUCCESS",
     "testId": "SAFETY-001",
     "sourceAnchorIds": [
-      "persistence-transition"
+      "persistence-transition",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:SAFETY-001"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-offline-false-success",
-        "scenarioIds": [
-          "offline-mutation-no-false-success"
-        ],
-        "assertionIds": [
-          "safety-postgres--offline-mutation-no-false-success"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-safety-001"
       }
     ]
   },
@@ -1977,14 +2359,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS",
     "testId": "SAFETY-002",
     "sourceAnchorIds": [
-      "persistence-transition"
+      "persistence-transition",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "cross-cutting-false-success",
-        "assertionId": "cross-cutting-false-success::SAFETY-002",
-        "scenarioId": "SAFETY-002::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-safety-002"
       }
     ]
   },
@@ -1992,22 +2382,22 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SAFETY-TIMEOUT_NO_FALSE_SUCCESS",
     "testId": "SAFETY-003",
     "sourceAnchorIds": [
-      "persistence-transition"
+      "persistence-transition",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-processupdatecontract-ts",
+      "authenticated-services-processupdateclient-ts",
+      "authenticated-supabase-functions-shared-processupdatecommand-ts"
     ],
     "ownership": [
       {
-        "kind": "hosted-scenario",
-        "ownerId": "blocked:SAFETY-003"
-      },
-      {
-        "kind": "server-assertion",
-        "ownerId": "server-timeout-false-success",
-        "scenarioIds": [
-          "timeout-mutation-no-false-success"
-        ],
-        "assertionIds": [
-          "safety-postgres--timeout-mutation-no-false-success"
-        ]
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-safety-003"
       }
     ]
   },
@@ -2185,14 +2575,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-DOWNLOAD_DENIAL",
     "testId": "STUDIO-007",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-artifact-contracts",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-scripts-authenticatedcontrolsfixture-mjs",
+      "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
+      "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "studio-private",
-        "assertionId": "studio-private::STUDIO-007",
-        "scenarioId": "STUDIO-007::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-studio-007"
       }
     ]
   },
@@ -2200,14 +2599,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-GENERATION_FAILURE",
     "testId": "STUDIO-003",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-artifact-contracts",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "studio-governed",
-        "assertionId": "studio-governed::STUDIO-003",
-        "scenarioId": "STUDIO-003::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-studio-003"
       }
     ]
   },
@@ -2215,14 +2619,19 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-GOVERNED_GENERATION",
     "testId": "STUDIO-002",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-artifact-contracts",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "studio-governed",
-        "assertionId": "studio-governed::STUDIO-002",
-        "scenarioId": "STUDIO-002::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-studio-002"
       }
     ]
   },
@@ -2230,14 +2639,23 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-HANDOFF_LINEAGE",
     "testId": "STUDIO-001",
     "sourceAnchorIds": [
-      "studio-artifact-contracts"
+      "studio-artifact-contracts",
+      "authenticated-scripts-authenticatedacceptancecases-mjs",
+      "authenticated-scripts-authenticatedacceptanceprofile-mjs",
+      "authenticated-scripts-authenticatedacceptanceevidence-mjs",
+      "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
+      "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
+      "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-services-productacceptancebridge-contracts-ts",
+      "authenticated-services-productacceptancebridge-client-ts",
+      "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
     ],
     "ownership": [
       {
-        "kind": "retained-assertion",
-        "ownerId": "studio-governed",
-        "assertionId": "studio-governed::STUDIO-001",
-        "scenarioId": "STUDIO-001::retained-contract"
+        "kind": "authenticated-scenario",
+        "ownerId": "authenticated-studio-001"
       }
     ]
   },

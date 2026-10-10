@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Authenticated product acceptance integration (2026-10-10)
+
+`docs/planning/authenticated-product-acceptance.md` owns the approved second integration boundary: trusted governed-Studio-to-legacy-Docs publishing, exact Delivery human-outcome authority projected read-only in Monitor, connected lifecycle/control execution, focused verification and rollback. The versioned 108-case catalog and authenticated versus public-Sandbox evidence contract remain governed by `docs/quality/exhaustive-hosted-product-acceptance.md`. PR C packages and baselines remain distinct. Hosted rollout/execution and paid/production effects require their separate boundary.
+
 ## Approved legacy Delivery authority (2026-10-10)
 
 `docs/planning/legacy-delivery-authority-acceptance.md` owns the AP-approved legacy task/import server-authority implementation, migration/compatibility contract, focused verification, evidence and fallback. It records the separate approved authenticated acceptance integration and seven read-only criterion corrections. The exhaustive catalog/proof framework remains governed by `docs/quality/exhaustive-hosted-product-acceptance.md`; changes must be explicit and versioned. PR C package/item/Monitor-baseline authority remains distinct and is not a replacement for legacy task business requirements. Hosted deployment and paid/production effects remain outside this repository approval.

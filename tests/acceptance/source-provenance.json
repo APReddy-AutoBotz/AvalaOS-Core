@@ -3,102 +3,65 @@
   "inventoryId": "avalaos-hosted-acceptance-2026-08",
   "proofOwnerRegistrySource": "tests/acceptance/proof-owner-registry.json",
   "sourceDigests": {
-    ".github/workflows/transcript-flow-pr-a.yml": "sha256:2176f261dc2979cf0ab17db46f846c3d326b58585e083d66b9782b4d70a9655c",
-    "components/enterprise/AssessTranscriptCandidateReview.tsx": "sha256:d8f20fedb16ee3d9d600fde6b3c2ddd779f7d23899d8bb6d54dbd1cf4b39b6d4",
-    "components/enterprise/EnterpriseIntelligenceView.tsx": "sha256:132f10c6e47ec2357a479e7011e9ef0aa2f28701fa3e183cc5a368ffe37f5f84",
-    "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
-    "package.json": "sha256:23ebf5d8d822531c8cf356b8cad844ca6effbf59d26630847262bc5e294d0586",
-    "vite.config.ts": "sha256:3692e5623118c7ac6af652c0c5a5730124212fe25e97759425229a29c14f2fef",
-    "playwright.config.ts": "sha256:0dcd00357662b701ff26f637e9346382bb2df4c5072ca574c7a3ee998eb5b152",
-    "playwright.enterprise-intelligence.config.ts": "sha256:9e949021cb7abe0678ea9eb662543aa073c43857da6dff689087a7afa67d28f9",
-    "playwright.pr1d.config.ts": "sha256:8ee945e3f94281f01a95be428eccb8f4b67d1bec42064e5b309764e52fd9db9f",
-    "playwright.studio-artifacts.config.ts": "sha256:e4610e44c89d3d89a259d15205946534196f39c44a6e9a80a9cde5dcdc30bc65",
-    "playwright.transcript-flow-pr-a.config.ts": "sha256:d77f57673ab6b1d156a1eb70d95bf1108017d56ec237bfaa02d4e53d10d1d916",
-    "scripts/checkEnterpriseIntelligenceBoundaries.mjs": "sha256:d0cee03ab6df6bf4f86ffade590e562a15b4394ca1beda1989652a22a555474c",
-    "scripts/hostedPilotActivation.mjs": "sha256:375a869fb088b4581bd26b95ecf523da050cc8b01266bef81375fd2ba4d43449",
-    "scripts/hostedPilotActivation.test.mjs": "sha256:ed6856426b58472beb3a0488f3f85da8f139627d97ebd4ff6a61f34481c2f9b9",
-    "scripts/runTranscriptFlowBrowser.mjs": "sha256:80bc32eb5535adbd4db23b776333685016a9b33a0e471436b97134abd26450ca",
-    "scripts/runTranscriptFlowBrowser.test.mjs": "sha256:09e25dfb5e390ab753795f46c50bb33730eba5b4458b501fd87471f5653176ef",
-    "scripts/runTranscriptFlowCoverage.mjs": "sha256:c0c50a83f8837f11d471414d227d01f6ef315e6aa55f61d82ac1017a5ad5d076",
-    "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
-    "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
-    "scripts/testTrustAssurancePostgres.mjs": "sha256:2728bb802d4e9e351972079f7166274df2627fcdb803d915a1d9d2cefd03e37a",
-    "scripts/testPr1gMigrations.mjs": "sha256:d1caa7e6868dafaac5aa1e94eaa78a9fc6bc556af7451cfff550196975d97bb1",
-    "scripts/applicationPortfolioAcceptanceEvidence.mjs": "sha256:7677f20187513102f676e1ab86489209c439a0bbc1b32e6a8e6a36657ebfbef5",
-    "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql": "sha256:91b3d358235b684c4c7b614440bf5f4fab722f37c543bf64cba6ea07e4979a22",
-    "supabase/migrations/20260722120000_pr1g_application_portfolio.sql": "sha256:65bae8086d855bd0da1888bad7683bbfde8afd15d2f1cea269f198ba27fb0e06",
-    "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql": "sha256:f84a3be28e639d53a2770ccf97342f8359d965b693a44e6aa315d6d6bb379d77",
-    "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql": "sha256:f48dde0aad8a065dbcf649976174f4c52a411e8910b14b842b75ff840ce29026",
-    "scripts/testPilotOperationsMigration.mjs": "sha256:59622919796a25646d76707d8cd29258300036ca1a501fe1a3c8bdbb6a942f61",
-    "scripts/testTranscriptFlowPostgres.mjs": "sha256:aafb979adc5652268d24d4660f1327d9364161cb3afcc528ceb368c5d2bbcd13",
-    "scripts/transcriptFlowEvidenceContract.mjs": "sha256:410fca06f0b3861802b503b8ce555afeffa5ff315e4742d5cf029e304b745582",
-    "scripts/transcriptFlowEvidenceContract.test.mjs": "sha256:198306d83d32724bcf4840bf50d8df8865a8cbd51ca9a9e09cd34bcf30c63d44",
-    "scripts/transcriptFlowEvidenceScope.mjs": "sha256:36525be958a8e448c7248ce79dd6b66de082be013335442d1dee5b94bb279f9c",
-    "scripts/trustAcceptanceEvidence.mjs": "sha256:73ad241675694a42075e3acc73df6bd3b0735a075fc97525910408652edf91d5",
-    "scripts/verifyTranscriptFlowEvidence.mjs": "sha256:15ab6e9fd011cde0bf8025b82eeb300158936b385cbf0ef98911558e7320436e",
-    "services/enterpriseIntelligence.test.ts": "sha256:3b2584cd5f67a9f16b0fba2ff09a3818b710bf75949da72174b9f53c078ec307",
-    "services/enterpriseIntelligenceClient.ts": "sha256:f7f92ffdf5a3998fc456330408555bedc59fe833a3214225f8c6447fbecbc011",
-    "services/transcriptFlow/assessApply.test.ts": "sha256:eb78b32ce8fec0b46748907baf3b30f19e8d29424e4261197b2c63c0c210f26b",
-    "services/transcriptFlow/assessApply.ts": "sha256:7813c6887e6349c8002db9127eb1439fcbffa07aad32d1b08826b3720b37ff0d",
-    "services/transcriptFlow/contracts.ts": "sha256:eb509f15a822319624a5d22126d1d8b6b72c72f3d4aceffe4b7237fc132b7542",
-    "services/transcriptFlow/sourceSets.test.ts": "sha256:a6da03e710b6a3226bc701f5fc3bbbb97cbf16a3a1db3facc1ca013d6cec3c98",
-    "services/transcriptFlow/sourceSets.ts": "sha256:177268c0ca1f99936de33df2526cfe0cf3dfcbefabf45466287060e5852b8022",
-    "supabase/functions/_shared/enterpriseIntelligenceAi.test.ts": "sha256:43b2d6cad368f239dfacd8abaf80649d3aee920a21604dd923962d19abe4a3ad",
-    "supabase/functions/_shared/enterpriseIntelligenceAi.ts": "sha256:b13a3872500087db6cb3291f0d3acc7281ee00a1f48b0f1d733b1995a61a44f1",
-    "supabase/functions/_shared/enterpriseIntelligenceCommand.test.ts": "sha256:48597aedd9ecd8f5bd8f67415fdd9e3dca2badf3b3a74e879f4971ed0eb03e02",
-    "supabase/functions/_shared/enterpriseIntelligenceCommand.ts": "sha256:b6060d1443aaf7e6cfdf7ab6ea166a82e01cc17dfc92bc215de31299a4512454",
-    "supabase/functions/_shared/enterpriseIntelligenceQuery.test.ts": "sha256:c749c53c31433df231bd6829917deef31788aa1f77fd323710bdb1b74464624f",
-    "supabase/functions/_shared/enterpriseIntelligenceQuery.ts": "sha256:b8d2a75b9f358fdf882beca02920bf719e75e19438e6eb2bbca6ae5e0164f791",
-    "supabase/functions/_shared/providerBudget.test.ts": "sha256:a8f2441c6c630c71761669232164d25687e82056a27d8276e816067afa0796ba",
-    "supabase/functions/_shared/providerBudget.ts": "sha256:a9e38870df2312782053249940a0af269001625776a6ca49da902be78449aaee",
-    "supabase/functions/_shared/providerBudgetMigration.test.ts": "sha256:16bcec9876664f59ff95b0ea7da66a07013436ad17d2c8c004315c66792a6193",
-    "supabase/functions/_shared/providerCleanup.test.ts": "sha256:989b4a19b54baad699f08ec1d502a6f837a92d978f8b3d372e8b23a65f61e703",
-    "supabase/functions/_shared/providerCleanup.ts": "sha256:5533c1b2cefa1a4e7618e0679e7fc526e81edd45d9312b8a88d2c4cc6f7ecd36",
-    "supabase/functions/_shared/providerLifecycle.test.ts": "sha256:3e02eebc89b5c73db5d008189b3802ba2274f761448e8a8335e687eba2b78c4d",
-    "supabase/functions/_shared/providerResolver.test.ts": "sha256:d0826b6de364f4d137a53f264cd8339749c41c2f219789619ec4e3d9d42f7c9d",
-    "supabase/functions/_shared/providerResolver.ts": "sha256:ec314055bc27946c5fed793b4c386663e572c2462b3fef88a41e400db8f9ca87",
-    "supabase/functions/_shared/supabase.ts": "sha256:13070ece3bd1cd761c32e7758321c29ecf1fb796664f7a05ca67799ea1fa382f",
-    "supabase/functions/_shared/transcriptSourceSetMigration.test.mjs": "sha256:2489cfcde1109c169a5cdfee9e54586a03891bf8c381bf26b513fd3467f86265",
-    "supabase/migrations/20260825165350_governed_transcript_source_sets_assess.sql": "sha256:c656d515ab8805fe01d42ec3baa7a6c2784527a97d655101a838bfcce2b898a4",
-    "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql": "sha256:4a467829152ae7b7afbffb71320e3b899f8d9c563ac66f889704ad32c934afb6",
-    "supabase/migrations/20260825165401_unified_provider_budget_authority.sql": "sha256:eee73c54ff3538ce78d2179cc5c5ad269a7c9581ad17b47b317616f00ea7989b",
-    "supabase/migrations/20260826151538_governed_transcript_authority_forward_fix.sql": "sha256:b2cbc07ae7917bf7dc6bd887cea7f0b5ae45207d1f0723f2b339e3d1b1586cf1",
-    "supabase/migrations/20260827173000_governed_transcript_hosted_identity_convergence.sql": "sha256:175058deb005500c8e5c66db2be06ead69c0335e18096f5441292bbcd6f4f646",
-    "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
-    "testing/process-lifecycle/contracts/pr-a-assertion-registry.json": "sha256:8dca3fc1d04349863dfac862695a492f3fcee7846ecea5f1198df1f2784feac8",
-    "testing/process-lifecycle/contracts/pr-a-evidence.schema.json": "sha256:6cbe7858cc86d49a993c9c7259dfa5c6db0089af5bc51260bc23701a3137adf3",
-    "testing/process-lifecycle/fixtures/identities/pr-a-personas.json": "sha256:8865e5e6efa1c8b99cc6a4d893d7e8446cda6ed8b653401db3c61c35ba6b9c66",
-    "testing/process-lifecycle/fixtures/pr-a-fixture-registry.json": "sha256:c66ecf23cae20f02495380e24e300b767918a545d282acc92126f6b7018f168d",
-    "testing/process-lifecycle/fixtures/providers/pr-a-mock-contracts.json": "sha256:fb0f73e08452cdcc877685e110b2708906ff81b8e5d87f564d9620f71020374b",
-    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-CLEAN-01.vtt": "sha256:3015cf97dd451613252e9eb03df560c352a5655667bf1fc3e243bb3056c4d76b",
-    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-CONFLICT-04.vtt": "sha256:99da5264f89131446fb96fd6f7a1c1a6543ffe07cea3419ea27a18cc743864e5",
-    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-CONTROLS-02.srt": "sha256:4e5ca5ece80e2ed551fbed9029d9c1c1db6569ae3c808252902fccbc72f4acbf",
-    "testing/process-lifecycle/fixtures/sources/assess/ASSESS-INCOMPLETE-03.txt": "sha256:9f058e0b98323ee9c1f7c32b4e0d038a50ac8fb0c13acab575c376edab7f4be9",
-    "testing/process-lifecycle/fixtures/sources/assess/PROMPT-INJECTION-01.vtt": "sha256:4c5c2d62f52fb7dabd7e16db842d4d74c24e55e1972b57a1645970d8052164e4",
-    "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
-    "tests/browser/enterpriseIntelligence.spec.ts": "sha256:b5c27bb51d9eb0d529e1427d108bddf4853ee810634a28473ff9d95cb353bb3a",
-    "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:c1f277d715f0f2ffa75b23c179493251288d936abef9fec569f220251dd67f0c",
-    "tests/browser/transcriptFlowPrA.spec.ts": "sha256:cac309086e4497d88184718afac7f7b70f8ccc8d532dad6ee9f7e3d7865278fe",
-    "App.tsx": "sha256:495039e6f21e194ed63a96c5c635f77a0b3bc3c73a20b109dc0b30170dff94ea",
+    "App.tsx": "sha256:77853ebf09c9d325190a9fcc7e3de4efe265c9f28163df3747301a250c27d24d",
     "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
     "index.css": "sha256:645f9ca9e3068604aee26a1521d0efd399a14d44fa24b42e34a5608c936da63c",
+    "scripts/applicationPortfolioAcceptanceEvidence.mjs": "sha256:7677f20187513102f676e1ab86489209c439a0bbc1b32e6a8e6a36657ebfbef5",
+    "scripts/assessV2AcceptanceEvidence.mjs": "sha256:8156a9f964f77dbbf7348098fec5b69ee4282e6059b3588000d91df189192a93",
+    "scripts/authenticatedAcceptanceCases.mjs": "sha256:dcfc746d3d7e45cc6f857c514e64885992b2adc86c1719a6808cee4219ec09f0",
+    "scripts/authenticatedAcceptanceEvidence.mjs": "sha256:5a5f0ce9b206f8961d996698e6c5ca34a8413b99b6a904d96783ddf8c055c459",
+    "scripts/authenticatedAcceptanceProfile.mjs": "sha256:2240a799815a5a0809140a855164da892e758fcee0c92602a25b3071ac8ae924",
+    "scripts/authenticatedControlsAcceptance.mjs": "sha256:7fe983098f644bb56df986f09408af6a6b846ae3310b71ce2800c6c5ec685507",
+    "scripts/authenticatedControlsFixture.mjs": "sha256:a1d33b141895f11a0dd893a35a8ba06c7a42a7dd9716f8f79e7a07d13c0f982b",
+    "scripts/authenticatedControlsPostgresAdapter.mjs": "sha256:77ec198f700fbccc9238faf93933e56ed976a8b10f3ad281f3827cce5c057f27",
+    "scripts/authenticatedControlsProductionLoader.mjs": "sha256:374f069a5713dd96f7a5d0a4d0abd2d54031d0b23814fd191610ddb480372bc9",
+    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:755c17f26f70b720514be0c13ae354941dd28fc02255bd0b7417b655bb12d871",
+    "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
+    "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
+    "scripts/enterpriseLifecyclePostgresFixture.mjs": "sha256:065ee12d6f050d8651dcea291b3722328e1504aa3ccf6e0f2508f8887131b437",
+    "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
+    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:585c201009bc4f4bcb319efc7b5f4a8c9ec997d9daaeed8d64e0d3cb4eaf79b2",
+    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:af7bdf7c571fa9539febc100bf4770942b0f646f19b8411b71f5478e64cabaf2",
+    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:c0a28fba1e23493483f0e2beab1754af52968efcbe9962be168284e404116a98",
+    "scripts/studioAcceptanceEvidence.mjs": "sha256:26c8357967ea2d5f465b8ca6f6646da00223e04bd7a4ca26aab3f2861f268b83",
+    "scripts/studioArtifactPostgresFixture.mjs": "sha256:ba622162b928378ed1394060461dbc9c6f945b94c98b30063049d0467729d491",
+    "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",
+    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:4fe22045f7919483466f420bba943af95fd215e06dbbbe5d8018638380830255",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:e5bfe4595c02c4963dd5700997ccf6d92fe4e8430927426c338dbd5883bbc9fc",
+    "scripts/testGovernAcceptancePostgres.mjs": "sha256:20f8d9d76ebe72985ab7c95ea5fc1e3450ef767339d6df57809825c94c05f844",
     "scripts/testPilotOperationsPostgres.mjs": "sha256:bac650ec023c34ecccbe467bf09ea9c6ab1f1f4958167f5ba4eab634afb38925",
-    "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql": "sha256:ab7c4ac7367d6768b6bb4a15cc16dab3ece087404d1ea9f26204222871bd565c",
+    "scripts/testPr1dMigrations.mjs": "sha256:59db5ba1a6fb523b1324acc7a3f040915555eac500a9a3df301d66ba56f039fa",
+    "scripts/testPr1gMigrations.mjs": "sha256:d1caa7e6868dafaac5aa1e94eaa78a9fc6bc556af7451cfff550196975d97bb1",
+    "scripts/testStudioAcceptancePostgres.mjs": "sha256:6e6979a3b2e6c99daba6fe9525da119269a4faecc547a058db335531767d870d",
+    "scripts/testTrustAssurancePostgres.mjs": "sha256:2728bb802d4e9e351972079f7166274df2627fcdb803d915a1d9d2cefd03e37a",
+    "scripts/trustAcceptanceEvidence.mjs": "sha256:73ad241675694a42075e3acc73df6bd3b0735a075fc97525910408652edf91d5",
     "services/adminWorkbenchModel.ts": "sha256:253cd030dc975cd0555d7d57f5bb62d47b47ed9744e8e1f35eec9431e36f4599",
     "services/aiMode.ts": "sha256:f73136224dd913662ad82698a15010d5eb8886ca2289204fbcf7e8dd3bb116a6",
     "services/assessV2/applicationPortfolio.ts": "sha256:f2ad28154480e62cce6ad5cc9e74440ac1e3de216fbc4e2ec97d6cd98df7eb6a",
     "services/assessV2/reviewDomain.ts": "sha256:2ebdfdd9d598c4d29e35ce57953a2c2a48964319182003a3a7dbb4f2914904b6",
+    "services/deliveryPolicy.ts": "sha256:39f7d91e09b5bea1065da9fcdf6fdf68c28e7fa76b6c5a5a6495abacc7ddf727",
     "services/deliveryWorkflowPolicy.ts": "sha256:1a86a44c5f2b807a93f10944fe4e2fc776dc4ba507ecdb160d8001fdfc6c0e8e",
     "services/docsToDeliveryLineage.ts": "sha256:316c63c8532a90feb70a6dc3cb76cf45f883abd32b6f27769ead9495c4607aa2",
     "services/enterpriseIntelligence.ts": "sha256:61bc95a03681114e5ead628b009d97f031f986e3ab56942a914e86e3e223d757",
     "services/handoffLedgerService.ts": "sha256:f44606025c75519f3befad71a7ea96c2101809f909922291ba8d5592717d515d",
     "services/hostedSandboxRoute.ts": "sha256:31b5a5e97e0f430bee5ca66846e4a1c91c4cb49d5d0ec17dcc3dbb37ff214fb5",
     "services/persistenceTransition.ts": "sha256:190843d1c54e84f2bfc2d448a48539b44baa06adc8ea934ba96bb384ed3aeb2c",
+    "services/processUpdateClient.ts": "sha256:6c989c03d3cd886fee3d6a2a894ec798c8513a404df7675c445350ba59431c9f",
+    "services/processUpdateContract.ts": "sha256:0e2e02671baf31f0ef7834ce2addcfed9fd835231b52c3e876bbe815cd265ab7",
+    "services/productAcceptanceBridge/client.ts": "sha256:886169ead9ce28c149f8b6d17f8c07b31910f18c8e531982760ddad02eefebd2",
+    "services/productAcceptanceBridge/contracts.ts": "sha256:87ed3e888239bfc103c57b4d5168f07429dc8dc40fdadfecd4c9624a3611816f",
     "services/scoringEngine.ts": "sha256:c06bd2ddab219755d13d45ee55793b2245da52e2e7ee1dc82cb0fb5d2d326c90",
     "services/studioArtifacts/contracts.ts": "sha256:3c403bf735296f2ffd8c8ee625c392b3a3cd51c129246b439083b19854483ac8",
     "services/trustAssurance/domain.ts": "sha256:09bafbe1692cdf10324064e0ba8f7effd4a1364def0addb8736d7b05a3a9e864",
-    "scripts/testPr1dMigrations.mjs": "sha256:59db5ba1a6fb523b1324acc7a3f040915555eac500a9a3df301d66ba56f039fa",
-    "scripts/assessV2AcceptanceEvidence.mjs": "sha256:8156a9f964f77dbbf7348098fec5b69ee4282e6059b3588000d91df189192a93",
+    "supabase/functions/_shared/enterpriseIntelligenceCommand.ts": "sha256:b6060d1443aaf7e6cfdf7ab6ea166a82e01cc17dfc92bc215de31299a4512454",
+    "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts": "sha256:0c703027f8d41c676f90109db53899fdc89c56d132f835bb9804a99b95429710",
+    "supabase/functions/_shared/enterpriseIntelligenceQuery.ts": "sha256:b8d2a75b9f358fdf882beca02920bf719e75e19438e6eb2bbca6ae5e0164f791",
+    "supabase/functions/_shared/processUpdateCommand.ts": "sha256:283ed891be51f48e3445e69457f2c07b889263e700130c6aee394d0273beade1",
+    "supabase/functions/_shared/studioDeliveryCommand.ts": "sha256:1d5568fc1ca184da2151c469c24aaf28f57421baf74a3dc289afd8f35dbc864e",
+    "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts": "sha256:8ce233ab505506ed5c8dd62eec657c795319682ce3f05eddc60288ef63eb493a",
+    "supabase/functions/_shared/tenantAuthority.ts": "sha256:ae5f112360ab1329364e8f7f82e8e16ec244f7e43fd059e7848a7722c0d5ec9d",
+    "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql": "sha256:d3dca64ba210d65ada8f191964198dd86fbe676bff9c8479c9b037c082307d26",
+    "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql": "sha256:91b3d358235b684c4c7b614440bf5f4fab722f37c543bf64cba6ea07e4979a22",
     "supabase/migrations/20260713120000_pr1c_enterprise_assess_ui_govern_studio_handoff.sql": "sha256:6c2771c019b1fd9b6b1d48f884453ce20d7ffb9a8802e3eadda520a4f6e93be4",
     "supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql": "sha256:7f49d7944a1195e0564826494ce5fb02d052b6a7ca687f1124bcdc26bf205209",
     "supabase/migrations/20260715120000_pr1d_decision_integrity_correction.sql": "sha256:fb46353079b50c004aa826618008eeec892f46e7794fa79617e519621f083bbd",
@@ -106,48 +69,51 @@
     "supabase/migrations/20260719130000_pr1d_author_fact_validation.sql": "sha256:783e858dcdca87e1eafd7c6a02d03eceec0ac199f098f28bf41149f24e2a53ea",
     "supabase/migrations/20260720100000_pr1d_fact_source_and_create_hash_hardening.sql": "sha256:6d9e910c4ca4b355b5b7060c450be3b5698a27627aa64c618f52085404a3b0ad",
     "supabase/migrations/20260720120000_pr1d_soft_delete_visibility_hardening.sql": "sha256:696a2b45b6e4ccbcdbbfd67db51e5dfd3c608577d2ae0d9387f8e6803e2aff61",
-    "scripts/testStudioAcceptancePostgres.mjs": "sha256:6e6979a3b2e6c99daba6fe9525da119269a4faecc547a058db335531767d870d",
-    "scripts/studioAcceptanceEvidence.mjs": "sha256:26c8357967ea2d5f465b8ca6f6646da00223e04bd7a4ca26aab3f2861f268b83",
-    "scripts/studioArtifactPostgresFixture.mjs": "sha256:ba622162b928378ed1394060461dbc9c6f945b94c98b30063049d0467729d491",
-    "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",
-    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:4fe22045f7919483466f420bba943af95fd215e06dbbbe5d8018638380830255",
+    "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
+    "supabase/migrations/20260722120000_pr1g_application_portfolio.sql": "sha256:65bae8086d855bd0da1888bad7683bbfde8afd15d2f1cea269f198ba27fb0e06",
+    "supabase/migrations/20260726120000_pr1g_authority_concurrency_correction.sql": "sha256:f84a3be28e639d53a2770ccf97342f8359d965b693a44e6aa315d6d6bb379d77",
+    "supabase/migrations/20260727090000_pr1b_membership_role_scope_trigger_forward_fix.sql": "sha256:f48dde0aad8a065dbcf649976174f4c52a411e8910b14b842b75ff840ce29026",
     "supabase/migrations/20260727120000_studio_governed_artifact_authority.sql": "sha256:f2891b336ca4990f79a89f5880522f928c9b569bd0dfce4dce9009316cae72c1",
     "supabase/migrations/20260729163251_studio_private_artifact_authority.sql": "sha256:8c2e093372e5c4c6c3a47ba9d6e55785ddd8182ed6d316cde5c2674cd90b8bae",
     "supabase/migrations/20260730190000_pr217_studio_private_artifact_runtime_forward_fix.sql": "sha256:847e8e74865903e69828119a282419d0bf3862fa455ae67c1587acc69cff49b6",
-    "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql": "sha256:f6a35c27f1cd2cdfa686b796aba7963d5b6000d40bf49cd47deb698d165b878c",
-    "scripts/testGovernAcceptancePostgres.mjs": "sha256:20f8d9d76ebe72985ab7c95ea5fc1e3450ef767339d6df57809825c94c05f844",
-    "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
-    "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
-    "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b",
-    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:074e012acd606dfd602ebdae78e8204b84c1ea11bbb17f546b966d24645b1b57",
-    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:52782c7d9d12c3bf9376797b1a2b17bd89fc9ef21e7c981786d9f637d98e9af7",
-    "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
-    "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
-    "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts": "sha256:0c703027f8d41c676f90109db53899fdc89c56d132f835bb9804a99b95429710",
     "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql": "sha256:15c4713f240a71c0ed3db954aa511aabff946e81caee384bdb4c3c2d98c7a1eb",
-    "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql": "sha256:768abe5b7e6abddadde060998a548f5c8f70b44c221a458cad5176b5118abe35",
     "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql": "sha256:e844a748667c55d6c62c787561f084b99e0af3e077d729e517b0fa160a7e748f",
+    "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql": "sha256:768abe5b7e6abddadde060998a548f5c8f70b44c221a458cad5176b5118abe35",
+    "supabase/migrations/20260808190000_trust_assurance_evidence_hub.sql": "sha256:4a467829152ae7b7afbffb71320e3b899f8d9c563ac66f889704ad32c934afb6",
+    "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql": "sha256:ab7c4ac7367d6768b6bb4a15cc16dab3ece087404d1ea9f26204222871bd565c",
+    "supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql": "sha256:f6a35c27f1cd2cdfa686b796aba7963d5b6000d40bf49cd47deb698d165b878c",
     "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql": "sha256:6c29886a31c7763f3f1fe72a6708f1987966ecfe129e99ed9cc4541883fbf838",
+    "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b",
     "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:88cdaa839edb8a00bc1a210d85c2ee110dfea1afdf11d4b89817e9b5473620cb",
     "supabase/migrations/20261009162752_govern_immutable_action_authority.sql": "sha256:0bd84ee3df629548a55c27aec3dd859e9d12b448d4ba5b356fee2d121a7110f7",
-    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:4d35100a8f1530a76e925a8a87da8b9b323efa59c53893429c84e3eb20325aae",
-    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:f7f7333fe68483ff60d6e32b65baa615060ba74d1e76ddd833185fd3288a58ac",
-    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:d94506c0a3b433193ab5e1ec09608723148b4b0c22a110c9bb210b83f88133a8",
-    "services/deliveryPolicy.ts": "sha256:39f7d91e09b5bea1065da9fcdf6fdf68c28e7fa76b6c5a5a6495abacc7ddf727",
-    "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql": "sha256:d3dca64ba210d65ada8f191964198dd86fbe676bff9c8479c9b037c082307d26",
-    "supabase/migrations/20261010025331_legacy_delivery_authority.sql": "sha256:51b18d3f5c382e1813814af53f6d67622740e0b75ce723592822ad19c3d2c909"
+    "supabase/migrations/20261010025331_legacy_delivery_authority.sql": "sha256:51b18d3f5c382e1813814af53f6d67622740e0b75ce723592822ad19c3d2c909",
+    "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql": "sha256:f24d72083cdc7a0d9b4aecc2941bebb604a3834d4f45df29d75da8b1bccfac74",
+    "supabase/migrations/20261010051413_authenticated_process_update_authority.sql": "sha256:c66781b6f3bf3084b87a847825bd6a5dcee0702823d445eaec20f769d7a0c5c6",
+    "tests/browser/authenticatedControlsAcceptance.ts": "sha256:83fab5a815dd1359efb0e7a4e132bbe19853689807ea734a3836f21f9899d342",
+    "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts": "sha256:08549014dcc7a5683baf3f0af6c5300284f1efd5ebf9d82eba3f784a89bdd8c3"
   },
   "contracts": [
     {
       "branchId": "ADMIN-ADMIN_NAVIGATION",
       "testId": "ADMIN-001",
       "sourceReferences": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ADMIN-001"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-admin-001"
         }
       ],
       "scope": {
@@ -161,22 +127,23 @@
       "branchId": "ADMIN-NON_ADMIN_DENIAL",
       "testId": "ADMIN-002",
       "sourceReferences": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ADMIN-002"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-admin-non-admin-denial",
-          "scenarioIds": [
-            "admin-non-admin-authority-denial"
-          ],
-          "assertionIds": [
-            "admin-postgres--non-admin-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-admin-002"
         }
       ],
       "scope": {
@@ -191,14 +158,23 @@
       "testId": "ADMIN-004",
       "sourceReferences": [
         "services/adminWorkbenchModel.ts",
-        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "pilot-operations",
-          "assertionId": "pilot-operations::ADMIN-004",
-          "scenarioId": "ADMIN-004::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-admin-004"
         }
       ],
       "scope": {
@@ -212,22 +188,23 @@
       "branchId": "ADMIN-ROLE_CAPABILITY_VIEW",
       "testId": "ADMIN-003",
       "sourceReferences": [
-        "services/adminWorkbenchModel.ts"
+        "services/adminWorkbenchModel.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ADMIN-003"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-admin-capability-matrix",
-          "scenarioIds": [
-            "admin-capability-matrix"
-          ],
-          "assertionIds": [
-            "admin-postgres--capability-matrix"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-admin-003"
         }
       ],
       "scope": {
@@ -242,14 +219,23 @@
       "testId": "AI-006",
       "sourceReferences": [
         "services/aiMode.ts",
-        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "ai-boundary",
-          "assertionId": "ai-boundary::AI-006",
-          "scenarioId": "AI-006::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-ai-006"
         }
       ],
       "scope": {
@@ -263,14 +249,23 @@
       "branchId": "AI-NO_BYOK",
       "testId": "AI-001",
       "sourceReferences": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "ai-boundary",
-          "assertionId": "ai-boundary::AI-001",
-          "scenarioId": "AI-001::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-ai-001"
         }
       ],
       "scope": {
@@ -284,14 +279,23 @@
       "branchId": "AI-PROVIDER_CAPABILITY_DENIAL",
       "testId": "AI-003",
       "sourceReferences": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "ai-boundary",
-          "assertionId": "ai-boundary::AI-003",
-          "scenarioId": "AI-003::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-ai-003"
         }
       ],
       "scope": {
@@ -305,14 +309,23 @@
       "branchId": "AI-PROVIDER_DISABLED",
       "testId": "AI-002",
       "sourceReferences": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "ai-boundary",
-          "assertionId": "ai-boundary::AI-002",
-          "scenarioId": "AI-002::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-ai-002"
         }
       ],
       "scope": {
@@ -326,14 +339,23 @@
       "branchId": "AI-PROVIDER_SECRET_BOUNDARY",
       "testId": "AI-004",
       "sourceReferences": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "ai-boundary",
-          "assertionId": "ai-boundary::AI-004",
-          "scenarioId": "AI-004::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-ai-004"
         }
       ],
       "scope": {
@@ -347,14 +369,23 @@
       "branchId": "AI-PROVIDER_UNAVAILABLE",
       "testId": "AI-005",
       "sourceReferences": [
-        "services/aiMode.ts"
+        "services/aiMode.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "ai-boundary",
-          "assertionId": "ai-boundary::AI-005",
-          "scenarioId": "AI-005::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-ai-005"
         }
       ],
       "scope": {
@@ -503,12 +534,22 @@
       "branchId": "ASSESS-DISCOVERY_COMPLETE",
       "testId": "ASSESS-003",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ASSESS-003"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-assess-003"
         }
       ],
       "scope": {
@@ -560,22 +601,22 @@
       "branchId": "ASSESS-PROCESS_EDIT_DENIAL",
       "testId": "ASSESS-002",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ASSESS-002"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-assess-process-edit-denial",
-          "scenarioIds": [
-            "assess-process-edit-authority-denial"
-          ],
-          "assertionIds": [
-            "assess-postgres--process-edit-authority-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-assess-002"
         }
       ],
       "scope": {
@@ -901,12 +942,22 @@
       "branchId": "ASSESS-V2_CREATE",
       "testId": "ASSESS-018",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ASSESS-018"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-assess-018"
         }
       ],
       "scope": {
@@ -920,12 +971,22 @@
       "branchId": "ASSESS-V2_FEATURE_DISABLED",
       "testId": "ASSESS-020",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ASSESS-020"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-assess-020"
         }
       ],
       "scope": {
@@ -939,12 +1000,22 @@
       "branchId": "ASSESS-V2_FINALIZE",
       "testId": "ASSESS-019",
       "sourceReferences": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:ASSESS-019"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-assess-019"
         }
       ],
       "scope": {
@@ -1018,23 +1089,23 @@
       "branchId": "DELIVERY-DELIVERY_PACK",
       "testId": "DELIVERY-009",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:DELIVERY-009"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-delivery-lineage-tenant-boundary",
-          "scenarioIds": [
-            "delivery-lineage-tenant-boundary"
-          ],
-          "assertionIds": [
-            "delivery-postgres--exact-pack-ancestry",
-            "delivery-postgres--foreign-tenant-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-009"
         }
       ],
       "scope": {
@@ -1056,7 +1127,9 @@
         "services/deliveryWorkflowPolicy.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
@@ -1077,14 +1150,23 @@
       "branchId": "DELIVERY-HANDOFF_IMPORT",
       "testId": "DELIVERY-001",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-001",
-          "scenarioId": "DELIVERY-001::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-001"
         }
       ],
       "scope": {
@@ -1098,14 +1180,23 @@
       "branchId": "DELIVERY-INVALID_TRANSITION",
       "testId": "DELIVERY-006",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-006",
-          "scenarioId": "DELIVERY-006::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-006"
         }
       ],
       "scope": {
@@ -1127,7 +1218,9 @@
         "services/deliveryWorkflowPolicy.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
@@ -1148,14 +1241,23 @@
       "branchId": "DELIVERY-STATUS_TRANSITION",
       "testId": "DELIVERY-005",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-005",
-          "scenarioId": "DELIVERY-005::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-005"
         }
       ],
       "scope": {
@@ -1169,14 +1271,23 @@
       "branchId": "DELIVERY-TASK_CREATE",
       "testId": "DELIVERY-002",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-002",
-          "scenarioId": "DELIVERY-002::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-002"
         }
       ],
       "scope": {
@@ -1190,14 +1301,23 @@
       "branchId": "DELIVERY-TASK_DELETE_DENIAL",
       "testId": "DELIVERY-004",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-004",
-          "scenarioId": "DELIVERY-004::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-004"
         }
       ],
       "scope": {
@@ -1211,14 +1331,23 @@
       "branchId": "DELIVERY-TASK_UPDATE_OWN",
       "testId": "DELIVERY-003",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "services/deliveryWorkflowPolicy.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-003",
-          "scenarioId": "DELIVERY-003::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-delivery-003"
         }
       ],
       "scope": {
@@ -1232,14 +1361,23 @@
       "branchId": "E2E-AUTHORITY_DENIAL",
       "testId": "E2E-003",
       "sourceReferences": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "canonical-pilot-journey",
-          "assertionId": "canonical-pilot-journey::E2E-003",
-          "scenarioId": "E2E-003::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-003"
         }
       ],
       "scope": {
@@ -1254,14 +1392,23 @@
       "testId": "E2E-001",
       "sourceReferences": [
         "services/handoffLedgerService.ts",
-        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql"
+        "supabase/migrations/20260823090000_hosted_evidence_family_provenance_contract.sql",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "canonical-pilot-journey",
-          "assertionId": "canonical-pilot-journey::E2E-001",
-          "scenarioId": "E2E-001::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-001"
         }
       ],
       "scope": {
@@ -1275,12 +1422,23 @@
       "branchId": "E2E-HITL_COMPLIANCE",
       "testId": "E2E-007",
       "sourceReferences": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:E2E-007"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-007"
         }
       ],
       "scope": {
@@ -1294,12 +1452,23 @@
       "branchId": "E2E-LOW_SUITABILITY",
       "testId": "E2E-005",
       "sourceReferences": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:E2E-005"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-005"
         }
       ],
       "scope": {
@@ -1313,12 +1482,23 @@
       "branchId": "E2E-REQUESTED_CHANGES_LOOP",
       "testId": "E2E-002",
       "sourceReferences": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:E2E-002"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-002"
         }
       ],
       "scope": {
@@ -1332,14 +1512,23 @@
       "branchId": "E2E-STALE_REPLAY_RECOVERY",
       "testId": "E2E-004",
       "sourceReferences": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "canonical-pilot-journey",
-          "assertionId": "canonical-pilot-journey::E2E-004",
-          "scenarioId": "E2E-004::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-004"
         }
       ],
       "scope": {
@@ -1353,12 +1542,23 @@
       "branchId": "E2E-STRONG_AUTOMATION",
       "testId": "E2E-006",
       "sourceReferences": [
-        "services/handoffLedgerService.ts"
+        "services/handoffLedgerService.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:E2E-006"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-e2e-006"
         }
       ],
       "scope": {
@@ -1376,10 +1576,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -1387,7 +1590,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
@@ -1412,10 +1617,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -1423,7 +1631,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
@@ -1448,10 +1658,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -1459,7 +1672,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
@@ -1484,10 +1699,13 @@
         "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
         "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
         "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
         "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
         "services/enterpriseIntelligence.ts",
         "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
         "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
         "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
         "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
         "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
@@ -1495,7 +1713,9 @@
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
-        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
@@ -1516,35 +1736,60 @@
       "branchId": "EI-QUERY_TENANT_ISOLATION",
       "testId": "EI-003",
       "sourceReferences": [
-        "services/enterpriseIntelligence.ts"
+        "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs",
+        "scripts/enterpriseIntelligenceAcceptanceParser.test.ts",
+        "scripts/enterpriseIntelligencePostgresFixture.mjs",
+        "scripts/authenticatedControlsProductionLoader.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/enterpriseIntelligence.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceCommand.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts",
+        "supabase/functions/_shared/enterpriseIntelligenceQuery.ts",
+        "supabase/functions/_shared/tenantAuthority.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260804120000_enterprise_intelligence_authority.sql",
+        "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql",
+        "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
+        "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
+        "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "enterprise-intelligence",
-          "assertionId": "enterprise-intelligence::EI-003",
+          "ownerId": "enterprise-intelligence-postgres-acceptance",
+          "assertionId": "enterprise-intelligence-postgres-acceptance::EI-003",
           "scenarioId": "EI-003::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-enterprise-intelligence-postgresql-v1",
+        "organizationId": "97000000-0000-4000-8000-000000000010",
+        "workspaceId": "97000000-0000-4000-8000-000000000011"
       }
     },
     {
       "branchId": "GOVERN-APPROVAL",
       "testId": "GOVERN-005",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-005",
-          "scenarioId": "GOVERN-005::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-005"
         }
       ],
       "scope": {
@@ -1558,14 +1803,19 @@
       "branchId": "GOVERN-CHANGES_REQUESTED",
       "testId": "GOVERN-003",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-003",
-          "scenarioId": "GOVERN-003::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-003"
         }
       ],
       "scope": {
@@ -1607,14 +1857,19 @@
       "branchId": "GOVERN-INDEPENDENT_ATTESTATION",
       "testId": "GOVERN-002",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-002",
-          "scenarioId": "GOVERN-002::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-002"
         }
       ],
       "scope": {
@@ -1628,14 +1883,19 @@
       "branchId": "GOVERN-REJECTION",
       "testId": "GOVERN-006",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-006",
-          "scenarioId": "GOVERN-006::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-006"
         }
       ],
       "scope": {
@@ -1649,14 +1909,19 @@
       "branchId": "GOVERN-REVIEW_ASSIGNMENT",
       "testId": "GOVERN-001",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-001",
-          "scenarioId": "GOVERN-001::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-001"
         }
       ],
       "scope": {
@@ -1698,14 +1963,19 @@
       "branchId": "GOVERN-REWORK_RESUBMIT",
       "testId": "GOVERN-004",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-004",
-          "scenarioId": "GOVERN-004::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-004"
         }
       ],
       "scope": {
@@ -1719,14 +1989,19 @@
       "branchId": "GOVERN-SEPARATION_OF_DUTY",
       "testId": "GOVERN-007",
       "sourceReferences": [
-        "services/assessV2/reviewDomain.ts"
+        "services/assessV2/reviewDomain.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "govern-authority",
-          "assertionId": "govern-authority::GOVERN-007",
-          "scenarioId": "GOVERN-007::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-govern-007"
         }
       ],
       "scope": {
@@ -1768,23 +2043,23 @@
       "branchId": "MONITOR-BLOCKER_VISIBILITY",
       "testId": "MONITOR-003",
       "sourceReferences": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:MONITOR-003"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-monitor-blocker",
-          "scenarioIds": [
-            "monitor-blocker-tenant-boundary"
-          ],
-          "assertionIds": [
-            "monitor-postgres--blocker-projection",
-            "monitor-postgres--foreign-tenant-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-monitor-003"
         }
       ],
       "scope": {
@@ -1798,23 +2073,23 @@
       "branchId": "MONITOR-LINEAGE_VISIBILITY",
       "testId": "MONITOR-001",
       "sourceReferences": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:MONITOR-001"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-monitor-lineage",
-          "scenarioIds": [
-            "monitor-lineage-tenant-boundary"
-          ],
-          "assertionIds": [
-            "monitor-postgres--lineage-projection",
-            "monitor-postgres--foreign-tenant-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-monitor-001"
         }
       ],
       "scope": {
@@ -1828,23 +2103,23 @@
       "branchId": "MONITOR-UNAVAILABLE_PROJECTION",
       "testId": "MONITOR-004",
       "sourceReferences": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:MONITOR-004"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-monitor-unavailable",
-          "scenarioIds": [
-            "monitor-unavailable-tenant-boundary"
-          ],
-          "assertionIds": [
-            "monitor-postgres--unavailable-projection",
-            "monitor-postgres--foreign-tenant-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-monitor-004"
         }
       ],
       "scope": {
@@ -1858,23 +2133,23 @@
       "branchId": "MONITOR-VALUE_SIGNAL",
       "testId": "MONITOR-002",
       "sourceReferences": [
-        "services/docsToDeliveryLineage.ts"
+        "services/docsToDeliveryLineage.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:MONITOR-002"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-monitor-outcome",
-          "scenarioIds": [
-            "monitor-outcome-tenant-boundary"
-          ],
-          "assertionIds": [
-            "monitor-postgres--outcome-projection",
-            "monitor-postgres--foreign-tenant-denied"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-monitor-002"
         }
       ],
       "scope": {
@@ -1983,22 +2258,22 @@
       "branchId": "SAFETY-OFFLINE_NO_FALSE_SUCCESS",
       "testId": "SAFETY-001",
       "sourceReferences": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:SAFETY-001"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-offline-false-success",
-          "scenarioIds": [
-            "offline-mutation-no-false-success"
-          ],
-          "assertionIds": [
-            "safety-postgres--offline-mutation-no-false-success"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-safety-001"
         }
       ],
       "scope": {
@@ -2079,14 +2354,22 @@
       "branchId": "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS",
       "testId": "SAFETY-002",
       "sourceReferences": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "cross-cutting-false-success",
-          "assertionId": "cross-cutting-false-success::SAFETY-002",
-          "scenarioId": "SAFETY-002::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-safety-002"
         }
       ],
       "scope": {
@@ -2100,22 +2383,22 @@
       "branchId": "SAFETY-TIMEOUT_NO_FALSE_SUCCESS",
       "testId": "SAFETY-003",
       "sourceReferences": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/processUpdateContract.ts",
+        "services/processUpdateClient.ts",
+        "supabase/functions/_shared/processUpdateCommand.ts"
       ],
       "ownership": [
         {
-          "kind": "hosted-scenario",
-          "ownerId": "blocked:SAFETY-003"
-        },
-        {
-          "kind": "server-assertion",
-          "ownerId": "server-timeout-false-success",
-          "scenarioIds": [
-            "timeout-mutation-no-false-success"
-          ],
-          "assertionIds": [
-            "safety-postgres--timeout-mutation-no-false-success"
-          ]
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-safety-003"
         }
       ],
       "scope": {
@@ -2363,14 +2646,23 @@
       "branchId": "STUDIO-DOWNLOAD_DENIAL",
       "testId": "STUDIO-007",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedControlsFixture.mjs",
+        "scripts/authenticatedControlsAcceptance.mjs",
+        "scripts/authenticatedControlsPostgresAdapter.mjs",
+        "tests/browser/authenticatedControlsAcceptance.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "studio-private",
-          "assertionId": "studio-private::STUDIO-007",
-          "scenarioId": "STUDIO-007::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-studio-007"
         }
       ],
       "scope": {
@@ -2384,14 +2676,19 @@
       "branchId": "STUDIO-GENERATION_FAILURE",
       "testId": "STUDIO-003",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "studio-governed",
-          "assertionId": "studio-governed::STUDIO-003",
-          "scenarioId": "STUDIO-003::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-studio-003"
         }
       ],
       "scope": {
@@ -2405,14 +2702,19 @@
       "branchId": "STUDIO-GOVERNED_GENERATION",
       "testId": "STUDIO-002",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "studio-governed",
-          "assertionId": "studio-governed::STUDIO-002",
-          "scenarioId": "STUDIO-002::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-studio-002"
         }
       ],
       "scope": {
@@ -2426,14 +2728,23 @@
       "branchId": "STUDIO-HANDOFF_LINEAGE",
       "testId": "STUDIO-001",
       "sourceReferences": [
-        "services/studioArtifacts/contracts.ts"
+        "services/studioArtifacts/contracts.ts",
+        "scripts/authenticatedAcceptanceCases.mjs",
+        "scripts/authenticatedAcceptanceProfile.mjs",
+        "scripts/authenticatedAcceptanceEvidence.mjs",
+        "scripts/enterpriseLifecyclePostgresFixture.mjs",
+        "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+        "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "services/productAcceptanceBridge/contracts.ts",
+        "services/productAcceptanceBridge/client.ts",
+        "supabase/functions/_shared/studioDeliveryCommand.ts",
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
       ],
       "ownership": [
         {
-          "kind": "retained-assertion",
-          "ownerId": "studio-governed",
-          "assertionId": "studio-governed::STUDIO-001",
-          "scenarioId": "STUDIO-001::retained-contract"
+          "kind": "authenticated-scenario",
+          "ownerId": "authenticated-studio-001"
         }
       ],
       "scope": {

@@ -3,13 +3,16 @@ import fs from 'node:fs';
 
 const charter = fs.readFileSync(new URL('../../docs/quality/pr255-controlled-human-testing-charter.md', import.meta.url), 'utf8');
 const bindings = JSON.parse(fs.readFileSync(new URL('./execution-bindings.json', import.meta.url), 'utf8'));
-const blockedHostedIds = bindings.hostedTests.filter(item => item.scenario === null).map(item => item.testId).sort();
+const publicSandboxIds = new Set(bindings.hostedTests.map(item => item.testId));
+const authenticatedIds = new Set(bindings.authenticatedTests.map(item => item.testId));
 
 const charterExcludedIds = [...charter.matchAll(/^- `([A-Z0-9]+-[0-9]{3})`$/gmu)].map(([, id]) => id).sort();
 assert.equal(charterExcludedIds.length, 15, "preserve the historical charter's fifteen exclusions");
 const subsequentlyBlockedIds = ['ASSESS-018', 'ASSESS-019', 'ASSESS-020', 'ADMIN-001'];
-assert.deepEqual([...charterExcludedIds, ...subsequentlyBlockedIds].sort(), blockedHostedIds,
-  'preserve historical exclusions plus the explicit Assess V2 and privileged Admin audit blocks');
+for (const id of [...charterExcludedIds, ...subsequentlyBlockedIds]) {
+  assert.equal(publicSandboxIds.has(id), false, `${id} remains excluded from public Sandbox proof`);
+  assert.equal(authenticatedIds.has(id), true, `${id} requires the separately approved authenticated profile`);
+}
 
 assert.match(charter, /Status: prepared, not executed\./u, 'preparation must not be represented as executed human evidence');
 assert.match(charter, /synthetic, non-evidentiary UX and product exploration/u, 'human testing must remain non-evidentiary product exploration');

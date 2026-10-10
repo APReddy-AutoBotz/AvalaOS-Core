@@ -32,6 +32,7 @@ interface DeliveryPackViewProps {
   docTemplates: DocTemplate[];
   documentGenerations: DocumentGeneration[];
   handoffEntries: HandoffLedgerEntry[];
+  savedSnapshot?: React.ReactNode;
   artifactPolicy?: {
     exportMarkdown?: ArtifactExportDecision;
     exportJson?: ArtifactExportDecision;
@@ -79,10 +80,15 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
   documentGenerations,
   handoffEntries,
   artifactPolicy,
+  savedSnapshot,
 }) => {
   const { processes } = useProcessService();
   const { getAssessmentForProcess } = useAssessmentService();
   const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const publishedStudioMaterialization = useMemo(
+    () => documentGenerations.some(generation => generation.artifacts.schemaVersion === 'studio-approved-work-items.v1'),
+    [documentGenerations],
+  );
 
   const processId = useMemo(() => inferDeliveryPackProcessId(tasks), [tasks]);
   const process = useMemo<AssessProcess | null>(() => {
@@ -92,7 +98,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    if (!processId) {
+    if (!processId || publishedStudioMaterialization) {
       setAssessment(null);
       return;
     }
@@ -104,7 +110,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [getAssessmentForProcess, processId]);
+  }, [getAssessmentForProcess, processId, publishedStudioMaterialization]);
 
   const pack = useMemo(() => buildDeliveryPack({
     project,
@@ -167,9 +173,17 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
         </div>
       </div>
 
+      {savedSnapshot}
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Section title="Decision And Avala Govern" icon={ClipboardDocumentListIcon}>
-          <div className="grid gap-4 lg:grid-cols-2">
+        <Section title={publishedStudioMaterialization ? 'Studio Publication Lineage' : 'Decision And Avala Govern'} icon={ClipboardDocumentListIcon}>
+          {publishedStudioMaterialization ? (
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Approved Studio source</div>
+              <p className="mt-3 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
+                This pack is linked to an approved Studio publication. Detailed decision, Govern, approval, and quality history remains in Studio and is unavailable in this legacy Delivery projection.
+              </p>
+            </div>
+          ) : <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
               <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Assess Decision</div>
               <dl className="mt-3 space-y-2 text-sm">
@@ -195,7 +209,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
                 <p className="mt-3 text-sm font-semibold text-slate-500">No Avala Govern snapshot is linked for this project.</p>
               )}
             </div>
-          </div>
+          </div>}
         </Section>
 
         <Section title="Approval And Evidence" icon={CheckCircleIcon}>
@@ -222,9 +236,14 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
                   <h3 className="font-black text-slate-900 dark:text-white">{document.title}</h3>
                   <p className="mt-1 text-xs font-semibold text-slate-500">{document.id} · {document.generatedAt}</p>
                 </div>
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-black uppercase ${statusClass(document.approvalStatus)}`}>{document.approvalStatus}</span>
+                <div className="flex flex-wrap gap-2">
+                  <span className={`rounded-full border px-2 py-1 text-[10px] font-black uppercase ${statusClass(document.approvalStatus)}`}>Approval {document.approvalStatus}</span>
+                  <span className={`rounded-full border px-2 py-1 text-[10px] font-black uppercase ${statusClass(document.qualityGateStatus)}`}>Quality {document.qualityGateStatus}</span>
+                </div>
               </div>
               <p className="mt-3 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{document.summary}</p>
+              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">{document.approvalDetail}</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">{document.qualityGateDetail}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
                 <span>{document.sectionCount} sections</span>
                 <span>{document.workItemCount} generated work items</span>
@@ -273,7 +292,11 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
           </div>
           <div className="space-y-3">
             {pack.auditSummary.length === 0 ? (
-              <div className="rounded-lg border border-slate-200 p-4 text-sm font-bold text-slate-500 dark:border-slate-800">No handoff audit metadata is linked.</div>
+              <div className="rounded-lg border border-slate-200 p-4 text-sm font-bold text-slate-500 dark:border-slate-800">
+                {publishedStudioMaterialization
+                  ? 'Detailed Studio approval and audit history is unavailable in this legacy Delivery projection. Review the authoritative history in Studio.'
+                  : 'No handoff audit metadata is linked.'}
+              </div>
             ) : pack.auditSummary.map(event => (
               <div key={event.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
                 <div className="text-sm font-black text-slate-900 dark:text-white">{event.label}</div>

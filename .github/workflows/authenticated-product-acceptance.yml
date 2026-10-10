@@ -1,0 +1,115 @@
+name: Authenticated Product Acceptance Preparation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Repository preparation only. No hosted job, environment, secrets or dispatch.
+# Local fixture authentication cannot promote authenticated hosted requirements.
+env:
+  RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  ACCEPTANCE_WORKFLOW_PATH: .github/workflows/authenticated-product-acceptance.yml
+  ACCEPTANCE_EVIDENCE_ENVIRONMENT: ci-disposable-postgres
+
+jobs:
+  source-and-authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: avalaos_exhaustive
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+      ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+      ENTERPRISE_INTELLIGENCE_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Feature contracts and evidence rejection
+        run: |
+          npm run test:authenticated-product:source
+          npm run typecheck
+          npm run typecheck:edge
+          node scripts/exhaustiveAcceptanceValidate.mjs
+          git diff --check
+      - name: Actual PostgreSQL bridge, process and provider authority
+        env:
+          PGPASSWORD: postgres
+        run: |
+          createdb -h 127.0.0.1 -U postgres avalaos_pilot_synthetic
+          node scripts/studioDeliveryAuthorityPostgres.mjs
+          node scripts/testAuthenticatedConnectedPostgres.mjs
+      - name: Enterprise Intelligence query and retained cases
+        env:
+          RETAINED_TEST_ID_RESULTS: /tmp/authenticated-ei-results.json
+          RETAINED_SUITE_COMMAND: node scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs
+        run: node scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs
+      - name: Retain sanitized Enterprise Intelligence results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-ei-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/authenticated-ei-results.json
+          if-no-files-found: error
+          retention-days: 14
+
+  connected-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: avalaos_pilot_synthetic
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+      PILOT_ACCEPTANCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Actual product cases on desktop and Pixel 7
+        run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
+      - name: Independently verify case observations and cleanup
+        run: node scripts/verifyAuthenticatedLocalEvidence.mjs output/acceptance/authenticated-product/local-evidence.json
+      - name: Retain sanitized local evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-local-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/acceptance/authenticated-product/local-evidence.json
+          if-no-files-found: error
+          retention-days: 14

@@ -26,6 +26,7 @@ import { buildAvalaGovernLiteCard } from './avalaGovernLiteService';
 
 const DOCUMENT_ARTIFACT_KEYS: DocumentArtifactKeys[] = ['brd', 'frd', 'pdd'];
 const OMITTED_CONTENT_POLICY = 'Document bodies, raw uploaded source content, provider payloads, raw prompts, secrets, and tenant-confidential source content are excluded from this pack export.';
+const isStudioPublishedGeneration = (generation: DocumentGeneration) => generation.artifacts.schemaVersion === 'studio-approved-work-items.v1';
 
 export interface BuildDeliveryPackInput {
   project: Project;
@@ -88,7 +89,7 @@ const getDocumentSummary = (generation: DocumentGeneration) => {
 
 const mapApprovalStatus = (generation: DocumentGeneration): DeliveryPackChecklistStatus => {
   const approvals = generation.artifacts.approvals || [];
-  if (approvals.length === 0) return 'Not Required';
+  if (approvals.length === 0) return isStudioPublishedGeneration(generation) ? 'Complete' : 'Not Required';
   if (approvals.some(approval => approval.status === 'Rejected')) return 'Action Required';
   if (approvals.some(approval => approval.status === 'Pending')) return 'Action Required';
   return 'Complete';
@@ -96,7 +97,7 @@ const mapApprovalStatus = (generation: DocumentGeneration): DeliveryPackChecklis
 
 const mapQualityGateStatus = (generation: DocumentGeneration): DeliveryPackChecklistStatus => {
   const qualityGate = generation.artifacts.qualityGate;
-  if (!qualityGate) return 'Not Required';
+  if (!qualityGate) return isStudioPublishedGeneration(generation) ? 'Missing' : 'Not Required';
   const findingCount = (qualityGate.ambiguityPoints?.length || 0) + (qualityGate.gapPoints?.length || 0);
   return findingCount > 0 ? 'Action Required' : 'Complete';
 };
@@ -111,6 +112,9 @@ const lineageStatusFor = (lineage?: TaskSourceLineageMetadata): DeliveryPackLine
 const mapDocumentRef = (generation: DocumentGeneration, docTemplates: DocTemplate[]): DeliveryPackDocumentRef => {
   const artifactKeys = DOCUMENT_ARTIFACT_KEYS.filter(key => Boolean(generation.artifacts[key]));
   const sectionCount = DOCUMENT_ARTIFACT_KEYS.reduce((total, key) => total + (generation.artifacts[key]?.sections?.length || 0), 0);
+  const publishedFromStudio = isStudioPublishedGeneration(generation);
+  const approvals = generation.artifacts.approvals || [];
+  const qualityGate = generation.artifacts.qualityGate;
 
   return {
     id: generation.id,
@@ -120,6 +124,13 @@ const mapDocumentRef = (generation: DocumentGeneration, docTemplates: DocTemplat
     artifactKeys,
     qualityGateStatus: mapQualityGateStatus(generation),
     approvalStatus: mapApprovalStatus(generation),
+    qualityGateDetail: publishedFromStudio && !qualityGate
+      ? 'Detailed quality history remains in Studio and is unavailable in this Delivery projection.'
+      : qualityGate ? 'Quality status is projected from the generated document reference.' : 'No quality review is required by this document reference.',
+    approvalDetail: publishedFromStudio && approvals.length === 0
+      ? 'Publication is bound to an approved Studio artifact version. Detailed approval history remains in Studio and is unavailable here.'
+      : approvals.length > 0 ? 'Approval status is projected from the generated document reference.' : 'No approval is required by this document reference.',
+    publishedFromStudio,
     summary: getDocumentSummary(generation),
     sectionCount,
     workItemCount: generation.artifacts.workItems?.length || 0,
@@ -262,17 +273,24 @@ const buildApprovalChecklist = (
   const approvalEvents = assessment?.review?.approvalHistory || [];
   const latestApproval = [...approvalEvents].reverse().find(event => event.status === 'Approved' || event.status === 'Rejected');
   const processOwner = userNameById(users, process?.ownerId);
+  const publishedDocument = documents.find(document => document.publishedFromStudio);
 
-  const items: DeliveryPackChecklistItem[] = [{
-    id: 'assessment-owner-approval',
-    label: 'Assessment owner decision recorded',
-    status: latestApproval?.status === 'Approved' || assessment?.status === 'Approved' || assessment?.status === 'Completed' || assessment?.status === 'Handed Off to Delivery'
-      ? 'Complete'
-      : governLite?.humanApprovalRequired ? 'Action Required' : 'Not Required',
-    owner: latestApproval?.actorName || processOwner,
-    source: 'Assess review state',
-    detail: latestApproval?.reason || `Assessment status is ${assessment?.status || 'not available'}.`,
-  }];
+  const items: DeliveryPackChecklistItem[] = publishedDocument ? [{
+    id: 'studio-publication-approval',
+    label: 'Approved Studio publication bound',
+    status: 'Complete',
+    source: 'Avala Studio publication authority',
+    detail: publishedDocument.approvalDetail,
+  }] : [{
+      id: 'assessment-owner-approval',
+      label: 'Assessment owner decision recorded',
+      status: latestApproval?.status === 'Approved' || assessment?.status === 'Approved' || assessment?.status === 'Completed' || assessment?.status === 'Handed Off to Delivery'
+        ? 'Complete'
+        : governLite?.humanApprovalRequired ? 'Action Required' : 'Not Required',
+      owner: latestApproval?.actorName || processOwner,
+      source: 'Assess review state',
+      detail: latestApproval?.reason || `Assessment status is ${assessment?.status || 'not available'}.`,
+    }];
 
   if (governLite) {
     items.push({
@@ -291,7 +309,7 @@ const buildApprovalChecklist = (
       label: `${document.title} approval status`,
       status: document.approvalStatus,
       source: 'Avala Studio',
-      detail: `Document generation ${document.id} has approval status ${document.approvalStatus}.`,
+      detail: document.approvalDetail,
     });
   });
 
@@ -424,20 +442,7 @@ const buildAuditSummary = (
     }));
   }
 
-  return workItems
-    .filter(item => item.sourceLineage?.handoffLedgerEntryIds?.length)
-    .map(item => ({
-      id: `${item.id}-lineage`,
-      label: `${item.title} source lineage recorded`,
-      sourceType: 'Work Items',
-      sourceId: item.id,
-      targetType: 'Project',
-      targetId: project.id,
-      status: (item.sourceLineage?.sourceStatus as DeliveryPackAuditEvent['status']) || 'Accepted',
-      createdAt: item.sourceLineage?.documentGenerationId ? '2026-04-26T18:10:00.000Z' : '',
-      createdBy: 'demo-lineage',
-      evidenceRefs: item.evidenceRefs,
-    }));
+  return [];
 };
 
 const statusFrom = (
@@ -467,12 +472,14 @@ export const buildDeliveryPack = ({
   const packId = inferDeliveryPackId(project, tasks);
   const packGeneratedAt = generatedAt || new Date().toISOString();
   const packExportedAt = exportedAt || packGeneratedAt;
-  const governLite = assessment && process ? buildAvalaGovernLiteCard(assessment, process) : undefined;
+  const hasStudioPublication = documentGenerations.some(isStudioPublishedGeneration);
+  const trustedAssessment = hasStudioPublication ? null : assessment;
+  const governLite = trustedAssessment && process ? buildAvalaGovernLiteCard(trustedAssessment, process) : undefined;
   const documents = documentGenerations.map(generation => mapDocumentRef(generation, docTemplates));
   const workItems = tasks.map(task => mapWorkItemRef(task, users));
-  const sources = buildSources(project, process, assessment, governLite, documents, workItems);
-  const approvalChecklist = buildApprovalChecklist(process, assessment, governLite, documents, users);
-  const evidenceChecklist = buildEvidenceChecklist(assessment, governLite, workItems);
+  const sources = buildSources(project, process, trustedAssessment, governLite, documents, workItems);
+  const approvalChecklist = buildApprovalChecklist(process, trustedAssessment, governLite, documents, users);
+  const evidenceChecklist = buildEvidenceChecklist(trustedAssessment, governLite, workItems);
   const blockers = buildBlockers(governLite, workItems, documents);
   const auditSummary = buildAuditSummary(project, workItems, handoffEntries);
 
@@ -491,16 +498,16 @@ export const buildDeliveryPack = ({
       status: process.status,
       createdAt: process.createdAt,
     } : undefined,
-    assessmentRef: assessment ? {
-      id: assessment.id,
+    assessmentRef: trustedAssessment ? {
+      id: trustedAssessment.id,
       type: 'Decision Pack',
-      title: `${process?.name || assessment.processId} decision summary`,
+      title: `${process?.name || trustedAssessment.processId} decision summary`,
       module: 'assess',
-      status: assessment.status,
-      createdAt: assessment.metadata.lastSavedAt,
+      status: trustedAssessment.status,
+      createdAt: trustedAssessment.metadata.lastSavedAt,
     } : undefined,
     sources,
-    decisionSummary: buildDecisionSummary(assessment),
+    decisionSummary: buildDecisionSummary(trustedAssessment),
     governLite,
     documents,
     workItems,

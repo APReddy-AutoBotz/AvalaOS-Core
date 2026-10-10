@@ -33,7 +33,7 @@ test('Enterprise Intelligence producer binds identity, sources, branches and exa
   const emitted = buildEnterpriseIntelligenceAcceptanceProducer({
     actualByTestId: fixtureActuals, identity, command, cleanupVerified: true,
   });
-  assert.equal(emitted.results.length, 4);
+  assert.equal(emitted.results.length, 5);
   assert.deepEqual(validateEnterpriseIntelligenceAcceptanceProducer({ emitted, identity, command }), []);
   assert.deepEqual(emitted.results.map(item => item.testId), EI_ACCEPTANCE_TEST_IDS);
   assert.deepEqual(emitted.results[0].sourceReferences, EI_ACCEPTANCE_SOURCE_REFERENCES);
@@ -66,7 +66,7 @@ test('Enterprise Intelligence preserves FAIL and BLOCKED independently with reta
   assert.deepEqual(validateEnterpriseIntelligenceAcceptanceProducer({ emitted, identity, command }), []);
   assert.deepEqual(finalizeEnterpriseIntelligenceAcceptanceExecution({
     actualByTestId, failuresByTestId, blockedByTestId, retainedResultPath: 'retained.json',
-  }), { counts: { passed: 2, failed: 1, blocked: 1 }, shouldFailProcess: false });
+  }), { counts: { passed: 3, failed: 1, blocked: 1 }, shouldFailProcess: false });
   assert.equal(finalizeEnterpriseIntelligenceAcceptanceExecution({
     actualByTestId, failuresByTestId, blockedByTestId,
   }).shouldFailProcess, true);

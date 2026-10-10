@@ -20,7 +20,7 @@ import {
   renderDeliveryPackJson,
   renderDeliveryPackMarkdown,
 } from './deliveryPackExportService';
-import { Task } from '../types';
+import { DocumentGeneration, Task } from '../types';
 
 const buildDemoPack = (overrides: Partial<Parameters<typeof buildDeliveryPack>[0]> = {}) => buildDeliveryPack({
   project: MOCK_PROJECTS.find(project => project.id === CANONICAL_AP_PROJECT_ID)!,
@@ -146,6 +146,66 @@ console.log('Running Delivery Pack service regression tests...');
 
   assert.equal(pack.exportMetadata.generatedAt, '2026-06-13T10:00:00.000Z');
   assert.equal(pack.exportMetadata.exportedAt, '2026-06-14T11:30:00.000Z');
+}
+
+{
+  const sourceGeneration = MOCK_DOCUMENT_GENERATIONS.find(generation => generation.projectId === CANONICAL_AP_PROJECT_ID)!;
+  const publishedGeneration: DocumentGeneration = {
+    ...sourceGeneration,
+    id: 'studio-published-generation',
+    templateId: 'studio-approved-brd',
+    artifacts: {
+      ...sourceGeneration.artifacts,
+      schemaVersion: 'studio-approved-work-items.v1',
+      approvedStudioContent: { title: 'Approved Studio BRD', sections: [] },
+      approvals: [],
+      qualityGate: undefined,
+    } as unknown as DocumentGeneration['artifacts'],
+  };
+  const publishedTask: Task = {
+    ...MOCK_TASKS[0],
+    id: 'studio-published-task',
+    sourceLineage: {
+      schemaVersion: 'legacy-delivery-lineage.v1',
+      importId: 'legacy-import',
+      documentGenerationId: publishedGeneration.id,
+      documentSourceDigest: `sha256:${'a'.repeat(64)}`,
+      sourceItemIndex: 1,
+      sourceProcessId: CANONICAL_AP_PROCESS_ID,
+      sourceAssessmentId: CANONICAL_AP_ASSESSMENT_ID,
+      sourceEpicIndex: 0,
+      sourceEpicTitle: 'Approved work',
+      processId: CANONICAL_AP_PROCESS_ID,
+      assessmentId: CANONICAL_AP_ASSESSMENT_ID,
+      handoffLedgerEntryIds: ['unresolved-history-reference'],
+    },
+  };
+  const pack = buildDeliveryPack({
+    project: MOCK_PROJECTS.find(project => project.id === CANONICAL_AP_PROJECT_ID)!,
+    tasks: [publishedTask],
+    users: MOCK_USERS,
+    documentGenerations: [publishedGeneration],
+    docTemplates: MOCK_DOC_TEMPLATES,
+    handoffEntries: [],
+    process: CANONICAL_AP_PROCESS,
+    assessment: CANONICAL_AP_ASSESSMENT,
+    generatedAt: '2026-10-10T12:00:00.000Z',
+    exportedAt: '2026-10-10T12:00:00.000Z',
+  });
+
+  assert.equal(pack.workItems[0].lineageStatus, 'Linked');
+  assert.equal(pack.decisionSummary, undefined, 'published Studio lineage must not borrow an arbitrary legacy assessment decision');
+  assert.equal(pack.governLite, undefined, 'published Studio lineage must not synthesize Govern from the legacy project anchor');
+  assert.equal(pack.assessmentRef, undefined);
+  assert.equal(pack.sources.some(source => source.type === 'Decision Pack'), false);
+  assert.equal(pack.documents[0].approvalStatus, 'Complete');
+  assert.match(pack.documents[0].approvalDetail, /bound to an approved Studio artifact version/);
+  assert.equal(pack.documents[0].qualityGateStatus, 'Missing');
+  assert.match(pack.documents[0].qualityGateDetail, /history remains in Studio.*unavailable/i);
+  assert.ok(pack.approvalChecklist.some(item => item.id === 'studio-publication-approval' && item.status === 'Complete'));
+  assert.equal(pack.approvalChecklist.some(item => item.id === 'assessment-owner-approval'), false);
+  assert.deepEqual(pack.auditSummary, [], 'unresolved lineage references must not fabricate audit events');
+  assert.doesNotMatch(JSON.stringify(pack), /demo-lineage|2026-04-26T18:10:00\.000Z/);
 }
 
 console.log('Delivery Pack service regression tests passed.');

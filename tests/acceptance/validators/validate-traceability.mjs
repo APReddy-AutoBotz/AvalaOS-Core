@@ -70,6 +70,7 @@ const summary = {
   retainedCases: [...classification.values()].filter(kinds => kinds.includes('retained')).length,
   oracleCases: [...classification.values()].filter(kinds => kinds.includes('oracle')).length,
   hostedCases: [...classification.values()].filter(kinds => kinds.includes('hosted')).length,
+  authenticatedCases: [...classification.values()].filter(kinds => kinds.includes('authenticated')).length,
   serverCases: [...classification.values()].filter(kinds => kinds.includes('server')).length,
   compositeCases: [...classification.values()].filter(kinds => kinds.length > 1).length,
   transcripts: fixtures.fixtures.length,
