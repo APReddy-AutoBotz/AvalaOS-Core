@@ -120,6 +120,18 @@
       "requiredGate": true
     },
     {
+      "suiteId": "legacy-delivery-postgres-acceptance",
+      "command": [
+        "node",
+        "scripts/legacyDeliveryAuthorityPostgres.mjs"
+      ],
+      "testIds": [
+        "DELIVERY-007",
+        "DELIVERY-008"
+      ],
+      "requiredGate": true
+    },
+    {
       "suiteId": "delivery-policy",
       "command": [
         "npm",
@@ -132,9 +144,7 @@
         "DELIVERY-003",
         "DELIVERY-004",
         "DELIVERY-005",
-        "DELIVERY-006",
-        "DELIVERY-007",
-        "DELIVERY-008"
+        "DELIVERY-006"
       ],
       "requiredGate": true
     },

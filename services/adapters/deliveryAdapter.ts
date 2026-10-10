@@ -1,7 +1,23 @@
 import { getRuntimeDataAccess, supabase } from '../supabaseClient';
-import { Project, Task, Epic, Sprint, Comment, ActivityLogItem } from '../../types';
+import { Project, Task, Epic, Sprint, Comment, ActivityLogItem, TenantContextProjection, WorkItem } from '../../types';
 import { MOCK_PROJECTS, MOCK_TASKS, MOCK_EPICS, MOCK_SPRINTS } from '../../data/mockData';
 import { toSupabaseDemoUserId } from '../demoIdentity';
+import {
+  buildLegacyDeliveryCommand,
+  executeLegacyDeliveryEnvelope,
+  getLegacyDeliveryPendingKey,
+  getPendingLegacyDeliveryCommand,
+  queryLegacyDelivery,
+  retryPendingLegacyDeliveryCommand,
+} from '../legacyDelivery/client';
+import type {
+  LegacyDeliveryAction,
+  LegacyDeliveryCommandSuccess,
+  LegacyDeliveryPayloadByAction,
+  LegacyDeliverySourceItem,
+  LegacyDeliveryTaskPatch,
+  LegacyDeliveryTaskProjection,
+} from '../legacyDelivery/contracts';
 
 const isUuid = (value?: string) => Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 const relationAppId = (relation: any) => {
@@ -37,6 +53,11 @@ const fromProjectRow = (row: any): Project => ({
   ownerId: row.owner_id || '',
   lifecycleStage: row.lifecycle_stage || 'Planning',
   healthStatus: row.health_status || 'On Track',
+});
+
+const fromAuthoritativeProjectRow = (row: any): Project => ({
+  ...fromProjectRow(row),
+  id: row.id,
 });
 
 const fromEpicRow = (row: any): Epic => ({
@@ -91,6 +112,193 @@ const fromTaskRow = (row: any): Task => ({
   retentionClass: row.metadata?.retentionClass,
   restoreEligible: row.metadata?.restoreEligible,
 });
+
+export class LegacyDeliveryProjectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LegacyDeliveryProjectionError';
+  }
+}
+
+export class LegacyDeliveryPendingReconciledError extends LegacyDeliveryProjectionError {
+  readonly pendingReconciled = true;
+
+  constructor() {
+    super('A previous Delivery command was reconciled first. The workspace has been refreshed; review the committed result before submitting another change.');
+    this.name = 'LegacyDeliveryPendingReconciledError';
+  }
+}
+
+const legacyScope = (context: TenantContextProjection) => ({
+  actorId: context.userId,
+  organizationId: context.organizationId,
+  workspaceId: context.workspaceId,
+  authorizationVersion: context.authorizationVersion,
+});
+
+const executeAuthoritativeCommand = async <A extends LegacyDeliveryAction>(
+  context: TenantContextProjection,
+  action: A,
+  payload: LegacyDeliveryPayloadByAction[A],
+): Promise<LegacyDeliveryCommandSuccess<A>> => {
+  const scope = legacyScope(context);
+  const proposed = buildLegacyDeliveryCommand(scope, action, payload);
+  const pendingKey = getLegacyDeliveryPendingKey(scope, proposed);
+  const pending = getPendingLegacyDeliveryCommand(scope, pendingKey);
+  if (!pending) return executeLegacyDeliveryEnvelope(scope, proposed);
+  const sameIntent = pending.action === proposed.action
+    && JSON.stringify(pending.payload) === JSON.stringify(proposed.payload);
+  const reconciled = await retryPendingLegacyDeliveryCommand(scope, pendingKey);
+  if (!sameIntent) throw new LegacyDeliveryPendingReconciledError();
+  return reconciled as LegacyDeliveryCommandSuccess<A>;
+};
+
+const lineageGenerationId = (task: LegacyDeliveryTaskProjection) => {
+  const value = task.sourceLineage?.documentGenerationId;
+  return typeof value === 'string' ? value : null;
+};
+
+const authoritativeEpicId = (task: LegacyDeliveryTaskProjection) => {
+  if (task.sourceEpicIndex === null) return undefined;
+  return `legacy-source-epic:${lineageGenerationId(task) || task.projectId}:${task.sourceEpicIndex}`;
+};
+
+export const mapLegacyDeliveryTask = (projection: LegacyDeliveryTaskProjection): Task => ({
+  id: projection.id,
+  version: projection.version ?? undefined,
+  readOnlyHistorical: !projection.mutable,
+  title: projection.title,
+  description: projection.description,
+  status: projection.status,
+  priority: projection.priority,
+  type: projection.type,
+  projectId: projection.projectId,
+  epicId: authoritativeEpicId(projection),
+  assigneeIds: projection.assigneeIds,
+  ownerId: projection.ownerId ?? undefined,
+  reporterId: projection.reporterId ?? undefined,
+  startDate: '',
+  dueDate: '',
+  dependencyIds: projection.dependencyIds,
+  sourceLineage: projection.sourceLineage as Task['sourceLineage'],
+  deletionState: projection.retentionState === 'active' ? 'active' : projection.retentionState,
+  deletionMode: projection.retentionState === 'active' ? undefined : projection.retentionState === 'retained' ? 'retained_lineage' : 'soft_delete',
+  deletionRequestedAt: projection.deletionRequestedAt ?? undefined,
+  deletionRequestedBy: projection.deletionRequestedBy ?? undefined,
+  retentionReason: projection.retentionReason ?? undefined,
+  retentionClass: projection.retentionClass,
+  restoreEligible: false,
+});
+
+const mapAuthoritativeEpics = (items: LegacyDeliveryTaskProjection[]): Epic[] => {
+  const byId = new Map<string, Epic>();
+  for (const task of items) {
+    const id = authoritativeEpicId(task);
+    if (!id || task.sourceEpicIndex === null || !task.sourceEpicTitle) continue;
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        name: task.sourceEpicTitle,
+        projectId: task.projectId,
+        color: ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'][task.sourceEpicIndex % 6],
+      });
+    }
+  }
+  return [...byId.values()];
+};
+
+const sameSourceItem = (displayed: WorkItem, source: LegacyDeliverySourceItem) =>
+  displayed.type === source.type
+  && displayed.title === source.title
+  && displayed.description === source.description
+  && displayed.acceptanceCriteria.length === source.acceptanceCriteria.length
+  && displayed.acceptanceCriteria.every((criterion, index) => criterion === source.acceptanceCriteria[index]);
+
+/**
+ * Resolves the modal's selection against the current server source projection.
+ * The browser never supplies titles or lineage to the write command.
+ */
+export const resolveLegacyDeliveryImportSelection = (
+  displayedItems: WorkItem[],
+  selectedItems: WorkItem[],
+  sourceItems: LegacyDeliverySourceItem[],
+) => {
+  if (displayedItems.length !== sourceItems.length
+    || displayedItems.some((item, index) => !sameSourceItem(item, sourceItems[index]))) {
+    throw new LegacyDeliveryProjectionError('The generated document changed after it was opened. Refresh it before importing Delivery work.');
+  }
+  const indices = selectedItems.map(selected => {
+    const byIdentity = displayedItems.findIndex(item => item === selected);
+    if (byIdentity >= 0) return byIdentity;
+    const matches = displayedItems.flatMap((item, index) => sameSourceItem(selected, { ...sourceItems[index], sourceIndex: index }) ? [index] : []);
+    if (matches.length !== 1) {
+      throw new LegacyDeliveryProjectionError('The selected work items could not be matched to the governed document. Reopen the import dialog and try again.');
+    }
+    return matches[0];
+  });
+  const unique = [...new Set(indices)].sort((left, right) => left - right);
+  if (unique.length !== selectedItems.length || unique.length === 0) {
+    throw new LegacyDeliveryProjectionError('Select at least one distinct governed work item to import.');
+  }
+  if (!unique.some(index => sourceItems[index].type !== 'Epic')) {
+    throw new LegacyDeliveryProjectionError('Select at least one Story or Task with the source epic grouping.');
+  }
+  return unique.map(index => sourceItems[index].sourceIndex);
+};
+
+const queryAllAuthoritativeTasks = async (context: TenantContextProjection, projectId: string) => {
+  const items: LegacyDeliveryTaskProjection[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const result = await queryLegacyDelivery(legacyScope(context), { projectId, limit: 100, cursor, includeRetained: true });
+    items.push(...result.items);
+    cursor = result.page.nextCursor;
+    if (cursor && seen.has(cursor)) throw new LegacyDeliveryProjectionError('Delivery returned an invalid paging cursor. Refresh the workspace before retrying.');
+    if (cursor) seen.add(cursor);
+  } while (cursor);
+  return items;
+};
+
+const taskUpdatePatch = (previous: Task, next: Task): LegacyDeliveryTaskPatch => {
+  const patch: LegacyDeliveryTaskPatch = {};
+  if (previous.title !== next.title) patch.title = next.title;
+  if (previous.description !== next.description) patch.description = next.description;
+  if (previous.priority !== next.priority) patch.priority = next.priority;
+  if (previous.status !== next.status) patch.status = next.status;
+  if (JSON.stringify(previous.assigneeIds) !== JSON.stringify(next.assigneeIds)) patch.assigneeIds = next.assigneeIds;
+  if (JSON.stringify(previous.dependencyIds || []) !== JSON.stringify(next.dependencyIds || [])) patch.dependencyIds = next.dependencyIds || [];
+  return patch;
+};
+
+const changed = (left: unknown, right: unknown) => JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
+const unsupportedUpdateFields: Array<keyof Task> = [
+  'type', 'projectId', 'epicId', 'sprintId', 'storyPoints', 'startDate', 'dueDate', 'parentId', 'subtaskIds',
+  'reporterId', 'ownerId', 'orderRank', 'comments', 'userStories', 'activityLog', 'sourceLineage',
+];
+export const assertLegacyDeliveryCreateProjectionSupported = (task: Partial<Task>) => {
+  const unsupported = [
+    task.status && task.status !== 'To Do' ? 'status' : null,
+    task.epicId ? 'epic' : null,
+    task.sprintId ? 'sprint' : null,
+    task.storyPoints !== undefined ? 'story points' : null,
+    task.startDate ? 'start date' : null,
+    task.dueDate ? 'due date' : null,
+    task.parentId ? 'parent task' : null,
+    task.reporterId ? 'reporter' : null,
+    task.ownerId ? 'owner' : null,
+    task.orderRank !== undefined ? 'backlog rank' : null,
+  ].filter(Boolean);
+  if (unsupported.length) {
+    throw new LegacyDeliveryProjectionError(`Connected Delivery task creation does not yet govern ${unsupported.join(', ')}. Create the task without those read-only planning fields.`);
+  }
+};
+export const assertLegacyDeliveryUpdateProjectionSupported = (previous: Task, next: Task) => {
+  const unsupported = unsupportedUpdateFields.filter(field => changed(previous[field], next[field]));
+  if (unsupported.length) {
+    throw new LegacyDeliveryProjectionError(`Connected Delivery keeps these fields read only until server authority is available: ${unsupported.join(', ')}.`);
+  }
+};
 
 async function getEntityUuid(table: string, orgId: string, appId?: string) {
   if (!appId) return null;
@@ -158,7 +366,104 @@ export const deliveryAdapter = {
     if (getRuntimeDataAccess() === 'local') return MOCK_PROJECTS;
     const { data, error } = await supabase.from('projects').select('*').eq('org_id', orgId).order('created_at');
     if (error) throw error;
-    return (data || []).map(fromProjectRow);
+    return (data || []).map(fromAuthoritativeProjectRow);
+  },
+
+  async getAuthoritativeProjects(context: TenantContextProjection) {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('org_id', context.organizationId)
+      .eq('workspace_id', context.workspaceId)
+      .eq('status', 'active')
+      .is('archived_at', null)
+      .is('deleted_at', null)
+      .order('created_at');
+    if (error) throw error;
+    return (data || []).map(fromAuthoritativeProjectRow);
+  },
+
+  async getAuthoritativeWorkspace(context: TenantContextProjection) {
+    const projects = await this.getAuthoritativeProjects(context);
+    const projections = (await Promise.all(
+      projects.map(project => queryAllAuthoritativeTasks(context, project.id)),
+    )).flat();
+    return {
+      projects,
+      tasks: projections.map(mapLegacyDeliveryTask),
+      epics: mapAuthoritativeEpics(projections),
+    };
+  },
+
+  async createAuthoritativeTask(context: TenantContextProjection, task: Partial<Task>) {
+    if (!task.projectId) throw new LegacyDeliveryProjectionError('Choose a project before creating Delivery work.');
+    assertLegacyDeliveryCreateProjectionSupported(task);
+    const result = await executeAuthoritativeCommand(context, 'task.create', {
+      projectId: task.projectId,
+      task: {
+        title: task.title || 'Untitled Task',
+        description: task.description || '',
+        priority: task.priority || 'Medium',
+        type: task.type || 'Task',
+        assigneeIds: task.assigneeIds || [],
+        dependencyIds: task.dependencyIds || [],
+      },
+    });
+    return mapLegacyDeliveryTask(result.resource);
+  },
+
+  async updateAuthoritativeTask(context: TenantContextProjection, previous: Task, next: Task) {
+    if (previous.readOnlyHistorical || !Number.isSafeInteger(previous.version) || (previous.version || 0) < 1) {
+      throw new LegacyDeliveryProjectionError('This historical Delivery item is read only because it has no server authority version.');
+    }
+    assertLegacyDeliveryUpdateProjectionSupported(previous, next);
+    const patch = taskUpdatePatch(previous, next);
+    if (Object.keys(patch).length === 0) return previous;
+    const result = await executeAuthoritativeCommand(context, 'task.update', {
+      taskId: previous.id,
+      expectedVersion: previous.version!,
+      patch,
+    });
+    return mapLegacyDeliveryTask(result.resource);
+  },
+
+  async deleteAuthoritativeTask(context: TenantContextProjection, task: Task) {
+    if (task.readOnlyHistorical || !Number.isSafeInteger(task.version) || (task.version || 0) < 1) {
+      throw new LegacyDeliveryProjectionError('This historical Delivery item is read only because it has no server authority version.');
+    }
+    const result = await executeAuthoritativeCommand(context, 'task.delete', {
+      taskId: task.id,
+      expectedVersion: task.version!,
+      deletionReason: 'Deleted from the Delivery workspace.',
+    });
+    return mapLegacyDeliveryTask(result.resource);
+  },
+
+  async importAuthoritativeWorkItems(context: TenantContextProjection, input: {
+    projectId: string;
+    sourceGenerationId: string;
+    displayedItems: WorkItem[];
+    selectedItems: WorkItem[];
+  }) {
+    const query = await queryLegacyDelivery(legacyScope(context), {
+      projectId: input.projectId,
+      sourceGenerationId: input.sourceGenerationId,
+      includeRetained: true,
+    });
+    if (!query.source) {
+      throw new LegacyDeliveryProjectionError('The governed source document is unavailable. Refresh the document before importing Delivery work.');
+    }
+    const sourceItemIndices = resolveLegacyDeliveryImportSelection(input.displayedItems, input.selectedItems, query.source.items);
+    const result = await executeAuthoritativeCommand(context, 'import', {
+      projectId: input.projectId,
+      sourceGenerationId: input.sourceGenerationId,
+      expectedSourceDigest: query.source.digest,
+      sourceItemIndices,
+    });
+    return {
+      epicCount: sourceItemIndices.filter(index => query.source!.items.find(item => item.sourceIndex === index)?.type === 'Epic').length,
+      taskCount: result.resource.itemCount,
+    };
   },
 
   async saveProject(project: Partial<Project>, orgId: string) {

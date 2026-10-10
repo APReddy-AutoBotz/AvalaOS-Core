@@ -350,10 +350,30 @@ export function resolveProductActionPolicy(input: ProductActionContext): Product
     if (!capabilities.length) {
       return buildDecision(input.action, metadata, false, 'server_context_unavailable', 'The current actor and workspace do not match a usable server context.');
     }
-    // The legacy editors below do not implement canonical Studio/Delivery
-    // commands. Never translate their permission names into server authority.
+    const legacyDeliveryAdminCapabilities = ['org.admin', 'security.manage', 'roles.manage'];
+    const legacyDeliveryCapabilities: Partial<Record<ProductAction, string[]>> = {
+      'delivery.import': ['workitems.import', 'project.manage', ...legacyDeliveryAdminCapabilities],
+      'project.task.create': ['task.create', 'backlog.manage', 'workitems.import', 'project.manage', ...legacyDeliveryAdminCapabilities],
+      'project.task.update': ['task.update', 'task.update.own', 'project.manage', ...legacyDeliveryAdminCapabilities],
+      'workflow.status.change': ['task.update', 'task.update.own', 'project.manage', ...legacyDeliveryAdminCapabilities],
+      'project.task.delete': ['task.delete', 'project.manage', ...legacyDeliveryAdminCapabilities],
+    };
+    const deliveryRequirements = legacyDeliveryCapabilities[input.action as ProductAction];
+    if (deliveryRequirements) {
+      const serverMetadata = { ...metadata, requiredPermissions: deliveryRequirements };
+      if (metadata.requiresProject && !input.projectId && input.scope.type !== ScopeType.PROJECT) {
+        return buildDecision(input.action, serverMetadata, false, 'missing_project_context', 'Select a project before taking this action.');
+      }
+      if (metadata.requiresDocument && !input.documentGenerationId) {
+        return buildDecision(input.action, serverMetadata, false, 'missing_document_context', 'Open a persisted generated document before importing Delivery work.');
+      }
+      if (!deliveryRequirements.some(capability => capabilities.includes(capability))) {
+        return buildDecision(input.action, serverMetadata, false, 'missing_permission', 'Your current workspace role cannot perform this Delivery action.');
+      }
+      return buildDecision(input.action, serverMetadata, true, 'allowed', 'The Delivery command is available; the server will verify current authority before committing it.');
+    }
     if (input.action !== 'process.create') {
-      return buildDecision(input.action, metadata, false, 'governed_workflow_required', 'Use the governed module workspace for this action. Legacy editors cannot make server changes.');
+      return buildDecision(input.action, metadata, false, 'governed_workflow_required', 'Use the governed module workspace for this action. This legacy action has no server authority.');
     }
     const requiredPermissions = ['assess.read', 'assess.process.create'];
     const serverMetadata = { ...metadata, requiredPermissions };

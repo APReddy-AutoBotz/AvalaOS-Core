@@ -23,18 +23,19 @@ const syntheticStudioFixtureMigrationName = '20260926053818_pr_c_synthetic_studi
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 const featureMigrationIndex = migrations.indexOf(migrationName);
 assert.ok(featureMigrationIndex > 0);
-assert.equal(migrations.at(-12), migrationName);
-assert.equal(migrations.at(-11), syntheticMigrationName);
-assert.equal(migrations.at(-10), syntheticStudioFixtureMigrationName);
-assert.equal(migrations.at(-9), '20260928060000_pr_c_synthetic_direct_planning_generation.sql');
-assert.equal(migrations.at(-8), '20261003015246_synthetic_ai_final_paid_validation_continuation.sql');
-assert.equal(migrations.at(-7), '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
-assert.equal(migrations.at(-6), '20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
-assert.equal(migrations.at(-5), '20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-assert.equal(migrations.at(-4), '20261004025101_studio_brd_source_fact_retention_v3.sql');
-assert.equal(migrations.at(-3), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
-assert.equal(migrations.at(-2), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
-assert.equal(migrations.at(-1), '20261009162752_govern_immutable_action_authority.sql');
+assert.equal(migrations.at(-13), migrationName);
+assert.equal(migrations.at(-12), syntheticMigrationName);
+assert.equal(migrations.at(-11), syntheticStudioFixtureMigrationName);
+assert.equal(migrations.at(-10), '20260928060000_pr_c_synthetic_direct_planning_generation.sql');
+assert.equal(migrations.at(-9), '20261003015246_synthetic_ai_final_paid_validation_continuation.sql');
+assert.equal(migrations.at(-8), '20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
+assert.equal(migrations.at(-7), '20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
+assert.equal(migrations.at(-6), '20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
+assert.equal(migrations.at(-5), '20261004025101_studio_brd_source_fact_retention_v3.sql');
+assert.equal(migrations.at(-4), '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql');
+assert.equal(migrations.at(-3), '20261008022445_enterprise_evidence_canonical_size_limit.sql');
+assert.equal(migrations.at(-2), '20261009162752_govern_immutable_action_authority.sql');
+assert.equal(migrations.at(-1), '20261010025331_legacy_delivery_authority.sql');
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -170,10 +171,10 @@ try {
     WHERE org_id=$1 AND workspace_id=$2`, [fixture.org, fixture.workspace])).studio_source_integration_enabled, false);
 
   const identity = await one(db, `SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`);
-  assert.equal(identity.migration_tip, '20261009162752');
+  assert.equal(identity.migration_tip, '20261010025331');
   const identityConstraint = await one(db, `SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
     WHERE conrelid='public.hosted_pilot_environment_identity'::regclass AND conname='hosted_pilot_environment_identity_migration_tip_check'`);
-  assert.equal(identityConstraint.expression, "(migration_tip = '20261009162752'::text)");
+  assert.equal(identityConstraint.expression, "(migration_tip = '20261010025331'::text)");
   const role = fixed(331);
   const orgRole = fixed(332);
   const packageActor = fixed(333);

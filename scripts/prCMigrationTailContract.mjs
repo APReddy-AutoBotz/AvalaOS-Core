@@ -31,6 +31,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20261004112232_synthetic_ai_brd_v3_quality_validation_allowance.sql',
   '20261008022445_enterprise_evidence_canonical_size_limit.sql',
   '20261009162752_govern_immutable_action_authority.sql',
+  '20261010025331_legacy_delivery_authority.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -39,14 +40,14 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, canonical source-size correction, and immutable Govern action-authority successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, canonical source-size correction, immutable Govern action-authority, and legacy Delivery authority successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners validate every approved migration before reading the
-// latest identity-bearing tip. The approved Govern correction advances only the
+// latest identity-bearing tip. The approved legacy Delivery authority advances only the
 // exact hosted-pilot identity and its already-authorized current consumers; it
 // grants no hosted exercise, provider, or spending authority.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return '20261009162752';
+  return '20261010025331';
 };

@@ -17,11 +17,13 @@ interface DocsViewProps {
 }
 
 const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTemplate): string => {
-    if (!template) return "Generated Document";
-    const doc = generation.artifacts[template.artifactKey];
+    const doc = template
+        ? generation.artifacts[template.artifactKey]
+        : generation.artifacts.brd || generation.artifacts.frd || generation.artifacts.pdd;
     if (doc && 'title' in doc && doc.title && doc.title.trim() !== '' && !doc.title.includes("N/A")) {
         return doc.title;
     }
+    if (!template) return "Generated Document";
     return `Document Set (${template.title})`;
 };
 

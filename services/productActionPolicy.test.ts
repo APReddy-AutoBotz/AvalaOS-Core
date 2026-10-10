@@ -76,20 +76,53 @@ describe('productActionPolicy', () => {
       assert.equal(resolveProductActionPolicy(input).allowed, false);
     }
   });
-  it('does not unlock legacy Studio/Delivery writers with canonical capabilities', () => {
-    for (const action of ['docs.generate', 'docs.refine', 'project.task.create', 'delivery.import', 'automation.create']) {
+  it('does not unlock server writers with unrelated capabilities', () => {
+    for (const action of ['docs.generate', 'docs.refine', 'automation.create']) {
       const input = serverInput();
       input.user = user({ orgRole: 'Admin', permissions: ['docs.generate', 'task.create'] });
       input.serverContext.tenantContext = { ...tenantContext, capabilities: ['studio.artifacts.generate', 'delivery.package.manage'] };
       assert.equal(resolveProductActionPolicy({ ...input, action, scope: projectScope }).reason, 'governed_workflow_required');
     }
+    for (const action of ['project.task.create', 'delivery.import']) {
+      const input = serverInput();
+      input.serverContext.tenantContext = { ...tenantContext, capabilities: ['studio.artifacts.generate', 'delivery.package.manage'] };
+      assert.equal(resolveProductActionPolicy({ ...input, action, scope: projectScope, projectId: projectScope.id, documentGenerationId: 'generation-1' }).reason, 'missing_permission');
+    }
+  });
+  it('unlocks only the server-backed legacy Delivery commands with current scoped capabilities', () => {
+    const cases = [
+      ['project.task.create', 'task.create'],
+      ['project.task.update', 'task.update'],
+      ['workflow.status.change', 'task.update.own'],
+      ['project.task.delete', 'task.delete'],
+      ['delivery.import', 'workitems.import'],
+    ] as const;
+    for (const [action, capability] of cases) {
+      const input = serverInput();
+      input.serverContext.tenantContext = { ...tenantContext, capabilities: [capability] };
+      const decision = resolveProductActionPolicy({
+        ...input,
+        action,
+        scope: projectScope,
+        projectId: projectScope.id,
+        documentGenerationId: action === 'delivery.import' ? 'generation-1' : undefined,
+      });
+      assert.equal(decision.allowed, true, `${action} should use ${capability}`);
+    }
+    const input = serverInput();
+    input.serverContext.tenantContext = { ...tenantContext, capabilities: ['workitems.import'] };
+    assert.equal(resolveProductActionPolicy({ ...input, action: 'delivery.import', scope: projectScope, projectId: projectScope.id }).reason, 'missing_document_context');
+    for (const action of ['docs.refine', 'approval.execute', 'docs.export', 'artifact.download']) {
+      assert.equal(resolveProductActionPolicy({ ...input, action, scope: projectScope, projectId: projectScope.id, documentGenerationId: 'generation-1' }).reason, 'governed_workflow_required');
+    }
   });
   it('routes hosted creation entries to canonical workspaces without changing demo routes', () => {
-    for (const view of [View.DOCS_FORGE, View.DOCS, View.WORKSPACE, View.TEMPLATE_STUDIO]) {
+    for (const view of [View.DOCS_FORGE, View.TEMPLATE_STUDIO]) {
       assert.equal(resolveGovernedCreationSurface('server', view), 'studio');
       assert.equal(resolveGovernedCreationSurface('local', view), null);
       assert.equal(resolveGovernedCreationSurface('disabled', view), null);
     }
+    for (const view of [View.DOCS, View.WORKSPACE]) assert.equal(resolveGovernedCreationSurface('server', view), null);
     for (const view of [View.BOARDS, View.LIST, View.DELIVERY_PACK]) assert.equal(resolveGovernedCreationSurface('server', view), 'delivery');
     assert.equal(resolveGovernedCreationSurface('server', View.PROCESS_CATALOG), null);
   });

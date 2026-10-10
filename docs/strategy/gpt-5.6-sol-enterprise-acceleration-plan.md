@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Approved remaining-acceptance authority work (2026-10-10)
+
+PR #281 is merged with its tested tree unchanged and successful post-merge Core CI `38016322009`. AP approved preserving the full legacy task business scope, implementing its missing server authority, introducing a separate authenticated synthetic test profile and explicitly correcting seven read-only criteria. The three read-only reviews are complete. Under the fixed managed workspace-write profile, the controller assigns separate database/fixture, Edge/client and application/browser implementation tracks; root owns acceptance evidence, documentation, CI and integration. No nested agents or hosted/paid actions are authorized.
+
+`docs/planning/legacy-delivery-authority-acceptance.md` governs the first substantial implementation PR. Keep atomic task/import authority, migration, focused verification, per-case evidence and fallback together. Add the approved authenticated profile and catalog corrections with their executable integration in the second boundary; do not produce a catalog-only PR or silently map legacy task criteria onto PR C packages. The immutable 58 PASS / 50 BLOCKED baseline remains unchanged until new qualifying execution.
+
 ## Connected acceptance workstream (2026-10-09)
 
 The verified PR #280 stable baseline is 58 PASS / 0 FAIL / 50 BLOCKED; exact run `37891394223` passed all 18 supported browser cases on both projects. AP requested substantial continued work rather than small evidence-only increments. The remaining requirements group into connected Assess/Govern/Studio (16), downstream Delivery/Monitor/E2E/resilience (20), and remaining V1 Assess/private-download/Admin/AI/EI controls (14). These are workstream boundaries, not executed proof.

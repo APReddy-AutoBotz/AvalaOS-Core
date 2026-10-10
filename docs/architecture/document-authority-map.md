@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Approved legacy Delivery authority (2026-10-10)
+
+`docs/planning/legacy-delivery-authority-acceptance.md` owns the AP-approved legacy task/import server-authority implementation, migration/compatibility contract, focused verification, evidence and fallback. It records the separate approved authenticated acceptance integration and seven read-only criterion corrections. The exhaustive catalog/proof framework remains governed by `docs/quality/exhaustive-hosted-product-acceptance.md`; changes must be explicit and versioned. PR C package/item/Monitor-baseline authority remains distinct and is not a replacement for legacy task business requirements. Hosted deployment and paid/production effects remain outside this repository approval.
+
 ## Connected lifecycle acceptance (2026-10-09)
 
 `docs/planning/connected-enterprise-lifecycle-acceptance.md` owns the current local browser/production-handler/disposable-PostgreSQL Assess/Govern/Studio journey, focused verification, CI artifact and rollback. The exhaustive catalog and hosted proof contract remain owned by `docs/quality/exhaustive-hosted-product-acceptance.md`; no hosted-required criterion or legacy Delivery meaning changes. Existing Assess V2 and Studio domain architecture documents retain product authority.

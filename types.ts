@@ -904,6 +904,10 @@ export type DeliveryRetentionClass = 'none' | 'dependency' | 'child' | 'lineage'
 
 export interface Task {
     id: string;
+    /** Positive server concurrency version for authoritative Delivery work. */
+    version?: number;
+    /** Historical rows without an authority version are projected read only. */
+    readOnlyHistorical?: boolean;
     title: string;
     description: string;
     status: TaskStatus;
@@ -913,6 +917,7 @@ export interface Task {
     epicId?: string;
     sprintId?: string;
     assigneeIds: string[];
+    ownerId?: string;
     reporterId?: string;
     storyPoints?: number;
     startDate: string; // YYYY-MM-DD

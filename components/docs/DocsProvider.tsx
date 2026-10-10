@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { DocumentGeneration } from '../../types';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { docsAdapter } from '../../services/adapters/docsAdapter';
 import { useAuth } from '../auth/AuthProvider';
-import { getRuntimeModeResolution } from '../../services/supabaseClient';
+import { getRuntimeDataAccess, getRuntimeModeResolution } from '../../services/supabaseClient';
 
 const DOCUMENT_PERSISTENCE_AUTHORITY_ERROR =
   'Document persistence authority is unavailable. The generated draft was not opened as a saved document.';
@@ -20,27 +20,57 @@ const DocsContext = createContext<DocsContextType | undefined>(undefined);
 export const DocsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const runtime = getRuntimeModeResolution();
   const legacyLocalOnly = runtime.status === 'resolved' && runtime.allowLocalAuthority;
-  const { currentOrganization } = useOrganizationContext();
+  const { currentOrganization, tenantContext } = useOrganizationContext();
   const { user } = useAuth();
   const [documentGenerations, setDocumentGenerations] = useState<DocumentGeneration[]>([]);
+  const [loadedAuthorityKey, setLoadedAuthorityKey] = useState<string | null>(legacyLocalOnly ? 'local' : null);
   const [loading, setLoading] = useState(false);
+  const fetchSequence = useRef(0);
+  const authorityKey = tenantContext
+    ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}`
+    : 'no-server-authority';
+  const activeAuthorityKey = useRef(authorityKey);
+  activeAuthorityKey.current = authorityKey;
 
   const fetchDocsData = async () => {
-    if (!currentOrganization || !legacyLocalOnly) return;
+    if (!currentOrganization) {
+      fetchSequence.current += 1;
+      if (!legacyLocalOnly) {
+        setDocumentGenerations([]);
+        setLoadedAuthorityKey(null);
+      }
+      setLoading(false);
+      return;
+    }
+    const requestSequence = ++fetchSequence.current;
+    const requestAuthorityKey = authorityKey;
     setLoading(true);
     try {
-      const data = await docsAdapter.getGenerations(currentOrganization.id);
+      if (getRuntimeDataAccess() === 'server') {
+        setDocumentGenerations([]);
+        setLoadedAuthorityKey(null);
+      }
+      if (!legacyLocalOnly && !tenantContext) return;
+      const data = legacyLocalOnly
+        ? await docsAdapter.getGenerations(currentOrganization.id)
+        : await docsAdapter.getAuthoritativeGenerations(tenantContext!);
+      if (fetchSequence.current !== requestSequence || activeAuthorityKey.current !== requestAuthorityKey) return;
       setDocumentGenerations(data);
+      setLoadedAuthorityKey(legacyLocalOnly ? 'local' : requestAuthorityKey);
     } catch (err) {
       console.error('Failed to fetch docs data:', err);
+      if (fetchSequence.current === requestSequence && activeAuthorityKey.current === requestAuthorityKey) {
+        setDocumentGenerations([]);
+        setLoadedAuthorityKey(null);
+      }
     } finally {
-      setLoading(false);
+      if (fetchSequence.current === requestSequence) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDocsData();
-  }, [currentOrganization]);
+  }, [currentOrganization, authorityKey]);
 
   const saveGeneration = async (gen: Partial<DocumentGeneration>): Promise<DocumentGeneration> => {
     if (!legacyLocalOnly || !currentOrganization || !user) {
@@ -64,7 +94,12 @@ export const DocsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <DocsContext.Provider value={{ documentGenerations, loading, saveGeneration, refresh: fetchDocsData }}>
+    <DocsContext.Provider value={{
+      documentGenerations: !legacyLocalOnly && loadedAuthorityKey !== authorityKey ? [] : documentGenerations,
+      loading,
+      saveGeneration,
+      refresh: fetchDocsData,
+    }}>
       {children}
     </DocsContext.Provider>
   );

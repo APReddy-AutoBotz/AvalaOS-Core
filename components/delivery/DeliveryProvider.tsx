@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Project, Task, Epic, Sprint, User, TaskStatus, ProjectLifecycleStage, TimesheetEntry, ApprovalStatus, WorkItem, TaskType, ActivityLogItem } from '../../types';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
-import { deliveryAdapter } from '../../services/adapters/deliveryAdapter';
+import { deliveryAdapter, LegacyDeliveryPendingReconciledError } from '../../services/adapters/deliveryAdapter';
 import { useAuth } from '../auth/AuthProvider';
+import { getRuntimeDataAccess } from '../../services/supabaseClient';
 import { assertCanCreateDeliveryTask, assertCanUpdateDeliveryTask, canDeleteDeliveryTask, canManageProjectDelivery, DeliveryPolicyError, hasDeliveryPermission } from '../../services/deliveryPolicy';
 import {
   assertProjectLifecycleMutationAllowed,
@@ -22,9 +23,16 @@ interface DeliveryContextType {
   epics: Epic[];
   sprints: Sprint[];
   loading: boolean;
+  error: string | null;
   addTask: (task: Partial<Task>) => Promise<Task | undefined>;
   addTasks: (tasks: Task[]) => Promise<Task[]>;
   addEpics: (epics: Epic[]) => Promise<Epic[]>;
+  importGeneratedWorkItems: (input: {
+    projectId: string;
+    sourceGenerationId: string;
+    displayedItems: WorkItem[];
+    selectedItems: WorkItem[];
+  }) => Promise<{ epicCount: number; taskCount: number }>;
   updateProject: (project: Project) => Promise<void>;
   updateSprint: (sprint: Sprint) => Promise<void>;
   updateTask: (task: Task) => Promise<void>;
@@ -115,41 +123,100 @@ const sortTasksForDisplay = (taskList: Task[]) =>
     .map(({ task }) => task);
 
 export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentOrganization } = useOrganizationContext();
+  const { currentOrganization, tenantContext } = useOrganizationContext();
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(getRuntimeDataAccess() === 'server');
+  const [error, setError] = useState<string | null>(null);
+  const [loadedAuthorityKey, setLoadedAuthorityKey] = useState<string | null>(null);
+  const fetchSequence = useRef(0);
+  const authorityKey = tenantContext
+    ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}`
+    : 'no-server-authority';
+  const activeAuthorityKey = useRef(authorityKey);
+  activeAuthorityKey.current = authorityKey;
+
+  const requireCurrentAuthority = (startedWith: string) => {
+    if (activeAuthorityKey.current !== startedWith) {
+      throw new DeliveryPolicyError('The Delivery workspace changed while the request was running. Refresh the current workspace before retrying.');
+    }
+  };
 
   const fetchAllData = async () => {
     if (!currentOrganization) return;
+    const requestSequence = ++fetchSequence.current;
+    const requestAuthorityKey = authorityKey;
     setLoading(true);
+    setError(null);
     try {
+      if (getRuntimeDataAccess() === 'server') {
+        setLoadedAuthorityKey(null);
+        setProjects([]);
+        setTasks([]);
+        setEpics([]);
+        setSprints([]);
+        if (!tenantContext) {
+          setError('A current server workspace is required before Delivery data can be loaded.');
+          return;
+        }
+        const workspace = await deliveryAdapter.getAuthoritativeWorkspace(tenantContext);
+        if (fetchSequence.current !== requestSequence || activeAuthorityKey.current !== requestAuthorityKey) return;
+        setProjects(workspace.projects);
+        setTasks(sortTasksForDisplay(workspace.tasks));
+        setEpics(workspace.epics);
+        setSprints([]);
+        setLoadedAuthorityKey(requestAuthorityKey);
+        return;
+      }
       const [projData, taskData, epicData, sprintData] = await Promise.all([
         deliveryAdapter.getProjects(currentOrganization.id),
         deliveryAdapter.getTasks(currentOrganization.id),
         deliveryAdapter.getEpics(currentOrganization.id),
         deliveryAdapter.getSprints(currentOrganization.id)
       ]);
+      if (fetchSequence.current !== requestSequence) return;
       setProjects(projData);
       setTasks(sortTasksForDisplay(taskData));
       setEpics(epicData);
       setSprints(sprintData);
+      setLoadedAuthorityKey('local');
     } catch (err) {
       console.error('Failed to fetch delivery data:', err);
+      if (fetchSequence.current === requestSequence && activeAuthorityKey.current === requestAuthorityKey) {
+        setProjects([]);
+        setTasks([]);
+        setEpics([]);
+        setSprints([]);
+        setLoadedAuthorityKey(null);
+        setError(err instanceof Error ? err.message : 'Delivery data could not be loaded.');
+      }
     } finally {
-      setLoading(false);
+      if (fetchSequence.current === requestSequence) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchAllData();
-  }, [currentOrganization]);
+  }, [currentOrganization, authorityKey]);
 
   const addTask = async (task: Partial<Task>) => {
     if (!currentOrganization || !user) return;
+    if (getRuntimeDataAccess() === 'server') {
+      if (!tenantContext) throw new DeliveryPolicyError('A current server workspace is required before creating Delivery work.');
+      const requestAuthorityKey = authorityKey;
+      let saved: Task;
+      try { saved = await deliveryAdapter.createAuthoritativeTask(tenantContext, task); }
+      catch (error) {
+        if (error instanceof LegacyDeliveryPendingReconciledError) await fetchAllData();
+        throw error;
+      }
+      requireCurrentAuthority(requestAuthorityKey);
+      setTasks(prev => sortTasksForDisplay([...prev, saved]));
+      return saved;
+    }
     assertCanCreateDeliveryTask(user);
     const newTask = {
       ...task,
@@ -163,6 +230,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addTasks = async (newTasks: Task[]) => {
     if (!currentOrganization || !user) return [];
+    if (getRuntimeDataAccess() === 'server') {
+      throw new DeliveryPolicyError('Bulk task creation is read only in the connected Delivery workspace. Use the governed document import command.');
+    }
     newTasks.forEach(() => assertCanCreateDeliveryTask(user));
     const savedTasks: Task[] = await Promise.all(
       newTasks.map(task => {
@@ -180,6 +250,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addEpics = async (newEpics: Epic[]) => {
     if (!currentOrganization || !user) return [];
+    if (getRuntimeDataAccess() === 'server') {
+      throw new DeliveryPolicyError('Epic creation is read only in the connected Delivery workspace. Source grouping is projected from the governed import.');
+    }
     newEpics.forEach(() => assertCanCreateDeliveryTask(user));
     const savedEpics = await Promise.all(
       newEpics.map(epic => deliveryAdapter.saveEpic(epic, currentOrganization.id))
@@ -194,6 +267,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateProject = async (project: Project) => {
     if (!currentOrganization || !user) return;
+    if (getRuntimeDataAccess() === 'server') {
+      throw new DeliveryPolicyError('Project lifecycle editing remains read only in the connected Delivery workspace.');
+    }
     if (!canManageProjectDelivery(user)) {
       throw new DeliveryPolicyError('Only project managers or admins can update project lifecycle and health.');
     }
@@ -210,6 +286,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateSprint = async (sprint: Sprint) => {
     if (!currentOrganization || !user) return;
+    if (getRuntimeDataAccess() === 'server') {
+      throw new DeliveryPolicyError('Sprint editing remains read only in the connected Delivery workspace.');
+    }
     if (!canManageProjectDelivery(user) && !hasDeliveryPermission(user, 'sprint.manage')) {
       throw new DeliveryPolicyError('Only project managers can update sprint planning.');
     }
@@ -229,6 +308,19 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!currentOrganization || !user) return;
     const existingTask = tasks.find(t => t.id === task.id);
     if (!existingTask) return;
+    if (getRuntimeDataAccess() === 'server') {
+      if (!tenantContext) throw new DeliveryPolicyError('A current server workspace is required before updating Delivery work.');
+      const requestAuthorityKey = authorityKey;
+      let saved: Task;
+      try { saved = await deliveryAdapter.updateAuthoritativeTask(tenantContext, existingTask, task); }
+      catch (error) {
+        if (error instanceof LegacyDeliveryPendingReconciledError) await fetchAllData();
+        throw error;
+      }
+      requireCurrentAuthority(requestAuthorityKey);
+      setTasks(prev => sortTasksForDisplay(prev.map(item => item.id === saved.id ? saved : item)));
+      return;
+    }
     const workflowDecision = assertTaskMutationAllowed({
       actor: user,
       organizationId: currentOrganization.id,
@@ -274,6 +366,9 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const reorderTask = async (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     if (!currentOrganization || !user) return;
+    if (getRuntimeDataAccess() === 'server') {
+      throw new DeliveryPolicyError('Backlog reordering remains read only in the connected Delivery workspace.');
+    }
     if (!canManageProjectDelivery(user) && !hasDeliveryPermission(user, 'backlog.manage')) {
       throw new DeliveryPolicyError('Only project managers or backlog managers can reorder backlog items.');
     }
@@ -341,6 +436,19 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!task) {
       throw new DeliveryPolicyError('Open a delivery work item before deleting it.');
     }
+    if (getRuntimeDataAccess() === 'server') {
+      if (!tenantContext) throw new DeliveryPolicyError('A current server workspace is required before deleting Delivery work.');
+      const requestAuthorityKey = authorityKey;
+      let saved: Task;
+      try { saved = await deliveryAdapter.deleteAuthoritativeTask(tenantContext, task); }
+      catch (error) {
+        if (error instanceof LegacyDeliveryPendingReconciledError) await fetchAllData();
+        throw error;
+      }
+      requireCurrentAuthority(requestAuthorityKey);
+      setTasks(prev => sortTasksForDisplay(prev.map(item => item.id === saved.id ? saved : item)));
+      return;
+    }
     if (!canDeleteDeliveryTask(user)) {
       throw new DeliveryPolicyError('You do not have permission to delete delivery tasks.');
     }
@@ -378,10 +486,38 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTasks(prev => sortTasksForDisplay(prev.map(t => t.id === taskId ? saved : t)));
   };
 
+  const importGeneratedWorkItems = async (input: {
+    projectId: string;
+    sourceGenerationId: string;
+    displayedItems: WorkItem[];
+    selectedItems: WorkItem[];
+  }) => {
+    if (!currentOrganization || !user) throw new DeliveryPolicyError('Sign in before importing Delivery work.');
+    if (getRuntimeDataAccess() !== 'server') {
+      throw new DeliveryPolicyError('The governed import command is available only in a connected server workspace.');
+    }
+    if (!tenantContext) throw new DeliveryPolicyError('A current server workspace is required before importing Delivery work.');
+    const requestAuthorityKey = authorityKey;
+    let committed: { epicCount: number; taskCount: number };
+    try { committed = await deliveryAdapter.importAuthoritativeWorkItems(tenantContext, input); }
+    catch (error) {
+      if (error instanceof LegacyDeliveryPendingReconciledError) await fetchAllData();
+      throw error;
+    }
+    requireCurrentAuthority(requestAuthorityKey);
+    await fetchAllData();
+    requireCurrentAuthority(requestAuthorityKey);
+    return committed;
+  };
+
   return (
     <DeliveryContext.Provider value={{ 
-      projects, tasks, epics, sprints, loading, 
-      addTask, addTasks, addEpics, updateProject, updateSprint, updateTask, updateTaskStatus, updateTaskSprint, reorderTask, deleteTask, refresh: fetchAllData 
+      projects: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : projects,
+      tasks: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : tasks,
+      epics: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : epics,
+      sprints: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : sprints,
+      loading, error,
+      addTask, addTasks, addEpics, importGeneratedWorkItems, updateProject, updateSprint, updateTask, updateTaskStatus, updateTaskSprint, reorderTask, deleteTask, refresh: fetchAllData
     }}>
       {children}
     </DeliveryContext.Provider>

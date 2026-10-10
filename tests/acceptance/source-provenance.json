@@ -7,9 +7,9 @@
     "components/enterprise/AssessTranscriptCandidateReview.tsx": "sha256:d8f20fedb16ee3d9d600fde6b3c2ddd779f7d23899d8bb6d54dbd1cf4b39b6d4",
     "components/enterprise/EnterpriseIntelligenceView.tsx": "sha256:132f10c6e47ec2357a479e7011e9ef0aa2f28701fa3e183cc5a368ffe37f5f84",
     "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
-    "package.json": "sha256:75f9f2281bf28421bdaa94caf77e7c925b5719da1b83be419b57928bb4301bf3",
+    "package.json": "sha256:23ebf5d8d822531c8cf356b8cad844ca6effbf59d26630847262bc5e294d0586",
     "vite.config.ts": "sha256:3692e5623118c7ac6af652c0c5a5730124212fe25e97759425229a29c14f2fef",
-    "playwright.config.ts": "sha256:7191461a1c160ea01f0807c5e67cc747d59c1d603a2db882cb4b98b050d403d2",
+    "playwright.config.ts": "sha256:0dcd00357662b701ff26f637e9346382bb2df4c5072ca574c7a3ee998eb5b152",
     "playwright.enterprise-intelligence.config.ts": "sha256:9e949021cb7abe0678ea9eb662543aa073c43857da6dff689087a7afa67d28f9",
     "playwright.pr1d.config.ts": "sha256:8ee945e3f94281f01a95be428eccb8f4b67d1bec42064e5b309764e52fd9db9f",
     "playwright.studio-artifacts.config.ts": "sha256:e4610e44c89d3d89a259d15205946534196f39c44a6e9a80a9cde5dcdc30bc65",
@@ -79,7 +79,7 @@
     "tests/browser/enterpriseIntelligence.spec.ts": "sha256:b5c27bb51d9eb0d529e1427d108bddf4853ee810634a28473ff9d95cb353bb3a",
     "tests/browser/enterpriseIntelligenceNetworkFixture.ts": "sha256:c1f277d715f0f2ffa75b23c179493251288d936abef9fec569f220251dd67f0c",
     "tests/browser/transcriptFlowPrA.spec.ts": "sha256:cac309086e4497d88184718afac7f7b70f8ccc8d532dad6ee9f7e3d7865278fe",
-    "App.tsx": "sha256:466ff42d7fa9b81c2a24715de4a4cb1c1aac4ca67eb1f39c1fc9d6ad73d918e0",
+    "App.tsx": "sha256:495039e6f21e194ed63a96c5c635f77a0b3bc3c73a20b109dc0b30170dff94ea",
     "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
     "index.css": "sha256:645f9ca9e3068604aee26a1521d0efd399a14d44fa24b42e34a5608c936da63c",
     "scripts/testPilotOperationsPostgres.mjs": "sha256:bac650ec023c34ecccbe467bf09ea9c6ab1f1f4958167f5ba4eab634afb38925",
@@ -119,8 +119,8 @@
     "scripts/governAcceptanceEvidence.mjs": "sha256:c064ae509422e5208e0ad026a18a170d45e1f24f899de48039c18bd0fb8b1ba7",
     "supabase/migrations/20260720160000_pr1e_assess_v2_governed_review_handoff.sql": "sha256:ef12fe52f7597b481278dc79b9fa025e86e2b6f341c967d3dd5003cefaf69aed",
     "supabase/migrations/20260923142120_pr1e_govern_control_alias_binding.sql": "sha256:97ad81b14e3ef48e05fee245d064f1faf228ef0d95f1f6547037904036cc4d9b",
-    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:b44be0dd0cb005ba5693edb3986c111e8b5e535d4ce3e349bbe55291c3e22136",
-    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:7fe8d58ff187941c2063614166f27ed8f3ef104c9d285318b160db98b686bb24",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:074e012acd606dfd602ebdae78e8204b84c1ea11bbb17f546b966d24645b1b57",
+    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:52782c7d9d12c3bf9376797b1a2b17bd89fc9ef21e7c981786d9f637d98e9af7",
     "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
     "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
     "supabase/functions/_shared/enterpriseIntelligenceIngestion.ts": "sha256:0c703027f8d41c676f90109db53899fdc89c56d132f835bb9804a99b95429710",
@@ -129,7 +129,13 @@
     "supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql": "sha256:e844a748667c55d6c62c787561f084b99e0af3e077d729e517b0fa160a7e748f",
     "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql": "sha256:6c29886a31c7763f3f1fe72a6708f1987966ecfe129e99ed9cc4541883fbf838",
     "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql": "sha256:88cdaa839edb8a00bc1a210d85c2ee110dfea1afdf11d4b89817e9b5473620cb",
-    "supabase/migrations/20261009162752_govern_immutable_action_authority.sql": "sha256:0bd84ee3df629548a55c27aec3dd859e9d12b448d4ba5b356fee2d121a7110f7"
+    "supabase/migrations/20261009162752_govern_immutable_action_authority.sql": "sha256:0bd84ee3df629548a55c27aec3dd859e9d12b448d4ba5b356fee2d121a7110f7",
+    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:4d35100a8f1530a76e925a8a87da8b9b323efa59c53893429c84e3eb20325aae",
+    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:f7f7333fe68483ff60d6e32b65baa615060ba74d1e76ddd833185fd3288a58ac",
+    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:d94506c0a3b433193ab5e1ec09608723148b4b0c22a110c9bb210b83f88133a8",
+    "services/deliveryPolicy.ts": "sha256:39f7d91e09b5bea1065da9fcdf6fdf68c28e7fa76b6c5a5a6495abacc7ddf727",
+    "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql": "sha256:d3dca64ba210d65ada8f191964198dd86fbe676bff9c8479c9b037c082307d26",
+    "supabase/migrations/20261010025331_legacy_delivery_authority.sql": "sha256:51b18d3f5c382e1813814af53f6d67622740e0b75ce723592822ad19c3d2c909"
   },
   "contracts": [
     {
@@ -1042,21 +1048,29 @@
       "branchId": "DELIVERY-DUPLICATE_IMPORT",
       "testId": "DELIVERY-007",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "scripts/legacyDeliveryAuthorityPostgres.mjs",
+        "scripts/legacyDeliveryPostgresFixture.mjs",
+        "scripts/legacyDeliveryAcceptanceEvidence.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/deliveryPolicy.ts",
+        "services/deliveryWorkflowPolicy.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-007",
+          "ownerId": "legacy-delivery-postgres-acceptance",
+          "assertionId": "legacy-delivery-postgres-acceptance::DELIVERY-007",
           "scenarioId": "DELIVERY-007::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-legacy-delivery-authority-postgresql-v1",
+        "organizationId": "a2000000-0000-4000-8000-000000000010",
+        "workspaceId": "a2000000-0000-4000-8000-000000000011"
       }
     },
     {
@@ -1105,21 +1119,29 @@
       "branchId": "DELIVERY-RETAINED_LINEAGE",
       "testId": "DELIVERY-008",
       "sourceReferences": [
-        "services/deliveryWorkflowPolicy.ts"
+        "scripts/legacyDeliveryAuthorityPostgres.mjs",
+        "scripts/legacyDeliveryPostgresFixture.mjs",
+        "scripts/legacyDeliveryAcceptanceEvidence.mjs",
+        "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs",
+        "services/deliveryPolicy.ts",
+        "services/deliveryWorkflowPolicy.ts",
+        "supabase/migrations/20260712120000_pr1b_identity_rbac_rls_assess.sql",
+        "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
       ],
       "ownership": [
         {
           "kind": "retained-assertion",
-          "ownerId": "delivery-policy",
-          "assertionId": "delivery-policy::DELIVERY-008",
+          "ownerId": "legacy-delivery-postgres-acceptance",
+          "assertionId": "legacy-delivery-postgres-acceptance::DELIVERY-008",
           "scenarioId": "DELIVERY-008::retained-contract"
         }
       ],
       "scope": {
-        "evidenceScope": "planned-fixture",
-        "fixtureId": "synthetic-default",
-        "organizationId": null,
-        "workspaceId": null
+        "evidenceScope": "executed-fixture",
+        "fixtureId": "synthetic-legacy-delivery-authority-postgresql-v1",
+        "organizationId": "a2000000-0000-4000-8000-000000000010",
+        "workspaceId": "a2000000-0000-4000-8000-000000000011"
       }
     },
     {
@@ -1364,7 +1386,8 @@
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
-        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
       ],
       "ownership": [
         {
@@ -1399,7 +1422,8 @@
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
-        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
       ],
       "ownership": [
         {
@@ -1434,7 +1458,8 @@
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
-        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
       ],
       "ownership": [
         {
@@ -1469,7 +1494,8 @@
         "supabase/migrations/20260805140000_enterprise_intelligence_ready_review_corrections.sql",
         "supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql",
         "supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql",
-        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql"
+        "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
+        "supabase/migrations/20261010025331_legacy_delivery_authority.sql"
       ],
       "ownership": [
         {
