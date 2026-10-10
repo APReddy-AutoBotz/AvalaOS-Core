@@ -125,11 +125,14 @@ const sortTasksForDisplay = (taskList: Task[]) =>
 export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentOrganization, tenantContext } = useOrganizationContext();
   const { user } = useAuth();
+  let runtimeDataAccess: ReturnType<typeof getRuntimeDataAccess> | null = null;
+  try { runtimeDataAccess = getRuntimeDataAccess(); }
+  catch { /* A blocked runtime must still render the public/sign-in boundary with no Delivery data. */ }
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [loading, setLoading] = useState(getRuntimeDataAccess() === 'server');
+  const [loading, setLoading] = useState(runtimeDataAccess === 'server');
   const [error, setError] = useState<string | null>(null);
   const [loadedAuthorityKey, setLoadedAuthorityKey] = useState<string | null>(null);
   const fetchSequence = useRef(0);
@@ -146,7 +149,18 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const fetchAllData = async () => {
-    if (!currentOrganization) return;
+    if (!currentOrganization || runtimeDataAccess === null) {
+      fetchSequence.current += 1;
+      setProjects([]);
+      setTasks([]);
+      setEpics([]);
+      setSprints([]);
+      setLoadedAuthorityKey(null);
+      // Keep project navigation waiting while a server session is being established.
+      setLoading(runtimeDataAccess === 'server');
+      setError(null);
+      return;
+    }
     const requestSequence = ++fetchSequence.current;
     const requestAuthorityKey = authorityKey;
     setLoading(true);
@@ -200,7 +214,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     fetchAllData();
-  }, [currentOrganization, authorityKey]);
+  }, [currentOrganization, authorityKey, runtimeDataAccess]);
 
   const addTask = async (task: Partial<Task>) => {
     if (!currentOrganization || !user) return;
@@ -512,10 +526,10 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <DeliveryContext.Provider value={{ 
-      projects: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : projects,
-      tasks: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : tasks,
-      epics: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : epics,
-      sprints: getRuntimeDataAccess() === 'server' && loadedAuthorityKey !== authorityKey ? [] : sprints,
+      projects: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? projects : [],
+      tasks: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? tasks : [],
+      epics: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? epics : [],
+      sprints: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? sprints : [],
       loading, error,
       addTask, addTasks, addEpics, importGeneratedWorkItems, updateProject, updateSprint, updateTask, updateTaskStatus, updateTaskSprint, reorderTask, deleteTask, refresh: fetchAllData
     }}>
