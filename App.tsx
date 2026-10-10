@@ -80,6 +80,7 @@ const TemplateLibraryView = React.lazy(() => import('./components/assess/Templat
 const ProcessDetailStubView = React.lazy(() => import('./components/assess/ProcessDetailStubView'));
 const GuidedAssessmentView = React.lazy(() => import('./components/assess/GuidedAssessmentView'));
 const EnterpriseIntelligenceView = React.lazy(() => import('./components/enterprise/EnterpriseIntelligenceView'));
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const ViewLoadingFallback = () => (
   <div className="mx-auto max-w-3xl p-8">
@@ -145,9 +146,12 @@ function App() {
     projects,
     epics,
     sprints,
+    loading: deliveryLoading,
+    error: deliveryError,
     addTask: deliveryAddTask,
     addTasks: deliveryAddTasks,
     addEpics: deliveryAddEpics,
+    importGeneratedWorkItems: deliveryImportGeneratedWorkItems,
     updateProject: deliveryUpdateProject,
     updateSprint: deliveryUpdateSprint,
     updateTask: deliveryUpdateTask,
@@ -170,6 +174,9 @@ function App() {
   const [assessToStudioSourceContext, setAssessToStudioSourceContext] = useState<AssessToStudioHandoffPayload | null>(null);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  useEffect(() => {
+    setSelectedTask(previous => previous ? tasks.find(task => task.id === previous.id) ?? null : null);
+  }, [tasks]);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [isImportProjectSelectorOpen, setImportProjectSelectorOpen] = useState(false);
   const organizationScopeTransition = useRef(false);
@@ -453,14 +460,25 @@ function App() {
     deliveryUpdateProject({ ...project, lifecycleStage: newStage }).catch(surfaceDeliveryError);
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
-    if (!ensureProductAction('project.task.update', { projectId: updatedTask.projectId })) return;
-    deliveryUpdateTask(updatedTask).catch(surfaceDeliveryError);
+  const handleUpdateTask = async (updatedTask: Task): Promise<boolean> => {
+    if (!ensureProductAction('project.task.update', { projectId: updatedTask.projectId })) return false;
+    try {
+      await deliveryUpdateTask(updatedTask);
+      return true;
+    } catch (error) {
+      surfaceDeliveryError(error);
+      return false;
+    }
   };
 
-  const handleAddTask = (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => {
-    if (!ensureProductAction('project.task.create', { projectId: taskDetails.projectId })) return;
-    deliveryAddTask(taskDetails).catch(surfaceDeliveryError);
+  const handleAddTask = async (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>): Promise<boolean> => {
+    if (!ensureProductAction('project.task.create', { projectId: taskDetails.projectId })) return false;
+    try {
+      return Boolean(await deliveryAddTask(taskDetails));
+    } catch (error) {
+      surfaceDeliveryError(error);
+      return false;
+    }
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -594,7 +612,7 @@ function App() {
 
     // Invalid durable navigation is rejected immediately. Only valid entity
     // reconstruction waits for process data required by route resolution.
-    if (processesLoading) return;
+    if (processesLoading || (dataAccess === 'server' && deliveryLoading)) return;
 
     const resolvedNavigation = resolveProductNavigationState({
       ...parseProductNavigationSearch(window.location.search),
@@ -634,6 +652,8 @@ function App() {
     currentUser,
     authoritativeViewCapabilities,
     documentGenerations,
+    deliveryLoading,
+    dataAccess,
     enabledModules,
     explicitNavigationIntent,
     guardLoading,
@@ -650,7 +670,7 @@ function App() {
   useEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
     if (navigationController.current.needsClassification()) return;
-    if (processesLoading) return;
+    if (processesLoading || (dataAccess === 'server' && deliveryLoading)) return;
 
     // Effects later in the same flush can observe ref writes from URL hydration
     // while still closing over the pre-hydration render. Keep reconciliation
@@ -727,6 +747,8 @@ function App() {
     currentUser,
     currentView,
     documentGenerations,
+    deliveryLoading,
+    dataAccess,
     enabledModules,
     explicitNavigationIntent,
     guardLoading,
@@ -753,7 +775,7 @@ function App() {
   }, [navigationAuthorityKey]);
 
   useEffect(() => {
-    if (guardLoading || !currentUser || !currentOrganization || processesLoading) return;
+    if (guardLoading || !currentUser || !currentOrganization || processesLoading || (dataAccess === 'server' && deliveryLoading)) return;
     const handlePopState = () => {
       const search = window.location.search;
       const target = isStructurallyValidProductNavigationSearch(search)
@@ -772,7 +794,7 @@ function App() {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [authoritativeViewCapabilities, currentOrganization, currentUser, documentGenerations, enabledModules, guardLoading, processes, processesLoading, projects, setCurrentView, setScopeIfChanged]);
+  }, [authoritativeViewCapabilities, currentOrganization, currentUser, dataAccess, deliveryLoading, documentGenerations, enabledModules, guardLoading, processes, processesLoading, projects, setCurrentView, setScopeIfChanged]);
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     const task = tasks.find(item => item.id === taskIdToMove);
     if (!ensureProductAction('project.task.reorder', { projectId: task?.projectId })) return;
@@ -873,8 +895,6 @@ function App() {
       generationCreatedAt?: string;
     } = {},
   ) => {
-    const importedAt = new Date().toISOString();
-    const handoffLedgerEntryId = `handoff-docs-delivery-${Date.now()}`;
     const activeGeneration = activeGenerationId
       ? documentGenerations.find(generation => generation.id === activeGenerationId)
       : undefined;
@@ -893,6 +913,25 @@ function App() {
       surfaceDeliveryError(new Error(importDecision.message));
       return false;
     }
+
+    if (dataAccess === 'server') {
+      if (!sourceGenerationId || !sourceArtifacts) {
+        throw new Error('Open a persisted generated document before importing Delivery work items. Unsaved document output cannot become authoritative Delivery state.');
+      }
+      const committed = await deliveryImportGeneratedWorkItems({
+        projectId,
+        sourceGenerationId,
+        displayedItems: sourceArtifacts.workItems,
+        selectedItems: itemsToImport,
+      });
+      const projectName = projects.find(p => p.id === projectId)?.name || 'the selected project';
+      alert(`${committed.epicCount} epic(s) and ${committed.taskCount} task(s) have been imported to your backlog.`);
+      applyGuardedView(View.BACKLOG, { type: ScopeType.PROJECT, id: projectId, name: projectName });
+      return true;
+    }
+
+    const importedAt = new Date().toISOString();
+    const handoffLedgerEntryId = `handoff-docs-delivery-${Date.now()}`;
     const sourceCreatedAt = importSource.generationCreatedAt || importedAt;
     const sourceContext = sourceArtifacts?.sourceContext;
     const newEpics: Epic[] = [];
@@ -974,12 +1013,15 @@ function App() {
     return true;
   };
 
-  const handleInitiateImport = (itemsToImport: WorkItem[]) => {
+  const handleInitiateImport = async (itemsToImport: WorkItem[]) => {
     // If we are already in a project, import directly.
     if (currentScope.type === ScopeType.PROJECT) {
-      const runProjectImport = async () => {
+      const runProjectImport = async (): Promise<boolean> => {
         const artifactsToImport = tempArtifacts;
         if (artifactsToImport) {
+          if (dataAccess === 'server') {
+            throw new Error('Save this generated document through a governed server workflow before importing Delivery work items. Unsaved document output remains read only.');
+          }
           const newGeneration: DocumentGeneration = {
             id: `docgen-${Date.now()}`,
             projectId: currentScope.id,
@@ -993,10 +1035,10 @@ function App() {
             generationId: finalizedGeneration.id,
             generationCreatedAt: finalizedGeneration.generatedAt,
           });
-          if (!imported) return;
+          if (!imported) return false;
           setActiveGenerationId(finalizedGeneration.id);
           setTempArtifacts(null);
-          return;
+          return true;
         }
 
         const activeGeneration = activeGenerationId
@@ -1007,13 +1049,15 @@ function App() {
           generationId: activeGeneration?.id || activeGenerationId,
           generationCreatedAt: activeGeneration?.generatedAt,
         });
-        if (!imported) return;
+        if (!imported) return false;
+        return true;
       };
 
-      runProjectImport().catch(surfaceDeliveryError);
+      return runProjectImport();
     } else {
       // If it's a global generation, open the project selector.
       setImportProjectSelectorOpen(true);
+      return true;
     }
   };
 
@@ -1022,6 +1066,9 @@ function App() {
     if (!artifactsToImport) return;
 
     const runGlobalImport = async () => {
+      if (dataAccess === 'server') {
+        throw new Error('Save this generated document through a governed server workflow before importing Delivery work items. Unsaved document output remains read only.');
+      }
       const newGeneration: DocumentGeneration = {
         id: `docgen-${Date.now()}`,
         projectId: project.id,
@@ -1292,6 +1339,14 @@ function App() {
         const activeGeneration = documentGenerations.find(g => g.id === activeGenerationId && (
           currentScope.type !== ScopeType.PROJECT || g.projectId === currentScope.id
         ));
+        if (dataAccess === 'server' && (
+          currentScope.type !== ScopeType.PROJECT
+          || !activeGeneration
+          || !CANONICAL_UUID.test(activeGeneration.id)
+          || !CANONICAL_UUID.test(activeGeneration.projectId)
+        )) {
+          return <div role="alert" className="p-8 text-center">Open a persisted generated document from the current project archive before importing Delivery work. Temporary or cross-project document state remains read only.</div>;
+        }
         const artifactsToShow = activeGeneration?.artifacts || tempArtifacts;
 
         if (!artifactsToShow) {
@@ -1299,7 +1354,18 @@ function App() {
         }
         // Template finding might be less reliable for global generations
         const templateId = activeGeneration?.templateId || 'brd.v1';
-        const template = docTemplates.find(t => t.id === templateId) || docTemplates[0];
+        const template = docTemplates.find(t => t.id === templateId) || docTemplates[0] || (dataAccess === 'server' ? {
+          id: templateId,
+          title: 'Persisted generated document',
+          description: 'Read-only projection of a persisted generated document.',
+          artifactKey: 'brd' as DocumentArtifactKeys,
+          sections: (artifactsToShow.brd?.sections || []).map(section => ({
+            key: section.key,
+            title: section.title,
+            description: section.title,
+            required: true,
+          })),
+        } : null);
         const documentGenerationId = activeGeneration?.id || null;
         const documentEvidenceRefs = artifactsToShow.sourceContext?.evidenceRefs.map(ref => ref.id) || [];
         const documentLineageRefs = artifactsToShow.sourceContext
@@ -1558,6 +1624,11 @@ function App() {
         />
         {!localRuntimeEnabled && <EnterpriseSessionToolbar />}
         <main id="app-main" tabIndex={0} className="view-transition-enter view-transition-enter-active flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+          {dataAccess === 'server' && deliveryError && (
+            <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+              Delivery data could not be loaded: {deliveryError}
+            </div>
+          )}
           <React.Suspense fallback={<ViewLoadingFallback />}>
             {renderCurrentView()}
           </React.Suspense>

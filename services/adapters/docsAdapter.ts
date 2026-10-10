@@ -1,5 +1,5 @@
 import { getRuntimeDataAccess, supabase } from '../supabaseClient';
-import { DocumentGeneration } from '../../types';
+import { DocumentGeneration, TenantContextProjection } from '../../types';
 import { MOCK_DOCUMENT_GENERATIONS } from '../../data/mockData';
 
 const isUuid = (value?: string) => Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
@@ -18,6 +18,11 @@ const fromGenerationRow = (row: any): DocumentGeneration => ({
   artifacts: row.artifacts || {},
 });
 
+const fromAuthoritativeGenerationRow = (row: any): DocumentGeneration => ({
+  ...fromGenerationRow(row),
+  projectId: row.project_id,
+});
+
 async function getProjectUuid(orgId: string, projectId?: string) {
   if (!projectId) return null;
   if (isUuid(projectId)) return projectId;
@@ -32,6 +37,20 @@ async function getProjectUuid(orgId: string, projectId?: string) {
 }
 
 export const docsAdapter = {
+  async getAuthoritativeGenerations(context: TenantContextProjection) {
+    const { data, error } = await supabase
+      .from('document_generations')
+      .select('*')
+      .eq('org_id', context.organizationId)
+      .eq('workspace_id', context.workspaceId)
+      .in('status', ['generated', 'draft'])
+      .is('archived_at', null)
+      .is('deleted_at', null)
+      .order('generated_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(fromAuthoritativeGenerationRow);
+  },
+
   async getGenerations(orgId: string, projectId?: string) {
     if (getRuntimeDataAccess() === 'local') {
       const generations = projectId

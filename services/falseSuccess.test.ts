@@ -51,13 +51,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| !navigationController\.current\.needsClassification\(\)\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?beginSettlement\(false\);[\s\S]*?return;\s*\}\s*[^]*?if \(processesLoading\) return;/,
+  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| !navigationController\.current\.needsClassification\(\)\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?beginSettlement\(false\);[\s\S]*?return;\s*\}\s*[^]*?if \(processesLoading \|\| \(dataAccess === 'server' && deliveryLoading\)\) return;/,
   'invalid durable navigation must be rejected in the layout phase before product hydration can observe a stale render',
 );
 assert.match(
   appSource,
-  /if \(processesLoading\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
-  'valid durable navigation must wait for product data before canonical route reconstruction',
+  /if \(processesLoading \|\| \(dataAccess === 'server' && deliveryLoading\)\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
+  'valid durable navigation must wait for process data and connected Delivery project data before canonical route reconstruction',
 );
 
 const providerSource = readFileSync('components/docs/DocsProvider.tsx', 'utf8');

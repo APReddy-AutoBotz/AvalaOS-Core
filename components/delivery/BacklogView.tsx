@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Task, Project, Epic, TaskStatus, TaskPriority } from '../../types';
 import { ClockIcon, ArrowPathIcon, BanIcon, SparklesIcon, CheckCircleIcon, ArrowUpIcon, MinusIcon, ArrowDownIcon, GripVerticalIcon, TrashIcon, FireIcon, EyeIcon, CodeBracketIcon, CircleIcon } from '../shared/icons';
 import InlineTaskCreator from './InlineTaskCreator';
+import { getRuntimeDataAccess } from '../../services/supabaseClient';
 
 interface BacklogViewProps {
     project: Project;
@@ -60,9 +61,9 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, isBeingDragged, onSelectTask, o
             draggable="true"
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
-            className={`grid grid-cols-[1fr_9rem_7rem_5rem_3rem] items-center gap-4 rounded-xl px-4 py-3 group transition-all hover:bg-white dark:hover:bg-slate-900/80 ${isBeingDragged ? 'opacity-30' : 'opacity-100'}`}
+            className={`grid grid-cols-2 items-center gap-3 rounded-xl px-4 py-3 group transition-all hover:bg-white sm:grid-cols-[minmax(0,1fr)_9rem_7rem_5rem_3rem] sm:gap-4 dark:hover:bg-slate-900/80 ${isBeingDragged ? 'opacity-30' : 'opacity-100'}`}
         >
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="col-span-2 flex min-w-0 items-center gap-3 sm:col-span-1">
                 <GripVerticalIcon className="w-5 h-5 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 cursor-grab flex-shrink-0" />
                 <span title={task.status} className="flex-shrink-0 cursor-pointer" onClick={() => onSelectTask(task)}>
                     <statusConfig.icon className={`w-5 h-5 ${statusConfig.color} ${statusConfig.animate ? 'animate-spin' : ''}`} />
@@ -85,7 +86,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, isBeingDragged, onSelectTask, o
                 </span>
              </div>
              <div className="flex justify-end">
-                <button type="button" aria-label={`Delete ${task.title}`} onClick={handleDelete} className="p-2 rounded-full text-slate-400 hover:text-abz-danger hover:bg-red-100 dark:hover:bg-red-900/50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">
+                <button type="button" aria-label={`Delete ${task.title}`} onClick={handleDelete} className="p-2 rounded-full text-slate-400 hover:text-abz-danger hover:bg-red-100 dark:hover:bg-red-900/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity">
                     <TrashIcon className="w-4 h-4" />
                 </button>
              </div>
@@ -105,8 +106,9 @@ const EpicGroup: React.FC<{
     onReorderTask: (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => void;
     onAddTask: (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => void;
     setDropTarget: (target: { epicId: string, referenceTaskId: string | null } | null) => void;
+    allowCreateInEpic: boolean;
 }> = (props) => {
-    const { epic, tasks, dropTarget, draggedTaskId, onSelectTask, onDeleteTask, onDragStart, onDragEnd, onReorderTask, onAddTask, setDropTarget } = props;
+    const { epic, tasks, dropTarget, draggedTaskId, onSelectTask, onDeleteTask, onDragStart, onDragEnd, onReorderTask, onAddTask, setDropTarget, allowCreateInEpic } = props;
     const epicTasks = tasks.filter(t => !t.parentId);
 
     const DropZone = ({ epicId, referenceTaskId }: { epicId: string, referenceTaskId: string | null }) => {
@@ -158,7 +160,7 @@ const EpicGroup: React.FC<{
                         <DropZone epicId={epic.id} referenceTaskId={null} />
                     </div>
                 )}
-                <InlineTaskCreator
+                {allowCreateInEpic && <InlineTaskCreator
                     onAddTask={(title) => onAddTask({
                         title,
                         projectId: (epic as Epic).projectId, // This works because 'unassigned' is not passed here
@@ -166,7 +168,7 @@ const EpicGroup: React.FC<{
                     })}
                     buttonText="Add a task"
                     className="pl-4 pr-2 pt-2 pb-1"
-                />
+                />}
             </div>
         </div>
     );
@@ -189,6 +191,7 @@ const BacklogView: React.FC<BacklogViewProps> = ({ project, tasks, epics, onSele
     };
 
     const unassignedTasks = tasks.filter(t => !t.epicId);
+    const serverAuthority = getRuntimeDataAccess() === 'server';
 
     return (
         <div className="premium-surface overflow-hidden rounded-2xl">
@@ -201,8 +204,14 @@ const BacklogView: React.FC<BacklogViewProps> = ({ project, tasks, epics, onSele
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">{tasks.length} items</span>
                     <span className="rounded-full bg-[#ffbc03]/15 px-3 py-1 text-xs font-black text-[#002C4B] dark:bg-[#ffbc03]/10 dark:text-[#ffcf45]">{epics.length} epics</span>
                 </div>
+                {serverAuthority && <div className="w-full sm:w-64">
+                    <InlineTaskCreator
+                        onAddTask={(title) => onAddTask({ title, projectId: project.id })}
+                        buttonText="Add a task"
+                    />
+                </div>}
             </div>
-            <div className="grid grid-cols-[1fr_9rem_7rem_5rem_3rem] gap-4 border-b border-slate-200/80 px-7 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400 dark:border-slate-800/80 dark:text-slate-500">
+            <div className="hidden grid-cols-[minmax(0,1fr)_9rem_7rem_5rem_3rem] gap-4 border-b border-slate-200/80 px-7 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400 sm:grid dark:border-slate-800/80 dark:text-slate-500">
                 <span>Work item</span>
                 <span>Status</span>
                 <span>Priority</span>
@@ -224,6 +233,7 @@ const BacklogView: React.FC<BacklogViewProps> = ({ project, tasks, epics, onSele
                         onReorderTask={onReorderTask}
                         onAddTask={onAddTask}
                         setDropTarget={setDropTarget}
+                        allowCreateInEpic={!serverAuthority}
                     />
                 ))}
                 {unassignedTasks.length > 0 && (
@@ -239,6 +249,7 @@ const BacklogView: React.FC<BacklogViewProps> = ({ project, tasks, epics, onSele
                         onReorderTask={onReorderTask}
                         onAddTask={onAddTask}
                         setDropTarget={setDropTarget}
+                        allowCreateInEpic={!serverAuthority}
                     />
                 )}
             </div>

@@ -20,8 +20,8 @@ interface TaskDetailModalProps {
     users: User[];
     currentUser: User;
     onClose: () => void;
-    onUpdateTask: (task: Task) => void;
-    onAddTask: (task: Task) => void;
+    onUpdateTask: (task: Task) => void | boolean | Promise<boolean>;
+    onAddTask: (task: Task) => void | boolean | Promise<boolean>;
     onDeleteTask: (taskId: string) => void;
 }
 
@@ -44,8 +44,10 @@ const priorityMap: Record<TaskPriority, { icon: React.FC<{ className?: string }>
     "Low": { icon: ArrowDownIcon, color: "text-slate-400", label: "Low" },
 };
 
-const formatDateForDisplay = (dateString: string) => {
+const formatDateForDisplay = (dateString?: string) => {
+    if (!dateString) return 'Not set';
     const date = new Date(dateString);
+    if (Number.isNaN(date.valueOf())) return 'Not set';
     const correctedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60000); // Correct for timezone offset from YYYY-MM-DD
     return new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(correctedDate);
 };
@@ -72,12 +74,15 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
     const [editedTask, setEditedTask] = useState<Task>(task);
     const [activeTab, setActiveTab] = useState<ModalTab>('Details');
     const [newComment, setNewComment] = useState("");
+    const [savingDetails, setSavingDetails] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
 
     useEffect(() => {
         // Only reset the whole modal state if the task ID changes (i.e., a new task is selected)
         setEditedTask(task);
         setIsEditing(false);
         setActiveTab('Details');
+        setSaveError(null);
     }, [task.id]);
 
     useEffect(() => {
@@ -88,14 +93,24 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
     }, [task, isEditing]);
 
 
-    const handleUpdateAndSave = (updatedTask: Task) => {
-        onUpdateTask(updatedTask);
-        setEditedTask(updatedTask); // Keep local state in sync
+    const handleUpdateAndSave = async (updatedTask: Task) => {
+        const result = await onUpdateTask(updatedTask);
+        if (result !== false) setEditedTask(updatedTask);
+        return result !== false;
     }
 
-    const handleSaveDetails = () => {
-        handleUpdateAndSave(editedTask);
-        setIsEditing(false);
+    const handleSaveDetails = async () => {
+        if (savingDetails) return;
+        setSavingDetails(true);
+        setSaveError(null);
+        try {
+            if (await handleUpdateAndSave(editedTask)) setIsEditing(false);
+            else setSaveError('The task update could not be confirmed. Your edits are preserved for retry.');
+        } catch (error) {
+            setSaveError(error instanceof Error ? error.message : 'The task update could not be confirmed. Your edits are preserved for retry.');
+        } finally {
+            setSavingDetails(false);
+        }
     };
 
     const handleCancelEdit = () => {
@@ -121,7 +136,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
     const renderContent = () => {
         switch (activeTab) {
             case 'Details':
-                return <DetailsTab task={task} epic={epic} project={project} users={users} isEditing={isEditing} editedTask={editedTask} setEditedTask={setEditedTask} onSave={handleSaveDetails} onCancel={handleCancelEdit} onSetEditing={setIsEditing} onDeleteTask={onDeleteTask} />;
+                return <DetailsTab task={task} epic={epic} project={project} users={users} isEditing={isEditing} editedTask={editedTask} setEditedTask={setEditedTask} onSave={() => void handleSaveDetails()} onCancel={handleCancelEdit} onSetEditing={setIsEditing} onDeleteTask={onDeleteTask} saving={savingDetails} />;
             case 'Subtasks':
                 return <SubtasksTab parentTask={editedTask} subtasks={subtasks} onUpdateParent={handleUpdateAndSave} onAddTask={onAddTask} onUpdateSubtask={onUpdateTask} onDeleteSubtask={onDeleteTask} />;
             case 'User Stories':
@@ -145,6 +160,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, allTasks, proje
 
     return (
         <Modal isOpen={!!task} onClose={onClose} title={task.title} size="lg" contentClassName="p-0">
+            {saveError && <div role="alert" className="mx-6 mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{saveError}</div>}
             {epic && (
                 <div className="px-6 pb-2 pt-4">
                     <span className="text-xs font-semibold inline-flex items-center px-2 py-0.5 rounded-full" style={{ backgroundColor: `${epic.color}20`, color: epic.color }}>
@@ -195,8 +211,9 @@ interface DetailsTabProps {
     onCancel: () => void;
     onSetEditing: (isEditing: boolean) => void;
     onDeleteTask: (taskId: string) => void;
+    saving: boolean;
 }
-const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing, editedTask, setEditedTask, onSave, onCancel, onSetEditing, onDeleteTask }) => {
+const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing, editedTask, setEditedTask, onSave, onCancel, onSetEditing, onDeleteTask, saving }) => {
     const assignees = users.filter(u => task.assigneeIds.includes(u.id));
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -261,8 +278,8 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, users, isEditing
                     </div>
                 </div>
                 <div className="flex justify-end gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-gray-700">
-                    <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-semibold rounded-2xl focus:outline-none focus:ring-3 focus:ring-slate-400 btn-ghost">Cancel</button>
-                    <button type="button" onClick={onSave} className="px-4 py-2 text-sm font-semibold rounded-2xl btn-primary">Save Changes</button>
+                    <button type="button" disabled={saving} onClick={onCancel} className="px-4 py-2 text-sm font-semibold rounded-2xl focus:outline-none focus:ring-3 focus:ring-slate-400 btn-ghost disabled:opacity-50">Cancel</button>
+                    <button type="button" disabled={saving} onClick={onSave} className="px-4 py-2 text-sm font-semibold rounded-2xl btn-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save Changes'}</button>
                 </div>
             </div>
         );

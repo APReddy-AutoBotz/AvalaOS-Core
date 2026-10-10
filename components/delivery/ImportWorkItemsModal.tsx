@@ -7,7 +7,7 @@ interface ImportWorkItemsModalProps {
     isOpen: boolean;
     onClose: () => void;
     workItems: WorkItem[];
-    onImport: (selectedItems: WorkItem[]) => void;
+    onImport: (selectedItems: WorkItem[]) => Promise<boolean>;
 }
 
 const workItemIcon = (type: WorkItem['type']) => {
@@ -20,13 +20,17 @@ const workItemIcon = (type: WorkItem['type']) => {
 
 const ImportWorkItemsModal: React.FC<ImportWorkItemsModalProps> = ({ isOpen, onClose, workItems, onImport }) => {
     const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     useEffect(() => {
         if (isOpen) {
             // Pre-select all items when the modal opens
             setSelectedItems(new Set(workItems.map((_, index) => index)));
+            setSubmitting(false);
+            setSubmitError(null);
         }
-    }, [isOpen, workItems]);
+    }, [isOpen]);
 
     const handleToggleItem = (index: number) => {
         const newSelection = new Set(selectedItems);
@@ -46,15 +50,25 @@ const ImportWorkItemsModal: React.FC<ImportWorkItemsModalProps> = ({ isOpen, onC
         }
     };
 
-    const handleImportClick = () => {
+    const handleImportClick = async () => {
         const itemsToImport = workItems.filter((_, index) => selectedItems.has(index));
-        onImport(itemsToImport);
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            const committed = await onImport(itemsToImport);
+            if (committed) onClose();
+            else setSubmitError('The import result could not be confirmed. Review the selected work and retry the same selection.');
+        } catch (error) {
+            setSubmitError(error instanceof Error ? error.message : 'The import could not be completed. Try the same selection again.');
+        } finally {
+            setSubmitting(false);
+        }
     };
     
     const allSelected = selectedItems.size === workItems.length && workItems.length > 0;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Import Work Items to Backlog">
+        <Modal isOpen={isOpen} onClose={submitting ? () => undefined : onClose} title="Import Work Items to Backlog">
             <div className="space-y-4">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                     Review the generated work items. Uncheck any items you don't want to import.
@@ -62,12 +76,14 @@ const ImportWorkItemsModal: React.FC<ImportWorkItemsModalProps> = ({ isOpen, onC
                 <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-800">
                     Imported items retain available source lineage and evidence refs. Docs-only lineage remains partial and is not Assess-backed evidence.
                 </div>
+                {submitError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{submitError}</div>}
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-abz-ink">
                     <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
                         <input
                             type="checkbox"
                             checked={allSelected}
+                            disabled={submitting}
                             onChange={handleToggleAll}
                             className="h-4 w-4 rounded border-gray-300 text-abz-primary focus:ring-abz-primary"
                         />
@@ -81,7 +97,9 @@ const ImportWorkItemsModal: React.FC<ImportWorkItemsModalProps> = ({ isOpen, onC
                         <div key={index} className={`flex items-start gap-3 p-3 rounded-lg border ${selectedItems.has(index) ? 'bg-white dark:bg-surface-dark border-abz-primary/50' : 'bg-slate-50/50 dark:bg-abz-ink/50 border-transparent'}`}>
                             <input
                                 type="checkbox"
+                                aria-label={`Select ${item.type}: ${item.title}`}
                                 checked={selectedItems.has(index)}
+                                disabled={submitting}
                                 onChange={() => handleToggleItem(index)}
                                 className="h-4 w-4 rounded border-gray-300 text-abz-primary focus:ring-abz-primary mt-1 flex-shrink-0"
                             />
@@ -97,16 +115,16 @@ const ImportWorkItemsModal: React.FC<ImportWorkItemsModalProps> = ({ isOpen, onC
                 </div>
 
                 <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-gray-700">
-                    <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm font-semibold rounded-xl">
+                    <button type="button" onClick={onClose} disabled={submitting} className="btn-ghost px-4 py-2 text-sm font-semibold rounded-xl disabled:cursor-not-allowed disabled:opacity-50">
                         Cancel
                     </button>
                     <button
                         type="button"
-                        onClick={handleImportClick}
-                        disabled={selectedItems.size === 0}
+                        onClick={() => void handleImportClick()}
+                        disabled={selectedItems.size === 0 || submitting}
                         className="btn-primary px-4 py-2 text-sm font-semibold rounded-xl"
                     >
-                        Import {selectedItems.size} Item{selectedItems.size !== 1 ? 's' : ''}
+                        {submitting ? 'Importing…' : `Import ${selectedItems.size} Item${selectedItems.size !== 1 ? 's' : ''}`}
                     </button>
                 </div>
             </div>

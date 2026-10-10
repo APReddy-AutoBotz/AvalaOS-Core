@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Legacy task/import authority correction (2026-10-10)
+
+Executed evidence: PR #281 merged with its tested tree unchanged and post-merge Core CI `38016322009` passed. The stable catalog remains 58 PASS / 50 BLOCKED. Confirmed source defect: legacy import generates client identifiers, persists epics/tasks separately and writes the handoff afterward; task policy and source lineage remain browser-supplied. That sequence lacks an atomic server command and canonical replay identity. Existing RLS is not proof of these business invariants; cross-tenant exploitability is a suspected defect requiring deeper validation. Deployment status is unknown and no hosted incident is asserted.
+
+AP approved the full-scope authority correction and later authenticated acceptance/profile corrections. Three read-only reviews completed before writes. Planned verification under `docs/planning/legacy-delivery-authority-acceptance.md` covers real legacy task commands, source-derived immutable ancestry, replay/conflict, current authority, own-task protection, transaction rollback, retained lineage, browser failure recovery and cleanup. Preserve PR C's distinct package/baseline semantics and original legacy obligations. Executed local PostgreSQL and focused runtime/evidence checks now prove atomic import, replay/duplicate denials, retained lineage, assignment/transition/archived-project boundaries, explicit routine ACLs, direct-read isolation and verified cleanup. The actual desktop/Pixel 7 product journeys also PASS with exact effect counts, unknown-response recovery, committed-state reload, matching source hashes and verified cleanup. Browser verification exposed and corrected PostgreSQL timestamp decoding, unset-date rendering, mobile clipping and a project-navigation startup race. Exact-candidate CI remains planned verification. No hosted or overall readiness claim follows.
+
 ## Connected lifecycle proof gap (2026-10-09)
 
 Executed evidence: PR #280 is merged with the tested tree unchanged; all applicable candidate workflows, post-merge Core CI `37881768478` and supported stable browser execution are verified. Stable run `37891394223` attempt 1 records 58 PASS / 0 FAIL / 50 BLOCKED / 0 UNCOVERED. The release gate remains incomplete because of coverage, not failed executed assertions.

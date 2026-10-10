@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Approved legacy task authority boundary (2026-10-10)
+
+AP approved promoting the existing legacy task/import workflow to server authority without replacing its semantics with PR C packages. The current browser policy/direct-persistence sequence does not establish atomic import, idempotency or immutable lineage. The new service-only boundary must derive source content and ancestry from persisted server records, authorize current actor/tenant/workspace state, enforce expected versions and task ownership/transitions, and commit domain state with receipt/audit atomically. The candidate preserves historical records unchanged and defaults new writes off. Newly authoritative rows require the capability-checked query RPC even where the historical membership-only SELECT policy exists; direct historical reads remain compatible. The execution contract, compatibility and focused proof are in `docs/planning/legacy-delivery-authority-acceptance.md`.
+
+The separate authenticated synthetic acceptance profile is approved for later executable integration. Public `/sandbox` remains browser-local. This approval does not install a migration, activate a hosted runtime, enable providers or establish production readiness.
+
 ## Connected lifecycle verification boundary (2026-10-09)
 
 PR #280's stable execution proves the supported browser-local Sandbox surface (58 total catalog PASS, 50 BLOCKED). `/sandbox` deliberately selects local authority and rejects backend traffic; it cannot prove server authorization or privileged mutations. The next repository-only integration harness uses a separate loopback application/HTTP fixture and disposable current-chain PostgreSQL. Production parsers, fresh tenant authority, command handlers, service-only RPCs and projections retain policy authority; only synthetic authentication/transport and provider-free inputs are substituted. Distinct actors and actual persisted identifiers connect Assess finalization, independent review/rework, Govern resolution and Studio consumption/generation. No downstream business result may be seeded and then claimed as a command outcome. See `docs/planning/connected-enterprise-lifecycle-acceptance.md`. The hosted catalog and product runtime boundaries remain unchanged.

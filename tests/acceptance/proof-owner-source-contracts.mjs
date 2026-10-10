@@ -319,8 +319,39 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "ei-acceptance-govern-immutable-action-authority",
     "sourceReference": "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
     "selector": "DO $govern_action_authority$"
+  },
+  {
+    "anchorId": "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
+    "sourceReference": "scripts/legacyDeliveryAuthorityPostgres.mjs",
+    "selector": "export async function runLegacyDeliveryAuthorityPostgres"
+  },
+  {
+    "anchorId": "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
+    "sourceReference": "scripts/legacyDeliveryPostgresFixture.mjs",
+    "selector": "export const LEGACY_DELIVERY_FIXTURE_VERSION"
+  },
+  {
+    "anchorId": "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
+    "sourceReference": "scripts/legacyDeliveryAcceptanceEvidence.mjs",
+    "selector": "export const LEGACY_DELIVERY_ACCEPTANCE_TEST_IDS"
+  },
+  {
+    "anchorId": "legacy-delivery-deliveryPolicy-ts",
+    "sourceReference": "services/deliveryPolicy.ts",
+    "selector": "export const canCreateDeliveryTask"
+  },
+  {
+    "anchorId": "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
+    "sourceReference": "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
+    "selector": "CREATE TABLE IF NOT EXISTS delivery_work_items ("
+  },
+  {
+    "anchorId": "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
+    "sourceReference": "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.legacy_delivery_apply_command("
   }
 ]);
+
 export const PROOF_EXECUTION_CONTEXTS = Object.freeze({
   oracle: Object.freeze({
     command: Object.freeze(['node', 'scripts/runAssessV1AcceptanceOracle.mjs']),
@@ -412,6 +443,10 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
     "enterprise-intelligence-postgres-acceptance": [
       "node",
       "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs"
+    ],
+    "legacy-delivery-postgres-acceptance": [
+      "node",
+      "scripts/legacyDeliveryAuthorityPostgres.mjs"
     ]
   },
   "serverCommands": {
@@ -472,6 +507,7 @@ export const PROOF_COMMAND_CONTRACTS = Object.freeze({
     ]
   }
 });
+
 export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
   {
     "branchId": "ADMIN-ADMIN_NAVIGATION",
@@ -1168,13 +1204,21 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-DUPLICATE_IMPORT",
     "testId": "DELIVERY-007",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
+      "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
+      "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "legacy-delivery-deliveryPolicy-ts",
+      "delivery-workflow-policy",
+      "application-portfolio-pr1b-base",
+      "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-007",
+        "ownerId": "legacy-delivery-postgres-acceptance",
+        "assertionId": "legacy-delivery-postgres-acceptance::DELIVERY-007",
         "scenarioId": "DELIVERY-007::retained-contract"
       }
     ]
@@ -1213,13 +1257,21 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-RETAINED_LINEAGE",
     "testId": "DELIVERY-008",
     "sourceAnchorIds": [
-      "delivery-workflow-policy"
+      "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
+      "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
+      "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
+      "studio-acceptance-syntheticaiterminaljournalmigrationtestguard-mjs",
+      "legacy-delivery-deliveryPolicy-ts",
+      "delivery-workflow-policy",
+      "application-portfolio-pr1b-base",
+      "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
     ],
     "ownership": [
       {
         "kind": "retained-assertion",
-        "ownerId": "delivery-policy",
-        "assertionId": "delivery-policy::DELIVERY-008",
+        "ownerId": "legacy-delivery-postgres-acceptance",
+        "assertionId": "legacy-delivery-postgres-acceptance::DELIVERY-008",
         "scenarioId": "DELIVERY-008::retained-contract"
       }
     ]
@@ -1400,7 +1452,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
-      "ei-acceptance-govern-immutable-action-authority"
+      "ei-acceptance-govern-immutable-action-authority",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
     ],
     "ownership": [
       {
@@ -1429,7 +1482,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
-      "ei-acceptance-govern-immutable-action-authority"
+      "ei-acceptance-govern-immutable-action-authority",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
     ],
     "ownership": [
       {
@@ -1458,7 +1512,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
-      "ei-acceptance-govern-immutable-action-authority"
+      "ei-acceptance-govern-immutable-action-authority",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
     ],
     "ownership": [
       {
@@ -1487,7 +1542,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-20260805140000-enterprise-intelligence-ready-review-corrections-sql",
       "ei-acceptance-20260916181916-assess-document-xlsx-ingestion-authority-sql",
       "ei-acceptance-20261008022445-enterprise-evidence-canonical-size-limit-sql",
-      "ei-acceptance-govern-immutable-action-authority"
+      "ei-acceptance-govern-immutable-action-authority",
+      "legacy-delivery-20261010025331-legacy-delivery-authority-sql"
     ],
     "ownership": [
       {

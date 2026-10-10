@@ -222,8 +222,10 @@ try {
   const base = await connect(urlFor(baseName));
   await bootstrap(base);
   const migrations = (await readdir(join('supabase', 'migrations'))).filter(name => name.endsWith('.sql')).sort();
-  assert.equal(migrations.at(-1), migrationName);
-  for (const name of migrations.slice(0, -1)) await apply(base, name);
+  const featureIndex = migrations.indexOf(migrationName);
+  assert.ok(featureIndex > 0);
+  assert.equal(migrations[featureIndex + 1], '20261010025331_legacy_delivery_authority.sql');
+  for (const name of migrations.slice(0, featureIndex)) await apply(base, name);
   await base.end(); clients.splice(clients.indexOf(base), 1);
 
   const current = await clone(admin, names.current);

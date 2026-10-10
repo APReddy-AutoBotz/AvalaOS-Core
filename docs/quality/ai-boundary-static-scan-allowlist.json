@@ -506,6 +506,19 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine these writes to synthetic loopback caller sessions and non-secret view/scope state. Keep real provider and service credentials out of the browser; production handlers and PostgreSQL remain authorization authority."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/legacyDeliveryAuthority.spec.ts",
+      "lines": [
+        68,
+        69,
+        70,
+        179,
+        180
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep synthetic session/navigation setup and persisted-view assertions confined to the loopback-only Legacy Delivery browser fixture; never treat these fixture values as server or provider authority."
     }
   ]
 }

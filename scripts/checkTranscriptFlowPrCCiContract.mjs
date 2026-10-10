@@ -16,6 +16,7 @@ export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
   'playwright.full-platform.config.ts',
   'playwright.hosted-accessibility-performance.config.ts',
   'playwright.hosted-pilot.config.ts',
+  'playwright.legacy-delivery.config.ts',
   'playwright.local-controlled-boundary.config.ts',
   'playwright.local-navigation-regression.config.ts',
   'playwright.local-sandbox-regression.config.ts',
@@ -76,7 +77,7 @@ const rootEntries = readdirSync('.', { withFileTypes: true });
 assert(rootEntries.filter(entry => isPlaywrightRootConfigFileNameForTest(entry.name)).every(entry => entry.isFile()),
   'root Playwright configs must be regular files, not links or directories');
 const actualPlaywrightConfigs = assertPlaywrightConfigInventoryForTest(rootEntries.map(entry => entry.name));
-assert.equal(actualPlaywrightConfigs.length, 25);
+assert.equal(actualPlaywrightConfigs.length, 26);
 assert.deepEqual(assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'README.md']),
   [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort());
 for (const extension of ['ts','js','mts','mjs','cts','cjs']) {

@@ -33,7 +33,7 @@ interface WorkspaceViewProps {
   currentUser: User;
   onUpdateApprovalStatus: (userId: string, status: ApprovalStatus, comments?: string) => void;
   onResubmitForApproval: (userId: string) => void;
-  onInitiateImport: (items: WorkItem[]) => void;
+  onInitiateImport: (items: WorkItem[]) => Promise<boolean>;
   onRefineSection: (artifactKey: DocumentArtifactKeys, sectionKey: string, newContent: string) => void;
   aiProviderType: AiProviderType;
   actionPolicy?: {
@@ -423,13 +423,12 @@ const WorkspaceView: React.FC<WorkspaceViewProps> = ({ artifacts, generationId, 
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
           workItems={artifacts.workItems}
-          onImport={(selectedItems) => {
+          onImport={async (selectedItems) => {
               if (!canImportWorkItems) {
                 blockAction(actionPolicy?.importWorkItems, 'Backlog import is not authorized for this workspace.');
-                return;
+                return false;
               }
-              onInitiateImport(selectedItems);
-              setIsImportModalOpen(false);
+              return onInitiateImport(selectedItems);
           }}
         />
       )}

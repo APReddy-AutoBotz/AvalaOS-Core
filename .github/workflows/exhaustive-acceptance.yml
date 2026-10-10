@@ -83,6 +83,7 @@ jobs:
           npm run test:application-portfolio-acceptance-evidence
           node scripts/assessV2AcceptanceEvidence.test.mjs
           node scripts/studioAcceptanceEvidence.test.mjs
+          node scripts/legacyDeliveryAcceptanceEvidence.test.mjs
           node scripts/governAcceptanceEvidence.test.mjs
           node scripts/enterpriseIntelligenceAcceptanceEvidence.test.mjs
           node scripts/produceExhaustiveServerEvidence.test.mjs
@@ -99,6 +100,7 @@ jobs:
           APPLICATION_PORTFOLIO_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           ASSESS_V2_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           STUDIO_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           GOVERN_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           ENTERPRISE_INTELLIGENCE_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
         run: node scripts/runExhaustiveRetainedSuites.mjs

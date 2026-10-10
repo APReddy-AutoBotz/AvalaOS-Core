@@ -26,6 +26,7 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20260916181916_assess_document_xlsx_ingestion_authority.sql',
   'supabase/migrations/20261008022445_enterprise_evidence_canonical_size_limit.sql',
   'supabase/migrations/20261009162752_govern_immutable_action_authority.sql',
+  'supabase/migrations/20261010025331_legacy_delivery_authority.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',
