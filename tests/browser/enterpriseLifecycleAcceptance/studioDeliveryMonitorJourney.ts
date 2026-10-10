@@ -188,6 +188,13 @@ const outcome = Object.freeze({
 const expectDigest = (value: string) => expect(value).toMatch(/^sha256:[a-f0-9]{64}$/u);
 const expectUuid = (value: string) => expect(value).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
 type ObservedProductionResponse = Readonly<{ route: string; status: number }>;
+const waitForLegacyDeliveryCommand = (page: Page, action: string) => page.waitForResponse(response => {
+  if (new URL(response.url()).pathname !== '/functions/v1/legacy-delivery-command'
+    || response.request().method() !== 'POST') return false;
+  try {
+    return (response.request().postDataJSON() as { action?: unknown }).action === action;
+  } catch { return false; }
+});
 const measuredResponses = (
   log: readonly ObservedProductionResponse[], start: number, routes: readonly string[],
   additional: readonly ObservedProductionResponse[] = [],
@@ -422,7 +429,12 @@ export const runStudioDeliveryMonitorJourney = async ({
   await page.getByPlaceholder('Enter a title for this task...').fill(itemTitles.created);
   const beforeCreate = await getFrame(control, projectName);
   const createResponseStart = productionResponses.length;
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const [createResponse] = await Promise.all([
+    waitForLegacyDeliveryCommand(page, 'task.create'),
+    page.getByRole('button', { name: 'Add', exact: true }).click(),
+  ]);
+  expect(createResponse.status()).toBe(200);
+  await expect(page.getByPlaceholder('Enter a title for this task...')).toBeHidden();
   await expect(page.getByText(itemTitles.created, { exact: true })).toBeVisible();
   const afterCreate = await getFrame(control, projectName);
   expect(afterCreate.counts.activeTasks).toBe(beforeCreate.counts.activeTasks + 1);
@@ -541,7 +553,12 @@ export const runStudioDeliveryMonitorJourney = async ({
   const beforeValidTransitionFrame = await getFrame(control, projectName);
   const beforeValidTransition = beforeValidTransitionFrame.tasks.find(task => task.id === importedTask!.id)!;
   const validTransitionResponseStart = productionResponses.length;
-  await taskDialog.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  const [validTransitionResponse] = await Promise.all([
+    waitForLegacyDeliveryCommand(page, 'task.update'),
+    taskDialog.getByRole('button', { name: 'Save Changes', exact: true }).click(),
+  ]);
+  expect(validTransitionResponse.status()).toBe(200);
+  await expect(taskDialog.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
   await expect(taskDialog.getByText('In Progress', { exact: true }).first()).toBeVisible();
   const afterValidTransitionFrame = await getFrame(control, projectName);
   const afterValidTransition = afterValidTransitionFrame.tasks.find(task => task.id === importedTask!.id)!;

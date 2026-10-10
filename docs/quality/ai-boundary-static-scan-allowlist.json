@@ -498,14 +498,29 @@
     },
     {
       "pattern": "localStorage",
-      "path": "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
+      "path": "tests/browser/authenticatedControlsAcceptance.ts",
       "lines": [
-        73,
-        74,
-        75
+        110,
+        111,
+        187,
+        188,
+        190,
+        192,
+        376
       ],
       "reason": "test/control documentation",
-      "futureAction": "Confine these writes to synthetic loopback caller sessions and non-secret view/scope state. Keep real provider and service credentials out of the browser; production handlers and PostgreSQL remain authorization authority."
+      "futureAction": "Confine authenticated-control session inspection, synthetic claim-forgery setup, and secret-absence storage snapshots to loopback browser tests. Never treat browser storage as authorization authority or persist a real provider secret."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/authenticatedLifecycleHarness.ts",
+      "lines": [
+        60,
+        61,
+        62
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Confine synthetic authenticated-session injection and non-secret view/scope setup to the loopback lifecycle harness. Production handlers and PostgreSQL remain authorization authority."
     },
     {
       "pattern": "localStorage",
