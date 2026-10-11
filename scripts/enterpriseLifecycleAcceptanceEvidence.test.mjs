@@ -173,6 +173,12 @@ const makeFixture = root => {
   return { backend, browser, backendPath, browserPath, expected: { headSha, runId: '123456', runAttempt: '2' } };
 };
 
+test('connected lifecycle producers bind every independently required backend source', async () => {
+  const { enterpriseLifecycleSourcePaths } = await import('./enterpriseLifecyclePostgresFixture.mjs');
+  const produced = new Set(enterpriseLifecycleSourcePaths);
+  assert.deepEqual(REQUIRED_BACKEND_SOURCES.filter(source => !produced.has(source)), []);
+});
+
 test('connected lifecycle evidence binds actual same-run backend and browser proof and re-verifies its manifest', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'connected-lifecycle-evidence-'));
   try {

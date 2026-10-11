@@ -184,10 +184,25 @@ export const authenticatedLifecycleSelectReviewer = async (page: Page, actor: Au
 
 export const authenticatedLifecycleAttestEverySubmittedEvidence = async (page: Page, rationale: string) => {
   const workspace = page.getByTestId('assess-v2-review-workspace');
+  const acceptButtons = workspace.getByRole('button', { name: 'Accept evidence', exact: true });
+  const acceptedHeadings = workspace.getByRole('heading', { name: 'Evidence accepted', exact: true });
   let committed = 0;
-  while (await workspace.getByRole('button', { name: 'Accept evidence', exact: true }).count()) {
+  while (await acceptButtons.count()) {
+    const pendingBefore = await acceptButtons.count();
+    const acceptedBefore = await acceptedHeadings.count();
     await workspace.getByLabel('Reviewer rationale', { exact: true }).first().fill(rationale);
-    await workspace.getByRole('button', { name: 'Accept evidence', exact: true }).first().click();
+    const responsePromise = page.waitForResponse(response => {
+      if (new URL(response.url()).pathname !== '/functions/v1/assess-v2-command'
+        || response.request().method() !== 'POST') return false;
+      try {
+        const body = response.request().postDataJSON() as { commandType?: unknown; payload?: { outcome?: unknown } };
+        return body.commandType === 'assessment_v2.evidence.attest' && body.payload?.outcome === 'accepted';
+      } catch { return false; }
+    });
+    const [response] = await Promise.all([responsePromise, acceptButtons.first().click()]);
+    expect(response.status()).toBe(200);
+    await expect(acceptButtons).toHaveCount(pendingBefore - 1);
+    await expect(acceptedHeadings).toHaveCount(acceptedBefore + 1);
     await expect(workspace.getByText('Evidence attestation committed: Evidence accepted.', { exact: true })).toBeVisible();
     committed += 1;
   }
