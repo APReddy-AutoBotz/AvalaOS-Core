@@ -142,8 +142,11 @@ ALTER TABLE public.studio_artifact_generation_attempts
     OR(provider_plan_state='bound' AND transport_kind='provider' AND authenticated_synthetic_permit_id IS NULL
       AND provider_route_id IS NOT NULL AND provider_config_id IS NOT NULL
       AND provider_name IN('openai','azure_openai','anthropic','gemini','groq','openai_compatible')
-      AND length(btrim(provider_model)) BETWEEN 1 AND 200 AND prompt_key='studio-multisource-generation'
-      AND prompt_version='studio-pr-b-1' AND provider_plan_hash~'^[0-9a-f]{64}$')
+      AND length(btrim(provider_model)) BETWEEN 1 AND 200
+      AND prompt_key IS NOT NULL AND prompt_version IS NOT NULL AND provider_plan_hash IS NOT NULL
+      AND prompt_key='studio-multisource-generation'
+      AND prompt_version IN('studio-pr-b-1','studio-pr-b-2','studio-pr-b-3')
+      AND provider_plan_hash~'^[0-9a-f]{64}$')
     OR(provider_plan_state='authenticated_synthetic' AND transport_kind='authenticated_synthetic'
       AND authenticated_synthetic_permit_id IS NOT NULL AND provider_route_id IS NULL AND provider_config_id IS NULL
       AND provider_name IS NULL AND provider_model IS NULL AND prompt_key='studio-multisource-generation'

@@ -38,6 +38,9 @@ const ids = {
   studioToken: '81000000-0000-4000-8000-000000000017',
   successRequest: '81000000-0000-4000-8000-000000000018', successPermit: '81000000-0000-4000-8000-000000000019',
   successToken: '81000000-0000-4000-8000-000000000020',
+  ordinaryRoute: '81000000-0000-4000-8000-000000000021',
+  ordinaryRequest: '81000000-0000-4000-8000-000000000022',
+  ordinaryToken: '81000000-0000-4000-8000-000000000023',
 };
 const hash = character => character.repeat(64);
 const authority = async (client, sql, parameters = []) => {
@@ -57,6 +60,7 @@ const admin = new Client({ connectionString: source });
 let db;
 let created = false;
 let fixture;
+let ordinaryAttemptId;
 try {
   await admin.connect();
   for (const role of ['anon', 'authenticated', 'service_role']) {
@@ -80,6 +84,51 @@ try {
     if (name === '20260916083814_assess_supporting_document_mapping.sql') {
       fixture = await createEnterpriseIntelligenceFixture(db, 'brd');
     }
+    if (name === '20261010144356_authenticated_hosted_exercise_authority.sql') {
+      assert.ok(fixture);
+      await db.query(`INSERT INTO public.role_capabilities(role_id,capability_key)
+        SELECT role_values.role_id,capability_values.capability FROM unnest($1::uuid[]) role_values(role_id)
+        CROSS JOIN unnest($2::text[]) capability_values(capability) ON CONFLICT DO NOTHING`,
+      [[fixture.role, fixture.routeRole], ['studio.artifacts.generate', 'studio.sources.read', 'studio.sources.manage']]);
+      await db.query('UPDATE public.ai_provider_configs SET last_validated_at=statement_timestamp() WHERE id=$1', [fixture.provider]);
+      await db.query(`INSERT INTO public.enterprise_ai_capability_routes(
+        id,org_id,workspace_id,provider_config_id,capability,model,enabled,allowed_roles,version,created_by,updated_by)
+        VALUES($1,$2,$3,$4,'studio.document.generate','fixture-model',true,ARRAY[$5::text],1,$6,$6)`,
+      [ids.ordinaryRoute, fixture.org, fixture.workspace, fixture.provider, fixture.routeRole, fixture.requester]);
+      await db.query(`INSERT INTO public.enterprise_transcript_workspace_flags(
+        org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,updated_by)
+        VALUES($1,$2,true,true,true,$3)
+        ON CONFLICT(org_id,workspace_id) DO UPDATE SET
+          unified_byok_gateway_enabled=true,studio_multisource_enabled=true,module_handoffs_enabled=true,updated_by=$3`,
+      [fixture.org, fixture.workspace, fixture.requester]);
+      await db.query('UPDATE public.enterprise_intelligence_runtime_control SET enabled=true,read_only=false,provider_enabled=true WHERE singleton');
+      await db.query('UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=true WHERE singleton');
+      const ordinaryArtifact = (await db.query(`SELECT aggregate.id,aggregate.aggregate_version,aggregate.current_version_id,
+        aggregate.current_approved_version_id,aggregate.source_package_id
+        FROM public.studio_artifact_aggregates aggregate WHERE aggregate.id=$1`, [fixture.artifactId])).rows[0];
+      const ordinaryTemplate = (await db.query("SELECT id FROM public.studio_system_template_versions WHERE artifact_type='brd' AND superseded_at IS NULL")).rows[0];
+      const ordinaryAuthorizationVersion = Number((await db.query(
+        'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [fixture.org, fixture.requester])).rows[0].version);
+      const ordinaryRequest = (await db.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) value', [JSON.stringify({
+        actorId: fixture.requester, organizationId: fixture.org, workspaceId: fixture.workspace,
+        requestId: ids.ordinaryRequest, idempotencyKey: 'authenticated-synthetic-ordinary-provider-v3',
+        authorizationVersion: ordinaryAuthorizationVersion, artifactId: ordinaryArtifact.id,
+        sourcePackageId: ordinaryArtifact.source_package_id, templateKind: 'system', templateVersionId: ordinaryTemplate.id,
+        expectedAggregateVersion: Number(ordinaryArtifact.aggregate_version), expectedCurrentVersionId: ordinaryArtifact.current_version_id,
+        expectedApprovedVersionId: ordinaryArtifact.current_approved_version_id,
+      })])).rows[0].value;
+      ordinaryAttemptId = ordinaryRequest.attemptId;
+      const ordinaryClaim = (await db.query('SELECT public.studio_artifact_generation_claim_v2($1,$2,45) value',
+        [ordinaryAttemptId, ids.ordinaryToken])).rows[0].value;
+      await db.query('SELECT public.studio_artifact_generation_fail_v2($1,$2,$3,$4)',
+        [ordinaryAttemptId, ids.ordinaryToken, Number(ordinaryClaim.executionFence), 'PROVIDER_REQUEST_FAILED']);
+      assert.deepEqual((await db.query(`SELECT state,provider_plan_state,prompt_key,prompt_version
+        FROM public.studio_artifact_generation_attempts WHERE id=$1`, [ordinaryAttemptId])).rows[0], {
+        state: 'failed', provider_plan_state: 'bound', prompt_key: 'studio-multisource-generation', prompt_version: 'studio-pr-b-3',
+      });
+      await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+      await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+    }
     const sql = readFileSync(path.join(root, 'supabase', 'migrations', name), 'utf8').replaceAll('\r\n', '\n');
     const apply = async () => {
       await db.query('BEGIN');
@@ -91,6 +140,14 @@ try {
       if (duplicateSafe.has(name)) await apply();
     } catch (error) {
       throw new Error(`AUTHENTICATED_SYNTHETIC_MIGRATION_FAILED:${name}:${error.message}`, { cause: error });
+    }
+    if (name === '20261010144356_authenticated_hosted_exercise_authority.sql') {
+      assert.deepEqual((await db.query(`SELECT state,provider_plan_state,transport_kind,prompt_key,prompt_version,
+        authenticated_synthetic_permit_id IS NULL permit_is_null
+        FROM public.studio_artifact_generation_attempts WHERE id=$1`, [ordinaryAttemptId])).rows[0], {
+        state: 'failed', provider_plan_state: 'bound', transport_kind: 'provider', prompt_key: 'studio-multisource-generation',
+        prompt_version: 'studio-pr-b-3', permit_is_null: true,
+      });
     }
   }
 
@@ -197,6 +254,8 @@ try {
   const studioAttempt = (await db.query(`SELECT * FROM public.studio_artifact_generation_attempts WHERE id=$1`, [studioRequested.attemptId])).rows[0];
   assert.equal(studioAttempt.transport_kind, 'authenticated_synthetic');
   assert.equal(studioAttempt.provider_route_id, null); assert.equal(studioAttempt.provider_config_id, null);
+  await assert.rejects(() => db.query('UPDATE public.studio_artifact_generation_attempts SET provider_route_id=$1 WHERE id=$2',
+    [ids.ordinaryRoute, studioRequested.attemptId]), /studio_generation_provider_plan_check/);
   const studioClaim = (await authority(db,
     'SELECT public.studio_artifact_generation_claim_authenticated_synthetic($1,$2,45) value',
     [studioRequested.attemptId, ids.studioToken])).rows[0].value;

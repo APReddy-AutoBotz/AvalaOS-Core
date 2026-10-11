@@ -4057,7 +4057,8 @@
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "DELIVERY-DUPLICATE_IMPORT"
@@ -4117,7 +4118,8 @@
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "DELIVERY-RETAINED_LINEAGE"
@@ -5624,7 +5626,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -5694,7 +5697,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -5764,7 +5768,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-QUERY_TENANT_ISOLATION"
@@ -5834,7 +5839,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -5904,7 +5910,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"

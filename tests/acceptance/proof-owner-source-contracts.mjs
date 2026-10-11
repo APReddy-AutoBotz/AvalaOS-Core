@@ -1749,7 +1749,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1856,7 +1857,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -2343,7 +2345,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -2378,7 +2381,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -2413,7 +2417,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -2448,7 +2453,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -2483,7 +2489,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {

@@ -294,6 +294,24 @@ void (async () => {
     && syntheticEvents.join(',') === 'consume,fail:PROVIDER_REQUEST_FAILED',
   'STUDIO-003', 'generation.authenticated-synthetic-failure-consumed-after-claim-before-stage',
   'one-shot-exact-bound-failure-permit');
+  syntheticEvents.length = 0;
+  const syntheticFailureWriteLost = await executeClaimedStudioGeneration({
+    ...syntheticClaim,
+    authenticatedSynthetic: { ...syntheticClaim.authenticatedSynthetic!, kind: 'studio_failure_after_claim' },
+  }, {
+    ...deps,
+    consumeSynthetic: async () => { syntheticEvents.push('consume'); return { kind: 'studio_failure_after_claim' }; },
+    runProvider: async () => { throw new Error('provider forbidden'); },
+    runBudgeted: (async () => { throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+    stage: async () => { throw new Error('stage forbidden'); },
+    finalize: async () => { throw new Error('finalize forbidden'); },
+    fail: async (_attemptId, code) => { syntheticEvents.push(`fail:${code}`); throw new Error('failure acknowledgement lost'); },
+  });
+  mark(syntheticFailureWriteLost.state === 'uncertain'
+    && syntheticFailureWriteLost.failureCode === 'GENERATION_UNCERTAIN'
+    && syntheticEvents.join(',') === 'consume,fail:PROVIDER_REQUEST_FAILED',
+  'STUDIO-003', 'generation.authenticated-synthetic-after-claim-failure-write-loss-is-uncertain',
+  'one-shot-failure-permit-terminal-write-ambiguity');
   const invalidPromptClaims = [
     { ...claim, providerPlan: { ...claim.providerPlan, promptKey: undefined } },
     { ...claim, providerPlan: { ...claim.providerPlan, promptVersion: undefined } },
