@@ -46,6 +46,8 @@ Classify resources before execution. Revoke real sessions and temporary access, 
 
 The browser child has a bounded timeout shorter than the exercise expiry. Stop it before cleanup; cancellation must follow the same cleanup path. A forcibly terminated host cannot certify cleanup: keep the result blocked and reject the next activation while active residue remains. Recovery then requires exact-target inspection and quiescence under the later hosted authorization; it must not silently start another exercise.
 
+Access revocation does not cancel a server command already in flight. Both cleanup verification and the next preflight therefore count every nonterminal authenticated synthetic Studio attempt as active residue, even after its exercise is quiesced and its permit consumed. They remain blocked until the attempt is terminal; cleanup never force-completes or deletes it. The disposable PostgreSQL regression covers requested, claimed/consumed, quiesced and completed states through the normal pipeline. Hosted recovery remains separately authorized.
+
 Install additive migrations default-OFF with exact predecessor/compatibility guards. Existing product paths retain their ordinary controls; installation cannot activate a synthetic exercise. The eventual rollout must verify exact deployed functions, migrations, origin and backend before setup. Fallback quiesces the exercise, revokes temporary access and keeps authorized reads/history available. Use forward fixes; never restore direct browser writes or rewrite immutable evidence.
 
 ## Read-only target inspection

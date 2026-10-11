@@ -10,6 +10,15 @@ const iso = value => {
 };
 const value = result => result.rows[0]?.value;
 
+// Revoking access does not cancel an already claimed server command. Until its
+// durable attempt is terminal, neither cleanup nor a new run can be certified.
+export const AUTHENTICATED_SYNTHETIC_ACTIVE_RESIDUE_SQL = `(
+  (SELECT count(*) FROM public.authenticated_synthetic_exercises WHERE lifecycle='active')+
+  (SELECT count(*) FROM public.studio_artifact_generation_attempts
+    WHERE transport_kind='authenticated_synthetic'
+      AND state NOT IN('completed','stale_completed','failed','cancelled','timed_out'))
+)::int`;
+
 const createPassword = () => `Aa7!${randomBytes(24).toString('base64url')}`;
 const authHeaders = config => ({
   apikey: config.serviceRoleKey,
@@ -234,7 +243,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
           (SELECT count(*)::int FROM public.enterprise_ai_capability_routes WHERE org_id=$1 AND workspace_id=$2 AND enabled) enabled_provider_routes,
           (SELECT count(*)::int FROM public.profiles p JOIN public.organization_members m ON m.user_id=p.id AND m.org_id=$1
             WHERE coalesce((p.metadata->>'synthetic')::boolean,false)=false) customer_rows,
-          (SELECT count(*)::int FROM public.authenticated_synthetic_exercises WHERE lifecycle='active') active_residue`,
+          ${AUTHENTICATED_SYNTHETIC_ACTIVE_RESIDUE_SQL} active_residue`,
         [config.scope.organizationId,config.scope.workspaceId,Object.values(config.scope.roleIds)]),
         query('SELECT role_id,capability_key FROM public.role_capabilities WHERE role_id=ANY($1::uuid[])',
           [Object.values(config.scope.roleIds)]),
@@ -580,7 +589,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         (SELECT count(*)::int FROM public.authenticated_synthetic_permits WHERE exercise_id=$1 AND state='armed') permits,
         (SELECT count(*)::int FROM public.ai_provider_key_refs ref JOIN public.ai_provider_configs config ON config.key_ref_id=ref.id
           WHERE config.org_id=$2 AND config.id=ANY($3::uuid[]) AND ref.status='active') secrets,
-        (SELECT count(*)::int FROM public.authenticated_synthetic_exercises WHERE lifecycle='active') active_residue,
+        ${AUTHENTICATED_SYNTHETIC_ACTIVE_RESIDUE_SQL} active_residue,
         (SELECT lifecycle FROM public.authenticated_synthetic_exercises WHERE id=$1) exercise_lifecycle,
         (SELECT count(*)::int FROM public.authenticated_synthetic_permit_events WHERE exercise_id=$1) event_count`,
       [exerciseId,config.scope.organizationId,Object.values(providerFixture??{}),actorIds,config.scope.workspaceId])).rows[0];

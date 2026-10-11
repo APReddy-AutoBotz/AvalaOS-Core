@@ -4,6 +4,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
+import { AUTHENTICATED_SYNTHETIC_ACTIVE_RESIDUE_SQL } from './authenticatedHostedControllerAdapters.mjs';
 
 const { Client } = pg;
 const root = process.cwd();
@@ -309,6 +310,9 @@ try {
   const successRequested = (await authority(db,
     'SELECT public.studio_artifact_generation_request_authenticated_synthetic($1::jsonb) value',
     [JSON.stringify(successCommand)])).rows[0].value;
+  const activeResidue = async () => Number((await db.query(
+    `SELECT ${AUTHENTICATED_SYNTHETIC_ACTIVE_RESIDUE_SQL} value`)).rows[0].value);
+  assert.equal(await activeResidue(), 2, 'the active exercise and requested attempt both block a new run');
   const successClaim = (await authority(db,
     'SELECT public.studio_artifact_generation_claim_authenticated_synthetic($1,$2,45) value',
     [successRequested.attemptId, ids.successToken])).rows[0].value;
@@ -316,6 +320,12 @@ try {
     'SELECT public.authenticated_synthetic_consume_studio_permit($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
     [ids.successPermit, ids.actor, ids.org, ids.workspace, ids.session, ids.successRequest, hash('8'),
       Number(successHead.aggregate_version), successRequested.attemptId, ids.successToken, Number(successClaim.executionFence)]);
+  await db.query('BEGIN');
+  try {
+    await db.query('SELECT public.authenticated_synthetic_quiesce($1)', [ids.exercise]);
+    assert.equal(await activeResidue(), 1,
+      'a consumed permit and revoked sessions cannot certify an unfinished server attempt as cleaned');
+  } finally { await db.query('ROLLBACK'); }
   const serverMaterial = (await db.query(`SELECT package.anchor_manifest,template.provider_instructions
     FROM public.studio_artifact_source_packages package
     JOIN public.studio_system_template_versions template ON template.id=$2
@@ -342,6 +352,7 @@ try {
   const finalized = (await authority(db, 'SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) value',
     [successRequested.attemptId, ids.successToken, Number(successClaim.executionFence)])).rows[0].value;
   assert.equal(finalized.state, 'completed'); assert.equal(finalized.stale, false);
+  assert.equal(await activeResidue(), 1, 'terminal attempts are retained history, not active residue');
   assert.equal((await db.query('SELECT count(*)::int count FROM public.enterprise_ai_budget_reservations WHERE studio_attempt_id=$1',
     [successRequested.attemptId])).rows[0].count, 0);
 
@@ -353,6 +364,7 @@ try {
     'SELECT public.authenticated_synthetic_consume_process_fault($1,$2,$3,$4,$5,$6,$7,$8)',
     [ids.actor, ids.org, ids.workspace, ids.session, 'process.update', ids.expiredRequest, hash('a'), 2]));
   await authority(db, 'SELECT public.authenticated_synthetic_quiesce($1)', [ids.exercise]);
+  assert.equal(await activeResidue(), 0, 'quiescence with terminal attempts permits cleanup certification');
   assert.equal((await db.query("SELECT count(*)::int count FROM public.authenticated_synthetic_permits WHERE state='armed'")).rows[0].count, 0);
   console.log('authenticated synthetic PostgreSQL: install, default-off, session/tenant/request/expiry, fenced Studio consume/replay and zero-effect guards passed');
 } finally {
