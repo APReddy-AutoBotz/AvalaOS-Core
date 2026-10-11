@@ -53,6 +53,36 @@ const responseDenied = response => response.status >= 400 || [
   'NETWORK_ABORTED', 'PROVIDER_DISABLED', 'SERVER_ERROR_PRECOMMIT',
 ].includes(response.classification);
 
+const requireSupabaseVaultPhysicalEvidence = (binding, serverObservations) => {
+  if(binding.secretBackendKind!=='supabase_vault')return;
+  const resources=serverObservations.cleanup.resources;
+  const physical=resources.filter(resource=>[
+    'secret_material_created_verified','secret_material_absence_verified',
+  ].includes(resource.kind));
+  if(physical.length!==AUTHENTICATED_ACCEPTANCE_PROJECTS.length*2){
+    throw new Error('authenticated-supabase-vault-physical-resource-count');
+  }
+  for(const project of AUTHENTICATED_ACCEPTANCE_PROJECTS){
+    const observation=serverObservations.cases.find(row=>row.testId==='AI-004'&&row.project===project);
+    const secrets=observation?changedRows(observation).filter(change=>change.current?.source==='ai_provider_key_refs'
+      &&change.current.effectKind==='secret'):[];
+    if(secrets.length!==1)throw new Error(`authenticated-supabase-vault-secret-source:${project}`);
+    const keyRefRecordHash=secrets[0].current.recordHash;
+    for(const [kind,phase,exists,fingerprintMatches] of [
+      ['secret_material_created_verified','created',true,true],
+      ['secret_material_absence_verified','absent',false,false],
+    ]){
+      const expected=authenticatedEvidenceDigest({schema:'supabase-vault-physical-observation-v1',
+        releaseSha:binding.releaseSha,runId:binding.workflow.runId,attempt:binding.workflow.attempt,project,
+        backendKind:binding.secretBackendKind,keyRefRecordHash,phase,exists,fingerprintMatches});
+      const matches=physical.filter(resource=>resource.kind===kind&&resource.resourceHash===expected
+        &&resource.classification==='transient'&&resource.status==='removed'
+        &&resource.actorHash===null&&resource.sessionHash===null);
+      if(matches.length!==1)throw new Error(`authenticated-supabase-vault-physical-proof:${project}:${phase}`);
+    }
+  }
+};
+
 // Focused executable seam for the disposable PostgreSQL adapter test. The full
 // producer below remains the only acceptance entry point and still requires
 // the complete 94-case inventory plus cleanup evidence.
@@ -195,6 +225,7 @@ export function produceAuthenticatedHostedEvidence({ binding, browserCorrelation
   const browserErrors = validateAuthenticatedBrowserCorrelations(browserCorrelations, binding);
   const serverErrors = validateAuthenticatedServerObservations(serverObservations, binding);
   if (browserErrors.length || serverErrors.length) throw new Error([...browserErrors, ...serverErrors].join(','));
+  requireSupabaseVaultPhysicalEvidence(binding,serverObservations);
   const browserIndex = new Map(browserCorrelations.cases.map(row => [caseKey(row), row]));
   const serverIndex = new Map(serverObservations.cases.map(row => [caseKey(row), row]));
   const cases = [];

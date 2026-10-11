@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { profileFixture, manifestFixture, rawHostedFixtures } from './authenticatedAcceptanceTestFixtures.mjs';
 import { AUTHENTICATED_ACCEPTANCE_TEST_IDS } from './authenticatedAcceptanceCases.mjs';
+import { authenticatedRawIdentity } from './authenticatedBrowserCorrelation.mjs';
 import { validateAuthenticatedAcceptanceManifest, evaluateAuthenticatedAcceptanceCase } from './authenticatedAcceptanceEvidence.mjs';
 import { produceAuthenticatedHostedEvidence } from './authenticatedHostedEvidence.mjs';
 import { validateAuthenticatedCatalogRevision } from './authenticatedAcceptanceCriteria.mjs';
@@ -52,6 +53,27 @@ test('missing frames, mismatched hashes, stale sources and actor/session collaps
   collapsed.actors.find(actor => actor.persona === 'reviewer').actorHash = collapsed.actors.find(actor => actor.persona === 'author').actorHash;
   assert.throws(() => produceAuthenticatedHostedEvidence({ binding: collapsed,
     browserCorrelations: rawHostedFixtures().browserCorrelations, serverObservations: rawHostedFixtures().serverObservations, catalog }));
+});
+
+test('native Vault evidence requires exact created and absent physical observations for each AI-004 case',()=>{
+  const valid=rawHostedFixtures();
+  assert.doesNotThrow(()=>produceAuthenticatedHostedEvidence({...valid,catalog}));
+  for(const change of [
+    raw=>{raw.serverObservations.cleanup.resources=raw.serverObservations.cleanup.resources
+      .filter(resource=>resource.kind!=='secret_material_created_verified');},
+    raw=>{raw.serverObservations.cleanup.resources.find(resource=>resource.kind==='secret_material_absence_verified').resourceHash
+      =raw.binding.sourceDigest;},
+  ]){
+    const raw=rawHostedFixtures();change(raw);
+    assert.throws(()=>produceAuthenticatedHostedEvidence({...raw,catalog}),/authenticated-supabase-vault-physical/);
+  }
+  const hashicorp=rawHostedFixtures();
+  hashicorp.binding.secretBackendKind='hashicorp_vault';
+  hashicorp.browserCorrelations.identity=authenticatedRawIdentity(hashicorp.binding);
+  hashicorp.serverObservations.identity=authenticatedRawIdentity(hashicorp.binding);
+  hashicorp.serverObservations.cleanup.resources=hashicorp.serverObservations.cleanup.resources
+    .filter(resource=>!resource.kind.startsWith('secret_material_'));
+  assert.doesNotThrow(()=>produceAuthenticatedHostedEvidence({...hashicorp,catalog}));
 });
 
 test('request, receipt, audit and observation windows are independently correlated', () => {

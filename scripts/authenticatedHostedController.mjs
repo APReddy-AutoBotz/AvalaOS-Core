@@ -97,6 +97,9 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
   }
   if (environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND !== 'hosted_authenticated_synthetic'
     || environment.AUTHENTICATED_ACCEPTANCE_AUTH_KIND !== 'supabase_auth') fail('EXECUTION_PROFILE_REJECTED');
+  const secretBackendKind = environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND;
+  if (!['hashicorp_vault', 'supabase_vault'].includes(secretBackendKind)
+    || environment.AVALA_PROVIDER_SECRET_BACKEND !== secretBackendKind) fail('SECRET_BACKEND_SELECTOR_REJECTED');
   const origin = safeOrigin(environment.HOSTED_PILOT_URL);
   const target = supabaseTarget(environment.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL);
   if (environment.AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF !== target.projectRef
@@ -144,6 +147,7 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
     catalogDigest: environment.AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST,
     sourceDigest: environment.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST,
     baselineDigest: environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,
+    secretBackendKind,
     workflow: Object.freeze({
       repository: environment.GITHUB_REPOSITORY,
       producer: Object.freeze({ path: '.github/workflows/exhaustive-acceptance.yml',
@@ -175,7 +179,7 @@ export function controllerProfile(config, window, actors) {
     fail('ACTOR_BINDING_REJECTED');
   }
   return {
-    schemaVersion: 'hosted-authenticated-synthetic-profile-v2',
+    schemaVersion: 'hosted-authenticated-synthetic-profile-v3',
     executionKind: 'hosted_authenticated_synthetic',
     authKind: 'supabase_auth',
     releaseSha: config.releaseSha,
@@ -189,6 +193,7 @@ export function controllerProfile(config, window, actors) {
     catalogDigest: config.catalogDigest,
     sourceDigest: config.sourceDigest,
     baselineDigest: config.baselineDigest,
+    secretBackendKind: config.secretBackendKind,
     policy: { syntheticOnly: true, production: false, customerDataAllowed: false, providersEnabled: false, paidCallsAllowed: false },
     workflow: structuredClone(config.workflow),
     window: { ...window },
@@ -235,7 +240,7 @@ export class AuthenticatedHostedController {
       || preflight.releaseSha !== this.config.releaseSha || preflight.deploymentId !== this.config.deploymentId
       || preflight.migrationVersion !== this.config.migrationVersion || preflight.backendDigest !== this.config.backendDigest
       || preflight.providersEnabled !== false || preflight.runtimeReady!==true
-      || preflight.secretBackendKind !== 'hashicorp_vault' || preflight.secretBackendWritable !== true
+      || preflight.secretBackendKind !== this.config.secretBackendKind || preflight.secretBackendWritable !== true
       || preflight.publicTargetDigest !== this.config.targetPublicDigest
       || preflight.baselineDigest !== this.config.baselineDigest
       || preflight.customerRows !== 0 || preflight.unapprovedActiveResidue !== 0
@@ -249,7 +254,7 @@ export class AuthenticatedHostedController {
       migrationVersion: this.config.migrationVersion,
       migrationDigest: this.config.migrationDigest,
       exerciseDigest: this.config.exerciseDigest,
-      profileVersion: 'hosted-authenticated-synthetic-profile-v2',
+      profileVersion: 'hosted-authenticated-synthetic-profile-v3',
       catalogDigest: this.config.catalogDigest,
       sourceDigest: this.config.sourceDigest,
       organizationId: this.config.scope.organizationId,
@@ -361,6 +366,16 @@ export class AuthenticatedHostedController {
     const firstAction = ordered[0];
     const lastAction = ordered.toSorted((a, b) => Date.parse(b.after.capturedAt) - Date.parse(a.after.capturedAt))[0];
     const scope = this.projects.get(projectName);
+    if (row.testId === 'AI-004' && this.config.secretBackendKind === 'supabase_vault') {
+      const physical = await this.adapter.verifySecretMaterialCase?.({
+        exerciseId: this.exerciseId,
+        projectName,
+        project: scope,
+        testId: row.testId,
+      });
+      if (!record(physical) || physical.backendKind !== this.config.secretBackendKind
+        || physical.exists !== true || physical.fingerprintMatches !== true) fail('SECRET_MATERIAL_EVIDENCE_REJECTED');
+    }
     const independent = { before: firstAction.before, after: lastAction.after };
     const startedAt = independent.before.capturedAt;
     const completedAt = independent.after.capturedAt;
@@ -485,8 +500,10 @@ export class AuthenticatedHostedController {
     action.after = after;
     action.complete = true;
     action.status = status;
-    await this.adapter.recordBrowserAction?.({ projectName, persona: action.persona, route: action.route, status,
-      requestBody: action.rawRequestBody, responseBody: response });
+    try{
+      await this.adapter.recordBrowserAction?.({ exerciseId: this.exerciseId, projectName, persona: action.persona,
+        route: action.route, status, requestBody: action.rawRequestBody, responseBody: response });
+    }finally{delete action.rawRequestBody;}
     return { recorded: true, actionId: action.actionId };
   }
 

@@ -19,6 +19,8 @@ test('fixture authentication, public profiles, foreign origins and unapproved ef
   for (const change of [
     p => { p.authKind = 'fixture_transport'; },
     p => { p.executionKind = 'hosted_preview'; },
+    p => { p.secretBackendKind = 'environment'; },
+    p => { delete p.secretBackendKind; },
     p => { p.origin = 'http://127.0.0.1:4173'; },
     p => { p.origin = 'https://avalaos-pilot.netlify.app/sandbox'; },
     p => { p.origin = 'https://deploy-preview-282--avalaos-pilot.netlify.app'; },
@@ -48,6 +50,7 @@ test('valid-looking retry and release substitutions cannot reuse an earlier bind
     p => { p.workflow.runId = '124'; },
     p => { p.releaseSha = p.checkoutSha = '9'.repeat(40); },
     p => { p.deploymentId = '9'.repeat(24); },
+    p => { p.secretBackendKind = 'hashicorp_vault'; },
     p => { p.actors[0].sessionHash = `sha256:${'9'.repeat(64)}`; },
   ]) {
     const actual = structuredClone(expected); change(actual);

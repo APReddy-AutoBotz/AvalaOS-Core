@@ -152,6 +152,14 @@ try {
     }
   }
 
+  assert.equal((await db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
+    '20261011053000');
+  assert.deepEqual((await authority(db,
+    'SELECT public.enterprise_provider_secret_backend_capability() value')).rows[0].value, {
+    backendKind: 'supabase_vault', available: false, migrationTip: '20261011053000',
+    exerciseActive: false, providerCallsAuthorized: false,
+  });
+
   // Installation succeeds in retained fixtures that have auth.users but not
   // auth.sessions. Runtime authority is added only in this dedicated test.
   assert.equal((await db.query("SELECT to_regclass('auth.sessions') value")).rows[0].value, null);
@@ -186,12 +194,12 @@ try {
   await assert.rejects(() => authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://foreign.invalid', `sha256:${hash('b')}`,
-      '20261010144356', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v2',
+      '20261011053000', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]));
   const activated = await authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://avalaos-pilot.netlify.app', `sha256:${hash('b')}`,
-      '20261010144356', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v2',
+      '20261011053000', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]);
   assert.equal(activated.rows[0].value.lifecycle, 'active');
   await authority(db, 'SELECT public.authenticated_synthetic_bind_session($1,$2,$3,$4)',

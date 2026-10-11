@@ -33,6 +33,7 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql',
   'supabase/migrations/20261010051413_authenticated_process_update_authority.sql',
   'supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql',
+  'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',

@@ -14,9 +14,15 @@ export function authenticatedHostedEnvironmentLines(environment, {
   catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8')),
   provenance = JSON.parse(fs.readFileSync('tests/acceptance/source-provenance.json', 'utf8')),
 } = {}) {
+  const secretBackendKind = required(environment, 'AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND',
+    /^(?:hashicorp_vault|supabase_vault)$/u);
+  if (environment.AVALA_PROVIDER_SECRET_BACKEND !== secretBackendKind) {
+    throw new Error('AUTHENTICATED_HOSTED_ENVIRONMENT_REJECTED');
+  }
   const values = {
     AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'hosted_authenticated_synthetic',
     AUTHENTICATED_ACCEPTANCE_AUTH_KIND: 'supabase_auth',
+    AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: secretBackendKind,
     AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF: required(environment,
       'AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF', /^[a-z0-9]{20}$/u),
     AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST: required(environment,

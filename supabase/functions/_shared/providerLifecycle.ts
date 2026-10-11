@@ -16,6 +16,7 @@ import {
   createProviderSecretReference,
   fingerprintProviderSecret,
   isAllowedProviderSecretRef,
+  ProviderSecretBackendError,
   resolveProviderSecretForDecision,
   type ProviderSecretBackend,
 } from './providerSecretAdapter.ts';
@@ -67,6 +68,7 @@ export type ProviderLifecycleKeyRef = {
   resolverType: 'server_reference';
   secretRef: string;
   safeFingerprint?: string | null;
+  secretBackendKind?: 'hashicorp_vault' | 'supabase_vault' | null;
   status: string;
 };
 
@@ -293,11 +295,18 @@ const resolveBoundSecret = async (
   if (!isAllowedProviderSecretRef(config.provider, config.keyRef.secretRef, authority.organizationId)) {
     throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
   }
+  if ((deps.secretBackend.kind === 'supabase_vault' && config.keyRef.secretBackendKind !== 'supabase_vault')
+    || (deps.secretBackend.kind !== 'supabase_vault' && config.keyRef.secretBackendKind === 'supabase_vault')) {
+    throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
+  }
   try {
     const value = await deps.secretBackend.resolve({
       provider: config.provider,
       secretRef: config.keyRef.secretRef,
       organizationId: authority.organizationId,
+      ...(deps.secretBackend.kind === 'supabase_vault' && config.keyRef.safeFingerprint
+        ? { binding: { kind: 'key_ref' as const, keyRefId: config.keyRef.id, safeFingerprint: config.keyRef.safeFingerprint } }
+        : {}),
     });
     if (!value) throw new ProviderLifecycleError('SECRET_UNAVAILABLE');
     return value;
@@ -339,6 +348,10 @@ const writeOrResolveSecret = async (
     if (execution?.plan.safeFingerprint && execution.plan.safeFingerprint !== fingerprint) {
       throw new ProviderLifecycleError('RESOURCE_CONFLICT');
     }
+    if (execution?.plan.secretBackendKind !== undefined
+      && execution.plan.secretBackendKind !== deps.secretBackend.kind) {
+      throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+    }
     const secretRef = typeof execution?.plan.secretReference === 'string'
       ? execution.plan.secretReference
       : createProviderSecretReference(provider, authority.organizationId, deps.randomId());
@@ -361,6 +374,7 @@ const writeOrResolveSecret = async (
     }
     await persistExecutionPlan(execution, {
       secretOwnership: 'managed_write',
+      secretBackendKind: deps.secretBackend.kind,
       provider,
       secretReference: secretRef,
       secretPlanReceiptId: execution?.receiptId,
@@ -369,13 +383,41 @@ const writeOrResolveSecret = async (
       writeState: execution?.plan.writeState === 'written' ? 'written' : 'planned',
       ...(protectedSecretReferenceHash ? { protectedSecretReferenceHash } : {}),
     });
-    const existing = await deps.secretBackend.resolve({ provider, secretRef, organizationId: authority.organizationId });
+    const receiptBinding = deps.secretBackend.kind === 'supabase_vault' && execution
+      ? { kind: 'receipt' as const, receiptId: execution.receiptId, executionToken: execution.executionToken,
+        executionFence: execution.executionFence, keyRefId, safeFingerprint: fingerprint }
+      : undefined;
+    if (deps.secretBackend.kind === 'supabase_vault' && !receiptBinding) {
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
+    let existing: string | undefined;
+    try {
+      existing = await deps.secretBackend.resolve({
+        provider, secretRef, organizationId: authority.organizationId,
+        ...(receiptBinding ? { binding: receiptBinding } : {}),
+      });
+    } catch (error) {
+      if (error instanceof ProviderSecretBackendError && error.code === 'SECRET_CONFLICT') {
+        throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+      }
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
     if (existing) {
       if (await fingerprintProviderSecret(existing) !== fingerprint) throw new ProviderLifecycleError('RESOURCE_CONFLICT');
       await persistExecutionPlan(execution, { writeState: 'written', externalSecretWritten: true });
       return { provider, secretRef, keyRefId, fingerprint, wrote: false, managed: true, value: existing };
     }
-    await deps.secretBackend.write({ provider, secretRef, organizationId: authority.organizationId, value: raw });
+    try {
+      await deps.secretBackend.write({
+        provider, secretRef, organizationId: authority.organizationId, value: raw,
+        ...(receiptBinding ? { binding: receiptBinding } : {}),
+      });
+    } catch (error) {
+      if (error instanceof ProviderSecretBackendError && error.code === 'SECRET_CONFLICT') {
+        throw new ProviderLifecycleError('RESOURCE_CONFLICT');
+      }
+      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+    }
     await persistExecutionPlan(execution, { writeState: 'written', externalSecretWritten: true });
     return { provider, secretRef, keyRefId, fingerprint, wrote: true, managed: true, value: raw };
   }
@@ -467,19 +509,20 @@ const cleanupPlannedSecret = async (
       cleanupTerminalCode: terminalCode,
     });
   }
-  let existing: string | undefined;
   try {
-    existing = await deps.secretBackend.resolve({
-      provider: providerValue as EnterpriseAiProvider,
-      secretRef: secretRefValue,
-      organizationId: authority.organizationId,
-    });
-    if (existing && await fingerprintProviderSecret(existing) !== safeFingerprint) {
-      throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
-    }
-    if (!existing) {
-      if (execution) await persistExecutionPlan(execution, { cleanupCompleted: true });
-      return;
+    if (deps.secretBackend.kind !== 'supabase_vault') {
+      const existing = await deps.secretBackend.resolve({
+        provider: providerValue as EnterpriseAiProvider,
+        secretRef: secretRefValue,
+        organizationId: authority.organizationId,
+      });
+      if (existing && await fingerprintProviderSecret(existing) !== safeFingerprint) {
+        throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
+      }
+      if (!existing) {
+        if (execution) await persistExecutionPlan(execution, { cleanupCompleted: true });
+        return;
+      }
     }
     if (!execution) throw new ProviderLifecycleError('PERSISTENCE_UNAVAILABLE');
     await execution.renewCleanupLease();
@@ -494,6 +537,11 @@ const cleanupPlannedSecret = async (
       secretRef: secretRefValue,
       organizationId: authority.organizationId,
       signal: controller.signal,
+      ...(deps.secretBackend.kind === 'supabase_vault'
+        ? { binding: { kind: 'receipt' as const, receiptId: execution.receiptId,
+          executionToken: execution.executionToken, executionFence: execution.executionFence,
+          keyRefId: requireUuid(execution.plan.keyRefId), safeFingerprint } }
+        : {}),
     });
     const outcome = await Promise.race([
       removePromise.then(() => 'removed' as const),
@@ -624,7 +672,7 @@ export const executeProviderLifecycleCommand = async (
         keyRefId,
         secretReference: prepared.secretRef,
         safeFingerprint: prepared.fingerprint,
-        backend: deps.secretBackend.kind,
+        backend: deps.secretBackend.kind === 'environment' ? 'environment' : 'vault',
       }, result, execution);
       return result;
     } catch (error) {
@@ -734,6 +782,8 @@ export const executeProviderLifecycleCommand = async (
               provider: config.keyRef.provider,
               resolver_type: config.keyRef.resolverType,
               secret_ref: config.keyRef.secretRef,
+              safe_fingerprint: config.keyRef.safeFingerprint,
+              secret_backend_kind: config.keyRef.secretBackendKind,
               status: config.keyRef.status,
             }
           : null,
@@ -816,10 +866,10 @@ export const executeProviderLifecycleCommand = async (
         keyRefId,
         secretReference: prepared.secretRef,
         safeFingerprint: prepared.fingerprint,
-        backend: deps.secretBackend.kind,
+        backend: deps.secretBackend.kind === 'environment' ? 'environment' : 'vault',
         lastValidatedAt,
       }, result, execution);
-      if (deps.secretBackend.writable && deps.secretBackend.remove) {
+      if (deps.secretBackend.kind !== 'supabase_vault' && deps.secretBackend.writable && deps.secretBackend.remove) {
         const controller = new AbortController();
         await deps.secretBackend.remove({
           provider: config.provider,
@@ -851,7 +901,7 @@ export const executeProviderLifecycleCommand = async (
       keyRefId: config.keyRef?.id || null,
       disableAllRoutes: true,
     }, result, execution);
-    if (config.keyRef && deps.secretBackend.writable && deps.secretBackend.remove) {
+    if (config.keyRef && deps.secretBackend.kind !== 'supabase_vault' && deps.secretBackend.writable && deps.secretBackend.remove) {
       const controller = new AbortController();
       await deps.secretBackend.remove({
         provider: config.provider,
@@ -888,8 +938,8 @@ export const createProviderLifecycleDatabase = (): ProviderLifecycleDatabase => 
     const row = configs[0];
     if (!row || !ENTERPRISE_AI_PROVIDERS.includes(row.provider) || !row.default_model) return null;
     const keyRows = row.key_ref_id
-      ? await postgrest<Array<{ id: string; provider: EnterpriseAiProvider; resolver_type: string; secret_ref: string; safe_fingerprint?: string | null; status: string }>>(
-        `ai_provider_key_refs?select=id,provider,resolver_type,secret_ref,safe_fingerprint,status&id=eq.${encodeURIComponent(row.key_ref_id)}&org_id=eq.${encodeURIComponent(input.organizationId)}&provider=eq.${encodeURIComponent(row.provider)}&deleted_at=is.null&limit=1`,
+      ? await postgrest<Array<{ id: string; provider: EnterpriseAiProvider; resolver_type: string; secret_ref: string; safe_fingerprint?: string | null; secret_backend_kind?: 'hashicorp_vault' | 'supabase_vault' | null; status: string }>>(
+        `ai_provider_key_refs?select=id,provider,resolver_type,secret_ref,safe_fingerprint,secret_backend_kind,status&id=eq.${encodeURIComponent(row.key_ref_id)}&org_id=eq.${encodeURIComponent(input.organizationId)}&provider=eq.${encodeURIComponent(row.provider)}&deleted_at=is.null&limit=1`,
         { method: 'GET' },
       )
       : [];
@@ -911,6 +961,7 @@ export const createProviderLifecycleDatabase = (): ProviderLifecycleDatabase => 
             resolverType: 'server_reference',
             secretRef: key.secret_ref,
             safeFingerprint: key.safe_fingerprint,
+            secretBackendKind: key.secret_backend_kind,
             status: key.status,
           }
         : null,

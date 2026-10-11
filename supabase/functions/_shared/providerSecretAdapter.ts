@@ -4,7 +4,11 @@ import {
   ProviderResolverDecision,
   ProviderResolverSupportedProvider,
 } from './providerResolver.ts';
-import { postgrest } from './supabase.ts';
+import {
+  postgrest,
+  rpc,
+  supabaseRpcErrorHasSignal,
+} from './supabase.ts';
 
 export type ProviderSecretLookupEligibility =
   | {
@@ -47,28 +51,65 @@ export type ProviderSecretKeyRefRow = {
   provider: string;
   resolver_type: string;
   secret_ref: string;
+  safe_fingerprint?: string | null;
+  secret_backend_kind?: 'hashicorp_vault' | 'supabase_vault' | null;
   status: string;
   expires_at?: string | null;
   deleted_at?: string | null;
 };
 
 export class ProviderSecretBackendError extends Error {
-  constructor(public readonly code: 'SECRET_BACKEND_UNAVAILABLE' | 'SECRET_REFERENCE_UNSAFE') {
+  constructor(public readonly code: 'SECRET_BACKEND_UNAVAILABLE' | 'SECRET_REFERENCE_UNSAFE' | 'SECRET_CONFLICT') {
     super(code);
     this.name = 'ProviderSecretBackendError';
   }
 }
 
+export type ProviderSecretBackendBinding =
+  | {
+      kind: 'key_ref';
+      keyRefId: string;
+      safeFingerprint: string;
+    }
+  | {
+      kind: 'receipt';
+      receiptId: string;
+      executionToken: string;
+      executionFence: number;
+      keyRefId: string;
+      safeFingerprint: string;
+    }
+  | {
+      kind: 'cleanup_job';
+      jobId: string;
+      executionToken: string;
+      executionFence: number;
+      keyRefId: string;
+      safeFingerprint: string;
+    };
+
 export type ProviderSecretBackend = {
-  kind: 'environment' | 'vault';
+  kind: 'environment' | 'vault' | 'hashicorp_vault' | 'supabase_vault';
   writable: boolean;
-  resolve(input: { provider: ProviderResolverSupportedProvider; secretRef: string; organizationId: string }): Promise<string | undefined>;
-  write?(input: { provider: ProviderResolverSupportedProvider; secretRef: string; organizationId: string; value: string }): Promise<void>;
+  resolve(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    binding?: ProviderSecretBackendBinding;
+  }): Promise<string | undefined>;
+  write?(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    value: string;
+    binding?: ProviderSecretBackendBinding;
+  }): Promise<void>;
   remove?(input: {
     provider: ProviderResolverSupportedProvider;
     secretRef: string;
     organizationId: string;
     signal: AbortSignal;
+    binding?: ProviderSecretBackendBinding;
   }): Promise<void>;
 };
 
@@ -204,7 +245,7 @@ const safeVaultAddress = (value: string) => {
 };
 
 export class VaultProviderSecretBackend implements ProviderSecretBackend {
-  readonly kind = 'vault' as const;
+  readonly kind = 'hashicorp_vault' as const;
   readonly writable = true;
 
   constructor(
@@ -273,9 +314,203 @@ export class VaultProviderSecretBackend implements ProviderSecretBackend {
   }
 }
 
+type ProviderSecretRpc = <T>(
+  name: string,
+  args: Record<string, unknown>,
+  options?: { signal?: AbortSignal },
+) => Promise<T>;
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeFingerprintPattern = /^sha256:[0-9a-f]{24}$/;
+
+const requireNativeBinding = <T extends ProviderSecretBackendBinding['kind']>(
+  binding: ProviderSecretBackendBinding | undefined,
+  ...allowed: T[]
+): Extract<ProviderSecretBackendBinding, { kind: T }> => {
+  if (!binding || !allowed.includes(binding.kind as T)
+    || !uuidPattern.test(binding.keyRefId)
+    || !safeFingerprintPattern.test(binding.safeFingerprint)) {
+    throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+  }
+  if (binding.kind === 'receipt' && (
+    !uuidPattern.test(binding.receiptId)
+    || !uuidPattern.test(binding.executionToken)
+    || !Number.isSafeInteger(binding.executionFence)
+    || binding.executionFence < 1
+  )) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+  if (binding.kind === 'cleanup_job' && (
+    !uuidPattern.test(binding.jobId)
+    || !uuidPattern.test(binding.executionToken)
+    || !Number.isSafeInteger(binding.executionFence)
+    || binding.executionFence < 1
+  )) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+  return binding as Extract<ProviderSecretBackendBinding, { kind: T }>;
+};
+
+const mapNativeBackendError = (error: unknown): ProviderSecretBackendError => {
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_PROVIDER_SECRET_CONFLICT')) {
+    return new ProviderSecretBackendError('SECRET_CONFLICT');
+  }
+  if (supabaseRpcErrorHasSignal(error, 'ENTERPRISE_PROVIDER_SECRET_REFERENCE_INVALID')) {
+    return new ProviderSecretBackendError('SECRET_REFERENCE_UNSAFE');
+  }
+  return new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+};
+
+export class SupabaseVaultProviderSecretBackend implements ProviderSecretBackend {
+  readonly kind = 'supabase_vault' as const;
+  readonly writable = true;
+
+  constructor(private readonly rpcImpl: ProviderSecretRpc = rpc) {}
+
+  private validateReference(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+  }) {
+    if (!uuidPattern.test(input.organizationId)
+      || !isAllowedProviderSecretRef(input.provider, input.secretRef, input.organizationId)) {
+      throw new ProviderSecretBackendError('SECRET_REFERENCE_UNSAFE');
+    }
+  }
+
+  async resolve(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    binding?: ProviderSecretBackendBinding;
+  }) {
+    this.validateReference(input);
+    const binding = requireNativeBinding(input.binding, 'key_ref', 'receipt');
+    try {
+      const value = binding.kind === 'key_ref'
+        ? await this.rpcImpl<unknown>('enterprise_provider_secret_resolve', {
+          p_key_ref: binding.keyRefId,
+          p_org: input.organizationId,
+          p_provider: input.provider,
+          p_secret_ref: input.secretRef,
+          p_safe_fingerprint: binding.safeFingerprint,
+        })
+        : await this.rpcImpl<unknown>('enterprise_provider_secret_resolve_for_receipt', {
+          p_receipt: binding.receiptId,
+          p_execution_token: binding.executionToken,
+          p_execution_fence: binding.executionFence,
+          p_key_ref: binding.keyRefId,
+          p_org: input.organizationId,
+          p_provider: input.provider,
+          p_secret_ref: input.secretRef,
+          p_safe_fingerprint: binding.safeFingerprint,
+        });
+      if (value === null || value === undefined) return undefined;
+      if (typeof value !== 'string' || !value) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+      return value;
+    } catch (error) {
+      if (error instanceof ProviderSecretBackendError) throw error;
+      throw mapNativeBackendError(error);
+    }
+  }
+
+  async write(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    value: string;
+    binding?: ProviderSecretBackendBinding;
+  }) {
+    this.validateReference(input);
+    if (!input.value) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+    const binding = requireNativeBinding(input.binding, 'receipt');
+    const args = {
+      p_receipt: binding.receiptId,
+      p_execution_token: binding.executionToken,
+      p_execution_fence: binding.executionFence,
+      p_key_ref: binding.keyRefId,
+      p_org: input.organizationId,
+      p_provider: input.provider,
+      p_secret_ref: input.secretRef,
+      p_safe_fingerprint: binding.safeFingerprint,
+      p_secret_value: input.value,
+    };
+    try {
+      const result = await this.rpcImpl<Record<string, unknown>>('enterprise_provider_secret_write', args);
+      if (!result || !['created', 'replayed'].includes(String(result.outcome))
+        || result.backendKind !== 'supabase_vault'
+        || result.safeFingerprint !== binding.safeFingerprint) {
+        throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+      }
+    } catch (error) {
+      if (error instanceof ProviderSecretBackendError) throw error;
+      throw mapNativeBackendError(error);
+    }
+  }
+
+  async remove(input: {
+    provider: ProviderResolverSupportedProvider;
+    secretRef: string;
+    organizationId: string;
+    signal: AbortSignal;
+    binding?: ProviderSecretBackendBinding;
+  }) {
+    this.validateReference(input);
+    const binding = requireNativeBinding(input.binding, 'receipt', 'cleanup_job');
+    const name = binding.kind === 'receipt'
+      ? 'enterprise_provider_secret_delete_for_receipt'
+      : 'enterprise_provider_secret_delete_for_cleanup';
+    const args = {
+      ...(binding.kind === 'receipt'
+        ? { p_receipt: binding.receiptId }
+        : { p_job: binding.jobId }),
+      p_execution_token: binding.executionToken,
+      p_execution_fence: binding.executionFence,
+      p_key_ref: binding.keyRefId,
+      p_org: input.organizationId,
+      p_provider: input.provider,
+      p_secret_ref: input.secretRef,
+      p_safe_fingerprint: binding.safeFingerprint,
+    };
+    try {
+      const result = await this.rpcImpl<Record<string, unknown>>(name, args, { signal: input.signal });
+      if (!result || !['deleted', 'absent'].includes(String(result.outcome))
+        || result.backendKind !== 'supabase_vault'
+        || result.safeFingerprint !== binding.safeFingerprint) {
+        throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+      }
+    } catch (error) {
+      if (error instanceof ProviderSecretBackendError) throw error;
+      throw mapNativeBackendError(error);
+    }
+  }
+}
+
 export const createProviderSecretBackend = (): ProviderSecretBackend => {
+  const selected = readServerEnv('AVALA_PROVIDER_SECRET_BACKEND');
   const address = readServerEnv('AVALA_VAULT_ADDR');
   const token = readServerEnv('AVALA_VAULT_TOKEN');
+  if (selected !== undefined) {
+    if (selected === 'environment') {
+      if (address || token || readServerEnv('AVALA_VAULT_PROVIDER_SECRET_PATH')) {
+        throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+      }
+      return new EnvironmentProviderSecretBackend();
+    }
+    if (selected === 'hashicorp_vault') {
+      if (!address || !token) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+      return new VaultProviderSecretBackend(
+        address,
+        token,
+        readServerEnv('AVALA_VAULT_PROVIDER_SECRET_PATH') || 'secret/data/avala/provider-secrets',
+      );
+    }
+    if (selected === 'supabase_vault') {
+      if (address || token || readServerEnv('AVALA_VAULT_PROVIDER_SECRET_PATH')) {
+        throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+      }
+      return new SupabaseVaultProviderSecretBackend();
+    }
+    throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
+  }
+  // Historical deployments did not set an explicit selector. Preserve that
+  // routing exactly while all new native configuration remains explicit.
   if (address || token) {
     if (!address || !token) throw new ProviderSecretBackendError('SECRET_BACKEND_UNAVAILABLE');
     return new VaultProviderSecretBackend(
@@ -294,7 +529,7 @@ const defaultLookupKeyRef = async (
   decision: AllowedProviderResolverDecision | AllowedEnterpriseProviderResolverDecision,
 ): Promise<ProviderSecretKeyRefRow | null> => {
   const rows = await postgrest<ProviderSecretKeyRefRow[]>(
-    `ai_provider_key_refs?select=id,org_id,provider,resolver_type,secret_ref,status,expires_at,deleted_at&id=eq.${encodeURIComponent(decision.keyRefId)}&org_id=eq.${encodeURIComponent(decision.orgId)}&provider=eq.${encodeURIComponent(decision.provider)}&limit=1`,
+    `ai_provider_key_refs?select=id,org_id,provider,resolver_type,secret_ref,safe_fingerprint,secret_backend_kind,status,expires_at,deleted_at&id=eq.${encodeURIComponent(decision.keyRefId)}&org_id=eq.${encodeURIComponent(decision.orgId)}&provider=eq.${encodeURIComponent(decision.provider)}&limit=1`,
     { method: 'GET' },
   );
   return rows[0] || null;
@@ -344,10 +579,22 @@ export const resolveProviderSecretForDecision = async (
     const backend = deps.backend || (deps.readEnv
       ? new EnvironmentProviderSecretBackend(deps.readEnv)
       : createProviderSecretBackend());
+    if (backend.kind === 'supabase_vault') {
+      if (keyRef.secret_backend_kind !== 'supabase_vault'
+        || !keyRef.safe_fingerprint
+        || !safeFingerprintPattern.test(keyRef.safe_fingerprint)) {
+        return { status: 'blocked', failureClass: 'secret_backend_unavailable', correlationId: allowedDecision.correlationId };
+      }
+    } else if (keyRef.secret_backend_kind === 'supabase_vault') {
+      return { status: 'blocked', failureClass: 'secret_backend_unavailable', correlationId: allowedDecision.correlationId };
+    }
     const apiKey = await backend.resolve({
       provider: allowedDecision.provider,
       secretRef: keyRef.secret_ref,
       organizationId: allowedDecision.orgId,
+      ...(backend.kind === 'supabase_vault'
+        ? { binding: { kind: 'key_ref' as const, keyRefId: keyRef.id, safeFingerprint: keyRef.safe_fingerprint! } }
+        : {}),
     });
     if (!apiKey) {
       return { status: 'blocked', failureClass: 'key_reference_ineligible', correlationId: allowedDecision.correlationId };

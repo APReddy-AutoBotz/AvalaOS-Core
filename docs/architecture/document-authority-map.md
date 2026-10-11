@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Synthetic secret-storage completion (2026-10-11)
+
+`docs/planning/hosted-acceptance-completion.md` also owns AP's approved Supabase Vault adapter, additive migration, focused verification, verified merge and inclusion in the existing synthetic rollout and same single 108-requirement run. This supersedes its earlier HashiCorp-only/configuration and hosted-write exclusions only within that explicit boundary. Enterprise Intelligence command/receipt authority remains in `docs/architecture/enterprise-intelligence-authority.md`; the original acceptance criteria remain in `docs/quality/exhaustive-hosted-product-acceptance.md`. No production or paid effects are included.
+
 ## Complete hosted authenticated runner (2026-10-10)
 
 `docs/planning/hosted-acceptance-completion.md` owns the newly approved real-session controller, default-OFF synthetic exercise/permit authority, two narrowly bound server faults, independent evidence producer, same-run workflow, read-only target inventory, focused verification and fallback. It supersedes the hosted-inspection and local-only-fault exclusions in the earlier authenticated preparation plan only within this explicit scope. The 108-case business catalog and proof semantics remain governed by `docs/quality/exhaustive-hosted-product-acceptance.md`; domain authorities and PR #264 bindings remain unchanged. Hosted rollout, activation and execution require the later exact-candidate boundary.

@@ -373,7 +373,7 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
   {
     "anchorId": "authenticated-scripts-authenticatedacceptanceprofile-mjs",
     "sourceReference": "scripts/authenticatedAcceptanceProfile.mjs",
-    "selector": "export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v2';"
+    "selector": "export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v3';"
   },
   {
     "anchorId": "authenticated-scripts-authenticatedacceptanceevidence-mjs",
@@ -539,6 +539,26 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "authenticated-hosted-observation-adapter",
     "sourceReference": "scripts/authenticatedHostedObservationAdapter.mjs",
     "selector": "export function createAuthenticatedHostedObservationReader("
+  },
+  {
+    "anchorId": "authenticated-hosted-native-secret-migration",
+    "sourceReference": "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.enterprise_provider_secret_backend_capability()"
+  },
+  {
+    "anchorId": "authenticated-native-secret-adapter",
+    "sourceReference": "supabase/functions/_shared/providerSecretAdapter.ts",
+    "selector": "export const createProviderSecretBackend ="
+  },
+  {
+    "anchorId": "authenticated-native-secret-lifecycle",
+    "sourceReference": "supabase/functions/_shared/providerLifecycle.ts",
+    "selector": "export const executeProviderLifecycleCommand ="
+  },
+  {
+    "anchorId": "authenticated-native-secret-cleanup",
+    "sourceReference": "supabase/functions/_shared/providerCleanup.ts",
+    "selector": "export const processNextProviderSecretCleanup ="
   }
 ]);
 
@@ -688,7 +708,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -729,7 +750,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -771,7 +793,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -812,7 +835,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -854,7 +878,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -895,7 +920,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -936,7 +962,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -977,7 +1004,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1018,7 +1046,11 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration",
+      "authenticated-native-secret-adapter",
+      "authenticated-native-secret-lifecycle",
+      "authenticated-native-secret-cleanup"
     ],
     "ownership": [
       {
@@ -1059,7 +1091,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1204,7 +1237,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1270,7 +1304,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1557,7 +1592,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1597,7 +1633,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1637,7 +1674,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1726,7 +1764,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1750,7 +1789,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1793,7 +1833,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1834,7 +1875,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1858,7 +1900,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1901,7 +1944,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1942,7 +1986,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -1983,7 +2028,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2024,7 +2070,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2065,7 +2112,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2107,7 +2155,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2148,7 +2197,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2189,7 +2239,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2230,7 +2281,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2271,7 +2323,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2312,7 +2365,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2346,7 +2400,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2382,7 +2437,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2418,7 +2474,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2454,7 +2511,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2490,7 +2548,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
-      "authenticated-hosted-migration"
+      "authenticated-hosted-migration",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2529,7 +2588,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2566,7 +2626,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2625,7 +2686,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2662,7 +2724,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2699,7 +2762,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2758,7 +2822,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2795,7 +2860,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2858,7 +2924,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2899,7 +2966,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2940,7 +3008,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -2981,7 +3050,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3086,7 +3156,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3175,7 +3246,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3215,7 +3287,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3426,7 +3499,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3463,7 +3537,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3500,7 +3575,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {
@@ -3541,7 +3617,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-generation",
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
-      "authenticated-hosted-observation-adapter"
+      "authenticated-hosted-observation-adapter",
+      "authenticated-hosted-native-secret-migration"
     ],
     "ownership": [
       {

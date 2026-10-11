@@ -22,11 +22,12 @@ const fixtureSource = Object.freeze({
 });
 
 export const profileFixture = () => ({
-  schemaVersion: 'hosted-authenticated-synthetic-profile-v2', executionKind: 'hosted_authenticated_synthetic',
+  schemaVersion: 'hosted-authenticated-synthetic-profile-v3', executionKind: 'hosted_authenticated_synthetic',
   authKind: 'supabase_auth', releaseSha: 'a'.repeat(40), checkoutSha: 'a'.repeat(40),
   origin: 'https://avalaos-pilot.netlify.app', deploymentId: 'b'.repeat(24),
-  backendDigest: digest('backend'), migrationVersion: '20261010144356', migrationDigest: digest('migration'),
+  backendDigest: digest('backend'), migrationVersion: '20261011053000', migrationDigest: digest('migration'),
   exerciseDigest: digest('exercise'), catalogDigest: digest('catalog'), sourceDigest: digest('source'), baselineDigest: digest('baseline'),
+  secretBackendKind: 'supabase_vault',
   policy: { syntheticOnly: true, production: false, customerDataAllowed: false, providersEnabled: false, paidCallsAllowed: false },
   workflow: {
     repository: 'APReddy-AutoBotz/AvalaOS-Core',
@@ -137,6 +138,17 @@ export const rawHostedFixtures = () => {
   }
   const resources = binding.actors.map(actor => ({ kind: 'session', resourceHash: digest(`resource:${actor.sessionHash}`),
     classification: 'transient', status: 'revoked', actorHash: actor.actorHash, sessionHash: actor.sessionHash }));
+  for(const project of AUTHENTICATED_ACCEPTANCE_PROJECTS){
+    const keyRefRecordHash=serverCases.find(row=>row.testId==='AI-004'&&row.project===project).after.records
+      .find(row=>row.source==='ai_provider_key_refs').recordHash;
+    for(const [kind,phase,exists,fingerprintMatches] of [
+      ['secret_material_created_verified','created',true,true],
+      ['secret_material_absence_verified','absent',false,false],
+    ])resources.push({kind,resourceHash:authenticatedEvidenceDigest({schema:'supabase-vault-physical-observation-v1',
+      releaseSha:binding.releaseSha,runId:binding.workflow.runId,attempt:binding.workflow.attempt,project,
+      backendKind:binding.secretBackendKind,keyRefRecordHash,phase,exists,fingerprintMatches}),
+    classification:'transient',status:'removed',actorHash:null,sessionHash:null});
+  }
   resources.push({ kind: 'receipt-history', resourceHash: digest('retained-history'), classification: 'retained_immutable',
     status: 'preserved', actorHash: null, sessionHash: null });
   return {

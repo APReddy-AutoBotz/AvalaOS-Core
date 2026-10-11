@@ -29,6 +29,12 @@ const governedRpcDomainSignals = new Set([
   'ENTERPRISE_PROVIDER_NOT_AVAILABLE',
   'ENTERPRISE_PROVIDER_VALIDATION_STALE',
   'ENTERPRISE_PROVIDER_ROUTE_BLOCKED',
+  'ENTERPRISE_PROVIDER_SECRET_BACKEND_UNAVAILABLE',
+  'ENTERPRISE_PROVIDER_SECRET_CONFLICT',
+  'ENTERPRISE_PROVIDER_SECRET_EXERCISE_REQUIRED',
+  'ENTERPRISE_PROVIDER_SECRET_OWNERSHIP_REQUIRED',
+  'ENTERPRISE_PROVIDER_SECRET_REFERENCE_INVALID',
+  'ENTERPRISE_PROVIDER_SECRET_STALE_FENCE',
   'ENTERPRISE_EVIDENCE_ASSESS_VERSION_CONFLICT',
   'ENTERPRISE_EVIDENCE_CANDIDATE_STALE',
   'ENTERPRISE_EVIDENCE_EDIT_HISTORY_REQUIRED',
@@ -285,7 +291,11 @@ export const postgrest = async <T>(
  * The function itself remains responsible for rechecking actor, tenant,
  * workspace, capability, and authorization-version authority.
  */
-export const rpc = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
+export const rpc = async <T>(
+  name: string,
+  args: Record<string, unknown>,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> => {
   const { url, serviceRoleKey } = supabaseEnv();
   let response: Response;
   try {
@@ -298,6 +308,7 @@ export const rpc = async <T>(name: string, args: Record<string, unknown>): Promi
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(args),
+      signal: options.signal,
     });
   } catch (error) {
     throw new SupabaseRpcTransportError(classifyRpcTransportFailure(error), false);

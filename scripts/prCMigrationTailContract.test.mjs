@@ -73,8 +73,13 @@ test('domain-budget RPC identifiers fit PostgreSQL without silent API-name trunc
   assert.throws(() => assertNames(`${source}\nCREATE FUNCTION public.${'x'.repeat(64)}()`), /truncate RPC identifier/u);
 });
 
-test('only the exact approved creation-access successor tail is accepted', () => {
+test('only the exact approved successor tail, including the native secret backend, is accepted', () => {
   assert.doesNotThrow(() => assertPrCMigrationTail([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]));
+  assert.equal(PR_C_APPROVED_SUCCESSOR_TAIL.at(-1), '20261011053000_supabase_provider_secret_backend.sql');
+  const nativeBackendIndex = PR_C_APPROVED_SUCCESSOR_TAIL.length - 1;
+  const reorderedNativeBackend = [...PR_C_APPROVED_SUCCESSOR_TAIL];
+  [reorderedNativeBackend[nativeBackendIndex - 1], reorderedNativeBackend[nativeBackendIndex]] =
+    [reorderedNativeBackend[nativeBackendIndex], reorderedNativeBackend[nativeBackendIndex - 1]];
   for (const hostileTail of [
     [],
     PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 1),
@@ -84,6 +89,9 @@ test('only the exact approved creation-access successor tail is accepted', () =>
     [PR_C_APPROVED_SUCCESSOR_TAIL[1], PR_C_APPROVED_SUCCESSOR_TAIL[0], ...PR_C_APPROVED_SUCCESSOR_TAIL.slice(2)],
     [...PR_C_APPROVED_SUCCESSOR_TAIL, PR_C_APPROVED_SUCCESSOR_TAIL[2]],
     [...PR_C_APPROVED_SUCCESSOR_TAIL, '20990101000000_unapproved.sql'],
+    PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, -1),
+    reorderedNativeBackend,
+    [...PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, -1), '20261011053001_unapproved_secret_backend.sql'],
   ]) {
     assert.throws(() => assertPrCMigrationTail([...frozenPrefix, ...hostileTail]));
   }
@@ -93,7 +101,7 @@ test('only the exact approved creation-access successor tail is accepted', () =>
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261010144356');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261011053000');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -107,12 +115,33 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
-  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261010144356')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 105)'));
+  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261011053000')"));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 106)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
-  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261010144356'/u);
+  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261011053000'/u);
   assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
+});
+
+test('native secret-backend successor advances identity without activation or provider effects', () => {
+  const sql = readFileSync(
+    'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql', 'utf8',
+  ).replaceAll('\r\n', '\n');
+  for (const marker of [
+    "migration_tip <> '20261010144356'",
+    "SET migration_tip='20261011053000'",
+    "CHECK(migration_tip='20261011053000')",
+    'enterprise_provider_secret_backend_capability',
+    'enterprise_provider_secret_write',
+    'enterprise_provider_secret_resolve',
+    'enterprise_provider_secret_delete_for_receipt',
+    'enterprise_provider_secret_delete_for_cleanup',
+    'enterprise_provider_secret_observe',
+    "to_regclass('vault.secrets') IS NOT NULL",
+  ]) assert.ok(sql.includes(marker), `missing native secret-backend identity contract: ${marker}`);
+  assert.doesNotMatch(sql, /UPDATE public\.(?:enterprise_intelligence|studio_artifact)_runtime_control/iu);
+  assert.doesNotMatch(sql, /SELECT\s+public\.authenticated_synthetic_exercise_activate\s*\(/iu);
+  assert.doesNotMatch(sql, /SELECT\s+public\.synthetic_ai_campaign_activate/iu);
 });
 
 test('canonical source-size successor advances exact identity and only approved authority access', () => {
