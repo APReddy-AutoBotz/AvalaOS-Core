@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Complete preactivation checkout verification (2026-10-11)
+
+PR #288 merged as `bd828f46b77d798f30382592a58f83974e44e13b` with the tested tree unchanged and candidate/post-merge checks passing. Its separately approved hosted run `38156313820`, attempt 1, again stopped at `AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE`, before database connection or exercise activation. Independent same-release evidence verifies **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, all 108 unique requirements and all 302 recorded source hashes; the blocked set is exactly the authenticated requirements. The corrected external SUT manifest binding was present, so the previous correction is incomplete. The old combined error does not establish whether HEAD or checkout status differed at the guard.
+
+The temporary `main` environment access was removed and verified, preserving other branches and the reviewer. Read-only aggregate checks found no exercise rows, active exercises, armed permits or sessions; both providers remain OFF. The single approved attempt is consumed. Another hosted run or temporary policy change requires separate approval.
+
+Continue the existing repository correction under `docs/planning/hosted-acceptance-completion.md`: reproduce the full local preactivation sequence in ordinary Ubuntu CI, checking exact HEAD and full Git status after each command. Use no hosted credentials or requests. Keep the protected guard strict, add only sanitized failure classifications/counts, and identify the actual offending command before claiming a fix or requesting another hosted attempt. Disposable Windows phases have not reproduced the issue; actual PostgreSQL/Linux replay is planned verification. All criteria and the production-readiness boundary remain unchanged.
+
 ## Hosted acceptance output isolation (2026-10-11)
 
 PR #287 merged as `38b9895d34ba0cb288c93bfa326270c5e59daeaf` with its tested tree unchanged; candidate and post-merge gates passed. Approved hosted run `38145461603`, attempt 2, produced independently verified same-release evidence: **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across all 108 requirements. All 302 recorded source hashes match that release. The 47 blocked requirements are exactly the authenticated cases; the public browser and deterministic evidence passed. This supersedes the earlier unused-run and 43/65 current-state statements below without combining evidence across releases.

@@ -10,6 +10,7 @@ import {
 } from './authenticatedHostedController.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
+import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
 
@@ -198,6 +199,52 @@ test('runner reports cleanup-incomplete instead of swallowing abort cleanup fail
     runPlaywright:async()=>{throw new Error('browser failed');}}),/AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE/u);
 });
 
+test('checkout state diagnostics distinguish exact-head and full-porcelain failures without paths', async () => {
+  const expectedHead = 'a'.repeat(40);
+  const cases = [
+    { name: 'head mismatch', head: 'b'.repeat(40), status: '',
+      code: 'HEAD_MISMATCH_TRACKED_0_UNTRACKED_0' },
+    { name: 'tracked dirt', head: expectedHead, status: ' M scripts/example.mjs\n',
+      code: 'TRACKED_DIRTY_TRACKED_1_UNTRACKED_0' },
+    { name: 'untracked dirt', head: expectedHead, status: '?? acceptance-results/example.json\n',
+      code: 'UNTRACKED_DIRTY_TRACKED_0_UNTRACKED_1' },
+    { name: 'mixed dirt', head: expectedHead,
+      status: ' M scripts/example.mjs\n?? acceptance-results/example.json\n',
+      code: 'MIXED_DIRTY_TRACKED_1_UNTRACKED_1' },
+  ];
+  for (const fixture of cases) {
+    const calls = [];
+    const git = async (command, args, options) => {
+      calls.push({ command, args, options });
+      return { stdout: args[0] === 'rev-parse' ? `${fixture.head}\n` : fixture.status };
+    };
+    await assert.rejects(
+      verifyAuthenticatedHostedCheckoutState(expectedHead, { git }),
+      error => {
+        assert.equal(error.message,
+          `AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE_${fixture.code}`,
+          fixture.name);
+        assert.equal(error.message.includes('scripts/example.mjs'), false);
+        assert.equal(error.message.includes('acceptance-results/example.json'), false);
+        return true;
+      },
+    );
+    assert.deepEqual(calls, [
+      { command: 'git', args: ['rev-parse', 'HEAD'], options: { cwd: process.cwd(), encoding: 'utf8' } },
+      { command: 'git', args: ['status', '--porcelain=v1', '--untracked-files=all'],
+        options: { cwd: process.cwd(), encoding: 'utf8' } },
+    ]);
+  }
+  assert.deepEqual(await verifyAuthenticatedHostedCheckoutState(expectedHead, { git: async (_command, args) => ({
+    stdout: args[0] === 'rev-parse' ? `${expectedHead}\n` : '',
+  }) }), { classification: 'CLEAN', trackedCount: 0, untrackedCount: 0 });
+  await assert.rejects(
+    verifyAuthenticatedHostedCheckoutState(expectedHead, { git: async () => { throw new Error('private detail'); } }),
+    error => error.message
+      === 'AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE_GIT_INSPECTION_REJECTED_TRACKED_0_UNTRACKED_0',
+  );
+});
+
 test('checkout verification rejects tracked and original oracle-manifest contamination before protected digests', async () => {
   const env = baseEnvironment();
   const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
@@ -214,8 +261,10 @@ test('checkout verification rejects tracked and original oracle-manifest contami
       calls.push({ command, args, options });
       return { stdout: args[0] === 'rev-parse' ? `${config.releaseSha}\n` : dirtyStatus };
     };
-    await assert.rejects(verifyAuthenticatedHostedCheckout(config, { git }),
-      /CHECKOUT_NOT_EXACT_CLEAN_RELEASE/u);
+    const classification = dirtyStatus.startsWith('?? ') ? 'UNTRACKED_DIRTY_TRACKED_0_UNTRACKED_1'
+      : 'TRACKED_DIRTY_TRACKED_1_UNTRACKED_0';
+    await assert.rejects(verifyAuthenticatedHostedCheckout(config, { git }), error => error.message
+      === `AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE_${classification}`);
     assert.deepEqual(calls, [
       { command: 'git', args: ['rev-parse', 'HEAD'], options: { cwd: process.cwd(), encoding: 'utf8' } },
       { command: 'git', args: ['status', '--porcelain=v1', '--untracked-files=all'],

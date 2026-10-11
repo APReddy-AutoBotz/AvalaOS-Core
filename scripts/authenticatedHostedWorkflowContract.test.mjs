@@ -7,6 +7,46 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('ordinary Linux CI replays the actual local preactivation commands without hosted authority', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const replay = workflow.jobs['preactivation-checkout'];
+  const hosted = workflow.jobs['hosted-authenticated'];
+  assert.equal(replay.if, "github.event_name != 'workflow_dispatch'");
+  assert.equal(replay['runs-on'], 'ubuntu-latest');
+  assert.equal(replay.environment, undefined);
+  assert.deepEqual(replay.permissions, { contents: 'read' });
+  assert.deepEqual(replay.services, hosted.services);
+  assert.doesNotMatch(JSON.stringify(replay), /secrets\.|vars\.|inputs\.|runAuthenticatedHostedAcceptance|verify-hosted-deployment|prepareAuthenticatedHostedEnvironment/u);
+  assert.equal(replay.env.HOSTED_PILOT_URL, 'https://preactivation.invalid');
+  const normalize = value => JSON.parse(JSON.stringify(value).replaceAll('${{ inputs.release_sha }}', '${{ env.RELEASE_SHA }}'));
+  const check = 'node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }';
+  for (const [name, value] of Object.entries(hosted.env)) {
+    if (['RELEASE_SHA', 'NETLIFY_DEPLOY_ID', 'HOSTED_PILOT_URL'].includes(name)) continue;
+    assert.equal(replay.env[name], value, `${name} must match protected preactivation output/environment binding`);
+  }
+  for (const name of [
+    'Validate catalogs, evidence and hosted contracts',
+    'Run exact-run retained server-authority suites',
+    'Run independent assessment oracle against production scoring',
+    'Run same-run disposable PostgreSQL server evidence',
+    'Validate deterministic public hosted declarations',
+    'Install official Chromium',
+  ]) {
+    const original = hosted.steps.find(step => step.name === name);
+    const actual = replay.steps.find(step => step.name === name);
+    assert.deepEqual(actual.env, normalize(original.env ?? null) ?? undefined, `${name}: environment parity`);
+    assert.equal(actual['continue-on-error'], undefined);
+    assert.equal(actual.run.trim(), [check, ...original.run.trim().split('\n').flatMap(line => [line, check])].join('\n'), `${name}: command and checkout-check parity`);
+  }
+  const cli = replay.steps.find(step => step.name === 'Install pinned Supabase CLI for deployed source attestation');
+  const hostedCli = hosted.steps.find(step => step.name === cli.name);
+  assert.equal(cli.uses, hostedCli.uses);
+  assert.deepEqual(cli.with, hostedCli.with);
+  assert.equal(cli.if, undefined);
+  assert.equal(replay.steps.at(-1).if, 'always()');
+  assert.equal(replay.steps.at(-1).run.trim(), check);
+});
+
 test('authenticated dispatch is protected on the one credential-bearing hosted job', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'),
     'authenticated-product-acceptance.yml');
