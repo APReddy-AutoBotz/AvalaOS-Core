@@ -198,15 +198,30 @@ test('runner reports cleanup-incomplete instead of swallowing abort cleanup fail
     runPlaywright:async()=>{throw new Error('browser failed');}}),/AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE/u);
 });
 
-test('checkout verification rejects a dirty exact checkout before trusting protected digests', async () => {
+test('checkout verification rejects tracked and original oracle-manifest contamination before protected digests', async () => {
   const env = baseEnvironment();
   const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
   const provenance = JSON.parse(fs.readFileSync('tests/acceptance/source-provenance.json', 'utf8'));
   env.AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST = canonicalDigest(catalog);
   env.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST = canonicalDigest(provenance.sourceDigests);
   const config = validateAuthenticatedHostedControllerEnvironment(env);
-  const git = async (_command, args) => ({ stdout: args[0] === 'rev-parse' ? `${config.releaseSha}\n` : ' M injected\n' });
-  await assert.rejects(verifyAuthenticatedHostedCheckout(config, { git }), /CHECKOUT_NOT_EXACT_CLEAN_RELEASE/u);
+  for (const dirtyStatus of [
+    ' M scripts/runAuthenticatedHostedAcceptance.mjs\n',
+    '?? acceptance-results/sut-oracle-results.json\n',
+  ]) {
+    const calls = [];
+    const git = async (command, args, options) => {
+      calls.push({ command, args, options });
+      return { stdout: args[0] === 'rev-parse' ? `${config.releaseSha}\n` : dirtyStatus };
+    };
+    await assert.rejects(verifyAuthenticatedHostedCheckout(config, { git }),
+      /CHECKOUT_NOT_EXACT_CLEAN_RELEASE/u);
+    assert.deepEqual(calls, [
+      { command: 'git', args: ['rev-parse', 'HEAD'], options: { cwd: process.cwd(), encoding: 'utf8' } },
+      { command: 'git', args: ['status', '--porcelain=v1', '--untracked-files=all'],
+        options: { cwd: process.cwd(), encoding: 'utf8' } },
+    ]);
+  }
 });
 
 test('Vault preflight uses capabilities-self and requires create update delete', async () => {

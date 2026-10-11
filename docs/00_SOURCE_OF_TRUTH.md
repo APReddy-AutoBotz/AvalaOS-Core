@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Hosted acceptance output isolation (2026-10-11)
+
+PR #287 merged as `38b9895d34ba0cb288c93bfa326270c5e59daeaf` with its tested tree unchanged; candidate and post-merge gates passed. Approved hosted run `38145461603`, attempt 2, produced independently verified same-release evidence: **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across all 108 requirements. All 302 recorded source hashes match that release. The 47 blocked requirements are exactly the authenticated cases; the public browser and deterministic evidence passed. This supersedes the earlier unused-run and 43/65 current-state statements below without combining evidence across releases.
+
+The authenticated runner stopped before database connection or exercise activation with `AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE`. Its preceding oracle step wrote the companion SUT manifest into the checkout. This is a confirmed workflow source defect, not a failed product assertion. Read-only follow-up found no exercise rows or sessions, and both providers OFF. The explicitly temporary `main` environment branch entry was removed; existing branches and required reviewer were preserved.
+
+Continue the approved repository repair under `docs/planning/hosted-acceptance-completion.md`: put that output in the runner's temporary directory and stage it only after the authenticated step, with focused output-isolation and clean-checkout regression checks. Preserve the strict guard and all acceptance criteria. The single hosted-run allowance is consumed; another hosted run or temporary branch-policy change requires explicit approval. Full acceptance and production readiness remain unproved.
+
 ## Fresh synthetic rollout and runtime source attestation (2026-10-11)
 
 AP approved a fresh synthetic target in the existing organization, preserving the old project's immutable history and the same unused single 108-requirement run. The fresh target uses available free capacity; all 106 unchanged canonical migrations are installed through `20261011053000`, both providers remain OFF, and the 16 required functions and same-release pilot are deployed. Native Vault boundaries and exact migration statements passed preflight. No hosted acceptance exercise has been activated and no production or paid effect is authorized.

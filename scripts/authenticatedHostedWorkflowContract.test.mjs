@@ -46,6 +46,14 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AVALA_PROVIDER_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN, undefined);
+  for (const [name, expected] of Object.entries({
+    RETAINED_RESULTS_MANIFEST: '/tmp/avalaos-retained-results.json',
+    ORACLE_RESULTS_MANIFEST: '/tmp/avalaos-oracle-results.json',
+    SUT_RESULTS_MANIFEST: '/tmp/avalaos-sut-oracle-results.json',
+    SERVER_RESULTS_MANIFEST: '/tmp/avalaos-server-results.json',
+  })) {
+    assert.equal(hosted.env[name], expected, `${name} must remain outside the exact-release checkout before activation`);
+  }
   const prepareIndex = hosted.steps.findIndex(step => step.name === 'Prepare authenticated exact source bindings');
   const retainedIndex = hosted.steps.findIndex(step => step.id === 'retained');
   assert.ok(retainedIndex >= 0 && retainedIndex < prepareIndex);
@@ -80,6 +88,11 @@ test('one exhaustive job owns retained, oracle, server, public browser and authe
   assert.equal(authenticated.env.AVALA_VAULT_ADDR, undefined);
   assert.equal(authenticated.env.AVALA_VAULT_TOKEN, undefined);
   assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH, undefined);
+  const staging = steps.find(step => step.name === 'Stage sanitized same-run manifests');
+  assert.equal(staging.if, 'always()');
+  assert.ok(steps.indexOf(staging) > steps.indexOf(authenticated));
+  assert.match(staging.run,
+    /test -f "\$SUT_RESULTS_MANIFEST" && cp "\$SUT_RESULTS_MANIFEST" acceptance-results\/sut-oracle-results[.]json/u);
   const gate = steps.find(step => step.name === 'Enforce one-run complete acceptance gates');
   assert.match(gate.run, /steps[.]authenticated[.]outcome/u);
   assert.match(gate.run, /steps[.]authenticated_evidence[.]outcome/u);

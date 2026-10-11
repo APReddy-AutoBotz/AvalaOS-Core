@@ -26,10 +26,24 @@ const run = extra => spawnSync(process.execPath, ['scripts/runAssessV1Acceptance
     ...extra,
   },
 });
+const checkoutStatus = () => {
+  const result = spawnSync('git', ['-c', 'core.fsmonitor=false', 'status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout;
+};
+const checkoutStatusBeforeOracle = checkoutStatus();
+const manifestRelative = path.relative(root, temp);
+assert.ok(path.isAbsolute(manifestRelative) || manifestRelative === '..' || manifestRelative.startsWith(`..${path.sep}`),
+  'oracle manifests must be outside the checkout');
 
 try {
   const exact = run();
   assert.equal(exact.status, 0, exact.stderr);
+  assert.equal(checkoutStatus(), checkoutStatusBeforeOracle,
+    'the real production-scoring oracle must not add tracked or untracked checkout output');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const sut = JSON.parse(readFileSync(sutManifestPath, 'utf8'));
   assert.equal(manifest.schemaVersion, 3);
