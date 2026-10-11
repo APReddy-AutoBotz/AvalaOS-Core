@@ -1,4 +1,5 @@
 import { expect, type Page, type Request, type Response } from '@playwright/test';
+import { openProductNavigation } from './productNavigationReadiness';
 
 export type ControlCaseSetup = {
   organizationId: string;
@@ -306,6 +307,7 @@ export async function observeAuthenticatedAiControls(
 
   const capabilitySetup = await deps.prepareCase('AI-003');
   await deps.enterAs('non_admin');
+  await openProductNavigation(deps.page);
   let deniedThroughVisibleControl = false;
   let capabilityApi: Observation['api'];
   const enterpriseEntry = deps.page.getByRole('button', {

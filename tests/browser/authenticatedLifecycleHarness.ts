@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { createProductNavigationReadinessAdapter, openProductNavigation, resolveProductNavigationShell } from './productNavigationReadiness';
+import { openProductNavigation } from './productNavigationReadiness';
 
 export const authenticatedHostedActionIds: unique symbol = Symbol('authenticatedHostedActionIds');
 
@@ -109,7 +109,6 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
       persona: actor.persona,
       accessToken,
     });
-    await resolveProductNavigationShell(createProductNavigationReadinessAdapter(page));
     return;
   }
   await page.goto('/');
@@ -119,7 +118,6 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
     localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({ type: 'my_work' }));
   }, { key: authStorageKey, session: sessionFor(actor) });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await resolveProductNavigationShell(createProductNavigationReadinessAdapter(page));
 };
 
 export const authenticatedLifecycleClickProduct = async (page: Page, label: string) => {
