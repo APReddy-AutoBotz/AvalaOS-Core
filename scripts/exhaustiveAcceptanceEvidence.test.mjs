@@ -184,7 +184,10 @@ const retained = {
   }],
 };
 assert.deepEqual(validateRetainedManifest(retained, expected, retainedBindings), []);
-const publicMigrationPath = 'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql';
+for (const publicMigrationPath of [
+  'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql',
+  'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql',
+]) {
 const publicMigrationManifest = { ...retained, results: [{ ...retained.results[0], sourceReferences: [publicMigrationPath] }] };
 const publicMigrationExpected = { ...expected, provenanceByTestId: new Map([
   ['TEST-001', { ...provenance, sourceReferences: [publicMigrationPath] }],
@@ -196,6 +199,7 @@ for (const unsafePath of [publicMigrationPath + '.token', '../' + publicMigratio
   const altered = { ...retained, results: [{ ...retained.results[0], sourceReferences: [unsafePath] }] };
   assert.ok(validateRetainedManifest(altered, publicMigrationExpected, retainedBindings)
     .some(error => error.startsWith('result-unsafe-source:')));
+}
 }
 assert.ok(validateRetainedManifest({ ...retained, releaseSha: 'b'.repeat(40) }, expected, retainedBindings).includes('release-sha'));
 assert.ok(validateRetainedManifest({ ...retained, suites: [...retained.suites, retained.suites[0]] }, expected, retainedBindings).some(item => item.startsWith('duplicate-or-missing-suite:')));

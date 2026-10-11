@@ -234,7 +234,7 @@
       "pattern": "GROQ_API_KEY",
       "path": "supabase/functions/_shared/providerSecretAdapter.ts",
       "lines": [
-        131
+        172
       ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."
@@ -243,7 +243,7 @@
       "pattern": "GEMINI_API_KEY",
       "path": "supabase/functions/_shared/providerSecretAdapter.ts",
       "lines": [
-        132
+        173
       ],
       "reason": "server-side Edge/Supabase environment reference",
       "futureAction": "Keep only as a server-side reserved-name denylist entry; do not read this name for resolver-governed provider calls."

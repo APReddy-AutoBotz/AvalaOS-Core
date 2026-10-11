@@ -33,7 +33,7 @@ assert.equal(migrations[renewalIndex+12],'20261003015246_synthetic_ai_final_paid
 assert.equal(migrations[renewalIndex+13],'20261003055918_synthetic_ai_terminal_effect_journal_reconciliation.sql');
 assert.equal(migrations[renewalIndex+14],'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
 assert.equal(migrations[renewalIndex+15],'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-assert.equal(approvedFullChainTip(migrations), '20261010144356');
+assert.equal(approvedFullChainTip(migrations), '20261011053000');
 const migrationSql=await readFile(join('supabase/migrations',migrationName),'utf8');
 const {Client}=pg;
 const names=[`ai_renewal_fresh_${process.pid}_${Date.now()}`,`ai_renewal_upgrade_${process.pid}_${Date.now()}`];

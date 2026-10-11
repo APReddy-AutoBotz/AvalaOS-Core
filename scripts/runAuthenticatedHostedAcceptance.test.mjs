@@ -7,7 +7,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
-import { downloadAndVerifyAuthenticatedEdgeSources, runAuthenticatedHostedAcceptance } from './runAuthenticatedHostedAcceptance.mjs';
+import { cleanupAuthenticatedSupabaseVaultSecrets, downloadAndVerifyAuthenticatedEdgeSources,
+  observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance } from './runAuthenticatedHostedAcceptance.mjs';
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command',
@@ -31,12 +32,13 @@ const hostedEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF:'abcdefghijklmnopqrst',AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST:sha('target'),
   AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY:'service-role-key-value-longer-than-thirty-two-characters',
   AUTHENTICATED_ACCEPTANCE_DATABASE_URL:'postgresql://postgres:synthetic-password@db.abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=verify-full',
-  AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST:sha('backend'),AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION:'20261010144356',
+  AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST:sha('backend'),AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION:'20261011053000',
   AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST:sha('migration'),AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST:sha('exercise'),
   AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST:sha('catalog'),AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST:sha('source'),
   AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST:sha('baseline'),AUTHENTICATED_ACCEPTANCE_SYNTHETIC_ONLY:'true',
   AUTHENTICATED_ACCEPTANCE_PRODUCTION:'false',AUTHENTICATED_ACCEPTANCE_CUSTOMER_DATA:'false',
   AUTHENTICATED_ACCEPTANCE_PROVIDERS_ENABLED:'false',AUTHENTICATED_ACCEPTANCE_PAID_CALLS:'false',
+  AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND:'supabase_vault',AVALA_PROVIDER_SECRET_BACKEND:'supabase_vault',
   AUTHENTICATED_ACCEPTANCE_SCOPE:JSON.stringify({organizationId:'11111111-1111-4111-8111-111111111111',
     workspaceId:'22222222-2222-4222-8222-222222222222',roleIds:{author:'33333333-3333-4333-8333-333333333333',
       reviewer:'44444444-4444-4444-8444-444444444444',approver:'55555555-5555-4555-8555-555555555555',
@@ -136,7 +138,7 @@ test('runner cancellation after activation stops before finalization and follows
     preflight:async()=>({syntheticTarget:true,production:false,releaseSha:environment.RELEASE_SHA,
       deploymentId:environment.NETLIFY_DEPLOY_ID,migrationVersion:environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION,
       backendDigest:environment.AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST,providersEnabled:false,runtimeReady:true,
-      secretBackendKind:'hashicorp_vault',secretBackendWritable:true,
+      secretBackendKind:'supabase_vault',secretBackendWritable:true,
       publicTargetDigest:environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST,
       baselineDigest:environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,customerRows:0,unapprovedActiveResidue:0,scopeReady:true}),
     activate:async()=>calls.push('activate'),quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup'),
@@ -149,4 +151,47 @@ test('runner cancellation after activation stops before finalization and follows
     runPlaywright:async()=>signalSource.emit('SIGINT')}),/AUTHENTICATED_HOSTED_RUNNER_SIGNAL_SIGINT/u);
   assert.deepEqual(calls,['activate','quiesce','revoke','cleanup','close']);
   assert.equal(signalSource.listenerCount('SIGINT'),0);assert.equal(signalSource.listenerCount('SIGTERM'),0);
+});
+
+test('native secret cleanup consumes the exact fenced job and proves physical absence without retries',async()=>{
+  const secret={id:'11111111-1111-4111-8111-111111111111',provider:'openai',
+    secret_ref:'AVALA_PROVIDER_SECRET_OPENAI_22222222222242228222222222222222_TEST',
+    safe_fingerprint:'sha256:1234567890abcdef12345678'};
+  const queries=[];let claims=0;
+  const database={query:async(sql,params)=>{queries.push({sql,params});
+    if(sql.includes('claim_provider_secret_cleanup_job'))return {rows:[{value:claims++===0?{state:'claimed',
+      jobId:'33333333-3333-4333-8333-333333333333',keyRefId:secret.id,
+      organizationId:'22222222-2222-4222-8222-222222222222',provider:'openai',backendKind:'supabase_vault',
+      safeFingerprint:secret.safe_fingerprint,executionFence:4}:{state:'empty'}}]};
+    if(sql.includes('delete_for_cleanup'))return {rows:[{value:{outcome:'deleted',backendKind:'supabase_vault',
+      safeFingerprint:secret.safe_fingerprint}}]};
+    if(sql.includes('complete_provider_secret_cleanup_job'))return {rows:[{value:{state:'completed',
+      jobId:'33333333-3333-4333-8333-333333333333',executionFence:4}}]};
+    throw new Error('unexpected query');}};
+  assert.deepEqual(await cleanupAuthenticatedSupabaseVaultSecrets(database,{backendKind:'supabase_vault',
+    exerciseId:'44444444-4444-4444-8444-444444444444',organizationId:'22222222-2222-4222-8222-222222222222',
+    secrets:[secret]}),{backendKind:'supabase_vault',removed:1});
+  assert.equal(queries.filter(item=>item.sql.includes('delete_for_cleanup')).length,1);
+  assert.equal(queries.filter(item=>item.sql.includes('complete_provider_secret_cleanup_job')).length,1);
+});
+
+test('native observation and cleanup reject unowned or mismatched physical material',async()=>{
+  const observedDatabase={query:async()=>({rows:[{value:{backendKind:'supabase_vault',exists:false,
+    fingerprintMatches:false,state:'deleted'}}]})};
+  assert.deepEqual(await observeAuthenticatedSupabaseVaultSecret(observedDatabase,{exerciseId:'1',keyRefId:'2',
+    organizationId:'3',provider:'openai',safeFingerprint:'sha256:1234567890abcdef12345678'}),
+  {backendKind:'supabase_vault',exists:false,fingerprintMatches:false,state:'deleted'});
+  let deleted=false;
+  const mismatchDatabase={query:async sql=>{
+    if(sql.includes('claim_provider_secret_cleanup_job'))return {rows:[{value:{state:'claimed',
+      jobId:'33333333-3333-4333-8333-333333333333',keyRefId:'99999999-9999-4999-8999-999999999999',
+      organizationId:'22222222-2222-4222-8222-222222222222',provider:'openai',backendKind:'supabase_vault',
+      safeFingerprint:'sha256:1234567890abcdef12345678',executionFence:1}}]};
+    if(sql.includes('delete_for_cleanup'))deleted=true;
+    return {rows:[]};}};
+  await assert.rejects(cleanupAuthenticatedSupabaseVaultSecrets(mismatchDatabase,{backendKind:'supabase_vault',
+    organizationId:'22222222-2222-4222-8222-222222222222',secrets:[{id:'11111111-1111-4111-8111-111111111111',
+      provider:'openai',secret_ref:'synthetic',safe_fingerprint:'sha256:1234567890abcdef12345678'}]}),
+  /SECRET_CLEANUP_JOB_REJECTED/u);
+  assert.equal(deleted,false);
 });

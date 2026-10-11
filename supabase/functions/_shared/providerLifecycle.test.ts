@@ -252,6 +252,40 @@ await test('executes the seven-step lifecycle without persisting raw secret mate
   }
 });
 
+await test('native bind persists backend identity before one receipt-bound write', async () => {
+  const config: ProviderLifecycleConfig = { id: CONFIG, organizationId: ORG, provider: 'openai', status: 'pending_review',
+    defaultModel: 'gpt-governed', modelAllowlist: ['gpt-governed'], keyRef: null };
+  let transitionPayload: Record<string, unknown> | undefined;
+  const calls: Array<{ operation: string; binding: unknown }> = [];
+  const backend: ProviderSecretBackend = {
+    kind: 'supabase_vault', writable: true,
+    resolve: async input => { calls.push({ operation: 'resolve', binding: input.binding }); return undefined; },
+    write: async input => { calls.push({ operation: 'write', binding: input.binding }); },
+    remove: async () => undefined,
+  };
+  const execution: ProviderLifecycleExecutionContext = {
+    receiptId: NONCE_ONE, executionToken: NONCE_TWO, executionFence: 9, plan: {},
+    persistPlan: async plan => { execution.plan = structuredClone(plan); return execution.plan; },
+    renewCleanupLease: async () => undefined,
+  };
+  const result = await executeProviderLifecycleCommand('provider.secret.bind', authority,
+    { providerConfigId: CONFIG, providerKey: 'native-provider-key' }, {
+      database: { loadConfig: async () => config, transition: async input => { transitionPayload = input.payload; return {}; } },
+      secretBackend: backend, routeResolverDeps: {} as never,
+      validateConnection: async () => ({ validated: true as const }), now: () => now, randomId: () => KEY_ONE,
+    }, execution);
+  assert.equal(result.keyRefId, KEY_ONE);
+  assert.equal(execution.plan.secretBackendKind, 'supabase_vault');
+  assert.equal(execution.plan.writeState, 'written');
+  assert.equal(transitionPayload?.backend, 'vault');
+  assert.deepEqual(calls.map(call => call.operation), ['resolve', 'write']);
+  for (const call of calls) assert.deepEqual(call.binding, {
+    kind: 'receipt', receiptId: NONCE_ONE, executionToken: NONCE_TWO, executionFence: 9,
+    keyRefId: KEY_ONE, safeFingerprint: execution.plan.safeFingerprint,
+  });
+  assert.equal(JSON.stringify({ plan: execution.plan, transitionPayload }).includes('native-provider-key'), false);
+});
+
 await test('campaign registration denial has zero database, secret, validation, or provider effects', async () => {
   const effects = { load: 0, transition: 0, secret: 0, validate: 0 };
   const deps = {

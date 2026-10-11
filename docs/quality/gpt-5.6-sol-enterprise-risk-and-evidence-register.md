@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Synthetic secret-backend completion (2026-10-11)
+
+Executed evidence: PR #285's merged and tested trees match; all 50 successful candidate checks/statuses and independent 94-record browser preparation passed. Its report is 43 PASS / 65 BLOCKED; hosted acceptance is not run. Read-only target metadata confirms an installed Supabase Vault extension, absent HashiCorp settings, one existing active reference and no unfinished cleanup jobs. Its legacy backend identity is unproved; no secret values were read. Browser Vault access is denied, while service role retains broad extension access.
+
+Confirmed integration gaps for a second writable backend: references/intents/cleanup lack durable backend identity, the existing interface lacks native transactional receipt context, and hosted verification assumes HashiCorp. AP approved a bounded native adapter and additive migration in the existing synthetic rollout/run. Planned verification covers exact receipt/fence and tenant denials, idempotence/conflicting values, uncertain writes/deletes, cancellation, legacy preservation, actual physical cleanup and exact released source. Do not guess legacy ownership, infer native authority from extension presence, revoke unrelated extension permissions, or disable recovery's backend before cleanup. Missing native/hosted proof remains blocked; providers stay OFF and no production or paid scope follows.
+
 ## Hosted runner and evidence authority (2026-10-10)
 
 Executed evidence: PR #283 candidate/merge trees match, 51 applicable candidate checks and post-merge Core/authenticated/Delivery workflows passed; independent preparation verifies 94 local UI records, all five EI cases and cleanup. Candidate coverage is 43 PASS / 65 BLOCKED, not a hosted result. Confirmed source gaps are missing executable hosted orchestration, fixture-only authentication, self-attested hosted evidence counts, incompatible provider-free generation and browser-fabricated server failure. AP approved bounded corrections under `docs/planning/hosted-acceptance-completion.md`; no business requirement is relaxed.

@@ -1,5 +1,9 @@
 # Enterprise Intelligence Authority
 
+## Approved synthetic native secret-storage extension (2026-10-11)
+
+AP approved the bounded Supabase Vault continuation in `docs/planning/hosted-acceptance-completion.md`. It must preserve the provider lifecycle authority below while adding an explicitly selected synthetic-only backend. Native material ownership is durable before the write and remains bound through key references, receipts and cleanup. Native writes and deletes validate exact persisted plan, tenant/provider/reference/fingerprint and current command or cleanup fence/lease in the same transaction; a service-role caller alone is insufficient. Legacy ownership is not guessed, provider execution remains OFF, and backend changes never silently redirect recovery. Quiesce new work and verify physical cleanup before disabling the pinned backend. This approved implementation does not establish deployed capability or authorize production/provider calls.
+
 ## Approved native document-mapping extension
 
 The 2026-09-16 extension is governed by `docs/planning/assess-supporting-document-mapping.md`. It adds native Assess V2 upload/review, bounded XLSX and structured CSV interpretation, and `assess-supporting-document-map-v1` typed, server-issued field targets. Existing plain-CSV source hashes remain compatible; structured spreadsheet interpretation has its own parser version and hash. Exact sheet/cell anchors must distinguish repeated values. Legacy normalized-text first-occurrence anchors are not sufficient for new spreadsheet field-mapping proof.

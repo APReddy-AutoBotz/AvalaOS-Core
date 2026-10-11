@@ -29,12 +29,13 @@ const baseEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF: 'abcdefghijklmnopqrst', AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST: digest('target'),
   AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY: 'service-role-key-value-longer-than-thirty-two-characters',
   AUTHENTICATED_ACCEPTANCE_DATABASE_URL: 'postgresql://postgres:synthetic-password@db.abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=verify-full',
-  AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: digest('backend'), AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: '20261010144356',
+  AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: digest('backend'), AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: '20261011053000',
   AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: digest('migration'), AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: digest('exercise'),
   AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST: digest('catalog'), AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST: digest('source'),
   AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST: digest('baseline'), AUTHENTICATED_ACCEPTANCE_SYNTHETIC_ONLY: 'true',
   AUTHENTICATED_ACCEPTANCE_PRODUCTION: 'false', AUTHENTICATED_ACCEPTANCE_CUSTOMER_DATA: 'false',
   AUTHENTICATED_ACCEPTANCE_PROVIDERS_ENABLED: 'false', AUTHENTICATED_ACCEPTANCE_PAID_CALLS: 'false',
+  AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: 'supabase_vault', AVALA_PROVIDER_SECRET_BACKEND: 'supabase_vault',
   AUTHENTICATED_ACCEPTANCE_SCOPE: JSON.stringify({ organizationId: id(), workspaceId: id(),
     roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id() } }),
 });
@@ -187,7 +188,7 @@ test('runner reports cleanup-incomplete instead of swallowing abort cleanup fail
   const environment=baseEnvironment();const config=validateAuthenticatedHostedControllerEnvironment(environment);
   const adapter={preflight:async()=>({syntheticTarget:true,production:false,releaseSha:config.releaseSha,
     deploymentId:config.deploymentId,migrationVersion:config.migrationVersion,backendDigest:config.backendDigest,
-    providersEnabled:false,runtimeReady:true,secretBackendKind:'hashicorp_vault',secretBackendWritable:true,
+    providersEnabled:false,runtimeReady:true,secretBackendKind:'supabase_vault',secretBackendWritable:true,
     publicTargetDigest:config.targetPublicDigest,baselineDigest:config.baselineDigest,
     customerRows:0,unapprovedActiveResidue:0,scopeReady:true}),
   activate:async()=>{},quiesce:async()=>{throw new Error('sanitized cleanup failure');}};
@@ -223,14 +224,47 @@ test('Vault preflight uses capabilities-self and requires create update delete',
   };
   assert.deepEqual(await verifyAuthenticatedSecretBackend({ AVALA_VAULT_ADDR: 'https://vault.example.invalid',
     AVALA_VAULT_TOKEN: 'synthetic-token-material', AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN:'management-token-value',
+    AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND:'hashicorp_vault',AVALA_PROVIDER_SECRET_BACKEND:'hashicorp_vault',
     AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH: 'secret/data/avalaos/authenticated' }, { fetchImpl,projectRef:'abcdefghijklmnopqrst',organizationId }),
   { kind: 'hashicorp_vault', writable: true });
   assert.equal(seen[1].url, 'https://vault.example.invalid/v1/sys/capabilities-self');
   await assert.rejects(verifyAuthenticatedSecretBackend({ AVALA_VAULT_ADDR: 'https://vault.example.invalid',
     AVALA_VAULT_TOKEN: 'synthetic-token-material', AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN:'management-token-value',
+    AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND:'hashicorp_vault',AVALA_PROVIDER_SECRET_BACKEND:'hashicorp_vault',
     AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH: 'secret/data/avalaos/authenticated' },
   {projectRef:'abcdefghijklmnopqrst',organizationId,fetchImpl:async url=>url.startsWith('https://api.supabase.com/')
     ?({ok:true,json:async()=>[{name:'AVALA_VAULT_ADDR',digest:digest('https://vault.example.invalid')},
       {name:'AVALA_VAULT_TOKEN',digest:digest('synthetic-token-material')},{name:'AVALA_VAULT_PROVIDER_SECRET_PATH',digest:digest('secret/data/avalaos/authenticated')} ]})
     :({ ok: true, json: async () => ({ capabilities: ['read'] }) }) }), /CAPABILITY_REJECTED/u);
+});
+
+test('native Vault preflight requires the explicit deployed selector, wrapper ACL and zero incompatible residue', async () => {
+  const environment={AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND:'supabase_vault',
+    AVALA_PROVIDER_SECRET_BACKEND:'supabase_vault',AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION:'20261011053000',
+    AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN:'management-token-value'};
+  const fetchImpl=async()=>({ok:true,json:async()=>[{name:'AVALA_PROVIDER_SECRET_BACKEND',
+    digest:digest('supabase_vault')}]});
+  const database={query:async sql=>{
+    if(sql.includes('enterprise_provider_secret_backend_capability() value'))return {rows:[{value:{
+      backendKind:'supabase_vault',available:true,migrationTip:'20261011053000',exerciseActive:false,
+      providerCallsAuthorized:false}}]};
+    if(sql.includes('WITH wrappers(signature)'))return {rows:[{wrapper_count:8,service_execute:true,anon_execute:false,
+      authenticated_execute:false,anon_vault_usage:false,authenticated_vault_usage:false,anon_secret_read:false,
+      authenticated_secret_read:false,anon_decrypted_read:false,authenticated_decrypted_read:false}]};
+    if(sql.includes('unfinished_cleanup'))return {rows:[{unfinished_cleanup:0,unfinished_managed_writes:0,
+      native_material_residue:0,incompatible_enabled_routes:0}]};
+    throw new Error('unexpected query');
+  }};
+  assert.deepEqual(await verifyAuthenticatedSecretBackend(environment,{fetchImpl,database,
+    projectRef:'abcdefghijklmnopqrst'}),{kind:'supabase_vault',writable:true});
+  await assert.rejects(verifyAuthenticatedSecretBackend(environment,{fetchImpl:async()=>({ok:true,json:async()=>[]}),
+    database,projectRef:'abcdefghijklmnopqrst'}),/REMOTE_SECRET_CONFIGURATION_REJECTED/u);
+  await assert.rejects(verifyAuthenticatedSecretBackend({...environment,AVALA_PROVIDER_SECRET_BACKEND:'hashicorp_vault'},
+    {fetchImpl,database,projectRef:'abcdefghijklmnopqrst'}),/SELECTOR_REJECTED/u);
+  const residueDatabase={query:async sql=>sql.includes('enterprise_provider_secret_backend_capability() value')
+    ?database.query(sql):sql.includes('WITH wrappers(signature)')?database.query(sql)
+      :({rows:[{unfinished_cleanup:1,unfinished_managed_writes:0,native_material_residue:0,
+        incompatible_enabled_routes:0}]})};
+  await assert.rejects(verifyAuthenticatedSecretBackend(environment,{fetchImpl,database:residueDatabase,
+    projectRef:'abcdefghijklmnopqrst'}),/RESIDUE_REJECTED/u);
 });

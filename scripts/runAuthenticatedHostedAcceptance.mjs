@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -24,7 +24,7 @@ import { createControlledHumanPostgresClientConfig,
   validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
 
 const execFileAsync = promisify(execFile);
-const MIGRATION_PATH = 'supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql';
+const MIGRATION_PATH = 'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql';
 const AUTHENTICATED_EDGE_FUNCTIONS=Object.freeze(['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command','legacy-delivery-command',
   'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-query','synthetic-admin',
@@ -185,7 +185,7 @@ export async function verifyAuthenticatedHostedDeployment(config, { fetchImpl = 
 const normalizedRemoteDigest=value=>typeof value==='string'&&/^(?:sha256:)?[0-9a-f]{64}$/u.test(value)
   ?(value.startsWith('sha256:')?value:`sha256:${value}`):null;
 
-export async function verifyAuthenticatedSecretBackend(environment, { fetchImpl = fetch, projectRef, organizationId } = {}) {
+export async function verifyAuthenticatedHashicorpSecretBackend(environment, { fetchImpl = fetch, projectRef, organizationId } = {}) {
   let address;
   try { address = new URL(environment.AVALA_VAULT_ADDR); } catch { fail('SECRET_BACKEND_REQUIRED'); }
   if (address.protocol !== 'https:' || address.origin !== environment.AVALA_VAULT_ADDR
@@ -225,6 +225,124 @@ export async function verifyAuthenticatedSecretBackend(environment, { fetchImpl 
     || (effective.has('create') && effective.has('update') && effective.has('delete') && effective.has('read'));
   if (!response.ok || !Array.isArray(capabilities) || !permitted || effective.has('deny')) fail('SECRET_BACKEND_CAPABILITY_REJECTED');
   return { kind: 'hashicorp_vault', writable: true };
+}
+
+export async function verifyAuthenticatedSupabaseVaultBackend(environment, { fetchImpl=fetch,projectRef,database }={}){
+  const managementToken=environment.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN;
+  if(!database||typeof database.query!=='function'||!/^[a-z0-9]{20}$/u.test(projectRef??'')
+    ||typeof managementToken!=='string'||managementToken.length<16)fail('SECRET_BACKEND_REQUIRED');
+  const metadataResponse=await fetchImpl(`https://api.supabase.com/v1/projects/${projectRef}/secrets`,{
+    redirect:'error',signal:AbortSignal.timeout(15_000),headers:{authorization:`Bearer ${managementToken}`,
+      'user-agent':'avalaos-authenticated-acceptance'} });
+  const metadata=await metadataResponse.json().catch(()=>null);
+  const metadataRows=Array.isArray(metadata)?metadata:Array.isArray(metadata?.secrets)?metadata.secrets:[];
+  const selector=metadataRows.find(item=>item?.name==='AVALA_PROVIDER_SECRET_BACKEND');
+  if(!metadataResponse.ok||![selector?.value,selector?.digest,selector?.value_digest,selector?.sha256]
+    .map(normalizedRemoteDigest).includes(sha('supabase_vault')))fail('REMOTE_SECRET_CONFIGURATION_REJECTED');
+  const capability=(await database.query('SELECT public.enterprise_provider_secret_backend_capability() value')).rows[0]?.value;
+  if(capability?.backendKind!=='supabase_vault'||capability?.available!==true
+    ||capability?.migrationTip!==environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION
+    ||capability?.exerciseActive!==false||capability?.providerCallsAuthorized!==false){
+    fail('SECRET_BACKEND_CAPABILITY_REJECTED');
+  }
+  const boundary=(await database.query(`WITH wrappers(signature) AS(VALUES
+      ('public.enterprise_provider_secret_backend_capability()'),
+      ('public.enterprise_provider_secret_write(uuid,uuid,bigint,uuid,uuid,text,text,text,text)'),
+      ('public.enterprise_provider_secret_resolve(uuid,uuid,text,text,text)'),
+      ('public.enterprise_provider_secret_resolve_for_receipt(uuid,uuid,bigint,uuid,uuid,text,text,text)'),
+      ('public.enterprise_provider_secret_observe(uuid,uuid,uuid,text,text)'),
+      ('public.enterprise_provider_secret_inventory(uuid,uuid)'),
+      ('public.enterprise_provider_secret_delete_for_receipt(uuid,uuid,bigint,uuid,uuid,text,text,text)'),
+      ('public.enterprise_provider_secret_delete_for_cleanup(uuid,uuid,bigint,uuid,uuid,text,text,text)')
+    ) SELECT count(*) FILTER(WHERE to_regprocedure(signature) IS NOT NULL)::int wrapper_count,
+      bool_and(has_function_privilege('service_role',to_regprocedure(signature),'EXECUTE')) service_execute,
+      bool_or(has_function_privilege('anon',to_regprocedure(signature),'EXECUTE')) anon_execute,
+      bool_or(has_function_privilege('authenticated',to_regprocedure(signature),'EXECUTE')) authenticated_execute,
+      has_schema_privilege('anon','vault','USAGE') anon_vault_usage,
+      has_schema_privilege('authenticated','vault','USAGE') authenticated_vault_usage,
+      has_table_privilege('anon','vault.secrets','SELECT') anon_secret_read,
+      has_table_privilege('authenticated','vault.secrets','SELECT') authenticated_secret_read,
+      has_table_privilege('anon','vault.decrypted_secrets','SELECT') anon_decrypted_read,
+      has_table_privilege('authenticated','vault.decrypted_secrets','SELECT') authenticated_decrypted_read
+    FROM wrappers`)).rows[0];
+  if(boundary?.wrapper_count!==8||boundary?.service_execute!==true||boundary?.anon_execute!==false
+    ||boundary?.authenticated_execute!==false||boundary?.anon_vault_usage!==false
+    ||boundary?.authenticated_vault_usage!==false||boundary?.anon_secret_read!==false
+    ||boundary?.authenticated_secret_read!==false||boundary?.anon_decrypted_read!==false
+    ||boundary?.authenticated_decrypted_read!==false)fail('SECRET_BACKEND_BOUNDARY_REJECTED');
+  const residue=(await database.query(`SELECT
+      (SELECT count(*)::int FROM public.enterprise_provider_secret_cleanup_jobs WHERE state<>'completed') unfinished_cleanup,
+      (SELECT count(*)::int FROM public.enterprise_ai_command_receipts
+        WHERE status='claimed' AND execution_plan->>'secretOwnership'='managed_write') unfinished_managed_writes,
+      (SELECT count(*)::int FROM public.enterprise_provider_secret_backend_ownerships
+        WHERE backend_kind='supabase_vault' AND state<>'deleted') native_material_residue,
+      (SELECT count(*)::int FROM public.enterprise_ai_capability_routes route
+        JOIN public.ai_provider_configs config ON config.id=route.provider_config_id AND config.org_id=route.org_id
+        JOIN public.ai_provider_key_refs ref ON ref.id=config.key_ref_id AND ref.org_id=config.org_id
+        WHERE route.enabled AND route.deleted_at IS NULL
+          AND ref.secret_backend_kind IS DISTINCT FROM 'supabase_vault') incompatible_enabled_routes`)).rows[0];
+  if(residue?.unfinished_cleanup!==0||residue?.unfinished_managed_writes!==0||residue?.native_material_residue!==0
+    ||residue?.incompatible_enabled_routes!==0)fail('SECRET_BACKEND_RESIDUE_REJECTED');
+  return {kind:'supabase_vault',writable:true};
+}
+
+export async function verifyAuthenticatedSecretBackend(environment,dependencies={}){
+  const selected=environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND;
+  if(!['hashicorp_vault','supabase_vault'].includes(selected)
+    ||environment.AVALA_PROVIDER_SECRET_BACKEND!==selected)fail('SECRET_BACKEND_SELECTOR_REJECTED');
+  return selected==='supabase_vault'
+    ?verifyAuthenticatedSupabaseVaultBackend(environment,dependencies)
+    :verifyAuthenticatedHashicorpSecretBackend(environment,dependencies);
+}
+
+export async function observeAuthenticatedSupabaseVaultSecret(database,input){
+  const result=(await database.query(`SELECT public.enterprise_provider_secret_observe($1,$2,$3,$4,$5) value`,
+    [input.exerciseId,input.keyRefId,input.organizationId,input.provider,input.safeFingerprint])).rows[0]?.value;
+  if(result?.backendKind!=='supabase_vault'||typeof result?.exists!=='boolean'
+    ||typeof result?.fingerprintMatches!=='boolean'||!['written','deleted','unowned'].includes(result?.state)){
+    fail('SECRET_OBSERVATION_REJECTED');
+  }
+  return result;
+}
+
+export async function cleanupAuthenticatedSupabaseVaultSecrets(database,input){
+  if(input?.backendKind!=='supabase_vault'||!Array.isArray(input.secrets)||input.secrets.length===0){
+    fail('SECRET_CLEANUP_INPUT_REJECTED');
+  }
+  const expected=new Map(input.secrets.map(secret=>[secret.id,secret]));
+  if(expected.size!==input.secrets.length)fail('SECRET_CLEANUP_INPUT_REJECTED');
+  const completed=new Set();
+  for(let index=0;index<=expected.size;index+=1){
+    const executionToken=randomUUID();
+    const claim=(await database.query('SELECT public.enterprise_ai_claim_provider_secret_cleanup_job($1) value',
+      [executionToken])).rows[0]?.value;
+    if(claim?.state==='empty')break;
+    const secret=expected.get(claim?.keyRefId);
+    if(claim?.state!=='claimed'||!secret||claim?.organizationId!==input.organizationId
+      ||claim?.provider!==secret.provider||claim?.backendKind!=='supabase_vault'
+      ||claim?.safeFingerprint!==secret.safe_fingerprint||!Number.isSafeInteger(Number(claim?.executionFence))
+      ||Number(claim.executionFence)<1){
+      fail('SECRET_CLEANUP_JOB_REJECTED');
+    }
+    try{
+      const removed=(await database.query(`SELECT public.enterprise_provider_secret_delete_for_cleanup(
+          $1,$2,$3,$4,$5,$6,$7,$8) value`,[claim.jobId,executionToken,claim.executionFence,secret.id,
+        input.organizationId,secret.provider,secret.secret_ref,secret.safe_fingerprint])).rows[0]?.value;
+      if(removed?.backendKind!=='supabase_vault'||!['deleted','absent'].includes(removed?.outcome)
+        ||removed?.safeFingerprint!==secret.safe_fingerprint)fail('SECRET_CLEANUP_REJECTED');
+      const settled=(await database.query('SELECT public.enterprise_ai_complete_provider_secret_cleanup_job($1,$2,$3) value',
+        [claim.jobId,executionToken,claim.executionFence])).rows[0]?.value;
+      if(settled?.state!=='completed'||settled?.jobId!==claim.jobId
+        ||Number(settled?.executionFence)!==Number(claim.executionFence))fail('SECRET_CLEANUP_SETTLEMENT_REJECTED');
+      completed.add(secret.id);
+    }catch(error){
+      await database.query('SELECT public.enterprise_ai_fail_provider_secret_cleanup_job($1,$2,$3,$4)',
+        [claim.jobId,executionToken,claim.executionFence,'hosted_cleanup_failed']).catch(()=>undefined);
+      throw error;
+    }
+  }
+  if(completed.size!==expected.size)fail('SECRET_CLEANUP_INCOMPLETE');
+  return {backendKind:'supabase_vault',removed:completed.size};
 }
 
 export async function cleanupAuthenticatedVaultSecret(environment,input,{fetchImpl=fetch}={}){
@@ -277,8 +395,13 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
     verifyDeployment: () => (dependencies.verifyDeployment ?? verifyAuthenticatedHostedDeployment)(config,
       {managementToken:environment.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN}),
     verifySecretBackend: () => (dependencies.verifySecretBackend ?? verifyAuthenticatedSecretBackend)(environment,
-      {projectRef:config.projectRef,organizationId:config.scope.organizationId}),
-    cleanupSecretBackend:input=>(dependencies.cleanupSecretBackend??cleanupAuthenticatedVaultSecret)(environment,input),
+      {projectRef:config.projectRef,organizationId:config.scope.organizationId,database}),
+    observeSecretBackend:input=>(dependencies.observeSecretBackend??observeAuthenticatedSupabaseVaultSecret)(database,input),
+    cleanupSecretBackend:input=>dependencies.cleanupSecretBackend
+      ?dependencies.cleanupSecretBackend(input)
+      :config.secretBackendKind==='supabase_vault'
+        ?cleanupAuthenticatedSupabaseVaultSecrets(database,input)
+        :cleanupAuthenticatedVaultSecret(environment,input),
   });
   const identity = (dependencies.createIdentityAdapter ?? createAuthenticatedHostedIdentityAdapter)({ config, db: database });
   const controller = new AuthenticatedHostedController({ config, adapter, identity });

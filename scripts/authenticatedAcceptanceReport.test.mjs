@@ -45,6 +45,8 @@ test('aggregate report separates real-auth contract data from local, partial and
     GITHUB_WORKFLOW_REF: p.workflow.caller.ref, GITHUB_EVENT_NAME: p.workflow.caller.event,
     GITHUB_RUN_ID: p.workflow.runId, GITHUB_RUN_ATTEMPT: p.workflow.attempt, GITHUB_JOB: p.workflow.caller.job,
     AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: p.backendDigest,
+    AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: p.secretBackendKind,
+    AVALA_PROVIDER_SECRET_BACKEND: p.secretBackendKind,
     AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: p.migrationVersion,
     AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: p.migrationDigest,
     AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: p.exerciseDigest,

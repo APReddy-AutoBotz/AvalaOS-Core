@@ -11,11 +11,12 @@ const keys = (value, expected, code) => {
 };
 const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value))
   && new Date(value).toISOString() === value;
-export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v2';
+export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v3';
 export const AUTHENTICATED_HOSTED_BINDING_KEYS = Object.freeze([
   'schemaVersion', 'executionKind', 'authKind', 'releaseSha', 'checkoutSha',
   'origin', 'deploymentId', 'backendDigest', 'migrationVersion', 'migrationDigest',
-  'exerciseDigest', 'catalogDigest', 'sourceDigest', 'baselineDigest', 'policy', 'workflow', 'window', 'actors',
+  'exerciseDigest', 'catalogDigest', 'sourceDigest', 'baselineDigest', 'secretBackendKind',
+  'policy', 'workflow', 'window', 'actors',
 ]);
 
 // This profile is deliberately separate from acceptanceExecutionProfile's
@@ -36,6 +37,7 @@ export function validateAuthenticatedHostedProfile(value) {
     if (!DIGEST.test(value[key])) fail('DIGEST_INVALID');
   }
   if (!/^20\d{12}$/u.test(value.migrationVersion)) fail('MIGRATION_INVALID');
+  if (!['hashicorp_vault', 'supabase_vault'].includes(value.secretBackendKind)) fail('SECRET_BACKEND_INVALID');
   keys(value.policy, ['syntheticOnly', 'production', 'customerDataAllowed', 'providersEnabled', 'paidCallsAllowed'], 'POLICY_SHAPE');
   if (!isDeepStrictEqual(value.policy, {
     syntheticOnly: true, production: false, customerDataAllowed: false, providersEnabled: false, paidCallsAllowed: false,
@@ -86,6 +88,9 @@ export function requireAuthenticatedHostedBinding(actual, expected) {
 
 export function authenticatedProfileFromEnvironment(environment, executionWindow) {
   if (environment.GITHUB_ACTIONS !== 'true') fail('WORKFLOW_RUNTIME_REQUIRED');
+  if (environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND !== environment.AVALA_PROVIDER_SECRET_BACKEND) {
+    fail('SECRET_BACKEND_INVALID');
+  }
   let actors;
   try { actors = JSON.parse(environment.AUTHENTICATED_ACCEPTANCE_ACTOR_BINDINGS ?? 'null'); }
   catch { fail('ACTORS_INVALID'); }
@@ -104,6 +109,7 @@ export function authenticatedProfileFromEnvironment(environment, executionWindow
     catalogDigest: environment.AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST,
     sourceDigest: environment.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST,
     baselineDigest: environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,
+    secretBackendKind: environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND,
     policy: {
       syntheticOnly: environment.AUTHENTICATED_ACCEPTANCE_SYNTHETIC_ONLY === 'true',
       production: environment.AUTHENTICATED_ACCEPTANCE_PRODUCTION !== 'false',

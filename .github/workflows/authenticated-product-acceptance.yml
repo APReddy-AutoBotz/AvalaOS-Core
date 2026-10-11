@@ -93,6 +93,7 @@ jobs:
       - name: Feature contracts and evidence rejection
         run: |
           npm run test:authenticated-product:source
+          npm run test:provider-secret-backend
           npm run typecheck
           npm run typecheck:edge
           node scripts/exhaustiveAcceptanceValidate.mjs
@@ -119,6 +120,36 @@ jobs:
           path: /tmp/authenticated-ei-results.json
           if-no-files-found: error
           retention-days: 14
+
+  native-provider-secret-backend:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      supabase-vault-postgres:
+        image: supabase/postgres:17.6.1.166@sha256:d5424e9f4d0c21d63991c3f3dd77881f23f722c3a212452a61bc91924b79e8c8
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Actual Supabase Vault provider-secret authority
+        env:
+          SUPABASE_PROVIDER_SECRET_BACKEND_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: npm run test:provider-secret-backend:postgres
 
   connected-browser:
     if: github.event_name != 'workflow_dispatch'
@@ -187,6 +218,8 @@ jobs:
       ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
       AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
       AUTHENTICATED_ACCEPTANCE_AUTH_KIND: supabase_auth
+      AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: supabase_vault
+      AVALA_PROVIDER_SECRET_BACKEND: supabase_vault
       RELEASE_SHA: ${{ inputs.release_sha }}
       NETLIFY_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
       HOSTED_PILOT_URL: ${{ inputs.hosted_url }}
@@ -309,9 +342,6 @@ jobs:
           AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN: ${{ secrets.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN }}
           AUTHENTICATED_ACCEPTANCE_DATABASE_URL: ${{ secrets.AUTHENTICATED_ACCEPTANCE_DATABASE_URL }}
           AUTHENTICATED_ACCEPTANCE_SCOPE: ${{ secrets.AUTHENTICATED_ACCEPTANCE_SCOPE }}
-          AVALA_VAULT_ADDR: ${{ vars.AVALA_VAULT_ADDR }}
-          AVALA_VAULT_TOKEN: ${{ secrets.AVALA_VAULT_TOKEN }}
-          AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH: ${{ vars.AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH }}
         run: node scripts/runAuthenticatedHostedAcceptance.mjs
       - name: Reconstruct authenticated evidence from browser actions and raw server frames
         id: authenticated_evidence

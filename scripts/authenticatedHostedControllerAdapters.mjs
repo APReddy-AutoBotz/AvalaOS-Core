@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
@@ -9,6 +9,7 @@ const iso = value => {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 };
 const value = result => result.rows[0]?.value;
+const PROVIDER_NAMES=Object.freeze(['openai','azure_openai','anthropic','gemini','groq','openai_compatible']);
 
 // Revoking access does not cancel an already claimed server command. Until its
 // durable attempt is terminal, neither cleanup nor a new run can be certified.
@@ -114,6 +115,7 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
 }
 
 export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDeployment, verifySecretBackend,
+  observeSecretBackend = async () => { throw new Error('AUTHENTICATED_HOSTED_SECRET_OBSERVATION_REQUIRED'); },
   cleanupSecretBackend = async () => { throw new Error('AUTHENTICATED_HOSTED_SECRET_CLEANUP_REQUIRED'); } }) {
   let sequence = 0;
   const projects = new Map();
@@ -129,6 +131,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
   let observationStartedAt = null;
   let immutableHistoryBeforeHash = null;
   const pendingSecretCleanup=new Map();
+  const secretMaterialEvidence=new Map();
   const query = (sql, params = []) => db.query(sql, params);
   const scopeParams = () => [config.scope.organizationId, config.scope.workspaceId];
   const authority = async (name, params) => value(await query(`SELECT public.${name}(${params.map((_, index) => `$${index + 1}`).join(',')}) value`, params));
@@ -352,12 +355,39 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       projects.set(projectName, project);
       return project;
     },
-    async recordBrowserAction({projectName,persona,route,status,requestBody,responseBody}){
+    async recordBrowserAction({exerciseId,projectName,persona,route,status,requestBody,responseBody}){
       if(route==='/functions/v1/studio-delivery-outcome-query'&&persona==='outsider'&&typeof requestBody?.projectId==='string'){
         const serialized=JSON.stringify(responseBody??{});
         foreignOutcomeProbes.set(projectName,{status,disclosedIdentifiers:serialized.includes(requestBody.projectId),
           disclosedBlocker:/blocker/iu.test(serialized)});
       }
+      if(route==='/functions/v1/enterprise-provider-lifecycle'&&requestBody?.operation==='provider.secret.bind'
+        &&config.secretBackendKind==='supabase_vault'
+        &&status>=200&&status<300&&typeof requestBody?.payload?.providerConfigId==='string'
+        &&typeof requestBody?.payload?.providerKey==='string'){
+        const safeFingerprint=`sha256:${createHash('sha256').update(requestBody.payload.providerKey).digest('hex').slice(0,24)}`;
+        const material=(await query(`SELECT ref.id,ref.provider,ref.secret_backend_kind
+          FROM public.ai_provider_configs config JOIN public.ai_provider_key_refs ref ON ref.id=config.key_ref_id
+          WHERE config.id=$1 AND config.org_id=$2 AND ref.org_id=config.org_id AND ref.status='active'`,
+        [requestBody.payload.providerConfigId,config.scope.organizationId])).rows;
+        if(material.length!==1||material[0].secret_backend_kind!==config.secretBackendKind){
+          throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_BINDING_REJECTED');
+        }
+        const observed=await observeSecretBackend({exerciseId,keyRefId:material[0].id,
+          organizationId:config.scope.organizationId,provider:material[0].provider,safeFingerprint});
+        if(observed?.backendKind!==config.secretBackendKind||observed?.exists!==true
+          ||observed?.fingerprintMatches!==true||observed?.state!=='written'){
+          throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_CREATION_REJECTED');
+        }
+        secretMaterialEvidence.set(projectName,{keyRefId:material[0].id,provider:material[0].provider,
+          safeFingerprint,backendKind:observed.backendKind,exists:true,fingerprintMatches:true,state:observed.state});
+      }
+    },
+    async verifySecretMaterialCase({projectName,testId}){
+      if(testId!=='AI-004')throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_CASE_REJECTED');
+      const observed=secretMaterialEvidence.get(projectName);
+      return observed?{backendKind:observed.backendKind,exists:observed.exists,
+        fingerprintMatches:observed.fingerprintMatches,state:observed.state}:null;
     },
     observe: input => observationReader.capture(input),
     async frame(pathname, { project, testId }) {
@@ -531,15 +561,53 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       catch(error){errors.push(error);}
       let secretRows=[];
       try{
-        secretRows=providerFixture?(await query(`SELECT ref.id,ref.provider,ref.secret_ref FROM public.ai_provider_key_refs ref
+        if(providerFixture&&config.secretBackendKind==='supabase_vault'){
+          const inventory=(await query('SELECT public.enterprise_provider_secret_inventory($1,$2) value',
+            [exerciseId,config.scope.organizationId])).rows[0]?.value;
+          if(!Array.isArray(inventory))throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_INVENTORY_REJECTED');
+          const inventoryIds=new Set(inventory.map(item=>item?.keyRefId));
+          if(inventoryIds.size!==inventory.length||inventory.some(item=>!uuid(item?.keyRefId??'')
+            ||item?.backendKind!=='supabase_vault'||!PROVIDER_NAMES.includes(item?.provider)
+            ||!/^sha256:[0-9a-f]{24}$/u.test(item?.safeFingerprint??'')||item?.state!=='written')){
+            throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_INVENTORY_REJECTED');
+          }
+          const refs=inventory.length?(await query(`SELECT id,provider,secret_ref,secret_backend_kind,safe_fingerprint
+            FROM public.ai_provider_key_refs WHERE org_id=$1 AND id=ANY($2::uuid[])`,
+          [config.scope.organizationId,[...inventoryIds]])).rows:[];
+          const refsById=new Map(refs.map(ref=>[ref.id,ref]));
+          secretRows=inventory.map(item=>{
+            const ref=refsById.get(item.keyRefId);
+            if(!ref||ref.provider!==item.provider||ref.secret_backend_kind!==item.backendKind
+              ||ref.safe_fingerprint!==item.safeFingerprint||typeof ref.secret_ref!=='string'){
+              throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_OWNERSHIP_REJECTED');
+            }
+            return {...ref,safe_fingerprint:item.safeFingerprint};
+          });
+        }else secretRows=providerFixture?(await query(`SELECT ref.id,ref.provider,ref.secret_ref,ref.secret_backend_kind,
+            NULL::text safe_fingerprint FROM public.ai_provider_key_refs ref
           JOIN public.ai_provider_configs config ON config.key_ref_id=ref.id
           WHERE config.org_id=$1 AND config.id=ANY($2::uuid[]) AND ref.status='active'`,
         [config.scope.organizationId,Object.values(providerFixture)])).rows:[];
       }catch(error){errors.push(error);}
       for(const secret of secretRows)pendingSecretCleanup.set(secret.id,secret);
-      for(const secret of pendingSecretCleanup.values()){
-        try{await cleanupSecretBackend({provider:secret.provider,secretRef:secret.secret_ref,
-          organizationId:config.scope.organizationId});pendingSecretCleanup.delete(secret.id);}catch(error){errors.push(error);}
+      if(config.secretBackendKind==='supabase_vault'){
+        for(const secret of pendingSecretCleanup.values()){
+          try{
+            if(secret.secret_backend_kind!=='supabase_vault'||!/^sha256:[0-9a-f]{24}$/u.test(secret.safe_fingerprint??'')){
+              throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_OWNERSHIP_REJECTED');
+            }
+            const observed=await observeSecretBackend({exerciseId,keyRefId:secret.id,
+              organizationId:config.scope.organizationId,provider:secret.provider,safeFingerprint:secret.safe_fingerprint});
+            if(observed?.backendKind!=='supabase_vault'||observed?.exists!==true
+              ||observed?.fingerprintMatches!==true||observed?.state!=='written'){
+              throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_INVENTORY_REJECTED');
+            }
+          }catch(error){errors.push(error);}
+        }
+      }else for(const secret of pendingSecretCleanup.values()){
+        try{await cleanupSecretBackend({backendKind:secret.secret_backend_kind??'hashicorp_vault',keyRefId:secret.id,
+          provider:secret.provider,secretRef:secret.secret_ref,organizationId:config.scope.organizationId});
+          pendingSecretCleanup.delete(secret.id);}catch(error){errors.push(error);}
       }
       try {
         await query('BEGIN');
@@ -576,6 +644,24 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         try{await query('ROLLBACK');}catch(rollbackError){errors.push(rollbackError);}
         errors.push(error);
       }
+      if(config.secretBackendKind==='supabase_vault'&&pendingSecretCleanup.size){
+        try{
+          await cleanupSecretBackend({backendKind:'supabase_vault',exerciseId,
+            organizationId:config.scope.organizationId,secrets:[...pendingSecretCleanup.values()]});
+          for(const secret of [...pendingSecretCleanup.values()]){
+            const observed=await observeSecretBackend({exerciseId,keyRefId:secret.id,
+              organizationId:config.scope.organizationId,provider:secret.provider,safeFingerprint:secret.safe_fingerprint});
+            if(observed?.backendKind!=='supabase_vault'||observed?.exists!==false
+              ||observed?.fingerprintMatches!==false||observed?.state!=='deleted'){
+              throw new Error('AUTHENTICATED_HOSTED_SECRET_MATERIAL_RESIDUE');
+            }
+            pendingSecretCleanup.delete(secret.id);
+            for(const evidence of secretMaterialEvidence.values())if(evidence.keyRefId===secret.id){
+              evidence.absenceVerified=true;evidence.absentState=observed.state;
+            }
+          }
+        }catch(error){errors.push(error);}
+      }
       if(errors.length)throw new AggregateError(errors,'AUTHENTICATED_HOSTED_CLEANUP_INCOMPLETE');
       return {transientResourcesRemoved:true,secretReferencesRevoked:secretRows.length};
     },
@@ -599,6 +685,19 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         resourceHash:authenticatedHostedDigest(`${kind}:${actorId}`),classification:'transient',status:'inactive',
         actorHash:authenticatedHostedDigest(actorId),sessionHash:null});
       if(providerFixture)for(const resourceId of Object.values(providerFixture))resources.push({kind:'provider_config',resourceHash:authenticatedHostedDigest(resourceId),classification:'transient',status:'inactive',actorHash:null,sessionHash:null});
+      for(const [projectName,evidence] of secretMaterialEvidence){
+        if(evidence.exists!==true||evidence.fingerprintMatches!==true||evidence.absenceVerified!==true){
+          pendingSecretCleanup.set(evidence.keyRefId,evidence);continue;
+        }
+        const keyRefRecordHash=authenticatedHostedDigest({source:'ai_provider_key_refs',identity:{id:evidence.keyRefId}});
+        for(const [kind,phase,exists,fingerprintMatches] of [
+          ['secret_material_created_verified','created',true,true],
+          ['secret_material_absence_verified','absent',false,false],
+        ])resources.push({kind,resourceHash:authenticatedHostedDigest({schema:'supabase-vault-physical-observation-v1',
+          releaseSha:config.releaseSha,runId:config.workflow.runId,attempt:config.workflow.attempt,project:projectName,
+          backendKind:evidence.backendKind,keyRefRecordHash,phase,exists,fingerprintMatches}),
+        classification:'transient',status:'removed',actorHash:null,sessionHash:null});
+      }
       resources.push({kind:'exercise_history',resourceHash:authenticatedHostedDigest(exerciseId),classification:'retained_immutable',status:state.exercise_lifecycle==='quiesced'?'preserved':'active',actorHash:null,sessionHash:null});
       const [legacyControl,studioControl,workspaceFlags,assessControl]=await Promise.all([
         query('SELECT writes_enabled FROM public.legacy_delivery_workspace_controls WHERE org_id=$1 AND workspace_id=$2',scopeParams()),

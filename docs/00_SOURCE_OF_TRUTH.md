@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Approved synthetic Supabase Vault completion (2026-10-11)
+
+PR #285 merged as `1c41b9cd98404c4938df86a2399d89f625ff12ea` with its tested tree unchanged. All 50 successful candidate checks/statuses passed, with 15 intentional skips and one neutral result. Independent preparation verifies all 94 browser records, five EI cases, cleanup and zero provider/paid effects. The same-release report remains **43 PASS / 0 FAIL / 65 BLOCKED / 0 UNCOVERED**; post-merge Core CI 38114872132, authenticated preparation 38114872125 and Legacy Delivery authority 38114872150 passed. Hosted acceptance is not run.
+
+AP approved the synthetic rollout and one full 108-requirement run, then explicitly approved implementing, verifying and merging a Supabase Vault adapter and including its additional migration/configuration in that same rollout/run. Follow `docs/planning/hosted-acceptance-completion.md`. This supersedes the earlier existing-HashiCorp-only and hosted-write exclusions only within the approved synthetic boundary. Preserve existing references, all criteria and immutable history; providers remain OFF, with no production changes or paid calls. Native storage, exact deployment and complete hosted behavior remain planned verification. The single hosted-run allowance is unused.
+
 ## Approved hosted acceptance completion (2026-10-10)
 
 PR #283 merged as `09cbec28a312e8ec5bf407f55537f8d9f98e83e3` with its tested tree unchanged. All 51 applicable candidate checks and post-merge Core CI `38055490353`, authenticated preparation `38055490351` and legacy Delivery authority `38055490362` passed. Independent preparation verifies 94 local UI case records, all five EI cases, cleanup and zero real-provider effects. The candidate report is **43 PASS / 0 FAIL / 65 BLOCKED**; historical stable 58 PASS / 50 BLOCKED remains separate and immutable.

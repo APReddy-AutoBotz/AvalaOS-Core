@@ -22,8 +22,19 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   const sourceAuthority = workflow.jobs['source-and-authority'].steps
     .find(step => step.name === 'Actual PostgreSQL bridge, process and provider authority');
   assert.match(sourceAuthority.run, /npm run test:authenticated-hosted:postgres/u);
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
+  /npm run test:provider-secret-backend/u);
+  const nativeBackend=workflow.jobs['native-provider-secret-backend'];
+  assert.equal(nativeBackend.if,"github.event_name != 'workflow_dispatch'");
+  assert.equal(nativeBackend.services['supabase-vault-postgres'].image,
+    'supabase/postgres:17.6.1.166@sha256:d5424e9f4d0c21d63991c3f3dd77881f23f722c3a212452a61bc91924b79e8c8');
   assert.equal(sourceAuthority.env.AUTHENTICATED_SYNTHETIC_DATABASE_URL,
     'postgresql://postgres:postgres@127.0.0.1:5432/postgres');
+  const nativeStep=nativeBackend.steps.find(step=>step.name==='Actual Supabase Vault provider-secret authority');
+  assert.equal(nativeStep.env.SUPABASE_PROVIDER_SECRET_BACKEND_DATABASE_URL,
+    'postgresql://postgres:postgres@127.0.0.1:5432/postgres');
+  assert.equal(nativeStep.run,'npm run test:provider-secret-backend:postgres');
   const hosted = workflow.jobs['hosted-authenticated'];
   assert.equal(workflow.jobs['authorize-hosted'], undefined);
   assert.equal(hosted.environment, 'hosted-nonproduction-pilot');
@@ -32,6 +43,8 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.equal(hosted.env.ACCEPTANCE_WORKFLOW_PATH, '.github/workflows/exhaustive-acceptance.yml');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND, 'hosted_authenticated_synthetic');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_AUTH_KIND, 'supabase_auth');
+  assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND, 'supabase_vault');
+  assert.equal(hosted.env.AVALA_PROVIDER_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN, undefined);
   const prepareIndex = hosted.steps.findIndex(step => step.name === 'Prepare authenticated exact source bindings');
   const retainedIndex = hosted.steps.findIndex(step => step.id === 'retained');
@@ -64,10 +77,9 @@ test('one exhaustive job owns retained, oracle, server, public browser and authe
     '${{ secrets.AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY }}');
   assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN,
     '${{ secrets.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN }}');
-  assert.equal(authenticated.env.AVALA_VAULT_ADDR, '${{ vars.AVALA_VAULT_ADDR }}');
-  assert.equal(authenticated.env.AVALA_VAULT_TOKEN, '${{ secrets.AVALA_VAULT_TOKEN }}');
-  assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH,
-    '${{ vars.AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH }}');
+  assert.equal(authenticated.env.AVALA_VAULT_ADDR, undefined);
+  assert.equal(authenticated.env.AVALA_VAULT_TOKEN, undefined);
+  assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH, undefined);
   const gate = steps.find(step => step.name === 'Enforce one-run complete acceptance gates');
   assert.match(gate.run, /steps[.]authenticated[.]outcome/u);
   assert.match(gate.run, /steps[.]authenticated_evidence[.]outcome/u);
@@ -85,17 +97,23 @@ test('authenticated environment derives source identities and rejects malformed 
     AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF: 'a'.repeat(20),
     AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST: digest('1'),
     AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: digest('2'),
-    AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: '20261010144356',
+    AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: '20261011053000',
     AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: digest('3'),
     AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: digest('4'),
     AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST: digest('5'),
+    AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: 'supabase_vault',
+    AVALA_PROVIDER_SECRET_BACKEND: 'supabase_vault',
   };
   const lines = authenticatedHostedEnvironmentLines(environment, { catalog: { cases: [] }, provenance: { sourceDigests: {} } });
   assert.ok(lines.includes('AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND=hosted_authenticated_synthetic'));
+  assert.ok(lines.includes('AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND=supabase_vault'));
   assert.ok(lines.some(line => line.startsWith('AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST=sha256:')));
   assert.ok(lines.some(line => line.startsWith('AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST=sha256:')));
   assert.ok(lines.every(line => !/SERVICE_ROLE|DATABASE_URL|AUTHENTICATED_ACCEPTANCE_SCOPE/u.test(line)));
   assert.throws(() => authenticatedHostedEnvironmentLines({ ...environment,
     AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: 'latest' }, { catalog: {}, provenance: { sourceDigests: {} } }),
+  /AUTHENTICATED_HOSTED_ENVIRONMENT_REJECTED/u);
+  assert.throws(() => authenticatedHostedEnvironmentLines({ ...environment,
+    AVALA_PROVIDER_SECRET_BACKEND: 'hashicorp_vault' }, { catalog: {}, provenance: { sourceDigests: {} } }),
   /AUTHENTICATED_HOSTED_ENVIRONMENT_REJECTED/u);
 });

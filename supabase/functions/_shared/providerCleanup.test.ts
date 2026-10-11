@@ -5,10 +5,12 @@ import type { ProviderSecretBackend } from './providerSecretAdapter';
 const job: ProviderSecretCleanupJob = {
   state: 'claimed', jobId: '11111111-1111-4111-8111-111111111111',
   keyRefId: '22222222-2222-4222-8222-222222222222', organizationId: '33333333-3333-4333-8333-333333333333',
-  provider: 'groq', attemptCount: 1,
+  provider: 'groq', attemptCount: 1, executionFence: 1, backendKind: 'hashicorp_vault',
+  safeFingerprint: 'sha256:111111111111111111111111',
 };
 const material = { id: job.keyRefId, org_id: job.organizationId, provider: job.provider,
-  resolver_type: 'server_reference', secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_33333333333343338333333333333333_RETIRED' };
+  resolver_type: 'server_reference', secret_ref: 'AVALA_PROVIDER_SECRET_GROQ_33333333333343338333333333333333_RETIRED',
+  safe_fingerprint: job.safeFingerprint, secret_backend_kind: job.backendKind };
 
 for (const provider of ['openai','azure_openai','anthropic','gemini','groq','openai_compatible'] as const) {
   let removed = 0; let completed = 0;
@@ -39,3 +41,19 @@ const responseLoss = await processNextProviderSecretCleanup({ executionToken: '4
 complete: async () => { throw new Error('sanitized response loss'); }, fail: async () => { responseLossFailures += 1; } });
 assert.equal(responseLoss.state, 'completion_uncertain'); assert.equal(responseLossFailures, 0);
 console.log('ok - cleanup completion response loss preserves fenced recovery ownership');
+
+let nativeBinding: unknown;
+const nativeResult = await processNextProviderSecretCleanup({
+  executionToken: '44444444-4444-4444-8444-444444444444',
+  backend: { kind: 'supabase_vault', writable: true, resolve: async () => undefined,
+    remove: async input => { nativeBinding = input.binding; } },
+  claim: async () => ({ ...job, backendKind: 'supabase_vault' }),
+  load: async () => ({ ...material, secret_backend_kind: 'supabase_vault' }),
+  complete: async (_job, _token, fence) => { assert.equal(fence, job.executionFence); },
+  fail: async () => { throw new Error('must not fail'); },
+});
+assert.equal(nativeResult.state, 'completed');
+assert.deepEqual(nativeBinding, { kind: 'cleanup_job', jobId: job.jobId,
+  executionToken: '44444444-4444-4444-8444-444444444444', executionFence: job.executionFence,
+  keyRefId: job.keyRefId, safeFingerprint: job.safeFingerprint });
+console.log('ok - native cleanup remains bound to exact job token, fence, key, and fingerprint');

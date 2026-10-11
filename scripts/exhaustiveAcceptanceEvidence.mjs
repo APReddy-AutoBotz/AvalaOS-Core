@@ -27,6 +27,7 @@ const sameObject = (left, right) => JSON.stringify(left ?? {}) === JSON.stringif
 // not a credential. Keep the exception exact, with provenance/digest checks below.
 const publicSourcePathsWithSensitiveWords = new Set([
   'supabase/migrations/20260805130000_provider_secret_write_intent_recovery.sql',
+  'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql',
 ]);
 const passEligibleScope = scope => scope?.evidenceScope === 'executed-fixture' && Boolean(scope.organizationId) && Boolean(scope.workspaceId);
 const assertionStatus = outcomes => (outcomes ?? []).some(outcome => outcome?.status === 'FAIL')
