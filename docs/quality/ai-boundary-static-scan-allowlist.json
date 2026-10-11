@@ -502,11 +502,11 @@
       "lines": [
         119,
         120,
-        199,
         200,
-        202,
-        204,
-        391
+        201,
+        203,
+        205,
+        393
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and storage-exposure assertions to this approved acceptance harness. Real hosted sessions are independently verified; browser state never grants server authority. Do not persist provider credentials or export auth tokens."
