@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
-import { cleanupAuthenticatedSupabaseVaultSecrets, downloadAndVerifyAuthenticatedEdgeSources,
+import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
+  downloadAndVerifyAuthenticatedEdgeSources,
   observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance } from './runAuthenticatedHostedAcceptance.mjs';
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
@@ -93,6 +94,113 @@ async function fixture(t, mode = 'exact') {
   };
   return { root, directories, cli, config: { projectRef: 'abcdefghijklmnopqrst', backendDigest: canonicalDigest(expected) } };
 }
+
+async function closureFixture(t, entryText, dependencies = {}) {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-closure-test-'));
+  t.after(async () => {
+    assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(root).startsWith('authenticated-closure-test-'));
+    await rm(root, { recursive: true, force: true });
+  });
+  const entryPath = path.join(root, 'supabase', 'functions', 'fixture', 'index.ts');
+  await mkdir(path.dirname(entryPath), { recursive: true });
+  await writeFile(entryPath, entryText);
+  for (const [relative, text] of Object.entries(dependencies)) {
+    const file = path.join(path.dirname(entryPath), relative);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, text);
+  }
+  return root;
+}
+
+test('runtime closure excludes only whole-statement type imports and exports', async t => {
+  const root = await closureFixture(t, [
+    "import type { Imported } from './missing-import.ts';",
+    "export type { Exported } from './missing-export.ts';",
+    'export const runtime = 1;',
+  ].join('\n'));
+  const closure = await collectAuthenticatedEdgeRuntimeClosure(root, 'fixture');
+  assert.deepEqual([...closure.keys()], ['fixture/index.ts']);
+});
+
+test('runtime closure retains static, inline, mixed, re-export and literal dynamic dependencies', async t => {
+  const sources = {
+    'default.ts':'export default 1;\n', 'namespace.ts':'export const value = 1;\n',
+    'side-effect.ts':'globalThis;\n', 'inline.ts':'export type Inline = string;\n',
+    'mixed.ts':'export type Mixed = string; export const runtime = 1;\n',
+    'reexport.ts':'export const value = 1;\n', 'export-all.ts':'export const value = 1;\n',
+    'dynamic.ts':'export const value = 1;\n',
+  };
+  const root = await closureFixture(t, [
+    "import Default from './default.ts';",
+    "import * as Namespace from './namespace.ts';",
+    "import './side-effect.ts';",
+    "import { type Inline } from './inline.ts';",
+    "import { type Mixed, runtime } from './mixed.ts';",
+    "export { value } from './reexport.ts';",
+    "export * from './export-all.ts';",
+    "void import('./dynamic.ts');",
+    'void Default; void Namespace; void runtime;',
+  ].join('\n'), sources);
+  const closure = await collectAuthenticatedEdgeRuntimeClosure(root, 'fixture');
+  assert.deepEqual([...closure.keys()].toSorted(), [
+    'fixture/default.ts', 'fixture/dynamic.ts', 'fixture/export-all.ts', 'fixture/index.ts',
+    'fixture/inline.ts', 'fixture/mixed.ts', 'fixture/namespace.ts', 'fixture/reexport.ts',
+    'fixture/side-effect.ts',
+  ]);
+});
+
+for (const [label, source] of [
+  ['inline type', "import { type Missing } from './missing-inline.ts';\n"],
+  ['mixed', "import { type Missing, runtime } from './missing-mixed.ts';\nvoid runtime;\n"],
+]) {
+  test(`runtime closure requires ${label} import dependencies`, async t => {
+    const root = await closureFixture(t, source);
+    await assert.rejects(collectAuthenticatedEdgeRuntimeClosure(root, 'fixture'),
+      /BACKEND_LOCAL_DEPENDENCY_UNRESOLVED/u);
+  });
+}
+
+test('runtime closure rejects an unresolved relative runtime import', async t => {
+  const root = await closureFixture(t, "import './missing-runtime.ts';\n");
+  await assert.rejects(collectAuthenticatedEdgeRuntimeClosure(root, 'fixture'),
+    /BACKEND_LOCAL_DEPENDENCY_UNRESOLVED/u);
+});
+
+test('runtime closure rejects parser errors', async t => {
+  const root = await closureFixture(t, "import { value from './dependency.ts';\n");
+  await assert.rejects(collectAuthenticatedEdgeRuntimeClosure(root, 'fixture'),
+    /BACKEND_LOCAL_SOURCE_PARSE_REJECTED/u);
+});
+
+test('runtime closure rejects non-literal dynamic imports', async t => {
+  const root = await closureFixture(t, "const dependency = './dependency.ts';\nvoid import(dependency);\n");
+  await assert.rejects(collectAuthenticatedEdgeRuntimeClosure(root, 'fixture'),
+    /BACKEND_LOCAL_DYNAMIC_IMPORT_REJECTED/u);
+});
+
+test('runtime closure rejects a relative dependency symlink that escapes the repository', async t => {
+  const root = await closureFixture(t, "import './dependency.ts';\n");
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'authenticated-closure-outside-'));
+  t.after(async () => {
+    assert.equal(path.dirname(outside), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(outside).startsWith('authenticated-closure-outside-'));
+    await rm(outside, { recursive: true, force: true });
+  });
+  const target = path.join(outside, 'dependency.ts');
+  await writeFile(target, 'export const value = 1;\n');
+  try {
+    await symlink(target, path.join(root, 'supabase', 'functions', 'fixture', 'dependency.ts'), 'file');
+  } catch (error) {
+    if (['EACCES', 'EPERM', 'UNKNOWN'].includes(error?.code)) {
+      t.skip('file symlinks are unavailable for this Windows test process');
+      return;
+    }
+    throw error;
+  }
+  await assert.rejects(collectAuthenticatedEdgeRuntimeClosure(root, 'fixture'),
+    /BACKEND_LOCAL_DEPENDENCY_ESCAPE/u);
+});
 
 test('deployed source attestation verifies each independent function and transitive dependency', async t => {
   const sample = await fixture(t);
