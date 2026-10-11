@@ -227,6 +227,7 @@ jobs:
       ACCEPTANCE_RESULTS_DIR: acceptance-results
       RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
       ORACLE_RESULTS_MANIFEST: /tmp/avalaos-oracle-results.json
+      SUT_RESULTS_MANIFEST: /tmp/avalaos-sut-oracle-results.json
       SERVER_RESULTS_MANIFEST: /tmp/avalaos-server-results.json
       AUTHENTICATED_RESULTS_MANIFEST: /tmp/authenticated-results.json
       AUTHENTICATED_CONTROLLER_BINDING: /tmp/authenticated-controller-binding.json
@@ -364,6 +365,7 @@ jobs:
           mkdir -p acceptance-results
           test -f "$RETAINED_RESULTS_MANIFEST" && cp "$RETAINED_RESULTS_MANIFEST" acceptance-results/retained-suite-results.json || true
           test -f "$ORACLE_RESULTS_MANIFEST" && cp "$ORACLE_RESULTS_MANIFEST" acceptance-results/oracle-results.json || true
+          test -f "$SUT_RESULTS_MANIFEST" && cp "$SUT_RESULTS_MANIFEST" acceptance-results/sut-oracle-results.json || true
           test -f "$SERVER_RESULTS_MANIFEST" && cp "$SERVER_RESULTS_MANIFEST" acceptance-results/server-results.json || true
           test -f "$AUTHENTICATED_RESULTS_MANIFEST" && cp "$AUTHENTICATED_RESULTS_MANIFEST" acceptance-results/authenticated-results.json || true
           test -f "$AUTHENTICATED_CONTROLLER_BINDING" && cp "$AUTHENTICATED_CONTROLLER_BINDING" acceptance-results/authenticated-controller-binding.json || true
