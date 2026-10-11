@@ -1,4 +1,5 @@
 import { expect, type Page, type Request, type Response } from '@playwright/test';
+import { openProductNavigation } from './productNavigationReadiness';
 
 export type ControlCaseSetup = {
   organizationId: string;
@@ -179,6 +180,7 @@ export async function observeAuthenticatedAdminControls(
 
   const nonAdminSetup = await deps.prepareCase('ADMIN-002');
   await deps.enterAs('non_admin');
+  await openProductNavigation(deps.page);
   await expect(deps.page.getByRole('button', { name: 'Admin', exact: true })).toHaveCount(0);
   const denied = await authenticatedPost(
     deps,
@@ -204,6 +206,7 @@ export async function observeAuthenticatedAdminControls(
     }
   });
   await deps.page.reload();
+  await openProductNavigation(deps.page);
   await expect(deps.page.getByRole('button', { name: 'Admin', exact: true })).toHaveCount(0);
   const forgedDenied = await authenticatedPost(
     deps,
@@ -306,6 +309,7 @@ export async function observeAuthenticatedAiControls(
 
   const capabilitySetup = await deps.prepareCase('AI-003');
   await deps.enterAs('non_admin');
+  await openProductNavigation(deps.page);
   let deniedThroughVisibleControl = false;
   let capabilityApi: Observation['api'];
   const enterpriseEntry = deps.page.getByRole('button', {
@@ -406,6 +410,7 @@ export async function observeAuthenticatedStudioDownloadDenial(
 ): Promise<Observation> {
   const setup = await deps.prepareCase('STUDIO-007');
   await deps.enterAs('non_admin');
+  await openProductNavigation(deps.page);
   let deniedThroughVisibleControl = false;
   let downloadApi: Observation['api'];
   const studioEntry = deps.page.getByRole('button', { name: 'Studio', exact: true });

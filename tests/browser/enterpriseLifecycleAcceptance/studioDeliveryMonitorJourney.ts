@@ -760,8 +760,13 @@ export const runStudioDeliveryMonitorJourney = async ({
       body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Projection unavailable.'}})});
   });
   const unavailableResponseStart = productionResponses.length;
-  await clickProduct(page, 'Delivery');
-  await clickProduct(page, 'Monitor');
+  await selectProjectScope(page, setup.deliveryProject.name);
+  const [unavailableProjection] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/functions/v1/studio-delivery-outcome-query'
+      && response.request().method() === 'POST'),
+    clickProduct(page, 'Monitor'),
+  ]);
+  expect(unavailableProjection.status()).toBe(503);
   await expect(page.getByTestId('authoritative-delivery-outcomes').getByRole('alert')).toHaveText(
     'Recorded outcomes are unavailable. Legacy task state is not substituted.',
   );
