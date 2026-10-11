@@ -1,5 +1,15 @@
 # AvalaOS Core Source Of Truth
 
+## Complete preactivation checkout verification (2026-10-11)
+
+PR #288 merged as `bd828f46b77d798f30382592a58f83974e44e13b` with the tested tree unchanged and candidate/post-merge checks passing. Its separately approved hosted run `38156313820`, attempt 1, again stopped at `AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE`, before database connection or exercise activation. Independent same-release evidence verifies **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, all 108 unique requirements and all 302 recorded source hashes; the blocked set is exactly the authenticated requirements. The corrected external SUT manifest binding was present, so the previous correction is incomplete. The old combined error does not establish whether HEAD or checkout status differed at the guard.
+
+The temporary `main` environment access was removed and verified, preserving other branches and the reviewer. Read-only aggregate checks found no exercise rows, active exercises, armed permits or sessions; both providers remain OFF. The single approved attempt is consumed. Another hosted run or temporary policy change requires separate approval.
+
+Ordinary credential-free Ubuntu/PostgreSQL replay `38159244969` on candidate `434836fb` reproduced the cause after the retained suites: nine untracked compiled files in `.agent/pr1g-parity-bridge` and `.agent/pr1g-projection-bridge`. Every earlier command retained exact HEAD and empty full Git status. These application-portfolio database-test bridge outputs are a confirmed source defect; the prior oracle correction did not cover them.
+
+Continue the existing repository correction under `docs/planning/hosted-acceptance-completion.md`: isolate both bridge builds in owned temporary directories with cleanup, retain the strict protected guard, and require the complete ordinary Linux preactivation replay to finish clean before claiming the correction verified. No hosted credentials or requests are used in this replay. All acceptance criteria and the production-readiness boundary remain unchanged; a successful repository replay cannot establish a hosted PASS.
+
 ## Hosted acceptance output isolation (2026-10-11)
 
 PR #287 merged as `38b9895d34ba0cb288c93bfa326270c5e59daeaf` with its tested tree unchanged; candidate and post-merge gates passed. Approved hosted run `38145461603`, attempt 2, produced independently verified same-release evidence: **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across all 108 requirements. All 302 recorded source hashes match that release. The 47 blocked requirements are exactly the authenticated cases; the public browser and deterministic evidence passed. This supersedes the earlier unused-run and 43/65 current-state statements below without combining evidence across releases.

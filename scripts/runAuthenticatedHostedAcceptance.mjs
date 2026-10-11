@@ -20,6 +20,7 @@ import {
   createAuthenticatedHostedIdentityAdapter,
   createAuthenticatedHostedPostgresAdapter,
 } from './authenticatedHostedControllerAdapters.mjs';
+import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { createControlledHumanPostgresClientConfig,
   validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
@@ -47,14 +48,12 @@ export function validateAuthenticatedDatabaseTarget(config){
 }
 
 export async function verifyAuthenticatedHostedCheckout(config, { root = process.cwd(), git = execFileAsync } = {}) {
-  const [head, status, catalogText, provenanceText, migrationText] = await Promise.all([
-    git('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }),
-    git('git', ['status', '--porcelain=v1', '--untracked-files=all'], { cwd: root, encoding: 'utf8' }),
+  await verifyAuthenticatedHostedCheckoutState(config.releaseSha, { root, git });
+  const [catalogText, provenanceText, migrationText] = await Promise.all([
     readFile(path.join(root, 'tests/acceptance/catalog/test-catalog.json'), 'utf8'),
     readFile(path.join(root, 'tests/acceptance/source-provenance.json'), 'utf8'),
     readFile(path.join(root, MIGRATION_PATH), 'utf8'),
   ]);
-  if (head.stdout.trim() !== config.releaseSha || status.stdout.trim()) fail('CHECKOUT_NOT_EXACT_CLEAN_RELEASE');
   const catalog = JSON.parse(catalogText);
   const provenance = JSON.parse(provenanceText);
   if (canonicalDigest(catalog) !== config.catalogDigest

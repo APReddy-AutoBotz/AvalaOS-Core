@@ -193,6 +193,139 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Credential-free replay of the protected job's local setup commands.
+  preactivation-checkout:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: avalaos_exhaustive
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      ACCEPTANCE_WORKFLOW_PATH: .github/workflows/exhaustive-acceptance.yml
+      ACCEPTANCE_EXECUTION_KIND: hosted_preview
+      ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
+      AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
+      AUTHENTICATED_ACCEPTANCE_AUTH_KIND: supabase_auth
+      AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: supabase_vault
+      AVALA_PROVIDER_SECRET_BACKEND: supabase_vault
+      PLAYWRIGHT_JSON: artifacts/exhaustive-acceptance/playwright-results.json
+      ACCEPTANCE_RESULTS_DIR: acceptance-results
+      RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
+      ORACLE_RESULTS_MANIFEST: /tmp/avalaos-oracle-results.json
+      SUT_RESULTS_MANIFEST: /tmp/avalaos-sut-oracle-results.json
+      SERVER_RESULTS_MANIFEST: /tmp/avalaos-server-results.json
+      AUTHENTICATED_RESULTS_MANIFEST: /tmp/authenticated-results.json
+      AUTHENTICATED_CONTROLLER_BINDING: /tmp/authenticated-controller-binding.json
+      NETLIFY_DEPLOY_ID: aaaaaaaaaaaaaaaaaaaaaaaa
+      HOSTED_PILOT_URL: https://preactivation.invalid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies and verify initial checkout
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npm ci
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Validate catalogs, evidence and hosted contracts
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npm run test:acceptance:catalog
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npm run test:authenticated-product:source
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/runExhaustiveAcceptanceReport.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/exhaustiveAcceptanceEvidence.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/hostedSandboxAcceptanceEvidence.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/produceExhaustiveServerEvidence.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/authenticatedHostedWorkflowContract.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node --test scripts/runPr1gBridgeTempCleanup.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npm run test:hosted-evidence-family-attestations
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npm run test:acceptance:network-observer
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Run exact-run retained server-authority suites
+        env:
+          TRUST_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          APPLICATION_PORTFOLIO_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          ASSESS_V2_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          STUDIO_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          GOVERN_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          ENTERPRISE_INTELLIGENCE_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/runExhaustiveRetainedSuites.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Run independent assessment oracle against production scoring
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/runAssessV1AcceptanceOracle.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Run same-run disposable PostgreSQL server evidence
+        env:
+          PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+          CANDIDATE_SHA: ${{ env.RELEASE_SHA }}
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npm run test:migrations:pilot-operations:postgres
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/produceExhaustiveServerEvidence.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Validate deterministic public hosted declarations
+        env:
+          ACCEPTANCE_EXECUTION_KIND: declaration_only
+          HOSTED_PILOT_URL: ""
+          NETLIFY_DEPLOY_ID: ""
+          EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          ACCEPTANCE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npx playwright test --config=playwright.exhaustive-acceptance.config.ts --list --reporter=list
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Install official Chromium
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          npx playwright install --with-deps chromium
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Install pinned Supabase CLI for deployed source attestation
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
+        with:
+          version: 2.101.0
+      - name: Verify complete preactivation checkout
+        if: always()
+        shell: bash
+        run: node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+
   hosted-authenticated:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -273,6 +406,7 @@ jobs:
           node scripts/hostedSandboxAcceptanceEvidence.test.mjs
           node scripts/produceExhaustiveServerEvidence.test.mjs
           node scripts/authenticatedHostedWorkflowContract.test.mjs
+          node --test scripts/runPr1gBridgeTempCleanup.test.mjs
           npm run test:hosted-evidence-family-attestations
           npm run test:acceptance:network-observer
           node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
