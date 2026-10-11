@@ -6,7 +6,9 @@ PR #288 merged as `bd828f46b77d798f30382592a58f83974e44e13b` with the tested tre
 
 The temporary `main` environment access was removed and verified, preserving other branches and the reviewer. Read-only aggregate checks found no exercise rows, active exercises, armed permits or sessions; both providers remain OFF. The single approved attempt is consumed. Another hosted run or temporary policy change requires separate approval.
 
-Continue the existing repository correction under `docs/planning/hosted-acceptance-completion.md`: reproduce the full local preactivation sequence in ordinary Ubuntu CI, checking exact HEAD and full Git status after each command. Use no hosted credentials or requests. Keep the protected guard strict, add only sanitized failure classifications/counts, and identify the actual offending command before claiming a fix or requesting another hosted attempt. Disposable Windows phases have not reproduced the issue; actual PostgreSQL/Linux replay is planned verification. All criteria and the production-readiness boundary remain unchanged.
+Ordinary credential-free Ubuntu/PostgreSQL replay `38159244969` on candidate `434836fb` reproduced the cause after the retained suites: nine untracked compiled files in `.agent/pr1g-parity-bridge` and `.agent/pr1g-projection-bridge`. Every earlier command retained exact HEAD and empty full Git status. These application-portfolio database-test bridge outputs are a confirmed source defect; the prior oracle correction did not cover them.
+
+Continue the existing repository correction under `docs/planning/hosted-acceptance-completion.md`: isolate both bridge builds in owned temporary directories with cleanup, retain the strict protected guard, and require the complete ordinary Linux preactivation replay to finish clean before claiming the correction verified. No hosted credentials or requests are used in this replay. All acceptance criteria and the production-readiness boundary remain unchanged; a successful repository replay cannot establish a hosted PASS.
 
 ## Hosted acceptance output isolation (2026-10-11)
 

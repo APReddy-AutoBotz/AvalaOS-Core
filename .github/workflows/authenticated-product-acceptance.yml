@@ -259,6 +259,8 @@ jobs:
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           node scripts/authenticatedHostedWorkflowContract.test.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node --test scripts/runPr1gBridgeTempCleanup.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           npm run test:hosted-evidence-family-attestations
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           npm run test:acceptance:network-observer
@@ -404,6 +406,7 @@ jobs:
           node scripts/hostedSandboxAcceptanceEvidence.test.mjs
           node scripts/produceExhaustiveServerEvidence.test.mjs
           node scripts/authenticatedHostedWorkflowContract.test.mjs
+          node --test scripts/runPr1gBridgeTempCleanup.test.mjs
           npm run test:hosted-evidence-family-attestations
           npm run test:acceptance:network-observer
           node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
