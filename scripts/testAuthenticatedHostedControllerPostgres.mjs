@@ -146,6 +146,11 @@ const authority = async (name, parameters) => (await serviceQuery(
 
 try {
   await admin.connect();
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    if (!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role])).rowCount) {
+      await admin.query(`CREATE ROLE ${role} NOLOGIN${role === 'service_role' ? ' BYPASSRLS' : ''}`);
+    }
+  }
   assert.equal((await admin.query('SELECT 1 FROM pg_database WHERE datname=$1', [database])).rowCount, 0);
   await admin.query(`CREATE DATABASE ${database}`);
   created = true;
