@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
@@ -6,6 +7,26 @@ import { authenticatedHostedEnvironmentLines } from './prepareAuthenticatedHoste
 import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.mjs';
 
 const digest = character => `sha256:${character.repeat(64)}`;
+
+test('real declaration listing needs no protected hosted caller identity', () => {
+  const release = 'a'.repeat(40);
+  const result = spawnSync(process.execPath, [
+    'node_modules/playwright/cli.js', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--list', '--reporter=list',
+  ], {
+    encoding: 'utf8',
+    windowsHide: true,
+    env: { ...process.env,
+      GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+      GITHUB_WORKFLOW_REF: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/pull/289/merge',
+      GITHUB_EVENT_NAME: 'pull_request', GITHUB_JOB: 'preactivation-checkout',
+      RELEASE_SHA: release, EXPECTED_RELEASE_SHA: release, ACCEPTANCE_RELEASE_SHA: release,
+      ACCEPTANCE_EXECUTION_KIND: 'declaration_only', HOSTED_PILOT_URL: '', NETLIFY_DEPLOY_ID: '',
+      LOCAL_ACCEPTANCE_BASE_URL: '', ACCEPTANCE_CHECKOUT_SHA: '', ACCEPTANCE_INVOCATION_ID: '',
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Total: 36 tests in 1 file/u);
+});
 
 test('ordinary Linux CI replays the actual local preactivation commands without hosted authority', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));

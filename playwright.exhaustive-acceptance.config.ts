@@ -25,16 +25,15 @@ const reportMetadata = createAcceptanceReportMetadata({
     'scripts/hostedSandboxAcceptanceEvidence.mjs',
   ],
 });
-const workflowPath = resolveHostedAcceptanceWorkflowPath({
-  environment: process.env,
-  allowedWorkflowPaths: [EXHAUSTIVE_ACCEPTANCE_WORKFLOW, PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW],
-});
 const metadata = executionProfile.executionKind === 'hosted_preview'
   ? {
       ...reportMetadata,
       workflowRuntime: createHostedAcceptanceWorkflowRuntime({
         environment: process.env,
-        workflowPath,
+        workflowPath: resolveHostedAcceptanceWorkflowPath({
+          environment: process.env,
+          allowedWorkflowPaths: [EXHAUSTIVE_ACCEPTANCE_WORKFLOW, PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW],
+        }),
         releaseSha: executionProfile.releaseSha,
       }),
     }
