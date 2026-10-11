@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Fresh synthetic rollout and runtime source attestation (2026-10-11)
+
+AP approved a fresh synthetic target in the existing organization, preserving the old project's immutable history and the same unused single 108-requirement run. The fresh target uses available free capacity; all 106 unchanged canonical migrations are installed through `20261011053000`, both providers remain OFF, and the 16 required functions and same-release pilot are deployed. Native Vault boundaries and exact migration statements passed preflight. No hosted acceptance exercise has been activated and no production or paid effect is authorized.
+
+Independent retrieved bundles contain 216 runtime source entries, all matching merged PR #286 (`5bccb4243e935f8e9e584da08deea142c2324f16`). The verifier incorrectly expects 232 entries because it follows statement-level TypeScript-only imports. Correct this confirmed acceptance-tooling defect under `docs/planning/hosted-acceptance-completion.md`, retaining exact runtime closure/content checks and full checkout provenance. The pilot also needs its explicit `pilot` runtime setting and the fresh target's Assess maintenance state must be released before baseline capture. These are rollout prerequisites, not passing hosted cases. All 108 requirements and the same-release **43 PASS / 65 BLOCKED** proof boundary remain unchanged.
+
 ## Approved synthetic Supabase Vault completion (2026-10-11)
 
 PR #285 merged as `1c41b9cd98404c4938df86a2399d89f625ff12ea` with its tested tree unchanged. All 50 successful candidate checks/statuses passed, with 15 intentional skips and one neutral result. Independent preparation verifies all 94 browser records, five EI cases, cleanup and zero provider/paid effects. The same-release report remains **43 PASS / 0 FAIL / 65 BLOCKED / 0 UNCOVERED**; post-merge Core CI 38114872132, authenticated preparation 38114872125 and Legacy Delivery authority 38114872150 passed. Hosted acceptance is not run.

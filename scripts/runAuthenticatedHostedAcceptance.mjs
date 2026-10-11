@@ -1,12 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
 import pg from 'pg';
+import ts from 'typescript';
 
 import { canonicalDigest, canonicalFileDigest } from './assessV1OracleEvidence.mjs';
 import {
@@ -80,6 +81,85 @@ const sourceFiles = async directory => {
   return output.toSorted();
 };
 
+const localModuleSpecifier = value => value.startsWith('./') || value.startsWith('../');
+const sourceScriptKind = file => {
+  if (file.endsWith('.tsx')) return ts.ScriptKind.TSX;
+  if (file.endsWith('.js') || file.endsWith('.mjs')) return ts.ScriptKind.JS;
+  if (file.endsWith('.json')) return ts.ScriptKind.JSON;
+  return ts.ScriptKind.TS;
+};
+
+const runtimeModuleSpecifiers = (file, text) => {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, sourceScriptKind(file));
+  if (source.parseDiagnostics.length !== 0) fail('BACKEND_LOCAL_SOURCE_PARSE_REJECTED');
+  const specifiers = [];
+  const add = node => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) specifiers.push(node.text);
+    else fail('BACKEND_LOCAL_DYNAMIC_IMPORT_REJECTED');
+  };
+  const visit = node => {
+    if (ts.isImportDeclaration(node)) {
+      if (!node.importClause?.isTypeOnly) add(node.moduleSpecifier);
+    } else if (ts.isExportDeclaration(node)) {
+      if (!node.isTypeOnly && node.moduleSpecifier) add(node.moduleSpecifier);
+    } else if (ts.isImportEqualsDeclaration(node)) {
+      if (!node.isTypeOnly && ts.isExternalModuleReference(node.moduleReference)
+        && node.moduleReference.expression) add(node.moduleReference.expression);
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      if (node.arguments.length === 0) fail('BACKEND_LOCAL_DYNAMIC_IMPORT_REJECTED');
+      add(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers;
+};
+
+export async function collectAuthenticatedEdgeRuntimeClosure(root, slug) {
+  const localFunctionsRoot = path.join(root, 'supabase', 'functions');
+  const canonicalRoot = await realpath(root);
+  const entry = path.join(localFunctionsRoot, slug, 'index.ts');
+  const pending = [entry];
+  const closure = new Map();
+  while (pending.length) {
+    const file = pending.pop();
+    const rootRelative = path.relative(root, file).replaceAll('\\', '/');
+    if (rootRelative.startsWith('../') || path.isAbsolute(rootRelative)) fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+    const functionRelative = path.relative(localFunctionsRoot, file).replaceAll('\\', '/');
+    const relative = functionRelative.startsWith('../') ? rootRelative : functionRelative;
+    if (closure.has(relative)) continue;
+    if (!(await stat(file).catch(() => null))?.isFile()) fail('BACKEND_LOCAL_DEPENDENCY_UNRESOLVED');
+    const canonicalFile = await realpath(file);
+    const canonicalRelative = path.relative(canonicalRoot, canonicalFile).replaceAll('\\', '/');
+    if (canonicalRelative.startsWith('../') || path.isAbsolute(canonicalRelative)) {
+      fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+    }
+    closure.set(relative, file);
+    const text = await readFile(file, 'utf8');
+    for (const specifier of runtimeModuleSpecifiers(file, text)) {
+      if (!localModuleSpecifier(specifier)) continue;
+      const requested = path.resolve(path.dirname(file), specifier);
+      const requestedRelative = path.relative(root, requested).replaceAll('\\', '/');
+      if (requestedRelative.startsWith('../') || path.isAbsolute(requestedRelative)) {
+        fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+      }
+      let dependency;
+      for (const candidate of [requested, `${requested}.ts`, `${requested}.tsx`, `${requested}.js`, `${requested}.mjs`,
+        `${requested}.json`, path.join(requested, 'index.ts'), path.join(requested, 'index.tsx'),
+        path.join(requested, 'index.js')]) {
+        if ((await stat(candidate).catch(() => null))?.isFile()) { dependency = candidate; break; }
+      }
+      if (!dependency) fail('BACKEND_LOCAL_DEPENDENCY_UNRESOLVED');
+      const dependencyRelative = path.relative(root, dependency).replaceAll('\\', '/');
+      if (dependencyRelative.startsWith('../') || path.isAbsolute(dependencyRelative)) {
+        fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+      }
+      pending.push(dependency);
+    }
+  }
+  return closure;
+}
+
 export async function downloadAndVerifyAuthenticatedEdgeSources(config, { root = process.cwd(), cli = execFileAsync,
   managementToken } = {}) {
   if (typeof managementToken !== 'string' || managementToken.length < 16) fail('BACKEND_INVENTORY_CREDENTIAL_REQUIRED');
@@ -91,27 +171,6 @@ export async function downloadAndVerifyAuthenticatedEdgeSources(config, { root =
   try {
     const compared = {};
     const localFunctionsRoot=path.join(root,'supabase','functions');
-    const localClosure=async slug=>{
-      const pending=[path.join(localFunctionsRoot,slug,'index.ts')];const closure=new Map();
-      while(pending.length){const file=pending.pop();
-        const rootRelative=path.relative(root,file).replaceAll('\\','/');
-        if(rootRelative.startsWith('../')||path.isAbsolute(rootRelative))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
-        const functionRelative=path.relative(localFunctionsRoot,file).replaceAll('\\','/');
-        const relative=functionRelative.startsWith('../')?rootRelative:functionRelative;
-        if(closure.has(relative))continue;closure.set(relative,file);const text=await readFile(file,'utf8');
-        for(const match of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)["'](\.{1,2}\/[^"']+)["']/gu)){
-          const requested=path.resolve(path.dirname(file),match[1]);let dependency;
-          for(const candidate of [requested,`${requested}.ts`,`${requested}.tsx`,`${requested}.js`,`${requested}.mjs`,
-            `${requested}.json`,path.join(requested,'index.ts'),path.join(requested,'index.tsx'),path.join(requested,'index.js')]){
-            if((await stat(candidate).catch(()=>null))?.isFile()){dependency=candidate;break;}
-          }
-          if(!dependency)continue;
-          const dependencyRelative=path.relative(root,dependency);
-          if(dependencyRelative.startsWith('..')||path.isAbsolute(dependencyRelative))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
-          pending.push(dependency);
-        }
-      }return closure;
-    };
     for (const slug of AUTHENTICATED_EDGE_FUNCTIONS) {
       const child=path.join(temporary,slug);await mkdir(path.join(child,'supabase'),{recursive:true});
       await writeFile(path.join(child,'supabase','config.toml'),`project_id = "${config.projectRef}"\n`,'utf8');
@@ -120,7 +179,8 @@ export async function downloadAndVerifyAuthenticatedEdgeSources(config, { root =
           SUPABASE_TELEMETRY_DISABLED: 'true' }, windowsHide: true,
       });
       const downloadedRoot=path.join(child,'supabase','functions');
-      const files=await sourceFiles(downloadedRoot).catch(()=>[]);const expected=await localClosure(slug);
+      const files=await sourceFiles(downloadedRoot).catch(()=>[]);
+      const expected=await collectAuthenticatedEdgeRuntimeClosure(root,slug);
       const layoutCandidates=[
         [downloadedRoot,localFunctionsRoot],[downloadedRoot,root],
         [path.join(downloadedRoot,slug),root],[path.join(downloadedRoot,slug),localFunctionsRoot],
