@@ -254,8 +254,12 @@ try {
   const studioAttempt = (await db.query(`SELECT * FROM public.studio_artifact_generation_attempts WHERE id=$1`, [studioRequested.attemptId])).rows[0];
   assert.equal(studioAttempt.transport_kind, 'authenticated_synthetic');
   assert.equal(studioAttempt.provider_route_id, null); assert.equal(studioAttempt.provider_config_id, null);
+  // The existing immutable-binding trigger rejects route substitution before
+  // PostgreSQL evaluates the provider-plan CHECK constraint.
   await assert.rejects(() => db.query('UPDATE public.studio_artifact_generation_attempts SET provider_route_id=$1 WHERE id=$2',
-    [ids.ordinaryRoute, studioRequested.attemptId]), /studio_generation_provider_plan_check/);
+    [ids.ordinaryRoute, studioRequested.attemptId]), /STUDIO_IMMUTABLE/);
+  assert.equal((await db.query('SELECT provider_route_id FROM public.studio_artifact_generation_attempts WHERE id=$1',
+    [studioRequested.attemptId])).rows[0].provider_route_id, null);
   const studioClaim = (await authority(db,
     'SELECT public.studio_artifact_generation_claim_authenticated_synthetic($1,$2,45) value',
     [studioRequested.attemptId, ids.studioToken])).rows[0].value;

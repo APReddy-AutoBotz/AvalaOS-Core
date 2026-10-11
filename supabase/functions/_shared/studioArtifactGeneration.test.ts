@@ -264,17 +264,47 @@ void (async () => {
       payloadHash: hash('9'), expectedVersion: 0, artifactType: 'brd',
     },
   };
-  const syntheticEvents: string[] = []; let syntheticStaged: unknown;
-  const syntheticSuccess = await executeClaimedStudioGeneration(syntheticClaim, {
-    ...deps,
-    consumeSynthetic: async () => { syntheticEvents.push('consume'); return { kind: 'studio_deterministic_success' }; },
-    runProvider: async () => { throw new Error('provider forbidden'); },
-    runBudgeted: (async () => { throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
-    stage: async input => { syntheticEvents.push('stage'); syntheticStaged = input.response; },
-    finalize: async () => { syntheticEvents.push('finalize'); return { state: 'completed', resource: { artifactId: ids[8], version: 1 } }; },
-  });
-  mark(syntheticSuccess.state === 'completed' && syntheticStaged !== undefined
-    && syntheticEvents.join(',') === 'consume,stage,finalize',
+  const syntheticEvents: string[] = []; let syntheticStaged: unknown; let syntheticProviderOperationId: string | undefined;
+  let syntheticConsumeRpc: { url: string; method?: string; body: Record<string, unknown> } | undefined;
+  const denoGlobal = globalThis as typeof globalThis & { Deno?: { env: { get(key: string): string | undefined } } };
+  const previousDeno = denoGlobal.Deno; const previousFetch = globalThis.fetch;
+  denoGlobal.Deno = { env: { get: key => ({
+    SUPABASE_URL: 'https://synthetic.invalid', SUPABASE_ANON_KEY: 'synthetic-anon-key',
+    SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role-key',
+  }[key]) } };
+  globalThis.fetch = (async (input, init) => {
+    syntheticConsumeRpc = {
+      url: String(input), method: init?.method,
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    };
+    syntheticEvents.push('consume');
+    return Response.json({ consumed: true, kind: 'studio_deterministic_success' });
+  }) as typeof fetch;
+  let syntheticSuccess: Awaited<ReturnType<typeof executeClaimedStudioGeneration>> | undefined;
+  try {
+    syntheticSuccess = await executeClaimedStudioGeneration(syntheticClaim, {
+      ...deps,
+      runProvider: async () => { throw new Error('provider forbidden'); },
+      runBudgeted: (async () => { throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+      stage: async input => {
+        syntheticEvents.push('stage'); syntheticStaged = input.response;
+        syntheticProviderOperationId = input.providerOperationId;
+      },
+      finalize: async () => { syntheticEvents.push('finalize'); return { state: 'completed', resource: { artifactId: ids[8], version: 1 } }; },
+    });
+  } finally {
+    globalThis.fetch = previousFetch; denoGlobal.Deno = previousDeno;
+  }
+  mark(syntheticSuccess?.state === 'completed' && syntheticStaged !== undefined
+    && syntheticEvents.join(',') === 'consume,stage,finalize'
+    && syntheticProviderOperationId === `authenticated-synthetic:${ids[14]}`
+    && syntheticConsumeRpc?.url === 'https://synthetic.invalid/rest/v1/rpc/authenticated_synthetic_consume_studio_permit'
+    && syntheticConsumeRpc.method === 'POST'
+    && JSON.stringify(syntheticConsumeRpc.body) === JSON.stringify({
+      p_permit_id: ids[14], p_actor_id: ids[6], p_org_id: ids[4], p_workspace_id: ids[5],
+      p_session_id: ids[15], p_request_id: ids[10], p_payload_hash: hash('9'), p_expected_version: 0,
+      p_attempt_id: ids[7], p_execution_token: ids[11], p_execution_fence: 2,
+    }),
   'STUDIO-002', 'generation.authenticated-synthetic-consumes-before-stage-with-zero-provider-budget',
   'fixed-provider-free-server-adapter');
   syntheticEvents.length = 0;
