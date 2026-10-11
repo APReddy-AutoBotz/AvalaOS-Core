@@ -6,6 +6,7 @@ const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 export const EXHAUSTIVE_ACCEPTANCE_WORKFLOW = '.github/workflows/exhaustive-acceptance.yml';
 export const PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW = '.github/workflows/preview-exhaustive-browser-qa.yml';
 export const EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW = '.github/workflows/exhaustive-acceptance-dispatch-bridge.yml';
+export const AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW = '.github/workflows/authenticated-product-acceptance.yml';
 
 const STABLE_REPOSITORY = 'APReddy-AutoBotz/AvalaOS-Core';
 const STABLE_ACTOR = 'APReddy-AutoBotz';
@@ -88,6 +89,20 @@ const validateDispatchBridgeRuntime = ({ environment, repository, workflowRef, r
   return Object.freeze({ callerWorkflowPath: EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW, deployId });
 };
 
+const validateAuthenticatedCallerRuntime = ({ environment, repository, workflowRef, releaseSha, workflowPath }) => {
+  if (repository !== STABLE_REPOSITORY
+    || workflowPath !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW
+    || environment.ACCEPTANCE_WORKFLOW_PATH !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW
+    || workflowRef !== `${repository}/${AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW}@refs/heads/main`
+    || environment.GITHUB_EVENT_NAME !== 'workflow_dispatch'
+    || environment.GITHUB_JOB !== 'hosted-authenticated'
+    || environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND !== 'hosted_authenticated_synthetic'
+    || environment.GITHUB_SHA !== releaseSha || releaseShaFromEnvironment(environment) !== releaseSha) {
+    throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
+  }
+  return Object.freeze({ callerWorkflowPath: AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW });
+};
+
 export const createHostedAcceptanceWorkflowRuntime = ({ environment, workflowPath, releaseSha }) => {
   if (environment.GITHUB_ACTIONS !== 'true') return null;
   const repository = requiredString(environment.GITHUB_REPOSITORY, 'HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
@@ -100,10 +115,13 @@ export const createHostedAcceptanceWorkflowRuntime = ({ environment, workflowPat
   const bridge = caller.workflowPath === EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW
     ? validateDispatchBridgeRuntime({ environment, repository, workflowRef, releaseSha })
     : null;
+  const authenticatedCaller = caller.workflowPath === AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW
+    ? validateAuthenticatedCallerRuntime({ environment, repository, workflowRef, releaseSha, workflowPath })
+    : null;
   if (
     !REPOSITORY.test(repository)
     || (bridge !== null && workflowPath !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW)
-    || (bridge === null && caller.workflowPath !== workflowPath)
+    || (bridge === null && authenticatedCaller === null && caller.workflowPath !== workflowPath)
     || !RUN_ID.test(runId)
     || !RUN_ATTEMPT.test(runAttempt)
     || !SHA.test(workflowSha)
@@ -122,6 +140,7 @@ export const createHostedAcceptanceWorkflowRuntime = ({ environment, workflowPat
     workflowSha,
     releaseSha,
     ...(bridge ? { callerWorkflowPath: bridge.callerWorkflowPath } : {}),
+    ...(authenticatedCaller ? { callerWorkflowPath: authenticatedCaller.callerWorkflowPath } : {}),
   });
 };
 
@@ -135,6 +154,13 @@ export const resolveHostedAcceptanceWorkflowPath = ({ environment, allowedWorkfl
   if (!REPOSITORY.test(repository)) throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   const caller = workflowRefParts({ repository, workflowRef });
   const matches = allowedWorkflowPaths.filter(path => caller.workflowPath === path);
+  if (caller.workflowPath === AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW
+    && allowedWorkflowPaths.includes(EXHAUSTIVE_ACCEPTANCE_WORKFLOW)) {
+    const releaseSha = releaseShaFromEnvironment(environment);
+    validateAuthenticatedCallerRuntime({ environment, repository, workflowRef, releaseSha,
+      workflowPath: EXHAUSTIVE_ACCEPTANCE_WORKFLOW });
+    return EXHAUSTIVE_ACCEPTANCE_WORKFLOW;
+  }
   if (matches.length === 1) {
     const declaredWorkflowPath = environment.ACCEPTANCE_WORKFLOW_PATH;
     if (declaredWorkflowPath !== undefined && declaredWorkflowPath !== matches[0]) {

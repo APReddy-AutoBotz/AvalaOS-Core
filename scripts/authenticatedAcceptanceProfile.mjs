@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { AUTHENTICATED_ACCEPTANCE_PROJECTS, AUTHENTICATED_ACCEPTANCE_WORKFLOW } from './authenticatedAcceptanceCases.mjs';
+import { EXHAUSTIVE_ACCEPTANCE_WORKFLOW } from './hostedAcceptanceReportProvenance.mjs';
 
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -10,7 +11,7 @@ const keys = (value, expected, code) => {
 };
 const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value))
   && new Date(value).toISOString() === value;
-export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v1';
+export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v2';
 export const AUTHENTICATED_HOSTED_BINDING_KEYS = Object.freeze([
   'schemaVersion', 'executionKind', 'authKind', 'releaseSha', 'checkoutSha',
   'origin', 'deploymentId', 'backendDigest', 'migrationVersion', 'migrationDigest',
@@ -39,25 +40,40 @@ export function validateAuthenticatedHostedProfile(value) {
   if (!isDeepStrictEqual(value.policy, {
     syntheticOnly: true, production: false, customerDataAllowed: false, providersEnabled: false, paidCallsAllowed: false,
   })) fail('POLICY_REJECTED');
-  keys(value.workflow, ['repository', 'path', 'ref', 'event', 'runId', 'attempt', 'job'], 'WORKFLOW_SHAPE');
+  keys(value.workflow, ['repository', 'producer', 'caller', 'runId', 'attempt'], 'WORKFLOW_SHAPE');
   const w = value.workflow;
-  if (w.repository !== 'APReddy-AutoBotz/AvalaOS-Core' || w.path !== AUTHENTICATED_ACCEPTANCE_WORKFLOW
-    || w.ref !== `${w.repository}/${w.path}@refs/heads/main` || w.event !== 'workflow_dispatch'
-    || !/^[1-9][0-9]*$/u.test(w.runId) || !/^[1-9][0-9]*$/u.test(w.attempt)
-    || w.job !== 'hosted-authenticated') fail('WORKFLOW_REJECTED');
+  keys(w.producer, ['path', 'ref', 'job'], 'WORKFLOW_SHAPE');
+  keys(w.caller, ['path', 'ref', 'event', 'job'], 'WORKFLOW_SHAPE');
+  if (w.repository !== 'APReddy-AutoBotz/AvalaOS-Core'
+    || w.producer.path !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW
+    || w.producer.ref !== `${w.repository}/${EXHAUSTIVE_ACCEPTANCE_WORKFLOW}@refs/heads/main`
+    || w.producer.job !== 'acceptance'
+    || w.caller.path !== AUTHENTICATED_ACCEPTANCE_WORKFLOW
+    || w.caller.ref !== `${w.repository}/${AUTHENTICATED_ACCEPTANCE_WORKFLOW}@refs/heads/main`
+    || w.caller.event !== 'workflow_dispatch' || w.caller.job !== 'hosted-authenticated'
+    || !/^[1-9][0-9]*$/u.test(w.runId) || !/^[1-9][0-9]*$/u.test(w.attempt)) fail('WORKFLOW_REJECTED');
   keys(value.window, ['startedAt', 'completedAt'], 'WINDOW_SHAPE');
   if (!timestamp(value.window.startedAt) || !timestamp(value.window.completedAt)
     || Date.parse(value.window.completedAt) <= Date.parse(value.window.startedAt)) fail('WINDOW_INVALID');
   if (!Array.isArray(value.actors) || !value.actors.length || value.actors.length > 32) fail('ACTORS_INVALID');
   const seen = new Set();
+  const actorPersonas = new Map();
+  const sessions = new Set();
   for (const actor of value.actors) {
     keys(actor, ['persona', 'project', 'actorHash', 'sessionHash', 'organizationHash', 'workspaceHash'], 'ACTOR_SHAPE');
     const key = `${actor.persona}:${actor.project}`;
     if (!/^[a-z][a-z0-9-]{1,63}$/u.test(actor.persona) || !AUTHENTICATED_ACCEPTANCE_PROJECTS.includes(actor.project)
       || seen.has(key) || ['actorHash', 'sessionHash', 'organizationHash', 'workspaceHash'].some(name => !DIGEST.test(actor[name]))) fail('ACTORS_INVALID');
     seen.add(key);
+    if (sessions.has(actor.sessionHash)) fail('ACTOR_SESSION_REUSED');
+    sessions.add(actor.sessionHash);
+    const priorPersona = actorPersonas.get(actor.actorHash);
+    if (priorPersona && priorPersona !== actor.persona) fail('ACTOR_ROLE_REUSED');
+    actorPersonas.set(actor.actorHash, actor.persona);
   }
-  if (AUTHENTICATED_ACCEPTANCE_PROJECTS.some(project => !value.actors.some(actor => actor.project === project))) fail('ACTOR_PROJECT_MISSING');
+  const independentPersonas = ['author', 'reviewer', 'approver', 'outsider'];
+  if (AUTHENTICATED_ACCEPTANCE_PROJECTS.some(project => independentPersonas
+    .some(persona => !value.actors.some(actor => actor.project === project && actor.persona === persona)))) fail('ACTOR_PROJECT_MISSING');
   return value;
 }
 
@@ -96,9 +112,12 @@ export function authenticatedProfileFromEnvironment(environment, executionWindow
       paidCallsAllowed: environment.AUTHENTICATED_ACCEPTANCE_PAID_CALLS !== 'false',
     },
     workflow: {
-      repository: environment.GITHUB_REPOSITORY, path: AUTHENTICATED_ACCEPTANCE_WORKFLOW,
-      ref: environment.GITHUB_WORKFLOW_REF, event: environment.GITHUB_EVENT_NAME,
-      runId: environment.GITHUB_RUN_ID, attempt: environment.GITHUB_RUN_ATTEMPT, job: environment.GITHUB_JOB,
+      repository: environment.GITHUB_REPOSITORY,
+      producer: { path: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+        ref: `${environment.GITHUB_REPOSITORY}/${EXHAUSTIVE_ACCEPTANCE_WORKFLOW}@refs/heads/main`, job: 'acceptance' },
+      caller: { path: AUTHENTICATED_ACCEPTANCE_WORKFLOW, ref: environment.GITHUB_WORKFLOW_REF,
+        event: environment.GITHUB_EVENT_NAME, job: environment.GITHUB_JOB },
+      runId: environment.GITHUB_RUN_ID, attempt: environment.GITHUB_RUN_ATTEMPT,
     },
     window: executionWindow,
     actors,

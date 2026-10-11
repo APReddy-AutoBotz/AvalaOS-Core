@@ -34,6 +34,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20261010025331_legacy_delivery_authority.sql',
   '20261010051100_authenticated_studio_delivery_outcome_monitor.sql',
   '20261010051413_authenticated_process_update_authority.sql',
+  '20261010144356_authenticated_hosted_exercise_authority.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -42,14 +43,14 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, canonical source-size correction, immutable Govern action-authority, legacy Delivery authority, authenticated Studio/Delivery outcome, and process update successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, canonical source-size correction, immutable Govern action-authority, legacy Delivery authority, authenticated Studio/Delivery outcome, process update, and authenticated hosted exercise successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners validate every approved migration before reading the
-// latest identity-bearing tip. The approved authenticated process authority advances only the
-// exact hosted-pilot identity and its already-authorized current consumers; it
-// grants no hosted exercise, provider, or spending authority.
+// latest identity-bearing tip. The approved hosted exercise authority installs
+// default-OFF; advancing the marker does not activate an exercise, enable a
+// provider, deploy a function, or grant a spending allowance.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return '20261010051413';
+  return '20261010144356';
 };

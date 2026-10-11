@@ -1,8 +1,14 @@
 import { expect, type Page } from '@playwright/test';
 import { openProductNavigation } from './productNavigationReadiness';
 
+export const authenticatedHostedActionIds: unique symbol = Symbol('authenticatedHostedActionIds');
+
 export type AuthenticatedLifecycleActor = Readonly<{
   token: string;
+  authKind?: 'fixture_transport' | 'supabase_auth';
+  persona?: 'author' | 'reviewer' | 'approver' | 'outsider';
+  projectName?: string;
+  password?: string;
   user: Readonly<{ id: string; email: string }>;
 }>;
 
@@ -17,7 +23,10 @@ export type AuthenticatedLifecycleSetup = Readonly<{
 
 const controlToken = process.env.ENTERPRISE_LIFECYCLE_CONTROL_TOKEN ?? '';
 const apiBaseUrl = process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '';
+const controlBaseUrl = process.env.ENTERPRISE_LIFECYCLE_CONTROL_URL ?? apiBaseUrl;
 const authStorageKey = process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token';
+const hostedRealAuth = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
+const hostedSessionCache = new Map<string, Readonly<{ key: string; value: string }>>();
 
 const required = (value: string, name: string) => {
   if (!value) throw new Error(`ENTERPRISE_LIFECYCLE_BROWSER_${name}_REQUIRED`);
@@ -33,7 +42,7 @@ const loopbackBaseUrl = (value: string) => {
 };
 
 export const authenticatedLifecycleControl = async <T>(pathname: string, body?: unknown): Promise<T> => {
-  const response = await fetch(`${loopbackBaseUrl(apiBaseUrl)}${pathname}`, {
+  const response = await fetch(`${loopbackBaseUrl(controlBaseUrl)}${pathname}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       'content-type': 'application/json',
@@ -55,6 +64,53 @@ const sessionFor = (actor: AuthenticatedLifecycleActor) => ({
 });
 
 export const authenticatedLifecycleEnterAs = async (page: Page, actor: AuthenticatedLifecycleActor) => {
+  if (hostedRealAuth) {
+    if (actor.authKind !== 'supabase_auth' || !actor.persona || !actor.projectName || !actor.password) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_ACTOR_REQUIRED');
+    }
+    await page.goto('/');
+    await page.evaluate(() => {
+      for (const key of Object.keys(localStorage)) if (key.startsWith('sb-')) localStorage.removeItem(key);
+      localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
+      localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({ type: 'my_work' }));
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const cacheKey = `${actor.user.id}:${actor.persona}`;
+    const cached = hostedSessionCache.get(cacheKey);
+    if (cached) {
+      await page.evaluate(({ key, value }) => localStorage.setItem(key, value), cached);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    } else {
+      await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toBeVisible();
+      await page.getByLabel('Work email', { exact: false }).fill(actor.user.email);
+      await page.getByLabel('Password', { exact: true }).fill(actor.password);
+      const signInResponse = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname.endsWith('/auth/v1/token') && url.searchParams.get('grant_type') === 'password';
+      });
+      await page.getByRole('button', { name: 'Sign in to AvalaOS', exact: true }).click();
+      expect((await signInResponse).status()).toBe(200);
+      const stored = await page.evaluate(() => {
+        const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
+        return key ? { key, value: localStorage.getItem(key) || '' } : null;
+      });
+      if (!stored?.value) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+      hostedSessionCache.set(cacheKey, stored);
+    }
+    await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
+    const accessToken = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
+      const stored = key ? JSON.parse(localStorage.getItem(key) || '{}') : {};
+      return stored.access_token ?? stored.currentSession?.access_token ?? '';
+    });
+    if (!accessToken) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+    await authenticatedLifecycleControl('/control/bind-browser-session', {
+      projectName: actor.projectName,
+      persona: actor.persona,
+      accessToken,
+    });
+    return;
+  }
   await page.goto('/');
   await page.evaluate(({ key, session }) => {
     localStorage.setItem(key, JSON.stringify(session));

@@ -7,6 +7,7 @@ export type ProcessCreationDependencies = {
   authenticate(request: Request): Promise<{ id: string }>;
   authority(request: Request, actorId: string, envelope: ProcessCreateEnvelope): Promise<Authority | null>;
   atomic(actorId: string, envelope: ProcessCreateEnvelope): Promise<unknown>;
+  consumePrecommitFault?(request: Request, body: unknown, actorId: string, envelope: ProcessCreateEnvelope): Promise<boolean>;
 };
 
 const statuses: Record<ProcessCreateError['code'], number> = {
@@ -32,6 +33,8 @@ export const executeProcessCreationRequest = async (request: Request, body: unkn
     if (!authority || authority.userId !== actor.id || authority.organizationId !== envelope.organizationId || authority.workspaceId !== envelope.workspaceId) return failed('PERMISSION_DENIED');
     if (authority.authorizationVersion !== envelope.authorizationVersion) return failed('AUTHORITY_STALE');
     if (!authority.capabilities.includes(PROCESS_CREATE_CAPABILITY) || !authority.capabilities.includes('assess.read')) return failed('PERMISSION_DENIED');
+    if (dependencies.consumePrecommitFault
+      && await dependencies.consumePrecommitFault(request, body, actor.id, envelope)) return failed('COMMAND_UNAVAILABLE');
     const outcome = await dependencies.atomic(actor.id, envelope);
     if (!object(outcome)) return failed('COMMAND_UNAVAILABLE');
     if (outcome.ok === false && object(outcome.error) && typeof outcome.error.code === 'string' && Object.prototype.hasOwnProperty.call(statuses, outcome.error.code)) {

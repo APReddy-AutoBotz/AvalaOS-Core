@@ -30,6 +30,9 @@ import {
   type StudioTemplateSectionDefinition,
   type StudioCanonicalSourceAnchorDto,
 } from '../../../services/studioArtifacts/contracts.ts';
+import { resolveAuthenticatedSyntheticStudioTransport } from './authenticatedSyntheticAuthority.ts';
+
+type StudioBoundProviderPlan = NonNullable<StudioExecutableGenerationClaim['providerPlan']>;
 
 /** Centralized RPC inventory; migrations and adapters must move in lockstep. */
 export const STUDIO_RPC = {
@@ -40,7 +43,9 @@ export const STUDIO_RPC = {
   handoffCommand: 'enterprise_assess_studio_handoff_command',
   templateCommand: 'studio_tenant_template_command',
   generationRequest: 'studio_artifact_generation_request_v2',
+  authenticatedSyntheticGenerationRequest: 'studio_artifact_generation_request_authenticated_synthetic',
   generationClaim: 'studio_artifact_generation_claim_v2',
+  authenticatedSyntheticGenerationClaim: 'studio_artifact_generation_claim_authenticated_synthetic',
   generationStage: 'studio_artifact_generation_stage_v2',
   generationFinalize: 'studio_artifact_generation_finalize_v2',
   generationCancel: 'studio_artifact_generation_cancel_v2',
@@ -248,6 +253,12 @@ const generationRequestRpcCommand = (command: StudioArtifactAtomicCommand) => {
     expectedAggregateVersion: command.expectedAggregateVersion,
     expectedCurrentVersionId: payload.expectedCurrentVersionId,
     expectedApprovedVersionId: payload.expectedApprovedVersionId,
+    ...(command.authenticatedSynthetic ? {
+      authenticatedSyntheticPermitId: command.authenticatedSynthetic.permitId,
+      authenticatedSyntheticKind: command.authenticatedSynthetic.kind,
+      authenticatedSyntheticSessionId: command.authenticatedSynthetic.sessionId,
+      authenticatedSyntheticPayloadHash: command.authenticatedSynthetic.payloadHash,
+    } : {}),
   };
 };
 
@@ -263,7 +274,10 @@ export const executeStudioAtomicCommand = async (
   } else if (command.commandType === 'studio.source-package.create') {
     name = STUDIO_RPC.sourcePackageCommand; args = { p_command: await sourcePackageRpcCommand(command) };
   } else if (command.commandType === 'studio.generation.request') {
-    name = STUDIO_RPC.generationRequest; args = { p_command: generationRequestRpcCommand(command) };
+    name = command.authenticatedSynthetic
+      ? STUDIO_RPC.authenticatedSyntheticGenerationRequest
+      : STUDIO_RPC.generationRequest;
+    args = { p_command: generationRequestRpcCommand(command) };
   } else {
     name = STUDIO_RPC.artifactCommand; args = { p_command: command };
   }
@@ -536,6 +550,20 @@ export async function loadStudioGenerationMaterial(
     templatePayload = { sectionDefinitions: row.section_definitions, fieldSchema: row.field_schema };
   } else throw new StudioArtifactError('TEMPLATE_NOT_APPROVED');
 
+  const syntheticPermitId = field(plan, 'authenticatedSyntheticPermitId', 'authenticated_synthetic_permit_id');
+  if (syntheticPermitId !== undefined) {
+    const permitId = durableUuid(syntheticPermitId);
+    const kind = field(plan, 'authenticatedSyntheticKind', 'authenticated_synthetic_kind');
+    const sessionId = durableUuid(field(plan, 'authenticatedSyntheticSessionId', 'authenticated_synthetic_session_id'));
+    const payloadHash = string(field(plan, 'authenticatedSyntheticPayloadHash', 'authenticated_synthetic_payload_hash'));
+    if ((kind !== 'studio_deterministic_success' && kind !== 'studio_failure_after_claim')
+      || !projectionHash.test(payloadHash)) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+    return {
+      sourcePackage, selectedSourceVersionIds, sourceAnchors, manualBrief, templatePayload,
+      providerPlan: null,
+    };
+  }
+
   const provider = string(field(plan, 'provider'));
   if (!ENTERPRISE_AI_PROVIDERS.includes(provider as never)) throw new StudioArtifactError('PROVIDER_ROUTE_UNAVAILABLE');
   const routeId = string(field(plan, 'providerRouteId', 'provider_route_id'));
@@ -551,13 +579,13 @@ export async function loadStudioGenerationMaterial(
     capability: 'studio.document.generate', mode: 'pilot', orgId: org, workspaceId: workspace, actorId: actor,
     correlationId: string(field(plan, 'requestId', 'request_id')), evidenceRef: '', policyResult: 'allowed', model,
     endpoint: config.endpoint_url || undefined, deployment: config.deployment_name || undefined, auditEvent: {},
-  } as StudioExecutableGenerationClaim['providerPlan']['resolverDecision'];
+  } as StudioBoundProviderPlan['resolverDecision'];
   return {
     sourcePackage, selectedSourceVersionIds, sourceAnchors, manualBrief, templatePayload,
     providerPlan: {
-      provider: provider as StudioExecutableGenerationClaim['providerPlan']['provider'], routeId, providerConfigId, model,
+      provider: provider as StudioBoundProviderPlan['provider'], routeId, providerConfigId, model,
       artifactType, promptKey: STUDIO_PROVIDER_PROMPT_KEY,
-      promptVersion: promptVersion as StudioExecutableGenerationClaim['providerPlan']['promptVersion'], providerPlanHash,
+      promptVersion: promptVersion as StudioBoundProviderPlan['promptVersion'], providerPlanHash,
       ...(config.endpoint_url ? { endpoint: config.endpoint_url } : {}),
       ...(config.deployment_name ? { deployment: config.deployment_name } : {}), resolverDecision,
     },
@@ -575,7 +603,10 @@ export const claimStudioGeneration = async (
   const attemptId = string(field(initial, 'attemptId', 'attempt_id'));
   const executionToken = typeof field(initial, 'executionToken', 'execution_token') === 'string'
     ? string(field(initial, 'executionToken', 'execution_token')) : crypto.randomUUID();
-  const value = object(await invoke<unknown>(STUDIO_RPC.generationClaim, {
+  const syntheticPermitId = field(initial, 'authenticatedSyntheticPermitId', 'authenticated_synthetic_permit_id');
+  const value = object(await invoke<unknown>(syntheticPermitId
+    ? STUDIO_RPC.authenticatedSyntheticGenerationClaim
+    : STUDIO_RPC.generationClaim, {
     p_attempt_id: attemptId, p_execution_token: executionToken, p_lease_seconds: 45,
   }));
   const terminalState = field(value, 'state');
@@ -654,6 +685,16 @@ export const claimStudioGeneration = async (
     timeoutMs: 30_000,
     providerAllowed: field(value, 'providerAllowed', 'provider_allowed') === true,
     reconcileOnly: field(value, 'reconcileOnly', 'reconcile_only') === true,
+    ...(field(plan, 'authenticatedSyntheticPermitId', 'authenticated_synthetic_permit_id') ? {
+      authenticatedSynthetic: {
+        permitId: durableUuid(field(plan, 'authenticatedSyntheticPermitId', 'authenticated_synthetic_permit_id')),
+        kind: field(plan, 'authenticatedSyntheticKind', 'authenticated_synthetic_kind') as 'studio_deterministic_success' | 'studio_failure_after_claim',
+        sessionId: durableUuid(field(plan, 'authenticatedSyntheticSessionId', 'authenticated_synthetic_session_id')),
+        payloadHash: string(field(plan, 'authenticatedSyntheticPayloadHash', 'authenticated_synthetic_payload_hash')),
+        expectedVersion: integer(field(plan, 'authenticatedSyntheticExpectedVersion', 'authenticated_synthetic_expected_version')),
+        artifactType: field(plan, 'artifactType', 'artifact_type') as 'brd' | 'frd' | 'pdd',
+      },
+    } : {}),
   };
 };
 
@@ -773,5 +814,7 @@ export const studioArtifactDependencies: StudioArtifactCommandDependencies = {
     return rows[0] ?? null;
   },
   executeAtomicCommand: command => executeStudioAtomicCommand(command),
+  resolveAuthenticatedSyntheticTransport: ({ request, body, command }) =>
+    resolveAuthenticatedSyntheticStudioTransport(request, body, command),
   executeClaimedGeneration: initial => executeStudioGenerationDependency(initial),
 };

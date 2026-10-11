@@ -1,5 +1,9 @@
 # Exhaustive hosted product acceptance
 
+## Complete hosted producer approval (2026-10-10)
+
+PR #283 preparation is verified after merge: 94 local UI records and five EI cases, with cleanup and zero real-provider effects. Its same-tree candidate report is 43 PASS / 65 BLOCKED; the historical stable 58 PASS / 50 BLOCKED report is unchanged. AP approved the complete hosted runner under `docs/planning/hosted-acceptance-completion.md`, including real role-separated sessions, independent before/after server frames and causal browser-command correlation. Supplied counters or authority booleans alone cannot establish PASS. Require all 47 authenticated cases on both projects alongside the 18 public-Sandbox and 43 retained/oracle/server cases in one release/run/attempt. Distinguish cleanup of transient access/resources from explicitly retained immutable synthetic history. No criteria are relaxed; local preparation cannot satisfy hosted cases. Hosted execution remains not run and is not authorized by repository implementation or read-only inspection.
+
 ## Approved authenticated profile and read-only corrections (2026-10-10)
 
 AP approved the separate `hosted_authenticated_synthetic` profile for the 47 previously blocked hosted requirements and explicit zero-write corrections for EI-003, ADMIN-001/003/004 and MONITOR-001/002/003. Preserve all 108 IDs and business meanings, exact Monitor human outcomes, legacy task/import semantics, AI-004's single synthetic privileged configuration write, and conditional audits for real privileged mutations. The public Sandbox's 18 supported cases retain their existing profile and network boundary.

@@ -513,6 +513,31 @@ void (async () => {
     attemptId: ids[10], promptVersion: String(v3ClaimMaterialPlan.promptVersion), providerAllowed: true,
   });
 
+  let syntheticClaimRpc = '';
+  const syntheticClaim = await claimStudioGeneration({
+    ...plan, attemptId: ids[10], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
+    sourcePackageVersion: 1, maximumOutputTokens: 4_000, expectedTemplateVersion: 'system-brd-v3',
+    authenticatedSyntheticPermitId: ids[20], authenticatedSyntheticKind: 'studio_deterministic_success',
+    authenticatedSyntheticSessionId: ids[21], authenticatedSyntheticPayloadHash: '7'.repeat(64),
+    authenticatedSyntheticExpectedVersion: 1,
+  }, async name => {
+    syntheticClaimRpc = name;
+    return {
+      attemptId: ids[10], executionToken: ids[13], executionFence: 1,
+      leaseExpiresAt: '2030-01-01T00:00:00Z', providerAllowed: true, reconcileOnly: false,
+      artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-1',
+      providerPlanHash: '4'.repeat(64), authenticatedSyntheticPermitId: ids[20],
+      authenticatedSyntheticKind: 'studio_deterministic_success', authenticatedSyntheticSessionId: ids[21],
+      authenticatedSyntheticPayloadHash: '7'.repeat(64), authenticatedSyntheticExpectedVersion: 1,
+    } as never;
+  }, async () => ({ ...material, providerPlan: null }));
+  mark(syntheticClaimRpc === STUDIO_RPC.authenticatedSyntheticGenerationClaim
+    && syntheticClaim.claimKind === 'active' && syntheticClaim.providerPlan === null
+    && syntheticClaim.authenticatedSynthetic?.permitId === ids[20],
+  'STUDIO-003', 'db.synthetic-attempt-uses-provider-free-claim-rpc', 'authenticated-synthetic-claim-routing', {
+    attemptId: ids[10], permitId: ids[20], claimRpc: syntheticClaimRpc,
+  });
+
   for (const [index, terminalState] of ['completed', 'stale_completed'].entries()) {
     let proposedRecoveryToken = '';
     let mutableMaterialReads = 0;

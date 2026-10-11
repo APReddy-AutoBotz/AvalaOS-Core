@@ -1,12 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, type Request, test } from '@playwright/test';
 import {
   authenticatedLifecycleClickProduct as clickProduct,
   authenticatedLifecycleControl as control,
   authenticatedLifecycleEnterAs as enterAs,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
+  authenticatedHostedActionIds,
   type AuthenticatedLifecycleActor as FixtureActor,
   type AuthenticatedLifecycleSetup as FixtureSetup,
 } from '../authenticatedLifecycleHarness';
@@ -62,11 +63,21 @@ type ProjectFinalization = Readonly<{
     generationCompletedCount: number;
   }>;
 }>;
-type ApiResponseObservation = Readonly<{ route: string; status: number }>;
+type HostedActionReference = Promise<string | null>;
+type ApiResponseObservation = Readonly<{ route: string; status: number; actionId: HostedActionReference }>;
+const hostedActionStarts = new WeakMap<Request, HostedActionReference>();
+const actionReference = (request: Request): HostedActionReference => hostedAuthenticatedAcceptance
+  ? hostedActionStarts.get(request) ?? Promise.reject(new Error('AUTHENTICATED_BROWSER_ACTION_START_MISSING'))
+  : Promise.resolve(null);
 
 const outputDirectory = process.env.ENTERPRISE_LIFECYCLE_OUTPUT_DIR
   ?? path.join('output', 'acceptance', 'enterprise-lifecycle');
 const authenticatedProductAcceptance = process.env.ENTERPRISE_LIFECYCLE_AUTHENTICATED === 'true';
+const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
+const hostedAllowedOrigins = new Set([
+  process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL,
+  process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,
+].filter((value): value is string => !!value).map(value => new URL(value).origin));
 const measuredCounters = (value: Partial<Record<string, number>> = {}) => ({
   logicalMutations: 0, domainWrites: 0, generationAttemptWrites: 0, receiptWrites: 0, auditWrites: 0,
   secretWrites: 0, storageWrites: 0, providerCalls: 0, paidCalls: 0, providerTokens: 0,
@@ -86,7 +97,7 @@ const observeApiResponse = async (
   const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === route, { timeout: 15_000 });
   await action();
   const response = await responsePromise;
-  return { route, status: response.status() };
+  return { route, status: response.status(), actionId: actionReference(response.request()) };
 };
 
 const observeFailedApiRequest = async (
@@ -101,7 +112,7 @@ const observeFailedApiRequest = async (
   await action();
   const request = await requestPromise;
   expect(request.failure()?.errorText, `${route} must fail at the browser transport boundary`).toBeTruthy();
-  return { route, status: 0 };
+  return { route, status: 0, actionId: actionReference(request) };
 };
 const controlCaseAction = Object.freeze<Record<string, { action: string; target: string; route: string }>>({
   'ADMIN-001': { action: 'navigate', target: 'Admin workbench', route: '/functions/v1/tenant-session' },
@@ -113,7 +124,7 @@ const controlCaseAction = Object.freeze<Record<string, { action: string; target:
   'AI-003': { action: 'request', target: 'provider validation as restricted member', route: '/functions/v1/enterprise-provider-lifecycle' },
   'AI-004': { action: 'click', target: 'Bind key securely', route: '/functions/v1/enterprise-provider-lifecycle' },
   'AI-005': { action: 'click', target: 'Validate unavailable provider', route: '/functions/v1/enterprise-provider-lifecycle' },
-  'AI-006': { action: 'inspect', target: 'authenticated function traffic and browser storage', route: '/functions/v1/enterprise-provider-lifecycle' },
+  'AI-006': { action: 'inspect', target: 'authenticated function traffic and browser storage', route: '/functions/v1/enterprise-intelligence-query' },
   'STUDIO-007': { action: 'inspect and request', target: 'Studio download availability and authenticated denial', route: '/functions/v1/studio-artifact-download' },
 });
 const controlObservationCase = (observation: {
@@ -123,7 +134,7 @@ const controlObservationCase = (observation: {
   assertions: string[];
   missingAssertions: string[];
   server?: Record<string, any>;
-  api?: { route: string; status: number };
+  api?: { route: string; status: number; actionId: HostedActionReference };
 }) => {
   const measured = observation.server?.measured;
   const before = measuredCounters(measured?.before ?? {});
@@ -132,7 +143,7 @@ const controlObservationCase = (observation: {
   if (!action || observation.api?.route !== action.route || !Number.isInteger(observation.api.status)) {
     throw new Error(`AUTHENTICATED_CONTROL_API_OBSERVATION_MISSING:${observation.testId}`);
   }
-  return {
+  const result={
     testId: observation.testId,
     status: observation.status === 'observed' ? 'passed' : 'blocked',
     proofMode: observation.proofMode,
@@ -154,6 +165,8 @@ const controlObservationCase = (observation: {
     },
     cleanup: { verified: true },
   };
+  Object.defineProperty(result,authenticatedHostedActionIds,{value:[observation.api.actionId]});
+  return result;
 };
 const scenarioCaseToLocal = (row: Awaited<ReturnType<typeof runAssessmentScenarioJourneys>>[number]) => {
   const before = measuredCounters({
@@ -168,7 +181,7 @@ const scenarioCaseToLocal = (row: Awaited<ReturnType<typeof runAssessmentScenari
     receiptWrites: row.measurements.after.counts.commandReceipts,
     auditWrites: row.measurements.after.counts.audits,
   });
-  return {
+  const result={
     testId: row.testId, status: 'passed', proofMode: 'actual-ui',
     observations: {
       browser: { actions: row.observations.browser.actions.map(target => ({ action: 'execute', target })),
@@ -182,6 +195,9 @@ const scenarioCaseToLocal = (row: Awaited<ReturnType<typeof runAssessmentScenari
       stateBeforeHash: row.measurements.stateBeforeHash, stateAfterHash: row.measurements.stateAfterHash },
     cleanup: { verified: true },
   };
+  Object.defineProperty(result,authenticatedHostedActionIds,{value:
+    (row as unknown as Record<symbol,HostedActionReference[]>)[authenticatedHostedActionIds]??[]});
+  return result;
 };
 const downstreamDomainState = (frame: StudioDeliveryDownstreamFrame) => frame.counts.publications
   + frame.counts.documentGenerations + frame.counts.imports + frame.counts.activeTasks
@@ -203,7 +219,7 @@ const downstreamCaseToLocal = (row: StudioDeliveryMonitorCaseResult) => {
   const after = measuredCounters({ logicalMutations: downstreamLogicalState(row.testId,row.measurements.after),
     domainWrites: downstreamDomainState(row.measurements.after), receiptWrites: row.measurements.after.counts.commandReceipts,
     auditWrites: row.measurements.after.counts.audits });
-  return {
+  const result={
     testId: row.testId, status: 'passed', proofMode: 'actual-ui',
     observations: {
       browser: { actions: row.observations.browser.actions.map(target => ({ action: 'execute', target })),
@@ -217,6 +233,9 @@ const downstreamCaseToLocal = (row: StudioDeliveryMonitorCaseResult) => {
       stateBeforeHash: row.measurements.stateBeforeHash, stateAfterHash: row.measurements.stateAfterHash },
     cleanup: { verified: true },
   };
+  Object.defineProperty(result,authenticatedHostedActionIds,{value:
+    (row as unknown as Record<symbol,HostedActionReference[]>)[authenticatedHostedActionIds]??[]});
+  return result;
 };
 const lifecycleDomainWrites = (frame: LifecycleFrame) => frame.v1Assessments + frame.v1AssessmentVersions
   + frame.cases + frame.caseVersions + frame.decisions
@@ -418,7 +437,78 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let reworkJourneyBefore: LifecycleFrame | null = null;
   let reworkJourneyApiResponses: ApiResponseObservation[] = [];
   let approvedDecisionApi: ApiResponseObservation | null = null;
-  const authenticatedCases: unknown[] = [];
+  let authenticatedCaseUploadTail: Promise<unknown> = Promise.resolve();
+  let networkActionUploadTail: Promise<unknown> = Promise.resolve();
+  const finishedRequests = new WeakSet<Request>();
+  const explicitCaseActions = new Map<string, HostedActionReference[]>();
+  const bindObservedCase = (testId: string,...actions: HostedActionReference[]) => {
+    if(actions.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${testId}`);
+    explicitCaseActions.set(testId,actions);
+  };
+  const caseActionReferences=(row: unknown): HostedActionReference[] =>
+    (row as Record<string | symbol,unknown>)[authenticatedHostedActionIds] as HostedActionReference[]??[];
+  const productRoute = (request: Request) => {
+    const url = new URL(request.url());
+    return /^\/(?:functions\/v1\/[a-z0-9-]+|rest\/v1\/rpc\/[a-z0-9_]+)$/u.test(url.pathname) ? url.pathname : null;
+  };
+  const startProductAction = (request: Request) => {
+    const existing = hostedActionStarts.get(request);
+    if (existing) return existing;
+    const route = productRoute(request);
+    if (!route) return Promise.resolve(null);
+    const pending = (async () => {
+      const headers = await request.allHeaders();
+      let requestBody: unknown = { method: request.method(), route };
+      try { requestBody = request.postDataJSON() ?? { method: request.method(), route }; }
+      catch { /* body-free product query */ }
+      const result = await control<{ actionId: string }>('/control/browser-action-start', {
+        projectName,
+        accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+        requestBody,
+        route,
+      });
+      return result.actionId;
+    })();
+    hostedActionStarts.set(request, pending);
+    return pending;
+  };
+  const finishProductAction = (request: Request, status: number, responseBody: unknown) => {
+    const route = productRoute(request);
+    if (!route || finishedRequests.has(request)) return;
+    finishedRequests.add(request);
+    networkActionUploadTail = networkActionUploadTail.then(async () => {
+      const actionId = await startProductAction(request);
+      if (!actionId) return;
+      await control('/control/browser-action', { projectName, actionId, responseBody, status });
+    });
+  };
+  class AuthenticatedCaseCollector extends Array<unknown> {
+    pushWithActions(row: Record<string | symbol, unknown>, ...actions: ApiResponseObservation[]) {
+      Object.defineProperty(row, authenticatedHostedActionIds, { value: actions.map(item => item.actionId) });
+      return this.push(row);
+    }
+    override push(...items: unknown[]) {
+      const length = super.push(...items);
+      if (hostedAuthenticatedAcceptance) {
+        for (const row of items) {
+          const testId=(row as any)?.testId;
+          const explicit=explicitCaseActions.get(testId);
+          if(explicit){Object.defineProperty(row as object,authenticatedHostedActionIds,{value:explicit});explicitCaseActions.delete(testId);}
+          authenticatedCaseUploadTail = authenticatedCaseUploadTail.then(async () => {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            await networkActionUploadTail;
+            const references=(row as Record<string | symbol, unknown>)[authenticatedHostedActionIds];
+            if(!Array.isArray(references)||references.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${(row as any)?.testId??'unknown'}`);
+            const actionIds=[...new Set((await Promise.all(references as HostedActionReference[])).filter((item): item is string=>!!item))];
+            if(actionIds.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_BINDING_MISSING:${(row as any)?.testId??'unknown'}`);
+            return control('/control/browser-case', { projectName, row, actionIds });
+          });
+        }
+      }
+      return length;
+    }
+  }
+  const authenticatedCases: unknown[] = new AuthenticatedCaseCollector();
   const stages = new Map<string, ObservedStage>();
   const assertions = new Map<string, Readonly<{ id: string; observed: true }>>();
   const observe = (stageId: string, assertionId: string, options: { reload?: boolean } = {}) => {
@@ -439,22 +529,41 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     externalRequests = [];
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
-      if (['http:', 'https:'].includes(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)) {
+      if (['http:', 'https:'].includes(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)
+        && !(hostedAuthenticatedAcceptance && hostedAllowedOrigins.has(url.origin))) {
         await route.abort('blockedbyclient');
         return;
       }
+      if (hostedAuthenticatedAcceptance && productRoute(route.request())) await startProductAction(route.request());
       await route.continue();
     });
     context.on('request', request => {
       const url = new URL(request.url());
       if (['http:', 'https:'].includes(url.protocol)) {
         observedHttpRequests += 1;
-        if (!['127.0.0.1', 'localhost'].includes(url.hostname)) {
+        if (!['127.0.0.1', 'localhost'].includes(url.hostname)
+          && !(hostedAuthenticatedAcceptance && hostedAllowedOrigins.has(url.origin))) {
           nonLoopbackRequests += 1;
           externalRequests.push(`${url.protocol}//${url.hostname}`);
         }
       }
     });
+    if (hostedAuthenticatedAcceptance) {
+      context.on('response', response => {
+        const request = response.request();
+        if (!productRoute(request)) return;
+        networkActionUploadTail = networkActionUploadTail.then(async () => {
+          const responseBody = await response.json().catch(() => ({}));
+          const actionId = await startProductAction(request);
+          if (!actionId || finishedRequests.has(request)) return;
+          finishedRequests.add(request);
+          await control('/control/browser-action', { projectName, actionId, responseBody, status: response.status() });
+        });
+      });
+      context.on('requestfailed', request => finishProductAction(request, 0, {
+        error: { code: 'BROWSER_TRANSPORT_FAILURE' },
+      }));
+    }
   });
 
   test.afterEach(async ({}, testInfo) => {
@@ -464,6 +573,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
   test.afterAll(async () => {
     if (!failed) {
+      await authenticatedCaseUploadTail;
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });
       expect(finalized).toMatchObject({
         journeyBinding: setup.journeyBinding,
@@ -511,6 +621,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (authenticatedProductAcceptance) {
       const before = measuredCounters({ receiptWrites: beforeDeniedEdit.receipts, auditWrites: beforeDeniedEdit.audits });
       const after = measuredCounters({ receiptWrites: afterDeniedEdit.receipts, auditWrites: afterDeniedEdit.audits });
+      bindObservedCase('ASSESS-002',deniedEditApi.actionId);
       authenticatedCases.push({
         testId: 'ASSESS-002', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -562,6 +673,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           : testId === 'SAFETY-002'
             ? ['server-error-command-not-committed', 'input-preserved-without-success']
             : ['timed-out-command-not-committed', 'input-preserved-without-success'];
+        bindObservedCase(testId,api.actionId);
         authenticatedCases.push({
           testId, status: 'passed', proofMode: 'actual-ui',
           observations: {
@@ -578,17 +690,40 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       };
 
       await runSafetyCase('SAFETY-001', 'NETWORK_OFFLINE', 0, async () => {
-        await page.route('**/functions/v1/process-command', route => route.abort('internetdisconnected'));
+        await page.route('**/functions/v1/process-command', async route => {
+          if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+          await route.abort('internetdisconnected');
+        });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
       await runSafetyCase('SAFETY-002', 'SERVICE_UNAVAILABLE', 500, async () => {
-        await page.route('**/functions/v1/process-command', route => route.fulfill({
-          status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
-        }));
+        await page.route('**/functions/v1/process-command', async route => {
+          if (!hostedAuthenticatedAcceptance) {
+            await route.fulfill({
+              status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+            });
+            return;
+          }
+          await startProductAction(route.request());
+          const requestBody = route.request().postDataJSON();
+          const authorization = await route.request().allHeaders();
+          await control('/control/arm-browser-fault', {
+            projectName,
+            persona: 'author',
+            kind: 'process_server_error_precommit',
+            commandType: requestBody.commandType ?? 'process.update',
+            requestBody,
+            accessToken: (authorization.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+          });
+          await route.continue();
+        });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
       await runSafetyCase('SAFETY-003', 'NETWORK_TIMEOUT', 0, async () => {
-        await page.route('**/functions/v1/process-command', route => route.abort('timedout'));
+        await page.route('**/functions/v1/process-command', async route => {
+          if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+          await route.abort('timedout');
+        });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
 
@@ -603,6 +738,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toHaveCount(0);
         const afterDisabled = await control<AssessV2Frame>('/control/assess-v2-frame', { projectName });
         expect(afterDisabled).toEqual(beforeDisabled);
+        bindObservedCase('ASSESS-020',disabledApi.actionId);
         authenticatedCases.push({
           testId: 'ASSESS-020', status: 'passed', proofMode: 'actual-ui',
           observations: {
@@ -654,6 +790,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('Assessed & Scored', { exact: true })).toBeVisible();
       const afterDiscovery = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterDiscovery.v1ReadyAssessments).toBe(beforeDiscovery.v1ReadyAssessments + 1);
+      bindObservedCase('ASSESS-003',actionReference(discoveryApi.request()));
       authenticatedCases.push({
         testId: 'ASSESS-003', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -689,6 +826,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
       const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterV2Create.cases).toBe(beforeV2Create.cases + 1);
+      bindObservedCase('ASSESS-018',createV2Api.actionId);
       authenticatedCases.push({
         testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -719,6 +857,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (authenticatedProductAcceptance && beforeV2Finalize) {
       const afterV2Finalize = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterV2Finalize.decisions).toBe(beforeV2Finalize.decisions + 1);
+      bindObservedCase('ASSESS-019',finalizeV2Api.actionId);
       authenticatedCases.push({
         testId: 'ASSESS-019', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -782,6 +921,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       expect(afterAssignmentLifecycle.assignments).toBe(beforeAssignmentLifecycle.assignments + 1);
       const measurements = lifecycleMeasurements(beforeAssignmentLifecycle,afterAssignmentLifecycle,
         beforeAssignmentLifecycle.assignments,afterAssignmentLifecycle.assignments);
+      bindObservedCase('GOVERN-001',assignmentApi.actionId);
       authenticatedCases.push({
         testId: 'GOVERN-001', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -795,6 +935,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           { id: 'assignment-visible', status: 'passed' },
         ] }, measurements, cleanup: { verified: true },
       });
+      bindObservedCase('E2E-004',assignmentApi.actionId,replayApi.actionId,staleApi.actionId);
       authenticatedCases.push({
         testId: 'E2E-004', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -826,6 +967,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     observe('govern-attest', 'ui.evidence-attested');
     if (authenticatedProductAcceptance && beforeAttestation && afterAttestation) {
       expect(afterAttestation.attestations).toBeGreaterThan(beforeAttestation.attestations);
+      bindObservedCase('GOVERN-002',firstAttestationApi[0].actionId);
       authenticatedCases.push({
         testId: 'GOVERN-002', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -860,6 +1002,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await expect(page.getByRole('button', { name: 'Start new draft revision', exact: true })).toBeVisible();
     if (authenticatedProductAcceptance && beforeChanges && afterChanges) {
       expect(afterChanges.changesRequested).toBe(beforeChanges.changesRequested + 1);
+      bindObservedCase('GOVERN-003',requestChangesApi.actionId);
       authenticatedCases.push({
         testId: 'GOVERN-003', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -902,6 +1045,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       expect(afterRework.decisions).toBe(beforeRework.decisions + 1);
       expect(afterRework.caseVersions).toBeGreaterThan(beforeRework.caseVersions);
       const measurements = lifecycleMeasurements(beforeRework,afterRework,beforeRework.decisions,afterRework.decisions);
+      bindObservedCase('GOVERN-004',reworkFinalizeApi.actionId);
       authenticatedCases.push({
         testId: 'GOVERN-004', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -941,6 +1085,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     observe('govern-approve', 'ui.independent-approved');
     if (authenticatedProductAcceptance) {
       expect(afterApproval.approvedReviews).toBe(beforeApproval.approvedReviews + 1);
+      bindObservedCase('GOVERN-005',approvalApi.actionId);
       authenticatedCases.push({
         testId: 'GOVERN-005', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -986,6 +1131,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (authenticatedProductAcceptance && beforeGovernBoundary) {
       const afterGovernBoundary = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterGovernBoundary.governResolutions).toBe(beforeGovernBoundary.governResolutions + 1);
+      bindObservedCase('GOVERN-007',governDenialApi.actionId,governResolutionApi.actionId);
       authenticatedCases.push({
         testId: 'GOVERN-007', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1034,6 +1180,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (authenticatedProductAcceptance && beforeStudioConsume) {
       const afterStudioConsume = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterStudioConsume.sourcePackages).toBe(beforeStudioConsume.sourcePackages + 1);
+      bindObservedCase('STUDIO-001',sourcePackageApi.actionId);
       authenticatedCases.push({
         testId: 'STUDIO-001', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1060,8 +1207,28 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await template.selectOption({ index: 1 });
     const beforeStudioGeneration = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-    const generationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
-      studioWorkspace.getByRole('button', { name: 'Generate governed package draft', exact: true }).click());
+    const hostedSuccessRoute = async (route: import('@playwright/test').Route) => {
+      await startProductAction(route.request());
+      const requestBody = route.request().postDataJSON();
+      const headers = await route.request().allHeaders();
+      await control('/control/arm-browser-fault', {
+        projectName,
+        persona: 'author',
+        kind: 'studio_deterministic_success',
+        commandType: requestBody.commandType ?? 'studio.document.generate',
+        requestBody,
+        accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+      });
+      await route.continue();
+    };
+    if (hostedAuthenticatedAcceptance) await page.route('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
+    let generationApi: ApiResponseObservation;
+    try {
+      generationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
+        studioWorkspace.getByRole('button', { name: 'Generate governed package draft', exact: true }).click());
+    } finally {
+      if (hostedAuthenticatedAcceptance) await page.unroute('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
+    }
     expect(generationApi.status).toBe(201);
     await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
     await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
@@ -1069,6 +1236,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (authenticatedProductAcceptance && beforeStudioGeneration) {
       const afterStudioGeneration = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterStudioGeneration.artifactVersions).toBe(beforeStudioGeneration.artifactVersions + 1);
+      bindObservedCase('STUDIO-002',generationApi.actionId);
       authenticatedCases.push({
         testId: 'STUDIO-002', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1108,11 +1276,34 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       observe('studio-artifact-approval', 'ui.studio-approved-exact-version');
 
       const beforeFailure = await control<StudioFailureFrame>('/control/studio-failure-frame', { projectName });
-      await control('/control/fail-next-studio-provider', { projectName });
+      const hostedFailureRoute = async (route: import('@playwright/test').Route) => {
+        await startProductAction(route.request());
+        const requestBody = route.request().postDataJSON();
+        const headers = await route.request().allHeaders();
+        await control('/control/arm-browser-fault', {
+          projectName,
+          persona: 'author',
+          kind: 'studio_failure_after_claim',
+          commandType: requestBody.commandType ?? 'studio.document.generate',
+          requestBody,
+          accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+        });
+        await route.continue();
+      };
+      if (hostedAuthenticatedAcceptance) {
+        await page.route('**/functions/v1/studio-artifact-command', hostedFailureRoute);
+      } else {
+        await control('/control/fail-next-studio-provider', { projectName });
+      }
       const template = page.getByLabel('Exact approved Studio template', { exact: true });
       if (!await template.inputValue()) await template.selectOption({ index: 1 });
-      const failedGenerationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
-        page.getByRole('button', { name: 'Generate governed package draft', exact: true }).click());
+      let failedGenerationApi: ApiResponseObservation;
+      try {
+        failedGenerationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
+          page.getByRole('button', { name: 'Generate governed package draft', exact: true }).click());
+      } finally {
+        if (hostedAuthenticatedAcceptance) await page.unroute('**/functions/v1/studio-artifact-command', hostedFailureRoute);
+      }
       expect(failedGenerationApi.status).toBe(200);
       await expect(page.getByRole('alert').getByText(
         /Generation attempt committed \(receipt .+\) and failed\. No artifact version was created\./u,
@@ -1131,6 +1322,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const after = measuredCounters({ domainWrites: afterFailure.versions,
         generationAttemptWrites: afterFailure.generationAttempts, receiptWrites: afterFailure.receipts,
         auditWrites: afterFailure.audits });
+      bindObservedCase('STUDIO-003',failedGenerationApi.actionId);
       authenticatedCases.push({
         testId: 'STUDIO-003', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1177,6 +1369,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(reviewWorkspace).toContainText('Rejected');
       const afterRejection = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName: rejectionProjectName });
       expect(afterRejection.rejectedReviews).toBe(beforeRejection.rejectedReviews + 1);
+      bindObservedCase('GOVERN-006',rejectionApi.actionId);
       authenticatedCases.push({
         testId: 'GOVERN-006', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1205,12 +1398,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         enterAs,
         clickProduct,
         selectProjectScope,
+        startTrackedRequest: hostedAuthenticatedAcceptance ? startProductAction : undefined,
       });
       const downstreamCases = result.cases.map(downstreamCaseToLocal);
       authenticatedCases.push(...downstreamCases);
       for (const item of result.observations) observe(`downstream-${item.caseId}`, item.assertionId);
       const deleteDenial = downstreamCases.find(item => item.testId === 'DELIVERY-004');
       if (!deleteDenial) throw new Error('AUTHENTICATED_E2E003_DENIAL_EVIDENCE_MISSING');
+      bindObservedCase('E2E-003',...caseActionReferences(deleteDenial));
       authenticatedCases.push({
         ...deleteDenial,
         testId: 'E2E-003',
@@ -1233,6 +1428,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const afterReworkJourney = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterReworkJourney.decisions).toBe(reworkJourneyBefore.decisions + 1);
       expect(result.finalFrame.lineage.complete).toBe(true);
+      bindObservedCase('E2E-002',...caseActionReferences(hitlPublication));
       authenticatedCases.push({
         testId: 'E2E-002', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1260,7 +1456,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     });
 
     test('production scoring preserves low-suitability and strong-automation decisions through governed publication', async ({ page }, testInfo) => {
-      const scenarioCases = await runAssessmentScenarioJourneys(page, testInfo.project.name);
+      const scenarioCases = await runAssessmentScenarioJourneys(page, testInfo.project.name,
+        hostedAuthenticatedAcceptance?startProductAction:undefined);
       authenticatedCases.push(...scenarioCases.map(scenarioCaseToLocal));
       for (const row of scenarioCases) for (const assertion of row.assertions) {
         observe(`scenario-${row.testId}`, assertion.id);
@@ -1274,6 +1471,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         clickProduct: (product: 'Assess' | 'Admin' | 'Enterprise Intelligence' | 'Studio') => clickProduct(page, product),
         prepareCase: <T,>(testId: string) => control<T>('/control/authenticated-controls/prepare', { testId }),
         readServerFrame: (testId: string) => control<Record<string, unknown>>('/control/authenticated-controls/frame', { testId }),
+        actionIdForRequest:actionReference,
       };
       const controlObservations = [
         ...await observeAuthenticatedAdminControls(deps),

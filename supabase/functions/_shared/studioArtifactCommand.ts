@@ -20,7 +20,15 @@ export type StudioArtifactAuthority = Readonly<{
   capabilities: readonly string[];
   roleNames?: readonly string[];
 }>;
-export type StudioArtifactAtomicCommand = StudioCommandEnvelope<JsonObject, StudioServerCommandType> & { actorId: string };
+export type StudioArtifactAtomicCommand = StudioCommandEnvelope<JsonObject, StudioServerCommandType> & {
+  actorId: string;
+  authenticatedSynthetic?: Readonly<{
+    permitId: string;
+    kind: 'studio_deterministic_success' | 'studio_failure_after_claim';
+    sessionId: string;
+    payloadHash: string;
+  }>;
+};
 export type StudioAtomicCommandResult = {
   outcome: 'committed' | 'replayed' | 'command_in_progress';
   receiptId: string;

@@ -317,4 +317,5 @@ export const legacyDeliveryBrowserFixtureSources = [
   'supabase/migrations/20261010025331_legacy_delivery_authority.sql',
   'supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql',
   'supabase/migrations/20261010051413_authenticated_process_update_authority.sql',
+  'supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql',
 ];

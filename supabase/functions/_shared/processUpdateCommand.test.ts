@@ -20,6 +20,7 @@ const exercise = async (overrides: Partial<ProcessUpdateDependencies>, expected:
   const dependencies: ProcessUpdateDependencies = {
     authenticate: overrides.authenticate ?? (async () => ({ id: actor })),
     authority: overrides.authority ?? (async () => context),
+    ...(overrides.consumePrecommitFault ? { consumePrecommitFault: overrides.consumePrecommitFault } : {}),
     atomic: async (actorId, command) => { atomic++; return (overrides.atomic ?? (async () => ({ ok: true, outcome: 'committed', resource })))(actorId,command); },
   };
   const response = await executeProcessUpdateRequest(request,envelope,dependencies);
@@ -33,6 +34,7 @@ const main = async () => {
   await exercise({ authenticate: async () => { throw new Error('no'); } },401,0);
   await exercise({ authority: async () => ({ ...context, capabilities: ['assess.read'] }) },403,0);
   await exercise({ authority: async () => ({ ...context, authorizationVersion: 8 }) },409,0);
+  assert.equal((await exercise({ consumePrecommitFault: async () => true },503,0)).error.code,'COMMAND_UNAVAILABLE');
   assert.equal((await exercise({ atomic: async () => ({ ok:false,error:{code:'VERSION_CONFLICT'} }) },409,1)).error.code,'VERSION_CONFLICT');
   assert.equal((await exercise({ atomic: async () => ({ ok:true,outcome:'committed',resource:{...resource,workspaceId:org} }) },503,1)).error.code,'COMMAND_UNAVAILABLE');
   console.log('process update command: positive and adversarial authority cases passed');

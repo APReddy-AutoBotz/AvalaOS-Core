@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Approved hosted acceptance completion (2026-10-10)
+
+PR #283 merged as `09cbec28a312e8ec5bf407f55537f8d9f98e83e3` with its tested tree unchanged. All 51 applicable candidate checks and post-merge Core CI `38055490353`, authenticated preparation `38055490351` and legacy Delivery authority `38055490362` passed. Independent preparation verifies 94 local UI case records, all five EI cases, cleanup and zero real-provider effects. The candidate report is **43 PASS / 0 FAIL / 65 BLOCKED**; historical stable 58 PASS / 50 BLOCKED remains separate and immutable.
+
+AP approved `docs/planning/hosted-acceptance-completion.md`: one complete real-session hosted runner, independently reconstructed server evidence, default-OFF provider-free normal Studio generation and two exact-request failure permits, with implementation and verified merge. Read-only inspection of the existing synthetic backend and pilot is included. Deployment, activation, hosted account/data/secret writes, acceptance execution, production and paid calls remain excluded. Inspection confirms the pilot serves the merged release while the synthetic backend lacks newer migrations/functions; this is a rollout prerequisite, not a hosted PASS. All 108 business requirements and the seven approved zero-write corrections remain unchanged. Focused source suites, application/Edge typechecks and catalog validation passed; exact-candidate database/browser CI remains planned verification. No new hosted execution has run.
+
 ## Authenticated acceptance integration (2026-10-10)
 
 PR #282 merged as `44323be96187798923b90ca4d6c68d1b18633b8f`, with its tested tree unchanged. All 48 applicable candidate checks and post-merge Core CI `38025488632` and Legacy Delivery Authority `38025488637` passed. Independent candidate evidence proves the original DELIVERY-007/008 cases and actual desktop/Pixel 7 task journeys. The repository-only catalog report is 42 PASS / 0 FAIL / 66 BLOCKED; the historical stable 58 PASS / 50 BLOCKED result remains immutable and is not combined across releases.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { requireAuthenticatedHostedBinding, validateAuthenticatedHostedProfile } from './authenticatedAcceptanceProfile.mjs';
+import { createHostedAcceptanceWorkflowRuntime, resolveHostedAcceptanceWorkflowPath } from './hostedAcceptanceReportProvenance.mjs';
 
 import { profileFixture } from './authenticatedAcceptanceTestFixtures.mjs';
 
@@ -25,12 +26,15 @@ test('fixture authentication, public profiles, foreign origins and unapproved ef
     p => { p.policy.providersEnabled = true; },
     p => { p.policy.paidCallsAllowed = true; },
     p => { delete p.policy.production; },
-    p => { p.workflow.event = 'pull_request'; },
-    p => { p.workflow.job = 'local-fixture'; },
+    p => { p.workflow.caller.event = 'pull_request'; },
+    p => { p.workflow.caller.job = 'local-fixture'; },
+    p => { p.workflow.producer.path = '.github/workflows/authenticated-product-acceptance.yml'; },
     p => { p.window.completedAt = p.window.startedAt; },
     p => { p.sessionToken = 'must-not-be-evidence'; },
     p => { p.actors.pop(); },
     p => { p.actors[0].actorHash = 'raw-actor'; },
+    p => { p.actors.find(actor => actor.persona === 'reviewer').actorHash = p.actors.find(actor => actor.persona === 'author').actorHash; },
+    p => { p.actors[1].sessionHash = p.actors[0].sessionHash; },
   ]) {
     const p = profileFixture(); change(p);
     assert.throws(() => validateAuthenticatedHostedProfile(p), /AUTHENTICATED_ACCEPTANCE_/);
@@ -48,5 +52,32 @@ test('valid-looking retry and release substitutions cannot reuse an earlier bind
   ]) {
     const actual = structuredClone(expected); change(actual);
     assert.throws(() => requireAuthenticatedHostedBinding(actual, expected), /BINDING_MISMATCH/);
+  }
+});
+
+test('canonical exhaustive producer preserves only the exact authenticated dispatch caller', () => {
+  const p = profileFixture();
+  const environment = {
+    GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: p.workflow.repository,
+    GITHUB_WORKFLOW_REF: p.workflow.caller.ref, GITHUB_EVENT_NAME: p.workflow.caller.event,
+    GITHUB_RUN_ID: p.workflow.runId, GITHUB_RUN_ATTEMPT: p.workflow.attempt,
+    GITHUB_SHA: p.releaseSha, RELEASE_SHA: p.releaseSha, GITHUB_JOB: p.workflow.caller.job,
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: p.executionKind,
+    ACCEPTANCE_WORKFLOW_PATH: p.workflow.producer.path,
+  };
+  const runtime = createHostedAcceptanceWorkflowRuntime({ environment,
+    workflowPath: p.workflow.producer.path, releaseSha: p.releaseSha });
+  assert.equal(runtime.workflowPath, '.github/workflows/exhaustive-acceptance.yml');
+  assert.equal(runtime.callerWorkflowPath, '.github/workflows/authenticated-product-acceptance.yml');
+  assert.equal(resolveHostedAcceptanceWorkflowPath({ environment,
+    allowedWorkflowPaths: ['.github/workflows/exhaustive-acceptance.yml'] }), '.github/workflows/exhaustive-acceptance.yml');
+  for (const change of [
+    e => { e.GITHUB_JOB = 'acceptance'; },
+    e => { e.GITHUB_EVENT_NAME = 'pull_request'; },
+    e => { e.GITHUB_WORKFLOW_REF = e.GITHUB_WORKFLOW_REF.replace('main', 'candidate'); },
+  ]) {
+    const invalid = { ...environment }; change(invalid);
+    assert.throws(() => createHostedAcceptanceWorkflowRuntime({ environment: invalid,
+      workflowPath: p.workflow.producer.path, releaseSha: p.releaseSha }), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/);
   }
 });

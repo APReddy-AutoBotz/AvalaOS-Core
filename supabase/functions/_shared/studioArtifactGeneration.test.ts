@@ -1,5 +1,5 @@
 import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
-import { executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
+import { buildAuthenticatedSyntheticStudioDraft, executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 import { composeStudioBrdSourceFacts, deriveStudioBrdSourceFacts } from './studioBrdSourceFacts.ts';
@@ -146,7 +146,7 @@ const decision = {
   mode: 'pilot', orgId: ids[4], workspaceId: ids[5], actorId: ids[6], correlationId: 'safe-correlation',
   evidenceRef: '', policyResult: 'allowed', model: 'governed-model', futureSecretLookupEligible: true,
   auditEvent: {},
-} as StudioExecutableGenerationClaim['providerPlan']['resolverDecision'];
+} as NonNullable<StudioExecutableGenerationClaim['providerPlan']>['resolverDecision'];
 const claim: StudioExecutableGenerationClaim = {
   claimKind: 'active',
   attemptId: ids[7], artifactId: ids[8], receiptId: ids[9], organizationId: ids[4], workspaceId: ids[5],
@@ -253,6 +253,47 @@ void (async () => {
     fail: async (_attemptId: string, code: string) => { events.push(`fail:${code}`); },
     runBudgeted: executedBudget,
   };
+  const deterministicDraft = buildAuthenticatedSyntheticStudioDraft('brd', [ids[0]], canonicalAnchors, tenantTemplatePayload);
+  mark(validateStudioDraft(deterministicDraft, [ids[0]], canonicalAnchors, tenantTemplatePayload) === deterministicDraft,
+    'STUDIO-002', 'generation.authenticated-synthetic-derived-only-from-server-material',
+    'fixed-provider-free-server-adapter');
+  const syntheticClaim: StudioExecutableGenerationClaim = {
+    ...claim,
+    authenticatedSynthetic: {
+      permitId: ids[14], kind: 'studio_deterministic_success', sessionId: ids[15],
+      payloadHash: hash('9'), expectedVersion: 0, artifactType: 'brd',
+    },
+  };
+  const syntheticEvents: string[] = []; let syntheticStaged: unknown;
+  const syntheticSuccess = await executeClaimedStudioGeneration(syntheticClaim, {
+    ...deps,
+    consumeSynthetic: async () => { syntheticEvents.push('consume'); return { kind: 'studio_deterministic_success' }; },
+    runProvider: async () => { throw new Error('provider forbidden'); },
+    runBudgeted: (async () => { throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+    stage: async input => { syntheticEvents.push('stage'); syntheticStaged = input.response; },
+    finalize: async () => { syntheticEvents.push('finalize'); return { state: 'completed', resource: { artifactId: ids[8], version: 1 } }; },
+  });
+  mark(syntheticSuccess.state === 'completed' && syntheticStaged !== undefined
+    && syntheticEvents.join(',') === 'consume,stage,finalize',
+  'STUDIO-002', 'generation.authenticated-synthetic-consumes-before-stage-with-zero-provider-budget',
+  'fixed-provider-free-server-adapter');
+  syntheticEvents.length = 0;
+  const syntheticFailure = await executeClaimedStudioGeneration({
+    ...syntheticClaim,
+    authenticatedSynthetic: { ...syntheticClaim.authenticatedSynthetic!, kind: 'studio_failure_after_claim' },
+  }, {
+    ...deps,
+    consumeSynthetic: async () => { syntheticEvents.push('consume'); return { kind: 'studio_failure_after_claim' }; },
+    runProvider: async () => { throw new Error('provider forbidden'); },
+    runBudgeted: (async () => { throw new Error('budget forbidden'); }) as unknown as typeof runBudgetedProviderEffect,
+    stage: async () => { throw new Error('stage forbidden'); },
+    finalize: async () => { throw new Error('finalize forbidden'); },
+    fail: async (_attemptId, code) => { syntheticEvents.push(`fail:${code}`); },
+  });
+  mark(syntheticFailure.state === 'failed'
+    && syntheticEvents.join(',') === 'consume,fail:PROVIDER_REQUEST_FAILED',
+  'STUDIO-003', 'generation.authenticated-synthetic-failure-consumed-after-claim-before-stage',
+  'one-shot-exact-bound-failure-permit');
   const invalidPromptClaims = [
     { ...claim, providerPlan: { ...claim.providerPlan, promptKey: undefined } },
     { ...claim, providerPlan: { ...claim.providerPlan, promptVersion: undefined } },
