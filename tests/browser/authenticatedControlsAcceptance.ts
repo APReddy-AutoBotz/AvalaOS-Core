@@ -15,6 +15,7 @@ export type ControlBrowserDeps = {
   clickProduct(product: 'Assess' | 'Admin' | 'Enterprise Intelligence' | 'Studio'): Promise<void>;
   prepareCase(testId: string): Promise<ControlCaseSetup>;
   readServerFrame(testId: string): Promise<Record<string, unknown>>;
+  actionIdForRequest?(request: Request): Promise<string | null>;
 };
 
 type Observation = {
@@ -24,13 +25,16 @@ type Observation = {
   assertions: string[];
   missingAssertions: string[];
   server?: Record<string, unknown>;
-  api?: { route: string; status: number };
+  api?: { route: string; status: number; actionId: Promise<string | null> };
 };
 
 const authenticatedApiBaseUrl = (() => {
   const value = process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '';
   const url = new URL(value);
-  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)) {
+  const hostedUrl = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true'
+    ? new URL(process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL ?? '') : null;
+  if (hostedUrl ? url.origin !== hostedUrl.origin
+    : (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname))) {
     throw new Error('AUTHENTICATED_CONTROLS_NON_LOOPBACK_API_REJECTED');
   }
   return url.toString().replace(/\/$/u, '');
@@ -53,7 +57,7 @@ const passed = async (
   deps: ControlBrowserDeps,
   testId: string,
   assertions: string[],
-  api?: { route: string; status: number },
+  api?: { route: string; status: number; actionId: Promise<string | null> },
 ): Promise<Observation> => ({
   testId,
   status: 'observed',
@@ -73,8 +77,11 @@ const observedResponse = async (
     page.waitForResponse(candidate => new URL(candidate.url()).pathname === route),
     action(),
   ]);
-  return { route, status: response.status() };
+  return { route, status: response.status(), actionId: depsActionId(page, response.request()) };
 };
+
+const requestTrackers = new WeakMap<Page, (request: Request) => Promise<string | null>>();
+const depsActionId = (page: Page, request: Request) => requestTrackers.get(page)?.(request) ?? Promise.resolve(null);
 
 const openAi = async (
   deps: ControlBrowserDeps,
@@ -106,7 +113,8 @@ const authenticatedPost = async (
   body: Record<string, unknown>,
 ) => {
   if (!authenticatedPostPaths.has(path)) throw new Error('AUTHENTICATED_CONTROLS_DIRECT_PATH_REJECTED');
-  return deps.page.evaluate(async ({ url, body: requestBody }) => {
+  const responsePromise=deps.page.waitForResponse(candidate=>new URL(candidate.url()).pathname===path);
+  const result=await deps.page.evaluate(async ({ url, body: requestBody }) => {
   const storageKey = Object.keys(localStorage).find(key => key.startsWith('sb-'));
   const session = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
   const response = await fetch(url, {
@@ -122,6 +130,8 @@ const authenticatedPost = async (
     body: await response.json().catch(() => null),
   };
   }, { url: `${authenticatedApiBaseUrl}${path}`, body });
+  const response=await responsePromise;
+  return {...result,actionId:depsActionId(deps.page,response.request())};
 };
 
 const adminListBody = (setup: ControlCaseSetup, authorizationVersion: number) => ({
@@ -135,6 +145,7 @@ const adminListBody = (setup: ControlCaseSetup, authorizationVersion: number) =>
 export async function observeAuthenticatedAdminControls(
   deps: ControlBrowserDeps,
 ): Promise<Observation[]> {
+  if(deps.actionIdForRequest)requestTrackers.set(deps.page,deps.actionIdForRequest);
   await deps.prepareCase('ADMIN-001');
   const adminAuthorityApi = await observedResponse(
     deps.page,
@@ -179,7 +190,7 @@ export async function observeAuthenticatedAdminControls(
   const nonAdminDenial = await passed(deps, 'ADMIN-002', [
     'non-admin-server-request-denied',
     'forged-navigation-grants-no-authority',
-  ], { route: '/functions/v1/synthetic-admin', status: denied.status });
+  ], { route: '/functions/v1/synthetic-admin', status: denied.status,actionId:denied.actionId });
 
   const forgedSetup = await deps.prepareCase('ADMIN-003');
   await deps.enterAs('non_admin');
@@ -204,7 +215,7 @@ export async function observeAuthenticatedAdminControls(
   const forgedClaimDenial = await passed(deps, 'ADMIN-003', [
     'server-capabilities-exact',
     'forged-client-capability-ineffective',
-  ], { route: '/functions/v1/synthetic-admin', status: forgedDenied.status });
+  ], { route: '/functions/v1/synthetic-admin', status: forgedDenied.status,actionId:forgedDenied.actionId });
 
   return [adminNavigation, nonAdminDenial, forgedClaimDenial, pilotOperations];
 }
@@ -296,7 +307,7 @@ export async function observeAuthenticatedAiControls(
   const capabilitySetup = await deps.prepareCase('AI-003');
   await deps.enterAs('non_admin');
   let deniedThroughVisibleControl = false;
-  let capabilityApi: { route: string; status: number } | undefined;
+  let capabilityApi: Observation['api'];
   const enterpriseEntry = deps.page.getByRole('button', {
     name: 'Enterprise Intelligence',
     exact: true,
@@ -336,6 +347,7 @@ export async function observeAuthenticatedAiControls(
     capabilityApi = {
       route: '/functions/v1/enterprise-provider-lifecycle',
       status: denied.status,
+      actionId:denied.actionId,
     };
   }
   observations.push(await passed(deps, 'AI-003', [
@@ -347,7 +359,7 @@ export async function observeAuthenticatedAiControls(
   opened = await openAi(deps);
   workspace = opened.workspace;
   const provider = workspace.getByRole('combobox', { name: 'Configured provider', exact: true });
-  let bindApi: { route: string; status: number } | undefined;
+  let bindApi: Observation['api'];
   if (await provider.locator('option').count() < 2) {
     observations.push(blocked('AI-004', 'synthetic provider UI precondition'));
   } else {
@@ -369,6 +381,7 @@ export async function observeAuthenticatedAiControls(
   }
 
   await deps.prepareCase('AI-006');
+  opened = await openAi(deps);
   await Promise.all(responseChecks);
   deps.page.off('request', onRequest);
   deps.page.off('response', onResponse);
@@ -383,7 +396,7 @@ export async function observeAuthenticatedAiControls(
     observations.push(await passed(deps, 'AI-006', [
       'browser-storage-and-traffic-secret-free',
       'provider-authority-server-only',
-    ], bindApi));
+    ], opened.api));
   }
   return observations;
 }
@@ -394,7 +407,7 @@ export async function observeAuthenticatedStudioDownloadDenial(
   const setup = await deps.prepareCase('STUDIO-007');
   await deps.enterAs('non_admin');
   let deniedThroughVisibleControl = false;
-  let downloadApi: { route: string; status: number } | undefined;
+  let downloadApi: Observation['api'];
   const studioEntry = deps.page.getByRole('button', { name: 'Studio', exact: true });
   if (await studioEntry.count() > 0) {
     await deps.clickProduct('Studio');
@@ -427,7 +440,7 @@ export async function observeAuthenticatedStudioDownloadDenial(
     });
     expect(denied.status).toBe(403);
     expect(denied.body?.error?.code).toBe('PERMISSION_DENIED');
-    downloadApi = { route: '/functions/v1/studio-artifact-download', status: denied.status };
+    downloadApi = { route: '/functions/v1/studio-artifact-download', status: denied.status,actionId:denied.actionId };
   }
   return passed(deps, 'STUDIO-007', [
     'private-broker-denies-before-storage',

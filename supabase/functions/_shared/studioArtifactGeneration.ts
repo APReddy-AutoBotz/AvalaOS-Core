@@ -15,6 +15,10 @@ import {
   deriveStudioBrdSourceFacts,
   StudioBrdSourceFactsError,
 } from './studioBrdSourceFacts.ts';
+import {
+  consumeAuthenticatedSyntheticStudioPermit,
+  type AuthenticatedSyntheticConsumedStudioPermit,
+} from './authenticatedSyntheticAuthority.ts';
 
 export const STUDIO_GENERATION_FAILURE_CODES = [
   'PROVIDER_GOVERNANCE_BLOCKED', 'PROVIDER_REQUEST_FAILED', 'PROVIDER_RATE_LIMITED',
@@ -63,11 +67,19 @@ export type StudioExecutableGenerationClaim = StudioGenerationExecutionIdentity 
   templateHead: number;
   expectedArtifactHead: number;
   manualBrief: string | null;
-  providerPlan: StudioProviderPlan;
+  providerPlan: StudioProviderPlan | null;
   maximumOutputTokens: number;
   timeoutMs: number;
   providerAllowed: boolean;
   reconcileOnly: boolean;
+  authenticatedSynthetic?: Readonly<{
+    permitId: string;
+    kind: 'studio_deterministic_success' | 'studio_failure_after_claim';
+    sessionId: string;
+    payloadHash: string;
+    expectedVersion: number;
+    artifactType: 'brd' | 'frd' | 'pdd';
+  }>;
 }>;
 
 export type StudioGenerationClaim = StudioExecutableGenerationClaim | StudioTerminalGenerationClaim;
@@ -97,6 +109,7 @@ export interface StudioGenerationDependencies {
   }): Promise<void>;
   finalize(input: StudioGenerationFinalizationInput): Promise<{ state: 'completed' | 'stale' | 'in_progress'; resource?: unknown }>;
   fail(attemptId: string, failureCode: StudioGenerationFailureCode): Promise<void>;
+  consumeSynthetic?(claim: StudioExecutableGenerationClaim): Promise<AuthenticatedSyntheticConsumedStudioPermit>;
   runBudgeted?: typeof runBudgetedProviderEffect;
   signal?: AbortSignal;
 }
@@ -209,6 +222,38 @@ export const validateStudioDraft = (
   return value;
 };
 
+/**
+ * Fixed provider-free adapter for the hosted authenticated exercise. Its only
+ * inputs are the normal server-loaded source anchors and approved template;
+ * neither the browser nor the privileged controller can supply draft content.
+ */
+export const buildAuthenticatedSyntheticStudioDraft = (
+  artifactType: string,
+  selectedSourceVersionIds: readonly string[],
+  sourceAnchors: readonly StudioCanonicalSourceAnchorDto[],
+  templatePayload: JsonObject,
+): JsonObject => {
+  const template = normalizeStudioArtifactTemplate(templatePayload);
+  const sections = template.sections.map((section, index) => ({
+    id: section.id,
+    title: section.title,
+    body: `Authenticated acceptance ${section.title.toLocaleLowerCase('en-US')} derived from authoritative server-selected sources.`,
+    sourceAnchors: index === 0 ? sourceAnchors.map(anchor => ({ ...anchor })) : [],
+    labels: index === 0 ? [] : [section.required ? 'template_required' : 'assumption'],
+  }));
+  return validateStudioDraft({
+    contractVersion: 'studio-artifact-2',
+    title: `${artifactType.toUpperCase()} authenticated acceptance artifact`,
+    summary: 'Deterministic provider-free output derived from authoritative server-loaded sources and the approved template.',
+    sections,
+    coverage: {
+      selectedSourceVersionIds: [...selectedSourceVersionIds],
+      coveredSourceVersionIds: [...selectedSourceVersionIds],
+      complete: true,
+    },
+  }, selectedSourceVersionIds, sourceAnchors, templatePayload);
+};
+
 const failureCode = (error: unknown): StudioGenerationFailureCode => {
   if (error instanceof StudioProviderGatewayError) {
     const map: Record<StudioProviderGatewayError['code'], StudioGenerationFailureCode> = {
@@ -224,7 +269,7 @@ const failureCode = (error: unknown): StudioGenerationFailureCode => {
   return 'PROVIDER_REQUEST_FAILED';
 };
 
-const budgetInput = (claim: StudioExecutableGenerationClaim): ProviderBudgetReservationInput => ({
+const budgetInput = (claim: StudioExecutableGenerationClaim & { providerPlan: StudioProviderPlan }): ProviderBudgetReservationInput => ({
   authority: {
     actorId: claim.actorId, organizationId: claim.organizationId, workspaceId: claim.workspaceId,
     authorizationVersion: claim.authorizationVersion,
@@ -306,6 +351,73 @@ export const executeClaimedStudioGeneration = async (
       if (reconciled.state === 'completed') return { state: 'completed', resource: reconciled.resource ?? {} };
       if (reconciled.state === 'stale') return { state: 'stale', resource: reconciled.resource };
       return { state: 'in_progress', resource: reconciled.resource };
+    }
+    if (claim.authenticatedSynthetic) {
+      let permit: AuthenticatedSyntheticConsumedStudioPermit;
+      try {
+        permit = await (deps.consumeSynthetic ?? (value => consumeAuthenticatedSyntheticStudioPermit({
+          permitId: value.authenticatedSynthetic!.permitId,
+          actorId: value.actorId,
+          organizationId: value.organizationId,
+          workspaceId: value.workspaceId,
+          sessionId: value.authenticatedSynthetic!.sessionId,
+          requestId: value.requestId,
+          payloadHash: value.authenticatedSynthetic!.payloadHash,
+          expectedVersion: value.authenticatedSynthetic!.expectedVersion,
+          attemptId: value.attemptId,
+          executionToken: value.executionToken,
+          executionFence: value.executionFence,
+        })))(claim);
+      } catch {
+        try { await deps.fail(claim.attemptId, 'PROVIDER_REQUEST_FAILED'); }
+        catch { return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' }; }
+        return { state: 'failed', failureCode: 'PROVIDER_REQUEST_FAILED' };
+      }
+      if (permit.kind === 'studio_failure_after_claim') {
+        try { await deps.fail(claim.attemptId, 'PROVIDER_REQUEST_FAILED'); }
+        catch { return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' }; }
+        return { state: 'failed', failureCode: 'PROVIDER_REQUEST_FAILED' };
+      }
+      let content: JsonObject;
+      try {
+        content = buildAuthenticatedSyntheticStudioDraft(
+          claim.authenticatedSynthetic.artifactType,
+          claim.selectedSourceVersionIds,
+          claim.sourceAnchors,
+          claim.templatePayload,
+        );
+      } catch {
+        try { await deps.fail(claim.attemptId, 'SOURCE_COVERAGE_INCOMPLETE'); }
+        catch { return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' }; }
+        return { state: 'failed', failureCode: 'SOURCE_COVERAGE_INCOMPLETE' };
+      }
+      // The one-shot permit is already consumed. From this point, preserve
+      // ambiguity for reconciliation rather than enabling another transport.
+      postEffectPhase = true;
+      await deps.stage({
+        attemptId: claim.attemptId,
+        executionToken: claim.executionToken,
+        executionFence: claim.executionFence,
+        providerOperationId: `authenticated-synthetic:${claim.authenticatedSynthetic.permitId}`,
+        response: content,
+      });
+      const finalized = await deps.finalize({
+        claimKind: 'active',
+        attemptId: claim.attemptId,
+        executionToken: claim.executionToken,
+        executionFence: claim.executionFence,
+        sourcePackageHead: claim.sourcePackageHead,
+        templateHead: claim.templateHead,
+        expectedArtifactHead: claim.expectedArtifactHead,
+      });
+      if (finalized.state === 'completed') return { state: 'completed', resource: finalized.resource ?? {} };
+      if (finalized.state === 'stale') return { state: 'stale', resource: finalized.resource };
+      return { state: 'in_progress', resource: finalized.resource };
+    }
+    if (!claim.providerPlan) {
+      try { await deps.fail(claim.attemptId, 'PROVIDER_GOVERNANCE_BLOCKED'); }
+      catch { return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' }; }
+      return { state: 'failed', failureCode: 'PROVIDER_GOVERNANCE_BLOCKED' };
     }
     let sourceFacts: ReturnType<typeof deriveStudioBrdSourceFacts> = null;
     if (claim.providerPlan.promptVersion === 'studio-pr-b-3') {

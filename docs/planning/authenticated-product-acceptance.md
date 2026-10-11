@@ -1,5 +1,11 @@
 # Authenticated product acceptance integration
 
+## Verified completion and approved successor (2026-10-10)
+
+This preparation boundary merged as PR #283, `09cbec28a312e8ec5bf407f55537f8d9f98e83e3`, with its tested tree unchanged. All 51 applicable candidate checks and post-merge Core/authenticated/Delivery workflows passed. Independently verified post-merge artifacts prove 94 local UI case records, five EI cases, cleanup and zero real-provider effects. These executed results supersede candidate-pending statements below without rewriting the historical artifacts. The same-tree repository report is 43 PASS / 65 BLOCKED; no new hosted PASS follows.
+
+AP subsequently approved `hosted-acceptance-completion.md` for the complete real-session hosted runner and read-only target inspection. That plan explicitly supersedes this document's hosted-inspection prohibition and local-only fault rule solely for service-controlled, exact-request Studio after-claim and process precommit failure permits. Hosted deployment, activation, writes, execution, production and paid effects remain excluded. All other business and authority boundaries remain in force.
+
 ## Outcome and authority
 
 Complete repository preparation for the remaining original acceptance requirements in one implementation PR: actual Assess → Govern → approved Studio → published legacy Docs → Delivery → read-only Monitor, plus failure recovery, private download, Admin, AI boundary and Enterprise Intelligence tenant isolation. Preserve all 108 case identities and original business semantics. AP approved the full consolidated plan, including the separate authenticated profile and the seven explicit read-only corrections. Repository implementation and verified merge are authorized; hosted inspection, installation, activation, execution, production and additional paid effects are not.

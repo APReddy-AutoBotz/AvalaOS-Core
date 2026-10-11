@@ -1,95 +1,141 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import { profileFixture, manifestFixture } from './authenticatedAcceptanceTestFixtures.mjs';
-import { AUTHENTICATED_ACCEPTANCE_PROJECTS, AUTHENTICATED_ACCEPTANCE_TEST_IDS, AUTHENTICATED_CASE_ASSERTIONS, authenticatedAcceptanceScenario } from './authenticatedAcceptanceCases.mjs';
+import { profileFixture, manifestFixture, rawHostedFixtures } from './authenticatedAcceptanceTestFixtures.mjs';
+import { AUTHENTICATED_ACCEPTANCE_TEST_IDS } from './authenticatedAcceptanceCases.mjs';
 import { validateAuthenticatedAcceptanceManifest, evaluateAuthenticatedAcceptanceCase } from './authenticatedAcceptanceEvidence.mjs';
+import { produceAuthenticatedHostedEvidence } from './authenticatedHostedEvidence.mjs';
 import { validateAuthenticatedCatalogRevision } from './authenticatedAcceptanceCriteria.mjs';
 
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
-const digest = value => `sha256:${value.repeat(64)}`;
 const evaluate = (manifest, testId, expected = profileFixture()) => evaluateAuthenticatedAcceptanceCase({
-  testCase: catalog.cases.find(c => c.testId === testId), manifest, expected, catalog,
+  testCase: catalog.cases.find(item => item.testId === testId), manifest, expected, catalog,
 });
 
-test('approved catalog changes are precisely bounded and preserve the synthetic privileged write', () => {
+test('approved catalog changes remain bounded and all 47 cases require both projects', () => {
   assert.deepEqual(validateAuthenticatedCatalogRevision(catalog), []);
   assert.equal(AUTHENTICATED_ACCEPTANCE_TEST_IDS.length, 47);
-  for (const change of [
-    c => { c.cases.find(x => x.testId === 'MONITOR-002').expectedMutationCount = 1; },
-    c => { c.cases.find(x => x.testId === 'AI-004').expectedMutationCount = 0; },
-    c => { c.criteriaChanges.readOnlyChanges.pop(); },
-    c => { c.cases.find(x => x.testId === 'ASSESS-018').environment = 'hosted_sandbox'; },
-  ]) { const c = structuredClone(catalog); change(c); assert.ok(validateAuthenticatedCatalogRevision(c).length); }
-});
-
-test('each of 47 cases requires its business assertions and both authenticated browser projects', () => {
   const manifest = manifestFixture();
   assert.deepEqual(validateAuthenticatedAcceptanceManifest(manifest, profileFixture(), catalog), []);
   for (const id of AUTHENTICATED_ACCEPTANCE_TEST_IDS) assert.equal(evaluate(manifest, id).status, 'PASS');
-  manifest.cases = manifest.cases.filter(r => !(r.testId === 'E2E-001' && r.project === 'pixel-7-chromium'));
-  assert.equal(evaluate(manifest, 'E2E-001').status, 'BLOCKED');
-  assert.equal(evaluate(manifest, 'DELIVERY-001').status, 'PASS');
-  manifest.cases[0].assertions.pop();
-  assert.ok(validateAuthenticatedAcceptanceManifest(manifest, profileFixture(), catalog).some(e => e.includes('business-assertions')));
+  const partial = structuredClone(manifest);
+  partial.browserCorrelations.cases = partial.browserCorrelations.cases
+    .filter(row => !(row.testId === 'E2E-001' && row.project === 'pixel-7-chromium'));
+  assert.equal(evaluate(partial, 'E2E-001').status, 'BLOCKED');
 });
 
-test('local auth, altered actors, duplicates, stale run, cleanup failure and provider effects cannot pass', () => {
+test('raw frames, rather than supplied counts or authority booleans, determine mutation evidence', () => {
+  const manifest = manifestFixture();
+  const forged = structuredClone(manifest);
+  forged.cases.find(row => row.testId === 'DELIVERY-001').measurements.logicalMutations = 0;
+  assert.equal(evaluate(forged, 'DELIVERY-001').status, 'BLOCKED');
+  const v1 = { schemaVersion: 'authenticated-acceptance-evidence-v1', binding: profileFixture(), cases: [],
+    preflight: { authorityVerified: true }, cleanup: { scopedResidue: 0 } };
+  assert.equal(evaluate(v1, 'DELIVERY-001').status, 'BLOCKED');
+});
+
+test('missing frames, mismatched hashes, stale sources and actor/session collapse fail closed', () => {
   for (const change of [
-    m => { m.binding.authKind = 'fixture_transport'; },
-    m => { m.cases[0].auth.actorHash = digest('9'); },
-    m => { m.cases[0].auth.sessionHash = digest('9'); },
-    m => { m.cases.push(structuredClone(m.cases[0])); },
-    m => { m.binding.workflow.attempt = '2'; },
-    m => { m.cleanup.sessionsRevoked = false; },
-    m => { m.cleanup.retainedHistoryPreserved = false; },
-    m => { m.cases[0].measurements.providerCalls = 1; },
-    m => { m.cases[0].ui.secretExposure = true; },
-    m => { m.cases[0].observedAt = '2026-10-10T06:00:00.000Z'; },
-    m => { m.cases[0].accessToken = 'forbidden'; },
+    raw => { raw.serverObservations.cases.pop(); },
+    raw => { raw.browserCorrelations.identity.workflowAttempt = '2'; },
+    raw => { raw.serverObservations.identity.sourceDigest = raw.binding.baselineDigest; },
+    raw => { raw.serverObservations.cases[0].participants[0].sessionHash = raw.binding.actors[1].sessionHash; },
+    raw => { raw.serverObservations.cases.find(row => row.testId === 'DELIVERY-001').after.records[0].commandBindingHash = raw.binding.sourceDigest; },
+    raw => { raw.serverObservations.cases.find(row => row.testId === 'DELIVERY-001').after.records[0].source = 'forged_domain_rows'; },
+    raw => { raw.serverObservations.cases.find(row => row.testId === 'DELIVERY-001').after.records[0].source = 'privileged_audit_events'; },
+    raw => { raw.browserCorrelations.cases[0].assertions[0].actual = 'Bearer raw-secret-value'; },
   ]) {
-    const m = manifestFixture(); change(m);
-    assert.ok(validateAuthenticatedAcceptanceManifest(m, profileFixture(), catalog).length);
-    assert.equal(evaluate(m, 'ASSESS-002').status, 'BLOCKED');
+    const raw = rawHostedFixtures(); change(raw);
+    assert.throws(() => produceAuthenticatedHostedEvidence({ ...raw, catalog }));
+  }
+  const collapsed = profileFixture();
+  collapsed.actors.find(actor => actor.persona === 'reviewer').actorHash = collapsed.actors.find(actor => actor.persona === 'author').actorHash;
+  assert.throws(() => produceAuthenticatedHostedEvidence({ binding: collapsed,
+    browserCorrelations: rawHostedFixtures().browserCorrelations, serverObservations: rawHostedFixtures().serverObservations, catalog }));
+});
+
+test('request, receipt, audit and observation windows are independently correlated', () => {
+  for (const change of [
+    raw => { raw.serverObservations.cases.find(row => row.testId === 'AI-004').after.records
+      .find(row => row.effectKind === 'receipt').receiptIdHash = raw.binding.sourceDigest; },
+    raw => { raw.browserCorrelations.cases.find(row => row.testId === 'DELIVERY-001').actions[0].requestIdHash = raw.binding.sourceDigest; },
+    raw => { raw.browserCorrelations.cases.find(row => row.testId === 'STUDIO-003').actions[0].browserPayloadHash = raw.binding.sourceDigest; },
+    raw => { raw.serverObservations.cases.find(row => row.testId === 'DELIVERY-001').after.records
+      .find(row => row.effectKind === 'domain').occurredAt = '2026-10-10T05:20:00.000Z'; },
+    raw => { raw.serverObservations.cases.find(row => row.testId === 'STUDIO-003').after.records
+      .find(row => row.effectKind === 'audit').auditIdHash = null; },
+  ]) {
+    const raw = rawHostedFixtures(); change(raw);
+    assert.throws(() => produceAuthenticatedHostedEvidence({ ...raw, catalog }));
   }
 });
 
-test('read-only cases reject manufactured writes and outcome claims without measured UI observations', () => {
+test('generation failure requires one concurrency-only aggregate write and replay receipts may preexist', () => {
+  const valid = manifestFixture();
+  assert.equal(valid.cases.find(row => row.testId === 'STUDIO-003').measurements.concurrencyWrites, 1);
   for (const change of [
-    row => { row.measurements.auditWrites = 1; },
-    row => { row.measurements.afterHash = digest('f'); },
-    row => { row.measurements.setupExcluded = false; },
-    row => { row.ui.resultObserved = false; },
-    row => { row.lineage.chainDigest = 'generic-fallback'; },
-    row => { row.assertions[0].status = 'BLOCKED'; },
+    raw => {
+      const observation = raw.serverObservations.cases.find(row => row.testId === 'STUDIO-003');
+      observation.before.records = observation.before.records.filter(row => row.source !== 'studio_artifact_aggregates');
+      observation.after.records = observation.after.records.filter(row => row.source !== 'studio_artifact_aggregates');
+    },
+    raw => {
+      const aggregate = raw.serverObservations.cases.find(row => row.testId === 'STUDIO-003').after.records
+        .find(row => row.source === 'studio_artifact_aggregates');
+      aggregate.businessRowHash = raw.binding.sourceDigest;
+    },
   ]) {
-    const m = manifestFixture(); change(m.cases.find(r => r.testId === 'MONITOR-002'));
-    assert.equal(evaluate(m, 'MONITOR-002').status, 'BLOCKED');
+    const raw = rawHostedFixtures(); change(raw);
+    assert.throws(() => produceAuthenticatedHostedEvidence({ ...raw, catalog }));
+  }
+
+  const replay = rawHostedFixtures();
+  const delivery = replay.serverObservations.cases.find(row => row.testId === 'DELIVERY-001');
+  const receipt = delivery.after.records.find(row => row.effectKind === 'receipt');
+  receipt.occurredAt = '2026-10-10T05:09:50.000Z';
+  delivery.before.records.push(structuredClone(receipt));
+  const manifest = produceAuthenticatedHostedEvidence({ ...replay, catalog });
+  assert.equal(manifest.cases.find(row => row.testId === 'DELIVERY-001').status, 'PASS');
+});
+
+test('unchanged multi-actor history does not become the current case participant', () => {
+  const raw = rawHostedFixtures();
+  const browser = raw.browserCorrelations.cases.find(row => row.testId === 'ADMIN-002' && row.project === 'desktop-chromium');
+  const server = raw.serverObservations.cases.find(row => row.testId === 'ADMIN-002' && row.project === 'desktop-chromium');
+  const outsider = raw.binding.actors.find(actor => actor.project === 'desktop-chromium' && actor.persona === 'outsider');
+  const historical = structuredClone(raw.serverObservations.cases
+    .find(row => row.testId === 'DELIVERY-001' && row.project === 'desktop-chromium').after.records
+    .find(row => row.effectKind === 'domain'));
+  historical.occurredAt = '2026-10-10T05:09:50.000Z';
+  const participant = { persona: outsider.persona, actorHash: outsider.actorHash, sessionHash: outsider.sessionHash };
+  browser.participants = [participant]; server.participants = [participant];
+  browser.actions[0].actorHash = outsider.actorHash; browser.actions[0].sessionHash = outsider.sessionHash;
+  server.before.records.push(structuredClone(historical));
+  server.after.records.push(structuredClone(historical));
+  const manifest = produceAuthenticatedHostedEvidence({ ...raw, catalog });
+  assert.equal(manifest.cases.find(row => row.testId === 'ADMIN-002'
+    && row.project === 'desktop-chromium').status, 'PASS');
+});
+
+test('cleanup distinguishes retained immutable history from active transient residue', () => {
+  const valid = manifestFixture();
+  assert.equal(valid.cleanup.activeTransientResidue, 0);
+  assert.ok(valid.cleanup.retainedImmutableHistory > 0);
+  for (const change of [
+    raw => { raw.serverObservations.cleanup.resources[0].status = 'active'; },
+    raw => { raw.serverObservations.cleanup.resources = raw.serverObservations.cleanup.resources
+      .filter(resource => resource.classification !== 'retained_immutable'); },
+    raw => { raw.serverObservations.cleanup.nonExerciseStateAfterHash = raw.binding.sourceDigest; },
+  ]) {
+    const raw = rawHostedFixtures(); change(raw);
+    assert.throws(() => produceAuthenticatedHostedEvidence({ ...raw, catalog }));
   }
 });
 
-test('failed generation preserves the artifact and exposes its exact operational journal', () => {
-  for (const change of [
-    row => { row.measurements.generationAttemptWrites = 0; },
-    row => { row.measurements.receiptWrites = 0; },
-    row => { row.measurements.auditWrites = 0; },
-    row => { row.measurements.domainWrites = 1; },
-    row => { row.measurements.afterHash = digest('f'); },
-  ]) {
-    const m = manifestFixture(); change(m.cases.find(r => r.testId === 'STUDIO-003'));
-    assert.equal(evaluate(m, 'STUDIO-003').status, 'BLOCKED');
-  }
-  const m = manifestFixture();
-  m.cases.find(r => r.testId === 'ADMIN-004').measurements.generationAttemptWrites = 1;
-  assert.equal(evaluate(m, 'ADMIN-004').status, 'BLOCKED');
-});
-
-test('AI configuration needs its exact write, receipt and audit; real assertion failure remains FAIL', () => {
-  const m = manifestFixture(); m.cases.find(r => r.testId === 'AI-004').measurements.auditWrites = 0;
-  assert.equal(evaluate(m, 'AI-004').status, 'BLOCKED');
-  const failed = manifestFixture(); const row = failed.cases.find(r => r.testId === 'DELIVERY-001');
-  row.status = 'FAIL'; row.failureCode = 'assertion_failed'; row.assertions[0].status = 'FAIL';
-  assert.equal(evaluate(failed, 'DELIVERY-001').status, 'FAIL');
-  assert.equal(evaluateAuthenticatedAcceptanceCase({ testCase: catalog.cases.find(c => c.testId === 'DELIVERY-001'),
-    manifest: { schemaVersion: 'local-authenticated-lifecycle-v1' }, expected: null, catalog }).status, 'BLOCKED');
+test('assertion failures remain FAIL after valid reconstruction', () => {
+  const raw = rawHostedFixtures();
+  const row = raw.browserCorrelations.cases.find(item => item.testId === 'DELIVERY-001');
+  row.assertions[0].actual = false;
+  const manifest = produceAuthenticatedHostedEvidence({ ...raw, catalog });
+  assert.equal(evaluate(manifest, 'DELIVERY-001').status, 'FAIL');
 });

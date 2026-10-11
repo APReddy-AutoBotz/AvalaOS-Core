@@ -3,6 +3,7 @@ import { getAuthUser, supabaseEnv } from './supabase.ts';
 import { resolveTenantAuthority, TenantAuthorityError } from './tenantAuthority.ts';
 import { createTenantAuthorityDatabase } from './tenantAuthorityDb.ts';
 import type { ProcessUpdateDependencies } from './processUpdateCommand.ts';
+import { consumeAuthenticatedSyntheticProcessFault } from './authenticatedSyntheticAuthority.ts';
 
 const MAX_RESPONSE_BYTES = 32768;
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -64,5 +65,9 @@ export const processUpdateDependencies: ProcessUpdateDependencies = {
     try { return await resolveTenantAuthority(actorId, { organizationId: envelope.organizationId, workspaceId: envelope.workspaceId }, createTenantAuthorityDatabase(request)); }
     catch (error) { if (error instanceof TenantAuthorityError && error.code === 'TENANT_ACCESS_DENIED') return null; throw error; }
   },
+  consumePrecommitFault: (request, body, actorId, envelope) => consumeAuthenticatedSyntheticProcessFault({
+    request, body, actorId, organizationId: envelope.organizationId, workspaceId: envelope.workspaceId,
+    commandType: 'process.update', requestId: envelope.requestId, expectedVersion: envelope.expectedVersion,
+  }),
   atomic: (actorId, envelope) => updateProcessAtomicRpcAdapter({ ...supabaseEnv(), fetcher: fetch })(actorId, envelope),
 };

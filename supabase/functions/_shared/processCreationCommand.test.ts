@@ -20,6 +20,7 @@ const exercise = async (overrides: Partial<ProcessCreationDependencies>, expecte
   const dependencies: ProcessCreationDependencies = {
     authenticate: overrides.authenticate ?? (async () => ({ id: actor })),
     authority: overrides.authority ?? (async () => context),
+    ...(overrides.consumePrecommitFault ? { consumePrecommitFault: overrides.consumePrecommitFault } : {}),
     atomic: async (actorId, command) => { atomic++; return atomicHandler(actorId, command); },
   };
   const response = await handleProcessCreationRequest(request(envelope), dependencies);
@@ -35,6 +36,7 @@ assert.equal((await exercise({ authority: async () => ({ ...context, organizatio
 assert.equal((await exercise({ authority: async () => ({ ...context, authorizationVersion: 8 }) }, 409, 0)).error.code, 'AUTHORITY_STALE');
 assert.equal((await exercise({ authority: async () => ({ ...context, capabilities: ['assess.read'] }) }, 403, 0)).error.code, 'PERMISSION_DENIED');
 assert.equal((await exercise({ authority: async () => ({ ...context, capabilities: ['assess.process.create'] }) }, 403, 0)).error.code, 'PERMISSION_DENIED');
+assert.equal((await exercise({ consumePrecommitFault: async () => true }, 503, 0)).error.code, 'COMMAND_UNAVAILABLE');
 assert.equal((await exercise({ atomic: async () => ({ ok: true, outcome: 'committed', resource: { ...resource, ownerId: org } }) }, 503, 1)).error.code, 'COMMAND_UNAVAILABLE');
 assert.equal((await exercise({ atomic: async () => ({ ok: false, error: { code: 'FEATURE_DISABLED' } }) }, 503, 1)).error.code, 'FEATURE_DISABLED');
 let called = false;

@@ -182,6 +182,37 @@ void (async () => {
   mark(ok.status === 201 && effects === 1 && authorityLoads === 2
     && ok.headers.get('Access-Control-Allow-Origin') === '*', 'IDEMP-001', 'handler-authority-before-effect-and-disclosure', 'new-generation-receipt');
 
+  const syntheticOrder: string[] = [];
+  const synthetic = await handleStudioArtifactCommand(requestFor(), {
+    ...deps,
+    loadFreshAuthority: async () => {
+      syntheticOrder.push('authority');
+      return { actorId: ids[11], authorizationVersion: 3, capabilities: ['studio.artifacts.generate'] };
+    },
+    resolveAuthenticatedSyntheticTransport: async () => {
+      syntheticOrder.push('resolve');
+      return { permitId: ids[2], kind: 'studio_deterministic_success', sessionId: ids[3], payloadHash: 'a'.repeat(64) };
+    },
+    executeAtomicCommand: async command => {
+      syntheticOrder.push('atomic');
+      if (command.authenticatedSynthetic?.permitId !== ids[2]) throw new Error('synthetic binding missing');
+      return committed;
+    },
+  });
+  let deniedSyntheticResolutions = 0;
+  const deniedSynthetic = await handleStudioArtifactCommand(requestFor(), {
+    ...deps,
+    loadFreshAuthority: async () => ({ actorId: ids[11], authorizationVersion: 3, capabilities: [] }),
+    resolveAuthenticatedSyntheticTransport: async () => {
+      deniedSyntheticResolutions += 1;
+      return null;
+    },
+  });
+  mark(synthetic.status === 201 && syntheticOrder.join(',') === 'authority,resolve,atomic,authority'
+    && deniedSynthetic.status === 403 && deniedSyntheticResolutions === 0,
+  'STUDIO-002', 'handler.synthetic-resolver-runs-after-fresh-authority-before-atomic',
+  'authenticated-one-shot-transport-selection');
+
   const methodDenied = await handleStudioArtifactCommand(new Request('https://local/studio', { method: 'GET' }), deps);
   const authDenied = await handleStudioArtifactCommand(requestFor(), {
     ...deps, authenticate: async () => { throw new Error('synthetic auth failure'); },

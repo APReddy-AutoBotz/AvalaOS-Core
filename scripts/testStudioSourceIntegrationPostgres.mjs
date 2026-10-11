@@ -24,7 +24,7 @@ const syntheticStudioFixtureMigrationName = '20260926053818_pr_c_synthetic_studi
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 const featureMigrationIndex = migrations.indexOf(migrationName);
 assert.ok(featureMigrationIndex > 0);
-assert.equal(approvedFullChainTip(migrations), '20261010051413');
+assert.equal(approvedFullChainTip(migrations), '20261010144356');
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -160,10 +160,10 @@ try {
     WHERE org_id=$1 AND workspace_id=$2`, [fixture.org, fixture.workspace])).studio_source_integration_enabled, false);
 
   const identity = await one(db, `SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`);
-  assert.equal(identity.migration_tip, '20261010051413');
+  assert.equal(identity.migration_tip, '20261010144356');
   const identityConstraint = await one(db, `SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
     WHERE conrelid='public.hosted_pilot_environment_identity'::regclass AND conname='hosted_pilot_environment_identity_migration_tip_check'`);
-  assert.equal(identityConstraint.expression, "(migration_tip = '20261010051413'::text)");
+  assert.equal(identityConstraint.expression, "(migration_tip = '20261010144356'::text)");
   const role = fixed(331);
   const orgRole = fixed(332);
   const packageActor = fixed(333);

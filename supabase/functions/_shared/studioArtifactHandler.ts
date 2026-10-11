@@ -17,6 +17,9 @@ export interface StudioArtifactCommandDependencies {
     request: Request; actorId: string; organizationId: string; workspaceId: string;
   }): Promise<StudioArtifactAuthority | null>;
   executeAtomicCommand(command: StudioArtifactAtomicCommand): Promise<StudioAtomicCommandResult>;
+  resolveAuthenticatedSyntheticTransport?(input: {
+    request: Request; body: unknown; command: StudioArtifactAtomicCommand;
+  }): Promise<StudioArtifactAtomicCommand['authenticatedSynthetic'] | null>;
   executeClaimedGeneration?(claim: JsonObject): Promise<
     | { state: 'completed'; resource: unknown }
     | { state: 'failed'; failureCode: string }
@@ -69,7 +72,11 @@ export const handleStudioArtifactCommand = async (
     };
     assertAuthority(await deps.loadFreshAuthority(authorityInput), actor.id, capability, envelope.authorizationVersion);
 
-    const command: StudioArtifactAtomicCommand = { ...envelope, actorId: actor.id };
+    let command: StudioArtifactAtomicCommand = { ...envelope, actorId: actor.id };
+    if (deps.resolveAuthenticatedSyntheticTransport && command.commandType === 'studio.generation.request') {
+      const authenticatedSynthetic = await deps.resolveAuthenticatedSyntheticTransport({ request, body, command });
+      if (authenticatedSynthetic) command = { ...command, authenticatedSynthetic };
+    }
     const result = await deps.executeAtomicCommand(command);
     let status = result.outcome === 'replayed' ? 200 : result.outcome === 'command_in_progress' ? 409 : 201;
     let payload: Record<string, unknown> = publicResult(result);

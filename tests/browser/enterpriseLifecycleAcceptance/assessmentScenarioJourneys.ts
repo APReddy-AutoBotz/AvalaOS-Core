@@ -17,6 +17,7 @@ import {
   type AuthenticatedLifecycleSetup,
 } from '../authenticatedLifecycleHarness';
 import type { StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
+import { authenticatedHostedActionIds } from '../authenticatedLifecycleHarness';
 
 type ScenarioCaseId = 'E2E-005' | 'E2E-006';
 const ASSERTIONS: Record<ScenarioCaseId, readonly string[]> = {
@@ -78,7 +79,7 @@ export type AssessmentScenarioCaseResult = Readonly<{
 }>;
 
 const expectDigest = (value: string) => expect(value).toMatch(/^sha256:[a-f0-9]{64}$/u);
-type ObservedProductionResponse = Readonly<{ route: string; status: number }>;
+type ObservedProductionResponse = Readonly<{ route: string; status: number; actionId?: Promise<string | null> }>;
 type StudioArtifactCommandType =
   | 'studio.artifact.review.submit'
   | 'studio.artifact.review.assign'
@@ -104,7 +105,9 @@ const measuredResponses = (log: readonly ObservedProductionResponse[], start: nu
   for (const route of routes) {
     expect(observed.some(item => item.route === route), `No actual response was observed for ${route}`).toBe(true);
   }
-  return observed.map(item => `${item.status} ${item.route}`);
+  const result=observed.map(item => `${item.status} ${item.route}`);
+  Object.defineProperty(result,authenticatedHostedActionIds,{value:observed.map(item=>item.actionId??Promise.resolve(null))});
+  return result;
 };
 const chooseScale = async (page: Page, label: string, value = 4) => {
   const field = page.getByText(label, { exact: true }).locator('..');
@@ -269,6 +272,7 @@ const runScenario = async (
   await item.getByLabel('Description', { exact: true }).fill('Human-authored downstream work bound to the exact finalized scenario decision.');
   await item.getByLabel('Acceptance criteria · one per line', { exact: true }).fill('The exact scenario policy and lineage remain preserved.');
   const before = await control<StudioDeliveryDownstreamFrame>('/control/downstream-frame', { projectName });
+  const publicationResponseStart = productionResponses.length;
   await publisher.getByTestId('publish-approved-studio-artifact').click();
   await expect(publisher.getByRole('status')).toContainText('Published 1 approved work item');
   const after = await control<StudioDeliveryDownstreamFrame>('/control/downstream-frame', { projectName });
@@ -276,7 +280,9 @@ const runScenario = async (
   expect(after.publication?.projectId).toBe(setup.deliveryProject.id);
   const decisionAfter = await control<ScenarioDecision>('/control/scenario-decision', { projectName });
   expect(decisionAfter).toEqual(decisionBefore);
-  return {
+  const publicationResponses = measuredResponses(productionResponses, publicationResponseStart,
+    ['/functions/v1/studio-delivery-authority-command']);
+  const result: AssessmentScenarioCaseResult = {
     testId, assertions: ASSERTIONS[testId].map(id => ({ id, status: 'passed' as const })),
     observations: {
       browser: { actions: ['Completed deterministic scenario facts', 'Finalized and independently approved the decision',
@@ -291,13 +297,18 @@ const runScenario = async (
     measurements: { setupExcluded: true, before, after, delta: countDelta(before, after), stateBeforeHash: before.writeFingerprint,
       stateAfterHash: after.writeFingerprint, targetBeforeHash: decisionBefore.targetHash, targetAfterHash: decisionAfter.targetHash },
   };
+  Object.defineProperty(result,authenticatedHostedActionIds,{value:
+    (publicationResponses as unknown as Record<symbol,Promise<string|null>[]>)[authenticatedHostedActionIds]??[]});
+  return result;
 };
 
-export const runAssessmentScenarioJourneys = async (page: Page, project: string) => {
+export const runAssessmentScenarioJourneys = async (page: Page, project: string,
+  startTrackedRequest?: (request: import('@playwright/test').Request)=>Promise<string|null>) => {
   const productionResponses: ObservedProductionResponse[] = [];
   page.on('response', response => {
     const route = new URL(response.url()).pathname;
-    if (route.startsWith('/functions/v1/')) productionResponses.push({ route, status: response.status() });
+    if (route.startsWith('/functions/v1/')) productionResponses.push({ route, status: response.status(),
+      actionId:startTrackedRequest?.(response.request()) });
   });
   return [
     await runScenario(page, project, 'low-suitability', productionResponses),

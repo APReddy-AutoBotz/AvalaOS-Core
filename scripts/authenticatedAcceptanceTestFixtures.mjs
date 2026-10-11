@@ -1,56 +1,154 @@
-// Invented validator test data only. Never accepted as executed product evidence.
+// Invented validator data only. Never accepted as executed product evidence.
 import fs from 'node:fs';
-import { AUTHENTICATED_ACCEPTANCE_PROJECTS, AUTHENTICATED_ACCEPTANCE_TEST_IDS, AUTHENTICATED_CASE_ASSERTIONS, authenticatedAcceptanceScenario } from './authenticatedAcceptanceCases.mjs';
+import {
+  AUTHENTICATED_ACCEPTANCE_PROJECTS,
+  AUTHENTICATED_ACCEPTANCE_TEST_IDS,
+  AUTHENTICATED_CASE_ASSERTIONS,
+  authenticatedAcceptanceScenario,
+} from './authenticatedAcceptanceCases.mjs';
+import { authenticatedEvidenceDigest, authenticatedRawIdentity } from './authenticatedBrowserCorrelation.mjs';
+import { produceAuthenticatedHostedEvidence } from './authenticatedHostedEvidence.mjs';
+
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
-export const profileFixture = () => ({
-  schemaVersion: 'hosted-authenticated-synthetic-profile-v1', executionKind: 'hosted_authenticated_synthetic',
-  authKind: 'supabase_auth', releaseSha: 'a'.repeat(40), checkoutSha: 'a'.repeat(40),
-  origin: 'https://avalaos-pilot.netlify.app', deploymentId: 'b'.repeat(24),
-  backendDigest: `sha256:${'c'.repeat(64)}`, migrationVersion: '20261010025331',
-  migrationDigest: `sha256:${'d'.repeat(64)}`, exerciseDigest: `sha256:${'e'.repeat(64)}`,
-  catalogDigest: `sha256:${'f'.repeat(64)}`, sourceDigest: `sha256:${'1'.repeat(64)}`,
-  baselineDigest: `sha256:${'2'.repeat(64)}`,
-  policy: { syntheticOnly: true, production: false, customerDataAllowed: false, providersEnabled: false, paidCallsAllowed: false },
-  workflow: {
-    repository: 'APReddy-AutoBotz/AvalaOS-Core', path: '.github/workflows/authenticated-product-acceptance.yml',
-    ref: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/heads/main',
-    event: 'workflow_dispatch', runId: '123', attempt: '1', job: 'hosted-authenticated',
-  },
-  window: { startedAt: '2026-10-10T05:00:00.000Z', completedAt: '2026-10-10T05:05:00.000Z' },
-  actors: ['desktop-chromium', 'pixel-7-chromium'].map((project, index) => ({ persona: 'author', project,
-    actorHash: `sha256:${'3'.repeat(64)}`, sessionHash: `sha256:${String(index + 4).repeat(64)}`,
-    organizationHash: `sha256:${'6'.repeat(64)}`, workspaceHash: `sha256:${'7'.repeat(64)}` })),
+const digest = value => authenticatedEvidenceDigest({ fixture: value });
+const personas = ['author', 'reviewer', 'approver', 'outsider'];
+const fixtureSource = Object.freeze({
+  domain: 'assess_processes',
+  secret: 'ai_provider_key_refs',
+  receipt: 'assess_command_receipts',
+  audit: 'privileged_audit_events',
+  generation_attempt: 'studio_artifact_generation_attempts',
+  control: 'authenticated_synthetic_permits',
 });
 
-const digest = value => `sha256:${value.repeat(64)}`;
-// These invented values exercise rejection logic only; they are never emitted
-// as executed product evidence or included in acceptance artifacts.
-export const manifestFixture = () => {
+export const profileFixture = () => ({
+  schemaVersion: 'hosted-authenticated-synthetic-profile-v2', executionKind: 'hosted_authenticated_synthetic',
+  authKind: 'supabase_auth', releaseSha: 'a'.repeat(40), checkoutSha: 'a'.repeat(40),
+  origin: 'https://avalaos-pilot.netlify.app', deploymentId: 'b'.repeat(24),
+  backendDigest: digest('backend'), migrationVersion: '20261010144356', migrationDigest: digest('migration'),
+  exerciseDigest: digest('exercise'), catalogDigest: digest('catalog'), sourceDigest: digest('source'), baselineDigest: digest('baseline'),
+  policy: { syntheticOnly: true, production: false, customerDataAllowed: false, providersEnabled: false, paidCallsAllowed: false },
+  workflow: {
+    repository: 'APReddy-AutoBotz/AvalaOS-Core',
+    producer: { path: '.github/workflows/exhaustive-acceptance.yml',
+      ref: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/exhaustive-acceptance.yml@refs/heads/main', job: 'acceptance' },
+    caller: { path: '.github/workflows/authenticated-product-acceptance.yml',
+      ref: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/heads/main',
+      event: 'workflow_dispatch', job: 'hosted-authenticated' },
+    runId: '123', attempt: '1',
+  },
+  window: { startedAt: '2026-10-10T05:00:00.000Z', completedAt: '2026-10-10T06:00:00.000Z' },
+  actors: AUTHENTICATED_ACCEPTANCE_PROJECTS.flatMap(project => personas.map(persona => ({
+    persona, project, actorHash: digest(`actor:${project}:${persona}`), sessionHash: digest(`session:${project}:${persona}`),
+    organizationHash: digest('organization'), workspaceHash: digest('workspace'),
+  }))),
+});
+
+const rawRecord = ({ key, effectKind, requestIdHash, persistedRequestHash = null, persistedPayloadHash = null,
+  commandBindingHash = null, actor, rowHash = digest(`row:${key}`), businessRowHash = rowHash, active = true,
+  source = fixtureSource[effectKind], commandIdHash = null, receiptIdHash = null, auditIdHash = null,
+  occurredAt = '2026-10-10T05:10:01.000Z' }) => ({
+  source,
+  recordHash: digest(`record:${key}`), rowHash, businessRowHash, occurredAt,
+  classification: effectKind === 'control' ? 'transient_control' : 'immutable_history', active,
+  actorHash: actor?.actorHash ?? null, sessionHash: actor?.sessionHash ?? null,
+  requestIdHash, persistedRequestHash, persistedPayloadHash, commandBindingHash,
+  commandIdHash, receiptIdHash, auditIdHash, effectKind,
+  organizationHash: digest('organization'), workspaceHash: digest('workspace'),
+});
+
+export const rawHostedFixtures = () => {
   const binding = profileFixture();
+  const identity = authenticatedRawIdentity(binding);
+  const browserCases = [];
+  const serverCases = [];
+  for (const testId of AUTHENTICATED_ACCEPTANCE_TEST_IDS) for (const project of AUTHENTICATED_ACCEPTANCE_PROJECTS) {
+    const definition = catalog.cases.find(item => item.testId === testId);
+    const actor = binding.actors.find(item => item.project === project && item.persona === 'author');
+    const participant = { persona: actor.persona, actorHash: actor.actorHash, sessionHash: actor.sessionHash };
+    const requestIdHash = digest(`request-id:${testId}:${project}`);
+    const browserPayloadHash = digest(`browser-payload:${testId}:${project}`);
+    const persistedRequestHash = digest(`persisted-request:${testId}:${project}`);
+    const commandBindingHash = digest(`command-binding:${testId}:${project}`);
+    const commandIdHash = definition.expectedMutationCount > 0 || testId === 'STUDIO-003' ? digest(`command:${testId}:${project}`) : null;
+    const receiptIdHash = commandIdHash ? digest(`receipt:${testId}:${project}`) : null;
+    const status = definition.expectedDenial ? 403 : testId === 'STUDIO-003' ? 500 : 200;
+    browserCases.push({
+      testId, project, scenario: authenticatedAcceptanceScenario(testId),
+      window: { startedAt: '2026-10-10T05:10:00.000Z', completedAt: '2026-10-10T05:11:00.000Z' },
+      participants: [participant],
+      actions: [{ actionId: digest(`action:${testId}:${project}`), occurredAt: '2026-10-10T05:10:01.000Z',
+        actorHash: actor.actorHash, sessionHash: actor.sessionHash, requestIdHash, browserPayloadHash, commandBindingHash,
+        response: { status, classification: status === 200 ? 'SUCCESS' : status === 500 ? 'SERVER_ERROR_PRECOMMIT' : 'AUTHORIZATION_DENIED',
+          commandIdHash, receiptIdHash } }],
+      assertions: AUTHENTICATED_CASE_ASSERTIONS[testId].map(id => ({ id, comparator: 'equals', expected: true, actual: true,
+        observedAt: '2026-10-10T05:10:30.000Z', source: 'actual-product-browser' })),
+      source: 'actual-product-browser',
+    });
+    const before = [];
+    const after = [];
+    if (definition.expectedMutationCount > 0 && testId !== 'AI-004') {
+      before.push(rawRecord({ key: `${testId}:${project}:domain`, effectKind: 'domain', requestIdHash: null,
+        actor: null, rowHash: digest(`before:${testId}:${project}`), occurredAt: '2026-10-10T05:00:01.000Z' }));
+      after.push(rawRecord({ key: `${testId}:${project}:domain`, effectKind: 'domain', requestIdHash,
+        persistedRequestHash, commandBindingHash, actor,
+        rowHash: digest(`after:${testId}:${project}`), commandIdHash }));
+    }
+    if (testId === 'AI-004') after.push(rawRecord({ key: `${testId}:${project}:secret`, effectKind: 'secret', requestIdHash,
+      persistedRequestHash, commandBindingHash, actor, commandIdHash }));
+    if (definition.expectedMutationCount > 0 || testId === 'STUDIO-003') {
+      after.push(rawRecord({ key: `${testId}:${project}:receipt`, effectKind: 'receipt', requestIdHash,
+        persistedRequestHash, commandBindingHash, actor,
+        commandIdHash, receiptIdHash }));
+      after.push(rawRecord({ key: `${testId}:${project}:audit:1`, effectKind: 'audit', requestIdHash,
+        persistedRequestHash, commandBindingHash, actor,
+        commandIdHash, receiptIdHash, auditIdHash: digest(`audit:1:${testId}:${project}`) }));
+    }
+    if (testId === 'STUDIO-003') {
+      const aggregateKey = `${testId}:${project}:aggregate`;
+      const businessRowHash = digest(`business:${aggregateKey}`);
+      before.push(rawRecord({ key: aggregateKey, source: 'studio_artifact_aggregates', effectKind: 'domain', requestIdHash: null,
+        actor: null, rowHash: digest(`before:${aggregateKey}`), businessRowHash,
+        occurredAt: '2026-10-10T05:00:01.000Z' }));
+      after.push(rawRecord({ key: aggregateKey, source: 'studio_artifact_aggregates', effectKind: 'domain', requestIdHash,
+        persistedRequestHash, commandBindingHash, actor, rowHash: digest(`after:${aggregateKey}`),
+        businessRowHash, commandIdHash }));
+      after.push(rawRecord({ key: `${testId}:${project}:attempt`, effectKind: 'generation_attempt', requestIdHash,
+        persistedRequestHash, commandBindingHash, actor, commandIdHash }));
+      after.push(rawRecord({ key: `${testId}:${project}:audit:2`, effectKind: 'audit', requestIdHash,
+        persistedRequestHash, commandBindingHash, actor,
+        commandIdHash, receiptIdHash, auditIdHash: digest(`audit:2:${testId}:${project}`) }));
+    }
+    if (['STUDIO-003', 'SAFETY-002'].includes(testId)) {
+      const permitKey = `${testId}:${project}:permit`;
+      before.push(rawRecord({ key: permitKey, effectKind: 'control', requestIdHash, persistedPayloadHash: browserPayloadHash,
+        commandBindingHash, actor, active: true, rowHash: digest(`armed:${permitKey}`),
+        occurredAt: '2026-10-10T05:09:58.000Z' }));
+      after.push(rawRecord({ key: permitKey, effectKind: 'control', requestIdHash, persistedPayloadHash: browserPayloadHash,
+        commandBindingHash, actor, active: false, rowHash: digest(`consumed:${permitKey}`) }));
+    }
+    serverCases.push({
+      testId, project, scenario: authenticatedAcceptanceScenario(testId),
+      window: { startedAt: '2026-10-10T05:10:00.000Z', completedAt: '2026-10-10T05:11:00.000Z' },
+      participants: [participant],
+      before: { capturedAt: '2026-10-10T05:09:59.000Z', records: before },
+      after: { capturedAt: '2026-10-10T05:11:01.000Z', records: [...before.filter(row => !after.some(next => next.recordHash === row.recordHash)), ...after] },
+    });
+  }
+  const resources = binding.actors.map(actor => ({ kind: 'session', resourceHash: digest(`resource:${actor.sessionHash}`),
+    classification: 'transient', status: 'revoked', actorHash: actor.actorHash, sessionHash: actor.sessionHash }));
+  resources.push({ kind: 'receipt-history', resourceHash: digest('retained-history'), classification: 'retained_immutable',
+    status: 'preserved', actorHash: null, sessionHash: null });
   return {
-    schemaVersion: 'authenticated-acceptance-evidence-v1', binding,
-    preflight: { serverBindingVerified: true, realAuthVerified: true, providersDisabled: true, noCustomerData: true, sourceVerified: true },
-    cleanup: { sessionsRevoked: true, browserStateRemoved: true, syntheticObjectsRemoved: true, providersDisabled: true,
-      scopedResidue: 0, retainedHistoryPreserved: true, digest: digest('8') },
-    cases: AUTHENTICATED_ACCEPTANCE_TEST_IDS.flatMap(testId => AUTHENTICATED_ACCEPTANCE_PROJECTS.map(project => {
-      const definition = catalog.cases.find(c => c.testId === testId);
-      const actor = binding.actors.find(a => a.project === project);
-      const { project: ignored, ...auth } = actor;
-      const writes = definition.expectedMutationCount;
-      return {
-        testId, project, scenario: authenticatedAcceptanceScenario(testId), status: 'PASS',
-        observedAt: '2026-10-10T05:02:00.000Z', auth: { kind: 'supabase_auth', ...auth },
-        measurements: { logicalMutations: writes, domainWrites: writes,
-          generationAttemptWrites: testId === 'STUDIO-003' ? 1 : 0,
-          receiptWrites: testId === 'STUDIO-003' ? 1 : writes, auditWrites: testId === 'STUDIO-003' ? 2 : writes,
-          secretWrites: testId === 'AI-004' ? 1 : 0, storageWrites: 0, providerCalls: 0, paidCalls: 0,
-          providerTokens: 0, budgetDebits: 0, foreignWrites: 0, beforeHash: digest('a'), afterHash: digest(writes ? 'b' : 'a'),
-          setupExcluded: true, authorityVerified: true, denialObserved: definition.expectedDenial, falseSuccess: false },
-        ui: { actionObserved: true, resultObserved: true, source: 'actual-product-browser', secretExposure: false },
-        lineage: definition.expectedLineage ? { chainDigest: digest('c'), organizationHash: actor.organizationHash,
-          workspaceHash: actor.workspaceHash, serverDerived: true, foreignTenantDenied: true } : null,
-        assertions: AUTHENTICATED_CASE_ASSERTIONS[testId].map(id => ({ id, status: 'PASS' })), failureCode: null,
-      };
-    })),
+    binding,
+    browserCorrelations: { schemaVersion: 'authenticated-browser-correlations-v1', identity, cases: browserCases },
+    serverObservations: { schemaVersion: 'authenticated-server-observations-v1', identity, cases: serverCases,
+      cleanup: { capturedAt: '2026-10-10T06:01:00.000Z', resources,
+        nonExerciseStateBeforeHash: digest('non-exercise'), nonExerciseStateAfterHash: digest('non-exercise') } },
   };
+};
+
+export const manifestFixture = () => {
+  const raw = rawHostedFixtures();
+  return produceAuthenticatedHostedEvidence({ ...raw, catalog });
 };

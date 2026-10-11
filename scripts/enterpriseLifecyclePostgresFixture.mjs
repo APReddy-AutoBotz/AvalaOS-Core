@@ -1313,6 +1313,7 @@ export const enterpriseLifecycleSourcePaths = Object.freeze([...new Set([
   'supabase/functions/_shared/assessV2Handlers.ts',
   'supabase/functions/_shared/assessV2ReviewCommand.ts',
   'supabase/functions/_shared/assessV2ReviewHandlers.ts',
+  'supabase/functions/_shared/authenticatedSyntheticAuthority.ts',
   'supabase/functions/_shared/studioArtifactCommand.ts',
   'supabase/functions/_shared/studioArtifactHandler.ts',
   'supabase/functions/_shared/studioArtifactDb.ts',

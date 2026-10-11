@@ -23,7 +23,7 @@ const migrationIndex=migrations.indexOf(migration);assert.ok(migrationIndex>0);
 assert.equal(migrations[migrationIndex-1],predecessor);
 assert.equal(migrations[migrationIndex+1],'20261003123459_studio_brd_prompt_v2_semantic_fidelity.sql');
 assert.equal(migrations[migrationIndex+2],'20261003150800_synthetic_ai_brd_v2_quality_validation_allowance.sql');
-assert.equal(approvedFullChainTip(migrations), '20261010051413');
+assert.equal(approvedFullChainTip(migrations), '20261010144356');
 const readMigration=async(name)=>(await readFile(join('supabase/migrations',name),'utf8')).replaceAll('\r\n','\n');
 const migrationSql=await readMigration(migration);
 const authBootstrap=`DO $$BEGIN CREATE ROLE anon NOLOGIN;EXCEPTION WHEN duplicate_object THEN NULL;END$$;

@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Approved hosted exercise boundary (2026-10-10)
+
+The merged PR #283 authority and local preparation are verified. `docs/planning/hosted-acceptance-completion.md` now governs the approved complete hosted runner. Real role-separated sessions are verified against `auth.sessions`; privileged observation remains outside the browser. Default-OFF service-only exercise and one-shot request permits bind target/release/deployment/migration/scope/session/payload/version/expiry. They may select deterministic provider-free transport only inside normal authenticated Studio generation, preserving receipt, claim, source/template validation, staging, finalization and audit. They may fail one Studio attempt after claim or one process command after authority before commit. They cannot authorize a provider route, paid budget effect, browser-selected output or general fault mode. Preserve existing PR #264 bindings and ordinary product behavior. Evidence must reconstruct effects from independent server frames and correlate every participating session and browser command; cleanup distinguishes revoked transient access from retained immutable history.
+
 ## Authenticated acceptance and joined legacy lineage (2026-10-10)
 
 The approved integration in `docs/planning/authenticated-product-acceptance.md` keeps public Sandbox browser-local and introduces a distinct authenticated synthetic proof profile. Local fixture authentication cannot become hosted session proof. The current governed Studio aggregate and legacy Docs source are different authorities: a bounded service-only publish command must bind an explicitly human-reviewed structured work-item payload to the exact approved Studio version and server-derived Assess/Govern ancestry before atomically materializing a protected legacy-compatible generation. Browser persistence or a fixture insert is not this bridge.

@@ -55,6 +55,7 @@ export const authenticatedLocalSourceDigests = () => {
     'supabase/functions/_shared/syntheticAdminEndpoint.ts',
     'supabase/functions/_shared/studioPrivateArtifactDownloadHandler.ts',
     'supabase/functions/_shared/tenantAuthority.ts',
+    'supabase/functions/_shared/authenticatedSyntheticAuthority.ts',
     'supabase/functions/_shared/assessV2Command.ts', 'supabase/functions/_shared/assessV2Handlers.ts',
     'supabase/functions/_shared/assessV2ReviewCommand.ts', 'supabase/functions/_shared/assessV2ReviewHandlers.ts',
     'supabase/functions/_shared/studioArtifactCommand.ts', 'supabase/functions/_shared/studioArtifactHandler.ts',

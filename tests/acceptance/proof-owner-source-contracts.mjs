@@ -373,7 +373,7 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
   {
     "anchorId": "authenticated-scripts-authenticatedacceptanceprofile-mjs",
     "sourceReference": "scripts/authenticatedAcceptanceProfile.mjs",
-    "selector": "export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v1';"
+    "selector": "export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v2';"
   },
   {
     "anchorId": "authenticated-scripts-authenticatedacceptanceevidence-mjs",
@@ -454,6 +454,91 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
     "sourceReference": "tests/browser/authenticatedControlsAcceptance.ts",
     "selector": "export async function observeAuthenticatedAdminControls("
+  },
+  {
+    "anchorId": "authenticated-hosted-controller",
+    "sourceReference": "scripts/authenticatedHostedController.mjs",
+    "selector": "export class AuthenticatedHostedController {"
+  },
+  {
+    "anchorId": "authenticated-hosted-postgres-adapter",
+    "sourceReference": "scripts/authenticatedHostedControllerAdapters.mjs",
+    "selector": "export function createAuthenticatedHostedPostgresAdapter("
+  },
+  {
+    "anchorId": "authenticated-hosted-runner",
+    "sourceReference": "scripts/runAuthenticatedHostedAcceptance.mjs",
+    "selector": "export async function runAuthenticatedHostedAcceptance("
+  },
+  {
+    "anchorId": "authenticated-hosted-browser-correlation",
+    "sourceReference": "scripts/authenticatedBrowserCorrelation.mjs",
+    "selector": "export function validateAuthenticatedBrowserCorrelations("
+  },
+  {
+    "anchorId": "authenticated-hosted-server-observer",
+    "sourceReference": "scripts/authenticatedHostedObserver.mjs",
+    "selector": "export function validateAuthenticatedServerObservations("
+  },
+  {
+    "anchorId": "authenticated-hosted-evidence-producer",
+    "sourceReference": "scripts/authenticatedHostedEvidence.mjs",
+    "selector": "export function produceAuthenticatedHostedEvidence("
+  },
+  {
+    "anchorId": "authenticated-hosted-file-producer",
+    "sourceReference": "scripts/produceAuthenticatedHostedEvidence.mjs",
+    "selector": "export function produceAuthenticatedHostedEvidenceFromFiles("
+  },
+  {
+    "anchorId": "authenticated-hosted-environment",
+    "sourceReference": "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+    "selector": "export function authenticatedHostedEnvironmentLines("
+  },
+  {
+    "anchorId": "authenticated-hosted-browser-auth",
+    "sourceReference": "tests/browser/authenticatedLifecycleHarness.ts",
+    "selector": "export const authenticatedLifecycleEnterAs = async"
+  },
+  {
+    "anchorId": "authenticated-hosted-browser-config",
+    "sourceReference": "playwright.authenticated-hosted.config.ts",
+    "selector": "export default defineConfig({"
+  },
+  {
+    "anchorId": "authenticated-hosted-protected-workflow",
+    "sourceReference": ".github/workflows/authenticated-product-acceptance.yml",
+    "selector": "  hosted-authenticated:"
+  },
+  {
+    "anchorId": "authenticated-hosted-runtime-authority",
+    "sourceReference": "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+    "selector": "export const resolveAuthenticatedSyntheticStudioTransport = async ("
+  },
+  {
+    "anchorId": "authenticated-hosted-migration",
+    "sourceReference": "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+    "selector": "CREATE TABLE public.authenticated_synthetic_exercises("
+  },
+  {
+    "anchorId": "authenticated-hosted-studio-generation",
+    "sourceReference": "supabase/functions/_shared/studioArtifactGeneration.ts",
+    "selector": "export const executeClaimedStudioGeneration = async ("
+  },
+  {
+    "anchorId": "authenticated-hosted-studio-database",
+    "sourceReference": "supabase/functions/_shared/studioArtifactDb.ts",
+    "selector": "export const executeStudioGenerationDependency = async ("
+  },
+  {
+    "anchorId": "authenticated-hosted-approved-plan",
+    "sourceReference": "docs/planning/hosted-acceptance-completion.md",
+    "selector": "# Hosted authenticated acceptance completion"
+  },
+  {
+    "anchorId": "authenticated-hosted-observation-adapter",
+    "sourceReference": "scripts/authenticatedHostedObservationAdapter.mjs",
+    "selector": "export function createAuthenticatedHostedObservationReader("
   }
 ]);
 
@@ -586,7 +671,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -610,7 +712,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -635,7 +754,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -659,7 +795,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -684,7 +837,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -708,7 +878,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -732,7 +919,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -756,7 +960,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -780,7 +1001,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -804,7 +1042,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -932,7 +1187,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -981,7 +1253,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1251,7 +1540,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1274,7 +1580,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1297,7 +1620,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1369,7 +1709,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1392,7 +1749,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1418,7 +1776,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1442,7 +1817,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1465,7 +1857,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "legacy-delivery-20260607152500-m5-2g-a-delivery-work-items-authority-sql",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1491,7 +1884,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1515,7 +1925,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1539,7 +1966,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1563,7 +2007,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1587,7 +2048,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1612,7 +2090,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1636,7 +2131,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1660,7 +2172,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1684,7 +2213,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1708,7 +2254,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1732,7 +2295,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1765,7 +2345,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1800,7 +2381,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1835,7 +2417,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1870,7 +2453,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1905,7 +2489,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "ei-acceptance-govern-immutable-action-authority",
       "legacy-delivery-20261010025331-legacy-delivery-authority-sql",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-migration"
     ],
     "ownership": [
       {
@@ -1927,7 +2512,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1947,7 +2549,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -1989,7 +2608,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2009,7 +2645,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2029,7 +2682,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2071,7 +2741,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2091,7 +2778,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2137,7 +2841,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2161,7 +2882,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2185,7 +2923,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2209,7 +2964,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2297,7 +3069,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2369,7 +3158,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2392,7 +3198,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-services-processupdatecontract-ts",
       "authenticated-services-processupdateclient-ts",
-      "authenticated-supabase-functions-shared-processupdatecommand-ts"
+      "authenticated-supabase-functions-shared-processupdatecommand-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2586,7 +3409,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-authenticatedcontrolsfixture-mjs",
       "authenticated-scripts-authenticatedcontrolsacceptance-mjs",
       "authenticated-scripts-authenticatedcontrolspostgresadapter-mjs",
-      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts"
+      "authenticated-tests-browser-authenticatedcontrolsacceptance-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2606,7 +3446,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2626,7 +3483,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-scripts-enterpriselifecyclepostgresfixture-mjs",
       "authenticated-tests-browser-enterpriselifecycleacceptance-enterpriselifecycleacceptance-spec-ts",
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
-      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql"
+      "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {
@@ -2650,7 +3524,24 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-services-productacceptancebridge-contracts-ts",
       "authenticated-services-productacceptancebridge-client-ts",
       "authenticated-supabase-functions-shared-studiodeliverycommand-ts",
-      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts"
+      "authenticated-supabase-functions-shared-studiodeliveryoutcomequery-ts",
+      "authenticated-hosted-controller",
+      "authenticated-hosted-postgres-adapter",
+      "authenticated-hosted-runner",
+      "authenticated-hosted-browser-correlation",
+      "authenticated-hosted-server-observer",
+      "authenticated-hosted-evidence-producer",
+      "authenticated-hosted-file-producer",
+      "authenticated-hosted-environment",
+      "authenticated-hosted-browser-auth",
+      "authenticated-hosted-browser-config",
+      "authenticated-hosted-protected-workflow",
+      "authenticated-hosted-runtime-authority",
+      "authenticated-hosted-migration",
+      "authenticated-hosted-studio-generation",
+      "authenticated-hosted-studio-database",
+      "authenticated-hosted-approved-plan",
+      "authenticated-hosted-observation-adapter"
     ],
     "ownership": [
       {

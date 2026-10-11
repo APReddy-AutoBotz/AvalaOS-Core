@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { authenticatedHostedActionIds } from '../authenticatedLifecycleHarness';
 
 export const STUDIO_DELIVERY_MONITOR_CASE_ASSERTIONS = Object.freeze({
   'DELIVERY-001': ['persisted-docs-import-committed', 'exact-source-lineage-visible'],
@@ -157,6 +158,7 @@ export type StudioDeliveryMonitorJourneyInput = Readonly<{
   enterAs: EnterAs;
   clickProduct: ClickProduct;
   selectProjectScope: SelectProjectScope;
+  startTrackedRequest?: (request: import('@playwright/test').Request) => Promise<string | null>;
 }>;
 
 type ScenarioDecision = Readonly<{
@@ -187,7 +189,7 @@ const outcome = Object.freeze({
 
 const expectDigest = (value: string) => expect(value).toMatch(/^sha256:[a-f0-9]{64}$/u);
 const expectUuid = (value: string) => expect(value).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
-type ObservedProductionResponse = Readonly<{ route: string; status: number }>;
+type ObservedProductionResponse = Readonly<{ route: string; status: number; actionId?: Promise<string | null> }>;
 const waitForLegacyDeliveryCommand = (page: Page, action: string) => page.waitForResponse(response => {
   if (new URL(response.url()).pathname !== '/functions/v1/legacy-delivery-command'
     || response.request().method() !== 'POST') return false;
@@ -203,7 +205,15 @@ const measuredResponses = (
   for (const route of routes) {
     expect(observed.some(item => item.route === route), `No actual response was observed for ${route}`).toBe(true);
   }
-  return observed.map(item => `${item.status} ${item.route}`);
+  const result=observed.map(item => `${item.status} ${item.route}`);
+  Object.defineProperty(result,authenticatedHostedActionIds,{value:observed.map(item=>item.actionId??Promise.resolve(null))});
+  return result;
+};
+const combineMeasuredResponses = (...groups: readonly string[][]) => {
+  const result = groups.flat();
+  Object.defineProperty(result, authenticatedHostedActionIds, { value: groups.flatMap(group =>
+    (group as unknown as Record<symbol, Promise<string | null>[]>)[authenticatedHostedActionIds] ?? []) });
+  return result;
 };
 const protectedTaskBinding = (task: StudioDeliveryDownstreamTask) => ({
   id: task.id,
@@ -268,17 +278,20 @@ const recordCase = (
   cases: StudioDeliveryMonitorCaseResult[], testId: DownstreamCaseId,
   before: StudioDeliveryDownstreamFrame, after: StudioDeliveryDownstreamFrame,
   actions: readonly string[], result: string, productionRoutes: readonly string[], responses: readonly string[],
-  targetBeforeHash?: string, targetAfterHash?: string,
+  targetBeforeHash?: string, targetAfterHash?: string, causalResponses: readonly string[] = responses,
 ) => {
   expectDigest(before.writeFingerprint); expectDigest(after.writeFingerprint);
   if (targetBeforeHash) expectDigest(targetBeforeHash);
   if (targetAfterHash) expectDigest(targetAfterHash);
-  cases.push({ testId,
+  const recorded: StudioDeliveryMonitorCaseResult={ testId,
     assertions: STUDIO_DELIVERY_MONITOR_CASE_ASSERTIONS[testId].map(id => ({ id, status: 'passed' as const })),
     observations: { browser: { actions, result }, api: { productionRoutes, responses } },
     measurements: { setupExcluded: true, before, after, delta: countDelta(before, after), stateBeforeHash: before.writeFingerprint,
       stateAfterHash: after.writeFingerprint, ...(targetBeforeHash ? { targetBeforeHash } : {}), ...(targetAfterHash ? { targetAfterHash } : {}) },
-  });
+  };
+  Object.defineProperty(recorded,authenticatedHostedActionIds,{value:
+    (causalResponses as unknown as Record<symbol,Promise<string|null>[]>)[authenticatedHostedActionIds]??[]});
+  cases.push(recorded);
 };
 
 const scanAffectedSurface = async (page: Page, surface: string, selector: string): Promise<StudioDeliveryAccessibilityResult> => {
@@ -298,9 +311,9 @@ const scanAffectedSurface = async (page: Page, surface: string, selector: string
 };
 
 export const runStudioDeliveryMonitorJourney = async ({
-  page, projectName, project, setup, control, enterAs, clickProduct, selectProjectScope,
+  page, projectName, project, setup, control, enterAs, clickProduct, selectProjectScope, startTrackedRequest,
 }: StudioDeliveryMonitorJourneyInput): Promise<StudioDeliveryMonitorJourneyResult> => {
-  expect(project).toMatch(/^(chromium-desktop|chromium-mobile)$/u);
+  expect(project).toMatch(/^(?:chromium-(?:desktop|mobile)|desktop-chromium|pixel-7-chromium)$/u);
   const observations: StudioDeliveryMonitorObservation[] = [];
   const cases: StudioDeliveryMonitorCaseResult[] = [];
   const accessibility: StudioDeliveryAccessibilityResult[] = [];
@@ -308,7 +321,8 @@ export const runStudioDeliveryMonitorJourney = async ({
   const productionResponses: ObservedProductionResponse[] = [];
   page.on('response', response => {
     const route = new URL(response.url()).pathname;
-    if (route.startsWith('/functions/v1/')) productionResponses.push({ route, status: response.status() });
+    if (route.startsWith('/functions/v1/')) productionResponses.push({ route, status: response.status(),
+      actionId:startTrackedRequest?.(response.request()) });
   });
   page.on('dialog', async dialog => {
     dialogs.push(dialog.message());
@@ -506,12 +520,14 @@ export const runStudioDeliveryMonitorJourney = async ({
     expect(dialogs.some(message => message.includes('Remove this task from active delivery views?'))).toBe(true);
     expect(dialogs.slice(dialogCount).some(message => !message.includes('Remove this task from active delivery views?'))).toBe(true);
     const requestId = crypto.randomUUID();
-    const deniedDeleteResponse = await page.request.post('/functions/v1/legacy-delivery-command', {
-      headers: {
-        authorization: `Bearer ${setup.actors.reviewer.token}`,
-        'content-type': 'application/json',
-      },
-      data: {
+    const deniedDeleteResponse = await page.evaluate(async body => {
+      const key=Object.keys(localStorage).find(candidate=>candidate.startsWith('sb-'))??'';
+      const stored=key?JSON.parse(localStorage.getItem(key)??'{}'):{};
+      const accessToken=stored.access_token??stored.currentSession?.access_token??'';
+      const response=await fetch('/functions/v1/legacy-delivery-command',{method:'POST',
+        headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json'},body:JSON.stringify(body)});
+      return {status:response.status,body:await response.text()};
+    }, {
         schemaVersion: 'legacy-delivery-command.v1', action: 'task.delete',
         organizationId: restrictedAuthority.organizationId, workspaceId: restrictedAuthority.workspaceId,
         expectedAuthorizationVersion: restrictedAuthority.authorizationVersion,
@@ -520,10 +536,9 @@ export const runStudioDeliveryMonitorJourney = async ({
           taskId: beforeOwnUpdate.id, expectedVersion: afterOwnUpdate.version,
           deletionReason: 'Verify that the assigned restricted actor cannot remove governed Delivery work.',
         },
-      },
     });
-    expect([403, 404]).toContain(deniedDeleteResponse.status());
-    const deniedDeleteBody = await deniedDeleteResponse.text();
+    expect([403, 404]).toContain(deniedDeleteResponse.status);
+    const deniedDeleteBody = deniedDeleteResponse.body;
     expect(deniedDeleteBody).not.toContain(beforeOwnUpdate.id);
     expect(deniedDeleteBody).not.toContain(setup.deliveryProject.id);
     const afterDeniedDelete = await getFrame(control, projectName);
@@ -539,7 +554,7 @@ export const runStudioDeliveryMonitorJourney = async ({
       'The UI and server boundary denied deletion without writes, and the same active task remained visible.',
       ['/functions/v1/legacy-delivery-command', '/functions/v1/legacy-delivery-query'], measuredResponses(productionResponses, deniedDeleteResponseStart,
         ['/functions/v1/legacy-delivery-command', '/functions/v1/legacy-delivery-query'],
-        [{ route: '/functions/v1/legacy-delivery-command', status: deniedDeleteResponse.status() }]));
+        [{ route: '/functions/v1/legacy-delivery-command', status: deniedDeleteResponse.status }]));
     observeEvery(observations, 'DELIVERY-004');
   } finally {
     await control('/control/restricted-delete', { projectName, enabled: false });
@@ -613,6 +628,7 @@ export const runStudioDeliveryMonitorJourney = async ({
   await outcomeEditor.getByLabel('Outcome label', { exact: true }).fill(outcome.label);
   await outcomeEditor.getByLabel('Recorded outcome detail', { exact: true }).fill(outcome.detail);
   const beforeOutcome = await getFrame(control, projectName);
+  const outcomeResponseStart = productionResponses.length;
   await outcomeEditor.getByTestId('record-delivery-outcome').click();
   await expect(outcomeEditor.getByRole('status')).toContainText('Recorded outcome version 1');
   const afterOutcome = await getFrame(control, projectName);
@@ -635,6 +651,8 @@ export const runStudioDeliveryMonitorJourney = async ({
     outcomeVersionImmutable: true,
     importLineageProtected: true,
   });
+  const outcomeResponses = measuredResponses(productionResponses, outcomeResponseStart,
+    ['/functions/v1/studio-delivery-authority-command']);
   await closeTask(page, itemTitles.blocker);
 
   await clickProduct(page, 'Delivery Pack');
@@ -680,14 +698,21 @@ export const runStudioDeliveryMonitorJourney = async ({
   await expect(monitor).toContainText(`Exact task ${importedTask!.id}`);
   await expect(monitor).toContainText(`document ${afterPublish.publication!.documentGenerationId}`);
   await expect(monitor).toContainText(`Studio version ${afterPublish.publication!.artifactVersionId}`);
+  const authorizedMonitorResponses = measuredResponses(productionResponses, monitorResponseStart,
+    ['/functions/v1/studio-delivery-outcome-query']);
   const apiBaseUrl = process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '';
   const apiUrl = new URL(apiBaseUrl);
-  expect(apiUrl.protocol).toBe('http:');
-  expect(['127.0.0.1', 'localhost']).toContain(apiUrl.hostname);
-  const foreignResponse = await fetch(`${apiBaseUrl.replace(/\/$/u, '')}/functions/v1/studio-delivery-outcome-query`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${setup.actors.outsider.token}` },
-    body: JSON.stringify({
+  expect(['http:','https:']).toContain(apiUrl.protocol);
+  await enterAs(page,setup.actors.outsider);
+  const foreignResponseStart = productionResponses.length;
+  const foreignResponse = await page.evaluate(async ({ url, body }) => {
+    const key=Object.keys(localStorage).find(candidate=>candidate.startsWith('sb-'))??'';
+    const stored=key?JSON.parse(localStorage.getItem(key)??'{}'):{};
+    const accessToken=stored.access_token??stored.currentSession?.access_token??'';
+    const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${accessToken}`},
+      body:JSON.stringify(body)});
+    return {status:response.status,body:await response.text()};
+  }, {url:`${apiBaseUrl.replace(/\/$/u, '')}/functions/v1/studio-delivery-outcome-query`,body:{
       schemaVersion: 'studio-delivery-outcome-query.v1',
       organizationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       workspaceId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -695,13 +720,16 @@ export const runStudioDeliveryMonitorJourney = async ({
       projectId: setup.deliveryProject.id,
       limit: 100,
       cursor: null,
-    }),
+    },
   });
   expect([403, 404]).toContain(foreignResponse.status);
-  const foreignBody = await foreignResponse.text();
+  const foreignBody = foreignResponse.body;
   expect(foreignBody).not.toContain(setup.deliveryProject.id);
   expect(foreignBody).not.toContain(outcome.label);
   expect(foreignBody).not.toContain(outcome.detail);
+  const foreignMonitorResponses = measuredResponses(productionResponses, foreignResponseStart,
+    ['/functions/v1/studio-delivery-outcome-query']);
+  await enterAs(page,setup.actors.approver);
   const afterMonitor = await getFrame(control, projectName);
   expect(afterMonitor.writeFingerprint).toBe(afterPackSnapshot.writeFingerprint);
   expect(afterMonitor.foreignProbe).toEqual({
@@ -712,28 +740,25 @@ export const runStudioDeliveryMonitorJourney = async ({
   recordCase(cases, 'MONITOR-001', afterPackSnapshot, afterMonitor,
     ['Opened Monitor', 'Verified exact task/document/Studio identifiers', 'Probed the same project as a foreign actor'],
     'Monitor displayed exact local ancestry while the foreign request disclosed no identifier.',
-    ['/functions/v1/studio-delivery-outcome-query'], measuredResponses(productionResponses, monitorResponseStart,
-      ['/functions/v1/studio-delivery-outcome-query'], [{ route: '/functions/v1/studio-delivery-outcome-query', status: foreignResponse.status }]),
+    ['/functions/v1/studio-delivery-outcome-query'], combineMeasuredResponses(authorizedMonitorResponses, foreignMonitorResponses),
     afterPackSnapshot.lineage.digest, afterMonitor.lineage.digest);
   recordCase(cases, 'MONITOR-002', afterPackSnapshot, afterMonitor,
     ['Read the explicit human outcome in Monitor'],
     'Status, label, and detail exactly matched the recorded outcome with no inferred fallback.',
-    ['/functions/v1/studio-delivery-outcome-query'], measuredResponses(productionResponses, monitorResponseStart,
-      ['/functions/v1/studio-delivery-outcome-query']));
+    ['/functions/v1/studio-delivery-outcome-query'], authorizedMonitorResponses);
   recordCase(cases, 'MONITOR-003', afterPackSnapshot, afterMonitor,
     ['Read the explicit blocker detail', 'Verified foreign response body omitted blocker text'],
     'The exact recorded blocker was visible only inside the authorized tenant/project scope.',
-    ['/functions/v1/studio-delivery-outcome-query'], measuredResponses(productionResponses, monitorResponseStart,
-      ['/functions/v1/studio-delivery-outcome-query'], [{ route: '/functions/v1/studio-delivery-outcome-query', status: foreignResponse.status }]));
+    ['/functions/v1/studio-delivery-outcome-query'], combineMeasuredResponses(authorizedMonitorResponses, foreignMonitorResponses));
   observeEvery(observations, 'MONITOR-001');
   observeEvery(observations, 'MONITOR-002');
   observeEvery(observations, 'MONITOR-003');
 
-  await page.route('**/functions/v1/studio-delivery-outcome-query', route => route.fulfill({
-    status: 503,
-    contentType: 'application/json',
-    body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Projection unavailable.' } }),
-  }));
+  await page.route('**/functions/v1/studio-delivery-outcome-query', async route => {
+    await startTrackedRequest?.(route.request());
+    await route.fulfill({status:503,contentType:'application/json',
+      body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Projection unavailable.'}})});
+  });
   const unavailableResponseStart = productionResponses.length;
   await clickProduct(page, 'Delivery');
   await clickProduct(page, 'Monitor');
@@ -755,7 +780,7 @@ export const runStudioDeliveryMonitorJourney = async ({
     ['/functions/v1/studio-delivery-authority-command', '/functions/v1/legacy-delivery-command', '/functions/v1/studio-delivery-outcome-query'],
     measuredResponses(productionResponses, publishResponseStart,
       ['/functions/v1/studio-delivery-authority-command', '/functions/v1/legacy-delivery-command', '/functions/v1/studio-delivery-outcome-query']),
-    beforePublish.lineage.digest, afterOutcome.lineage.digest);
+    beforePublish.lineage.digest, afterOutcome.lineage.digest, outcomeResponses);
   observeEvery(observations, 'E2E-001');
 
   const expectedObservations = Object.values(STUDIO_DELIVERY_MONITOR_CASE_ASSERTIONS)

@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { manifestFixture } from './authenticatedAcceptanceTestFixtures.mjs';
+import { rawHostedFixtures } from './authenticatedAcceptanceTestFixtures.mjs';
+import { produceAuthenticatedHostedEvidence } from './authenticatedHostedEvidence.mjs';
+import { authenticatedRawIdentity } from './authenticatedBrowserCorrelation.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { canonicalSourceSha256 } from './exhaustiveAcceptanceModel.mjs';
 import { AUTHENTICATED_ACCEPTANCE_TEST_IDS } from './authenticatedAcceptanceCases.mjs';
@@ -18,13 +20,18 @@ test('aggregate report separates real-auth contract data from local, partial and
   for (const ref of Object.keys(provenance.sourceDigests)) provenance.sourceDigests[ref] = canonicalSourceSha256(fs.readFileSync(ref));
   const provenancePath = path.join(directory, 'test-provenance.json');
   fs.writeFileSync(provenancePath, JSON.stringify(provenance));
-  const manifest = manifestFixture();
-  const p = manifest.binding;
+  const rawManifest = rawHostedFixtures();
+  const p = rawManifest.binding;
   p.catalogDigest = canonicalDigest(catalog);
   p.sourceDigest = canonicalDigest(provenance.sourceDigests);
+  rawManifest.browserCorrelations.identity = authenticatedRawIdentity(p);
+  rawManifest.serverObservations.identity = authenticatedRawIdentity(p);
+  const manifest = produceAuthenticatedHostedEvidence({ ...rawManifest, catalog });
   const environment = {
     ...process.env, ACCEPTANCE_RESULTS_DIR: directory, ACCEPTANCE_PROVENANCE: provenancePath,
+    ACCEPTANCE_WORKFLOW_PATH: p.workflow.producer.path,
     AUTHENTICATED_RESULTS_MANIFEST: path.join(directory, 'input.json'),
+    AUTHENTICATED_CONTROLLER_BINDING: path.join(directory, 'controller-binding.json'),
     RETAINED_RESULTS_MANIFEST: path.join(directory, 'absent-retained.json'),
     ORACLE_RESULTS_MANIFEST: path.join(directory, 'absent-oracle.json'),
     SERVER_RESULTS_MANIFEST: path.join(directory, 'absent-server.json'),
@@ -35,8 +42,8 @@ test('aggregate report separates real-auth contract data from local, partial and
     RELEASE_SHA: p.releaseSha, GITHUB_SHA: p.checkoutSha,
     HOSTED_PILOT_URL: p.origin, NETLIFY_DEPLOY_ID: p.deploymentId,
     GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: p.workflow.repository,
-    GITHUB_WORKFLOW_REF: p.workflow.ref, GITHUB_EVENT_NAME: p.workflow.event,
-    GITHUB_RUN_ID: p.workflow.runId, GITHUB_RUN_ATTEMPT: p.workflow.attempt, GITHUB_JOB: p.workflow.job,
+    GITHUB_WORKFLOW_REF: p.workflow.caller.ref, GITHUB_EVENT_NAME: p.workflow.caller.event,
+    GITHUB_RUN_ID: p.workflow.runId, GITHUB_RUN_ATTEMPT: p.workflow.attempt, GITHUB_JOB: p.workflow.caller.job,
     AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: p.backendDigest,
     AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: p.migrationVersion,
     AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: p.migrationDigest,
@@ -51,6 +58,7 @@ test('aggregate report separates real-auth contract data from local, partial and
   };
   const run = (input, extra = {}) => {
     fs.writeFileSync(environment.AUTHENTICATED_RESULTS_MANIFEST, JSON.stringify(input));
+    fs.writeFileSync(environment.AUTHENTICATED_CONTROLLER_BINDING, JSON.stringify(manifest.binding));
     const child = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
       env: { ...environment, ...extra }, encoding: 'utf8', windowsHide: true,
     });
@@ -64,7 +72,7 @@ test('aggregate report separates real-auth contract data from local, partial and
     for (const [change, extra] of [
       [m => { m.binding.authKind = 'fixture_transport'; }, {}],
       [m => { m.binding.workflow.attempt = '2'; }, {}],
-      [m => { m.cleanup.sessionsRevoked = false; }, {}],
+      [m => { m.cleanup.activeTransientResidue = 1; }, {}],
       [m => m, { GITHUB_ACTIONS: 'false' }],
       [m => m, { ACCEPTANCE_EXECUTION_DISPOSITION: 'NOT_EXECUTED' }],
     ]) {
@@ -72,11 +80,14 @@ test('aggregate report separates real-auth contract data from local, partial and
       assert.ok(run(candidate, extra).every(row => row.status === 'BLOCKED'));
     }
     const partial = structuredClone(manifest);
-    partial.cases = partial.cases.filter(row => !(row.testId === 'MONITOR-002' && row.project === 'pixel-7-chromium'));
+    partial.browserCorrelations.cases = partial.browserCorrelations.cases
+      .filter(row => !(row.testId === 'MONITOR-002' && row.project === 'pixel-7-chromium'));
     assert.equal(run(partial).find(row => row.testId === 'MONITOR-002').status, 'BLOCKED');
-    const failed = structuredClone(manifest);
-    const row = failed.cases.find(item => item.testId === 'DELIVERY-001');
-    row.status = 'FAIL'; row.failureCode = 'assertion_failed'; row.assertions[0].status = 'FAIL';
+    const raw = { binding: structuredClone(manifest.binding),
+      browserCorrelations: structuredClone(manifest.browserCorrelations),
+      serverObservations: structuredClone(manifest.serverObservations) };
+    raw.browserCorrelations.cases.find(item => item.testId === 'DELIVERY-001').assertions[0].actual = false;
+    const failed = produceAuthenticatedHostedEvidence({ ...raw, catalog });
     assert.equal(run(failed).find(item => item.testId === 'DELIVERY-001').status, 'FAIL');
   } finally {
     const resolved = path.resolve(directory);

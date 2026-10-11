@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Hosted runner and evidence authority (2026-10-10)
+
+Executed evidence: PR #283 candidate/merge trees match, 51 applicable candidate checks and post-merge Core/authenticated/Delivery workflows passed; independent preparation verifies 94 local UI records, all five EI cases and cleanup. Candidate coverage is 43 PASS / 65 BLOCKED, not a hosted result. Confirmed source gaps are missing executable hosted orchestration, fixture-only authentication, self-attested hosted evidence counts, incompatible provider-free generation and browser-fabricated server failure. AP approved bounded corrections under `docs/planning/hosted-acceptance-completion.md`; no business requirement is relaxed.
+
+Read-only target inspection confirms non-production identity, provider switches OFF, a ready frontend at the merged release and an older backend migration/function inventory. Writable secret-backend configuration, exact deployed function source, real sessions and complete hosted behavior remain unproved. Implementation verification is planned. Require actual-role exact-binding/replay/session denials, independent causal server evidence, zero provider/budget effects, explicit retained history and cleanup on partial failure. Missing evidence remains BLOCKED/FAIL. No hosted writes, deployment or activation are authorized by this inspection.
+
+The subsequent configuration-name inspection confirms the candidate's required writable Vault adapter is not configured: its address/token/path names are absent. No secret values were read. AI-004 hosted execution must fail preflight before setup until this existing backend is configured under later explicit authority; repository/local preparation may continue. Exact deployed Edge source remains unverified because the source retrieval connector failed internally.
+
 ## Authenticated acceptance integration gaps (2026-10-10)
 
 Executed evidence: PR #282 has matching candidate/merge trees, 48 successful candidate checks and successful post-merge Core/Delivery workflows. The original duplicate-import and retained-lineage cases passed; no new stable report was executed. Confirmed baseline source defects were the missing trusted approved-Studio-to-legacy-Docs bridge and the absence of an authoritative exact human outcome record for Monitor. Existing downstream fixture inserts cannot prove the joined lifecycle. Fixture bearer authentication cannot prove hosted Auth. Hosted installation, storage and session behavior remain deployment status unknown.

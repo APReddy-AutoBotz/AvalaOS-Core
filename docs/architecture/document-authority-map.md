@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Complete hosted authenticated runner (2026-10-10)
+
+`docs/planning/hosted-acceptance-completion.md` owns the newly approved real-session controller, default-OFF synthetic exercise/permit authority, two narrowly bound server faults, independent evidence producer, same-run workflow, read-only target inventory, focused verification and fallback. It supersedes the hosted-inspection and local-only-fault exclusions in the earlier authenticated preparation plan only within this explicit scope. The 108-case business catalog and proof semantics remain governed by `docs/quality/exhaustive-hosted-product-acceptance.md`; domain authorities and PR #264 bindings remain unchanged. Hosted rollout, activation and execution require the later exact-candidate boundary.
+
 ## Authenticated product acceptance integration (2026-10-10)
 
 `docs/planning/authenticated-product-acceptance.md` owns the approved second integration boundary: trusted governed-Studio-to-legacy-Docs publishing, exact Delivery human-outcome authority projected read-only in Monitor, connected lifecycle/control execution, focused verification and rollback. The versioned 108-case catalog and authenticated versus public-Sandbox evidence contract remain governed by `docs/quality/exhaustive-hosted-product-acceptance.md`. PR C packages and baselines remain distinct. Hosted rollout/execution and paid/production effects require their separate boundary.

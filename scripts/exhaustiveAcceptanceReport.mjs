@@ -62,17 +62,16 @@ const oracleManifest = loadOptional(process.env.ORACLE_RESULTS_MANIFEST || 'acce
 const playwright = loadOptional(process.env.PLAYWRIGHT_JSON || 'artifacts/exhaustive-acceptance/playwright-results.json');
 const serverManifest = loadOptional(process.env.SERVER_RESULTS_MANIFEST || 'acceptance-results/server-results.json');
 const authenticatedManifest = loadOptional(process.env.AUTHENTICATED_RESULTS_MANIFEST || 'acceptance-results/authenticated-results.json');
+const authenticatedControllerBinding = loadOptional(process.env.AUTHENTICATED_CONTROLLER_BINDING || 'acceptance-results/authenticated-controller-binding.json');
 let authenticatedExpected = null;
-if (authenticatedManifest) {
+if (authenticatedManifest && authenticatedControllerBinding) {
   try {
     authenticatedExpected = authenticatedProfileFromEnvironment({
       ...process.env,
       AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST: canonicalDigest(catalog),
       AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST: canonicalDigest(provenanceDocument.sourceDigests),
-    }, {
-      startedAt: process.env.AUTHENTICATED_ACCEPTANCE_STARTED_AT,
-      completedAt: process.env.AUTHENTICATED_ACCEPTANCE_COMPLETED_AT,
-    });
+      AUTHENTICATED_ACCEPTANCE_ACTOR_BINDINGS: JSON.stringify(authenticatedControllerBinding.actors),
+    }, authenticatedControllerBinding.window);
   } catch { /* Missing independent hosted identity cannot promote local proof. */ }
 }
 const authenticatedErrors = authenticatedExpected

@@ -726,7 +726,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ASSESS-PROCESS_EDIT_DENIAL"
@@ -786,7 +803,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ASSESS-DISCOVERY_COMPLETE"
@@ -1520,7 +1554,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ASSESS-V2_CREATE"
@@ -1580,7 +1631,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ASSESS-V2_FINALIZE"
@@ -1640,7 +1708,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ASSESS-V2_FEATURE_DISABLED"
@@ -2095,7 +2180,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-REVIEW_ASSIGNMENT"
@@ -2152,7 +2254,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-INDEPENDENT_ATTESTATION"
@@ -2209,7 +2328,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-CHANGES_REQUESTED"
@@ -2266,7 +2402,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-REWORK_RESUBMIT"
@@ -2323,7 +2476,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-APPROVAL"
@@ -2380,7 +2550,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-REJECTION"
@@ -2437,7 +2624,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "GOVERN-SEPARATION_OF_DUTY"
@@ -2669,7 +2873,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "STUDIO-HANDOFF_LINEAGE"
@@ -2726,7 +2947,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "STUDIO-GOVERNED_GENERATION"
@@ -2783,7 +3021,24 @@
         "scripts/enterpriseLifecyclePostgresFixture.mjs",
         "tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "STUDIO-GENERATION_FAILURE"
@@ -3021,7 +3276,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "STUDIO-DOWNLOAD_DENIAL"
@@ -3318,7 +3590,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-HANDOFF_IMPORT"
@@ -3379,7 +3668,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-TASK_CREATE"
@@ -3440,7 +3746,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-TASK_UPDATE_OWN"
@@ -3501,7 +3824,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-TASK_DELETE_DENIAL"
@@ -3562,7 +3902,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-STATUS_TRANSITION"
@@ -3623,7 +3980,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-INVALID_TRANSITION"
@@ -3683,7 +4057,8 @@
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "DELIVERY-DUPLICATE_IMPORT"
@@ -3743,7 +4118,8 @@
         "supabase/migrations/20260607152500_m5_2g_a_delivery_work_items_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "DELIVERY-RETAINED_LINEAGE"
@@ -3804,7 +4180,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "DELIVERY-DELIVERY_PACK"
@@ -3865,7 +4258,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "MONITOR-LINEAGE_VISIBILITY"
@@ -3926,7 +4336,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "MONITOR-VALUE_SIGNAL"
@@ -3987,7 +4414,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "MONITOR-BLOCKER_VISIBILITY"
@@ -4048,7 +4492,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "MONITOR-UNAVAILABLE_PROJECTION"
@@ -4109,7 +4570,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ADMIN-ADMIN_NAVIGATION"
@@ -4170,7 +4648,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ADMIN-NON_ADMIN_DENIAL"
@@ -4231,7 +4726,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ADMIN-ROLE_CAPABILITY_VIEW"
@@ -4293,7 +4805,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "ADMIN-PILOT_OPERATIONS_READ_ONLY"
@@ -4619,7 +5148,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "AI-NO_BYOK"
@@ -4680,7 +5226,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "AI-PROVIDER_DISABLED"
@@ -4741,7 +5304,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "AI-PROVIDER_CAPABILITY_DENIAL"
@@ -4802,7 +5382,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "AI-PROVIDER_SECRET_BOUNDARY"
@@ -4863,7 +5460,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "AI-PROVIDER_UNAVAILABLE"
@@ -4925,7 +5539,24 @@
         "scripts/authenticatedControlsFixture.mjs",
         "scripts/authenticatedControlsAcceptance.mjs",
         "scripts/authenticatedControlsPostgresAdapter.mjs",
-        "tests/browser/authenticatedControlsAcceptance.ts"
+        "tests/browser/authenticatedControlsAcceptance.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "AI-NO_BROWSER_SECRET"
@@ -4995,7 +5626,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -5065,7 +5697,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -5135,7 +5768,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-QUERY_TENANT_ISOLATION"
@@ -5205,7 +5839,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -5275,7 +5910,8 @@
         "supabase/migrations/20261009162752_govern_immutable_action_authority.sql",
         "supabase/migrations/20261010025331_legacy_delivery_authority.sql",
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
-        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql"
+        "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"
@@ -5337,7 +5973,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-CANONICAL_HAPPY"
@@ -5398,7 +6051,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-REQUESTED_CHANGES_LOOP"
@@ -5459,7 +6129,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-AUTHORITY_DENIAL"
@@ -5520,7 +6207,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-STALE_REPLAY_RECOVERY"
@@ -5581,7 +6285,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-LOW_SUITABILITY"
@@ -5642,7 +6363,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-STRONG_AUTOMATION"
@@ -5703,7 +6441,24 @@
         "services/productAcceptanceBridge/contracts.ts",
         "services/productAcceptanceBridge/client.ts",
         "supabase/functions/_shared/studioDeliveryCommand.ts",
-        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts"
+        "supabase/functions/_shared/studioDeliveryOutcomeQuery.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "E2E-HITL_COMPLIANCE"
@@ -5763,7 +6518,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "SAFETY-OFFLINE_NO_FALSE_SUCCESS"
@@ -5823,7 +6595,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS"
@@ -5883,7 +6672,24 @@
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "services/processUpdateContract.ts",
         "services/processUpdateClient.ts",
-        "supabase/functions/_shared/processUpdateCommand.ts"
+        "supabase/functions/_shared/processUpdateCommand.ts",
+        "scripts/authenticatedHostedController.mjs",
+        "scripts/authenticatedHostedControllerAdapters.mjs",
+        "scripts/runAuthenticatedHostedAcceptance.mjs",
+        "scripts/authenticatedBrowserCorrelation.mjs",
+        "scripts/authenticatedHostedObserver.mjs",
+        "scripts/authenticatedHostedEvidence.mjs",
+        "scripts/produceAuthenticatedHostedEvidence.mjs",
+        "scripts/prepareAuthenticatedHostedEnvironment.mjs",
+        "tests/browser/authenticatedLifecycleHarness.ts",
+        "playwright.authenticated-hosted.config.ts",
+        ".github/workflows/authenticated-product-acceptance.yml",
+        "supabase/functions/_shared/authenticatedSyntheticAuthority.ts",
+        "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
+        "supabase/functions/_shared/studioArtifactGeneration.ts",
+        "supabase/functions/_shared/studioArtifactDb.ts",
+        "docs/planning/hosted-acceptance-completion.md",
+        "scripts/authenticatedHostedObservationAdapter.mjs"
       ],
       "branchIds": [
         "SAFETY-TIMEOUT_NO_FALSE_SUCCESS"

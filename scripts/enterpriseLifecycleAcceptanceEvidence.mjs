@@ -104,6 +104,7 @@ export const REQUIRED_BACKEND_SOURCES = Object.freeze([
   'supabase/functions/_shared/assessV2ReviewCommand.ts',
   'supabase/functions/_shared/assessV2ReviewHandlers.ts',
   'supabase/functions/_shared/providerBudget.ts',
+  'supabase/functions/_shared/authenticatedSyntheticAuthority.ts',
   'supabase/functions/_shared/studioArtifactCommand.ts',
   'supabase/functions/_shared/studioArtifactDb.ts',
   'supabase/functions/_shared/studioArtifactGeneration.ts',
