@@ -36,22 +36,9 @@ test('diagnostics map bounded network codes without exposing raw messages or sta
   assert.equal(caught.stack.includes(secret), false);
 });
 
-test('source download recognizes allowlisted CLI signatures and sanitizes unknown stderr', async () => {
-  const docker = Object.assign(new Error('raw child failure'), {
-    stderr: 'Cannot connect to the Docker daemon fixture-sensitive-value-must-never-appear',
-  });
-  assert.equal((await classified('SOURCE_DOWNLOAD', docker, { source: 'cli' })).message,
-    'AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_SOURCE_DOWNLOAD_CLI_DOCKER_UNAVAILABLE');
-  const unknown = Object.assign(new Error('raw child failure'), {
-    stderr: 'an unrecognized CLI failure fixture-sensitive-value-must-never-appear',
-  });
-  assert.equal((await classified('SOURCE_DOWNLOAD', unknown, { source: 'cli' })).message,
-    'AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_SOURCE_DOWNLOAD_CLI_FAILURE');
-});
-
 test('known authenticated hosted failures keep their exact identity', async () => {
   const expected = new Error('AUTHENTICATED_HOSTED_RUNNER_BACKEND_SOURCE_FILE_MISMATCH:fixture-sensitive-value');
-  const caught=await classified('SOURCE_DOWNLOAD', expected, { source: 'cli' });
+  const caught=await classified('SOURCE_DOWNLOAD', expected);
   assert.equal(caught.message,'AUTHENTICATED_HOSTED_RUNNER_BACKEND_SOURCE_FILE_MISMATCH');
   assert.notEqual(caught,expected);
 });
@@ -64,7 +51,7 @@ test('diagnostic stage and source identifiers are closed allowlists', async () =
 });
 
 test('every preactivation stage has a fixed unknown-error fallback', async () => {
-  for (const stage of ['DATABASE_CONNECT','DEPLOYMENT_INVENTORY','SOURCE_DOWNLOAD','NATIVE_VAULT',
+  for (const stage of ['DATABASE_CONNECT','DEPLOYMENT_INVENTORY','SOURCE_PREPARE','SOURCE_DOWNLOAD','SOURCE_COMPARE','NATIVE_VAULT',
     'DATABASE_SCOPE_BASELINE','ACTIVATION']) {
     const caught=await classified(stage,new Error('fixture-sensitive-value-must-never-appear'));
     assert.equal(caught.message,`AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_${stage}_UNCLASSIFIED`);

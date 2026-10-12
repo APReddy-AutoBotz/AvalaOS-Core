@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Original-source attestation correction (2026-10-12)
+
+PR #290 merged as `2c65fd0d4b95635066247a91f65933d771a67b5e`. Its approved run `38209643186`, attempt 1, stopped before activation with `AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_DEPLOYMENT_INVENTORY_UNCLASSIFIED`. Independent reconstruction verifies all 307 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across 108 requirements. Temporary main access was removed while preserving other branches and the reviewer. Read-only cleanup found no active exercises, sessions, bindings, permits or synthetic attempts; both providers remain OFF. The acceptance-run allowance is consumed.
+
+AP approved repository correction and a separate four-request read-only source-format diagnostic. The diagnostic completed: multipart returned all **26 exact original source files** for the inspected function, binary returned a compiled bundle, and function version stayed unchanged. This disproves the earlier required-Docker assumption for that target. Credential-free investigation also confirmed cleanup masking and decoder path/content defects; none alone proves the historical hosted exception's cause.
+
+Follow `docs/planning/hosted-acceptance-completion.md`: replace the uncommitted Docker workaround with bounded in-memory multipart original-source retrieval, bind each response to current deployment identity, preserve exact filename/closure/byte/digest checks, and recheck inventory stability. Three read-only reviews completed before implementation. Final local verification passed all 52 focused Linux tests, five workflow-contract tests, the 16-function/216-entry loopback integration on Windows and Linux, and offline validation of all 26 retained real-response source digests. Exact-candidate CI remains planned; no new hosted acceptance attempt, deployment, database change, production action or paid call is authorized. The 61 PASS / 47 BLOCKED boundary remains unchanged.
+
 ## Hosted preflight diagnostics (2026-10-12)
 
 PR #289 merged as `3d05c82222e665e4883f90f6d0af8860bc9a9c23`. Its approved hosted run `38162609610`, attempt 1, passed checkout, retained/oracle/server evidence and public browser checks, then finished with independently reconstructed **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. All 304 source hashes match. The authenticated runner entered database preflight but emitted only `AUTHENTICATED_HOSTED_RUNNER_FAILED`; it created no exercise, session or permit. Both providers remain OFF, and temporary `main` access was removed while preserving other branches and the reviewer. The single-run allowance is consumed.

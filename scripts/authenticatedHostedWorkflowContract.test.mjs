@@ -59,16 +59,11 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
     assert.equal(actual['continue-on-error'], undefined);
     assert.equal(actual.run.trim(), [check, ...original.run.trim().split('\n').flatMap(line => [line, check])].join('\n'), `${name}: command and checkout-check parity`);
   }
-  const cli = replay.steps.find(step => step.name === 'Install pinned Supabase CLI for deployed source attestation');
-  const hostedCli = hosted.steps.find(step => step.name === cli.name);
-  assert.equal(cli.uses, hostedCli.uses);
-  assert.deepEqual(cli.with, hostedCli.with);
-  assert.equal(cli.if, undefined);
-  const cliProbe = replay.steps.find(step => step.name === 'Verify real pinned CLI against loopback fixture');
-  assert.ok(replay.steps.indexOf(cliProbe) > replay.steps.indexOf(cli));
-  assert.equal(cliProbe.run.trim(), `node scripts/testAuthenticatedSupabaseCli.mjs\n${check}`);
-  assert.equal(cliProbe.env, undefined);
-  assert.equal(cliProbe['continue-on-error'], undefined);
+  assert.equal(replay.steps.some(step => String(step.uses ?? '').startsWith('supabase/setup-cli@')), false);
+  const decoderProbe = replay.steps.find(step => step.name === 'Verify original source attestation against loopback multipart');
+  assert.equal(decoderProbe.run.trim(), `node scripts/testAuthenticatedSupabaseMultipart.mjs\n${check}`);
+  assert.equal(decoderProbe.env, undefined);
+  assert.equal(decoderProbe['continue-on-error'], undefined);
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
@@ -142,11 +137,7 @@ test('one exhaustive job owns retained, oracle, server, public browser and authe
   assert.doesNotMatch(commands, /download-artifact|historical|previous[-_ ]run/iu);
   const authenticated = steps.find(step => step.id === 'authenticated');
   assert.equal(authenticated['continue-on-error'], true);
-  const cli = steps.find(step => step.name === 'Install pinned Supabase CLI for deployed source attestation');
-  assert.equal(cli.uses, 'supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf');
-  assert.equal(cli.with.version, '2.101.0');
-  assert.equal(cli.if, "steps.deployment.outcome == 'success'");
-  assert.ok(steps.indexOf(cli) < steps.indexOf(authenticated));
+  assert.equal(steps.some(step => String(step.uses ?? '').startsWith('supabase/setup-cli@')), false);
   assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY,
     '${{ secrets.AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY }}');
   assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN,

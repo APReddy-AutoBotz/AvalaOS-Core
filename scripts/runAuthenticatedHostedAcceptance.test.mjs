@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,7 +9,8 @@ import test from 'node:test';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
   downloadAndVerifyAuthenticatedEdgeSources,
-  observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance } from './runAuthenticatedHostedAcceptance.mjs';
+  observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance,
+  verifyAuthenticatedEdgeSourceResponse,verifyAuthenticatedHostedDeployment } from './runAuthenticatedHostedAcceptance.mjs';
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command',
@@ -78,29 +79,46 @@ async function fixture(t, mode = 'exact') {
     expected[`${slug}:_shared/nested.ts`] = sha(nested);
     expected[`${slug}:services/contract.ts`] = sha(contract);
   }
-  const directories = [];
-  const cli = async (command, args, options) => {
-    assert.equal(command, 'supabase');
-    assert.deepEqual(args.slice(0, 2), ['functions', 'download']);
-    assert.equal(args.includes('--use-api'), false);
-    assert.equal(args.includes('--use-docker'), true);
-    assert.equal(args[args.indexOf('--workdir') + 1], options.cwd);
-    assert.match(await readFile(path.join(options.cwd, 'supabase/config.toml'), 'utf8'), /project_id/u);
-    assert.equal(options.env.SUPABASE_ACCESS_TOKEN, 'fake-management-token-only');
-    directories.push(options.cwd);
-    const slug = args[2];
-    // Docker unbundling targets supabase/functions/<slug>, then recreates the
-    // module graph relative to its lowest repository-local source path.
-    const decoded = relative => `${slug}/${relative}`;
-    await save(options.cwd, decoded(`supabase/functions/${slug}/index.ts`), entry.replaceAll('\n', '\r\n'));
-    await save(options.cwd, decoded('supabase/functions/_shared/shared.ts'), shared);
-    if (mode !== 'missing-transitive') await save(options.cwd, decoded('supabase/functions/_shared/nested.ts'),
-      mode === 'stale-first' && slug === functions[0] ? 'export const value = 0;\n' : nested);
-    if (mode !== 'missing-repository-dependency') await save(options.cwd, decoded('services/contract.ts'), contract);
-    if (mode === 'shadow-shared') await save(options.cwd, '_shared/shared.ts', shared);
-    return { stdout: '', stderr: '' };
+  const deployments={};let fetchCount=0;
+  for(const [index,slug] of functions.entries())deployments[slug]={
+    id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,version:index+1,status:'ACTIVE'};
+  const multipart=slug=>{
+    const form=new FormData();const deployment=deployments[slug];
+    const metadata={deployment_id:`${fixtureProjectRef}_${deployment.id}_${deployment.version}`,
+      original_size:4096,compressed_size:2048,module_count:4,
+      deno2_entrypoint_path:`source/supabase/functions/${slug}/index.ts`};
+    if(mode==='metadata-extra')metadata.unknown=true;
+    if(mode==='metadata-entrypoint')metadata.deno2_entrypoint_path='source/wrong.ts';
+    if(mode==='metadata-deployment')metadata.deployment_id='wrong';
+    if(mode==='metadata-count')metadata.module_count=5;
+    form.append('metadata',mode==='metadata-invalid'?'{':mode==='metadata-large'?'x'.repeat(64*1024+1):JSON.stringify(metadata));
+    const sources=[
+      [`source/supabase/functions/${slug}/index.ts`,entry.replaceAll('\n','\r\n')],
+      ['source/supabase/functions/_shared/shared.ts',shared],
+      ['source/supabase/functions/_shared/nested.ts',mode==='stale-first'&&slug===functions[0]
+        ?'export const value = 0;\n':mode==='invalid-byte'?Buffer.from([0xff]):nested],
+      [mode==='path-traversal'?'source/services/../contract.ts':'source/services/contract.ts',contract],
+    ];
+    for(const [remote,text] of sources){
+      if(mode==='missing-transitive'&&remote.endsWith('/nested.ts'))continue;
+      if(mode==='missing-repository-dependency'&&remote==='source/services/contract.ts')continue;
+      form.append(mode==='unknown-field'?'unknown':'file',new Blob([text]),remote);
+    }
+    if(mode==='extra')form.append('file',new Blob(['extra']),'source/extra.ts');
+    if(mode==='duplicate-file')form.append('file',new Blob([entry]),`source/supabase/functions/${slug}/index.ts`);
+    if(mode==='duplicate-metadata')form.append('metadata','{}');
+    return new Response(form);
   };
-  return { root, directories, cli, config: { projectRef: 'abcdefghijklmnopqrst', backendDigest: canonicalDigest(expected) } };
+  const fetchImpl=async(url,options)=>{
+    const slug=functions[fetchCount++];
+    assert.equal(url,`https://api.supabase.com/v1/projects/${fixtureProjectRef}/functions/${slug}/body`);
+    assert.equal(options.method,'GET');assert.equal(options.redirect,'error');
+    assert.equal(options.headers.authorization,'Bearer fake-management-token-only');
+    assert.equal(options.headers.accept,'multipart/form-data');
+    return multipart(slug);
+  };
+  return { root,deployments,fetchImpl,multipart,
+    config: { projectRef: fixtureProjectRef, backendDigest: canonicalDigest(expected) } };
 }
 
 async function closureFixture(t, entryText, dependencies = {}) {
@@ -210,52 +228,138 @@ test('runtime closure rejects a relative dependency symlink that escapes the rep
     /BACKEND_LOCAL_DEPENDENCY_ESCAPE/u);
 });
 
-test('deployed source attestation verifies each independent function and transitive dependency', async t => {
-  const sample = await fixture(t);
-  const result = await downloadAndVerifyAuthenticatedEdgeSources(sample.config,
-    { root: sample.root, cli: sample.cli, managementToken: 'fake-management-token-only' });
-  assert.equal(result.files, functions.length * 4);
-  assert.equal(new Set(sample.directories).size, functions.length);
-  for (const directory of sample.directories) assert.equal(await stat(directory).catch(() => null), null);
-  // Only the temporary downloads were removed; the checked-out source survives.
-  assert.equal(await readFile(path.join(sample.root, 'supabase/functions/_shared/nested.ts'), 'utf8'), nested);
+test('multipart source attestation verifies all functions and transitive dependencies',async t=>{
+  const sample=await fixture(t);const result=await downloadAndVerifyAuthenticatedEdgeSources(sample.config,{
+    root:sample.root,fetchImpl:sample.fetchImpl,deployments:sample.deployments,
+    managementToken:'fake-management-token-only'});
+  assert.deepEqual(result,{backendDigest:sample.config.backendDigest,files:functions.length*4});
+  assert.equal(await readFile(path.join(sample.root,'supabase/functions/_shared/nested.ts'),'utf8'),nested);
 });
 
-test('a later fresh bundle cannot conceal an earlier function with a stale shared dependency', async t => {
-  const sample = await fixture(t, 'stale-first');
-  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,
-    { root: sample.root, cli: sample.cli, managementToken: 'fake-management-token-only' }), /BACKEND_SOURCE_FILE_MISMATCH/u);
-  assert.equal(sample.directories.length, 1);
-  assert.equal(await stat(sample.directories[0]).catch(() => null), null);
+for(const [mode,code] of [
+  ['stale-first','BACKEND_SOURCE_FILE_MISMATCH'],
+  ['invalid-byte','BACKEND_SOURCE_FILE_MISMATCH'],
+  ['missing-transitive','BACKEND_DEPENDENCY_CLOSURE_MISSING'],
+  ['missing-repository-dependency','BACKEND_DEPENDENCY_CLOSURE_MISSING'],
+  ['extra','BACKEND_DEPENDENCY_CLOSURE_EXTRA'],
+  ['metadata-invalid','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['metadata-extra','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['metadata-entrypoint','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['metadata-deployment','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['metadata-count','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['metadata-large','BACKEND_SOURCE_MULTIPART_REJECTED'],
+  ['duplicate-metadata','BACKEND_SOURCE_MULTIPART_REJECTED'],
+  ['duplicate-file','BACKEND_SOURCE_MULTIPART_REJECTED'],
+  ['unknown-field','BACKEND_SOURCE_MULTIPART_REJECTED'],
+  ['path-traversal','BACKEND_SOURCE_MULTIPART_REJECTED'],
+])test(`multipart source verification rejects ${mode}`,async t=>{
+  const sample=await fixture(t,mode);
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
+    fetchImpl:sample.fetchImpl,deployments:sample.deployments,managementToken:'fake-management-token-only'}),
+  new RegExp(code,'u'));
 });
 
-test('a matching entry point and direct dependency cannot hide a missing transitive dependency', async t => {
-  const sample = await fixture(t, 'missing-transitive');
-  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,
-    { root: sample.root, cli: sample.cli, managementToken: 'fake-management-token-only' }), /BACKEND_DEPENDENCY_CLOSURE_MISSING/u);
-  assert.equal(await stat(sample.directories[0]).catch(() => null), null);
+test('offline multipart verifier returns only the selected function digest map',async t=>{
+  const sample=await fixture(t);const slug=functions[0];
+  const compared=await verifyAuthenticatedEdgeSourceResponse(sample.multipart(slug),{root:sample.root,slug,
+    projectRef:fixtureProjectRef,deployment:sample.deployments[slug]});
+  assert.deepEqual(Object.keys(compared).toSorted(),[
+    `${slug}:_shared/nested.ts`,`${slug}:_shared/shared.ts`,`${slug}:services/contract.ts`,`${slug}:${slug}/index.ts`,
+  ].toSorted());
 });
 
-test('source attestation includes production contracts outside the functions directory', async t => {
-  const sample = await fixture(t, 'missing-repository-dependency');
-  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,
-    { root: sample.root, cli: sample.cli, managementToken: 'fake-management-token-only' }), /BACKEND_DEPENDENCY_CLOSURE_MISSING/u);
+for(const [label,response,code] of [
+  ['status',new Response(null,{status:403,headers:{'content-type':'multipart/form-data; boundary=abc'}}),
+    'BACKEND_SOURCE_STATUS_REJECTED'],
+  ['media type',new Response('no',{status:200,headers:{'content-type':'application/octet-stream'}}),
+    'BACKEND_SOURCE_CONTENT_TYPE_REJECTED'],
+  ['missing boundary',new Response('no',{status:200,headers:{'content-type':'multipart/form-data'}}),
+    'BACKEND_SOURCE_CONTENT_TYPE_REJECTED'],
+  ['zero declared size',new Response('x',{status:200,headers:{'content-type':'multipart/form-data; boundary=abc',
+    'content-length':'0'}}),'BACKEND_SOURCE_SIZE_REJECTED'],
+  ['oversized declaration',new Response('x',{status:200,headers:{'content-type':'multipart/form-data; boundary=abc',
+    'content-length':String(33*1024*1024)}}),'BACKEND_SOURCE_SIZE_REJECTED'],
+  ['malformed multipart',new Response('not-multipart',{status:200,
+    headers:{'content-type':'multipart/form-data; boundary=abc'}}),'BACKEND_SOURCE_MULTIPART_REJECTED'],
+])test(`multipart response rejects ${label}`,async t=>{
+  const sample=await fixture(t);const slug=functions[0];
+  await assert.rejects(verifyAuthenticatedEdgeSourceResponse(response,{root:sample.root,slug,
+    projectRef:fixtureProjectRef,deployment:sample.deployments[slug]}),new RegExp(code,'u'));
 });
 
-test('a second flat shared tree cannot be mixed into the isolated Docker-decoded bundle', async t => {
-  const sample = await fixture(t, 'shadow-shared');
-  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,
-    { root: sample.root, cli: sample.cli, managementToken: 'fake-management-token-only' }), /BACKEND_DEPENDENCY_CLOSURE_MISSING/u);
+test('multipart response rejects redirects and requests never follow them',async t=>{
+  const sample=await fixture(t);const response=sample.multipart(functions[0]);
+  Object.defineProperty(response,'redirected',{value:true});
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
+    deployments:sample.deployments,managementToken:'fake-management-token-only',
+    fetchImpl:async(_url,options)=>{assert.equal(options.redirect,'error');return response;}}),
+  /BACKEND_SOURCE_REDIRECT_REJECTED/u);
 });
 
-test('source download sanitizes a raw subprocess failure and still removes its temporary directory', async t => {
-  const sample = await fixture(t);let child;
-  const cli=async (_command,_args,options)=>{child=options.cwd;const error=new Error('fixture-sensitive-value-must-never-appear');
-    error.stderr='Error status 403: {"message":"fixture-sensitive-value-must-never-appear"}';throw error;};
-  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,
-    {root:sample.root,cli,managementToken:'fake-management-token-only'}),
-  /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_SOURCE_DOWNLOAD_CLI_AUTHENTICATION$/u);
-  assert.equal(await stat(child).catch(()=>null),null);
+test('multipart response enforces the streamed byte bound',async t=>{
+  const sample=await fixture(t);const oversized=new ReadableStream({start(controller){
+    controller.enqueue(new Uint8Array(32*1024*1024));controller.enqueue(new Uint8Array([1]));controller.close();}});
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
+    deployments:sample.deployments,managementToken:'fake-management-token-only',
+    fetchImpl:async()=>new Response(oversized,{status:200,headers:{'content-type':'multipart/form-data; boundary=abc'}})}),
+  /BACKEND_SOURCE_SIZE_REJECTED/u);
+});
+
+test('multipart fetch sanitizes cancellation',async t=>{
+  const sample=await fixture(t);const aborted=new Error('sensitive');aborted.name='AbortError';
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
+    deployments:sample.deployments,managementToken:'fake-management-token-only',fetchImpl:async()=>{throw aborted;}}),
+  /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_SOURCE_DOWNLOAD_TIMEOUT$/u);
+});
+
+test('multipart source verification requires every exact deployment binding',async t=>{
+  const sample=await fixture(t);sample.deployments[functions[0]]={...sample.deployments[functions[0]],status:'INACTIVE'};
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
+    fetchImpl:sample.fetchImpl,deployments:sample.deployments,managementToken:'fake-management-token-only'}),
+  /BACKEND_DEPLOYMENT_BINDING_REJECTED/u);
+});
+
+const deploymentVerificationFixture=sample=>{
+  const config={origin:'https://avalaos-pilot.netlify.app',releaseSha:'a'.repeat(40),deploymentId:'b'.repeat(24),
+    projectRef:fixtureProjectRef,backendDigest:sample.config.backendDigest,targetPublicDigest:sha('target')};
+  const rows=functions.map(slug=>({slug,...sample.deployments[slug]}));
+  const frontend=()=>new Response('<div id="root"></div>',{status:200,headers:{
+    'x-avalaos-release':config.releaseSha,'x-avalaos-environment':'hosted_nonproduction_pilot',
+    'x-avalaos-netlify-deploy-id':config.deploymentId}});
+  return {config,rows,frontend};
+};
+
+test('deployment verification passes stable inventory bindings to source verification',async t=>{
+  const sample=await fixture(t);const setup=deploymentVerificationFixture(sample);let inventoryCalls=0;let supplied;
+  const fetchImpl=async url=>url===setup.config.origin?setup.frontend():new Response(JSON.stringify(setup.rows),{
+    status:200,headers:{'content-type':'application/json','x-call':String(++inventoryCalls)}});
+  const result=await verifyAuthenticatedHostedDeployment(setup.config,{fetchImpl,managementToken:'fake-management-token-only',
+    verifyDownloadedSources:async(_config,options)=>{supplied=options.deployments;return {}}});
+  assert.equal(inventoryCalls,2);assert.equal(supplied.get(functions[0]).version,1);
+  assert.equal(result.backendDigest,setup.config.backendDigest);
+});
+
+for(const [label,change,code] of [
+  ['missing',rows=>rows.slice(1),'BACKEND_FUNCTION_MISSING'],
+  ['duplicate',rows=>[...rows,rows[0]],'BACKEND_INVENTORY_REJECTED'],
+])test(`deployment verification rejects ${label} initial inventory before source verification`,async t=>{
+  const sample=await fixture(t);const setup=deploymentVerificationFixture(sample);let sourceCalled=false;
+  const rows=change(setup.rows);
+  const fetchImpl=async url=>url===setup.config.origin?setup.frontend():new Response(JSON.stringify(rows),{
+    status:200,headers:{'content-type':'application/json'}});
+  await assert.rejects(verifyAuthenticatedHostedDeployment(setup.config,{fetchImpl,
+    managementToken:'fake-management-token-only',verifyDownloadedSources:async()=>{sourceCalled=true;}}),new RegExp(code,'u'));
+  assert.equal(sourceCalled,false);
+});
+
+test('deployment verification rejects version drift after source verification',async t=>{
+  const sample=await fixture(t);const setup=deploymentVerificationFixture(sample);let inventories=0;let sourceCalled=false;
+  const fetchImpl=async url=>{if(url===setup.config.origin)return setup.frontend();inventories+=1;
+    const rows=inventories===1?setup.rows:setup.rows.map((row,index)=>index===0?{...row,version:row.version+1}:row);
+    return new Response(JSON.stringify(rows),{status:200,headers:{'content-type':'application/json'}});};
+  await assert.rejects(verifyAuthenticatedHostedDeployment(setup.config,{fetchImpl,
+    managementToken:'fake-management-token-only',verifyDownloadedSources:async()=>{sourceCalled=true;}}),
+  /BACKEND_INVENTORY_DRIFT/u);assert.equal(sourceCalled,true);assert.equal(inventories,2);
 });
 
 test('database connection diagnostics are sanitized and the failed owned client is closed', async () => {

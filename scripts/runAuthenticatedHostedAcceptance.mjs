@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -33,6 +32,8 @@ const AUTHENTICATED_EDGE_FUNCTIONS=Object.freeze(['tenant-session','process-comm
   'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-query','synthetic-admin',
   'pilot-operations-query','enterprise-provider-lifecycle','enterprise-provider-lifecycle-authority',
   'enterprise-provider-lifecycle-recovery']);
+const MAX_EDGE_SOURCE_RESPONSE_BYTES=32*1024*1024;
+const MAX_EDGE_SOURCE_FILES=2048;
 const sha = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const fail = code => { throw new Error(`AUTHENTICATED_HOSTED_RUNNER_${code}`); };
 
@@ -68,17 +69,13 @@ export async function verifyAuthenticatedHostedCheckout(config, { root = process
   return { catalogDigest: config.catalogDigest, sourceDigest: config.sourceDigest, migrationDigest };
 }
 
-const sourceFiles = async directory => {
-  const output = [];
-  const visit = async current => {
-    for (const entry of await readdir(current, { withFileTypes: true })) {
-      const target = path.join(current, entry.name);
-      if (entry.isDirectory()) await visit(target);
-      else if (entry.isFile()) output.push(target);
-    }
-  };
-  await visit(directory);
-  return output.toSorted();
+const statIfPresent = async file => {
+  try {
+    return await stat(file);
+  } catch (error) {
+    if (['ENOENT','ENOTDIR'].includes(error?.code)) return null;
+    throw error;
+  }
 };
 
 const localModuleSpecifier = value => value.startsWith('./') || value.startsWith('../');
@@ -128,7 +125,7 @@ export async function collectAuthenticatedEdgeRuntimeClosure(root, slug) {
     const functionRelative = path.relative(localFunctionsRoot, file).replaceAll('\\', '/');
     const relative = functionRelative.startsWith('../') ? rootRelative : functionRelative;
     if (closure.has(relative)) continue;
-    if (!(await stat(file).catch(() => null))?.isFile()) fail('BACKEND_LOCAL_DEPENDENCY_UNRESOLVED');
+    if (!(await statIfPresent(file))?.isFile()) fail('BACKEND_LOCAL_DEPENDENCY_UNRESOLVED');
     const canonicalFile = await realpath(file);
     const canonicalRelative = path.relative(canonicalRoot, canonicalFile).replaceAll('\\', '/');
     if (canonicalRelative.startsWith('../') || path.isAbsolute(canonicalRelative)) {
@@ -147,7 +144,7 @@ export async function collectAuthenticatedEdgeRuntimeClosure(root, slug) {
       for (const candidate of [requested, `${requested}.ts`, `${requested}.tsx`, `${requested}.js`, `${requested}.mjs`,
         `${requested}.json`, path.join(requested, 'index.ts'), path.join(requested, 'index.tsx'),
         path.join(requested, 'index.js')]) {
-        if ((await stat(candidate).catch(() => null))?.isFile()) { dependency = candidate; break; }
+        if ((await statIfPresent(candidate))?.isFile()) { dependency = candidate; break; }
       }
       if (!dependency) fail('BACKEND_LOCAL_DEPENDENCY_UNRESOLVED');
       const dependencyRelative = path.relative(root, dependency).replaceAll('\\', '/');
@@ -160,67 +157,130 @@ export async function collectAuthenticatedEdgeRuntimeClosure(root, slug) {
   return closure;
 }
 
-export async function downloadAndVerifyAuthenticatedEdgeSources(config, { root = process.cwd(), cli = execFileAsync,
-  managementToken } = {}) {
-  if (typeof managementToken !== 'string' || managementToken.length < 16) fail('BACKEND_INVENTORY_CREDENTIAL_REQUIRED');
-  for (const slug of AUTHENTICATED_EDGE_FUNCTIONS) {
-    const local = path.join(root, 'supabase', 'functions', slug, 'index.ts');
-    if (!(await stat(local).catch(() => null))?.isFile()) fail('BACKEND_LOCAL_FUNCTION_MISSING');
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const deploymentFor=(deployments,slug)=>deployments instanceof Map?deployments.get(slug):deployments?.[slug];
+const validDeployment=deployment=>deployment&&uuid.test(deployment.id??'')&&Number.isSafeInteger(deployment.version)
+  &&deployment.version>0&&deployment.status==='ACTIVE';
+
+const normalizeCrlfBytes=input=>{
+  const source=Buffer.from(input);const normalized=Buffer.allocUnsafe(source.length);let read=0;let written=0;
+  while(read<source.length){if(source[read]===13&&source[read+1]===10){normalized[written++]=10;read+=2;}
+    else normalized[written++]=source[read++];}
+  return normalized.subarray(0,written);
+};
+
+const boundedMultipartBody=async response=>{
+  const reject=async code=>{await response?.body?.cancel?.().catch(()=>undefined);fail(code);};
+  if(response?.redirected===true)await reject('BACKEND_SOURCE_REDIRECT_REJECTED');
+  if(response?.status!==200)await reject('BACKEND_SOURCE_STATUS_REJECTED');
+  const contentType=String(response.headers?.get?.('content-type')??'').trim();
+  const match=contentType.match(/^multipart\/form-data\s*;\s*boundary=(?:"([0-9A-Za-z'()+_,.\/:=?-]{1,70})"|([0-9A-Za-z'()+_,.\/:=?-]{1,70}))$/u);
+  if(!match)await reject('BACKEND_SOURCE_CONTENT_TYPE_REJECTED');
+  const declared=String(response.headers?.get?.('content-length')??'');
+  if(declared!==''&&(!/^\d+$/u.test(declared)||Number(declared)<1||Number(declared)>MAX_EDGE_SOURCE_RESPONSE_BYTES)){
+    await reject('BACKEND_SOURCE_SIZE_REJECTED');
   }
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'authenticated-edge-source-'));
-  try {
-    const compared = {};
-    const localFunctionsRoot=path.join(root,'supabase','functions');
-    for (const slug of AUTHENTICATED_EDGE_FUNCTIONS) {
-      const child=path.join(temporary,slug);await mkdir(path.join(child,'supabase'),{recursive:true});
-      await writeFile(path.join(child,'supabase','config.toml'),`project_id = "${config.projectRef}"\n`,'utf8');
-      await withAuthenticatedHostedDiagnostic('SOURCE_DOWNLOAD', () => cli('supabase',
-        ['functions','download',slug,'--project-ref',config.projectRef,'--workdir',child,'--use-docker'], {
-          cwd: child, encoding: 'utf8', env: { ...process.env, SUPABASE_ACCESS_TOKEN: managementToken,
-            SUPABASE_TELEMETRY_DISABLED: 'true' }, windowsHide: true,
-        }), { source: 'cli' });
-      const downloadedRoot=path.join(child,'supabase','functions');
-      const files=await sourceFiles(downloadedRoot).catch(()=>[]);
-      const expected=await collectAuthenticatedEdgeRuntimeClosure(root,slug);
-      const layoutCandidates=[
-        [downloadedRoot,localFunctionsRoot],[downloadedRoot,root],
-        [path.join(downloadedRoot,slug),root],[path.join(downloadedRoot,slug),localFunctionsRoot],
-        [path.join(downloadedRoot,slug),path.join(localFunctionsRoot,slug)],
-      ];
-      const mappings=[];
-      for(const [remoteBase,localBase] of layoutCandidates){const mapping=[];let valid=true;
-        for(const file of files){const relative=path.relative(remoteBase,file).replaceAll('\\','/');
-          if(relative===''||relative.startsWith('../')||path.isAbsolute(relative)){valid=false;break;}
-          const local=path.resolve(localBase,relative);const rootRelative=path.relative(root,local).replaceAll('\\','/');
-          if(rootRelative.startsWith('../')||path.isAbsolute(rootRelative)){valid=false;break;}
-          const functionRelative=path.relative(localFunctionsRoot,local).replaceAll('\\','/');
-          const normalizedRelative=functionRelative.startsWith('../')?rootRelative:functionRelative;
-          if(expected.get(normalizedRelative)!==local||mapping.some(item=>item.normalizedRelative===normalizedRelative)){
-            valid=false;break;
-          }
-          mapping.push({file,local,normalizedRelative});
-        }
-        if(valid&&mapping.length===expected.size)mappings.push(mapping);
+  if(!response.body?.getReader)await reject('BACKEND_SOURCE_BODY_REJECTED');
+  const chunks=[];let received=0;const reader=response.body.getReader();
+  try{for(;;){const {done,value}=await reader.read();if(done)break;const chunk=Buffer.from(value);received+=chunk.length;
+      if(received>MAX_EDGE_SOURCE_RESPONSE_BYTES)fail('BACKEND_SOURCE_SIZE_REJECTED');chunks.push(chunk);}
+    if(received===0)fail('BACKEND_SOURCE_BODY_REJECTED');
+  }catch(error){await reader.cancel().catch(()=>undefined);throw error;}finally{reader.releaseLock();}
+  const bounded=new Response(Buffer.concat(chunks,received),{headers:{'content-type':contentType}});
+  try{return await bounded.formData();}catch{fail('BACKEND_SOURCE_MULTIPART_REJECTED');}
+};
+
+const canonicalRemoteSourcePath=value=>typeof value==='string'&&value.startsWith('source/')
+  &&!value.includes('\\')&&!/[\u0000-\u001f\u007f]/u.test(value)&&!path.posix.isAbsolute(value)
+  &&path.posix.normalize(value)===value&&value.split('/').every(segment=>segment!==''&&segment!=='.'&&segment!=='..');
+
+export async function verifyAuthenticatedEdgeSourceResponse(response,{root=process.cwd(),slug,projectRef,deployment,
+  expected}={}){
+  if(!AUTHENTICATED_EDGE_FUNCTIONS.includes(slug)||!/^[a-z0-9]{20}$/u.test(projectRef??'')||!validDeployment(deployment)){
+    fail('BACKEND_SOURCE_INPUT_REJECTED');
+  }
+  const closure=expected??await collectAuthenticatedEdgeRuntimeClosure(root,slug);
+  if(!(closure instanceof Map)||closure.size<1||closure.size>MAX_EDGE_SOURCE_FILES)fail('BACKEND_SOURCE_INPUT_REJECTED');
+  const form=await boundedMultipartBody(response);
+  let metadataText=null;const files=new Map();
+  for(const [field,value] of form.entries()){
+    if(typeof value==='string'){
+      if(field!=='metadata'||metadataText!==null||Buffer.byteLength(value,'utf8')>64*1024){
+        fail('BACKEND_SOURCE_MULTIPART_REJECTED');
       }
-      const unique=new Map(mappings.map(mapping=>[mapping.map(item=>`${item.file}:${item.normalizedRelative}`).sort().join('|'),mapping]));
-      if(unique.size===0)fail('BACKEND_DEPENDENCY_CLOSURE_MISSING');
-      if(unique.size!==1)fail('BACKEND_SOURCE_LAYOUT_AMBIGUOUS');
-      for(const {file,local,normalizedRelative} of unique.values().next().value){
-        const [remoteText,localText]=await Promise.all([readFile(file),readFile(local)]);
-        const normalize=input=>input.toString('utf8').replace(/\r\n/gu,'\n');
-        if(normalize(remoteText)!==normalize(localText))fail('BACKEND_SOURCE_FILE_MISMATCH');
-        compared[`${slug}:${normalizedRelative}`]=sha(normalize(localText));
-      }
+      metadataText=value;continue;
     }
-    if (canonicalDigest(compared) !== config.backendDigest) fail('BACKEND_SOURCE_DIGEST_MISMATCH');
-    return { backendDigest: config.backendDigest, files: Object.keys(compared).length };
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
+    if(field!=='file'||!(value instanceof Blob)||!canonicalRemoteSourcePath(value.name)||files.has(value.name)){
+      fail('BACKEND_SOURCE_MULTIPART_REJECTED');
+    }
+    files.set(value.name,value);
   }
+  if(metadataText===null)fail('BACKEND_SOURCE_METADATA_REJECTED');
+  let metadata;try{metadata=JSON.parse(metadataText);}catch{fail('BACKEND_SOURCE_METADATA_REJECTED');}
+  const metadataKeys=['compressed_size','deno2_entrypoint_path','deployment_id','module_count','original_size'];
+  if(!metadata||Array.isArray(metadata)||Object.keys(metadata).toSorted().join('|')!==metadataKeys.join('|')
+    ||metadata.deployment_id!==`${projectRef}_${deployment.id}_${deployment.version}`
+    ||metadata.deno2_entrypoint_path!==`source/supabase/functions/${slug}/index.ts`
+    ||metadata.module_count!==closure.size
+    ||!['original_size','compressed_size'].every(key=>Number.isSafeInteger(metadata[key])&&metadata[key]>=0
+      &&metadata[key]<=MAX_EDGE_SOURCE_RESPONSE_BYTES))fail('BACKEND_SOURCE_METADATA_REJECTED');
+  const expectedFiles=new Map();
+  for(const [normalizedRelative,local] of closure){
+    const relative=path.relative(root,local).replaceAll('\\','/');
+    if(relative===''||relative.startsWith('../')||path.isAbsolute(relative))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+    const remote=`source/${relative}`;if(!canonicalRemoteSourcePath(remote))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+    expectedFiles.set(remote,{normalizedRelative,local});
+  }
+  if(files.size>expectedFiles.size)fail('BACKEND_DEPENDENCY_CLOSURE_EXTRA');
+  if(files.size<expectedFiles.size)fail('BACKEND_DEPENDENCY_CLOSURE_MISSING');
+  if([...files.keys()].some(remote=>!expectedFiles.has(remote)))fail('BACKEND_DEPENDENCY_CLOSURE_EXTRA');
+  const compared={};
+  for(const [remote,{normalizedRelative,local}] of expectedFiles){
+    const file=files.get(remote);if(!file)fail('BACKEND_DEPENDENCY_CLOSURE_MISSING');
+    const [remoteBytes,localBytes]=await Promise.all([file.arrayBuffer().then(Buffer.from),readFile(local)]);
+    const normalizedRemote=normalizeCrlfBytes(remoteBytes);const normalizedLocal=normalizeCrlfBytes(localBytes);
+    if(!normalizedRemote.equals(normalizedLocal))fail('BACKEND_SOURCE_FILE_MISMATCH');
+    compared[`${slug}:${normalizedRelative}`]=sha(normalizedLocal);
+  }
+  return compared;
 }
+
+export async function downloadAndVerifyAuthenticatedEdgeSources(config,{root=process.cwd(),managementToken,
+  fetchImpl=fetch,deployments,signal}={}){
+  if(typeof managementToken!=='string'||managementToken.length<16||!/^[a-z0-9]{20}$/u.test(config?.projectRef??'')){
+    fail('BACKEND_INVENTORY_CREDENTIAL_REQUIRED');
+  }
+  const compared={};
+  for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){
+    const deployment=deploymentFor(deployments,slug);if(!validDeployment(deployment))fail('BACKEND_DEPLOYMENT_BINDING_REJECTED');
+    const expected=await withAuthenticatedHostedDiagnostic('SOURCE_PREPARE',()=>collectAuthenticatedEdgeRuntimeClosure(root,slug));
+    const timeout=AbortSignal.timeout(30_000);const requestSignal=signal?AbortSignal.any([signal,timeout]):timeout;
+    const response=await withAuthenticatedHostedDiagnostic('SOURCE_DOWNLOAD',()=>fetchImpl(
+      `https://api.supabase.com/v1/projects/${config.projectRef}/functions/${slug}/body`,{method:'GET',redirect:'error',
+        signal:requestSignal,headers:{authorization:`Bearer ${managementToken}`,accept:'multipart/form-data',
+          'user-agent':'avalaos-authenticated-acceptance'}}));
+    Object.assign(compared,await withAuthenticatedHostedDiagnostic('SOURCE_COMPARE',()=>
+      verifyAuthenticatedEdgeSourceResponse(response,{root,slug,projectRef:config.projectRef,deployment,expected})));
+  }
+  if(canonicalDigest(compared)!==config.backendDigest)fail('BACKEND_SOURCE_DIGEST_MISMATCH');
+  return {backendDigest:config.backendDigest,files:Object.keys(compared).length};
+}
+
+const authenticatedDeployments=rows=>{
+  if(!Array.isArray(rows)||rows.length>512)fail('BACKEND_INVENTORY_REJECTED');
+  const deployments=new Map();
+  for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){
+    const matches=rows.filter(item=>(item?.slug??item?.name)===slug);
+    if(matches.length!==1)fail(matches.length===0?'BACKEND_FUNCTION_MISSING':'BACKEND_INVENTORY_REJECTED');
+    const item=matches[0];const deployment={id:item.id,version:item.version,status:item.status};
+    if(!validDeployment(deployment))fail('BACKEND_INVENTORY_REJECTED');deployments.set(slug,deployment);
+  }
+  return deployments;
+};
 
 export async function verifyAuthenticatedHostedDeployment(config, { fetchImpl = fetch, managementToken,
   verifyDownloadedSources = downloadAndVerifyAuthenticatedEdgeSources } = {}) {
+  if(!/^[a-z0-9]{20}$/u.test(config?.projectRef??''))fail('BACKEND_INVENTORY_REJECTED');
   const identity = await verifyHostedDeployment({ hostedUrl: config.origin, expectedHead: config.releaseSha,
     expectedDeployId: config.deploymentId, fetchImpl });
   const response = await fetchImpl(config.origin, { redirect: 'error', headers: { Accept: 'text/html',
@@ -232,13 +292,23 @@ export async function verifyAuthenticatedHostedDeployment(config, { fetchImpl = 
   if(typeof managementToken!=='string'||managementToken.length<16)fail('BACKEND_INVENTORY_CREDENTIAL_REQUIRED');
   const inventoryResponse=await fetchImpl(`https://api.supabase.com/v1/projects/${config.projectRef}/functions`,{
     redirect:'error',signal:AbortSignal.timeout(15_000),headers:{authorization:`Bearer ${managementToken}`,'user-agent':'avalaos-authenticated-acceptance'} });
-  const inventory=await inventoryResponse.json().catch(()=>null);const rows=Array.isArray(inventory)?inventory:inventory?.functions;
-  if(!inventoryResponse.ok||!Array.isArray(rows))fail('BACKEND_INVENTORY_REJECTED');
-  for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){
-    const deployed=rows.find(item=>(item?.slug??item?.name)===slug&&(!item?.status||item.status==='ACTIVE'));
-    if(!deployed)fail('BACKEND_FUNCTION_MISSING');
+  if(inventoryResponse.status!==200||inventoryResponse.redirected===true){
+    await inventoryResponse.body?.cancel().catch(()=>undefined);fail('BACKEND_INVENTORY_REJECTED');
   }
-  await verifyDownloadedSources(config,{managementToken});
+  const inventory=await inventoryResponse.json().catch(()=>null);const rows=Array.isArray(inventory)?inventory:inventory?.functions;
+  const deployments=authenticatedDeployments(rows);
+  await verifyDownloadedSources(config,{managementToken,fetchImpl,deployments});
+  const finalInventoryResponse=await fetchImpl(`https://api.supabase.com/v1/projects/${config.projectRef}/functions`,{
+    redirect:'error',signal:AbortSignal.timeout(15_000),headers:{authorization:`Bearer ${managementToken}`,
+      'user-agent':'avalaos-authenticated-acceptance'} });
+  if(finalInventoryResponse.status!==200||finalInventoryResponse.redirected===true){
+    await finalInventoryResponse.body?.cancel().catch(()=>undefined);fail('BACKEND_INVENTORY_REJECTED');
+  }
+  const finalInventory=await finalInventoryResponse.json().catch(()=>null);
+  const finalRows=Array.isArray(finalInventory)?finalInventory:finalInventory?.functions;
+  const finalDeployments=authenticatedDeployments(finalRows);
+  for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){const before=deployments.get(slug);const after=finalDeployments.get(slug);
+    if(before.id!==after.id||before.version!==after.version||before.status!==after.status)fail('BACKEND_INVENTORY_DRIFT');}
   return { syntheticTarget: true, production: false, releaseSha: identity.release,
     deploymentId: identity.deployId, backendDigest: config.backendDigest, publicTargetDigest: config.targetPublicDigest };
 }
