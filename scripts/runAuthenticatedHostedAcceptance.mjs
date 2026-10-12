@@ -20,6 +20,7 @@ import {
   createAuthenticatedHostedIdentityAdapter,
   createAuthenticatedHostedPostgresAdapter,
 } from './authenticatedHostedControllerAdapters.mjs';
+import { authenticatedHostedFailureCode, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { createControlledHumanPostgresClientConfig,
@@ -173,10 +174,11 @@ export async function downloadAndVerifyAuthenticatedEdgeSources(config, { root =
     for (const slug of AUTHENTICATED_EDGE_FUNCTIONS) {
       const child=path.join(temporary,slug);await mkdir(path.join(child,'supabase'),{recursive:true});
       await writeFile(path.join(child,'supabase','config.toml'),`project_id = "${config.projectRef}"\n`,'utf8');
-      await cli('supabase',['functions','download',slug,'--project-ref',config.projectRef,'--workdir',child,'--use-docker'], {
-        cwd: child, encoding: 'utf8', env: { ...process.env, SUPABASE_ACCESS_TOKEN: managementToken,
-          SUPABASE_TELEMETRY_DISABLED: 'true' }, windowsHide: true,
-      });
+      await withAuthenticatedHostedDiagnostic('SOURCE_DOWNLOAD', () => cli('supabase',
+        ['functions','download',slug,'--project-ref',config.projectRef,'--workdir',child,'--use-docker'], {
+          cwd: child, encoding: 'utf8', env: { ...process.env, SUPABASE_ACCESS_TOKEN: managementToken,
+            SUPABASE_TELEMETRY_DISABLED: 'true' }, windowsHide: true,
+        }), { source: 'cli' });
       const downloadedRoot=path.join(child,'supabase','functions');
       const files=await sourceFiles(downloadedRoot).catch(()=>[]);
       const expected=await collectAuthenticatedEdgeRuntimeClosure(root,slug);
@@ -445,11 +447,23 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
   const config = validateAuthenticatedHostedControllerEnvironment(environment);
   validateAuthenticatedDatabaseTarget(config);
   await (dependencies.verifyCheckout ?? verifyAuthenticatedHostedCheckout)(config);
-  const database = dependencies.database ?? new pg.Client(createControlledHumanPostgresClientConfig(config.databaseUrl,{
-    allowLoopback:false,applicationName:'authenticated_hosted_acceptance',connectionTimeoutMillis:20_000}));
   const ownsDatabase = !dependencies.database;
-  if (ownsDatabase) await database.connect();
-  const adapter = (dependencies.createPostgresAdapter ?? createAuthenticatedHostedPostgresAdapter)({
+  const database = dependencies.database ?? await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', async () =>
+    (dependencies.createDatabase ?? (clientConfig => new pg.Client(clientConfig)))(
+      createControlledHumanPostgresClientConfig(config.databaseUrl,{
+        allowLoopback:false,applicationName:'authenticated_hosted_acceptance',connectionTimeoutMillis:20_000})));
+  if (ownsDatabase) {
+    try {
+      await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.connect());
+    } catch (primaryError) {
+      try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
+      catch (cleanupError) {
+        throw new AggregateError([primaryError,cleanupError], 'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+      }
+      throw primaryError;
+    }
+  }
+  const rawAdapter = (dependencies.createPostgresAdapter ?? createAuthenticatedHostedPostgresAdapter)({
     config, db: database,
     verifyDeployment: () => (dependencies.verifyDeployment ?? verifyAuthenticatedHostedDeployment)(config,
       {managementToken:environment.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN}),
@@ -462,6 +476,11 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
         ?cleanupAuthenticatedSupabaseVaultSecrets(database,input)
         :cleanupAuthenticatedVaultSecret(environment,input),
   });
+  const adapter = {
+    ...rawAdapter,
+    preflight: input => withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', () => rawAdapter.preflight(input)),
+    activate: input => withAuthenticatedHostedDiagnostic('ACTIVATION', () => rawAdapter.activate(input)),
+  };
   const identity = (dependencies.createIdentityAdapter ?? createAuthenticatedHostedIdentityAdapter)({ config, db: database });
   const controller = new AuthenticatedHostedController({ config, adapter, identity });
   const cancellation=new AbortController();const signalSource=dependencies.signalSource??process;
@@ -503,7 +522,8 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
     const cleanupErrors=[];
     if (!finalized) try { await controller.abortAndQuiesce(); } catch (error) { cleanupErrors.push(error); }
     try { await server?.close(); } catch (error) { cleanupErrors.push(error); }
-    if (ownsDatabase) try { await database.end(); } catch (error) { cleanupErrors.push(error); }
+    if (ownsDatabase) try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
+    catch (error) { cleanupErrors.push(error); }
     signalSource.removeListener('SIGTERM',cancelSigterm);signalSource.removeListener('SIGINT',cancelSigint);
     if (cleanupErrors.length) throw new AggregateError([...(primaryError?[primaryError]:[]),...cleanupErrors],
       'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
@@ -515,8 +535,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   runAuthenticatedHostedAcceptance().then(() => {
     console.log(JSON.stringify({ status: 'completed', outputs: AUTHENTICATED_HOSTED_OUTPUT_PATHS }));
   }).catch(error => {
-    const code=String(error?.message??'').match(/AUTHENTICATED_HOSTED_(?:RUNNER|CONTROLLER|OBSERVATION)_[A-Z0-9_]+/u)?.[0]
-      ??'AUTHENTICATED_HOSTED_RUNNER_FAILED';
+    const code=authenticatedHostedFailureCode(error);
     console.error(code);
     process.exitCode = 1;
   });

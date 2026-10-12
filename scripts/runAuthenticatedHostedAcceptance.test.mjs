@@ -46,6 +46,14 @@ const hostedEnvironment = () => ({
       outsider:'66666666-6666-4666-8666-666666666666'}}),
 });
 
+const validPreflight = environment => ({syntheticTarget:true,production:false,releaseSha:environment.RELEASE_SHA,
+  deploymentId:environment.NETLIFY_DEPLOY_ID,migrationVersion:environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION,
+  backendDigest:environment.AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST,providersEnabled:false,runtimeReady:true,
+  secretBackendKind:'supabase_vault',secretBackendWritable:true,
+  publicTargetDigest:environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST,
+  baselineDigest:environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,customerRows:0,unapprovedActiveResidue:0,
+  scopeReady:true});
+
 async function fixture(t, mode = 'exact') {
   const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-source-test-'));
   t.after(async () => {
@@ -240,15 +248,64 @@ test('a second flat shared tree cannot be mixed into the isolated Docker-decoded
     { root: sample.root, cli: sample.cli, managementToken: 'fake-management-token-only' }), /BACKEND_DEPENDENCY_CLOSURE_MISSING/u);
 });
 
+test('source download sanitizes a raw subprocess failure and still removes its temporary directory', async t => {
+  const sample = await fixture(t);let child;
+  const cli=async (_command,_args,options)=>{child=options.cwd;const error=new Error('fixture-sensitive-value-must-never-appear');
+    error.stderr='Error status 403: {"message":"fixture-sensitive-value-must-never-appear"}';throw error;};
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,
+    {root:sample.root,cli,managementToken:'fake-management-token-only'}),
+  /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_SOURCE_DOWNLOAD_CLI_AUTHENTICATION$/u);
+  assert.equal(await stat(child).catch(()=>null),null);
+});
+
+test('database connection diagnostics are sanitized and the failed owned client is closed', async () => {
+  const environment=hostedEnvironment();const calls=[];let adapterCreated=false;
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment,{verifyCheckout:async()=>{},
+    createDatabase:()=>({connect:async()=>{calls.push('connect');const error=new Error('postgresql://secret@host/db');
+      error.code='ENOTFOUND';throw error;},end:async()=>calls.push('end')}),
+    createPostgresAdapter:()=>{adapterCreated=true;return {};}}),
+  /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_DATABASE_CONNECT_DNS$/u);
+  assert.deepEqual(calls,['connect','end']);assert.equal(adapterCreated,false);
+});
+
+test('database close failure keeps cleanup precedence and only retains sanitized diagnostics', async () => {
+  const environment=hostedEnvironment();let caught;
+  try {await runAuthenticatedHostedAcceptance(environment,{verifyCheckout:async()=>{},
+    createDatabase:()=>({connect:async()=>{const error=new Error('primary-sensitive-value');error.code='ENOTFOUND';throw error;},
+      end:async()=>{throw new Error('cleanup-sensitive-value');}})});
+  } catch(error){caught=error;}
+  assert.equal(caught?.message,'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+  assert.deepEqual(caught?.errors?.map(error=>error.message),[
+    'AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_DATABASE_CONNECT_DNS',
+    'AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_DATABASE_CONNECT_UNCLASSIFIED',
+  ]);
+});
+
+test('preflight diagnostics stop before activation without exposing the injected error', async () => {
+  const environment=hostedEnvironment();const calls=[];
+  const adapter={preflight:async()=>{calls.push('preflight');throw new Error('fixture-sensitive-value-must-never-appear');},
+    activate:async()=>calls.push('activate')};
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment,{database:{},verifyCheckout:async()=>{},
+    createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({})}),
+  /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_DATABASE_SCOPE_BASELINE_UNCLASSIFIED$/u);
+  assert.deepEqual(calls,['preflight']);
+});
+
+test('activation diagnostics retain the exact activation stage and do not run active cleanup', async () => {
+  const environment=hostedEnvironment();const calls=[];
+  const adapter={preflight:async()=>validPreflight(environment),
+    activate:async()=>{calls.push('activate');throw new Error('fixture-sensitive-value-must-never-appear');},
+    quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup')};
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment,{database:{},verifyCheckout:async()=>{},
+    createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({})}),
+  /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_ACTIVATION_UNCLASSIFIED$/u);
+  assert.deepEqual(calls,['activate']);
+});
+
 test('runner cancellation after activation stops before finalization and follows cleanup', async () => {
   const environment=hostedEnvironment();const calls=[];const signalSource=new EventEmitter();
   const adapter={
-    preflight:async()=>({syntheticTarget:true,production:false,releaseSha:environment.RELEASE_SHA,
-      deploymentId:environment.NETLIFY_DEPLOY_ID,migrationVersion:environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION,
-      backendDigest:environment.AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST,providersEnabled:false,runtimeReady:true,
-      secretBackendKind:'supabase_vault',secretBackendWritable:true,
-      publicTargetDigest:environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST,
-      baselineDigest:environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,customerRows:0,unapprovedActiveResidue:0,scopeReady:true}),
+    preflight:async()=>validPreflight(environment),
     activate:async()=>calls.push('activate'),quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup'),
     verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
       activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true}),

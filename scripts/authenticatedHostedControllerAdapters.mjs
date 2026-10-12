@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
+import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
@@ -219,11 +220,13 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
 
   return {
     async preflight() {
+      return withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', async () => {
       observationStartedAt=iso((await query('SELECT statement_timestamp() value')).rows[0].value);
       if(!observationStartedAt)throw new Error('AUTHENTICATED_HOSTED_CUTOFF_REJECTED');
       nonExerciseStateBeforeHash=await nonExerciseState([]);
-      const [deployment, secret, dbState,capabilityState] = await Promise.all([
-        verifyDeployment(), verifySecretBackend(), query(`SELECT
+      const deployment=await withAuthenticatedHostedDiagnostic('DEPLOYMENT_INVENTORY', verifyDeployment);
+      const secret=await withAuthenticatedHostedDiagnostic('NATIVE_VAULT', verifySecretBackend);
+      const dbState=await query(`SELECT
           (SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1) migration_version,
           (SELECT enabled FROM public.studio_artifact_runtime_control WHERE singleton) studio_enabled,
           (SELECT provider_enabled FROM public.studio_artifact_runtime_control WHERE singleton) studio_provider,
@@ -247,10 +250,10 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
           (SELECT count(*)::int FROM public.profiles p JOIN public.organization_members m ON m.user_id=p.id AND m.org_id=$1
             WHERE coalesce((p.metadata->>'synthetic')::boolean,false)=false) customer_rows,
           ${AUTHENTICATED_SYNTHETIC_ACTIVE_RESIDUE_SQL} active_residue`,
-        [config.scope.organizationId,config.scope.workspaceId,Object.values(config.scope.roleIds)]),
-        query('SELECT role_id,capability_key FROM public.role_capabilities WHERE role_id=ANY($1::uuid[])',
-          [Object.values(config.scope.roleIds)]),
-      ]);
+        [config.scope.organizationId,config.scope.workspaceId,Object.values(config.scope.roleIds)]);
+      const capabilityState=await query(
+        'SELECT role_id,capability_key FROM public.role_capabilities WHERE role_id=ANY($1::uuid[])',
+        [Object.values(config.scope.roleIds)]);
       const row = dbState.rows[0];
       const capabilitiesByRole=new Map(Object.values(config.scope.roleIds).map(roleId=>[roleId,new Set()]));
       for(const capability of capabilityState.rows)capabilitiesByRole.get(capability.role_id)?.add(capability.capability_key);
@@ -273,11 +276,13 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         baselineDigest: nonExerciseStateBeforeHash,
         customerRows: row.customer_rows, unapprovedActiveResidue: row.active_residue,
         scopeReady:row.synthetic_org===true&&row.synthetic_workspace===true&&row.scope_roles===4&&rolesReady };
+      });
     },
-    activate: input => authority('authenticated_synthetic_exercise_activate', [input.exerciseId,input.releaseSha,
-      input.deploymentId,input.origin,input.backendDigest,input.migrationVersion,input.migrationDigest,input.exerciseDigest,
-      input.profileVersion,input.catalogDigest,input.sourceDigest,
-      input.organizationId,input.workspaceId,input.expiresAt]),
+    activate: input => withAuthenticatedHostedDiagnostic('ACTIVATION', () =>
+      authority('authenticated_synthetic_exercise_activate', [input.exerciseId,input.releaseSha,
+        input.deploymentId,input.origin,input.backendDigest,input.migrationVersion,input.migrationDigest,input.exerciseDigest,
+        input.profileVersion,input.catalogDigest,input.sourceDigest,
+        input.organizationId,input.workspaceId,input.expiresAt])),
     bindSession: input => authority('authenticated_synthetic_bind_session',
       [input.exerciseId,input.actorId,input.sessionId,input.persona]),
     armPermit: input => authority('authenticated_synthetic_arm_permit', [input.exerciseId,input.permitId,input.kind,

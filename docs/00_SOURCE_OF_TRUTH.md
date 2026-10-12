@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Hosted preflight diagnostics (2026-10-12)
+
+PR #289 merged as `3d05c82222e665e4883f90f6d0af8860bc9a9c23`. Its approved hosted run `38162609610`, attempt 1, passed checkout, retained/oracle/server evidence and public browser checks, then finished with independently reconstructed **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. All 304 source hashes match. The authenticated runner entered database preflight but emitted only `AUTHENTICATED_HOSTED_RUNNER_FAILED`; it created no exercise, session or permit. Both providers remain OFF, and temporary `main` access was removed while preserving other branches and the reviewer. The single-run allowance is consumed.
+
+The underlying preflight cause remains **suspected defect requiring deeper validation**. The proposed missing CLI config-field explanation was rejected by an actual pinned-CLI probe: its embedded defaults let the exact one-line config reach download. Confirmed source defects are loss of safe failure-stage detail and reliance on a mocked CLI for download integration. Continue the authorized repository correction under `docs/planning/hosted-acceptance-completion.md`: bounded diagnostic codes and a credential-free real-CLI loopback check, preserving all source, checkout, authority and acceptance gates. Another hosted run requires separate approval; no hosted PASS or production readiness follows from this correction.
+
 ## Complete preactivation checkout verification (2026-10-11)
 
 PR #288 merged as `bd828f46b77d798f30382592a58f83974e44e13b` with the tested tree unchanged and candidate/post-merge checks passing. Its separately approved hosted run `38156313820`, attempt 1, again stopped at `AUTHENTICATED_HOSTED_RUNNER_CHECKOUT_NOT_EXACT_CLEAN_RELEASE`, before database connection or exercise activation. Independent same-release evidence verifies **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, all 108 unique requirements and all 302 recorded source hashes; the blocked set is exactly the authenticated requirements. The corrected external SUT manifest binding was present, so the previous correction is incomplete. The old combined error does not establish whether HEAD or checkout status differed at the guard.

@@ -321,7 +321,12 @@ jobs:
         uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
         with:
           version: 2.101.0
-      - name: Verify complete preactivation checkout
+      - name: Verify real pinned CLI against loopback fixture
+        run: |-
+          node scripts/testAuthenticatedSupabaseCli.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Verify final preactivation checkout
         if: always()
         shell: bash
         run: node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
