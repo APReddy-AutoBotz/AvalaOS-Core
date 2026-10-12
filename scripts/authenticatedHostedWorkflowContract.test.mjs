@@ -64,6 +64,11 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   assert.equal(cli.uses, hostedCli.uses);
   assert.deepEqual(cli.with, hostedCli.with);
   assert.equal(cli.if, undefined);
+  const cliProbe = replay.steps.find(step => step.name === 'Verify real pinned CLI against loopback fixture');
+  assert.ok(replay.steps.indexOf(cliProbe) > replay.steps.indexOf(cli));
+  assert.equal(cliProbe.run.trim(), `node scripts/testAuthenticatedSupabaseCli.mjs\n${check}`);
+  assert.equal(cliProbe.env, undefined);
+  assert.equal(cliProbe['continue-on-error'], undefined);
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
