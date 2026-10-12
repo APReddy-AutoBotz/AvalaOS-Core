@@ -759,6 +759,9 @@
     "vite.local-controlled-boundary.config.ts": "sha256:8ad305782314cb785aa40b53e8e3ad1aa0cb4aa3be57102e4e3d514c2b534c46",
     "vite.studio-pr-b.config.ts": "sha256:b36f94089c86af1a0c4b1ccebeafde3d531ca1c298e2352a8382cd7347c1f884",
     "vite.synthetic-browser-test.config.ts": "sha256:58703c4db5d673fbf70474052322733bfa687a8b09ffecd334d00b888a258314",
-    "vite.trust-assurance.config.ts": "sha256:805ce66f9aa2540c48f7bca6f7bab7dc8b870a9009ac3609bdd5f28a29ed6057"
+    "vite.trust-assurance.config.ts": "sha256:805ce66f9aa2540c48f7bca6f7bab7dc8b870a9009ac3609bdd5f28a29ed6057",
+    "scripts/authenticatedHostedDiagnostics.mjs": "sha256:6cb50b6bd4e79f6520828678a5922c89e74492d50a4d64d14ab97512517902b6",
+    "scripts/authenticatedHostedDiagnostics.test.mjs": "sha256:97fc2e4a191871abf637bf0d34ca32e9e27db725ee25333ba96e6ff71feb4856",
+    "scripts/testAuthenticatedSupabaseCli.mjs": "sha256:3cdad754175352a0ae8b6ca1d394ae8d47f83c3a5505edfaf8e8af21c374cfb2"
   }
 }
