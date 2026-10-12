@@ -20,7 +20,7 @@ import {
   createAuthenticatedHostedIdentityAdapter,
   createAuthenticatedHostedPostgresAdapter,
 } from './authenticatedHostedControllerAdapters.mjs';
-import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { authenticatedHostedFailureCode, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { createControlledHumanPostgresClientConfig,
@@ -535,8 +535,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   runAuthenticatedHostedAcceptance().then(() => {
     console.log(JSON.stringify({ status: 'completed', outputs: AUTHENTICATED_HOSTED_OUTPUT_PATHS }));
   }).catch(error => {
-    const code=String(error?.message??'').match(/AUTHENTICATED_HOSTED_(?:RUNNER|CONTROLLER|OBSERVATION)_[A-Z0-9_]+/u)?.[0]
-      ??'AUTHENTICATED_HOSTED_RUNNER_FAILED';
+    const code=authenticatedHostedFailureCode(error);
     console.error(code);
     process.exitCode = 1;
   });

@@ -80,6 +80,9 @@ const knownCode = error => {
   return match?.[1] ?? null;
 };
 
+export const authenticatedHostedFailureCode = error =>
+  knownCode(error) ?? 'AUTHENTICATED_HOSTED_RUNNER_FAILED';
+
 const errorChain = error => {
   const chain = [];
   let current = error;

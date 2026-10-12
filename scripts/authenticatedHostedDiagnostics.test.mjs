@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { authenticatedHostedFailureCode, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 
 const classified = async (stage, error, options) => {
   try {
@@ -69,4 +69,15 @@ test('every preactivation stage has a fixed unknown-error fallback', async () =>
     const caught=await classified(stage,new Error('fixture-sensitive-value-must-never-appear'));
     assert.equal(caught.message,`AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_${stage}_UNCLASSIFIED`);
   }
+});
+
+test('terminal reporting preserves specific Vault and scope codes without raw suffixes', () => {
+  for (const code of ['AUTHENTICATED_HOSTED_SECRET_MATERIAL_BINDING_REJECTED',
+    'AUTHENTICATED_HOSTED_CUTOFF_REJECTED', 'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE']) {
+    assert.equal(authenticatedHostedFailureCode(new Error(code + ':fixture-sensitive-value')), code);
+  }
+  assert.equal(authenticatedHostedFailureCode(new Error('raw fixture-sensitive-value')),
+    'AUTHENTICATED_HOSTED_RUNNER_FAILED');
+  assert.equal(authenticatedHostedFailureCode(new Error('raw AUTHENTICATED_HOSTED_FAKE_SUFFIX')),
+    'AUTHENTICATED_HOSTED_RUNNER_FAILED');
 });
