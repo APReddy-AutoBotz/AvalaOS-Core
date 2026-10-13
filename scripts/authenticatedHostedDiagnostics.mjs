@@ -1,7 +1,9 @@
 const STAGES = new Set([
   'DATABASE_CONNECT',
   'DEPLOYMENT_INVENTORY',
+  'SOURCE_PREPARE',
   'SOURCE_DOWNLOAD',
+  'SOURCE_COMPARE',
   'NATIVE_VAULT',
   'DATABASE_SCOPE_BASELINE',
   'ACTIVATION',
@@ -53,26 +55,10 @@ const NODE_CATEGORIES = new Map([
   ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'TLS'],
   ['CERT_HAS_EXPIRED', 'TLS'],
   ['ENOENT', 'EXECUTABLE_NOT_FOUND'],
+  ['EACCES', 'FILESYSTEM_PERMISSION'],
+  ['EPERM', 'FILESYSTEM_PERMISSION'],
   ['ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'OUTPUT_BUFFER'],
   ['ENOMEM', 'RESOURCE_EXHAUSTED'],
-]);
-
-const CLI_SIGNATURES = Object.freeze([
-  ['Cannot find project ref. Have you run supabase link?', 'CLI_CONFIGURATION'],
-  ['project_id is required', 'CLI_CONFIGURATION'],
-  ['Invalid project ref', 'CLI_CONFIGURATION'],
-  ['Access token not provided', 'CLI_AUTHENTICATION'],
-  ['Invalid access token format', 'CLI_AUTHENTICATION'],
-  ['Invalid access token', 'CLI_AUTHENTICATION'],
-  ['Error status 401:', 'CLI_AUTHENTICATION'],
-  ['Error status 403:', 'CLI_AUTHENTICATION'],
-  ['context deadline exceeded', 'TIMEOUT'],
-  ['Client.Timeout exceeded while awaiting headers', 'TIMEOUT'],
-  ['stdout maxBuffer length exceeded', 'OUTPUT_BUFFER'],
-  ['stderr maxBuffer length exceeded', 'OUTPUT_BUFFER'],
-  ['Cannot connect to the Docker daemon', 'CLI_DOCKER_UNAVAILABLE'],
-  ['Docker is not running', 'CLI_DOCKER_UNAVAILABLE'],
-  ['Is the docker daemon running?', 'CLI_DOCKER_UNAVAILABLE'],
 ]);
 
 const knownCode = error => {
@@ -101,16 +87,11 @@ const categoryFor = (error, source) => {
     if (NODE_CATEGORIES.has(code)) return NODE_CATEGORIES.get(code);
     if (item?.name === 'AbortError' || item?.name === 'TimeoutError') return 'TIMEOUT';
   }
-  if (source === 'cli') {
-    const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
-    for (const [signature, category] of CLI_SIGNATURES) if (stderr.includes(signature)) return category;
-    return 'CLI_FAILURE';
-  }
   return 'UNCLASSIFIED';
 };
 
 export async function withAuthenticatedHostedDiagnostic(stage, operation, { source = 'runtime' } = {}) {
-  if (!STAGES.has(stage) || !['runtime', 'cli'].includes(source) || typeof operation !== 'function') {
+  if (!STAGES.has(stage) || source !== 'runtime' || typeof operation !== 'function') {
     throw new Error('AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_INPUT_REJECTED');
   }
   try {
