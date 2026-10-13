@@ -64,6 +64,10 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   assert.equal(decoderProbe.run.trim(), `node scripts/testAuthenticatedSupabaseMultipart.mjs\n${check}`);
   assert.equal(decoderProbe.env, undefined);
   assert.equal(decoderProbe['continue-on-error'], undefined);
+  const bootstrap = replay.steps.find(step => step.name === 'Verify real hosted browser bootstrap without credentials');
+  assert.equal(bootstrap.run.trim(), `node scripts/testAuthenticatedHostedBootstrap.mjs\n${check}`);
+  assert.equal(bootstrap.env, undefined);
+  assert.equal(bootstrap['continue-on-error'], undefined);
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
@@ -150,6 +154,10 @@ test('one exhaustive job owns retained, oracle, server, public browser and authe
   assert.ok(steps.indexOf(staging) > steps.indexOf(authenticated));
   assert.match(staging.run,
     /test -f "\$SUT_RESULTS_MANIFEST" && cp "\$SUT_RESULTS_MANIFEST" acceptance-results\/sut-oracle-results[.]json/u);
+  assert.match(staging.run, /test -f \/tmp\/authenticated-hosted-diagnostic[.]json && cp \/tmp\/authenticated-hosted-diagnostic[.]json acceptance-results\/authenticated-hosted-diagnostic[.]json/u);
+  const upload = steps.find(step => step.name === 'Upload sanitized same-run acceptance evidence');
+  assert.equal(upload.if, 'always()');
+  assert.match(upload.with.path, /acceptance-results\//u);
   const gate = steps.find(step => step.name === 'Enforce one-run complete acceptance gates');
   assert.match(gate.run, /steps[.]authenticated[.]outcome/u);
   assert.match(gate.run, /steps[.]authenticated_evidence[.]outcome/u);

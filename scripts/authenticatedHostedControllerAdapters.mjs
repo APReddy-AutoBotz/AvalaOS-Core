@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
 import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { authenticatedHostedIdentityCategoryForStatus, authenticatedHostedIdentityUpstreamCode,
+  validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
@@ -11,6 +13,16 @@ const iso = value => {
 };
 const value = result => result.rows[0]?.value;
 const PROVIDER_NAMES=Object.freeze(['openai','azure_openai','anthropic','gemini','groq','openai_compatible']);
+
+export async function readAuthenticatedHostedCleanupControls(query, scope) {
+  const legacyControl=await query('SELECT writes_enabled FROM public.legacy_delivery_workspace_controls WHERE org_id=$1 AND workspace_id=$2',scope);
+  const studioControl=await query(`SELECT publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled FROM public.studio_delivery_workspace_controls
+    WHERE org_id=$1 AND workspace_id=$2`,scope);
+  const workspaceFlags=await query(`SELECT unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled
+    FROM public.enterprise_transcript_workspace_flags WHERE org_id=$1 AND workspace_id=$2`,scope);
+  const assessControl=await query('SELECT enabled,read_only FROM public.assess_v2_runtime_control WHERE singleton');
+  return { legacyControl, studioControl, workspaceFlags, assessControl };
+}
 
 // Revoking access does not cancel an already claimed server command. Until its
 // durable attempt is terminal, neither cleanup nor a new run can be certified.
@@ -53,13 +65,26 @@ const FORBIDDEN_PERSONA_CAPABILITIES=Object.freeze({
 
 export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl = fetch }) {
   const created = new Map();
-  const request = async (path, init = {}) => {
-    const response = await fetchImpl(`${config.supabaseUrl}${path}`, {
-      ...init,
-      headers: { ...authHeaders(config), ...(init.headers ?? {}) },
+  const identityError = (operation, category, body = {}) => {
+    const upstreamCode = authenticatedHostedIdentityUpstreamCode(body?.error_code ?? body?.code ?? body?.error);
+    const error = new Error(`AUTHENTICATED_HOSTED_IDENTITY_${category}`);
+    error.authenticatedHostedIdentityDiagnostic = validateAuthenticatedHostedIdentityDiagnostic({
+      operation,
+      category,
+      ...(upstreamCode ? { upstreamCode } : {}),
     });
+    return error;
+  };
+  const request = async (path, init = {}) => {
+    let response;
+    try {
+      response = await fetchImpl(`${config.supabaseUrl}${path}`, {
+        ...init,
+        headers: { ...authHeaders(config), ...(init.headers ?? {}) },
+      });
+    } catch { throw identityError('PROVISION', 'TRANSPORT_FAILURE'); }
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(`AUTHENTICATED_HOSTED_IDENTITY_HTTP_${response.status}`);
+    if (!response.ok) throw identityError('PROVISION', authenticatedHostedIdentityCategoryForStatus(response.status), body);
     return body;
   };
   return {
@@ -86,11 +111,15 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
       return result;
     },
     async verifySession({ accessToken, actorId, sessionId }) {
-      const response = await fetchImpl(`${config.supabaseUrl}/auth/v1/user`, {
-        headers: { apikey: config.serviceRoleKey, authorization: `Bearer ${accessToken}` },
-      });
+      let response;
+      try {
+        response = await fetchImpl(`${config.supabaseUrl}/auth/v1/user`, {
+          headers: { apikey: config.serviceRoleKey, authorization: `Bearer ${accessToken}` },
+        });
+      } catch { throw identityError('VERIFY_SESSION', 'TRANSPORT_FAILURE'); }
       const user = await response.json().catch(() => ({}));
-      if (!response.ok || user.id !== actorId) return null;
+      if (!response.ok) throw identityError('VERIFY_SESSION', authenticatedHostedIdentityCategoryForStatus(response.status), user);
+      if (user.id !== actorId) return null;
       const session = (await db.query(`SELECT id,user_id,not_after,refreshed_at
         FROM auth.sessions WHERE id=$1 AND user_id=$2 AND (not_after IS NULL OR not_after>statement_timestamp())`,
       [sessionId, actorId])).rows[0];
@@ -704,14 +733,9 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         classification:'transient',status:'removed',actorHash:null,sessionHash:null});
       }
       resources.push({kind:'exercise_history',resourceHash:authenticatedHostedDigest(exerciseId),classification:'retained_immutable',status:state.exercise_lifecycle==='quiesced'?'preserved':'active',actorHash:null,sessionHash:null});
-      const [legacyControl,studioControl,workspaceFlags,assessControl]=await Promise.all([
-        query('SELECT writes_enabled FROM public.legacy_delivery_workspace_controls WHERE org_id=$1 AND workspace_id=$2',scopeParams()),
-        query(`SELECT publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled FROM public.studio_delivery_workspace_controls
-          WHERE org_id=$1 AND workspace_id=$2`,scopeParams()),
-        query(`SELECT unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled
-          FROM public.enterprise_transcript_workspace_flags WHERE org_id=$1 AND workspace_id=$2`,scopeParams()),
-        query('SELECT enabled,read_only FROM public.assess_v2_runtime_control WHERE singleton'),
-      ]);
+      // pg.Client is single-connection and must not receive concurrent cleanup queries.
+      const {legacyControl,studioControl,workspaceFlags,assessControl}=
+        await readAuthenticatedHostedCleanupControls(query,scopeParams());
       const same=(left,right,keys)=>left!==null&&right!==null&&keys.every(key=>left[key]===right[key]);
       const controlsRestored=(!deliveryControlsBefore||((deliveryControlsBefore.legacy
         ? same(legacyControl.rows[0]??null,deliveryControlsBefore.legacy,['writes_enabled']) : legacyControl.rows.length===0)

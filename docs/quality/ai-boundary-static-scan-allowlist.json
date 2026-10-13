@@ -515,17 +515,17 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        73,
-        74,
-        75,
-        81,
-        94,
-        95,
-        102,
-        103,
-        116,
-        117,
-        118
+        98,
+        99,
+        100,
+        106,
+        133,
+        134,
+        144,
+        145,
+        161,
+        162,
+        163
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and storage-exposure assertions to this approved acceptance harness. Real hosted sessions are independently verified; browser state never grants server authority. Do not persist provider credentials or export auth tokens."

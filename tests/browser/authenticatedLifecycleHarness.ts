@@ -27,6 +27,11 @@ const controlBaseUrl = process.env.ENTERPRISE_LIFECYCLE_CONTROL_URL ?? apiBaseUr
 const authStorageKey = process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token';
 const hostedRealAuth = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
 const hostedSessionCache = new Map<string, Readonly<{ key: string; value: string }>>();
+const identityUpstreamCodes = new Set([
+  'bad_jwt', 'email_address_invalid', 'email_address_not_authorized', 'email_not_confirmed', 'invalid_credentials',
+  'not_admin', 'over_email_send_rate_limit', 'over_request_rate_limit', 'signup_disabled', 'user_already_exists',
+  'user_banned', 'validation_failed',
+]);
 
 const required = (value: string, name: string) => {
   if (!value) throw new Error(`ENTERPRISE_LIFECYCLE_BROWSER_${name}_REQUIRED`);
@@ -53,6 +58,26 @@ export const authenticatedLifecycleControl = async <T>(pathname: string, body?: 
   if (!response.ok) throw new Error(`ENTERPRISE_LIFECYCLE_CONTROL_FAILED:${pathname}:${response.status}`);
   return response.json() as Promise<T>;
 };
+
+const reportIdentityDiagnostic = async (
+  projectName: string,
+  category: 'CREDENTIAL_REJECTED' | 'ACCESS_DENIED' | 'IDENTITY_ENDPOINT_MISSING' | 'IDENTITY_CONFLICT'
+    | 'IDENTITY_INPUT_REJECTED' | 'RATE_LIMITED' | 'UPSTREAM_UNAVAILABLE' | 'TRANSPORT_FAILURE' | 'SESSION_MISSING',
+  upstreamCode?: string,
+) => {
+  await authenticatedLifecycleControl('/control/browser-diagnostic', {
+    projectName,
+    diagnostic: { operation: 'SIGN_IN', category,
+      ...(upstreamCode && identityUpstreamCodes.has(upstreamCode) ? { upstreamCode } : {}) },
+  }).catch(() => undefined);
+};
+const identityCategoryForStatus = (status: number) => status === 400 ? 'IDENTITY_INPUT_REJECTED' as const
+  : status === 401 ? 'CREDENTIAL_REJECTED' as const : status === 403 ? 'ACCESS_DENIED' as const
+    : status === 404 ? 'IDENTITY_ENDPOINT_MISSING' as const
+      : status === 409 ? 'IDENTITY_CONFLICT' as const
+        : status === 422 ? 'IDENTITY_INPUT_REJECTED' as const
+          : status === 429 ? 'RATE_LIMITED' as const
+            : status >= 500 && status <= 599 ? 'UPSTREAM_UNAVAILABLE' as const : 'TRANSPORT_FAILURE' as const;
 
 const sessionFor = (actor: AuthenticatedLifecycleActor) => ({
   access_token: actor.token,
@@ -88,13 +113,30 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
         const url = new URL(response.url());
         return url.pathname.endsWith('/auth/v1/token') && url.searchParams.get('grant_type') === 'password';
       });
-      await page.getByRole('button', { name: 'Sign in to AvalaOS', exact: true }).click();
-      expect((await signInResponse).status()).toBe(200);
+      let response;
+      try {
+        await page.getByRole('button', { name: 'Sign in to AvalaOS', exact: true }).click();
+        response = await signInResponse;
+      } catch {
+        await reportIdentityDiagnostic(actor.projectName, 'TRANSPORT_FAILURE');
+        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_TRANSPORT_FAILURE');
+      }
+      if (response.status() !== 200) {
+        const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+        const candidate = [body.error_code, body.code, body.error].find(value => typeof value === 'string');
+        const upstreamCode = typeof candidate === 'string' && identityUpstreamCodes.has(candidate) ? candidate : undefined;
+        const category = identityCategoryForStatus(response.status());
+        await reportIdentityDiagnostic(actor.projectName, category, upstreamCode);
+        throw new Error(`ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_${category}`);
+      }
       const stored = await page.evaluate(() => {
         const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
         return key ? { key, value: localStorage.getItem(key) || '' } : null;
       });
-      if (!stored?.value) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+      if (!stored?.value) {
+        await reportIdentityDiagnostic(actor.projectName, 'SESSION_MISSING');
+        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+      }
       hostedSessionCache.set(cacheKey, stored);
     }
     await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
@@ -103,7 +145,10 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
       const stored = key ? JSON.parse(localStorage.getItem(key) || '{}') : {};
       return stored.access_token ?? stored.currentSession?.access_token ?? '';
     });
-    if (!accessToken) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+    if (!accessToken) {
+      await reportIdentityDiagnostic(actor.projectName, 'SESSION_MISSING');
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+    }
     await authenticatedLifecycleControl('/control/bind-browser-session', {
       projectName: actor.projectName,
       persona: actor.persona,
