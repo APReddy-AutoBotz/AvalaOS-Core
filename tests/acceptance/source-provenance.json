@@ -29,7 +29,7 @@
     "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
     "components/shared/DeliveryOutcomeMonitorPanel.tsx": "sha256:b59e3d69b75efd3da28f50d36b8e09cf0735238bd2f794416b9943387ab57c36",
     "components/shared/PortfolioView.tsx": "sha256:06a54bc593669810a11aa1805e24d2634a4f5f2fe148885eedc6a8ee9f6173ce",
-    "docs/planning/hosted-acceptance-completion.md": "sha256:223c6e617192ea9e457bd927f0b3c162c4a3fb8d9741114de49b7db9a79817ff",
+    "docs/planning/hosted-acceptance-completion.md": "sha256:6bd38f382711939d261f85b0096c24064c52dbaaf2b7ed6e76e928d36299ed79",
     "index.css": "sha256:645f9ca9e3068604aee26a1521d0efd399a14d44fa24b42e34a5608c936da63c",
     "package.json": "sha256:cc1690f49a75878707c33fbb45e7c8d85ece0554f5d69170fd988a9296a84794",
     "playwright.authenticated-hosted-sign-in-entry.config.ts": "sha256:ee2e580e1a37c57dc4ec612d2790d5d537897d9c6c2a118671458c63baa7d858",
