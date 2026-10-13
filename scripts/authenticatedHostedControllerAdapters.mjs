@@ -165,7 +165,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
   const query = (sql, params = []) => db.query(sql, params);
   const scopeParams = () => [config.scope.organizationId, config.scope.workspaceId];
   const authority = async (name, params) => value(await query(`SELECT public.${name}(${params.map((_, index) => `$${index + 1}`).join(',')}) value`, params));
-  const observationReader = createAuthenticatedHostedObservationReader({ db, config, authority });
+  const observationReader = createAuthenticatedHostedObservationReader({ db, config });
   const exerciseOwnership = projectRows => ({
     actorIds: [...new Set(projectRows.flatMap(project => AUTHENTICATED_HOSTED_PERSONAS
       .map(persona => project.identities?.[persona]?.id).filter(Boolean)))],
@@ -177,10 +177,10 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
     ownership: exerciseOwnership(projectRows),
   });
   const immutableExerciseState = async (exerciseId,projectRows) => {
-    const rows=[];const capturedAt=new Date().toISOString();
+    const rows=[];
     for(const project of projectRows){
       const frame=await observationReader.capture({exerciseId,
-        from:observationStartedAt,to:capturedAt,project});
+        from:observationStartedAt,project});
       rows.push(...frame.records.filter(item=>item.classification==='immutable_history'
         && !['ai_provider_configs','ai_provider_key_refs'].includes(item.source))
         .map(item=>({source:item.source,recordHash:item.recordHash,rowHash:item.rowHash,businessRowHash:item.businessRowHash})));
@@ -304,7 +304,8 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         publicTargetDigest: deployment.publicTargetDigest,
         baselineDigest: nonExerciseStateBeforeHash,
         customerRows: row.customer_rows, unapprovedActiveResidue: row.active_residue,
-        scopeReady:row.synthetic_org===true&&row.synthetic_workspace===true&&row.scope_roles===4&&rolesReady };
+        scopeReady:row.synthetic_org===true&&row.synthetic_workspace===true&&row.scope_roles===4&&rolesReady,
+        observationStartedAt };
       });
     },
     activate: input => withAuthenticatedHostedDiagnostic('ACTIVATION', () =>
@@ -748,7 +749,9 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       const immutableHistoryAfterHash=await immutableExerciseState(exerciseId,projectRows);
       const immutableHistoryPreserved=state.exercise_lifecycle==='quiesced'&&immutableHistoryBeforeHash!==null
         &&immutableHistoryBeforeHash===immutableHistoryAfterHash;
-      return {capturedAt:new Date().toISOString(),resources,activeSessions:state.sessions,activeIdentities:state.active_identities,
+      const capturedAt=iso((await query('SELECT statement_timestamp() value')).rows[0]?.value);
+      if(!capturedAt)throw new Error('AUTHENTICATED_HOSTED_CLEANUP_CLOCK_REJECTED');
+      return {capturedAt,resources,activeSessions:state.sessions,activeIdentities:state.active_identities,
         activeMemberships:state.memberships,armedPermits:state.permits,
         activeSecretMaterial:state.secrets+pendingSecretCleanup.size,unapprovedActiveResidue:state.active_residue+(controlsRestored?0:1),
         nonExerciseChanged:nonExerciseStateBeforeHash!==nonExerciseStateAfterHash,immutableHistoryPreserved,

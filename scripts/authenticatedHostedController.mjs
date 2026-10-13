@@ -245,6 +245,7 @@ export class AuthenticatedHostedController {
     this.randomId = randomId;
     this.exerciseId = randomId();
     this.startedAt = now().toISOString();
+    this.observationStartedAt = null;
     this.controlToken = randomBytes(32).toString('base64url');
     this.projects = new Map();
     this.projectIdentitySets = new Map();
@@ -268,7 +269,9 @@ export class AuthenticatedHostedController {
       || preflight.publicTargetDigest !== this.config.targetPublicDigest
       || preflight.baselineDigest !== this.config.baselineDigest
       || preflight.customerRows !== 0 || preflight.unapprovedActiveResidue !== 0
-      || preflight.scopeReady!==true) fail('PREFLIGHT_REJECTED');
+      || preflight.scopeReady!==true || !timestamp(preflight.observationStartedAt)) fail('PREFLIGHT_REJECTED');
+    this.observationStartedAt = preflight.observationStartedAt;
+    this.startedAt = preflight.observationStartedAt;
     await this.adapter.activate({
       exerciseId: this.exerciseId,
       releaseSha: this.config.releaseSha,
@@ -344,7 +347,8 @@ export class AuthenticatedHostedController {
       aliases: project.aliases,
       actors,
     };
-    this.projects.set(projectName, { ...project, identities, browserSetup, lastBoundaryAt: this.now().toISOString() });
+    if (!timestamp(this.observationStartedAt)) fail('OBSERVATION_CUTOFF_REJECTED');
+    this.projects.set(projectName, { ...project, identities, browserSetup, lastBoundaryAt: this.observationStartedAt });
     return browserSetup;
   }
 
@@ -505,10 +509,10 @@ export class AuthenticatedHostedController {
     }
     const hashes = authenticatedHostedRequestBinding({ requestId, actorHash: binding.actorHash,
       commandType, payload: requestBody, requireUuid: mutationBinding });
-    const boundaryAt = this.now().toISOString();
-    const before = await this.adapter.observe({ exerciseId: this.exerciseId, from: this.startedAt,
-      to: boundaryAt, project });
+    if (!timestamp(project.lastBoundaryAt)) fail('OBSERVATION_CUTOFF_REJECTED');
+    const before = await this.adapter.observe({ exerciseId: this.exerciseId, from: project.lastBoundaryAt, project });
     if (!record(before) || !timestamp(before.capturedAt) || !Array.isArray(before.records)) fail('AUTHORITY_FRAME_REJECTED');
+    project.lastBoundaryAt = before.capturedAt;
     const actionId = authenticatedHostedDigest(this.randomId());
     const action = { actionId, occurredAt: before.capturedAt, actorHash: binding.actorHash,
       sessionHash: binding.sessionHash, ...hashes, response: null, persona: binding.persona,
@@ -534,10 +538,8 @@ export class AuthenticatedHostedController {
     const classification = String(response.error?.code ?? response.errorCode ?? response.outcome
       ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
       .toUpperCase().replace(/[^A-Z0-9_]/gu, '_').slice(0, 80);
-    const capturedAt = this.now().toISOString();
     const project = this.projects.get(projectName);
-    const after = await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt,
-      to: capturedAt, project });
+    const after = await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt, project });
     if (!record(after) || !timestamp(after.capturedAt) || !Array.isArray(after.records)
       || Date.parse(after.capturedAt) <= Date.parse(action.before.capturedAt)) fail('AUTHORITY_FRAME_REJECTED');
     action.response = {
@@ -549,6 +551,7 @@ export class AuthenticatedHostedController {
     action.after = after;
     action.complete = true;
     action.status = status;
+    project.lastBoundaryAt = after.capturedAt;
     try{
       await this.adapter.recordBrowserAction?.({ exerciseId: this.exerciseId, projectName, persona: action.persona,
         route: action.route, status, requestBody: action.rawRequestBody, responseBody: response });
@@ -647,7 +650,6 @@ export class AuthenticatedHostedController {
     for (const testId of AUTHENTICATED_ACCEPTANCE_TEST_IDS) for (const project of AUTHENTICATED_ACCEPTANCE_PROJECTS) {
       if (!this.browserCases.some(item => item.testId === testId && item.project === project)) fail('CASE_INVENTORY_INCOMPLETE');
     }
-    const completedAt = this.now().toISOString();
     const quiesce = await this.adapter.quiesce({ exerciseId: this.exerciseId });
     await this.identity.revokeAll({ sessions: [...this.boundSessions.values()], projects: [...this.projects.values()] });
     const cleanup = await this.adapter.cleanup({
@@ -660,8 +662,10 @@ export class AuthenticatedHostedController {
     if (!verified || verified.activeSessions !== 0 || verified.activeIdentities !== 0 || verified.activeMemberships !== 0
       || verified.armedPermits !== 0 || verified.activeSecretMaterial !== 0
       || verified.unapprovedActiveResidue !== 0 || verified.nonExerciseChanged !== false
-      || verified.immutableHistoryPreserved !== true) fail('CLEANUP_REJECTED');
+      || verified.immutableHistoryPreserved !== true || !timestamp(verified.capturedAt)
+      || Date.parse(verified.capturedAt) < Date.parse(this.startedAt)) fail('CLEANUP_REJECTED');
     this.quiesced = true;
+    const completedAt = verified.capturedAt;
     const profile = controllerProfile(this.config, { startedAt: this.startedAt, completedAt }, [...this.boundSessions.values()]);
     const identity = authenticatedRawIdentity(profile);
     const browser = { schemaVersion: AUTHENTICATED_BROWSER_CORRELATION_SCHEMA, identity, cases: this.browserCases };

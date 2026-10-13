@@ -107,6 +107,9 @@ test('playwright locations retain only an exact allowlisted source and bounded p
     { source: process.cwd(), line: 1 },
   ]) assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, location: invalid }), base);
   assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, rawTitle: 'sensitive' }), null);
+  const navigationSource = 'tests/browser/productNavigationReadiness.ts';
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightFailureLocation({ source: navigationSource, line: 1 }),
+    { source: navigationSource, line: 1 });
 });
 
 test('playwright failure descriptors retain only closed phase and code pairs', () => {
@@ -116,6 +119,15 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED')),
   { phase: 'CONTROL_CHANNEL', code: 'SESSION_REJECTED' });
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TRANSPORT_REJECTED')),
+  { phase: 'CONTROL_CHANNEL', code: 'TRANSPORT_REJECTED' });
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED')),
+  { phase: 'CONTROL_CHANNEL', code: 'RESPONSE_REJECTED' });
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('PRODUCT_NAVIGATION_SHELL_NOT_READY')),
+  { phase: 'PRODUCT_NAVIGATION', code: 'SHELL_NOT_READY' });
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     { message: '\u001b[31mError: AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING\u001b[39m' }),
   { phase: 'NETWORK_TRACKER', code: 'TRACKER_MISSING' });

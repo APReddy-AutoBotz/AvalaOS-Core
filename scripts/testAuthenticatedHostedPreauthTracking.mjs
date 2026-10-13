@@ -62,6 +62,7 @@ const main = async () => {
     identity: { verifySession: async value => ({ actorId: value.actorId, sessionId: value.sessionId }) },
   });
   controller.projects.set(projectName, {
+    lastBoundaryAt: new Date(tick).toISOString(),
     identities: { author: { id: actorId, email: 'fixture-author@example.invalid' } },
   });
   controllerServer = await startAuthenticatedHostedControllerServer(controller);

@@ -235,18 +235,24 @@ const controlRecord = ({ source, item, scope, capturedAt }) => {
   };
 };
 
-export function createAuthenticatedHostedObservationReader({ db, config, authority }) {
-  if (!db?.query || typeof authority !== 'function' || !UUID.test(config?.scope?.organizationId ?? '')
+export function createAuthenticatedHostedObservationReader({ db, config }) {
+  if (!db?.query || !UUID.test(config?.scope?.organizationId ?? '')
     || !UUID.test(config?.scope?.workspaceId ?? '')) fail('CONFIG_REJECTED');
   const scope = config.scope;
   return Object.freeze({
-    async capture({ exerciseId, from, to, project }) {
-      if (!UUID.test(exerciseId ?? '') || !timestamp(from) || !timestamp(to) || Date.parse(from) > Date.parse(to)
+    async capture(input) {
+      if (!input || Object.hasOwn(input, 'to')) fail('CAPTURE_REJECTED');
+      const { exerciseId, from, project } = input;
+      if (!UUID.test(exerciseId ?? '') || !timestamp(from)
         || !UUID.test(project?.projectId ?? '') || !UUID.test(project?.processId ?? '')) fail('CAPTURE_REJECTED');
       const actors = projectActors(project);
-      const authorityFrame = await authority('authenticated_synthetic_observe', [exerciseId, from, to]);
+      const authorityFrame = (await db.query(
+        'SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value',
+        [exerciseId, from],
+      )).rows?.[0]?.value;
       const capturedAt = iso(authorityFrame?.capturedAt);
-      if (!capturedAt || !Array.isArray(authorityFrame?.actorSessions)) fail('AUTHORITY_FRAME_REJECTED');
+      if (!capturedAt || Date.parse(capturedAt) < Date.parse(from)
+        || !Array.isArray(authorityFrame?.actorSessions)) fail('AUTHORITY_FRAME_REJECTED');
       const sessionByActor = new Map(authorityFrame.actorSessions.map(item => [item.actorHash, item.sessionHash]));
       const entries = [];
       const result = await db.query(AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.map(sourceQuery).join('\nUNION ALL\n'),
@@ -268,13 +274,15 @@ export function createAuthenticatedHostedObservationReader({ db, config, authori
         return { actorHash: actorHash && sessionHash ? actorHash : null,
           sessionHash: actorHash && sessionHash ? sessionHash : null };
       };
-      const anchors = entries.filter(entry => entry.source.effectKind === 'receipt').map(entry => {
+      const anchors = entries.filter(entry => entry.source.effectKind === 'receipt'
+        && Date.parse(entry.occurredAt) >= Date.parse(from)
+        && Date.parse(entry.occurredAt) <= Date.parse(capturedAt)).map(entry => {
         const binding = hashesFor(entry);
         return receiptAnchor(entry, binding.actorHash, binding.sessionHash);
       }).filter(Boolean);
       const records = entries.map(entry => {
         const binding = hashesFor(entry);
-        const anchor = selectAnchor({ entry, anchors, from, to, actorHash: binding.actorHash });
+        const anchor = selectAnchor({ entry, anchors, from, to: capturedAt, actorHash: binding.actorHash });
         const command = anchor?.commandId ?? null;
         return {
           source: entry.source.table,

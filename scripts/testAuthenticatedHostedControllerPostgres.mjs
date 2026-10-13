@@ -7,7 +7,8 @@ import pg from 'pg';
 
 import { AUTHENTICATED_CASE_ASSERTIONS, authenticatedAcceptanceScenario } from './authenticatedAcceptanceCases.mjs';
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
-import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
+import { AuthenticatedHostedController, authenticatedHostedDigest,
+  AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
 import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
 import { reconstructAuthenticatedHostedCaseEvidence } from './authenticatedHostedEvidence.mjs';
 import {
@@ -44,7 +45,9 @@ const duplicateSafe = new Set([
 ]);
 const catalog = JSON.parse(readFileSync(path.join(root, 'tests', 'acceptance', 'catalog', 'test-catalog.json'), 'utf8'));
 const definition = catalog.cases.find(item => item.testId === 'ASSESS-003');
+const deniedDefinition = catalog.cases.find(item => item.testId === 'ASSESS-002');
 assert.ok(definition);
+assert.ok(deniedDefinition);
 const requiredCapabilities = Object.freeze({
   author: ['org.admin','operations.read','assess.read','assess.create','assess.response.write','assess.finalize',
     'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
@@ -141,9 +144,10 @@ const adapterDb = {
     return operation;
   },
 };
-const authority = async (name, parameters) => (await serviceQuery(
-  `SELECT public.${name}(${parameters.map((_, index) => `$${index + 1}`).join(',')}) value`, parameters,
-)).rows[0]?.value;
+const tokenFor = (actorId, sessionId) => `header.${Buffer.from(JSON.stringify({
+  sub: actorId,
+  session_id: sessionId,
+})).toString('base64url')}.signature-padding-that-keeps-the-token-bounded`;
 
 try {
   await admin.connect();
@@ -247,7 +251,9 @@ try {
     backendDigest: config.backendDigest, migrationVersion: config.migrationVersion, providersEnabled: false, runtimeReady: true,
     secretBackendKind: 'hashicorp_vault', secretBackendWritable: true, publicTargetDigest: config.targetPublicDigest,
     customerRows: 0, unapprovedActiveResidue: 0, scopeReady: true, baselineDigest: config.baselineDigest,
+    observationStartedAt: preflight.observationStartedAt,
   });
+  assert.ok(Number.isFinite(Date.parse(preflight.observationStartedAt)));
   assert.equal(deploymentCalls.length, 1);
   for (const persona of AUTHENTICATED_HOSTED_PERSONAS) {
     const actual = new Set((await db.query('SELECT capability_key FROM public.role_capabilities WHERE role_id=$1',
@@ -320,7 +326,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::int count FROM public.authenticated_synthetic_actor_sessions WHERE exercise_id=$1',
     [ids.exercise])).rows[0].count, 4);
 
-  const reader = createAuthenticatedHostedObservationReader({ db, config, authority });
+  const reader = createAuthenticatedHostedObservationReader({ db: adapterDb, config });
   const exerciseOwnership = {
     actorIds: Object.values(ids.actors), projectIds: [project.projectId], processIds: [project.processId],
   };
@@ -345,9 +351,9 @@ try {
   } finally { await db.query('ROLLBACK'); }
   assert.equal(await reader.nonExerciseDigest({ cutoff: ownershipCutoff, ownership: exerciseOwnership }),
     nonExerciseBaseline);
-  const startedAt = new Date().toISOString();
-  const before = await reader.capture({ exerciseId: ids.exercise, from: startedAt, to: startedAt, project });
-  const adapterBefore = await adapter.observe({ exerciseId: ids.exercise, from: startedAt, to: startedAt, project });
+  const startedAt = preflight.observationStartedAt;
+  const before = await reader.capture({ exerciseId: ids.exercise, from: startedAt, project });
+  const adapterBefore = await adapter.observe({ exerciseId: ids.exercise, from: startedAt, project });
   assert.ok(Number.isFinite(Date.parse(before.capturedAt)));
   assert.ok(Number.isFinite(Date.parse(adapterBefore.capturedAt)));
   assert.deepEqual(adapterBefore.records, before.records);
@@ -367,8 +373,8 @@ try {
   assert.equal(result.ok, true);
   assert.equal(result.outcome, 'committed');
   assert.equal(result.resource.version, 2);
-  const completedAt = new Date(Date.now() + 1).toISOString();
-  const after = await reader.capture({ exerciseId: ids.exercise, from: startedAt, to: completedAt, project });
+  const after = await reader.capture({ exerciseId: ids.exercise, from: before.capturedAt, project });
+  const completedAt = after.capturedAt;
   const participant = {
     persona: 'author', actorHash: authenticatedHostedDigest(ids.actors.author),
     sessionHash: authenticatedHostedDigest(ids.sessions.author),
@@ -382,7 +388,7 @@ try {
   assert.ok(receipt);
   const browser = {
     testId: 'ASSESS-003', project: 'desktop-chromium', scenario: authenticatedAcceptanceScenario('ASSESS-003'),
-    window: { startedAt, completedAt }, participants: [participant],
+    window: { startedAt: before.capturedAt, completedAt }, participants: [participant],
     actions: [{ actionId: authenticatedEvidenceDigest('authenticated-hosted-controller-action'), occurredAt: completedAt,
       actorHash: participant.actorHash, sessionHash: participant.sessionHash, ...requestBinding,
       response: { status: 200, classification: 'SUCCESS', commandIdHash: null,
@@ -406,6 +412,58 @@ try {
   assert.equal(reconstructed.measurements.paidCalls, 0);
   assert.equal(reconstructed.measurements.budgetReservations, 0);
   assert.equal(reconstructed.measurements.budgetDebits, 0);
+
+  const deniedController = new AuthenticatedHostedController({
+    config,
+    now: () => new Date('2036-10-10T00:00:00.000Z'),
+    identity: { verifySession: async () => ({ actorId: ids.actors.outsider, sessionId: ids.sessions.outsider }) },
+    adapter,
+  });
+  deniedController.exerciseId = ids.exercise;
+  deniedController.startedAt = preflight.observationStartedAt;
+  deniedController.observationStartedAt = preflight.observationStartedAt;
+  deniedController.active = true;
+  deniedController.projects.set('desktop-chromium-rejection', {
+    ...rejectionProject,
+    lastBoundaryAt: preflight.observationStartedAt,
+  });
+  const deniedRequestId = randomUUID();
+  const deniedAuthorizationVersion = Number((await db.query(
+    'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+    [ids.org, ids.actors.outsider],
+  )).rows[0].version);
+  const deniedAction = await deniedController.beginBrowserAction({
+    projectName: 'desktop-chromium-rejection',
+    accessToken: tokenFor(ids.actors.outsider, ids.sessions.outsider),
+    route: '/functions/v1/process-command',
+    requestBody: { requestId: deniedRequestId, commandType: 'process.update', expectedVersion: 1 },
+  });
+  const deniedResult = (await serviceQuery(
+    'SELECT public.update_assess_process($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) value',
+    [ids.actors.outsider, ids.org, ids.workspace, deniedAuthorizationVersion, deniedRequestId,
+      'hosted-controller-denied-update', 1, rejectionProject.processId, payload.name, payload.description,
+      payload.department, payload.criticality],
+  )).rows[0].value;
+  assert.deepEqual(deniedResult, { ok: false, error: { code: 'PERMISSION_DENIED' } });
+  await db.query('SELECT pg_sleep(0.01)');
+  await deniedController.finishBrowserAction({
+    projectName: 'desktop-chromium-rejection', actionId: deniedAction.actionId, status: 403,
+    responseBody: deniedResult,
+  });
+  await deniedController.recordBrowserCase({
+    projectName: 'desktop-chromium-rejection', actionIds: [deniedAction.actionId],
+    row: { testId: 'ASSESS-002', controls: { assertions: [
+      { id: 'persisted-process-edit-denied', status: 'passed' },
+      { id: 'unchanged-process-after-reload', status: 'passed' },
+    ] } },
+  });
+  const deniedEvidence = reconstructAuthenticatedHostedCaseEvidence({
+    browser: deniedController.browserCases[0], server: deniedController.serverCases[0], definition: deniedDefinition,
+  });
+  assert.equal(deniedEvidence.status, 'PASS');
+  assert.equal(deniedEvidence.measurements.logicalMutations, 0);
+  assert.equal(deniedEvidence.measurements.receiptWrites, 0);
+  assert.equal(deniedEvidence.measurements.auditWrites, 0);
 
   const processFrame = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-003' });
   assert.equal(processFrame.receipts, 1);
@@ -464,7 +522,7 @@ try {
     (SELECT count(*)::int FROM public.studio_artifact_generation_attempts WHERE org_id=$1) generation_attempts`, [ids.org])).rows[0],
   zeroEffectsBefore);
 
-  console.log('authenticated hosted controller PostgreSQL: preflight, setup, session binding, production mutation evidence, CAS restore and cleanup passed');
+  console.log('authenticated hosted controller PostgreSQL: DB clock, setup, session binding, production mutation, denied-action correlation, CAS restore and cleanup passed');
 } finally {
   if (db) await db.end().catch(() => {});
   let cleaned = !created;

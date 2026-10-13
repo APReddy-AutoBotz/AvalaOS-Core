@@ -63,17 +63,72 @@ const boundedControlFailure = async (response: Response) => {
   return 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED';
 };
 
-export const authenticatedLifecycleControl = async <T>(pathname: string, body?: unknown): Promise<T> => {
-  const response = await fetch(`${loopbackBaseUrl(controlBaseUrl)}${pathname}`, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-enterprise-lifecycle-control': required(controlToken, 'CONTROL_TOKEN'),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+export const createAuthenticatedLifecycleControl = ({
+  baseUrl,
+  token,
+  fetchImpl = fetch,
+}: Readonly<{ baseUrl: string; token: string; fetchImpl?: typeof fetch }>) => async <T>(
+  pathname: string,
+  body?: unknown,
+): Promise<T> => {
+  const target = `${loopbackBaseUrl(baseUrl)}${pathname}`;
+  const controlHeader = required(token, 'CONTROL_TOKEN');
+  let response: Response;
+  try {
+    response = await fetchImpl(target, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-enterprise-lifecycle-control': controlHeader,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  } catch {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TRANSPORT_REJECTED');
+  }
   if (!response.ok) throw new Error(await boundedControlFailure(response));
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED');
+  }
+};
+
+export const authenticatedLifecycleControl = createAuthenticatedLifecycleControl({
+  baseUrl: controlBaseUrl,
+  token: controlToken,
+});
+
+export type AuthenticatedLifecycleWorkQueue = Readonly<{
+  enqueue: (operation: () => Promise<unknown>) => void;
+  drain: () => Promise<void>;
+}>;
+
+export const createAuthenticatedLifecycleWorkQueue = (): AuthenticatedLifecycleWorkQueue => {
+  let tail: Promise<void> = Promise.resolve();
+  let hasFailure = false;
+  let firstFailure: unknown;
+  const enqueue = (operation: () => Promise<unknown>) => {
+    const work = tail.then(async () => {
+      if (!hasFailure) await operation();
+    });
+    tail = work.catch(error => {
+      if (!hasFailure) {
+        hasFailure = true;
+        firstFailure = error instanceof Error
+          ? error : new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED');
+      }
+    });
+  };
+  const drain = async () => {
+    for (;;) {
+      const snapshot = tail;
+      await snapshot;
+      if (snapshot === tail) break;
+    }
+    if (hasFailure) throw firstFailure;
+  };
+  return Object.freeze({ enqueue, drain });
 };
 
 const reportIdentityDiagnostic = async (

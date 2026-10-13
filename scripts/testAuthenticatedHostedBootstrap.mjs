@@ -44,7 +44,7 @@ const validPreflight={syntheticTarget:true,production:false,releaseSha:release,d
   migrationVersion:environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION,backendDigest:environment.AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST,
   providersEnabled:false,runtimeReady:true,secretBackendKind:'supabase_vault',secretBackendWritable:true,
   publicTargetDigest:environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST,
-  baselineDigest:environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,customerRows:0,unapprovedActiveResidue:0,scopeReady:true};
+  baselineDigest:environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,customerRows:0,unapprovedActiveResidue:0,scopeReady:true,observationStartedAt:'2026-10-13T00:00:00.000Z'};
 
 const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-bootstrap-test-'));
 const browserWorkspace=await mkdtemp(path.join(os.tmpdir(),'authenticated-hosted-browser-'));
@@ -90,7 +90,7 @@ try{
   assert.deepEqual(childDiagnostic,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
     project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure',
     phase:'CONTROL_CHANNEL',code:'CONTROL_REJECTED'});
-  assert.equal(location?.source,'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts');
+  assert.equal(location?.source,'tests/browser/authenticatedLifecycleHarness.ts');
   assert.equal(Number.isSafeInteger(location?.line)&&location.line>0,true);
   assert.equal(authCreateRequests,1);
   assert.equal(projectSetup,0);
