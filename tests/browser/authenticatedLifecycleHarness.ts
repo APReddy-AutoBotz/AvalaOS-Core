@@ -99,7 +99,7 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
       localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
       localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({ type: 'my_work' }));
     });
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
     const cacheKey = `${actor.user.id}:${actor.persona}`;
     const cached = hostedSessionCache.get(cacheKey);
     if (cached) {

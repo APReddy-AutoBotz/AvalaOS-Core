@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Actual application sign-in preparation (2026-10-13)
+
+The latest approved PR #294 run (`38413392098`) retains 61 PASS / 47 BLOCKED and now pinpoints the helper's incorrect public-homepage navigation before sign-in. Cleanup and providers OFF are verified; its single-run allowance is consumed. Three read-only reviewers completed before writes. Root owns scope, integration and one verified implementation PR; one worker owns the narrowly corrected entry helper and actual-app local browser proof, with no nested delegation. Follow `docs/planning/hosted-acceptance-completion.md`; retain original criteria, server authority and proof boundaries. This repository correction authorizes no hosted retry, backend deployment, migration, production or paid effect.
+
 ## Approved native secret-storage completion (2026-10-11)
 
 PR #285 is merged with its tested tree unchanged and all candidate checks complete. AP approved the prepared Supabase Vault implementation, verified merge and inclusion in the existing synthetic rollout and same single 108-requirement run. All three read-only architecture/security/quality reviews completed and the root synthesized them before writes. Under the fixed workspace-write profile, three workers exclusively own runtime/storage authority, hosted runner/cleanup, and migration-chain fixtures. Root owns canonical documents, catalog/provenance, package/CI integration, verification and one substantial implementation PR. No nested delegation, separate evidence PR, new paid allowance or production action. Preserve unknown legacy reference ownership; bind native writes and cleanup durably to the selected backend and exact receipt/fence. Follow `docs/planning/hosted-acceptance-completion.md`; native verification and hosted execution remain planned.

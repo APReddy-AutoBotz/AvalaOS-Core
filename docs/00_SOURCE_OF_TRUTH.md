@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Real application sign-in entry correction (2026-10-13)
+
+PR #294 merged as `48456abee2d7eaff6d13afa0b15d994f8ac0df3e`. Its approved run `38413392098`, attempt 1, failed; independent reconstruction verifies all 313 recorded source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. The retained diagnostic now identifies `tests/browser/authenticatedLifecycleHarness.ts:109`: the first desktop lifecycle journey never sees the sign-in heading, before credentials are submitted. Cleanup verified quiescence, revoked identities/sessions, no active memberships, permits, residue or secret references, and both providers OFF. The owned temporary `main` policy is removed. The single-run allowance is consumed.
+
+Confirmed source defect: the hosted helper returns to `/` after clearing browser session state, but the real anonymous application renders its public homepage there. The secure access form is at `/sign-in`. The preceding transport proof used minimal HTML and did not exercise real application routing. Preserve that proof's transport-only scope; it does not establish successful sign-in.
+
+Continue the authorized repository correction under `docs/planning/hosted-acceptance-completion.md`: preserve the initial session scrub, navigate to the actual sign-in route, and verify the shared helper against the real application page with local inert Auth/controller endpoints. Preserve credential submission, server session binding, every acceptance criterion and the 47 blocked dispositions. Local preparation cannot promote hosted acceptance. No new hosted run, backend deployment, migration, production action or paid call is authorized by this correction.
+
 ## Authenticated pre-sign-in request tracking (2026-10-13)
 
 PR #293 merged as `338ecb92d6ac76d64905a1741689c62acd99e5b2` with the tested tree unchanged and applicable candidate/post-merge checks passing. Its separately approved run `38343852749`, attempt 1, created four synthetic identities and reached the first desktop lifecycle test, which failed. Independent reconstruction verifies all 310 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across the unchanged 108 requirements. The diagnostic identifies `primary-lifecycle / unexpected-failure`, not the failing assertion. Read-only cleanup verified quiescence, revoked identities and sessions, no active memberships, permits, residue or secret references, and both providers OFF. The owned temporary `main` policy was removed. The one-run allowance is consumed.
