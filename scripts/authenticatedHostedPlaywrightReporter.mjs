@@ -1,7 +1,8 @@
 import { rename, writeFile } from 'node:fs/promises';
 
 import { AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA,
-  validateAuthenticatedHostedPlaywrightDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+  validateAuthenticatedHostedPlaywrightDiagnostic,
+  validateAuthenticatedHostedPlaywrightFailureLocation } from './authenticatedHostedDiagnostics.mjs';
 
 const TEST_CATEGORIES = new Map([
   ['authors, replays, rejects stale work, requests changes and resubmits through the production UI', 'primary-lifecycle'],
@@ -31,7 +32,20 @@ export default class AuthenticatedHostedPlaywrightReporter {
   }
 
   onStepEnd(test, _result, step) {
-    if (this.failure || !step?.error || step.category !== 'hook') return;
+    if (!step?.error) return;
+    const firstFailureStep = !this.failureStepSeen;
+    this.failureStepSeen = true;
+    if (firstFailureStep && step.location) {
+      const source = typeof step.location.file === 'string'
+        ? step.location.file.replaceAll('\\', '/') : '';
+      const root = process.cwd().replaceAll('\\', '/');
+      const relative = source.startsWith(`${root}/`) ? source.slice(root.length + 1) : source;
+      this.failureLocation = validateAuthenticatedHostedPlaywrightFailureLocation({
+        source: relative,
+        line: step.location.line,
+      });
+    }
+    if (this.failure || step.category !== 'hook') return;
     const category = step.title === 'beforeAll hook' ? 'project-bootstrap'
       : step.title === 'afterAll hook' ? 'project-teardown' : null;
     if (category) this.failure = { project: projectCategory(test), testCategory: category,
@@ -40,6 +54,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
 
   onTestEnd(test, result) {
     if (!this.failure && result.status !== test.expectedStatus) {
+      this.failureStepSeen = true;
       this.failure = { project: projectCategory(test), testCategory: testCategory(test),
         category: resultCategory(result.status) };
     }
@@ -61,6 +76,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       project: this.failure?.project ?? this.current?.project ?? 'unknown',
       testCategory: this.failure?.testCategory ?? this.current?.testCategory ?? 'runner',
       category: this.failure?.category ?? category,
+      ...(this.failureLocation ? { location: this.failureLocation } : {}),
     });
     if (!value) return;
     const temporary = `${path}.${process.pid}.tmp`;

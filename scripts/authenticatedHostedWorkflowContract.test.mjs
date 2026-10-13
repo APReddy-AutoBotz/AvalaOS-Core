@@ -68,6 +68,10 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   assert.equal(bootstrap.run.trim(), `node scripts/testAuthenticatedHostedBootstrap.mjs\n${check}`);
   assert.equal(bootstrap.env, undefined);
   assert.equal(bootstrap['continue-on-error'], undefined);
+  const preauth = replay.steps.find(step => step.name === 'Verify pre-sign-in tracking across two local origins');
+  assert.equal(preauth.run.trim(), `node scripts/testAuthenticatedHostedPreauthTracking.mjs\n${check}`);
+  assert.equal(preauth.env, undefined);
+  assert.equal(preauth['continue-on-error'], undefined);
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
