@@ -513,6 +513,13 @@
     },
     {
       "pattern": "localStorage",
+      "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
+      "lines": [60, 75],
+      "reason": "test/control documentation",
+      "futureAction": "Keep these read-only assertions limited to inert loopback Auth sessions: rejected credentials leave no session and switching actors replaces the previous token. Never read real credentials or promote this preparation proof to hosted authority."
+    },
+    {
+      "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
         98,

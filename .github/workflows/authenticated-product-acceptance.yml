@@ -332,6 +332,11 @@ jobs:
           node scripts/testAuthenticatedHostedPreauthTracking.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
+      - name: Verify actual application sign-in entry without credentials
+        run: |-
+          node scripts/testAuthenticatedHostedSignInEntry.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
       - name: Verify final preactivation checkout
         if: always()
         shell: bash

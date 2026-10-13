@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Hosted sign-in entry evidence gap (2026-10-13)
+
+Executed evidence: approved run `38413392098` on merged PR #294 (`48456abe`) failed before credential submission at the real-auth helper's sign-in-heading assertion. Independent verification confirms 313 source hashes and 61 PASS / 47 BLOCKED. Cleanup, both providers OFF and removal of owned temporary branch access are verified. Confirmed source defect: the helper navigates to the public homepage while expecting the `/sign-in` form. The earlier minimal-page transport proof did not cover actual application routing.
+
+The authorized correction preserves the session scrub, credential submission and controller-verified session binding, then adds actual-app/shared-helper cold-entry, denial and cached-actor-switch preparation on loopback. No cached value becomes server authority and no local result may promote hosted cases. Planned verification and rollback are in `docs/planning/hosted-acceptance-completion.md`. No backend/schema/production/paid change or new hosted attempt is included; all 47 authenticated cases remain blocked pending qualifying evidence.
+
 ## Synthetic secret-backend completion (2026-10-11)
 
 Executed evidence: PR #285's merged and tested trees match; all 50 successful candidate checks/statuses and independent 94-record browser preparation passed. Its report is 43 PASS / 65 BLOCKED; hosted acceptance is not run. Read-only target metadata confirms an installed Supabase Vault extension, absent HashiCorp settings, one existing active reference and no unfinished cleanup jobs. Its legacy backend identity is unproved; no secret values were read. Browser Vault access is denied, while service role retains broad extension access.

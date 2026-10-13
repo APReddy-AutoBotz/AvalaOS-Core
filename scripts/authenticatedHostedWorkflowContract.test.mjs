@@ -72,6 +72,10 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   assert.equal(preauth.run.trim(), `node scripts/testAuthenticatedHostedPreauthTracking.mjs\n${check}`);
   assert.equal(preauth.env, undefined);
   assert.equal(preauth['continue-on-error'], undefined);
+  const signInEntry = replay.steps.find(step => step.name === 'Verify actual application sign-in entry without credentials');
+  assert.equal(signInEntry.run.trim(), `node scripts/testAuthenticatedHostedSignInEntry.mjs\n${check}`);
+  assert.equal(signInEntry.env, undefined);
+  assert.equal(signInEntry['continue-on-error'], undefined);
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
