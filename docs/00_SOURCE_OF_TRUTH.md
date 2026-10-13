@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Exact original-source layout compatibility (2026-10-13)
+
+PR #291 merged as `c180f584` with the tested tree unchanged, all 52 applicable candidate checks and all three post-merge workflows passing. AP then approved one full synthetic run with read-only preflight and all 16 original-source checks. The preflight verified the exact pilot release, all 106 migration sources and native secret boundary, but the current source verifier rejected three responses before exercise activation. No workflow was dispatched, temporary branch access added, backend deployed or database migrated; the single-run allowance is unused.
+
+The approved inspection found 13 repository-layout responses and three functions-only-layout responses, with stable before/after deployment identities. Independent offline comparison established all 23 files in the three rejected responses match their exact closures, source bytes and digests. The verifier's single-layout assumption is a **confirmed source defect**; it is not a product assertion failure. Continue the existing repository acceptance correction under `docs/planning/hosted-acceptance-completion.md`: recognize only the two observed exact metadata-selected layouts, retain all source and identity checks, and verify all 16 retained responses. No product, schema, scoring or acceptance-meaning change. The last qualifying report remains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**; no new hosted PASS is claimed.
+
 ## Original-source attestation correction (2026-10-12)
 
 PR #290 merged as `2c65fd0d4b95635066247a91f65933d771a67b5e`. Its approved run `38209643186`, attempt 1, stopped before activation with `AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_DEPLOYMENT_INVENTORY_UNCLASSIFIED`. Independent reconstruction verifies all 307 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across 108 requirements. Temporary main access was removed while preserving other branches and the reviewer. Read-only cleanup found no active exercises, sessions, bindings, permits or synthetic attempts; both providers remain OFF. The acceptance-run allowance is consumed.

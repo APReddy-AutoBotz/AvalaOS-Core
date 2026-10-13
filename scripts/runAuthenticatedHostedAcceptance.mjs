@@ -190,7 +190,7 @@ const boundedMultipartBody=async response=>{
   try{return await bounded.formData();}catch{fail('BACKEND_SOURCE_MULTIPART_REJECTED');}
 };
 
-const canonicalRemoteSourcePath=value=>typeof value==='string'&&value.startsWith('source/')
+const canonicalRemoteSourcePath=value=>typeof value==='string'&&(value.startsWith('source/')||value.startsWith('functions/'))
   &&!value.includes('\\')&&!/[\u0000-\u001f\u007f]/u.test(value)&&!path.posix.isAbsolute(value)
   &&path.posix.normalize(value)===value&&value.split('/').every(segment=>segment!==''&&segment!=='.'&&segment!=='..');
 
@@ -218,17 +218,30 @@ export async function verifyAuthenticatedEdgeSourceResponse(response,{root=proce
   if(metadataText===null)fail('BACKEND_SOURCE_METADATA_REJECTED');
   let metadata;try{metadata=JSON.parse(metadataText);}catch{fail('BACKEND_SOURCE_METADATA_REJECTED');}
   const metadataKeys=['compressed_size','deno2_entrypoint_path','deployment_id','module_count','original_size'];
+  const repositoryEntrypoint=`source/supabase/functions/${slug}/index.ts`;
+  const functionsEntrypoint=`functions/${slug}/index.ts`;
   if(!metadata||Array.isArray(metadata)||Object.keys(metadata).toSorted().join('|')!==metadataKeys.join('|')
     ||metadata.deployment_id!==`${projectRef}_${deployment.id}_${deployment.version}`
-    ||metadata.deno2_entrypoint_path!==`source/supabase/functions/${slug}/index.ts`
+    ||![repositoryEntrypoint,functionsEntrypoint].includes(metadata.deno2_entrypoint_path)
     ||metadata.module_count!==closure.size
     ||!['original_size','compressed_size'].every(key=>Number.isSafeInteger(metadata[key])&&metadata[key]>=0
       &&metadata[key]<=MAX_EDGE_SOURCE_RESPONSE_BYTES))fail('BACKEND_SOURCE_METADATA_REJECTED');
+  const functionsLayout=metadata.deno2_entrypoint_path===functionsEntrypoint;
+  const localFunctionsRoot=path.join(root,'supabase','functions');
+  const canonicalFunctionsRoot=functionsLayout?await realpath(localFunctionsRoot):null;
   const expectedFiles=new Map();
   for(const [normalizedRelative,local] of closure){
     const relative=path.relative(root,local).replaceAll('\\','/');
     if(relative===''||relative.startsWith('../')||path.isAbsolute(relative))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
-    const remote=`source/${relative}`;if(!canonicalRemoteSourcePath(remote))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+    const functionsRelative=path.relative(localFunctionsRoot,local).replaceAll('\\','/');
+    if(functionsLayout){
+      const canonicalFunctionsRelative=path.relative(canonicalFunctionsRoot,await realpath(local)).replaceAll('\\','/');
+      if(functionsRelative===''||functionsRelative.startsWith('../')||path.isAbsolute(functionsRelative)
+        ||canonicalFunctionsRelative===''||canonicalFunctionsRelative.startsWith('../')
+        ||path.isAbsolute(canonicalFunctionsRelative))fail('BACKEND_SOURCE_METADATA_REJECTED');
+    }
+    const remote=functionsLayout?`functions/${functionsRelative}`:`source/${relative}`;
+    if(!canonicalRemoteSourcePath(remote))fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
     expectedFiles.set(remote,{normalizedRelative,local});
   }
   if(files.size>expectedFiles.size)fail('BACKEND_DEPENDENCY_CLOSURE_EXTRA');
