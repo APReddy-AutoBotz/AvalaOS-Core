@@ -55,7 +55,7 @@ const validPreflight = environment => ({syntheticTarget:true,production:false,re
   secretBackendKind:'supabase_vault',secretBackendWritable:true,
   publicTargetDigest:environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST,
   baselineDigest:environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,customerRows:0,unapprovedActiveResidue:0,
-  scopeReady:true});
+  scopeReady:true,observationStartedAt:'2026-10-13T00:00:00.000Z'});
 
 async function fixture(t, mode = 'exact') {
   const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-source-test-'));

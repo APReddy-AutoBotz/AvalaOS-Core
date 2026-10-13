@@ -218,7 +218,8 @@ test('browser action captures a pre-request frame and requires its explicit case
   const frames=[{capturedAt:'2026-10-10T00:00:00.000Z',records:[]},{capturedAt:'2026-10-10T00:00:02.000Z',records:[]}];
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
     now:()=>new Date('2026-10-10T00:00:01.000Z'),identity:{verifySession:async()=>({actorId,sessionId})},adapter:{
-      bindSession:async()=>{},observe:async input=>{assert.equal(input.project.processId,'process');return frames[captures++];},
+      bindSession:async()=>{},observe:async input=>{assert.equal(input.project.processId,'process');
+        assert.equal(Object.hasOwn(input,'to'),false);return frames[captures++];},
     }});
   controller.startedAt='2026-10-09T23:59:59.000Z';controller.projects.set('desktop-chromium',{processId:'process',
     identities:{author:{id:actorId}},lastBoundaryAt:controller.startedAt});
@@ -326,7 +327,8 @@ test('runner reports cleanup-incomplete instead of swallowing abort cleanup fail
     deploymentId:config.deploymentId,migrationVersion:config.migrationVersion,backendDigest:config.backendDigest,
     providersEnabled:false,runtimeReady:true,secretBackendKind:'supabase_vault',secretBackendWritable:true,
     publicTargetDigest:config.targetPublicDigest,baselineDigest:config.baselineDigest,
-    customerRows:0,unapprovedActiveResidue:0,scopeReady:true}),
+    customerRows:0,unapprovedActiveResidue:0,scopeReady:true,
+    observationStartedAt:'2026-10-10T00:00:00.000Z'}),
   activate:async()=>{},quiesce:async()=>{throw new Error('sanitized cleanup failure');}};
   await assert.rejects(runAuthenticatedHostedAcceptance(environment,{database:{},verifyCheckout:async()=>{},
     createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({revokeAll:async()=>{}}),

@@ -21,47 +21,52 @@ const projectCategory = test => {
 const testCategory = test => TEST_CATEGORIES.get(test?.title) ?? 'unknown';
 const resultCategory = status => status === 'timedOut' ? 'timeout'
   : status === 'interrupted' ? 'interrupted' : 'unexpected-failure';
+const sameFailure = (left, right) => left === right || (
+  typeof left?.message === 'string' && left.message === right?.message
+  && typeof left?.location?.file === 'string' && left.location.file === right?.location?.file
+  && left.location.line === right?.location?.line
+);
 
 export default class AuthenticatedHostedPlaywrightReporter {
   constructor() {
     this.failure = null;
     this.runnerError = false;
+    this.currentHookFailures = [];
   }
 
   onTestBegin(test) {
-    if (!this.failure) this.current = { project: projectCategory(test), testCategory: testCategory(test) };
+    if (!this.failure) {
+      this.current = { project: projectCategory(test), testCategory: testCategory(test) };
+      this.currentHookFailures = [];
+    }
   }
 
   onStepEnd(test, _result, step) {
-    if (!step?.error) return;
-    const firstFailureStep = !this.failureStepSeen;
-    this.failureStepSeen = true;
-    if (firstFailureStep) this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(step.error);
-    if (firstFailureStep && step.location) {
-      const source = typeof step.location.file === 'string'
-        ? step.location.file.replaceAll('\\', '/') : '';
-      const root = process.cwd().replaceAll('\\', '/');
-      const relative = source.startsWith(`${root}/`) ? source.slice(root.length + 1) : source;
-      this.failureLocation = validateAuthenticatedHostedPlaywrightFailureLocation({
-        source: relative,
-        line: step.location.line,
-      });
-    }
-    if (this.failure || !firstFailureStep || step.category !== 'hook') return;
+    if (this.failure || !step?.error || step.category !== 'hook') return;
     const category = step.title === 'beforeAll hook' ? 'project-bootstrap'
       : step.title === 'afterAll hook' ? 'project-teardown' : null;
-    if (category) this.failure = { project: projectCategory(test), testCategory: category,
-      category: 'unexpected-failure' };
+    this.currentHookFailures.push({ error: step.error, category });
   }
 
   onTestEnd(test, result) {
     if (!this.failure && result.status !== test.expectedStatus) {
-      if (!this.failureStepSeen) {
-        this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(result.error ?? result.errors?.[0]);
+      const primary = result.error ?? result.errors?.[0] ?? null;
+      const primaryHook = this.currentHookFailures?.find(item => sameFailure(item.error, primary));
+      this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(primary);
+      if (primary?.location) {
+        const source = typeof primary.location.file === 'string'
+          ? primary.location.file.replaceAll('\\', '/') : '';
+        const root = process.cwd().replaceAll('\\', '/');
+        const relative = source.startsWith(`${root}/`) ? source.slice(root.length + 1) : source;
+        this.failureLocation = validateAuthenticatedHostedPlaywrightFailureLocation({
+          source: relative,
+          line: primary.location.line,
+        });
       }
-      this.failureStepSeen = true;
-      this.failure = { project: projectCategory(test), testCategory: testCategory(test),
+      this.failure = { project: projectCategory(test),
+        testCategory: primaryHook?.category ?? testCategory(test),
         category: resultCategory(result.status) };
+      this.currentHookFailures = [];
     }
   }
 

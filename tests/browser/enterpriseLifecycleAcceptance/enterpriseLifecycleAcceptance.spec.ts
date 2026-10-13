@@ -7,6 +7,7 @@ import {
   authenticatedLifecycleControl as control,
   authenticatedLifecycleEnterAs as enterAs,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
+  createAuthenticatedLifecycleWorkQueue,
   authenticatedHostedActionIds,
   type AuthenticatedLifecycleActor as FixtureActor,
   type AuthenticatedLifecycleSetup as FixtureSetup,
@@ -440,13 +441,15 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let reworkJourneyBefore: LifecycleFrame | null = null;
   let reworkJourneyApiResponses: ApiResponseObservation[] = [];
   let approvedDecisionApi: ApiResponseObservation | null = null;
-  let authenticatedCaseUploadTail: Promise<unknown> = Promise.resolve();
-  let networkActionUploadTail: Promise<unknown> = Promise.resolve();
-  let networkActionError: unknown = null;
+  type TestWorkQueues = Readonly<{
+    network: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
+    cases: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
+  }>;
+  let activeTestWorkQueues: TestWorkQueues | null = null;
+  const projectWorkQueues: TestWorkQueues[] = [];
   const queueNetworkAction = (operation: () => Promise<unknown>) => {
-    networkActionUploadTail = networkActionUploadTail.then(operation).catch(error => {
-      if (!networkActionError) networkActionError = error;
-    });
+    if (!activeTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    activeTestWorkQueues.network.enqueue(operation);
   };
   const explicitCaseActions = new Map<string, HostedActionReference[]>();
   const bindObservedCase = (testId: string,...actions: HostedActionReference[]) => {
@@ -472,13 +475,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const length = super.push(...items);
       if (hostedAuthenticatedAcceptance) {
         for (const row of items) {
+          const owningTestWorkQueues = activeTestWorkQueues;
+          if (!owningTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
           const testId=(row as any)?.testId;
           const explicit=explicitCaseActions.get(testId);
           if(explicit){Object.defineProperty(row as object,authenticatedHostedActionIds,{value:explicit});explicitCaseActions.delete(testId);}
-          authenticatedCaseUploadTail = authenticatedCaseUploadTail.then(async () => {
+          owningTestWorkQueues.cases.enqueue(async () => {
             await new Promise(resolve => setTimeout(resolve, 0));
-            await networkActionUploadTail;
-            if (networkActionError) throw networkActionError;
+            await owningTestWorkQueues.network.drain();
             const references=(row as Record<string | symbol, unknown>)[authenticatedHostedActionIds];
             if(!Array.isArray(references)||references.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${(row as any)?.testId??'unknown'}`);
             const actionIds=[...new Set((await Promise.all(references as HostedActionReference[])).filter((item): item is string=>!!item))];
@@ -518,33 +522,63 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
   test.beforeEach(async ({ context }) => {
     externalRequests = [];
+    const owningTestWorkQueues = Object.freeze({
+      network: createAuthenticatedLifecycleWorkQueue(),
+      cases: createAuthenticatedLifecycleWorkQueue(),
+    });
+    activeTestWorkQueues = owningTestWorkQueues;
+    projectWorkQueues.push(owningTestWorkQueues);
     await installAuthenticatedHostedNetwork({
       context,
       hosted: hostedAuthenticatedAcceptance,
       allowedOrigins: hostedAllowedOrigins,
       tracker: hostedBrowserActionTracker,
-      queueNetworkAction,
+      queueNetworkAction: operation => owningTestWorkQueues.network.enqueue(operation),
       onExternalRequest: origin => {
         nonLoopbackRequests += 1;
         externalRequests.push(origin);
       },
       onHttpRequest: () => { observedHttpRequests += 1; },
-      onTrackerError: error => { if (!networkActionError) networkActionError = error; },
+      onTrackerError: error => owningTestWorkQueues.network.enqueue(async () => { throw error; }),
     });
   });
 
   test.afterEach(async ({}, testInfo) => {
-    await networkActionUploadTail;
-    if (networkActionError) failed = true;
+    const owningTestWorkQueues = activeTestWorkQueues;
+    let boundaryFailure: unknown = null;
+    let hasBoundaryFailure = false;
+    if (owningTestWorkQueues) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      for (const queue of [owningTestWorkQueues.network, owningTestWorkQueues.cases]) {
+        try { await queue.drain(); }
+        catch (error) {
+          if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+        }
+      }
+    }
+    if (hasBoundaryFailure) failed = true;
     if (testInfo.status !== testInfo.expectedStatus) failed = true;
-    expect(externalRequests, 'the connected acceptance browser must not make external requests').toEqual([]);
-    if (networkActionError) throw networkActionError;
+    let externalRequestFailure: unknown = null;
+    try { expect(externalRequests, 'the connected acceptance browser must not make external requests').toEqual([]); }
+    catch (error) { failed = true; externalRequestFailure = error; }
+    if (hasBoundaryFailure) throw boundaryFailure;
+    if (externalRequestFailure) throw externalRequestFailure;
   });
 
   test.afterAll(async () => {
     if (!setup || !projectName || !projectStartedAt) return;
+    let boundaryFailure: unknown = null;
+    let hasBoundaryFailure = false;
+    for (const workQueues of projectWorkQueues) {
+      for (const queue of [workQueues.network, workQueues.cases]) {
+        try { await queue.drain(); }
+        catch (error) {
+          if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+        }
+      }
+    }
+    if (hasBoundaryFailure) failed = true;
     if (!failed) {
-      await authenticatedCaseUploadTail;
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });
       expect(finalized).toMatchObject({
         journeyBinding: setup.journeyBinding,
@@ -573,6 +607,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     };
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(path.join(outputDirectory, `browser-${projectName}.json`), `${JSON.stringify(fragment, null, 2)}\n`, 'utf8');
+    if (hasBoundaryFailure) throw boundaryFailure;
   });
 
   test('authors, replays, rejects stale work, requests changes and resubmits through the production UI', async ({ page, context }) => {

@@ -44,6 +44,10 @@ const authorityFrame = () => ({
 const tableFromSql = sql => /FROM public[.]([a-z0-9_]+) x/u.exec(sql)?.[1] ?? null;
 const fakeDb = ({ digestOnly = false } = {}) => ({
   async query(sql, parameters) {
+    if (sql === 'SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value') {
+      assert.deepEqual(parameters, [ids.exercise, from]);
+      return { rows: [{ value: authorityFrame() }] };
+    }
     const table = tableFromSql(sql);
     assert.ok(table && AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.some(source => source.table === table));
     if (sql.includes("'sha256:'||encode")) {
@@ -98,15 +102,10 @@ test('request binding separates raw browser payload from command identity', () =
     commandType: 'post:/read', requireUuid: true }), /COMMAND_BINDING_REJECTED/u);
 });
 
-test('reader scopes actual rows to the project actors and joins receipt, audit and permit causality', async () => {
+test('reader captures its upper bound from the database and joins receipt, audit and permit causality', async () => {
   const reader = createAuthenticatedHostedObservationReader({ db: fakeDb(),
-    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } },
-    authority: async (name, parameters) => {
-      assert.equal(name, 'authenticated_synthetic_observe');
-      assert.deepEqual(parameters, [ids.exercise, from, to]);
-      return authorityFrame();
-    } });
-  const frame = await reader.capture({ exerciseId: ids.exercise, from, to, project });
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } } });
+  const frame = await reader.capture({ exerciseId: ids.exercise, from, project });
   const process = frame.records.find(row => row.source === 'assess_processes');
   const receipt = frame.records.find(row => row.source === 'assess_command_receipts');
   const audit = frame.records.find(row => row.source === 'privileged_audit_events');
@@ -140,22 +139,65 @@ test('reader rejects a persisted row with no legitimate event or modification ti
   const base = fakeDb();
   const db = { async query(sql, parameters) {
     const result = await base.query(sql, parameters);
-    if (!sql.includes("'sha256:'||encode")) result.rows.find(row => row.source === 'assess_processes').value = {
+    if (sql.includes('UNION ALL')) result.rows.find(row => row.source === 'assess_processes').value = {
       id: ids.process, org_id: ids.org, workspace_id: ids.workspace,
       updated_by: ids.author, status: 'Ready for Review',
     };
     return result;
   } };
   const reader = createAuthenticatedHostedObservationReader({ db,
-    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } },
-    authority: async () => authorityFrame() });
-  await assert.rejects(reader.capture({ exerciseId: ids.exercise, from, to, project }),
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } } });
+  await assert.rejects(reader.capture({ exerciseId: ids.exercise, from, project }),
     /SOURCE_TIME_REJECTED:assess_processes/u);
+});
+
+test('receipt attribution uses the exact inclusive database-owned capture interval', async () => {
+  const base = fakeDb();
+  const receiptTimes = [
+    '2026-10-10T05:09:59.999Z',
+    from,
+    capturedAt,
+    '2026-10-10T05:11:01.001Z',
+  ];
+  const receiptIds = receiptTimes.map(() => randomUUID());
+  const requestIds = receiptTimes.map(() => randomUUID());
+  const db = { async query(sql, parameters) {
+    const result = await base.query(sql, parameters);
+    if (sql.includes('UNION ALL')) {
+      result.rows.push(...receiptTimes.map((createdAt, index) => ({
+        source: 'assess_command_receipts',
+        value: {
+          id: receiptIds[index], org_id: ids.org, workspace_id: ids.workspace, actor_id: ids.author,
+          command_type: 'process.update', request_id: requestIds[index], resource_id: ids.process, created_at: createdAt,
+        },
+      })));
+    }
+    return result;
+  } };
+  const reader = createAuthenticatedHostedObservationReader({ db,
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } } });
+  const observed = await reader.capture({ exerciseId: ids.exercise, from, project });
+  const attributed = new Map(observed.records.filter(row => row.source === 'assess_command_receipts')
+    .map(row => [row.occurredAt, {
+      requestIdHash: row.requestIdHash,
+      commandBindingHash: row.commandBindingHash,
+      receiptIdHash: row.receiptIdHash,
+    }]));
+  const emptyAttribution = { requestIdHash: null, commandBindingHash: null, receiptIdHash: null };
+  assert.deepEqual(attributed.get(receiptTimes[0]), emptyAttribution);
+  for (const boundary of receiptTimes.slice(1, 3)) {
+    assert.match(attributed.get(boundary).requestIdHash, /^sha256:[0-9a-f]{64}$/u);
+    assert.match(attributed.get(boundary).commandBindingHash, /^sha256:[0-9a-f]{64}$/u);
+    assert.match(attributed.get(boundary).receiptIdHash, /^sha256:[0-9a-f]{64}$/u);
+  }
+  assert.deepEqual(attributed.get(receiptTimes[3]), emptyAttribution);
+  await assert.rejects(reader.capture({ exerciseId: ids.exercise, from, to: capturedAt, project }),
+    /CAPTURE_REJECTED/u);
 });
 
 test('non-exercise digest is composed only from server-side per-source digests', async () => {
   const reader = createAuthenticatedHostedObservationReader({ db: fakeDb({ digestOnly: true }),
-    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } }, authority: async () => authorityFrame() });
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } } });
   const value = await reader.nonExerciseDigest({ cutoff: from,
     ownership: { actorIds: [], projectIds: [], processIds: [] } });
   assert.match(value, /^sha256:[0-9a-f]{64}$/u);

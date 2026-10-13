@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Acceptance observation and failure boundaries (2026-10-14)
+
+The repository correction in `docs/planning/hosted-acceptance-completion.md` must keep observation windows in the database clock domain, with the database cutoff as the initial cursor and each authority observation's statement timestamp as its next cursor. Runner-clock times cannot widen or clamp command/receipt attribution intervals. Request/session binding and independent server reconstruction stay unchanged; this is acceptance-tooling authority, not a product schema or permission change. Reproduce the mixed-clock condition before claiming the correction verified.
+
+Browser action and case queues must drain at the owning test boundary and before finalization, retaining the first error without unhandled rejection or silent case promotion. The canonical first failing Playwright result owns diagnostic cause and location; a caught step or later cleanup error cannot replace it. Diagnostics retain only exact closed codes and validated source/line values. Raw browser output remains excluded. Local proof does not promote hosted-required criteria; the latest qualified report remains 61 PASS / 47 BLOCKED.
+
 ## Approved synthetic native secret backend (2026-10-11)
 
 The approved Supabase Vault adapter is a new server-only, explicitly selected synthetic backend; installed extension metadata is not proof of that adapter. Persist distinct backend ownership before native writes and retain it through key references and cleanup. Native mutation must atomically validate the exact organization/provider/reference/fingerprint and persisted command or cleanup lease/fence. Preserve current authorization, receipts, prior/active-reference protections, legacy environment/HashiCorp behavior and no automatic fallback. Browser roles remain denied Vault access. Narrow wrappers do not remove the service-role credential's ambient extension authority; no broader role reconfiguration is included. The hosted controller independently verifies physical material creation and removal. Quiesce new work, reconcile and clean using the pinned backend, verify absence, and only then disable its selection. Implementation and verification are governed by `docs/planning/hosted-acceptance-completion.md`; production capability is not claimed.

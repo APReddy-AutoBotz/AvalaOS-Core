@@ -316,6 +316,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
       customerRows: 0,
       unapprovedActiveResidue: 0,
       scopeReady: true,
+      observationStartedAt: nextTime().toISOString(),
     }),
     activate: async () => ({ activated: true }),
     setupProject: async ({ projectName }) => {
@@ -359,6 +360,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
     quiesce: async () => ({ quiesced: true }),
     cleanup: async () => ({ cleaned: true }),
     verifyCleanup: async () => ({
+      capturedAt: nextTime().toISOString(),
       activeSessions: 0,
       activeIdentities: 0,
       activeMemberships: 0,

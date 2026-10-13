@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Observation and failure propagation correction (2026-10-14)
+
+Merged PR #296's approved run `38470948715` retains independently verified 61 PASS / 47 BLOCKED, verified cleanup/providers OFF and consumed hosted allowance. All three read-only reviewers completed before writes. Root synthesized primary-result reporting loss, detached case uploads and the independent-clock reproduction requirement without asserting a historical cause. Under the fixed managed workspace-write profile, two implementation workers exclusively own browser failure propagation and observation clock/correlation respectively; root owns canonical documents, shared CI/provenance, integration and one substantial PR. No nested delegation or active reviewers during writes. Follow `docs/planning/hosted-acceptance-completion.md`; no unrelated regression campaign or new hosted action.
+
 ## Composed hosted authentication boundary (2026-10-13)
 
 Approved run `38432718184` on merged PR #295 retains independently verified 61 PASS / 47 BLOCKED, with verified cleanup/providers OFF and consumed hosted allowance. Three read-only reviewers completed; root synthesized the composition gap, bounded diagnostic loss and acceptance-controller token-verification defect without asserting an unknown hosted cause. Under the fixed managed workspace-write profile, one worker owns the combined browser/controller proof and its focused corrections; root owns canonical documents, CI/provenance, final verification and one substantial PR. No nested delegation or review agents during writes. Follow `docs/planning/hosted-acceptance-completion.md`; preserve unrelated work, full criteria and server authority. Another hosted attempt requires its separate exact-release authorization.
