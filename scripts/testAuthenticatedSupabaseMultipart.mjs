@@ -23,6 +23,7 @@ const functions = Object.freeze([
   'enterprise-provider-lifecycle', 'enterprise-provider-lifecycle-authority',
   'enterprise-provider-lifecycle-recovery',
 ]);
+const functionsLayout = new Set(['tenant-session', 'studio-artifact-download', 'pilot-operations-query']);
 const sha = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const normalize = value => value.toString('utf8').replace(/\r\n/gu, '\n');
 const deployments = new Map(functions.map(slug => [slug, {
@@ -72,19 +73,21 @@ function variantEntries(entries, scenario) {
       normalizedRelative: 'services/unexpectedMultipartFixture.ts',
       repositoryRelative: 'services/unexpectedMultipartFixture.ts',
       bytes: Buffer.from("export const unexpectedMultipartFixture = true;\n"),
+      syntheticExtra: true,
     });
   }
   return result;
 }
 
-async function multipartPayload(slug, entries, expectedModuleCount) {
+async function multipartPayload(slug, entries, expectedModuleCount, layout) {
   const originalSize = entries.reduce((total, entry) => total + entry.bytes.length, 0);
   const metadata = {
     deployment_id: `${project}_${fakeDeploymentId}_${fakeVersion}`,
     original_size: originalSize,
     compressed_size: Math.max(1, Math.floor(originalSize / 2)),
     module_count: expectedModuleCount,
-    deno2_entrypoint_path: `source/supabase/functions/${slug}/index.ts`,
+    deno2_entrypoint_path: layout === 'functions'
+      ? `functions/${slug}/index.ts` : `source/supabase/functions/${slug}/index.ts`,
   };
   assert.deepEqual(Object.keys(metadata), [
     'deployment_id', 'original_size', 'compressed_size', 'module_count', 'deno2_entrypoint_path',
@@ -92,7 +95,12 @@ async function multipartPayload(slug, entries, expectedModuleCount) {
   const form = new FormData();
   form.append('metadata', JSON.stringify(metadata));
   for (const entry of entries) {
-    form.append('file', new File([entry.bytes], `source/${entry.repositoryRelative}`));
+    if (layout === 'functions' && !entry.syntheticExtra) {
+      assert.equal(entry.repositoryRelative, `supabase/functions/${entry.normalizedRelative}`);
+    }
+    const remote = layout === 'functions'
+      ? `functions/${entry.normalizedRelative}` : `source/${entry.repositoryRelative}`;
+    form.append('file', new File([entry.bytes], remote));
   }
   const request = new Request('http://127.0.0.1/multipart', { method: 'POST', body: form });
   const contentType = request.headers.get('content-type');
@@ -105,12 +113,13 @@ async function buildPayloads(closures) {
   const payloads = new Map();
   for (const slug of functions) {
     payloads.set(`success:${slug}`, await multipartPayload(
-      slug, variantEntries(closures.get(slug), 'success'), closures.get(slug).length));
+      slug, variantEntries(closures.get(slug), 'success'), closures.get(slug).length,
+      functionsLayout.has(slug) ? 'functions' : 'repository'));
   }
   for (const scenario of ['stale', 'missing', 'extra']) {
     payloads.set(`${scenario}:${functions[0]}`,
       await multipartPayload(functions[0], variantEntries(closures.get(functions[0]), scenario),
-        closures.get(functions[0]).length));
+        closures.get(functions[0]).length, 'functions'));
   }
   return payloads;
 }
@@ -206,6 +215,7 @@ async function main() {
       successfulClosures: 216, deepEnterpriseIntelligenceSourceVerified: true,
       deepLegacyContractsSourceVerified: true, staleSourceRejected: true,
       missingDependencyRejected: true, extraDependencyRejected: true,
+      repositoryLayoutFunctions: 13, functionsLayoutFunctions: 3,
       repositorySourcesUnchanged: true, temporaryOutputs: 0, childProcesses: 0, hostedRequests: 0,
     };
   } finally {

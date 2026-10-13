@@ -121,6 +121,36 @@ async function fixture(t, mode = 'exact') {
     config: { projectRef: fixtureProjectRef, backendDigest: canonicalDigest(expected) } };
 }
 
+async function functionsOnlyFixture(t) {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-functions-layout-test-'));
+  t.after(async () => {
+    assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(root).startsWith('authenticated-functions-layout-test-'));
+    await rm(root, { recursive: true, force: true });
+  });
+  const slug=functions[0];
+  const localEntry="import { value } from '../_shared/shared.ts';\nexport default value;\n";
+  const localShared='export const value = 1;\n';
+  const entryPath=path.join(root,'supabase','functions',slug,'index.ts');
+  const sharedPath=path.join(root,'supabase','functions','_shared','shared.ts');
+  await mkdir(path.dirname(entryPath),{recursive:true});
+  await mkdir(path.dirname(sharedPath),{recursive:true});
+  await writeFile(entryPath,localEntry);await writeFile(sharedPath,localShared);
+  const deployment={id:'00000000-0000-4000-8000-000000000001',version:1,status:'ACTIVE'};
+  const multipart=({entrypoint=`functions/${slug}/index.ts`,fileLayout='functions'}={})=>{
+    const form=new FormData();
+    form.append('metadata',JSON.stringify({deployment_id:`${fixtureProjectRef}_${deployment.id}_${deployment.version}`,
+      original_size:4096,compressed_size:2048,module_count:2,deno2_entrypoint_path:entrypoint}));
+    const entryPrefix=['functions','mixed','traversal'].includes(fileLayout)?'functions':'source/supabase/functions';
+    const sharedPrefix=fileLayout==='functions'?'functions':'source/supabase/functions';
+    form.append('file',new Blob([localEntry]),`${entryPrefix}/${slug}/index.ts`);
+    form.append('file',new Blob([localShared]),fileLayout==='traversal'
+      ?'functions/_shared/../_shared/shared.ts':`${sharedPrefix}/_shared/shared.ts`);
+    return new Response(form);
+  };
+  return {root,slug,deployment,multipart};
+}
+
 async function closureFixture(t, entryText, dependencies = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-closure-test-'));
   t.after(async () => {
@@ -234,6 +264,59 @@ test('multipart source attestation verifies all functions and transitive depende
     managementToken:'fake-management-token-only'});
   assert.deepEqual(result,{backendDigest:sample.config.backendDigest,files:functions.length*4});
   assert.equal(await readFile(path.join(sample.root,'supabase/functions/_shared/nested.ts'),'utf8'),nested);
+});
+
+test('multipart source attestation accepts the exact functions-only layout when the closure stays under functions',async t=>{
+  const sample=await functionsOnlyFixture(t);
+  const compared=await verifyAuthenticatedEdgeSourceResponse(sample.multipart(),{root:sample.root,slug:sample.slug,
+    projectRef:fixtureProjectRef,deployment:sample.deployment});
+  assert.deepEqual(Object.keys(compared).toSorted(),[
+    `${sample.slug}:_shared/shared.ts`,`${sample.slug}:${sample.slug}/index.ts`,
+  ].toSorted());
+  const repositoryCompared=await verifyAuthenticatedEdgeSourceResponse(sample.multipart({
+    entrypoint:`source/supabase/functions/${sample.slug}/index.ts`,fileLayout:'repository'}),{
+    root:sample.root,slug:sample.slug,projectRef:fixtureProjectRef,deployment:sample.deployment});
+  assert.deepEqual(repositoryCompared,compared);
+});
+
+test('functions-only layout rejects a dependency symlink into repository-level services',async t=>{
+  const sample=await functionsOnlyFixture(t);
+  const link=path.join(sample.root,'supabase/functions/_shared/shared.ts');
+  const target=path.join(sample.root,'services/shared.ts');
+  await mkdir(path.dirname(target),{recursive:true});await writeFile(target,await readFile(link));await rm(link);
+  try{await symlink(target,link,'file');}catch(error){
+    if(['EACCES','EPERM','UNKNOWN'].includes(error?.code)){
+      t.skip('file symlinks are unavailable for this Windows test process');return;
+    }throw error;
+  }
+  await assert.rejects(verifyAuthenticatedEdgeSourceResponse(sample.multipart(),{root:sample.root,slug:sample.slug,
+    projectRef:fixtureProjectRef,deployment:sample.deployment}),/BACKEND_SOURCE_METADATA_REJECTED/u);
+});
+
+test('functions-only metadata rejects a closure with a repository-level dependency',async t=>{
+  const sample=await fixture(t);const slug=functions[0];const deployment=sample.deployments[slug];
+  const form=new FormData();
+  form.append('metadata',JSON.stringify({deployment_id:`${fixtureProjectRef}_${deployment.id}_${deployment.version}`,
+    original_size:4096,compressed_size:2048,module_count:4,deno2_entrypoint_path:`functions/${slug}/index.ts`}));
+  form.append('file',new Blob([entry]),`functions/${slug}/index.ts`);
+  form.append('file',new Blob([shared]),'functions/_shared/shared.ts');
+  form.append('file',new Blob([nested]),'functions/_shared/nested.ts');
+  form.append('file',new Blob([contract]),'functions/services/contract.ts');
+  await assert.rejects(verifyAuthenticatedEdgeSourceResponse(new Response(form),{root:sample.root,slug,
+    projectRef:fixtureProjectRef,deployment}),/BACKEND_SOURCE_METADATA_REJECTED/u);
+});
+
+for(const [label,entrypoint,fileLayout,code] of [
+  ['source-functions entrypoint',`source/functions/${functions[0]}/index.ts`,'functions','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['wrong-slug functions entrypoint',`functions/${functions[1]}/index.ts`,'functions','BACKEND_SOURCE_METADATA_REJECTED'],
+  ['mixed repository-root files',`functions/${functions[0]}/index.ts`,'mixed','BACKEND_DEPENDENCY_CLOSURE_EXTRA'],
+  ['short files under repository metadata',`source/supabase/functions/${functions[0]}/index.ts`,'functions',
+    'BACKEND_DEPENDENCY_CLOSURE_EXTRA'],
+  ['short-root traversal alias',`functions/${functions[0]}/index.ts`,'traversal','BACKEND_SOURCE_MULTIPART_REJECTED'],
+])test(`functions-only source attestation rejects ${label}`,async t=>{
+  const sample=await functionsOnlyFixture(t);
+  await assert.rejects(verifyAuthenticatedEdgeSourceResponse(sample.multipart({entrypoint,fileLayout}),{
+    root:sample.root,slug:sample.slug,projectRef:fixtureProjectRef,deployment:sample.deployment}),new RegExp(code,'u'));
 });
 
 for(const [mode,code] of [

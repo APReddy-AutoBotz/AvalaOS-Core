@@ -78,7 +78,7 @@
     "components/shared/Sidebar.tsx": "sha256:5a83e252cf93a80116d1fe07c1a571d2ee08d39b0e8e5fd7100c02327dc4873e",
     "components/shared/brand.tsx": "sha256:4f529d44c1905f43fe381f76921b941f2da88a72a2bcb0ebfd76c1c4b6017b28",
     "config/pilot-acceptance-spec.json": "sha256:197a58f7a3b602dbf4f34afc166bdc85b89f8bd4cc00e4490c1a1d28d61d261c",
-    "docs/00_SOURCE_OF_TRUTH.md": "sha256:0003ab287c4cf514ea2d718f38856e1a9403ae16a47d55e52d27562a06448f6c",
+    "docs/00_SOURCE_OF_TRUTH.md": "sha256:f5e88626dc60bc5032bbcc33c0b7b65e820eebc6566c69bc7bfcd15ea0e42616",
     "docs/architecture/current-to-target-enterprise-architecture.md": "sha256:121e3c1395b9f46af0eb4dc5480e2008b52d784a42a10a689d92877c6388a77d",
     "docs/architecture/document-authority-map.md": "sha256:13326990d6f86241c510088bb409fd1e026d431833dbfd4f9c133af8a2bc5f6e",
     "docs/architecture/enterprise-intelligence-authority.md": "sha256:572e70608c02454f4131044f5bda2bc2bb5bf25fc6a3b0f91d231abb02776ab4",
@@ -103,7 +103,7 @@
     "docs/planning/enterprise-intelligence-acceptance.md": "sha256:6d373c752c9035937a64970c8a02e753b9549613caacf48451eb61dba108ef8c",
     "docs/planning/govern-authority-acceptance.md": "sha256:1f4cf990f860250adc0d2078a1f00bb4ed9b3fc2672b076346479094b5804fb1",
     "docs/planning/governed-multisource-transcript-module-handoff-plan.md": "sha256:96171e1daf20ba02e1517b0a656496340d009f1ff2f0d1855bffc2da0b3d3a67",
-    "docs/planning/hosted-acceptance-completion.md": "sha256:1d473b3ef5d9d822b189cec9c30188dcfeeb26b65ce6ca9d522e726ba1a8d249",
+    "docs/planning/hosted-acceptance-completion.md": "sha256:b1b792fa93e86d8534dc4eca4c92a9b4baf256cc3b65854b5cc2a1a2d8950287",
     "docs/planning/hosted-sandbox-acceptance.md": "sha256:9cc3673ad1098d2094ea314883c3fa0173eb41c40607c7f60f9512fdf3d86ebc",
     "docs/planning/legacy-delivery-authority-acceptance.md": "sha256:a6d498d2e0739d89176b7fdb5a0399f7a307c98d5d4d72443aa6928ba9a390e1",
     "docs/planning/pilot-operations-cors.md": "sha256:ac6346faef8337f914beae6f7bd7874899a0f4988110e0b92cc1dab1709c242f",
@@ -337,8 +337,8 @@
     "scripts/runAssessImportValidation.mjs": "sha256:f5052d562ee8d82ffa0a0e7dc95fe8b888bfd559e95b14d92e6d82628e1a6177",
     "scripts/runAssessV1AcceptanceOracle.mjs": "sha256:022ae8ebf45bc29db19e0b58ac0c4371fa344ce9fbb6038ac2048469533aef75",
     "scripts/runAssessV1AcceptanceOracle.test.mjs": "sha256:e0385eea4f264a62b5a687f9f4413d1103545f6932b2d2158f95c9fc7ad6778a",
-    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:c81c7df15412b731d521b20a49f2ff0fb114a5ca7c6005c65b41c2da568172bb",
-    "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:a0d9330ec9c87078390ef9d84d787035b06a7ec85e3901afc7db0ce6200438bc",
+    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:60cad64b0e87eb83ebc21364bacab9383f6bf500dedf6db5d8064d087efb889b",
+    "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:db60bef739ec85c59f8e1c4d5a076c5a803bb2d0fb6799d01e07d84d98ee0275",
     "scripts/runCreationAccessCoverage.mjs": "sha256:04b1d5dabe2b44e7c1c9fba32bbf01ad806206939143d1b6cf4bdf1bd95dd5ae",
     "scripts/runCreationAccessCoverage.test.mjs": "sha256:b8474f831a57ca064840576b643d50cc78186da14864450729bea77d0424dcde",
     "scripts/runCreationAccessPostgres.mjs": "sha256:905f7f7f92c8a219548ea1fea4079b0fd0f0c09281da85af631d2ef242f1b2c6",
@@ -705,7 +705,7 @@
     "tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs": "sha256:3c10fef84b5fa53756b9db7456e86666b2e35b60ef7c600240e4d86128f18d6f",
     "tests/acceptance/proof-owner-registry.json": "sha256:7c5f54fa0ce03feb7a3f759f472b6119410bd604c020756928f96c8c7729f043",
     "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:f94f2141c9c883e1c668cd8068f7402a9727b6c10e793feb8d2962716583ec07",
-    "tests/acceptance/source-provenance.json": "sha256:c227d72c46947243a74270b848f3fb5690c3d89ed98cf906ca710448973c69e0",
+    "tests/acceptance/source-provenance.json": "sha256:7f8652dd92e262d4d23f8d3e13c62905f12702c01389bbaed102604c9b63dd21",
     "tests/acceptance/validators/inventory-provenance.test.mjs": "sha256:051a067eaf13190c1792f78328961cd65cb5552862e0e7a074256d9420cd2e5f",
     "tests/acceptance/validators/validate-traceability.mjs": "sha256:00957d930b6d381a91b60e15ff5db769781a544e1cd115b9a1427abc0d564d08",
     "tests/browser/assessImport.spec.ts": "sha256:bd0a87efc6654f80f6dbbec375c6171fb8211dc11681b4345ae179475cbfec48",
@@ -762,6 +762,6 @@
     "vite.trust-assurance.config.ts": "sha256:805ce66f9aa2540c48f7bca6f7bab7dc8b870a9009ac3609bdd5f28a29ed6057",
     "scripts/authenticatedHostedDiagnostics.mjs": "sha256:3b20e53d848fef14c32e1bd91d0fa097d51faef23c2882b9f6e87b11d0fa5160",
     "scripts/authenticatedHostedDiagnostics.test.mjs": "sha256:bc5c75a77fa3a1e130aa71c633178d2a08eb42fca96e5ba0b2f8cf44daad5faa",
-    "scripts/testAuthenticatedSupabaseMultipart.mjs": "sha256:9f23b7a011c0ef0e164bd10285255aa6c87691fbc165f64de90845315f29b4bc"
+    "scripts/testAuthenticatedSupabaseMultipart.mjs": "sha256:3e1ad337b3c3b7155c64bb41cf131c925bcb9226abe492a7e533039750527fe6"
   }
 }
