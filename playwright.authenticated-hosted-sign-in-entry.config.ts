@@ -6,7 +6,7 @@ for (const [name, value] of Object.entries({ baseURL, outputDir })) {
   if (!value) throw new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_${name.toUpperCase()}_REQUIRED`);
 }
 const parsed = new URL(baseURL);
-if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || !/^\d+$/u.test(parsed.port)) {
+if (parsed.origin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app' || parsed.pathname !== '/') {
   throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_BASE_URL_REJECTED');
 }
 

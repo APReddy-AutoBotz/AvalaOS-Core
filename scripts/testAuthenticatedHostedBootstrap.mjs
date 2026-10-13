@@ -88,7 +88,8 @@ try{
   assert.deepEqual(diagnostic.primary,diagnostic.failure);
   const {location,...childDiagnostic}=diagnostic.child;
   assert.deepEqual(childDiagnostic,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
-    project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure'});
+    project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure',
+    phase:'CONTROL_CHANNEL',code:'CONTROL_REJECTED'});
   assert.equal(location?.source,'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts');
   assert.equal(Number.isSafeInteger(location?.line)&&location.line>0,true);
   assert.equal(authCreateRequests,1);

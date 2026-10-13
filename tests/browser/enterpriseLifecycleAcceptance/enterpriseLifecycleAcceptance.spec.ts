@@ -20,6 +20,7 @@ import {
   observeAuthenticatedAiControls,
   observeAuthenticatedStudioDownloadDenial,
 } from '../authenticatedControlsAcceptance';
+import { installAuthenticatedHostedNetwork } from '../authenticatedHostedNetwork';
 
 type ObservedStage = Readonly<{ id: string; uiObserved: true; reloadObserved?: true }>;
 type MutationSnapshot = Readonly<{
@@ -517,48 +518,19 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
   test.beforeEach(async ({ context }) => {
     externalRequests = [];
-    await context.route('**/*', async route => {
-      const url = new URL(route.request().url());
-      if (['http:', 'https:'].includes(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)
-        && !(hostedAuthenticatedAcceptance && hostedAllowedOrigins.has(url.origin))) {
-        await route.abort('blockedbyclient');
-        return;
-      }
-      if (hostedAuthenticatedAcceptance) {
-        try { await startProductAction(route.request()); }
-        catch (error) {
-          if (!networkActionError) networkActionError = error;
-          await route.abort('failed');
-          return;
-        }
-      }
-      await route.continue();
+    await installAuthenticatedHostedNetwork({
+      context,
+      hosted: hostedAuthenticatedAcceptance,
+      allowedOrigins: hostedAllowedOrigins,
+      tracker: hostedBrowserActionTracker,
+      queueNetworkAction,
+      onExternalRequest: origin => {
+        nonLoopbackRequests += 1;
+        externalRequests.push(origin);
+      },
+      onHttpRequest: () => { observedHttpRequests += 1; },
+      onTrackerError: error => { if (!networkActionError) networkActionError = error; },
     });
-    context.on('request', request => {
-      const url = new URL(request.url());
-      if (['http:', 'https:'].includes(url.protocol)) {
-        observedHttpRequests += 1;
-        if (!['127.0.0.1', 'localhost'].includes(url.hostname)
-          && !(hostedAuthenticatedAcceptance && hostedAllowedOrigins.has(url.origin))) {
-          nonLoopbackRequests += 1;
-          externalRequests.push(`${url.protocol}//${url.hostname}`);
-        }
-      }
-    });
-    if (hostedAuthenticatedAcceptance) {
-      context.on('response', response => {
-        const request = response.request();
-        queueNetworkAction(async () => {
-          const classification = await hostedBrowserActionTracker!.classify(request);
-          if (classification.kind !== 'business-action') return;
-          const responseBody = await response.json().catch(() => ({}));
-          await hostedBrowserActionTracker!.finish(request, response.status(), responseBody);
-        });
-      });
-      context.on('requestfailed', request => finishProductAction(request, 0, {
-        error: { code: 'BROWSER_TRANSPORT_FAILURE' },
-      }));
-    }
   });
 
   test.afterEach(async ({}, testInfo) => {

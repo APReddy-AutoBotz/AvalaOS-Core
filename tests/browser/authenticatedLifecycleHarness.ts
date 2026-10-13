@@ -46,6 +46,23 @@ const loopbackBaseUrl = (value: string) => {
   return url.toString().replace(/\/$/u, '');
 };
 
+const boundedControlFailure = async (response: Response) => {
+  const payload: unknown = await response.json().catch(() => null);
+  const controllerCode = payload && typeof payload === 'object' && !Array.isArray(payload)
+    && typeof (payload as { error?: unknown }).error === 'string'
+    ? (payload as { error: string }).error : '';
+  if (/^AUTHENTICATED_HOSTED_CONTROLLER_(?:SESSION_|BROWSER_ACTION_SESSION_)/u.test(controllerCode)) {
+    return 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED';
+  }
+  if (/^AUTHENTICATED_HOSTED_CONTROLLER_PERMIT_/u.test(controllerCode)) {
+    return 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_PERMIT_REJECTED';
+  }
+  if (/^AUTHENTICATED_HOSTED_CONTROLLER_(?:BROWSER_ACTION_|AUTHORITY_FRAME_)/u.test(controllerCode)) {
+    return 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_ACTION_REJECTED';
+  }
+  return 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED';
+};
+
 export const authenticatedLifecycleControl = async <T>(pathname: string, body?: unknown): Promise<T> => {
   const response = await fetch(`${loopbackBaseUrl(controlBaseUrl)}${pathname}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -55,7 +72,7 @@ export const authenticatedLifecycleControl = async <T>(pathname: string, body?: 
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  if (!response.ok) throw new Error(`ENTERPRISE_LIFECYCLE_CONTROL_FAILED:${pathname}:${response.status}`);
+  if (!response.ok) throw new Error(await boundedControlFailure(response));
   return response.json() as Promise<T>;
 };
 

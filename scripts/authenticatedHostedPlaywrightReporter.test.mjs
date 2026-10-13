@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 
 import AuthenticatedHostedPlaywrightReporter from './authenticatedHostedPlaywrightReporter.mjs';
+import { validateAuthenticatedHostedPlaywrightDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+
+const execFileAsync = promisify(execFile);
 
 const titles = new Map([
   ['authors, replays, rejects stale work, requests changes and resubmits through the production UI', 'primary-lifecycle'],
@@ -108,4 +113,75 @@ test('a test-end failure without step detail cannot inherit a later teardown loc
   const value=JSON.parse(await readFile(destination,'utf8'));
   assert.equal(Object.hasOwn(value,'location'),false);
   assert.equal(value.testCategory,'primary-lifecycle');
+});
+
+test('the first bounded failure descriptor survives later teardown noise', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-primary-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'primary.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  reporter.onTestBegin(current);
+  reporter.onStepEnd(current,{}, {category:'expect',title:'first',
+    error:new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED'),
+    location:{file:path.resolve('tests/browser/authenticatedHostedNetwork.ts'),line:1,column:1}});
+  reporter.onStepEnd(current,{}, {category:'hook',title:'afterAll hook',
+    error:new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED'),
+    location:{file:path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),line:1,column:1}});
+  reporter.onTestEnd(current,{status:'failed',error:new Error('fixture-sensitive-final')});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.testCategory,'primary-lifecycle');
+  assert.equal(value.phase,'NETWORK_TRACKER');assert.equal(value.code,'ACTION_START_REJECTED');
+  assert.deepEqual(value.location,{source:'tests/browser/authenticatedHostedNetwork.ts',line:1});
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+});
+
+test('an unknown first failure cannot be replaced by a later allowlisted descriptor', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-unknown-primary-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'unknown-primary.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  reporter.onTestBegin(current);
+  reporter.onStepEnd(current,{}, {category:'expect',title:'first',error:new Error('raw-sensitive-first')});
+  reporter.onStepEnd(current,{}, {category:'hook',title:'afterAll hook',
+    error:new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED')});
+  reporter.onTestEnd(current,{status:'failed'});await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(Object.hasOwn(value,'phase'),false);assert.equal(Object.hasOwn(value,'code'),false);
+  assert.equal(value.testCategory,'primary-lifecycle');assert.equal(JSON.stringify(value).includes('raw-sensitive'),false);
+});
+
+test('a real Playwright failure crosses the reporter boundary as a closed descriptor', async t => {
+  const root=await mkdtemp(path.join(process.cwd(),'authenticated-reporter-integration-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const destination=path.join(root,'diagnostic.json');
+  const reporterPath=path.resolve('scripts/authenticatedHostedPlaywrightReporter.mjs');
+  const testDir=JSON.stringify(root.replaceAll('\\','/'));
+  const config=path.join(root,'playwright.config.mjs');
+  await writeFile(path.join(root,'failure.spec.mjs'),`import { test } from '@playwright/test';\n`+
+    `test('bounded failure', async () => { throw new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED'); });\n`);
+  await writeFile(config,`export default { testDir: ${testDir}, projects: [{ name: 'desktop-chromium' }], `+
+    `reporter: [[${JSON.stringify(reporterPath)}]] };\n`);
+  let exitCode=0;
+  try {
+    await execFileAsync(process.execPath,[path.resolve('node_modules/@playwright/test/cli.js'),'test','--config',config],{
+      cwd:process.cwd(),env:{...process.env,AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH:destination},maxBuffer:2_000_000,
+    });
+  } catch (error) { exitCode=error?.code; }
+  assert.equal(exitCode,1);
+  let serialized;
+  try { serialized=await readFile(destination,'utf8'); }
+  catch { assert.fail('real Playwright diagnostic missing'); }
+  const value=JSON.parse(serialized);
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
+  assert.equal(value.phase,'NETWORK_TRACKER');assert.equal(value.code,'ACTION_START_REJECTED');
+  assert.equal(JSON.stringify(value).includes('bounded failure'),false);
 });

@@ -43,7 +43,12 @@ test('inert fixture emits a bounded rejection diagnostic without creating a bind
     });
     assert.equal(rejected.status, 401);
     assert.deepEqual(await rejected.json(), { error_code: 'invalid_credentials', message: 'Invalid credentials' });
-    const diagnostic = await fetch(`${fixture.baseUrl}/control/browser-diagnostic`, {
+    await fetch(`${fixture.controlBaseUrl}/control/setup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+      body: JSON.stringify({ projectName: 'desktop-chromium' }),
+    });
+    const diagnostic = await fetch(`${fixture.controlBaseUrl}/control/browser-diagnostic`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
       body: JSON.stringify({
@@ -52,14 +57,23 @@ test('inert fixture emits a bounded rejection diagnostic without creating a bind
       }),
     });
     assert.equal(diagnostic.status, 200);
-    const observation = await fetch(`${fixture.baseUrl}/control/sign-in-entry-observation?projectName=desktop-chromium`, {
-      headers: { 'x-enterprise-lifecycle-control': fixture.controlToken },
+    const observation = await fetch(`${fixture.controlBaseUrl}/control/sign-in-entry-observation`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+      body: JSON.stringify({ projectName: 'desktop-chromium' }),
     });
     assert.equal(observation.status, 200);
     assert.deepEqual(await observation.json(), {
       passwordRequests: [{ actor: 'rejected', outcome: 'rejected' }],
-      diagnostics: [{ operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' }],
       bindings: [],
+      attestationRequests: 0,
+      processCommandRequests: 0,
+      anonymousProcessCommandRequests: 0,
+      verifySessionCalls: [],
+      diagnostic: { source: 'browser', project: 'desktop-chromium', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
+      actions: [],
+      browserCases: 0,
+      serverCases: 0,
     });
   } finally {
     assert.equal(await fixture.close(), true);
@@ -79,6 +93,8 @@ test('shared helper retains the scrub navigation and enters the actual sign-in r
   assert.match(realAuthBranch, /await page[.]goto\('\/'\);[\s\S]*await page[.]goto\('\/sign-in', \{ waitUntil: 'domcontentloaded' \}\);/u);
   assert.equal((realAuthBranch.match(/await page[.]goto\('\/sign-in'/gu) ?? []).length, 1);
   assert.match(runnerSource, /--config', 'vite[.]authenticated-hosted-sign-in-entry[.]config[.]ts'/u);
+  assert.match(runnerSource, /VITE_PR_C_CONTROLLED_HUMAN_ENABLED: 'authorized'/u);
+  assert.match(runnerSource, /startAuthenticatedHostedControllerServer/u);
   assert.match(viteSource, /envDir: false as const/u);
   assert.deepEqual(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS, ['desktop-chromium', 'pixel-7-chromium']);
 });
