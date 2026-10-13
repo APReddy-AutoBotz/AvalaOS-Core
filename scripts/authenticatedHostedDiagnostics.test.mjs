@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
+import { authenticatedHostedFailureCode, authenticatedHostedPlaywrightFailureDescriptor,
+  createAuthenticatedHostedRunDiagnostic,
   validateAuthenticatedHostedIdentityDiagnostic, validateAuthenticatedHostedPlaywrightDiagnostic,
   validateAuthenticatedHostedPlaywrightFailureLocation,
   validateAuthenticatedHostedRunDiagnostic, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
@@ -106,4 +107,31 @@ test('playwright locations retain only an exact allowlisted source and bounded p
     { source: process.cwd(), line: 1 },
   ]) assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, location: invalid }), base);
   assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, rawTitle: 'sensitive' }), null);
+});
+
+test('playwright failure descriptors retain only closed phase and code pairs', () => {
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED')),
+  { phase: 'NETWORK_TRACKER', code: 'ACTION_START_REJECTED' });
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED')),
+  { phase: 'CONTROL_CHANNEL', code: 'SESSION_REJECTED' });
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    { message: '\u001b[31mError: AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING\u001b[39m' }),
+  { phase: 'NETWORK_TRACKER', code: 'TRACKER_MISSING' });
+  assert.equal(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED:raw-sensitive-suffix')), null);
+  const base = { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1', project: 'desktop-chromium',
+    testCategory: 'primary-lifecycle', category: 'unexpected-failure' };
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base,
+    phase: 'IDENTITY_ENTRY', code: 'CREDENTIAL_REJECTED' }), { ...base,
+    phase: 'IDENTITY_ENTRY', code: 'CREDENTIAL_REJECTED' });
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base,
+    phase: 'IDENTITY_ENTRY', code: 'TRACKER_MISSING' }), null);
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base,
+    phase: 'RAW_PHASE', code: 'CREDENTIAL_REJECTED' }), null);
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base,
+    phase: undefined, code: 'CREDENTIAL_REJECTED' }), null);
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base,
+    phase: 'IDENTITY_ENTRY', code: 'CREDENTIAL_REJECTED', raw: 'secret' }), null);
 });

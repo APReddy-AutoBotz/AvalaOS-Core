@@ -348,11 +348,13 @@ export class AuthenticatedHostedController {
     return browserSetup;
   }
 
-  async bindBrowserSession({ projectName, persona, accessToken }) {
+  async verifyPresentedBrowserSession({ projectName, persona = null, accessToken }) {
     const project = this.projects.get(projectName);
-    if (!project || !AUTHENTICATED_HOSTED_PERSONAS.includes(persona)) fail('SESSION_SCOPE_REJECTED');
+    if (!project) fail('PROJECT_NOT_FOUND');
     const claims = decodeJwtClaims(accessToken);
-    if (claims.actorId !== project.identities[persona].id) fail('SESSION_ACTOR_REJECTED');
+    const resolvedPersona = persona ?? AUTHENTICATED_HOSTED_PERSONAS
+      .find(candidate => project.identities[candidate]?.id === claims.actorId);
+    if (!resolvedPersona || project.identities[resolvedPersona]?.id !== claims.actorId) fail('SESSION_ACTOR_REJECTED');
     let verified;
     try { verified = await this.identity.verifySession({ accessToken, ...claims }); }
     catch (error) {
@@ -361,6 +363,10 @@ export class AuthenticatedHostedController {
       throw error;
     }
     if (!verified || verified.actorId !== claims.actorId || verified.sessionId !== claims.sessionId) fail('SESSION_VERIFY_REJECTED');
+    return { project, persona: resolvedPersona, claims };
+  }
+
+  async bindVerifiedBrowserSession({ projectName, persona, claims }) {
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
     const key = `${browserProject}:${persona}`;
     const binding = {
@@ -377,6 +383,12 @@ export class AuthenticatedHostedController {
       this.boundSessions.set(key, { ...binding, actorId: claims.actorId, sessionId: claims.sessionId });
     }
     return { bound: true, actorHash: binding.actorHash, sessionHash: binding.sessionHash };
+  }
+
+  async bindBrowserSession({ projectName, persona, accessToken }) {
+    if (!this.projects.has(projectName) || !AUTHENTICATED_HOSTED_PERSONAS.includes(persona)) fail('SESSION_SCOPE_REJECTED');
+    const verified = await this.verifyPresentedBrowserSession({ projectName, persona, accessToken });
+    return this.bindVerifiedBrowserSession({ projectName, persona, claims: verified.claims });
   }
 
   async captureFrame(pathname, input) {
@@ -459,16 +471,17 @@ export class AuthenticatedHostedController {
   }
 
   async resolveBrowserActionBinding({ projectName, accessToken }) {
-    const claims = decodeJwtClaims(accessToken);
+    const verified = await this.verifyPresentedBrowserSession({ projectName, accessToken });
+    const { claims, persona } = verified;
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
-    let binding = [...this.boundSessions.values()].find(item => item.project === browserProject
-      && item.actorId === claims.actorId && item.sessionId === claims.sessionId);
+    const key = `${browserProject}:${persona}`;
+    let binding = this.boundSessions.get(key);
+    if (binding && (binding.actorId !== claims.actorId || binding.sessionId !== claims.sessionId)) {
+      fail('SESSION_ROTATION_REJECTED');
+    }
     if (!binding) {
-      const project = this.projects.get(projectName);
-      const persona = AUTHENTICATED_HOSTED_PERSONAS.find(candidate => project.identities[candidate]?.id === claims.actorId);
-      if (!persona) fail('BROWSER_ACTION_SESSION_REJECTED');
-      await this.bindBrowserSession({ projectName, persona, accessToken });
-      binding = this.boundSessions.get(`${browserProject}:${persona}`);
+      await this.bindVerifiedBrowserSession({ projectName, persona, claims });
+      binding = this.boundSessions.get(key);
     }
     if (!binding) fail('BROWSER_ACTION_SESSION_REJECTED');
     return binding;
@@ -566,10 +579,12 @@ export class AuthenticatedHostedController {
   async armBrowserFault({ projectName, persona, kind, commandType, requestBody, accessToken }) {
     if (!this.projects.has(projectName) || !AUTHENTICATED_HOSTED_PERSONAS.includes(persona)
       || !record(requestBody) || typeof commandType !== 'string') fail('PERMIT_REJECTED');
-    const claims = decodeJwtClaims(accessToken);
+    const verified = await this.verifyPresentedBrowserSession({ projectName, persona, accessToken });
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
     const bound = this.boundSessions.get(`${browserProject}:${persona}`);
-    if (!bound || bound.actorId !== claims.actorId) fail('SESSION_VERIFY_REJECTED');
+    if (!bound || bound.actorId !== verified.claims.actorId || bound.sessionId !== verified.claims.sessionId) {
+      fail('SESSION_VERIFY_REJECTED');
+    }
     const requestId = requestBody.requestId;
     const expectedVersion = commandType === 'studio.generation.request'
       ? requestBody.expectedAggregateVersion : commandType === 'process.update' ? requestBody.expectedVersion : null;
@@ -577,8 +592,8 @@ export class AuthenticatedHostedController {
     return this.armPermit({
       kind,
       commandType,
-      actorId: claims.actorId,
-      sessionId: claims.sessionId,
+      actorId: bound.actorId,
+      sessionId: bound.sessionId,
       requestId,
       payloadHash: authenticatedHostedDigest(requestBody).slice('sha256:'.length),
       expectedVersion,

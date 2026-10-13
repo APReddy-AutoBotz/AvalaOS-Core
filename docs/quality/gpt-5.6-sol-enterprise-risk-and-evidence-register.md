@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Composed authentication and controller evidence authority (2026-10-13)
+
+Executed evidence: approved run `38432718184` on merged PR #295 (`48b76a47`) failed in the first desktop lifecycle journey. All 322 source hashes and the 108-case report independently verify: 61 PASS / 47 BLOCKED. No exact assertion or identity error is retained. Cleanup, providers OFF and removal of temporary branch access are verified; the one-run allowance is consumed. No sign-in, request-tracker, deployment or UI cause is established.
+
+Confirmed preparation gap: the actual application, shared helper, full lifecycle request hooks and real controller were split between different proofs. Confirmed acceptance-controller source defect: cached actor/session claims can skip verification of the presented token on subsequent tracked actions; fault arming also lacks an exact verified-session check at that boundary. This can admit forged same-claim tokens to evidence tracking or permit-request processing; later backend/SQL checks limit impact, and no production exploit or connection to the failed hosted run is proved. Confirmed diagnostic loss: asynchronous controller/tracker failures can surface without a first eligible source location, while the control helper discards the bounded response code.
+
+Executed local correction: 50 focused checks, typecheck and the composed Desktop/Pixel browser proof pass. Forged, revoked, mismatched and unbound-session negatives stop before observation/binding/permit effects; permits still require an existing exact binding. Real Playwright serialization preserves the closed phase/code and first-primary precedence without raw error disclosure. The composed browser proof passed before remediation too, so it does not establish the historical hosted cause. Exact-candidate integration and CI remain planned under `docs/planning/hosted-acceptance-completion.md`. No backend/schema change, new hosted action or promoted acceptance result follows from local preparation.
+
 ## Hosted sign-in entry evidence gap (2026-10-13)
 
 Executed evidence: approved run `38413392098` on merged PR #294 (`48456abe`) failed before credential submission at the real-auth helper's sign-in-heading assertion. Independent verification confirms 313 source hashes and 61 PASS / 47 BLOCKED. Cleanup, both providers OFF and removal of owned temporary branch access are verified. Confirmed source defect: the helper navigates to the public homepage while expecting the `/sign-in` form. The earlier minimal-page transport proof did not cover actual application routing.

@@ -137,10 +137,73 @@ test('real session binding is idempotent and namespaces the browser project pers
   assert.equal(calls.length,1);assert.equal(calls[0].persona,'author_desktop-chromium');
 });
 
+test('cached browser actions reverify the exact presented token before observation', async () => {
+  const actorId=id();const sessionId=id();const validToken=tokenFor(actorId,sessionId);
+  const forgedToken=`${validToken.slice(0,validToken.lastIndexOf('.')+1)}${'y'.repeat(48)}`;
+  let observeCalls=0;let verifyCalls=0;
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity:{verifySession:async({accessToken})=>{verifyCalls+=1;if(accessToken!==validToken)throw new Error('SESSION_REJECTED');
+      return {actorId,sessionId};}},adapter:{bindSession:async()=>{},observe:async()=>{observeCalls+=1;
+      return {capturedAt:'2026-10-10T00:00:00.000Z',records:[]};}}});
+  controller.projects.set('desktop-chromium',{processId:'process',identities:{author:{id:actorId}}});
+  await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken:validToken});
+  await assert.rejects(controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:forgedToken,
+    route:'/functions/v1/process-command',requestBody:{requestId:id(),commandType:'process.update'}}),/SESSION_REJECTED/u);
+  assert.equal(verifyCalls,2);assert.equal(observeCalls,0);
+});
+
+test('cached browser actions reject a stale session before observation', async () => {
+  const actorId=id();const sessionId=id();const accessToken=tokenFor(actorId,sessionId);let active=true;let observeCalls=0;
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity:{verifySession:async()=>{if(!active)throw new Error('SESSION_STALE');return {actorId,sessionId};}},
+    adapter:{bindSession:async()=>{},observe:async()=>{observeCalls+=1;return {capturedAt:'2026-10-10T00:00:00.000Z',records:[]};}}});
+  controller.projects.set('desktop-chromium',{processId:'process',identities:{author:{id:actorId}}});
+  await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken});
+  active=false;
+  await assert.rejects(controller.beginBrowserAction({projectName:'desktop-chromium',accessToken,
+    route:'/functions/v1/process-command',requestBody:{requestId:id(),commandType:'process.update'}}),/SESSION_STALE/u);
+  assert.equal(observeCalls,0);
+});
+
+test('browser fault arming rejects a valid alternate session before permit effects', async () => {
+  const actorId=id();const boundSessionId=id();const alternateSessionId=id();let permitCalls=0;
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity:{verifySession:async({sessionId})=>({actorId,sessionId})},adapter:{armPermit:async()=>{permitCalls+=1;return {armed:true};}}});
+  controller.active=true;controller.projects.set('desktop-chromium',{identities:{author:{id:actorId}}});
+  controller.boundSessions.set('desktop-chromium:author',{project:'desktop-chromium',persona:'author',actorId,
+    sessionId:boundSessionId,actorHash:digest(actorId),sessionHash:digest(boundSessionId)});
+  await assert.rejects(controller.armBrowserFault({projectName:'desktop-chromium',persona:'author',kind:'studio_deterministic_success',
+    commandType:'studio.generation.request',accessToken:tokenFor(actorId,alternateSessionId),requestBody:{requestId:id(),
+      commandType:'studio.generation.request',expectedAggregateVersion:7,payload:{source:'server-bound'}}}),
+  /SESSION_ROTATION_REJECTED|SESSION_VERIFY_REJECTED/u);
+  assert.equal(permitCalls,0);
+});
+
+test('browser fault arming requires a prior exact binding without creating one', async () => {
+  const actorId=id();const sessionId=id();let bindCalls=0;let permitCalls=0;
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity:{verifySession:async()=>({actorId,sessionId})},adapter:{bindSession:async()=>{bindCalls+=1;},
+      armPermit:async()=>{permitCalls+=1;return {armed:true};}}});
+  controller.active=true;controller.projects.set('desktop-chromium',{identities:{author:{id:actorId}}});
+  await assert.rejects(controller.armBrowserFault({projectName:'desktop-chromium',persona:'author',kind:'studio_deterministic_success',
+    commandType:'studio.generation.request',accessToken:tokenFor(actorId,sessionId),requestBody:{requestId:id(),
+      commandType:'studio.generation.request',expectedAggregateVersion:7,payload:{source:'server-bound'}}}),
+  /SESSION_VERIFY_REJECTED/u);
+  assert.equal(bindCalls,0);assert.equal(permitCalls,0);assert.equal(controller.boundSessions.size,0);
+});
+
+test('browser action binding rejects an unknown project with a bounded controller error', async () => {
+  const actorId=id();const sessionId=id();
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity:{verifySession:async()=>({actorId,sessionId})},adapter:{}});
+  await assert.rejects(controller.resolveBrowserActionBinding({projectName:'missing-project',accessToken:tokenFor(actorId,sessionId)}),
+    /^Error: AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND$/u);
+});
+
 test('Studio fault arming uses the production expectedAggregateVersion envelope', async () => {
   const actorId=id();const sessionId=id();let permit;
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
-    identity:{},adapter:{armPermit:async input=>{permit=input;return {armed:true};}}});
+    identity:{verifySession:async()=>({actorId,sessionId})},adapter:{armPermit:async input=>{permit=input;return {armed:true};}}});
   controller.active=true;controller.projects.set('desktop-chromium',{identities:{author:{id:actorId}}});
   controller.boundSessions.set('desktop-chromium:author',{project:'desktop-chromium',persona:'author',actorId,sessionId,
     actorHash:digest(actorId),sessionHash:digest(sessionId)});

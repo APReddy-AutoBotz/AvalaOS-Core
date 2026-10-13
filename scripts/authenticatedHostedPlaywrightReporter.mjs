@@ -1,6 +1,7 @@
 import { rename, writeFile } from 'node:fs/promises';
 
 import { AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA,
+  authenticatedHostedPlaywrightFailureDescriptor,
   validateAuthenticatedHostedPlaywrightDiagnostic,
   validateAuthenticatedHostedPlaywrightFailureLocation } from './authenticatedHostedDiagnostics.mjs';
 
@@ -35,6 +36,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
     if (!step?.error) return;
     const firstFailureStep = !this.failureStepSeen;
     this.failureStepSeen = true;
+    if (firstFailureStep) this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(step.error);
     if (firstFailureStep && step.location) {
       const source = typeof step.location.file === 'string'
         ? step.location.file.replaceAll('\\', '/') : '';
@@ -45,7 +47,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
         line: step.location.line,
       });
     }
-    if (this.failure || step.category !== 'hook') return;
+    if (this.failure || !firstFailureStep || step.category !== 'hook') return;
     const category = step.title === 'beforeAll hook' ? 'project-bootstrap'
       : step.title === 'afterAll hook' ? 'project-teardown' : null;
     if (category) this.failure = { project: projectCategory(test), testCategory: category,
@@ -54,6 +56,9 @@ export default class AuthenticatedHostedPlaywrightReporter {
 
   onTestEnd(test, result) {
     if (!this.failure && result.status !== test.expectedStatus) {
+      if (!this.failureStepSeen) {
+        this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(result.error ?? result.errors?.[0]);
+      }
       this.failureStepSeen = true;
       this.failure = { project: projectCategory(test), testCategory: testCategory(test),
         category: resultCategory(result.status) };
@@ -76,6 +81,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       project: this.failure?.project ?? this.current?.project ?? 'unknown',
       testCategory: this.failure?.testCategory ?? this.current?.testCategory ?? 'runner',
       category: this.failure?.category ?? category,
+      ...(this.failureDescriptor ?? {}),
       ...(this.failureLocation ? { location: this.failureLocation } : {}),
     });
     if (!value) return;

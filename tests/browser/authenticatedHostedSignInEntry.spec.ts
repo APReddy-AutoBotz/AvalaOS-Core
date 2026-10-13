@@ -1,12 +1,24 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
+import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   authenticatedLifecycleControl,
   authenticatedLifecycleEnterAs,
+  authenticatedLifecycleOpenConnectedProcess,
   type AuthenticatedLifecycleActor,
 } from './authenticatedLifecycleHarness';
+import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
 
 const appOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_APP_URL ?? '').origin;
 const apiOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').origin;
+const localAppOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_APP_URL ?? '').origin;
+const localApiOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL ?? '').origin;
+const syntheticProjectRef = 'abcdefghijklmnopqrst';
+if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
+  || apiOrigin !== `https://${syntheticProjectRef}.supabase.co`
+  || !/^http:\/\/127[.]0[.]0[.]1:\d+$/u.test(localAppOrigin)
+  || !/^http:\/\/127[.]0[.]0[.]1:\d+$/u.test(localApiOrigin)) {
+  throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_BINDING_REJECTED');
+}
 
 const actor = (
   projectName: string,
@@ -32,20 +44,62 @@ const actor = (
   };
 };
 
-const installLoopbackGuard = async (page: Page) => {
-  const unexpectedOrigins: string[] = [];
-  await page.route('**/*', route => {
-    const origin = new URL(route.request().url()).origin;
-    if (origin === appOrigin || origin === apiOrigin) return route.continue();
-    unexpectedOrigins.push(origin);
-    return route.abort('blockedbyclient');
+const dispatchToLocalProxy = async (route: Route) => {
+  const request = route.request();
+  const requested = new URL(request.url());
+  const targetOrigin = requested.origin === appOrigin ? localAppOrigin
+    : requested.origin === apiOrigin ? localApiOrigin : null;
+  if (!targetOrigin) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_ORIGIN_REJECTED');
+  const headers = await request.allHeaders();
+  for (const name of ['host', 'content-length', 'accept-encoding']) delete headers[name];
+  const response = await fetch(`${targetOrigin}${requested.pathname}${requested.search}`, {
+    method: request.method(),
+    headers,
+    body: ['GET', 'HEAD'].includes(request.method()) ? undefined : request.postDataBuffer(),
+    redirect: 'manual',
   });
-  return unexpectedOrigins;
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_REDIRECT_REJECTED');
+  }
+  const responseHeaders = Object.fromEntries(response.headers);
+  for (const name of ['content-encoding', 'content-length', 'transfer-encoding']) delete responseHeaders[name];
+  await route.fulfill({ status: response.status, headers: responseHeaders, body: Buffer.from(await response.arrayBuffer()) });
 };
 
 test('actual application uses the shared real-auth helper for rejected, cold and cached sign-in', async ({ page }, testInfo) => {
   const projectName = testInfo.project.name;
-  const unexpectedOrigins = await installLoopbackGuard(page);
+  const setup = await authenticatedLifecycleControl<{
+    aliases: { process: string };
+  }>('/control/setup', { projectName });
+  const unexpectedOrigins: string[] = [];
+  let observedHttpRequests = 0;
+  let networkActionError: unknown = null;
+  let networkActionTail: Promise<unknown> = Promise.resolve();
+  const queueNetworkAction = (operation: () => Promise<unknown>) => {
+    networkActionTail = networkActionTail.then(operation).catch(error => {
+      if (!networkActionError) networkActionError = error;
+    });
+  };
+  const tracker = new AuthenticatedHostedBrowserActionTracker({
+    backendOrigin: apiOrigin,
+    appOrigin,
+    startAction: input => authenticatedLifecycleControl<{ actionId: string }>('/control/browser-action-start', {
+      projectName,
+      ...input,
+    }),
+    finishAction: input => authenticatedLifecycleControl('/control/browser-action', { projectName, ...input }),
+  });
+  await installAuthenticatedHostedNetwork({
+    context: page.context(),
+    hosted: true,
+    allowedOrigins: new Set([appOrigin, apiOrigin]),
+    tracker,
+    queueNetworkAction,
+    onExternalRequest: origin => unexpectedOrigins.push(origin),
+    onHttpRequest: () => { observedHttpRequests += 1; },
+    onTrackerError: error => { if (!networkActionError) networkActionError = error; },
+    dispatchAllowedRequest: dispatchToLocalProxy,
+  });
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
 
@@ -55,48 +109,123 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await expect(page.getByRole('heading', { name: /Evaluate before you automate/u })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
 
+  const anonymousOutcome = await page.evaluate(async backendOrigin => {
+    try {
+      await fetch(`${backendOrigin}/functions/v1/process-command`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commandType: 'process.update' }),
+      });
+      return 'reached-backend';
+    } catch { return 'blocked-before-backend'; }
+  }, apiOrigin);
+  expect(anonymousOutcome).toBe('blocked-before-backend');
+  await networkActionTail;
+  expect(networkActionError).toBeInstanceOf(Error);
+  expect((networkActionError as Error).message).toBe('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
+  networkActionError = null;
+  const anonymousObservation = await authenticatedLifecycleControl<{
+    actions: unknown[]; anonymousProcessCommandRequests: number;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(anonymousObservation.actions).toEqual([]);
+  expect(anonymousObservation.anonymousProcessCommandRequests).toBe(0);
+
+  const foreignOutcome = await page.evaluate(async () => {
+    try {
+      await fetch('https://foreign.example/functions/v1/process-command', { method: 'POST' });
+      return 'reached-network';
+    } catch { return 'blocked-before-network'; }
+  });
+  expect(foreignOutcome).toBe('blocked-before-network');
+  await expect.poll(() => unexpectedOrigins).toContain('https://foreign.example');
+  await networkActionTail;
+  expect(networkActionError).toBeInstanceOf(Error);
+  expect((networkActionError as Error).message).toBe('AUTHENTICATED_BROWSER_PRODUCT_ORIGIN_REJECTED');
+  networkActionError = null;
+  unexpectedOrigins.length = 0;
+
   await expect(authenticatedLifecycleEnterAs(page, actor(projectName, 'rejected')))
     .rejects.toThrow('ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_CREDENTIAL_REJECTED');
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('sb-')))).toEqual([]);
   const rejectedObservation = await authenticatedLifecycleControl<{
     passwordRequests: unknown[];
-    diagnostics: unknown[];
+    diagnostic: unknown;
     bindings: unknown[];
-  }>(`/control/sign-in-entry-observation?projectName=${encodeURIComponent(projectName)}`);
-  expect(rejectedObservation).toEqual({
+    actions: unknown[];
+    attestationRequests: number;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(rejectedObservation).toMatchObject({
     passwordRequests: [{ actor: 'rejected', outcome: 'rejected' }],
-    diagnostics: [{ operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' }],
+    diagnostic: { source: 'browser', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
     bindings: [],
+    actions: [],
   });
+  expect(rejectedObservation.attestationRequests).toBeGreaterThan(0);
 
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'));
+  const reviewerColdObservation = await authenticatedLifecycleControl<{
+    passwordRequests: unknown[]; bindings: unknown[]; verifySessionCalls: unknown[];
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(reviewerColdObservation.passwordRequests).toEqual([
+    { actor: 'rejected', outcome: 'rejected' },
+    { actor: 'A', outcome: 'accepted' },
+    { actor: 'B', outcome: 'accepted' },
+  ]);
+  expect(reviewerColdObservation.bindings).toEqual([
+    expect.objectContaining({ actor: 'A', persona: 'author' }),
+    expect.objectContaining({ actor: 'B', persona: 'reviewer' }),
+  ]);
+  expect(reviewerColdObservation.verifySessionCalls).toContainEqual({ actor: 'B', outcome: 'verified' });
+  await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+  await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+  await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
+  await page.getByLabel('Process name', { exact: true }).fill('Unauthorized process rename');
+  const deniedResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/functions/v1/process-command');
+  await page.getByRole('button', { name: 'Save process details', exact: true }).click();
+  expect((await deniedResponse).status()).toBe(403);
+  await expect(page.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
   const storedSessions = await page.evaluate(() => Object.entries(localStorage)
     .filter(([key]) => key.startsWith('sb-'))
     .map(([key, value]) => ({ key, value: JSON.parse(value) })));
   expect(storedSessions).toHaveLength(1);
-  expect(storedSessions[0]?.value.access_token ?? storedSessions[0]?.value.currentSession?.access_token)
-    .toBe(`loopback-${projectName}-token-a`);
+  const storedAccessToken = storedSessions[0]?.value.access_token ?? storedSessions[0]?.value.currentSession?.access_token;
+  const storedClaims = JSON.parse(Buffer.from(String(storedAccessToken).split('.')[1] ?? '', 'base64url').toString('utf8'));
+  expect(storedClaims.sub).toBe(actor(projectName, 'A').user.id);
 
   const observation = await authenticatedLifecycleControl<{
     passwordRequests: unknown[];
-    diagnostics: unknown[];
+    diagnostic: unknown;
     bindings: unknown[];
-  }>(`/control/sign-in-entry-observation?projectName=${encodeURIComponent(projectName)}`);
-  expect(observation).toEqual({
+    actions: Array<{ route: string; persona: string; complete: boolean; status: number | null; actorHash: string; sessionHash: string }>;
+    processCommandRequests: number;
+    anonymousProcessCommandRequests: number;
+    browserCases: number;
+    serverCases: number;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(observation).toMatchObject({
     passwordRequests: [
       { actor: 'rejected', outcome: 'rejected' },
       { actor: 'A', outcome: 'accepted' },
       { actor: 'B', outcome: 'accepted' },
     ],
-    diagnostics: [{ operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' }],
+    diagnostic: { source: 'browser', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
     bindings: [
-      { actor: 'A', persona: 'author', token: `loopback-${projectName}-token-a` },
-      { actor: 'B', persona: 'reviewer', token: `loopback-${projectName}-token-b` },
-      { actor: 'A', persona: 'author', token: `loopback-${projectName}-token-a` },
+      { actor: 'A', persona: 'author' },
+      { actor: 'B', persona: 'reviewer' },
     ],
   });
+  const deniedActions = observation.actions.filter(action => action.route === '/functions/v1/process-command');
+  expect(deniedActions).toHaveLength(1);
+  expect(deniedActions[0]).toMatchObject({ persona: 'reviewer', complete: true, status: 403 });
+  expect(observation.processCommandRequests).toBe(1);
+  expect(observation.anonymousProcessCommandRequests).toBe(0);
+  expect(observation.actions.every(action => action.route !== '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
+    && !action.route.startsWith('/auth/'))).toBe(true);
+  expect(observation.browserCases).toBe(0);
+  expect(observation.serverCases).toBe(0);
+  expect(observedHttpRequests).toBeGreaterThan(0);
   expect(unexpectedOrigins).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

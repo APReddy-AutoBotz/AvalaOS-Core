@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Composed hosted authentication boundary (2026-10-13)
+
+Approved run `38432718184` on merged PR #295 retains independently verified 61 PASS / 47 BLOCKED, with verified cleanup/providers OFF and consumed hosted allowance. Three read-only reviewers completed; root synthesized the composition gap, bounded diagnostic loss and acceptance-controller token-verification defect without asserting an unknown hosted cause. Under the fixed managed workspace-write profile, one worker owns the combined browser/controller proof and its focused corrections; root owns canonical documents, CI/provenance, final verification and one substantial PR. No nested delegation or review agents during writes. Follow `docs/planning/hosted-acceptance-completion.md`; preserve unrelated work, full criteria and server authority. Another hosted attempt requires its separate exact-release authorization.
+
 ## Actual application sign-in preparation (2026-10-13)
 
 The latest approved PR #294 run (`38413392098`) retains 61 PASS / 47 BLOCKED and now pinpoints the helper's incorrect public-homepage navigation before sign-in. Cleanup and providers OFF are verified; its single-run allowance is consumed. Three read-only reviewers completed before writes. Root owns scope, integration and one verified implementation PR; one worker owns the narrowly corrected entry helper and actual-app local browser proof, with no nested delegation. Follow `docs/planning/hosted-acceptance-completion.md`; retain original criteria, server authority and proof boundaries. This repository correction authorizes no hosted retry, backend deployment, migration, production or paid effect.

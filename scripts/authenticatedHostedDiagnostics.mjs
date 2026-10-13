@@ -52,8 +52,30 @@ const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts',
   'tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts',
   'tests/browser/authenticatedLifecycleHarness.ts',
+  'tests/browser/authenticatedHostedNetwork.ts',
   'tests/browser/authenticatedControlsAcceptance.ts',
 ]);
+const PLAYWRIGHT_FAILURE_DESCRIPTORS = new Map([
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_CREDENTIAL_REJECTED', ['IDENTITY_ENTRY', 'CREDENTIAL_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_ACCESS_DENIED', ['IDENTITY_ENTRY', 'ACCESS_DENIED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_ENDPOINT_MISSING', ['IDENTITY_ENTRY', 'ENDPOINT_MISSING']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_CONFLICT', ['IDENTITY_ENTRY', 'IDENTITY_CONFLICT']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_INPUT_REJECTED', ['IDENTITY_ENTRY', 'INPUT_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_RATE_LIMITED', ['IDENTITY_ENTRY', 'RATE_LIMITED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_UPSTREAM_UNAVAILABLE', ['IDENTITY_ENTRY', 'UPSTREAM_UNAVAILABLE']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_TRANSPORT_FAILURE', ['IDENTITY_ENTRY', 'TRANSPORT_FAILURE']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED', ['IDENTITY_ENTRY', 'SESSION_MISSING']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED', ['CONTROL_CHANNEL', 'SESSION_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_PERMIT_REJECTED', ['CONTROL_CHANNEL', 'PERMIT_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_ACTION_REJECTED', ['CONTROL_CHANNEL', 'ACTION_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED', ['CONTROL_CHANNEL', 'CONTROL_REJECTED']],
+  ['AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING', ['NETWORK_TRACKER', 'TRACKER_MISSING']],
+  ['AUTHENTICATED_BROWSER_PRODUCT_ORIGIN_REJECTED', ['NETWORK_TRACKER', 'PRODUCT_ORIGIN_REJECTED']],
+  ['AUTHENTICATED_BROWSER_ACTION_START_REJECTED', ['NETWORK_TRACKER', 'ACTION_START_REJECTED']],
+  ['AUTHENTICATED_BROWSER_ACTION_START_MISSING', ['NETWORK_TRACKER', 'ACTION_START_MISSING']],
+]);
+const PLAYWRIGHT_FAILURE_PAIRS = new Set([...PLAYWRIGHT_FAILURE_DESCRIPTORS.values()]
+  .map(([phase, code]) => `${phase}:${code}`));
 export const AUTHENTICATED_HOSTED_IDENTITY_CATEGORIES = Object.freeze([
   'PROVISION_FAILED',
   'CREDENTIAL_REJECTED',
@@ -106,17 +128,30 @@ function validateRunIdentityDiagnostic(value) {
 }
 
 export function validateAuthenticatedHostedPlaywrightDiagnostic(value) {
-  const keys = value?.location === undefined
-    ? ['schemaVersion', 'project', 'testCategory', 'category']
-    : ['schemaVersion', 'project', 'testCategory', 'category', 'location'];
+  const hasPhase = record(value) && Object.hasOwn(value, 'phase');
+  const hasCode = record(value) && Object.hasOwn(value, 'code');
+  if (hasPhase !== hasCode) return null;
+  const keys = ['schemaVersion', 'project', 'testCategory', 'category',
+    ...(hasPhase ? ['phase', 'code'] : []),
+    ...(value?.location === undefined ? [] : ['location'])];
   if (!exactKeys(value, keys)
     || value.schemaVersion !== AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA
     || !PLAYWRIGHT_PROJECTS.has(value.project) || !PLAYWRIGHT_TEST_CATEGORIES.has(value.testCategory)
-    || !PLAYWRIGHT_CATEGORIES.has(value.category)) return null;
+    || !PLAYWRIGHT_CATEGORIES.has(value.category)
+    || (hasPhase && !PLAYWRIGHT_FAILURE_PAIRS.has(`${value.phase}:${value.code}`))) return null;
   const location = value.location === undefined ? null : validateAuthenticatedHostedPlaywrightFailureLocation(value.location);
   return Object.freeze({ schemaVersion: value.schemaVersion, project: value.project,
     testCategory: value.testCategory, category: value.category,
+    ...(hasPhase ? { phase: value.phase, code: value.code } : {}),
     ...(location ? { location } : {}) });
+}
+
+export function authenticatedHostedPlaywrightFailureDescriptor(error) {
+  const serialized = typeof error?.message === 'string' ? error.message : '';
+  const withoutAnsi = serialized.replace(/\u001b\[[0-9;]*m/gu, '');
+  const message = withoutAnsi.startsWith('Error: ') ? withoutAnsi.slice('Error: '.length) : withoutAnsi;
+  const descriptor = PLAYWRIGHT_FAILURE_DESCRIPTORS.get(message);
+  return descriptor ? Object.freeze({ phase: descriptor[0], code: descriptor[1] }) : null;
 }
 
 export function validateAuthenticatedHostedPlaywrightFailureLocation(value, { root = process.cwd() } = {}) {
