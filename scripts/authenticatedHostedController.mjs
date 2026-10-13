@@ -1,5 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import {
@@ -18,13 +20,16 @@ import {
   validateAuthenticatedServerObservations,
 } from './authenticatedHostedObserver.mjs';
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
+import { validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 
 export const AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA = 'authenticated-hosted-controller-v1';
 export const AUTHENTICATED_HOSTED_AUTHORITY_SCHEMA = 'authenticated-synthetic-authority-observation-v1';
+const HOSTED_TEMP_ROOT = process.platform === 'win32' ? os.tmpdir() : '/tmp';
 export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
-  browser: '/tmp/authenticated-browser-correlations.json',
-  server: '/tmp/authenticated-server-observations.json',
-  binding: '/tmp/authenticated-controller-binding.json',
+  browser: path.join(HOSTED_TEMP_ROOT, 'authenticated-browser-correlations.json'),
+  server: path.join(HOSTED_TEMP_ROOT, 'authenticated-server-observations.json'),
+  binding: path.join(HOSTED_TEMP_ROOT, 'authenticated-controller-binding.json'),
+  diagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-hosted-diagnostic.json'),
 });
 export const AUTHENTICATED_HOSTED_PERSONAS = Object.freeze(['author', 'reviewer', 'approver', 'outsider']);
 export const AUTHENTICATED_HOSTED_FAULT_KINDS = Object.freeze([
@@ -202,8 +207,25 @@ export function controllerProfile(config, window, actors) {
 }
 
 const safeJson = async request => {
-  const raw = await request.text();
-  if (raw.length > 2_000_000) fail('REQUEST_TOO_LARGE');
+  const maximumBytes = 2_000_000;
+  const declaredLength = request.headers?.['content-length'];
+  if (typeof declaredLength === 'string' && /^\d+$/u.test(declaredLength)
+    && Number(declaredLength) > maximumBytes) {
+    request.resume();
+    fail('REQUEST_TOO_LARGE');
+  }
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buffer.byteLength;
+    if (bytes > maximumBytes) {
+      request.resume();
+      fail('REQUEST_TOO_LARGE');
+    }
+    chunks.push(buffer);
+  }
+  const raw = Buffer.concat(chunks, bytes).toString('utf8');
   try { return raw ? JSON.parse(raw) : {}; } catch { fail('REQUEST_JSON_REJECTED'); }
 };
 
@@ -230,6 +252,8 @@ export class AuthenticatedHostedController {
     this.browserActions = new Map();
     this.browserCases = [];
     this.serverCases = [];
+    this.parentIdentityDiagnostic = null;
+    this.browserIdentityDiagnostic = null;
     this.active = false;
     this.quiesced = false;
   }
@@ -276,13 +300,19 @@ export class AuthenticatedHostedController {
     if (!browserProject) fail('PROJECT_NAME_REJECTED');
     let identities = this.projectIdentitySets.get(browserProject);
     if (!identities) {
-      identities = await this.identity.provisionProject({
-        projectName: browserProject,
-        exerciseId: this.exerciseId,
-        exerciseDigest: this.config.exerciseDigest,
-        scope: this.config.scope,
-        personas: AUTHENTICATED_HOSTED_PERSONAS,
-      });
+      try {
+        identities = await this.identity.provisionProject({
+          projectName: browserProject,
+          exerciseId: this.exerciseId,
+          exerciseDigest: this.config.exerciseDigest,
+          scope: this.config.scope,
+          personas: AUTHENTICATED_HOSTED_PERSONAS,
+        });
+      } catch (error) {
+        this.recordIdentityDiagnostic({ projectName: browserProject,
+          diagnostic: error?.authenticatedHostedIdentityDiagnostic ?? { operation: 'PROVISION', category: 'PROVISION_FAILED' } }, 'parent');
+        throw error;
+      }
       this.projectIdentitySets.set(browserProject, identities);
     }
     const project = await this.adapter.setupProject({
@@ -323,7 +353,13 @@ export class AuthenticatedHostedController {
     if (!project || !AUTHENTICATED_HOSTED_PERSONAS.includes(persona)) fail('SESSION_SCOPE_REJECTED');
     const claims = decodeJwtClaims(accessToken);
     if (claims.actorId !== project.identities[persona].id) fail('SESSION_ACTOR_REJECTED');
-    const verified = await this.identity.verifySession({ accessToken, ...claims });
+    let verified;
+    try { verified = await this.identity.verifySession({ accessToken, ...claims }); }
+    catch (error) {
+      this.recordIdentityDiagnostic({ projectName, diagnostic:
+        error?.authenticatedHostedIdentityDiagnostic ?? { operation: 'VERIFY_SESSION', category: 'SESSION_VERIFICATION_FAILED' } }, 'parent');
+      throw error;
+    }
     if (!verified || verified.actorId !== claims.actorId || verified.sessionId !== claims.sessionId) fail('SESSION_VERIFY_REJECTED');
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
     const key = `${browserProject}:${persona}`;
@@ -557,6 +593,7 @@ export class AuthenticatedHostedController {
     if (pathname === '/control/browser-action') return this.finishBrowserAction(input);
     if (pathname === '/control/arm-permit') return this.armPermit(input);
     if (pathname === '/control/arm-browser-fault') return this.armBrowserFault(input);
+    if (pathname === '/control/browser-diagnostic') return this.recordIdentityDiagnostic(input, 'browser');
     const framePaths = new Set([
       '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
       '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',
@@ -570,6 +607,22 @@ export class AuthenticatedHostedController {
       project: this.projects.get(input.projectName),
       scope: this.config.scope,
     });
+  }
+
+  recordIdentityDiagnostic({ projectName, diagnostic }, source = 'browser') {
+    const project = projectName?.startsWith('desktop-chromium') ? 'desktop-chromium'
+      : projectName?.startsWith('pixel-7-chromium') ? 'pixel-7-chromium' : null;
+    const safe = validateAuthenticatedHostedIdentityDiagnostic(diagnostic);
+    if (!project || !safe) fail('BROWSER_DIAGNOSTIC_REJECTED');
+    if (!['parent','browser'].includes(source)) fail('BROWSER_DIAGNOSTIC_REJECTED');
+    const key=source==='parent'?'parentIdentityDiagnostic':'browserIdentityDiagnostic';
+    if (!this[key]) this[key] = Object.freeze({ source, project, ...safe });
+    return { recorded: true };
+  }
+
+  failureDiagnostic() {
+    const value=this.parentIdentityDiagnostic??this.browserIdentityDiagnostic;
+    return value ? Object.freeze({ ...value }) : null;
   }
 
   async finalize() {

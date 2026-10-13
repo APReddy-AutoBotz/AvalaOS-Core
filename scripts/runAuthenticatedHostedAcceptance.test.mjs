@@ -8,8 +8,10 @@ import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
+  buildAuthenticatedHostedChildEnvironment,
   downloadAndVerifyAuthenticatedEdgeSources,
   observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance,
+  runAuthenticatedHostedChild,
   verifyAuthenticatedEdgeSourceResponse,verifyAuthenticatedHostedDeployment } from './runAuthenticatedHostedAcceptance.mjs';
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
@@ -500,9 +502,60 @@ test('runner cancellation after activation stops before finalization and follows
   await assert.rejects(runAuthenticatedHostedAcceptance(environment,{database:{},signalSource,verifyCheckout:async()=>{},
     createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({revokeAll:async()=>calls.push('revoke')}),
     startServer:async()=>({baseUrl:'http://127.0.0.1:1',controlToken:'token',close:async()=>calls.push('close')}),
-    runPlaywright:async()=>signalSource.emit('SIGINT')}),/AUTHENTICATED_HOSTED_RUNNER_SIGNAL_SIGINT/u);
+    runPlaywright:async()=>signalSource.emit('SIGINT')}),/AUTHENTICATED_HOSTED_RUNNER_BROWSER_CANCELLED/u);
   assert.deepEqual(calls,['activate','quiesce','revoke','cleanup','close']);
   assert.equal(signalSource.listenerCount('SIGINT'),0);assert.equal(signalSource.listenerCount('SIGTERM'),0);
+});
+
+test('browser child environment is a strict public and ephemeral allowlist', () => {
+  const secret='fixture-sensitive-value-must-never-appear';
+  const environment={PATH:process.env.PATH,NODE_OPTIONS:`--require=${secret}`,
+    AUTHENTICATED_ACCEPTANCE_DATABASE_URL:secret,
+    AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY:secret,
+    AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN:secret,
+    AUTHENTICATED_ACCEPTANCE_SCOPE:secret,AVALA_VAULT_TOKEN:secret,OPENAI_API_KEY:secret,GITHUB_TOKEN:secret};
+  const child=buildAuthenticatedHostedChildEnvironment(environment,
+    {origin:'https://avalaos-pilot.netlify.app',supabaseUrl:`https://${fixtureProjectRef}.supabase.co`},
+    {baseUrl:'http://127.0.0.1:1234',controlToken:'ephemeral-loopback-token'},
+    {browserEvidence:path.join(os.tmpdir(),'owned','evidence'),playwright:path.join(os.tmpdir(),'owned','playwright'),
+      diagnostic:path.join(os.tmpdir(),'owned','diagnostic.json')});
+  assert.equal(child.ENTERPRISE_LIFECYCLE_CONTROL_TOKEN,'ephemeral-loopback-token');
+  assert.equal(child.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,`https://${fixtureProjectRef}.supabase.co`);
+  assert.equal(JSON.stringify(child).includes(secret),false);
+  for(const forbidden of ['NODE_OPTIONS','AUTHENTICATED_ACCEPTANCE_DATABASE_URL','AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY',
+    'AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN','AUTHENTICATED_ACCEPTANCE_SCOPE','AVALA_VAULT_TOKEN','OPENAI_API_KEY','GITHUB_TOKEN']){
+    assert.equal(Object.hasOwn(child,forbidden),false,forbidden);
+  }
+});
+
+test('browser child wrapper preserves only validated nonzero diagnostics', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-child-test-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const diagnosticPath=path.join(root,'diagnostic.json');
+  await writeFile(diagnosticPath,JSON.stringify({schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+    project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure'}));
+  await assert.rejects(runAuthenticatedHostedChild(process.execPath,['-e','process.exit(7)'],{env:{}},{diagnosticPath}),error=>{
+    assert.equal(error.message,'AUTHENTICATED_HOSTED_RUNNER_BROWSER_EXIT_NONZERO');
+    assert.deepEqual(error.authenticatedHostedPlaywrightDiagnostic,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+      project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure'});
+    return true;
+  });
+  await writeFile(diagnosticPath,JSON.stringify({schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+    project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure',raw:'secret'}));
+  await assert.rejects(runAuthenticatedHostedChild(process.execPath,['-e','process.exit(8)'],{env:{}},{diagnosticPath}),error=>{
+    assert.equal(error.authenticatedHostedPlaywrightDiagnostic,null);return true;
+  });
+});
+
+test('browser child wrapper distinguishes timeout and cancellation without child output', async () => {
+  await assert.rejects(runAuthenticatedHostedChild(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{}},
+    {timeoutMs:50}),/AUTHENTICATED_HOSTED_RUNNER_BROWSER_TIMEOUT/u);
+  const cancellation=new AbortController();
+  const running=runAuthenticatedHostedChild(process.execPath,['-e','setInterval(()=>{},1000)'],{env:{}},
+    {timeoutMs:5_000,cancellationSignal:cancellation.signal});
+  setTimeout(()=>cancellation.abort('raw-sensitive-reason'),50);
+  await assert.rejects(running,error=>error.message==='AUTHENTICATED_HOSTED_RUNNER_BROWSER_CANCELLED'
+    &&!error.message.includes('raw-sensitive-reason'));
 });
 
 test('native secret cleanup consumes the exact fenced job and proves physical absence without retries',async()=>{

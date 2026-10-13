@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Authenticated browser failure boundary (2026-10-13)
+
+PR #292 merged as `7c25e45b32f02dbced3c73df684adf6c929227e4`, with the tested tree unchanged and applicable candidate/post-merge checks passing. AP approved the exact protected run `38334396515`, attempt 1. The source/deployment preflight and public browser checks passed, but the authenticated Playwright child failed after exercise activation. Independent reconstruction verifies all 307 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across all 108 requirements. The final gate correctly rejected the missing authenticated evidence; GitHub's continued-on-error step conclusion is not success evidence.
+
+The runner discarded both child output streams, the controller collapsed identity errors, and the browser helper discarded the safe response code. The real local bootstrap subsequently exposed a **confirmed source defect**: the Node HTTP controller calls Fetch Request's `.text()` on an `IncomingMessage`, which has no such method, so setup fails before identity provisioning. The earlier tests bypassed this transport. Read-only follow-up verified the exact hosted exercise quiesced, no created identities for this run, no active sessions/memberships/permits/residue or active secret references, and both providers OFF. The temporary `main` policy was removed while preserving other branches and the reviewer. This single-run allowance is consumed.
+
+Continue the authorized repository correction under `docs/planning/hosted-acceptance-completion.md`: use a bounded Node request-stream reader, preserve bounded failure diagnostics, keep privileged credentials in the parent controller, guard incomplete setup, isolate temporary browser output, and verify the real browser/config/controller startup path locally. Preserve every acceptance criterion and the failed evidence. Do not change the synthetic email namespace or claim an Auth rejection without observed evidence. Another hosted attempt requires its own approval; repository verification cannot promote the 47 blocked requirements.
+
 ## Exact original-source layout compatibility (2026-10-13)
 
 PR #291 merged as `c180f584` with the tested tree unchanged, all 52 applicable candidate checks and all three post-merge workflows passing. AP then approved one full synthetic run with read-only preflight and all 16 original-source checks. The preflight verified the exact pilot release, all 106 migration sources and native secret boundary, but the current source verifier rejected three responses before exercise activation. No workflow was dispatched, temporary branch access added, backend deployed or database migrated; the single-run allowance is unused.

@@ -6,10 +6,12 @@ import test from 'node:test';
 import {
   AuthenticatedHostedController,
   authenticatedHostedDigest,
+  startAuthenticatedHostedControllerServer,
   validateAuthenticatedHostedControllerEnvironment,
 } from './authenticatedHostedController.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
-import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
+import { createAuthenticatedHostedIdentityAdapter, createAuthenticatedHostedPostgresAdapter,
+  readAuthenticatedHostedCleanupControls } from './authenticatedHostedControllerAdapters.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
@@ -20,6 +22,35 @@ const id = () => randomUUID();
 const fixtureProjectRef = 'abcdefghijklmnopqrst';
 const tokenFor = (actorId, sessionId) => `${Buffer.from('{}').toString('base64url')}.${
   Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.${'x'.repeat(48)}`;
+
+test('real loopback controller streams bounded JSON before dispatch', async () => {
+  const calls = [];
+  const server = await startAuthenticatedHostedControllerServer({
+    controlToken: 'fixture-loopback-token',
+    control: async (pathname, input) => { calls.push({ pathname, input }); return { accepted: true }; },
+  });
+  try {
+    const good = await fetch(`${server.baseUrl}/control/setup`, { method: 'POST', headers: {
+      'content-type': 'application/json', 'x-enterprise-lifecycle-control': server.controlToken,
+    }, body: JSON.stringify({ projectName: 'desktop-chromium' }) });
+    assert.equal(good.status, 200);
+    assert.deepEqual(await good.json(), { accepted: true });
+    assert.deepEqual(calls, [{ pathname: '/control/setup', input: { projectName: 'desktop-chromium' } }]);
+
+    const invalid = await fetch(`${server.baseUrl}/control/setup`, { method: 'POST', headers: {
+      'content-type': 'application/json', 'x-enterprise-lifecycle-control': server.controlToken,
+    }, body: '{' });
+    assert.equal(invalid.status, 409);
+    assert.deepEqual(await invalid.json(), { error: 'AUTHENTICATED_HOSTED_CONTROLLER_REQUEST_JSON_REJECTED' });
+
+    const oversized = await fetch(`${server.baseUrl}/control/setup`, { method: 'POST', headers: {
+      'content-type': 'application/json', 'x-enterprise-lifecycle-control': server.controlToken,
+    }, body: 'x'.repeat(2_000_001) });
+    assert.equal(oversized.status, 409);
+    assert.deepEqual(await oversized.json(), { error: 'AUTHENTICATED_HOSTED_CONTROLLER_REQUEST_TOO_LARGE' });
+    assert.equal(calls.length, 1);
+  } finally { await server.close(); }
+});
 const baseEnvironment = () => ({
   GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
   GITHUB_WORKFLOW_REF: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/heads/main',
@@ -171,6 +202,47 @@ test('cleanup before any committed setup leaves existing workspace controls unto
   }}});
   await adapter.cleanup({exerciseId:id(),projects:[]});
   assert.equal(commands.some(sql=>/\b(?:UPDATE|DELETE FROM) public\.(?:legacy_delivery_workspace_controls|studio_delivery_workspace_controls|enterprise_transcript_workspace_flags)\b/u.test(sql)),false);
+});
+
+test('cleanup control reads serialize on the single PostgreSQL client', async () => {
+  let inFlight=false;const calls=[];
+  const query=async sql=>{
+    assert.equal(inFlight,false,'cleanup queries must not overlap on pg.Client');inFlight=true;calls.push(sql);
+    await new Promise(resolve=>setTimeout(resolve,2));inFlight=false;return {rows:[]};
+  };
+  await readAuthenticatedHostedCleanupControls(query,[id(),id()]);
+  assert.equal(calls.length,4);
+  assert.match(calls[0],/legacy_delivery_workspace_controls/u);
+  assert.match(calls[1],/studio_delivery_workspace_controls/u);
+  assert.match(calls[2],/enterprise_transcript_workspace_flags/u);
+  assert.match(calls[3],/assess_v2_runtime_control/u);
+});
+
+test('trusted parent identity diagnostic takes precedence over browser reporting', () => {
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    adapter:{},identity:{}});
+  controller.recordIdentityDiagnostic({projectName:'desktop-chromium',
+    diagnostic:{operation:'PROVISION',category:'IDENTITY_INPUT_REJECTED',upstreamCode:'email_address_invalid'}},'parent');
+  controller.recordIdentityDiagnostic({projectName:'desktop-chromium',
+    diagnostic:{operation:'SIGN_IN',category:'CREDENTIAL_REJECTED',upstreamCode:'invalid_credentials'}},'browser');
+  assert.deepEqual(controller.failureDiagnostic(),{source:'parent',project:'desktop-chromium',operation:'PROVISION',
+    category:'IDENTITY_INPUT_REJECTED',upstreamCode:'email_address_invalid'});
+  assert.throws(()=>controller.recordIdentityDiagnostic({projectName:'desktop-chromium',diagnostic:{operation:'SIGN_IN',
+    category:'CREDENTIAL_REJECTED',upstreamCode:'raw-upstream-body'}},'browser'),/BROWSER_DIAGNOSTIC_REJECTED/u);
+});
+
+test('identity adapter maps 400 to input rejection and keeps only allowlisted upstream code', async () => {
+  const config=validateAuthenticatedHostedControllerEnvironment(baseEnvironment());
+  const adapter=createAuthenticatedHostedIdentityAdapter({config,db:{},fetchImpl:async()=>({ok:false,status:400,
+    json:async()=>({error_code:'email_address_invalid',message:'fixture-sensitive-value'})})});
+  await assert.rejects(adapter.provisionProject({projectName:'desktop-chromium',exerciseDigest:digest('exercise'),
+    personas:['author']}),error=>{
+    assert.equal(error.message,'AUTHENTICATED_HOSTED_IDENTITY_IDENTITY_INPUT_REJECTED');
+    assert.deepEqual(error.authenticatedHostedIdentityDiagnostic,{operation:'PROVISION',
+      category:'IDENTITY_INPUT_REJECTED',upstreamCode:'email_address_invalid'});
+    assert.equal(JSON.stringify(error.authenticatedHostedIdentityDiagnostic).includes('fixture-sensitive-value'),false);
+    return true;
+  });
 });
 
 test('abort cannot certify cleanup if unrelated state changed or retained history was lost', async () => {

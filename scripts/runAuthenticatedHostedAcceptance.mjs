@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
-import { readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, open, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -19,7 +20,8 @@ import {
   createAuthenticatedHostedIdentityAdapter,
   createAuthenticatedHostedPostgresAdapter,
 } from './authenticatedHostedControllerAdapters.mjs';
-import { authenticatedHostedFailureCode, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
+  validateAuthenticatedHostedPlaywrightDiagnostic, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { createControlledHumanPostgresClientConfig,
@@ -504,21 +506,81 @@ export async function cleanupAuthenticatedVaultSecret(environment,input,{fetchIm
   await verify.body?.cancel();
 }
 
-const run = (command, args, options, timeoutMs = 30 * 60_000, cancellationSignal) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { ...options, stdio: ['ignore','pipe','pipe'], windowsHide: true });
+const childError = (category, diagnostic = null) => {
+  const error = new Error(`AUTHENTICATED_HOSTED_RUNNER_BROWSER_${category}`);
+  error.authenticatedHostedChildCategory = category;
+  error.authenticatedHostedPlaywrightDiagnostic = diagnostic;
+  return error;
+};
+
+const readChildDiagnostic = async diagnosticPath => {
+  let handle;
+  try {
+    const linked = await lstat(diagnosticPath);
+    if (linked.isSymbolicLink() || !linked.isFile() || linked.size < 2 || linked.size > 2_000) return null;
+    handle = await open(diagnosticPath, 'r');
+    const before = await handle.stat();
+    if (!before.isFile() || before.size !== linked.size || before.dev !== linked.dev || before.ino !== linked.ino) return null;
+    const bytes = Buffer.alloc(before.size);
+    const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+    const after = await handle.stat();
+    if (bytesRead !== bytes.length || after.size !== before.size || after.dev !== before.dev || after.ino !== before.ino) return null;
+    const raw = bytes.toString('utf8');
+    return validateAuthenticatedHostedPlaywrightDiagnostic(JSON.parse(raw));
+  } catch { return null; }
+  finally { await handle?.close().catch(() => undefined); }
+};
+
+export const runAuthenticatedHostedChild = (command, args, options, {
+  timeoutMs = 30 * 60_000,
+  cancellationSignal,
+  diagnosticPath,
+  spawnImpl = spawn,
+} = {}) => new Promise((resolve, reject) => {
+  let child;
+  try { child = spawnImpl(command, args, { ...options, stdio: ['ignore','pipe','pipe'], windowsHide: true }); }
+  catch { reject(childError('START_FAILED')); return; }
   child.stdout?.resume(); child.stderr?.resume();
   let termination=null;let forceTimer;
   const terminate=reason=>{if(termination)return;termination=reason;child.kill('SIGTERM');
     forceTimer=setTimeout(()=>child.kill('SIGKILL'),10_000);forceTimer.unref?.();};
-  const onCancel=()=>terminate(String(cancellationSignal.reason??'CANCELLED'));
+  const onCancel=()=>terminate('CANCELLED');
   if(cancellationSignal?.aborted)onCancel();else cancellationSignal?.addEventListener('abort',onCancel,{once:true});
-  const timer=setTimeout(()=>terminate('CHILD_TIMEOUT'),timeoutMs);
+  const timer=setTimeout(()=>terminate('TIMEOUT'),timeoutMs);
   timer.unref?.();
   const done=()=>{clearTimeout(timer);clearTimeout(forceTimer);cancellationSignal?.removeEventListener('abort',onCancel);};
-  child.once('error', error => { done(); reject(error); });
-  child.once('exit', (code, signal) => { done(); if(termination)reject(new Error(`AUTHENTICATED_HOSTED_RUNNER_${termination}`));
-    else if(code===0)resolve();else reject(new Error(`AUTHENTICATED_HOSTED_RUNNER_CHILD_FAILED:${code ?? signal}`)); });
+  child.once('error', () => { done(); reject(childError('START_FAILED')); });
+  child.once('exit', async code => {
+    done();
+    const diagnostic = diagnosticPath ? await readChildDiagnostic(diagnosticPath) : null;
+    if(termination)reject(childError(termination, diagnostic));
+    else if(code===0)resolve();else reject(childError('EXIT_NONZERO', diagnostic));
+  });
 });
+
+const CHILD_RUNTIME_KEYS = Object.freeze([
+  'PATH', 'Path', 'HOME', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'SystemRoot', 'SYSTEMROOT',
+  'ComSpec', 'PATHEXT', 'TEMP', 'TMP', 'TMPDIR', 'PLAYWRIGHT_BROWSERS_PATH', 'LANG', 'LC_ALL',
+]);
+
+export function buildAuthenticatedHostedChildEnvironment(environment, config, server, paths) {
+  const child = {};
+  for (const key of CHILD_RUNTIME_KEYS) if (typeof environment[key] === 'string' && environment[key]) child[key] = environment[key];
+  return Object.freeze({
+    ...child,
+    CI: 'true',
+    ENTERPRISE_LIFECYCLE_APP_BASE_URL: config.origin,
+    ENTERPRISE_LIFECYCLE_API_BASE_URL: config.supabaseUrl,
+    ENTERPRISE_LIFECYCLE_CONTROL_URL: server.baseUrl,
+    ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: server.controlToken,
+    ENTERPRISE_LIFECYCLE_AUTHENTICATED: 'true',
+    ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH: 'true',
+    AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: config.supabaseUrl,
+    ENTERPRISE_LIFECYCLE_OUTPUT_DIR: paths.browserEvidence,
+    AUTHENTICATED_HOSTED_PLAYWRIGHT_OUTPUT_DIR: paths.playwright,
+    AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH: paths.diagnostic,
+  });
+}
 
 const atomicJson = async (destination, document) => {
   const temporary = `${destination}.${process.pid}.tmp`;
@@ -526,7 +588,24 @@ const atomicJson = async (destination, document) => {
   await rename(temporary, destination);
 };
 
-export async function runAuthenticatedHostedAcceptance(environment = process.env, dependencies = {}) {
+const removeIfPresent = async file => {
+  try { await unlink(file); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+};
+const safeRunCategory = (error, child) => error?.authenticatedHostedChildCategory==='EXIT_NONZERO' && !child
+  ? 'UNCLASSIFIED' : ['START_FAILED','EXIT_NONZERO','TIMEOUT','CANCELLED']
+  .includes(error?.authenticatedHostedChildCategory) ? error.authenticatedHostedChildCategory
+    : 'RUNNER_REJECTED';
+const removeOwnedBrowserWorkspace = async directory => {
+  if (!directory) return;
+  const root = path.resolve(os.tmpdir());
+  const resolved = path.resolve(directory);
+  if (path.dirname(resolved) !== root || !path.basename(resolved).startsWith('authenticated-hosted-browser-')) {
+    throw new Error('AUTHENTICATED_HOSTED_RUNNER_TEMP_CLEANUP_REJECTED');
+  }
+  await rm(resolved, { recursive: true, force: true });
+};
+
+async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, diagnosticState, outputPaths) {
   const config = validateAuthenticatedHostedControllerEnvironment(environment);
   validateAuthenticatedDatabaseTarget(config);
   await (dependencies.verifyCheckout ?? verifyAuthenticatedHostedCheckout)(config);
@@ -561,57 +640,111 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
   });
   const adapter = {
     ...rawAdapter,
-    preflight: input => withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', () => rawAdapter.preflight(input)),
-    activate: input => withAuthenticatedHostedDiagnostic('ACTIVATION', () => rawAdapter.activate(input)),
+    preflight: input => { diagnosticState.phase='PREFLIGHT';
+      return withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', () => rawAdapter.preflight(input)); },
+    activate: input => { diagnosticState.phase='ACTIVATION';
+      return withAuthenticatedHostedDiagnostic('ACTIVATION', () => rawAdapter.activate(input)); },
   };
   const identity = (dependencies.createIdentityAdapter ?? createAuthenticatedHostedIdentityAdapter)({ config, db: database });
   const controller = new AuthenticatedHostedController({ config, adapter, identity });
+  diagnosticState.controller = controller;
   const cancellation=new AbortController();const signalSource=dependencies.signalSource??process;
   const cancelSigterm=()=>cancellation.abort('SIGNAL_SIGTERM');const cancelSigint=()=>cancellation.abort('SIGNAL_SIGINT');
-  const throwIfCancelled=()=>{if(cancellation.signal.aborted)fail(String(cancellation.signal.reason??'CANCELLED'));};
+  const throwIfCancelled=()=>{if(cancellation.signal.aborted)throw childError('CANCELLED');};
   signalSource.on('SIGTERM',cancelSigterm);signalSource.on('SIGINT',cancelSigint);
   let server;
+  let browserWorkspace;
   let finalized = false;
   let primaryError = null;
   try {
     await controller.preflightAndActivate();
     throwIfCancelled();
+    diagnosticState.phase = 'CONTROLLER_START';
     server = await (dependencies.startServer ?? startAuthenticatedHostedControllerServer)(controller);
     throwIfCancelled();
+    browserWorkspace = await (dependencies.createBrowserWorkspace ?? (() => mkdtemp(path.join(os.tmpdir(), 'authenticated-hosted-browser-'))))();
+    const browserPaths = {
+      browserEvidence: path.join(browserWorkspace, 'evidence'),
+      playwright: path.join(browserWorkspace, 'playwright'),
+      diagnostic: path.join(browserWorkspace, 'playwright-diagnostic.json'),
+    };
     const playwrightArgs=[path.resolve('node_modules/@playwright/test/cli.js'), 'test',
       '--config=playwright.authenticated-hosted.config.ts', '--workers=1'];
     const playwrightOptions={
-        cwd: process.cwd(), env: { ...environment, ENTERPRISE_LIFECYCLE_APP_BASE_URL: config.origin,
-          ENTERPRISE_LIFECYCLE_API_BASE_URL: config.supabaseUrl,
-          ENTERPRISE_LIFECYCLE_CONTROL_URL: server.baseUrl,
-          ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: server.controlToken,
-          ENTERPRISE_LIFECYCLE_AUTHENTICATED: 'true', ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH: 'true' },
+        cwd: process.cwd(), env: buildAuthenticatedHostedChildEnvironment(environment, config, server, browserPaths),
       };
+    diagnosticState.phase = 'BROWSER_EXECUTION';
     if(dependencies.runPlaywright)await dependencies.runPlaywright(process.execPath,playwrightArgs,playwrightOptions);
-    else await run(process.execPath,playwrightArgs,playwrightOptions,30*60_000,cancellation.signal);
+    else await runAuthenticatedHostedChild(process.execPath,playwrightArgs,playwrightOptions,
+      {timeoutMs:30*60_000,cancellationSignal:cancellation.signal,diagnosticPath:browserPaths.diagnostic});
     throwIfCancelled();
+    diagnosticState.phase = 'FINALIZATION';
     const output = await controller.finalize();
     throwIfCancelled();
     await Promise.all([
-      atomicJson(AUTHENTICATED_HOSTED_OUTPUT_PATHS.binding, output.profile),
-      atomicJson(AUTHENTICATED_HOSTED_OUTPUT_PATHS.browser, output.browser),
-      atomicJson(AUTHENTICATED_HOSTED_OUTPUT_PATHS.server, output.server),
+      atomicJson(outputPaths.binding, output.profile),
+      atomicJson(outputPaths.browser, output.browser),
+      atomicJson(outputPaths.server, output.server),
     ]);
     finalized = true;
-    return { outputPaths: AUTHENTICATED_HOSTED_OUTPUT_PATHS };
+    diagnosticState.cleanup = 'verified';
+    return { outputPaths };
   } catch (error) {
     primaryError = error;
+    diagnosticState.primaryError = error;
+    diagnosticState.child = error?.authenticatedHostedPlaywrightDiagnostic ?? null;
   } finally {
     const cleanupErrors=[];
     if (!finalized) try { await controller.abortAndQuiesce(); } catch (error) { cleanupErrors.push(error); }
     try { await server?.close(); } catch (error) { cleanupErrors.push(error); }
     if (ownsDatabase) try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
     catch (error) { cleanupErrors.push(error); }
+    try { await removeOwnedBrowserWorkspace(browserWorkspace); }
+    catch { cleanupErrors.push(new Error('AUTHENTICATED_HOSTED_RUNNER_TEMP_CLEANUP_INCOMPLETE')); }
     signalSource.removeListener('SIGTERM',cancelSigterm);signalSource.removeListener('SIGINT',cancelSigint);
-    if (cleanupErrors.length) throw new AggregateError([...(primaryError?[primaryError]:[]),...cleanupErrors],
-      'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+    if (cleanupErrors.length) {
+      diagnosticState.cleanup = 'failed';
+      throw new AggregateError([...(primaryError?[primaryError]:[]),...cleanupErrors],
+        'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+    }
+    if (controller.active) diagnosticState.cleanup = 'verified';
   }
   throw primaryError;
+}
+
+export async function runAuthenticatedHostedAcceptance(environment = process.env, dependencies = {}) {
+  const outputPaths = dependencies.outputPaths ?? AUTHENTICATED_HOSTED_OUTPUT_PATHS;
+  await removeIfPresent(outputPaths.diagnostic);
+  const diagnosticState = { phase: 'PREFLIGHT', cleanup: 'not-required', controller: null,
+    primaryError: null, child: null };
+  try {
+    const result = await runAuthenticatedHostedAcceptanceCore(environment, dependencies, diagnosticState, outputPaths);
+    await removeIfPresent(outputPaths.diagnostic);
+    return result;
+  } catch (error) {
+    const primaryError = diagnosticState.primaryError ?? error;
+    const primary = { phase: diagnosticState.phase, category: safeRunCategory(primaryError, diagnosticState.child) };
+    const cleanupFailed = diagnosticState.cleanup === 'failed';
+    const identityWithProject = diagnosticState.controller?.failureDiagnostic?.() ?? null;
+    const identity = identityWithProject
+      ? { source: identityWithProject.source, operation: identityWithProject.operation, category: identityWithProject.category,
+        ...(identityWithProject.upstreamCode ? { upstreamCode: identityWithProject.upstreamCode } : {}) }
+      : null;
+    const envelope = createAuthenticatedHostedRunDiagnostic({
+      failure: cleanupFailed ? { phase: 'CLEANUP', category: 'CLEANUP_INCOMPLETE' } : primary,
+      primary,
+      child: diagnosticState.child,
+      identity,
+      cleanup: diagnosticState.cleanup,
+    });
+    try { await atomicJson(outputPaths.diagnostic, envelope); }
+    catch (writeError) {
+      error.authenticatedHostedDiagnosticWriteFailed = true;
+      error.authenticatedHostedDiagnosticWriteCategory = ['EACCES','EPERM','ENOENT','ENOSPC'].includes(writeError?.code)
+        ? writeError.code : 'UNCLASSIFIED';
+    }
+    throw error;
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

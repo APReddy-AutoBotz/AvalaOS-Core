@@ -9,6 +9,152 @@ const STAGES = new Set([
   'ACTIVATION',
 ]);
 
+export const AUTHENTICATED_HOSTED_DIAGNOSTIC_SCHEMA = 'authenticated-hosted-run-diagnostic-v1';
+export const AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA = 'authenticated-hosted-playwright-diagnostic-v1';
+
+const RUN_PHASES = new Set([
+  'PREFLIGHT',
+  'ACTIVATION',
+  'CONTROLLER_START',
+  'BROWSER_EXECUTION',
+  'FINALIZATION',
+  'CLEANUP',
+]);
+const RUN_CATEGORIES = new Set([
+  'RUNNER_REJECTED',
+  'START_FAILED',
+  'EXIT_NONZERO',
+  'TIMEOUT',
+  'CANCELLED',
+  'FINALIZATION_REJECTED',
+  'CLEANUP_INCOMPLETE',
+  'UNCLASSIFIED',
+]);
+const PLAYWRIGHT_PROJECTS = new Set(['desktop-chromium', 'pixel-7-chromium', 'unknown']);
+const PLAYWRIGHT_TEST_CATEGORIES = new Set([
+  'project-bootstrap',
+  'primary-lifecycle',
+  'govern-studio-lifecycle',
+  'independent-rejection',
+  'delivery-monitor',
+  'scoring-policy',
+  'authenticated-controls',
+  'project-teardown',
+  'runner',
+  'unknown',
+]);
+const PLAYWRIGHT_CATEGORIES = new Set(['unexpected-failure', 'timeout', 'interrupted', 'configuration', 'no-tests']);
+export const AUTHENTICATED_HOSTED_IDENTITY_CATEGORIES = Object.freeze([
+  'PROVISION_FAILED',
+  'CREDENTIAL_REJECTED',
+  'ACCESS_DENIED',
+  'IDENTITY_ENDPOINT_MISSING',
+  'IDENTITY_CONFLICT',
+  'IDENTITY_INPUT_REJECTED',
+  'RATE_LIMITED',
+  'UPSTREAM_UNAVAILABLE',
+  'TRANSPORT_FAILURE',
+  'SESSION_MISSING',
+  'SESSION_VERIFICATION_FAILED',
+]);
+export const AUTHENTICATED_HOSTED_IDENTITY_UPSTREAM_CODES = Object.freeze([
+  'bad_jwt',
+  'email_address_invalid',
+  'email_address_not_authorized',
+  'email_not_confirmed',
+  'invalid_credentials',
+  'not_admin',
+  'over_email_send_rate_limit',
+  'over_request_rate_limit',
+  'signup_disabled',
+  'user_already_exists',
+  'user_banned',
+  'validation_failed',
+]);
+const IDENTITY_OPERATIONS = new Set(['PROVISION', 'SIGN_IN', 'VERIFY_SESSION']);
+const IDENTITY_SOURCES = new Set(['parent', 'browser']);
+const IDENTITY_CATEGORIES = new Set(AUTHENTICATED_HOSTED_IDENTITY_CATEGORIES);
+const IDENTITY_UPSTREAM_CODES = new Set(AUTHENTICATED_HOSTED_IDENTITY_UPSTREAM_CODES);
+const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const exactKeys = (value, expected) => record(value)
+  && Object.keys(value).length === expected.length
+  && expected.every(key => Object.hasOwn(value, key));
+
+export function validateAuthenticatedHostedIdentityDiagnostic(value) {
+  if (!record(value) || !exactKeys(value, value.upstreamCode === undefined
+    ? ['operation', 'category'] : ['operation', 'category', 'upstreamCode'])
+    || !IDENTITY_OPERATIONS.has(value.operation) || !IDENTITY_CATEGORIES.has(value.category)
+    || (value.upstreamCode !== undefined && !IDENTITY_UPSTREAM_CODES.has(value.upstreamCode))) return null;
+  return Object.freeze({ operation: value.operation, category: value.category,
+    ...(value.upstreamCode === undefined ? {} : { upstreamCode: value.upstreamCode }) });
+}
+
+function validateRunIdentityDiagnostic(value) {
+  if (!record(value) || !IDENTITY_SOURCES.has(value.source)) return null;
+  const { source, ...diagnostic } = value;
+  const safe = validateAuthenticatedHostedIdentityDiagnostic(diagnostic);
+  return safe ? Object.freeze({ source, ...safe }) : null;
+}
+
+export function validateAuthenticatedHostedPlaywrightDiagnostic(value) {
+  if (!exactKeys(value, ['schemaVersion', 'project', 'testCategory', 'category'])
+    || value.schemaVersion !== AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA
+    || !PLAYWRIGHT_PROJECTS.has(value.project) || !PLAYWRIGHT_TEST_CATEGORIES.has(value.testCategory)
+    || !PLAYWRIGHT_CATEGORIES.has(value.category)) return null;
+  return Object.freeze({ schemaVersion: value.schemaVersion, project: value.project,
+    testCategory: value.testCategory, category: value.category });
+}
+
+const runFailure = value => exactKeys(value, ['phase', 'category'])
+  && RUN_PHASES.has(value.phase) && RUN_CATEGORIES.has(value.category)
+  ? Object.freeze({ phase: value.phase, category: value.category }) : null;
+
+export function createAuthenticatedHostedRunDiagnostic({ failure, primary, child = null, identity = null, cleanup }) {
+  const safeFailure = runFailure(failure);
+  const safePrimary = runFailure(primary);
+  const safeChild = child === null ? null : validateAuthenticatedHostedPlaywrightDiagnostic(child);
+  const safeIdentity = identity === null ? null : validateRunIdentityDiagnostic(identity);
+  if (!safeFailure || !safePrimary || (child !== null && !safeChild) || (identity !== null && !safeIdentity)
+    || !['verified', 'failed', 'not-required'].includes(cleanup)) {
+    throw new Error('AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_ENVELOPE_REJECTED');
+  }
+  return Object.freeze({
+    schemaVersion: AUTHENTICATED_HOSTED_DIAGNOSTIC_SCHEMA,
+    status: 'failed',
+    failure: safeFailure,
+    primary: safePrimary,
+    child: safeChild,
+    identity: safeIdentity,
+    cleanup: Object.freeze({ status: cleanup }),
+  });
+}
+
+export function validateAuthenticatedHostedRunDiagnostic(value) {
+  if (!exactKeys(value, ['schemaVersion', 'status', 'failure', 'primary', 'child', 'identity', 'cleanup'])
+    || value.schemaVersion !== AUTHENTICATED_HOSTED_DIAGNOSTIC_SCHEMA || value.status !== 'failed'
+    || !exactKeys(value.cleanup, ['status'])) return null;
+  try {
+    return createAuthenticatedHostedRunDiagnostic({ failure: value.failure, primary: value.primary,
+      child: value.child, identity: value.identity, cleanup: value.cleanup.status });
+  } catch { return null; }
+}
+
+export function authenticatedHostedIdentityCategoryForStatus(status) {
+  if (status === 400) return 'IDENTITY_INPUT_REJECTED';
+  if (status === 401) return 'CREDENTIAL_REJECTED';
+  if (status === 403) return 'ACCESS_DENIED';
+  if (status === 404) return 'IDENTITY_ENDPOINT_MISSING';
+  if (status === 409) return 'IDENTITY_CONFLICT';
+  if (status === 422) return 'IDENTITY_INPUT_REJECTED';
+  if (status === 429) return 'RATE_LIMITED';
+  if (status >= 500 && status <= 599) return 'UPSTREAM_UNAVAILABLE';
+  return 'TRANSPORT_FAILURE';
+}
+
+export function authenticatedHostedIdentityUpstreamCode(value) {
+  return typeof value === 'string' && IDENTITY_UPSTREAM_CODES.has(value) ? value : undefined;
+}
+
 const SQLSTATE_CATEGORIES = new Map([
   ['28P01', 'SQL_AUTHENTICATION'],
   ['28000', 'SQL_AUTHENTICATION'],

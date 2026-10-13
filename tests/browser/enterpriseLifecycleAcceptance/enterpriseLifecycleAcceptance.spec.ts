@@ -519,7 +519,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   test.beforeAll(async ({}, testInfo) => {
     projectName = testInfo.project.name;
     projectStartedAt = new Date().toISOString();
-    setup = await control<FixtureSetup>('/control/setup', { projectName });
+    try { setup = await control<FixtureSetup>('/control/setup', { projectName }); }
+    catch (error) { failed = true; throw error; }
     expect(setup.journeyBinding).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(setup.aliases.process).toBe(`${projectName} connected lifecycle`);
     for (const key of ['case', 'review', 'handoff', 'artifact'] as const) expect(setup.aliases[key]).toMatch(new RegExp(`^primary-${key}-\\d+$`, 'u'));
@@ -572,6 +573,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   });
 
   test.afterAll(async () => {
+    if (!setup || !projectName || !projectStartedAt) return;
     if (!failed) {
       await authenticatedCaseUploadTail;
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { authenticatedHostedFailureCode, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
+  validateAuthenticatedHostedIdentityDiagnostic, validateAuthenticatedHostedPlaywrightDiagnostic,
+  validateAuthenticatedHostedRunDiagnostic, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 
 const classified = async (stage, error, options) => {
   try {
@@ -67,4 +69,23 @@ test('terminal reporting preserves specific Vault and scope codes without raw su
     'AUTHENTICATED_HOSTED_RUNNER_FAILED');
   assert.equal(authenticatedHostedFailureCode(new Error('raw AUTHENTICATED_HOSTED_FAKE_SUFFIX')),
     'AUTHENTICATED_HOSTED_RUNNER_FAILED');
+});
+
+test('run diagnostic envelope is closed, preserves primary failure and lets cleanup dominate', () => {
+  const child = { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1', project: 'desktop-chromium',
+    testCategory: 'primary-lifecycle', category: 'unexpected-failure' };
+  const value = createAuthenticatedHostedRunDiagnostic({
+    failure: { phase: 'CLEANUP', category: 'CLEANUP_INCOMPLETE' },
+    primary: { phase: 'BROWSER_EXECUTION', category: 'EXIT_NONZERO' },
+    child,
+    identity: { source: 'browser', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
+    cleanup: 'failed',
+  });
+  assert.deepEqual(validateAuthenticatedHostedRunDiagnostic(value), value);
+  assert.equal(JSON.stringify(value).includes('raw'), false);
+  assert.equal(validateAuthenticatedHostedRunDiagnostic({ ...value, raw: 'secret' }), null);
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...child, project: 'arbitrary-project' }), null);
+  assert.equal(validateAuthenticatedHostedIdentityDiagnostic({ operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'raw-code' }), null);
+  assert.throws(() => createAuthenticatedHostedRunDiagnostic({ ...value, cleanup: 'best-effort' }),
+    /DIAGNOSTIC_ENVELOPE_REJECTED/u);
 });

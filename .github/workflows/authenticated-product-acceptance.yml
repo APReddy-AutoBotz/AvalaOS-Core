@@ -322,6 +322,11 @@ jobs:
           node scripts/testAuthenticatedSupabaseMultipart.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
+      - name: Verify real hosted browser bootstrap without credentials
+        run: |-
+          node scripts/testAuthenticatedHostedBootstrap.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
       - name: Verify final preactivation checkout
         if: always()
         shell: bash
@@ -499,6 +504,7 @@ jobs:
           test -f "$SERVER_RESULTS_MANIFEST" && cp "$SERVER_RESULTS_MANIFEST" acceptance-results/server-results.json || true
           test -f "$AUTHENTICATED_RESULTS_MANIFEST" && cp "$AUTHENTICATED_RESULTS_MANIFEST" acceptance-results/authenticated-results.json || true
           test -f "$AUTHENTICATED_CONTROLLER_BINDING" && cp "$AUTHENTICATED_CONTROLLER_BINDING" acceptance-results/authenticated-controller-binding.json || true
+          test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json acceptance-results/authenticated-hosted-diagnostic.json || true
       - name: Generate unified 108-case report
         id: report
         if: always()
@@ -527,6 +533,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          printf '%s\n' \
+            'Authenticated browser outcome: ${{ steps.authenticated.outcome }}' \
+            'Authenticated evidence outcome: ${{ steps.authenticated_evidence.outcome }}' \
+            'Public browser outcome: ${{ steps.hosted.outcome }}' \
+            'Combined report outcome: ${{ steps.report.outcome }}' | tee -a "$GITHUB_STEP_SUMMARY"
           test "${{ steps.retained.outcome }}" = success
           test "${{ steps.oracle.outcome }}" = success
           test "${{ steps.server.outcome }}" = success
