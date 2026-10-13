@@ -327,6 +327,11 @@ jobs:
           node scripts/testAuthenticatedHostedBootstrap.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
+      - name: Verify pre-sign-in tracking across two local origins
+        run: |-
+          node scripts/testAuthenticatedHostedPreauthTracking.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
       - name: Verify final preactivation checkout
         if: always()
         shell: bash

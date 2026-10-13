@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Authenticated pre-sign-in request tracking (2026-10-13)
+
+PR #293 merged as `338ecb92d6ac76d64905a1741689c62acd99e5b2` with the tested tree unchanged and applicable candidate/post-merge checks passing. Its separately approved run `38343852749`, attempt 1, created four synthetic identities and reached the first desktop lifecycle test, which failed. Independent reconstruction verifies all 310 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across the unchanged 108 requirements. The diagnostic identifies `primary-lifecycle / unexpected-failure`, not the failing assertion. Read-only cleanup verified quiescence, revoked identities and sessions, no active memberships, permits, residue or secret references, and both providers OFF. The owned temporary `main` policy was removed. The one-run allowance is consumed.
+
+Source review confirms a conditional acceptance-harness defect: its pathname-only tracker classifies the public pre-sign-in attestation RPC as a user-authenticated action and demands a user JWT. The public RPC is reached only when controlled-human binding is enabled; this run's diagnostic does not establish whether it occurred. Matching CORS preflights also lack a transport classification. Earlier fixture tests bypassed hosted tracking, and the real bootstrap stopped at an injected identity rejection. These findings do not establish the historical failure's exact cause.
+
+Continue the authorized repository correction under `docs/planning/hosted-acceptance-completion.md`: classify the exact public attestation and valid backend preflights separately, preserve authenticated business-action authority, verify the shared path in a local two-origin browser, and retain a bounded source location for subsequent failures. Keep all 47 authenticated criteria blocked until qualifying hosted evidence exists. No new hosted attempt, backend deployment, migration or paid effect is authorized by this correction.
+
 ## Authenticated browser failure boundary (2026-10-13)
 
 PR #292 merged as `7c25e45b32f02dbced3c73df684adf6c929227e4`, with the tested tree unchanged and applicable candidate/post-merge checks passing. AP approved the exact protected run `38334396515`, attempt 1. The source/deployment preflight and public browser checks passed, but the authenticated Playwright child failed after exercise activation. Independent reconstruction verifies all 307 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across all 108 requirements. The final gate correctly rejected the missing authenticated evidence; GitHub's continued-on-error step conclusion is not success evidence.

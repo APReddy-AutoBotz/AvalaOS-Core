@@ -86,8 +86,11 @@ try{
   assert.ok(diagnostic);
   assert.deepEqual(diagnostic.failure,{phase:'BROWSER_EXECUTION',category:'EXIT_NONZERO'});
   assert.deepEqual(diagnostic.primary,diagnostic.failure);
-  assert.deepEqual(diagnostic.child,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+  const {location,...childDiagnostic}=diagnostic.child;
+  assert.deepEqual(childDiagnostic,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
     project:'desktop-chromium',testCategory:'project-bootstrap',category:'unexpected-failure'});
+  assert.equal(location?.source,'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts');
+  assert.equal(Number.isSafeInteger(location?.line)&&location.line>0,true);
   assert.equal(authCreateRequests,1);
   assert.equal(projectSetup,0);
   assert.deepEqual(diagnostic.identity,{source:'parent',operation:'PROVISION',category:'IDENTITY_INPUT_REJECTED',

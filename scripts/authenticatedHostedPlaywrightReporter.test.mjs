@@ -51,3 +51,61 @@ test('static reporter gives hook failures bootstrap or teardown precedence', asy
     assert.equal(value.testCategory,category);assert.equal(JSON.stringify(value).includes('fixture-sensitive-value'),false);
   }
 });
+
+test('static reporter retains the first safe step source and line without raw failure fields', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-location-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'location.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  reporter.onTestBegin(current);
+  reporter.onStepEnd(current,{}, {category:'expect',title:'fixture-sensitive-title',error:new Error('fixture-sensitive-message'),
+    location:{file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1,column:77}});
+  reporter.onStepEnd(current,{}, {category:'expect',title:'later',error:new Error('later'),
+    location:{file:path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),line:2,column:88}});
+  reporter.onTestEnd(current,{status:'failed'});await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.deepEqual(value.location,{source:'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',line:1});
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+  assert.equal(Object.hasOwn(value.location,'column'),false);
+});
+
+test('an invalid first failure location cannot be replaced by a later valid hook location', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-first-location-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'first-location.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  reporter.onTestBegin(current);
+  reporter.onStepEnd(current,{}, {category:'expect',title:'first',error:new Error('first'),
+    location:{file:path.resolve('outside-sensitive.ts'),line:1,column:1}});
+  reporter.onStepEnd(current,{}, {category:'hook',title:'afterAll hook',error:new Error('later'),
+    location:{file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1,column:1}});
+  reporter.onTestEnd(current,{status:'failed'});await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(Object.hasOwn(value,'location'),false);
+});
+
+test('a test-end failure without step detail cannot inherit a later teardown location', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-test-end-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'test-end.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  reporter.onTestBegin(current);reporter.onTestEnd(current,{status:'failed'});
+  reporter.onStepEnd(current,{}, {category:'hook',title:'afterAll hook',error:new Error('later'),
+    location:{file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1,column:1}});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(Object.hasOwn(value,'location'),false);
+  assert.equal(value.testCategory,'primary-lifecycle');
+});

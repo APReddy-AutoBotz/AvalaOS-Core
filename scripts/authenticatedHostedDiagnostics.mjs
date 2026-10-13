@@ -1,3 +1,6 @@
+import { readFileSync, realpathSync } from 'node:fs';
+import path from 'node:path';
+
 const STAGES = new Set([
   'DATABASE_CONNECT',
   'DEPLOYMENT_INVENTORY',
@@ -44,6 +47,13 @@ const PLAYWRIGHT_TEST_CATEGORIES = new Set([
   'unknown',
 ]);
 const PLAYWRIGHT_CATEGORIES = new Set(['unexpected-failure', 'timeout', 'interrupted', 'configuration', 'no-tests']);
+const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
+  'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
+  'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts',
+  'tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts',
+  'tests/browser/authenticatedLifecycleHarness.ts',
+  'tests/browser/authenticatedControlsAcceptance.ts',
+]);
 export const AUTHENTICATED_HOSTED_IDENTITY_CATEGORIES = Object.freeze([
   'PROVISION_FAILED',
   'CREDENTIAL_REJECTED',
@@ -88,7 +98,6 @@ export function validateAuthenticatedHostedIdentityDiagnostic(value) {
   return Object.freeze({ operation: value.operation, category: value.category,
     ...(value.upstreamCode === undefined ? {} : { upstreamCode: value.upstreamCode }) });
 }
-
 function validateRunIdentityDiagnostic(value) {
   if (!record(value) || !IDENTITY_SOURCES.has(value.source)) return null;
   const { source, ...diagnostic } = value;
@@ -97,12 +106,35 @@ function validateRunIdentityDiagnostic(value) {
 }
 
 export function validateAuthenticatedHostedPlaywrightDiagnostic(value) {
-  if (!exactKeys(value, ['schemaVersion', 'project', 'testCategory', 'category'])
+  const keys = value?.location === undefined
+    ? ['schemaVersion', 'project', 'testCategory', 'category']
+    : ['schemaVersion', 'project', 'testCategory', 'category', 'location'];
+  if (!exactKeys(value, keys)
     || value.schemaVersion !== AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA
     || !PLAYWRIGHT_PROJECTS.has(value.project) || !PLAYWRIGHT_TEST_CATEGORIES.has(value.testCategory)
     || !PLAYWRIGHT_CATEGORIES.has(value.category)) return null;
+  const location = value.location === undefined ? null : validateAuthenticatedHostedPlaywrightFailureLocation(value.location);
   return Object.freeze({ schemaVersion: value.schemaVersion, project: value.project,
-    testCategory: value.testCategory, category: value.category });
+    testCategory: value.testCategory, category: value.category,
+    ...(location ? { location } : {}) });
+}
+
+export function validateAuthenticatedHostedPlaywrightFailureLocation(value, { root = process.cwd() } = {}) {
+  if (!exactKeys(value, ['source', 'line']) || typeof value.source !== 'string'
+    || !Number.isSafeInteger(value.line) || value.line < 1) return null;
+  const normalizedSource = value.source.replaceAll('\\', '/');
+  if (!PLAYWRIGHT_LOCATION_SOURCES.includes(normalizedSource)) return null;
+  try {
+    const source = realpathSync(path.resolve(root, normalizedSource));
+    const allowlisted = new Map(PLAYWRIGHT_LOCATION_SOURCES.map(relative => [
+      realpathSync(path.resolve(root, relative)), relative,
+    ]));
+    const relative = allowlisted.get(source);
+    if (!relative) return null;
+    const lineCount = readFileSync(source, 'utf8').split(/\r?\n/u).length;
+    if (value.line > lineCount) return null;
+    return Object.freeze({ source: relative, line: value.line });
+  } catch { return null; }
 }
 
 const runFailure = value => exactKeys(value, ['phase', 'category'])

@@ -14,6 +14,7 @@ import {
 import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
+import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   observeAuthenticatedAdminControls,
   observeAuthenticatedAiControls,
@@ -65,9 +66,10 @@ type ProjectFinalization = Readonly<{
 }>;
 type HostedActionReference = Promise<string | null>;
 type ApiResponseObservation = Readonly<{ route: string; status: number; actionId: HostedActionReference }>;
-const hostedActionStarts = new WeakMap<Request, HostedActionReference>();
+let hostedBrowserActionTracker: AuthenticatedHostedBrowserActionTracker | null = null;
 const actionReference = (request: Request): HostedActionReference => hostedAuthenticatedAcceptance
-  ? hostedActionStarts.get(request) ?? Promise.reject(new Error('AUTHENTICATED_BROWSER_ACTION_START_MISSING'))
+  ? hostedBrowserActionTracker?.reference(request)
+    ?? Promise.reject(new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING'))
   : Promise.resolve(null);
 
 const outputDirectory = process.env.ENTERPRISE_LIFECYCLE_OUTPUT_DIR
@@ -439,7 +441,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let approvedDecisionApi: ApiResponseObservation | null = null;
   let authenticatedCaseUploadTail: Promise<unknown> = Promise.resolve();
   let networkActionUploadTail: Promise<unknown> = Promise.resolve();
-  const finishedRequests = new WeakSet<Request>();
+  let networkActionError: unknown = null;
+  const queueNetworkAction = (operation: () => Promise<unknown>) => {
+    networkActionUploadTail = networkActionUploadTail.then(operation).catch(error => {
+      if (!networkActionError) networkActionError = error;
+    });
+  };
   const explicitCaseActions = new Map<string, HostedActionReference[]>();
   const bindObservedCase = (testId: string,...actions: HostedActionReference[]) => {
     if(actions.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${testId}`);
@@ -447,40 +454,13 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   };
   const caseActionReferences=(row: unknown): HostedActionReference[] =>
     (row as Record<string | symbol,unknown>)[authenticatedHostedActionIds] as HostedActionReference[]??[];
-  const productRoute = (request: Request) => {
-    const url = new URL(request.url());
-    return /^\/(?:functions\/v1\/[a-z0-9-]+|rest\/v1\/rpc\/[a-z0-9_]+)$/u.test(url.pathname) ? url.pathname : null;
-  };
   const startProductAction = (request: Request) => {
-    const existing = hostedActionStarts.get(request);
-    if (existing) return existing;
-    const route = productRoute(request);
-    if (!route) return Promise.resolve(null);
-    const pending = (async () => {
-      const headers = await request.allHeaders();
-      let requestBody: unknown = { method: request.method(), route };
-      try { requestBody = request.postDataJSON() ?? { method: request.method(), route }; }
-      catch { /* body-free product query */ }
-      const result = await control<{ actionId: string }>('/control/browser-action-start', {
-        projectName,
-        accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
-        requestBody,
-        route,
-      });
-      return result.actionId;
-    })();
-    hostedActionStarts.set(request, pending);
-    return pending;
+    if (!hostedBrowserActionTracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    return hostedBrowserActionTracker.begin(request);
   };
   const finishProductAction = (request: Request, status: number, responseBody: unknown) => {
-    const route = productRoute(request);
-    if (!route || finishedRequests.has(request)) return;
-    finishedRequests.add(request);
-    networkActionUploadTail = networkActionUploadTail.then(async () => {
-      const actionId = await startProductAction(request);
-      if (!actionId) return;
-      await control('/control/browser-action', { projectName, actionId, responseBody, status });
-    });
+    if (!hostedBrowserActionTracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    queueNetworkAction(() => hostedBrowserActionTracker!.finish(request, status, responseBody));
   };
   class AuthenticatedCaseCollector extends Array<unknown> {
     pushWithActions(row: Record<string | symbol, unknown>, ...actions: ApiResponseObservation[]) {
@@ -497,6 +477,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           authenticatedCaseUploadTail = authenticatedCaseUploadTail.then(async () => {
             await new Promise(resolve => setTimeout(resolve, 0));
             await networkActionUploadTail;
+            if (networkActionError) throw networkActionError;
             const references=(row as Record<string | symbol, unknown>)[authenticatedHostedActionIds];
             if(!Array.isArray(references)||references.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${(row as any)?.testId??'unknown'}`);
             const actionIds=[...new Set((await Promise.all(references as HostedActionReference[])).filter((item): item is string=>!!item))];
@@ -524,6 +505,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     expect(setup.journeyBinding).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(setup.aliases.process).toBe(`${projectName} connected lifecycle`);
     for (const key of ['case', 'review', 'handoff', 'artifact'] as const) expect(setup.aliases[key]).toMatch(new RegExp(`^primary-${key}-\\d+$`, 'u'));
+    if (hostedAuthenticatedAcceptance) {
+      const backendOrigin = new URL(process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL ?? '').origin;
+      const appOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL ?? '').origin;
+      hostedBrowserActionTracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
+        startAction: input => control<{ actionId: string }>('/control/browser-action-start', { projectName, ...input }),
+        finishAction: input => control('/control/browser-action', { projectName, ...input }),
+      });
+    }
   });
 
   test.beforeEach(async ({ context }) => {
@@ -535,7 +524,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await route.abort('blockedbyclient');
         return;
       }
-      if (hostedAuthenticatedAcceptance && productRoute(route.request())) await startProductAction(route.request());
+      if (hostedAuthenticatedAcceptance) {
+        try { await startProductAction(route.request()); }
+        catch (error) {
+          if (!networkActionError) networkActionError = error;
+          await route.abort('failed');
+          return;
+        }
+      }
       await route.continue();
     });
     context.on('request', request => {
@@ -552,13 +548,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (hostedAuthenticatedAcceptance) {
       context.on('response', response => {
         const request = response.request();
-        if (!productRoute(request)) return;
-        networkActionUploadTail = networkActionUploadTail.then(async () => {
+        queueNetworkAction(async () => {
+          const classification = await hostedBrowserActionTracker!.classify(request);
+          if (classification.kind !== 'business-action') return;
           const responseBody = await response.json().catch(() => ({}));
-          const actionId = await startProductAction(request);
-          if (!actionId || finishedRequests.has(request)) return;
-          finishedRequests.add(request);
-          await control('/control/browser-action', { projectName, actionId, responseBody, status: response.status() });
+          await hostedBrowserActionTracker!.finish(request, response.status(), responseBody);
         });
       });
       context.on('requestfailed', request => finishProductAction(request, 0, {
@@ -568,8 +562,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   });
 
   test.afterEach(async ({}, testInfo) => {
+    await networkActionUploadTail;
+    if (networkActionError) failed = true;
     if (testInfo.status !== testInfo.expectedStatus) failed = true;
     expect(externalRequests, 'the connected acceptance browser must not make external requests').toEqual([]);
+    if (networkActionError) throw networkActionError;
   });
 
   test.afterAll(async () => {

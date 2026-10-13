@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
   validateAuthenticatedHostedIdentityDiagnostic, validateAuthenticatedHostedPlaywrightDiagnostic,
+  validateAuthenticatedHostedPlaywrightFailureLocation,
   validateAuthenticatedHostedRunDiagnostic, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 
 const classified = async (stage, error, options) => {
@@ -88,4 +89,21 @@ test('run diagnostic envelope is closed, preserves primary failure and lets clea
   assert.equal(validateAuthenticatedHostedIdentityDiagnostic({ operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'raw-code' }), null);
   assert.throws(() => createAuthenticatedHostedRunDiagnostic({ ...value, cleanup: 'best-effort' }),
     /DIAGNOSTIC_ENVELOPE_REJECTED/u);
+});
+
+test('playwright locations retain only an exact allowlisted source and bounded positive line', () => {
+  const source = 'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts';
+  const location = validateAuthenticatedHostedPlaywrightFailureLocation({ source, line: 1 });
+  assert.deepEqual(location, { source, line: 1 });
+  const base = { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1', project: 'desktop-chromium',
+    testCategory: 'primary-lifecycle', category: 'unexpected-failure' };
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, location }), { ...base, location });
+  for (const invalid of [
+    { source: '../../sensitive.env', line: 1 },
+    { source, line: 0 },
+    { source, line: 9_999_999 },
+    { source, line: 1, column: 7 },
+    { source: process.cwd(), line: 1 },
+  ]) assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, location: invalid }), base);
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, rawTitle: 'sensitive' }), null);
 });
