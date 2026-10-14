@@ -21,6 +21,42 @@ export type AuthenticatedLifecycleSetup = Readonly<{
   actors: Readonly<Record<'author' | 'reviewer' | 'approver' | 'outsider', AuthenticatedLifecycleActor>>;
 }>;
 
+const hostedSetupSuffix = /^\[run ([1-9][0-9]{0,19})[.]([1-9][0-9]{0,15}) ([a-f0-9]{12})\]$/u;
+
+export const authenticatedLifecycleValidateSetupLabels = (
+  setup: Readonly<{
+    projectName: string;
+    deliveryProject: Readonly<{ name: string }>;
+    aliases: Readonly<{ process: string }>;
+  }>,
+  projectName: string,
+  hosted: boolean,
+) => {
+  const processPrefix = `${projectName} connected lifecycle`;
+  const deliveryPrefix = `${projectName} delivery project`;
+  const processName = setup?.aliases?.process;
+  const deliveryProjectName = setup?.deliveryProject?.name;
+  if (setup?.projectName !== projectName || typeof processName !== 'string'
+    || typeof deliveryProjectName !== 'string') {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SETUP_LABELS_REJECTED');
+  }
+  if (!hosted) {
+    if (processName !== processPrefix || deliveryProjectName !== deliveryPrefix) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SETUP_LABELS_REJECTED');
+    }
+    return Object.freeze({ processName, deliveryProjectName, suffix: null });
+  }
+  const processSuffix = processName.startsWith(`${processPrefix} `)
+    ? processName.slice(processPrefix.length + 1) : '';
+  const deliverySuffix = deliveryProjectName.startsWith(`${deliveryPrefix} `)
+    ? deliveryProjectName.slice(deliveryPrefix.length + 1) : '';
+  const match = hostedSetupSuffix.exec(processSuffix);
+  if (!match || deliverySuffix !== processSuffix || !Number.isSafeInteger(Number(match[2]))) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SETUP_LABELS_REJECTED');
+  }
+  return Object.freeze({ processName, deliveryProjectName, suffix: processSuffix });
+};
+
 const controlToken = process.env.ENTERPRISE_LIFECYCLE_CONTROL_TOKEN ?? '';
 const apiBaseUrl = process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '';
 const controlBaseUrl = process.env.ENTERPRISE_LIFECYCLE_CONTROL_URL ?? apiBaseUrl;

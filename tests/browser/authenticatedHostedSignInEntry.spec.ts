@@ -4,6 +4,7 @@ import {
   authenticatedLifecycleControl,
   authenticatedLifecycleEnterAs,
   authenticatedLifecycleOpenConnectedProcess,
+  authenticatedLifecycleValidateSetupLabels,
   type AuthenticatedLifecycleActor,
 } from './authenticatedLifecycleHarness';
 import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
@@ -80,13 +81,13 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   }
   const projectName = testInfo.project.name;
   const setup = await authenticatedLifecycleControl<{
+    projectName: string;
     aliases: { process: string };
     deliveryProject: { name: string };
   }>('/control/setup', { projectName });
-  const fixtureSuffix = setup.aliases.process.match(/\[run 12345[.]1 [0-9a-f]{12}\]$/u)?.[0];
-  expect(fixtureSuffix).toBeTruthy();
-  expect(setup.deliveryProject.name.endsWith(fixtureSuffix ?? 'missing-fixture-suffix')).toBe(true);
+  authenticatedLifecycleValidateSetupLabels(setup, projectName, true);
   const unexpectedOrigins: string[] = [];
+  const proxiedOrigins: string[] = [];
   let observedHttpRequests = 0;
   let networkActionError: unknown = null;
   let networkActionTail: Promise<unknown> = Promise.resolve();
@@ -113,10 +114,28 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     onExternalRequest: origin => unexpectedOrigins.push(origin),
     onHttpRequest: () => { observedHttpRequests += 1; },
     onTrackerError: error => { if (!networkActionError) networkActionError = error; },
-    dispatchAllowedRequest: dispatchToLocalProxy,
+    dispatchAllowedRequest: async route => {
+      proxiedOrigins.push(new URL(route.request().url()).origin);
+      await dispatchToLocalProxy(route);
+    },
   });
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
+
+  const arbitraryLoopbackOutcome = await page.evaluate(async origin => {
+    try {
+      await fetch(`${origin}/functions/v1/process-command`, { method: 'POST' });
+      return 'reached-loopback';
+    } catch { return 'blocked-before-loopback'; }
+  }, localApiOrigin);
+  expect(arbitraryLoopbackOutcome).toBe('blocked-before-loopback');
+  await expect.poll(() => unexpectedOrigins).toContain(localApiOrigin);
+  expect(proxiedOrigins).not.toContain(localApiOrigin);
+  await networkActionTail;
+  expect(networkActionError).toBeInstanceOf(Error);
+  expect((networkActionError as Error).message).toBe('AUTHENTICATED_BROWSER_PRODUCT_ORIGIN_REJECTED');
+  networkActionError = null;
+  unexpectedOrigins.length = 0;
 
   // The preserved first navigation is the session-scrub entry. The real app
   // maps it to PublicWebsite, demonstrating why the subsequent entry must use /sign-in.
@@ -255,6 +274,8 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await networkActionTail;
   if (networkActionError) throw networkActionError;
   expect(observedHttpRequests).toBeGreaterThan(0);
+  expect(proxiedOrigins.length).toBeGreaterThan(0);
+  expect(proxiedOrigins.every(origin => origin === appOrigin || origin === apiOrigin)).toBe(true);
   expect(unexpectedOrigins).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

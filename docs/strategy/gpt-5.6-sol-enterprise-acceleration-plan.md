@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Primary hosted setup contract (2026-10-14)
+
+PR #298's approved run `38508323243` retains independently verified 61 PASS / 47 BLOCKED, verified cleanup/providers OFF and consumed allowance. Three read-only reviewers completed their findings and closed before writes. Root accepted one focused repository correction: shared mode-aware setup-label validation, successful inert setup through the real primary hook, and exact hosted browser origin containment. Labels remain locators; existing controller IDs, session/RLS authority and adapter identity derivation remain unchanged. Under the fixed workspace-write profile, one implementation worker owns code and focused proof, and root owns canonical documents, provenance, CI, integration and the single PR. No nested delegation, broad unrelated regressions or new hosted action. Follow `docs/planning/hosted-acceptance-completion.md`.
+
 ## Retained fixture identity correction (2026-10-14)
 
 PR #297's approved run `38482699693` retains independently verified 61 PASS / 47 BLOCKED across all 108 criteria, verified cleanup/providers OFF and consumed hosted allowance. Three read-only architecture/security/quality reviews completed and closed before writes. Root accepted one repository boundary covering repeated process and Delivery project fixture names, exact selection and retained-history reproduction; historical hosted causation remains unproven. Under the fixed workspace-write profile, one implementation worker owns labels/browser fixtures/helpers and focused proofs; root owns PostgreSQL proof, canonical documents, CI/provenance, integration and the single PR. No nested delegation, active reviewers during writes, unrelated regression campaign or new hosted action. Follow `docs/planning/hosted-acceptance-completion.md`.

@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import { createAuthenticatedHostedIdentityAdapter } from './authenticatedHostedControllerAdapters.mjs';
+import { authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 import { runAuthenticatedHostedAcceptance, runAuthenticatedHostedChild } from './runAuthenticatedHostedAcceptance.mjs';
 import { validateAuthenticatedHostedRunDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 
@@ -51,6 +54,7 @@ const browserWorkspace=await mkdtemp(path.join(os.tmpdir(),'authenticated-hosted
 const outputPaths={browser:path.join(root,'browser.json'),server:path.join(root,'server.json'),
   binding:path.join(root,'binding.json'),diagnostic:path.join(root,'diagnostic.json')};
 const calls=[];let authCreateRequests=0;let projectSetup=0;
+let positiveBrowserWorkspace;
 try{
   await writeFile(outputPaths.diagnostic,JSON.stringify({raw:sensitive}));
   const before=(await execFileAsync('git',['status','--porcelain=v1','--untracked-files=all'],{encoding:'utf8'})).stdout;
@@ -102,6 +106,105 @@ try{
     await assert.rejects(access(accepted));
   }
   await assert.rejects(access(browserWorkspace));
+
+  const positiveOutputPaths={browser:path.join(root,'positive-browser.json'),server:path.join(root,'positive-server.json'),
+    binding:path.join(root,'positive-binding.json'),diagnostic:path.join(root,'positive-diagnostic.json')};
+  positiveBrowserWorkspace=await mkdtemp(path.join(os.tmpdir(),'authenticated-hosted-browser-'));
+  assert.equal(path.dirname(positiveBrowserWorkspace),path.resolve(os.tmpdir()));
+  const proxyRejections=[];
+  const rejectingProxy=createServer((_request,response)=>{
+    proxyRejections.push('HTTP');
+    response.writeHead(502,{connection:'close'});response.end();
+  });
+  rejectingProxy.on('connect',(_request,socket)=>{
+    proxyRejections.push('CONNECT');
+    socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n');
+  });
+  await new Promise((resolve,reject)=>{
+    rejectingProxy.once('error',reject);
+    rejectingProxy.listen(0,'127.0.0.1',resolve);
+  });
+  const proxyAddress=rejectingProxy.address();
+  assert.ok(proxyAddress&&typeof proxyAddress!=='string');
+  const proxyUrl=`http://127.0.0.1:${proxyAddress.port}`;
+  const wrapperConfig=path.join(root,'playwright.bootstrap.config.mjs');
+  const identities=Object.freeze({
+    author:Object.freeze({id:'71000000-0000-4000-8000-000000000001',email:'author.desktop@local.invalid',password:'synthetic-author-password'}),
+    reviewer:Object.freeze({id:'71000000-0000-4000-8000-000000000002',email:'reviewer.desktop@local.invalid',password:'synthetic-reviewer-password'}),
+    approver:Object.freeze({id:'71000000-0000-4000-8000-000000000003',email:'approver.desktop@local.invalid',password:'synthetic-approver-password'}),
+    outsider:Object.freeze({id:'71000000-0000-4000-8000-000000000004',email:'outsider.desktop@local.invalid',password:'synthetic-outsider-password'}),
+  });
+  const positiveLifecycle=[];
+  let positiveSetupCount=0;
+  let positiveCaught;
+  try{
+    await runAuthenticatedHostedAcceptance(environment,{
+      outputPaths:positiveOutputPaths,database:{},verifyCheckout:async()=>positiveLifecycle.push('checkout'),
+      createBrowserWorkspace:async()=>positiveBrowserWorkspace,
+      createPostgresAdapter:({config})=>({
+        preflight:async()=>validPreflight,activate:async()=>positiveLifecycle.push('activate'),
+        setupProject:async({projectName,exerciseId})=>{
+          positiveSetupCount+=1;
+          const labels=authenticatedHostedFixtureIdentity({runId:config.workflow.runId,
+            attempt:config.workflow.attempt,exerciseId,projectName});
+          return {projectName,processId:'72000000-0000-4000-8000-000000000001',
+            projectId:'73000000-0000-4000-8000-000000000001',
+            deliveryProject:{id:'73000000-0000-4000-8000-000000000001',name:labels.deliveryProjectName},
+            aliases:{case:'primary-case-1',review:'primary-review-1',handoff:'primary-handoff-1',
+              artifact:'primary-artifact-1',process:labels.processName}};
+        },
+        quiesce:async()=>positiveLifecycle.push('quiesce'),cleanup:async()=>positiveLifecycle.push('cleanup'),
+        verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
+          activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true}),
+      }),
+      createIdentityAdapter:()=>({created:new Map(),provisionProject:async()=>identities,
+        revokeAll:async()=>positiveLifecycle.push('revoke')}),
+      runPlaywright:async(command,args,options)=>{
+        assert.equal(options.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH,'true');
+        assert.equal(Object.hasOwn(options.env,'AUTHENTICATED_HOSTED_BOOTSTRAP_TEST'),false);
+        const actualConfig=pathToFileURL(path.resolve('playwright.authenticated-hosted.config.ts')).href;
+        const absoluteTestDir=path.resolve('tests/browser/enterpriseLifecycleAcceptance');
+        const absoluteReporter=path.resolve('scripts/authenticatedHostedPlaywrightReporter.mjs');
+        await writeFile(wrapperConfig,`import base from ${JSON.stringify(actualConfig)};\n`
+          +`const proxy={server:${JSON.stringify(proxyUrl)},bypass:'<-loopback>'};\n`
+          +`export default {...base,testDir:${JSON.stringify(absoluteTestDir)},`
+          +`reporter:[[${JSON.stringify(absoluteReporter)}]],use:{...base.use,proxy},`
+          +`projects:base.projects.map(project=>({...project,use:{...project.use,proxy}}))};\n`);
+        const wrappedArgs=args.map(value=>value.startsWith('--config=')?`--config=${wrapperConfig}`:value);
+        await runAuthenticatedHostedChild(command,[...wrappedArgs,'--project=desktop-chromium'],options,
+          {timeoutMs:60_000,diagnosticPath:options.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH});
+      },
+    });
+  }catch(error){positiveCaught=error;}
+  finally{await new Promise((resolve,reject)=>rejectingProxy.close(error=>error?reject(error):resolve()));}
+  const positiveDiagnostic=validateAuthenticatedHostedRunDiagnostic(JSON.parse(
+    await readFile(positiveOutputPaths.diagnostic,'utf8')));
+  assert.ok(positiveDiagnostic);
+  const positiveAcceptedPresent=[];
+  for(const accepted of [positiveOutputPaths.browser,positiveOutputPaths.server,positiveOutputPaths.binding]){
+    if(await access(accepted).then(()=>true).catch(()=>false))positiveAcceptedPresent.push(path.basename(accepted));
+  }
+  const positiveWorkspacePresent=await access(positiveBrowserWorkspace).then(()=>true).catch(()=>false);
+  console.log(JSON.stringify({status:'bounded-bootstrap-probe',project:positiveDiagnostic.child?.project,
+    testCategory:positiveDiagnostic.child?.testCategory,location:positiveDiagnostic.child?.location??null,
+    cleanup:positiveDiagnostic.cleanup.status,proxyRejections:proxyRejections.length,
+    setupCount:positiveSetupCount,acceptedManifestCount:positiveAcceptedPresent.length,
+    browserWorkspacePresent:positiveWorkspacePresent}));
+  assert.equal(positiveCaught?.message,'AUTHENTICATED_HOSTED_RUNNER_BROWSER_EXIT_NONZERO');
+  assert.deepEqual(positiveDiagnostic.failure,{phase:'BROWSER_EXECUTION',category:'EXIT_NONZERO'});
+  assert.deepEqual(positiveDiagnostic.primary,positiveDiagnostic.failure);
+  assert.equal(positiveDiagnostic.child?.project,'desktop-chromium');
+  assert.equal(positiveDiagnostic.child?.testCategory,'primary-lifecycle');
+  assert.equal(positiveDiagnostic.child?.category,'unexpected-failure');
+  assert.equal(positiveDiagnostic.child?.location?.source,'tests/browser/authenticatedLifecycleHarness.ts');
+  assert.equal(Number.isSafeInteger(positiveDiagnostic.child?.location?.line)
+    && positiveDiagnostic.child.location.line>0,true);
+  assert.equal(proxyRejections.length>0,true);
+  assert.equal(positiveSetupCount,1);
+  assert.deepEqual(positiveLifecycle,['checkout','activate','quiesce','revoke','cleanup']);
+  assert.deepEqual(positiveDiagnostic.cleanup,{status:'verified'});
+  assert.deepEqual(positiveAcceptedPresent,[]);
+  assert.equal(positiveWorkspacePresent,false);
   const after=(await execFileAsync('git',['status','--porcelain=v1','--untracked-files=all'],{encoding:'utf8'})).stdout;
   assert.equal(after,before);
   console.log(JSON.stringify({status:'passed',phase:diagnostic.failure.phase,category:diagnostic.failure.category,
@@ -110,4 +213,9 @@ try{
   assert.equal(path.dirname(root),path.resolve(os.tmpdir()));
   await rm(root,{recursive:true,force:true});
   if(await access(browserWorkspace).then(()=>true).catch(()=>false))await rm(browserWorkspace,{recursive:true,force:true});
+  if(positiveBrowserWorkspace){
+    assert.equal(path.dirname(positiveBrowserWorkspace),path.resolve(os.tmpdir()));
+    assert.ok(path.basename(positiveBrowserWorkspace).startsWith('authenticated-hosted-browser-'));
+    await rm(positiveBrowserWorkspace,{recursive:true,force:true});
+  }
 }

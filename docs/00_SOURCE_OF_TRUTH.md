@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Hosted setup contract integration (2026-10-14)
+
+PR #298 merged as `e124b2d5` with all applicable candidate and post-merge checks passing. Its approved run `38508323243`, attempt 1, failed in the real primary journey's `beforeAll`, at `enterpriseLifecycleAcceptance.spec.ts:504`. Independent reconstruction verifies all 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across the unchanged 108 requirements. Cleanup verifies quiescence, revoked identities/sessions, no active memberships, permits, residue or secret references, both providers OFF and removal of owned temporary main access. The one-run allowance is consumed.
+
+**Confirmed source defect:** PR #298 changed hosted fixture labels but omitted the primary spec's old fixed-name assertion. Preparation exercised a different sign-in spec, or stopped at injected provisioning rejection, so neither reached this assertion with successful hosted-shaped setup. Correct the shared setup contract and execute the actual primary startup hook with inert setup and fail-closed local network containment under `docs/planning/hosted-acceptance-completion.md`. This failure precedes product navigation and does not resolve the older catalog-cardinality cause. No hosted case is promoted by local preparation; another hosted attempt requires separate authorization.
+
 ## Retained synthetic fixture identity (2026-10-14)
 
 PR #297 merged as `4bbbf9ed84d08095c421802ca094d694afb3b13e`. Its approved run `38482699693`, attempt 1, failed. Independent reconstruction verifies all 325 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across the unchanged 108 requirements. The first desktop journey reached Process Catalog but failed its exactly-one process-row assertion at `enterpriseLifecycleAcceptance.spec.ts:262`. The diagnostic does not retain cardinality, so the precise hosted cause remains **suspected defect requiring deeper validation**. Read-only cleanup verifies quiescence, revoked identities/sessions, no active memberships, permits, residue or secret references, both providers OFF and owned temporary main access removed. The single-run allowance is consumed.
