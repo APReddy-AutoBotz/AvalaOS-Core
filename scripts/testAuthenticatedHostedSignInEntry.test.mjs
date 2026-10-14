@@ -35,6 +35,11 @@ test('runner accepts exact loopback origins and rejects broader targets', () => 
   ]) assert.throws(() => assertAuthenticatedHostedSignInEntryLoopbackUrl(value), /NON_LOOPBACK_URL_REJECTED/u);
 });
 
+test('fixture rejects unrecognized process seed modes before opening local services', async () => {
+  await assert.rejects(startAuthenticatedHostedSignInEntryFixture({ processSeedMode: 'unbounded' }),
+    /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE_REJECTED/u);
+});
+
 test('inert fixture emits a bounded rejection diagnostic without creating a binding', async () => {
   const fixture = await startAuthenticatedHostedSignInEntryFixture();
   try {

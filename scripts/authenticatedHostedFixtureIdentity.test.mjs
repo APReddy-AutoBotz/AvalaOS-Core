@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
+import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
+  authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 
 const input = Object.freeze({
   runId: '12345',
@@ -38,4 +39,14 @@ test('fixture identity changes for every trusted binding input and rejects unbou
     { ...input, projectName: 'Desktop Chromium' },
   ]) assert.throws(() => authenticatedHostedFixtureIdentity(candidate),
     /AUTHENTICATED_HOSTED_FIXTURE_IDENTITY_REJECTED/u);
+});
+
+test('shared synthetic process metadata is immutable and command-valid', () => {
+  assert.deepEqual(AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA, {
+    description: 'Synthetic authenticated acceptance process.',
+    department: 'Operations',
+    criticality: 'High',
+  });
+  assert.equal(Object.isFrozen(AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA), true);
+  assert.throws(() => { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department = 'Changed'; }, TypeError);
 });

@@ -14,11 +14,13 @@ const appOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_APP_URL
 const apiOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').origin;
 const localAppOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_APP_URL ?? '').origin;
 const localApiOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL ?? '').origin;
+const processSeedMode = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE ?? '';
 const syntheticProjectRef = 'abcdefghijklmnopqrst';
 if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
   || apiOrigin !== `https://${syntheticProjectRef}.supabase.co`
   || !/^http:\/\/127[.]0[.]0[.]1:\d+$/u.test(localAppOrigin)
-  || !/^http:\/\/127[.]0[.]0[.]1:\d+$/u.test(localApiOrigin)) {
+  || !/^http:\/\/127[.]0[.]0[.]1:\d+$/u.test(localApiOrigin)
+  || !['valid', 'nullable-reproduction'].includes(processSeedMode)) {
   throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_BINDING_REJECTED');
 }
 
@@ -229,6 +231,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
   await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Save process details', exact: true })).toHaveCount(0);
+  if (processSeedMode === 'nullable-reproduction') {
+    await expect(authenticatedLifecycleAttemptUnauthorizedProcessUpdate(page, setup.aliases.process))
+      .rejects.toThrow('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED');
+    const reproduction = await authenticatedLifecycleControl<{
+      actions: Array<{ route: string }>;
+      processCommandRequests: number;
+      anonymousProcessCommandRequests: number;
+    }>('/control/sign-in-entry-observation', { projectName });
+    expect(reproduction.actions.filter(action => action.route === '/functions/v1/process-command')).toEqual([]);
+    expect(reproduction.processCommandRequests).toBe(0);
+    expect(reproduction.anonymousProcessCommandRequests).toBe(0);
+    return;
+  }
   const denied = await authenticatedLifecycleAttemptUnauthorizedProcessUpdate(page, setup.aliases.process);
   expect(denied.status).toBe(403);
   expect(denied.body).toEqual({ ok: false, error: {

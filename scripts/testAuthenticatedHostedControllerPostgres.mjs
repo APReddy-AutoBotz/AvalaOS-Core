@@ -10,6 +10,7 @@ import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.m
 import { AuthenticatedHostedController, authenticatedHostedDigest,
   AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
 import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
+import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA } from './authenticatedHostedFixtureIdentity.mjs';
 import { reconstructAuthenticatedHostedCaseEvidence } from './authenticatedHostedEvidence.mjs';
 import {
   authenticatedHostedRequestBinding,
@@ -389,6 +390,15 @@ try {
     [{id:project.processId,name:project.aliases.process}], 'the current alias selects only the newly seeded process');
   assert.deepEqual(reviewerCatalog.projects.filter(row=>row.name===project.deliveryProject.name),
     [{id:project.projectId,name:project.deliveryProject.name}], 'the current alias selects only the newly seeded project');
+  const freshReviewerProcess = await visibleProcess(ids.actors.reviewer,project.processId);
+  assert.deepEqual(freshReviewerProcess, {
+    id: project.processId,
+    org_id: ids.org,
+    workspace_id: ids.workspace,
+    name: project.aliases.process,
+    ...AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
+    authority_version: '1',
+  }, 'reviewer RLS sees explicit valid metadata on the fresh version-1 process before author mutation');
   assert.notEqual(project.aliases.process,retainedBefore.process.name);
   assert.notEqual(project.deliveryProject.name,retainedBefore.project.name);
   assert.deepEqual((await visibleCatalog(ids.actors.outsider)).processes,[], 'membership without assess.read cannot read processes');

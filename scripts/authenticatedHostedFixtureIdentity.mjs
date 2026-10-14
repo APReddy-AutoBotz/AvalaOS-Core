@@ -7,6 +7,12 @@ const BROWSER_PROJECT = /^(?:desktop-chromium|pixel-7-chromium)(?:-[a-z0-9-]{1,6
 
 export const AUTHENTICATED_HOSTED_FIXTURE_IDENTITY_SCHEMA = 'authenticated-hosted-fixture-identity-v1';
 
+export const AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA = Object.freeze({
+  description: 'Synthetic authenticated acceptance process.',
+  department: 'Operations',
+  criticality: 'High',
+});
+
 export const authenticatedHostedFixtureIdentity = ({ runId, attempt, exerciseId, projectName }) => {
   const canonicalRunId = String(runId ?? '');
   const canonicalAttempt = Number(attempt);

@@ -1,5 +1,15 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Fresh process denial input contract (2026-10-14)
+
+**Executed evidence:** PR #300 run `38591514213`, attempt 1, independently verifies 327 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The primary desktop diagnostic identifies `authenticatedLifecycleHarness.ts:382`, before the denial command. Quiescence, four revoked identities, zero active sessions/memberships/permits/residue/secret references, providers OFF and owned temporary-main removal are verified. The single-run allowance is consumed.
+
+**Confirmed source defect:** synthetic setup omits nullable description/department required by the strict command helper. Actual-app preparation fills those fields, while its database proof checks denial only after an author update. **Suspected defect requiring deeper validation:** the exact hosted guard predicate was not retained; source analysis does not establish observed live field values. No product authorization bypass is established.
+
+**Planned verification:** reproduce the raw nullable seed before correction, explicitly seed product-valid synthetic metadata, independently assert the fresh version-1 row through reviewer RLS before mutation, and run the real shared browser helper on Desktop/Pixel. Preserve exact singleton scope, authority-version binding, reviewer capability absence, valid command, exact 403 and zero-write/reload proof. Keep diagnostics value-free. No criteria/schema/permission changes or new hosted action; source revert is the fallback and all 47 hosted cases remain blocked.
+
+**Executed evidence:** the nullable-metadata actual-app reproduction rejects with the expected process-authority code on Desktop and Pixel and sends zero commands. Corrected actual-app preparation passes both profiles with exact 403, no anonymous commands or accepted case writes, containment and unchanged checkout. Focused Node checks pass 19/19, helper checks 9/9 and typecheck passes. Fresh version-1 PostgreSQL execution and exact-candidate CI remain planned. The reproduction confirms the source defect without claiming the historical diagnostic retained its exact failed predicate.
+
 ## Restricted process command evidence (2026-10-14)
 
 **Executed evidence:** PR #299 run `38517707715`, attempt 1, independently verifies 327 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The primary diagnostic locates the Edit process details click at line 611. Cleanup/quiescence, four revoked identities, zero active access/residue/secret references, providers OFF and temporary-main removal are verified. The single-run allowance is consumed.

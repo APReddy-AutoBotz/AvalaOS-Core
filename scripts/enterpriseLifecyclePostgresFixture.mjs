@@ -10,6 +10,7 @@ import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTe
 import { createEnterpriseLifecycleStudioGeneration } from './enterpriseLifecycleStudioGeneration.mjs';
 import { createAuthenticatedControlsFixture } from './authenticatedControlsFixture.mjs';
 import { createAuthenticatedControlsPostgresAdapter } from './authenticatedControlsPostgresAdapter.mjs';
+import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA } from './authenticatedHostedFixtureIdentity.mjs';
 
 const { Client } = pg;
 const root = process.cwd();
@@ -280,7 +281,15 @@ export async function createEnterpriseLifecycleFixture({
       await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [ids.organization, ids.workspace, actor]);
     }
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Outsider tenant','outsider-tenant') ON CONFLICT DO NOTHING", [ids.foreignOrganization]);
-    await db.query("INSERT INTO assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by) VALUES($1,$2,$3,'Connected lifecycle','Draft',$4,$4,$4)", [ids.process, ids.organization, ids.workspace, ids.author]);
+    await db.query(`INSERT INTO assess_processes(
+      id,org_id,workspace_id,name,description,department,criticality,status,owner_id,created_by,updated_by)
+      VALUES($1,$2,$3,'Connected lifecycle',$4,$5,$6,'Draft',$7,$7,$7)`, [
+      ids.process, ids.organization, ids.workspace,
+      AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.description,
+      AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department,
+      AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.criticality,
+      ids.author,
+    ]);
     await db.query("INSERT INTO process_update_workspace_controls(org_id,workspace_id,enabled,read_only) VALUES($1,$2,true,false)", [ids.organization, ids.workspace]);
     await db.query(`INSERT INTO public.enterprise_transcript_workspace_flags(
       org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,updated_by
@@ -895,7 +904,15 @@ export async function createEnterpriseLifecycleFixture({
           await db.query(`DELETE FROM public.pilot_operations_environments
             WHERE org_id=$1 AND workspace_id=$2 AND environment_type='pilot_candidate'`,
           [ids.organization,ids.workspace]);
-          await db.query("INSERT INTO assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by) VALUES($1,$2,$3,$4,'Draft',$5,$5,$5)", [projectProcessId, ids.organization, ids.workspace, `${projectName} connected lifecycle`, ids.author]);
+          await db.query(`INSERT INTO assess_processes(
+            id,org_id,workspace_id,name,description,department,criticality,status,owner_id,created_by,updated_by)
+            VALUES($1,$2,$3,$4,$5,$6,$7,'Draft',$8,$8,$8)`, [
+            projectProcessId, ids.organization, ids.workspace, `${projectName} connected lifecycle`,
+            AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.description,
+            AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department,
+            AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.criticality,
+            ids.author,
+          ]);
           await db.query("INSERT INTO projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id) VALUES($1,$2,$3,$4,$5,$5,$5,$6)", [deliveryProjectId, ids.organization, ids.workspace, `${projectName} delivery project`, ids.author, projectProcessId]);
           projectSetups.set(projectName, { processId: projectProcessId, projectId: deliveryProjectId });
           const projectAliases = Object.fromEntries(Object.entries(aliases).map(([key, value]) => [key, `${value}-${setupSequence}`]));
