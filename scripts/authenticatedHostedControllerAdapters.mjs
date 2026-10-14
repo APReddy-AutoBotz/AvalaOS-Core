@@ -4,6 +4,7 @@ import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './auth
 import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { authenticatedHostedIdentityCategoryForStatus, authenticatedHostedIdentityUpstreamCode,
   validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
@@ -319,9 +320,15 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       input.commandType,input.actorId,input.sessionId,input.requestId,input.payloadHash,input.expectedVersion,
       input.expiresAt]),
     quiesce: input => authority('authenticated_synthetic_quiesce', [input.exerciseId]),
-    async setupProject({ projectName, identities }) {
+    async setupProject({ projectName, exerciseId, identities }) {
       sequence += 1;
       const processId = randomUUID(); const projectId = randomUUID();
+      const fixtureIdentity = authenticatedHostedFixtureIdentity({
+        runId: config.workflow.runId,
+        attempt: config.workflow.attempt,
+        exerciseId,
+        projectName,
+      });
       let capturedDeliveryControls = null;
       let capturedWorkspaceFlags = null;
       let createdProviderFixture = null;
@@ -356,9 +363,9 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
           if(!membership?.organization||!membership?.workspace)throw new Error('AUTHENTICATED_HOSTED_MEMBERSHIP_REUSE_REJECTED');
         }
         await query(`INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by)
-          VALUES($1,$2,$3,$4,'Draft',$5,$5,$5)`,[processId,...scopeParams(),`${projectName} connected lifecycle`,identities.author.id]);
+          VALUES($1,$2,$3,$4,'Draft',$5,$5,$5)`,[processId,...scopeParams(),fixtureIdentity.processName,identities.author.id]);
         await query(`INSERT INTO public.projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id)
-          VALUES($1,$2,$3,$4,$5,$5,$5,$6)`,[projectId,...scopeParams(),`${projectName} delivery project`,identities.author.id,processId]);
+          VALUES($1,$2,$3,$4,$5,$5,$5,$6)`,[projectId,...scopeParams(),fixtureIdentity.deliveryProjectName,identities.author.id,processId]);
         await query(`INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true)
           ON CONFLICT(org_id,workspace_id) DO UPDATE SET writes_enabled=true,updated_at=statement_timestamp()`,scopeParams());
         await query(`INSERT INTO public.studio_delivery_workspace_controls(org_id,workspace_id,publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled)
@@ -384,9 +391,9 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         }
         if(createdProviderFixture)providerFixture=createdProviderFixture;
       } catch (error) { await query('ROLLBACK'); throw error; }
-      const project = { projectName, processId, projectId, deliveryProject:{id:projectId,name:`${projectName} delivery project`},
+      const project = { projectName, processId, projectId, deliveryProject:{id:projectId,name:fixtureIdentity.deliveryProjectName},
         aliases:{case:`primary-case-${sequence}`,review:`primary-review-${sequence}`,handoff:`primary-handoff-${sequence}`,
-          artifact:`primary-artifact-${sequence}`,process:`${projectName} connected lifecycle`} };
+          artifact:`primary-artifact-${sequence}`,process:fixtureIdentity.processName} };
       projects.set(projectName, project);
       return project;
     },

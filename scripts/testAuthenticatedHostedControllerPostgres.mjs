@@ -121,6 +121,7 @@ const admin = new Client({ connectionString: source });
 let db;
 let created = false;
 let bootstrapFixture;
+const retainedIds = { process: randomUUID(), project: randomUUID(), foreignProcess: randomUUID() };
 const serviceQuery = async (sql, parameters = []) => {
   await db.query('BEGIN');
   try {
@@ -168,6 +169,8 @@ try {
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
       'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
     GRANT USAGE ON SCHEMA public TO service_role;
+    GRANT USAGE ON SCHEMA auth TO authenticated;
+    GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;`);
   for (const name of migrations) {
@@ -228,6 +231,37 @@ try {
   await db.query('UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=false WHERE singleton');
   await db.query('UPDATE public.enterprise_intelligence_runtime_control SET enabled=true,read_only=false,provider_enabled=false WHERE singleton');
   await db.query('UPDATE public.assess_v2_runtime_control SET enabled=true,read_only=false WHERE singleton');
+
+  // Persistent synthetic workspaces keep these rows after earlier actors are revoked.
+  // They predate the new exercise baseline and must never be reused or removed.
+  await db.query(`INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by)
+    VALUES($1,$2,$3,'desktop-chromium-postgres connected lifecycle','Draft',$4,$4,$4)`,
+  [retainedIds.process,ids.org,ids.workspace,ids.actors.author]);
+  await db.query(`INSERT INTO public.projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id)
+    VALUES($1,$2,$3,'desktop-chromium-postgres delivery project',$4,$4,$4,$5)`,
+  [retainedIds.project,ids.org,ids.workspace,ids.actors.author,retainedIds.process]);
+  await db.query(`INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by)
+    VALUES($1,$2,$3,'desktop-chromium-postgres connected lifecycle','Draft',$4,$4,$4)`,
+  [retainedIds.foreignProcess,bootstrapFixture.org,bootstrapFixture.workspace,ids.actors.author]);
+  const retainedHistory = async () => (await db.query(`SELECT
+    (SELECT to_jsonb(p) FROM public.assess_processes p WHERE id=$1) process,
+    (SELECT to_jsonb(p) FROM public.projects p WHERE id=$2) project,
+    (SELECT to_jsonb(p) FROM public.assess_processes p WHERE id=$3) foreign_process`,
+  [retainedIds.process,retainedIds.project,retainedIds.foreignProcess])).rows[0];
+  const retainedBefore = await retainedHistory();
+  const visibleCatalog = async (actorId, workspaceId = ids.workspace) => {
+    await db.query('BEGIN');
+    try {
+      await db.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[actorId]);
+      await db.query('SET LOCAL ROLE authenticated');
+      return {
+        processes: (await db.query('SELECT id,name FROM public.assess_processes WHERE org_id=$1 AND workspace_id=$2',
+          [workspaceId===ids.workspace?ids.org:bootstrapFixture.org,workspaceId])).rows,
+        projects: (await db.query('SELECT id,name FROM public.projects WHERE org_id=$1 AND workspace_id=$2 AND deleted_at IS NULL',
+          [workspaceId===ids.workspace?ids.org:bootstrapFixture.org,workspaceId])).rows,
+      };
+    } finally { await db.query('ROLLBACK'); }
+  };
 
   const deploymentCalls = [];
   const secretCalls = [];
@@ -325,6 +359,24 @@ try {
   }), /AUTHENTICATED_SYNTHETIC_SESSION_REJECTED|duplicate key/iu);
   assert.equal((await db.query('SELECT count(*)::int count FROM public.authenticated_synthetic_actor_sessions WHERE exercise_id=$1',
     [ids.exercise])).rows[0].count, 4);
+
+  // Independent fixed oracle for the trusted fixture binding above; do not derive
+  // expected labels by calling the helper whose insertion/alias pairing we verify.
+  assert.equal(project.aliases.process,'desktop-chromium-postgres connected lifecycle [run 12345.1 e1bc3b7134bf]');
+  assert.equal(project.deliveryProject.name,'desktop-chromium-postgres delivery project [run 12345.1 e1bc3b7134bf]');
+  const reviewerCatalog = await visibleCatalog(ids.actors.reviewer);
+  assert.ok(reviewerCatalog.processes.some(row=>row.id===retainedIds.process));
+  assert.ok(reviewerCatalog.projects.some(row=>row.id===retainedIds.project));
+  assert.deepEqual(reviewerCatalog.processes.filter(row=>row.name===project.aliases.process),
+    [{id:project.processId,name:project.aliases.process}], 'the current alias selects only the newly seeded process');
+  assert.deepEqual(reviewerCatalog.projects.filter(row=>row.name===project.deliveryProject.name),
+    [{id:project.projectId,name:project.deliveryProject.name}], 'the current alias selects only the newly seeded project');
+  assert.notEqual(project.aliases.process,retainedBefore.process.name);
+  assert.notEqual(project.deliveryProject.name,retainedBefore.project.name);
+  assert.deepEqual((await visibleCatalog(ids.actors.outsider)).processes,[], 'membership without assess.read cannot read processes');
+  assert.deepEqual(await visibleCatalog(ids.actors.reviewer,bootstrapFixture.workspace),{processes:[],projects:[]},
+    'same-name history in another workspace stays hidden');
+  assert.deepEqual(await retainedHistory(),retainedBefore);
 
   const reader = createAuthenticatedHostedObservationReader({ db: adapterDb, config });
   const exerciseOwnership = {
@@ -512,6 +564,10 @@ try {
   assert.equal(verified.nonExerciseChanged, false);
   assert.equal(verified.immutableHistoryPreserved, true);
   assert.equal(verified.retainedImmutableHistory, true);
+  assert.deepEqual(await retainedHistory(),retainedBefore,'cleanup preserves all prior process/project history');
+  assert.equal((await db.query('SELECT deleted_at FROM public.assess_processes WHERE id=$1',[project.processId])).rows[0].deleted_at,null);
+  assert.equal((await db.query('SELECT deleted_at FROM public.projects WHERE id=$1',[project.projectId])).rows[0].deleted_at,null);
+  assert.deepEqual(await visibleCatalog(ids.actors.reviewer),{processes:[],projects:[]},'revoked membership denies the retained catalog');
   assert.ok(verified.resources.some(item => item.kind === 'exercise_history'
     && item.classification === 'retained_immutable' && item.status === 'preserved'));
   assert.deepEqual((await db.query('SELECT enabled,read_only FROM public.assess_v2_runtime_control WHERE singleton')).rows[0],

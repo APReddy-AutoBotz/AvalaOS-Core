@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS,
+  AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE,
   assertAuthenticatedHostedSignInEntryLoopbackUrl,
   authenticatedHostedSignInEntryChildEnvironment,
   startAuthenticatedHostedSignInEntryFixture,
@@ -75,6 +76,55 @@ test('inert fixture emits a bounded rejection diagnostic without creating a bind
       browserCases: 0,
       serverCases: 0,
     });
+  } finally {
+    assert.equal(await fixture.close(), true);
+  }
+});
+
+test('inert fixture returns only scoped retained and current process rows with one shared fixture suffix', async () => {
+  const fixture = await startAuthenticatedHostedSignInEntryFixture();
+  try {
+    const setupResponse = await fetch(`${fixture.controlBaseUrl}/control/setup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+      body: JSON.stringify({ projectName: 'desktop-chromium' }),
+    });
+    assert.equal(setupResponse.status, 200);
+    const setup = await setupResponse.json();
+    const suffix = /\[run 12345[.]1 [0-9a-f]{12}\]$/u.exec(setup.aliases.process)?.[0];
+    assert.ok(suffix);
+    assert.equal(setup.deliveryProject.name.endsWith(suffix), true);
+
+    const signIn = await fetch(`${fixture.baseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'reviewer.desktop-chromium@local.invalid',
+        password: 'synthetic-reviewer-password',
+      }),
+    });
+    assert.equal(signIn.status, 200);
+    const session = await signIn.json();
+    const headers = { authorization: `Bearer ${session.access_token}` };
+    const scopedQuery = new URLSearchParams({
+      org_id: `eq.${AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.organizationId}`,
+      workspace_id: `eq.${AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.workspaceId}`,
+    });
+    const scoped = await fetch(`${fixture.baseUrl}/rest/v1/assess_processes?${scopedQuery}`, { headers });
+    assert.equal(scoped.status, 200);
+    const rows = await scoped.json();
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].name, setup.aliases.process);
+    assert.equal(rows[1].name, 'desktop-chromium connected lifecycle');
+    assert.equal(rows[2].name, `${setup.aliases.process} prefix decoy`);
+
+    const foreignQuery = new URLSearchParams({
+      org_id: `eq.${AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.organizationId}`,
+      workspace_id: 'eq.30000000-0000-4000-8000-000000000099',
+    });
+    const foreign = await fetch(`${fixture.baseUrl}/rest/v1/assess_processes?${foreignQuery}`, { headers });
+    assert.equal(foreign.status, 200);
+    assert.deepEqual(await foreign.json(), []);
   } finally {
     assert.equal(await fixture.close(), true);
   }

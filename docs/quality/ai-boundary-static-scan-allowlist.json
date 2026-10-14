@@ -515,8 +515,8 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        147,
-        189
+        162,
+        205
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep these read-only assertions limited to inert loopback Auth sessions: rejected credentials leave no session and switching actors replaces the previous token. Never read real credentials or promote this preparation proof to hosted authority."
