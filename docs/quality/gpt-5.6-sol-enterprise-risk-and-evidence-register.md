@@ -8,6 +8,8 @@
 
 Root resolved reviewer disagreement using the normative process-edit-denial catalog and accepted ADMIN/AI/Studio restricted-request composition. Preserve the product UI and role authority. **Planned verification:** reproduce the capability-accurate disabled path locally; require a fully valid same-session production process command, exact 403, action/session correlation, unchanged reload and independently observed zero effects. Keep enabled-control local coverage and scoped outsider negatives. No criteria change, hosted permission grant, backend deployment, migration or new run. Source-only rollback retains failed evidence and all 47 blocked cases.
 
+PR #300 preparation also exposed a confirmed request-observation ordering defect: an allowed request cancelled before its async route callback could reach completion without a registered action start. The installed-network regression reproduces AUTHENTICATED_BROWSER_ACTION_START_MISSING against the prior source. Register the same idempotent start promise at the request event, still await authority before dispatch, and drain exact negative-probe failure events before resetting expected errors. Missing-start rejection and public/CORS/origin classifications remain unchanged. The precise Linux request was not retained; no broader runtime claim follows.
+
 ## Primary setup contract evidence boundary (2026-10-14)
 
 **Executed evidence:** approved PR #298 run `38508323243`, attempt 1, independently verifies 327 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. Its bounded diagnostic identifies the primary spec's startup assertion at line 504. Cleanup, quiescence, revoked identities/sessions, providers OFF and owned temporary main-policy removal are verified; allowance consumed.

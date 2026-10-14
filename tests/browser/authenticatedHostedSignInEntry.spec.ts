@@ -123,6 +123,9 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
 
+  const loopbackFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === `${localApiOrigin}/functions/v1/process-command`,
+  });
   const arbitraryLoopbackOutcome = await page.evaluate(async origin => {
     try {
       await fetch(`${origin}/functions/v1/process-command`, { method: 'POST' });
@@ -130,6 +133,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     } catch { return 'blocked-before-loopback'; }
   }, localApiOrigin);
   expect(arbitraryLoopbackOutcome).toBe('blocked-before-loopback');
+  await loopbackFailure;
   await expect.poll(() => unexpectedOrigins).toContain(localApiOrigin);
   expect(proxiedOrigins).not.toContain(localApiOrigin);
   await networkActionTail;
@@ -144,6 +148,9 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await expect(page.getByRole('heading', { name: /Evaluate before you automate/u })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
 
+  const anonymousFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === `${apiOrigin}/functions/v1/process-command`,
+  });
   const anonymousOutcome = await page.evaluate(async backendOrigin => {
     try {
       await fetch(`${backendOrigin}/functions/v1/process-command`, {
@@ -153,6 +160,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     } catch { return 'blocked-before-backend'; }
   }, apiOrigin);
   expect(anonymousOutcome).toBe('blocked-before-backend');
+  await anonymousFailure;
   await networkActionTail;
   expect(networkActionError).toBeInstanceOf(Error);
   expect((networkActionError as Error).message).toBe('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
@@ -163,6 +171,9 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(anonymousObservation.actions).toEqual([]);
   expect(anonymousObservation.anonymousProcessCommandRequests).toBe(0);
 
+  const foreignFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === 'https://foreign.example/functions/v1/process-command',
+  });
   const foreignOutcome = await page.evaluate(async () => {
     try {
       await fetch('https://foreign.example/functions/v1/process-command', { method: 'POST' });
@@ -170,6 +181,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     } catch { return 'blocked-before-network'; }
   });
   expect(foreignOutcome).toBe('blocked-before-network');
+  await foreignFailure;
   await expect.poll(() => unexpectedOrigins).toContain('https://foreign.example');
   await networkActionTail;
   expect(networkActionError).toBeInstanceOf(Error);

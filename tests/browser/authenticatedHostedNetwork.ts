@@ -64,6 +64,14 @@ export const installAuthenticatedHostedNetwork = async ({
     if (!webProtocol(url.protocol)) return;
     onHttpRequest();
     if (!allowedWebOrigin(url, hosted, allowedOrigins)) onExternalRequest(url.origin);
+    else if (hosted) {
+      // Playwright can report a navigation-cancelled request before its async
+      // route callback reaches the tracker. Prime the same idempotent begin
+      // promise at the request event so response/requestfailed observers can
+      // never overtake the required action start. The route still awaits this
+      // promise and aborts before dispatch when authority rejects it.
+      void startProductAction(request).catch(() => undefined);
+    }
   });
 
   if (hosted) {
