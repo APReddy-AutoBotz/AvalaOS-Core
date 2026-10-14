@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  authenticatedLifecycleValidateProcessNavigation,
   authenticatedLifecycleValidateDeniedProcessAuthority,
+  authenticatedLifecycleValidateSessionBinding,
   authenticatedLifecycleValidateSetupLabels,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
@@ -10,6 +12,7 @@ import {
 
 const deniedAuthorityInput = () => ({
   selected: {
+    userId: '00000000-0000-4000-8000-000000000007',
     organizationId: 'organization-1',
     workspaceId: 'workspace-1',
     authorizationVersion: 7,
@@ -26,12 +29,13 @@ const deniedAuthorityInput = () => ({
     authority_version: 1,
   }],
   processLabel: 'Connected process',
+  selectedProcessId: 'process-1',
   processHeaders: { apikey: 'public-test-key' },
 });
 
 test('denied process authority requires exact scope, capability absence, current authority version and explicit metadata', () => {
   assert.deepEqual(authenticatedLifecycleValidateDeniedProcessAuthority(deniedAuthorityInput()), {
-    context: { organizationId: 'organization-1', workspaceId: 'workspace-1', authorizationVersion: 7 },
+    context: { actorId: '00000000-0000-4000-8000-000000000007', organizationId: 'organization-1', workspaceId: 'workspace-1', authorizationVersion: 7 },
     process: {
       id: 'process-1', version: 1, description: 'Synthetic authenticated acceptance process.',
       department: 'Operations', criticality: 'High',
@@ -41,6 +45,7 @@ test('denied process authority requires exact scope, capability absence, current
   for (const candidate of [
     { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected,
       capabilities: ['assess.read', 'assess.process.update'] } },
+    { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected, userId: 'not-a-user' } },
     { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected, workspaceId: null } },
     { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected, authorizationVersion: 0.5 } },
   ]) assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority(candidate),
@@ -68,6 +73,50 @@ test('denied process authority rejects version fallback, nullable metadata and s
   assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority({
     ...input, processRows: [row, { ...row, id: 'process-2' }],
   }), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED/u);
+  assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority({
+    ...input, selectedProcessId: 'process-2',
+  }), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED/u);
+});
+
+const processNavigation = () => ({
+  search: '?view=process_detail&scope=my_work&processId=40000000-0000-4000-8000-000000000001',
+  persistedView: 'process_detail',
+  persistedScope: { type: 'my_work' },
+});
+
+test('process navigation requires one exact URL and persisted My Work tuple', () => {
+  assert.deepEqual(authenticatedLifecycleValidateProcessNavigation(
+    processNavigation(),
+    '40000000-0000-4000-8000-000000000001',
+  ), { processId: '40000000-0000-4000-8000-000000000001' });
+  for (const candidate of [
+    { ...processNavigation(), search: '?view=process_catalog&scope=my_work&processId=40000000-0000-4000-8000-000000000001' },
+    { ...processNavigation(), search: '?view=process_detail&scope=organization&processId=40000000-0000-4000-8000-000000000001' },
+    { ...processNavigation(), search: '?view=process_detail&scope=my_work&processId=40000000-0000-4000-8000-000000000002' },
+    { ...processNavigation(), search: '?view=process_detail&scope=my_work&processId=40000000-0000-4000-8000-000000000001&projectId=50000000-0000-4000-8000-000000000001' },
+    { ...processNavigation(), search: '?view=process_detail&scope=my_work&processId=40000000-0000-4000-8000-000000000001&processId=40000000-0000-4000-8000-000000000001' },
+    { ...processNavigation(), persistedView: 'process_catalog' },
+    { ...processNavigation(), persistedScope: { type: 'my_work', id: 'unexpected' } },
+  ]) assert.throws(() => authenticatedLifecycleValidateProcessNavigation(
+    candidate,
+    '40000000-0000-4000-8000-000000000001',
+  ), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED/u);
+});
+
+test('browser session continuity rejects actor or session substitution before dispatch', () => {
+  const expected = {
+    actorId: '10000000-0000-4000-8000-000000000002',
+    sessionId: '20000000-0000-4000-8000-000000000002',
+  };
+  assert.deepEqual(authenticatedLifecycleValidateSessionBinding(expected, expected), expected);
+  for (const candidate of [
+    null,
+    { ...expected, actorId: '10000000-0000-4000-8000-000000000003' },
+    { ...expected, sessionId: '20000000-0000-4000-8000-000000000003' },
+    { ...expected, actorId: 'not-an-actor' },
+    { ...expected, sessionId: 'not-a-session' },
+  ]) assert.throws(() => authenticatedLifecycleValidateSessionBinding(candidate, expected),
+    /ENTERPRISE_LIFECYCLE_BROWSER_SESSION_BINDING_REJECTED/u);
 });
 
 const setupLabels = (projectName: string, processName: string, deliveryProjectName: string) => ({

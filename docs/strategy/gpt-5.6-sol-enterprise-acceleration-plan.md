@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Process navigation proof correction (2026-10-14)
+
+PR #301's approved run `38608851775` retains independently verified 61 PASS / 47 BLOCKED, complete cleanup/providers OFF and consumed allowance. Three read-only architecture/security/quality reviewers completed and closed. Root accepts one repository correction: reproduce the shared process-entry synchronization gap, observe exact durable navigation before and after the authority-refresh reload, and retain the final reload and independent unchanged-state proof. Historical hosted causation remains unproven. Under the fixed managed workspace-write profile one worker owns shared harness and actual-app preparation; root owns canonical docs, provenance/CI, integration and one implementation PR. Preserve all criteria, unrelated work and stash. No product permission/schema changes, broad regression campaign or new hosted action. Follow `docs/planning/hosted-acceptance-completion.md`.
+
 ## Fresh process fixture contract correction (2026-10-14)
 
 Approved PR #300 run `38591514213` retains independently verified 61 PASS / 47 BLOCKED, verified cleanup/providers OFF and consumed allowance. All three read-only reviewers completed; root accepts the synthetic seed's omitted nullable metadata and preparation's post-update/non-null masking as the coherent repository correction. Under the fixed managed workspace-write profile, one worker owns complete shared fixture metadata, current-version binding, bounded diagnostics and focused first-command/PostgreSQL proofs. Root owns active documentation, provenance/CI, integration and one implementation PR. No nested agents or active reviewers during writes. Follow `docs/planning/hosted-acceptance-completion.md`; no unrelated regression campaign, schema/product-permission change or new hosted action.

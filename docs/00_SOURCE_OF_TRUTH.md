@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Process navigation acceptance boundary (2026-10-14)
+
+PR #301 merged as `14aeae5531c2e42c3e653fdb45d582e476a3ea05` with identical tested tree, applicable candidate/post-merge checks and independently verified preparation artifacts. Approved run `38608851775`, attempt 1, independently verifies 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. It passed the restricted reviewer's valid process-command denial, then failed the process heading assertion after reload at `enterpriseLifecycleAcceptance.spec.ts:635`, before the independent unchanged-state comparison. Cleanup verifies quiescence, revoked identities/sessions/memberships, no active permits/residue/secret references or unfinished secret cleanup, providers OFF and owned temporary main access removed. The one-run allowance is consumed.
+
+**Confirmed source defect:** shared process entry observes the workspace before requiring durable URL/persisted-state agreement, immediately followed by an authority-refresh reload. **Suspected defect requiring deeper validation:** the failed run did not retain the navigation tuple, so this timing gap is not a proven historical cause. Follow `docs/planning/hosted-acceptance-completion.md` for deterministic actual-app reproduction and observation-only synchronization while preserving both reloads, server authority and all criteria. Local preparation cannot promote the 47 blocked requirements. No new hosted action is authorized.
+
 ## Fresh synthetic process contract (2026-10-14)
 
 PR #300 merged as `3d664393d437bf5c362cb30a6b06d7000f455b12` with the identical tested tree, all applicable candidate/post-merge checks and independent preparation evidence verified. Its approved run `38591514213`, attempt 1, failed at `authenticatedLifecycleHarness.ts:382` before the restricted reviewer's process command. Independent reconstruction verifies 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. Cleanup confirms quiescence, four revoked identities, zero active sessions/memberships/permits/residue/secret references, both providers OFF and owned temporary main access removed. The allowance is consumed.

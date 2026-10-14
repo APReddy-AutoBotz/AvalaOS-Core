@@ -225,7 +225,75 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   ]);
   expect(reviewerColdObservation.verifySessionCalls).toContainEqual({ actor: 'B', outcome: 'verified' });
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
-  await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+  await page.evaluate(() => {
+    const gatedWindow = window as unknown as Record<string, unknown>;
+    const originalPushState = window.history.pushState;
+    let held: Parameters<History['pushState']> | null = null;
+    let captureCount = 0;
+    let releaseCount = 0;
+    window.history.pushState = function gatedProcessDetailPush(...args) {
+      const candidate = new URL(String(args[2] ?? window.location.href), window.location.href);
+      if (!held && candidate.searchParams.get('view') === 'process_detail') {
+        held = args;
+        captureCount += 1;
+        return;
+      }
+      return originalPushState.apply(window.history, args);
+    };
+    gatedWindow.__avalaosProcessDetailGate = {
+      captured: () => held !== null,
+      release: () => {
+        const released = held;
+        window.history.pushState = originalPushState;
+        if (!released) return { captureCount, releaseCount };
+        held = null;
+        releaseCount += 1;
+        originalPushState.apply(window.history, released);
+        return { captureCount, releaseCount };
+      },
+    };
+  });
+  let openSettled = false;
+  const openPromise = authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process).then(processId => {
+    openSettled = true;
+    return processId;
+  });
+  let selectedProcessId: string;
+  try {
+    await expect.poll(() => page.evaluate(() => {
+      const gate = (window as unknown as Record<string, {
+        captured?: () => boolean;
+      }>).__avalaosProcessDetailGate;
+      return gate?.captured?.() ?? false;
+    })).toBe(true);
+    await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
+    expect(openSettled).toBe(false);
+    const unsettled = await page.evaluate(() => ({
+      search: window.location.search,
+      persistedView: JSON.parse(localStorage.getItem('avalaos-core-v1-view') || 'null'),
+      persistedScope: JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null'),
+    }));
+    expect(new URLSearchParams(unsettled.search).get('view')).toBe('process_catalog');
+    expect(unsettled.persistedView).toBe('process_detail');
+    expect(unsettled.persistedScope).toEqual({ type: 'my_work' });
+    const released = await page.evaluate(() => {
+      const gate = (window as unknown as Record<string, {
+        release?: () => { captureCount: number; releaseCount: number };
+      }>).__avalaosProcessDetailGate;
+      return gate?.release?.() ?? null;
+    });
+    expect(released).toEqual({ captureCount: 1, releaseCount: 1 });
+    selectedProcessId = await openPromise;
+  } finally {
+    await page.evaluate(() => {
+      const gate = (window as unknown as Record<string, {
+        release?: () => unknown;
+      }>).__avalaosProcessDetailGate;
+      gate?.release?.();
+    });
+    await openPromise.catch(() => undefined);
+  }
+  expect(selectedProcessId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
   const editProcess = page.getByRole('button', { name: 'Edit process details', exact: true });
   await expect(editProcess).toBeDisabled();
   await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');

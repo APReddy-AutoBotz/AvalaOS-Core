@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Process navigation settlement evidence (2026-10-14)
+
+**Executed evidence:** PR #301 run `38608851775`, attempt 1, independently verifies 327 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The exact process-command 403 assertions passed; the final reload heading failed at `enterpriseLifecycleAcceptance.spec.ts:635` before unchanged-state comparison. Cleanup, quiescence, revoked synthetic access, zero active permits/residue/secret references/unfinished secret cleanup, providers OFF and temporary-main removal are verified. The allowance is consumed.
+
+**Confirmed source defect:** shared process entry waits only for workspace visibility, while the next helper immediately reloads and App separately commits durable navigation. **Suspected defect requiring deeper validation:** the exact URL/storage tuple and historical failure mechanism were not retained. No product authorization bypass is established; a denied command alone cannot prove ASSESS-002's zero-write/reload criterion.
+
+**Planned verification:** hold the actual application's process-detail history transition and reproduce premature helper completion on Desktop/Pixel; then require observation-only exact URL/persisted tuple, matching fresh RLS process and unchanged session before dispatch. Preserve disabled edit UI, both reloads, valid command, exact denial, independent before/after frames and network containment. Reject mismatched route/scope/process/session without dispatch. Do not change App navigation, permissions, schema, criteria, timeouts or retries. Source-only rollback preserves failed evidence; all 47 hosted criteria remain blocked pending separately approved qualifying execution.
+
 ## Fresh process denial input contract (2026-10-14)
 
 **Executed evidence:** PR #300 run `38591514213`, attempt 1, independently verifies 327 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The primary desktop diagnostic identifies `authenticatedLifecycleHarness.ts:382`, before the denial command. Quiescence, four revoked identities, zero active sessions/memberships/permits/residue/secret references, providers OFF and owned temporary-main removal are verified. The single-run allowance is consumed.

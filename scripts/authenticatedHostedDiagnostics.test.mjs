@@ -136,6 +136,13 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
   { phase: 'PROCESS_CATALOG', code: 'PROCESS_AUTHORITY_REJECTED' });
   assert.equal(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED:sensitive-value')), null);
+  for (const [message, phase, code] of [
+    ['ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED', 'PRODUCT_NAVIGATION', 'PROCESS_NAVIGATION_REJECTED'],
+    ['ENTERPRISE_LIFECYCLE_BROWSER_SESSION_BINDING_REJECTED', 'IDENTITY_ENTRY', 'SESSION_BINDING_REJECTED'],
+  ]) {
+    assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(new Error(message)), { phase, code });
+    assert.equal(authenticatedHostedPlaywrightFailureDescriptor(new Error(`${message}:sensitive-value`)), null);
+  }
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('PRODUCT_NAVIGATION_SHELL_NOT_READY')),
   { phase: 'PRODUCT_NAVIGATION', code: 'SHELL_NOT_READY' });

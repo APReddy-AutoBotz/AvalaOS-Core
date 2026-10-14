@@ -1,4 +1,7 @@
 import { expect, type Page, type Request } from '@playwright/test';
+import { StorageKeys } from '../../services/storage';
+import { hasDurableProductNavigationAgreement } from '../../services/productNavigationState';
+import { ScopeType, View } from '../../types';
 import { openProductNavigation } from './productNavigationReadiness';
 
 export const authenticatedHostedActionIds: unique symbol = Symbol('authenticatedHostedActionIds');
@@ -63,6 +66,7 @@ const controlBaseUrl = process.env.ENTERPRISE_LIFECYCLE_CONTROL_URL ?? apiBaseUr
 const authStorageKey = process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token';
 const hostedRealAuth = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
 const hostedSessionCache = new Map<string, Readonly<{ key: string; value: string }>>();
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const identityUpstreamCodes = new Set([
   'bad_jwt', 'email_address_invalid', 'email_address_not_authorized', 'email_not_confirmed', 'invalid_credentials',
   'not_admin', 'over_email_send_rate_limit', 'over_request_rate_limit', 'signup_disabled', 'user_already_exists',
@@ -309,6 +313,84 @@ const connectedEvidenceClaims = [
   'asset.accountableOwner',
 ] as const;
 
+export type AuthenticatedLifecycleProcessNavigation = Readonly<{
+  search: string;
+  persistedView: unknown;
+  persistedScope: unknown;
+}>;
+
+export const authenticatedLifecycleValidateProcessNavigation = (
+  navigation: AuthenticatedLifecycleProcessNavigation,
+  expectedProcessId?: string,
+) => {
+  const params = new URLSearchParams(navigation.search);
+  const processId = params.get('processId');
+  const exactKeys = [...params.keys()].sort().join(',') === 'processId,scope,view';
+  if (!exactKeys
+    || params.getAll('view').length !== 1 || params.get('view') !== View.PROCESS_DETAIL
+    || params.getAll('scope').length !== 1 || params.get('scope') !== ScopeType.MY_WORK
+    || params.getAll('processId').length !== 1 || !processId || !uuid.test(processId)
+    || (expectedProcessId !== undefined && processId !== expectedProcessId)
+    || !hasDurableProductNavigationAgreement(
+      params,
+      navigation.persistedView,
+      navigation.persistedScope,
+    )) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  return Object.freeze({ processId });
+};
+
+const authenticatedLifecycleReadProcessNavigation = (page: Page) => page.evaluate(({ viewKey, scopeKey }) => {
+  let persistedView: unknown = null;
+  let persistedScope: unknown = null;
+  try { persistedView = JSON.parse(localStorage.getItem(viewKey) || 'null'); } catch { /* rejected by validation */ }
+  try { persistedScope = JSON.parse(localStorage.getItem(scopeKey) || 'null'); } catch { /* rejected by validation */ }
+  return {
+    search: window.location.search,
+    persistedView,
+    persistedScope,
+  };
+}, { viewKey: StorageKeys.VIEW, scopeKey: StorageKeys.SCOPE });
+
+const authenticatedLifecycleObserveProcessNavigation = async (page: Page, expectedProcessId?: string) => {
+  let candidateProcessId: string | null = null;
+  try {
+    await expect.poll(async () => {
+      const navigation = await authenticatedLifecycleReadProcessNavigation(page);
+      const params = new URLSearchParams(navigation.search);
+      const processId = params.get('processId');
+      const routeReady = params.getAll('view').length === 1 && params.get('view') === View.PROCESS_DETAIL
+        && params.getAll('scope').length === 1 && params.get('scope') === ScopeType.MY_WORK
+        && params.getAll('processId').length === 1 && Boolean(processId && uuid.test(processId));
+      if (routeReady) candidateProcessId = processId;
+      return routeReady;
+    }).toBe(true);
+  } catch {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  if (!candidateProcessId || (expectedProcessId !== undefined && candidateProcessId !== expectedProcessId)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  const processId = candidateProcessId;
+  try {
+    await expect.poll(async () => {
+      try {
+        authenticatedLifecycleValidateProcessNavigation(
+          await authenticatedLifecycleReadProcessNavigation(page),
+          processId,
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    }).toBe(true);
+  } catch {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  return processId;
+};
+
 export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, processLabel: string) => {
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
   const exactProcessButton = page.getByRole('button', { name: processLabel, exact: true });
@@ -324,20 +406,24 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
   }
   await row.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
+  return authenticatedLifecycleObserveProcessNavigation(page);
 };
 
 export const authenticatedLifecycleValidateDeniedProcessAuthority = ({
   selected,
   processRows,
   processLabel,
+  selectedProcessId,
   processHeaders,
 }: Readonly<{
   selected: Readonly<Record<string, unknown>> | null;
   processRows: readonly unknown[];
   processLabel: string;
+  selectedProcessId: string;
   processHeaders: Readonly<Record<string, string>>;
 }>) => {
-  if (!selected || typeof selected.organizationId !== 'string' || typeof selected.workspaceId !== 'string'
+  if (!selected || typeof selected.userId !== 'string' || !uuid.test(selected.userId)
+    || typeof selected.organizationId !== 'string' || typeof selected.workspaceId !== 'string'
     || !Number.isSafeInteger(selected.authorizationVersion) || !Array.isArray(selected.capabilities)
     || selected.capabilities.includes('assess.process.update')) {
     throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_CONTEXT_REJECTED');
@@ -349,7 +435,7 @@ export const authenticatedLifecycleValidateDeniedProcessAuthority = ({
   const process = matches.length === 1 ? matches[0] : null;
   const version = process?.authority_version;
   const publicApiKey = processHeaders.apikey;
-  if (!process || typeof process.id !== 'string' || !Number.isSafeInteger(version)
+  if (!process || process.id !== selectedProcessId || !Number.isSafeInteger(version)
     || (version as number) < 1 || typeof process.description !== 'string' || typeof process.department !== 'string'
     || typeof process.criticality !== 'string'
     || !['Low', 'Medium', 'High', 'Critical'].includes(process.criticality)
@@ -358,6 +444,7 @@ export const authenticatedLifecycleValidateDeniedProcessAuthority = ({
   }
   return Object.freeze({
     context: Object.freeze({
+      actorId: selected.userId,
       organizationId: selected.organizationId,
       workspaceId: selected.workspaceId,
       authorizationVersion: selected.authorizationVersion as number,
@@ -373,10 +460,49 @@ export const authenticatedLifecycleValidateDeniedProcessAuthority = ({
   });
 };
 
+export type AuthenticatedLifecycleSessionBinding = Readonly<{ actorId: string; sessionId: string }>;
+
+export const authenticatedLifecycleValidateSessionBinding = (
+  current: AuthenticatedLifecycleSessionBinding | null,
+  expected?: AuthenticatedLifecycleSessionBinding,
+) => {
+  if (!current || !uuid.test(current.actorId) || !uuid.test(current.sessionId)
+    || (expected !== undefined
+      && (current.actorId !== expected.actorId || current.sessionId !== expected.sessionId))) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SESSION_BINDING_REJECTED');
+  }
+  return Object.freeze({ actorId: current.actorId, sessionId: current.sessionId });
+};
+
+const authenticatedLifecycleReadBrowserSessionBinding = async (page: Page) => {
+  const binding = await page.evaluate(() => {
+    const storageKeys = Object.keys(localStorage).filter(key => key.startsWith('sb-'));
+    if (storageKeys.length !== 1) return null;
+    let stored: Record<string, unknown> = {};
+    try { stored = JSON.parse(localStorage.getItem(storageKeys[0]) || '{}'); } catch { return null; }
+    const currentSession = stored.currentSession && typeof stored.currentSession === 'object'
+      ? stored.currentSession as Record<string, unknown> : stored;
+    const user = currentSession.user && typeof currentSession.user === 'object'
+      ? currentSession.user as Record<string, unknown> : null;
+    const accessToken = currentSession.access_token;
+    if (typeof user?.id !== 'string' || typeof accessToken !== 'string' || !accessToken) return null;
+    try {
+      const encoded = accessToken.split('.')[1] ?? '';
+      const normalized = encoded.replace(/-/gu, '+').replace(/_/gu, '/');
+      const claims = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as Record<string, unknown>;
+      return claims.sub === user.id && typeof claims.session_id === 'string'
+        ? { actorId: user.id, sessionId: claims.session_id } : null;
+    } catch { return null; }
+  });
+  return authenticatedLifecycleValidateSessionBinding(binding);
+};
+
 export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
   page: Page,
   processLabel: string,
 ): Promise<Readonly<{ status: number; body: unknown; request: Request; requestId: string }>> => {
+  const selectedProcessId = await authenticatedLifecycleObserveProcessNavigation(page);
+  const sessionBeforeReload = await authenticatedLifecycleReadBrowserSessionBinding(page);
   const backend = new URL(required(apiBaseUrl, 'API_BASE_URL'));
   const serverContextResponse = page.waitForResponse(response => {
     const url = new URL(response.url());
@@ -393,6 +519,15 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
     processReadResponse,
     page.reload({ waitUntil: 'domcontentloaded' }),
   ]);
+  await authenticatedLifecycleObserveProcessNavigation(page, selectedProcessId);
+  await expect(page.getByRole('heading', { name: processLabel, exact: true })).toBeVisible();
+  const editProcess = page.getByRole('button', { name: 'Edit process details', exact: true });
+  await expect(editProcess).toBeDisabled();
+  await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
+  await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save process details', exact: true })).toHaveCount(0);
+  const sessionAfterReload = await authenticatedLifecycleReadBrowserSessionBinding(page);
+  authenticatedLifecycleValidateSessionBinding(sessionAfterReload, sessionBeforeReload);
   const [contextBody, processBody, processHeaders] = await Promise.all([
     contextResponse.json().catch(() => null),
     processResponse.json().catch(() => null),
@@ -409,11 +544,15 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
       candidate.organizationId === saved.organizationId && candidate.workspaceId === saved.workspaceId)
       ?? (contexts.length === 1 ? contexts[0] : null);
   }, contextBody.contexts) as {
-    organizationId?: unknown; workspaceId?: unknown; authorizationVersion?: unknown; capabilities?: unknown;
+    userId?: unknown; organizationId?: unknown; workspaceId?: unknown; authorizationVersion?: unknown; capabilities?: unknown;
   } | null;
   const authority = authenticatedLifecycleValidateDeniedProcessAuthority({
-    selected, processRows: processBody, processLabel, processHeaders,
+    selected, processRows: processBody, processLabel, selectedProcessId, processHeaders,
   });
+  authenticatedLifecycleValidateSessionBinding({
+    actorId: authority.context.actorId,
+    sessionId: sessionAfterReload.sessionId,
+  }, sessionAfterReload);
   const requestId = crypto.randomUUID();
   const processCommandResponse = page.waitForResponse(response => {
     const url = new URL(response.url());
@@ -421,11 +560,22 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
       || response.request().method() !== 'POST') return false;
     try { return response.request().postDataJSON()?.requestId === requestId; } catch { return false; }
   });
-  const resultPromise = page.evaluate(async ({ baseUrl, requestId: exactRequestId, context, currentProcess, apiKey }) => {
+  const resultPromise = page.evaluate(async ({ baseUrl, requestId: exactRequestId, context, currentProcess, apiKey, expectedSession }) => {
     const storageKey = Object.keys(localStorage).find(key => key.startsWith('sb-'));
     const session = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
     const accessToken = session.access_token ?? session.currentSession?.access_token ?? '';
     if (!accessToken) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SESSION_REQUIRED');
+    try {
+      const encoded = accessToken.split('.')[1] ?? '';
+      const normalized = encoded.replace(/-/gu, '+').replace(/_/gu, '/');
+      const claims = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')));
+      if (claims.sub !== expectedSession.actorId || claims.session_id !== expectedSession.sessionId) {
+        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SESSION_BINDING_REJECTED');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_SESSION_BINDING_REJECTED') throw error;
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SESSION_BINDING_REJECTED');
+    }
     const response = await fetch(`${baseUrl}/functions/v1/process-command`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}`, apikey: apiKey },
@@ -455,6 +605,7 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
       ...authority.process,
     },
     apiKey: authority.publicApiKey,
+    expectedSession: sessionAfterReload,
   });
   const [response, result] = await Promise.all([processCommandResponse, resultPromise]);
   return { ...result, requestId, request: response.request() };
