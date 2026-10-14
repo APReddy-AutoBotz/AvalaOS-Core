@@ -2,6 +2,7 @@ import { expect, test, type Route } from '@playwright/test';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   authenticatedLifecycleControl,
+  authenticatedLifecycleAttemptUnauthorizedProcessUpdate,
   authenticatedLifecycleEnterAs,
   authenticatedLifecycleOpenConnectedProcess,
   authenticatedLifecycleValidateSetupLabels,
@@ -211,13 +212,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(reviewerColdObservation.verifySessionCalls).toContainEqual({ actor: 'B', outcome: 'verified' });
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
   await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
-  await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
-  await expect(page.getByLabel('Process name', { exact: true })).toHaveValue(setup.aliases.process);
-  await page.getByLabel('Process name', { exact: true }).fill('Unauthorized process rename');
-  const deniedResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/functions/v1/process-command');
-  await page.getByRole('button', { name: 'Save process details', exact: true }).click();
-  expect((await deniedResponse).status()).toBe(403);
-  await expect(page.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
+  const editProcess = page.getByRole('button', { name: 'Edit process details', exact: true });
+  await expect(editProcess).toBeDisabled();
+  await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
+  await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save process details', exact: true })).toHaveCount(0);
+  const denied = await authenticatedLifecycleAttemptUnauthorizedProcessUpdate(page, setup.aliases.process);
+  expect(denied.status).toBe(403);
+  expect(denied.body).toEqual({ ok: false, error: {
+    code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
+  } });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+  await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
   await networkActionTail;
   if (networkActionError) throw networkActionError;

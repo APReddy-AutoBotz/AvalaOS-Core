@@ -515,8 +515,8 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        181,
-        224
+        182,
+        231
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep these read-only assertions limited to inert loopback Auth sessions: rejected credentials leave no session and switching actors replaces the previous token. Never read real credentials or promote this preparation proof to hosted authority."
@@ -535,7 +535,9 @@
         253,
         269,
         270,
-        271
+        271,
+        392,
+        393
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and storage-exposure assertions to this approved acceptance harness. Real hosted sessions are independently verified; browser state never grants server authority. Do not persist provider credentials or export auth tokens."

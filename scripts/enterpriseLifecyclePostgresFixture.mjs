@@ -43,7 +43,7 @@ export const validateEnterpriseLifecycleDatabaseUrl = value => {
   return parsed.toString();
 };
 
-const loadProductionModule = (() => {
+export const loadEnterpriseLifecycleProductionModule = (() => {
   const repositoryRoot = path.resolve(root);
   const cache = new Map();
   const context = vm.createContext({
@@ -97,6 +97,7 @@ const loadProductionModule = (() => {
   };
   return load;
 })();
+const loadProductionModule = loadEnterpriseLifecycleProductionModule;
 
 const asRole = async (client, role, operation) => {
   await client.query('BEGIN');

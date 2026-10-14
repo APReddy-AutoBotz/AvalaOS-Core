@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Restricted process command evidence (2026-10-14)
+
+**Executed evidence:** PR #299 run `38517707715`, attempt 1, independently verifies 327 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The primary diagnostic locates the Edit process details click at line 611. Cleanup/quiescence, four revoked identities, zero active access/residue/secret references, providers OFF and temporary-main removal are verified. The single-run allowance is consumed.
+
+**Confirmed source defect:** the browser assumes a denied reviewer can open the edit form, while the hosted role contract does not require the capability that enables it. Local sign-in preparation grants that capability to both identities, and its blanket process-command 403 cannot validate the restricted path. The existing PostgreSQL denial uses an outsider rather than the reviewer. **Suspected defect requiring deeper validation:** the precise hosted disabled/control state was not retained, so the click location alone does not establish its cause. No product authorization defect or unauthorized write is established.
+
+Root resolved reviewer disagreement using the normative process-edit-denial catalog and accepted ADMIN/AI/Studio restricted-request composition. Preserve the product UI and role authority. **Planned verification:** reproduce the capability-accurate disabled path locally; require a fully valid same-session production process command, exact 403, action/session correlation, unchanged reload and independently observed zero effects. Keep enabled-control local coverage and scoped outsider negatives. No criteria change, hosted permission grant, backend deployment, migration or new run. Source-only rollback retains failed evidence and all 47 blocked cases.
+
 ## Primary setup contract evidence boundary (2026-10-14)
 
 **Executed evidence:** approved PR #298 run `38508323243`, attempt 1, independently verifies 327 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. Its bounded diagnostic identifies the primary spec's startup assertion at line 504. Cleanup, quiescence, revoked identities/sessions, providers OFF and owned temporary main-policy removal are verified; allowance consumed.

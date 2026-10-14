@@ -141,6 +141,27 @@ const projectFromRejectedEmail = email => {
   const match = /^rejected\.(desktop-chromium|pixel-7-chromium)@local[.]invalid$/u.exec(email);
   return match?.[1] ?? null;
 };
+const capabilitiesForIdentity = identity => identity.persona === 'author'
+  ? ['assess.read', 'assess.process.update'] : ['assess.read'];
+const validDeniedProcessUpdate = (body, identity, process) => {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !process) return false;
+  const keys = Object.keys(body).sort();
+  const payload = body.payload;
+  return JSON.stringify(keys) === JSON.stringify([
+    'authorizationVersion', 'commandType', 'expectedVersion', 'idempotencyKey', 'organizationId', 'payload',
+    'requestId', 'workspaceId',
+  ])
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(body.requestId)
+    && body.idempotencyKey === `process.update.${body.requestId}`
+    && body.commandType === 'process.update'
+    && body.organizationId === ORGANIZATION_ID && body.workspaceId === WORKSPACE_ID
+    && body.authorizationVersion === 1 && body.expectedVersion === process.authority_version
+    && payload && typeof payload === 'object' && !Array.isArray(payload)
+    && Object.keys(payload).sort().join(',') === 'criticality,department,description,name,processId'
+    && payload.processId === process.id && payload.name === 'Unauthorized process rename'
+    && payload.description === process.description && payload.department === process.department
+    && payload.criticality === process.criticality && identity.persona === 'reviewer';
+};
 
 export const startAuthenticatedHostedSignInEntryFixture = async () => {
   let anonymousProcessCommandRequests = 0;
@@ -248,12 +269,13 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
           workspaceId: WORKSPACE_ID,
           workspaceName: 'Loopback workspace',
           authorizationVersion: 1,
-          capabilities: ['assess.read', 'assess.process.update'],
+          capabilities: capabilitiesForIdentity(identity),
         }] });
       }
 
       if (incoming.method === 'GET' && url.pathname === '/rest/v1/assess_processes') {
         const identity = identitiesByToken.get(bearerToken(incoming));
+        if (incoming.headers.apikey !== PUBLIC_ANON_KEY) return sendJson(outgoing, 401, { code: 'API_KEY_REQUIRED' });
         const exactScope = url.searchParams.get('org_id') === `eq.${ORGANIZATION_ID}`
           && url.searchParams.get('workspace_id') === `eq.${WORKSPACE_ID}`;
         return identity ? sendJson(outgoing, 200, exactScope ? projectForIdentity(identity) : []) : sendJson(outgoing, 401, {
@@ -271,7 +293,13 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
         if (identity) observations.get(identity.projectName).processCommandRequests += 1;
         else anonymousProcessCommandRequests += 1;
         if (!identity) return sendJson(outgoing, 401, { error: { code: 'AUTHENTICATION_REQUIRED' } });
-        return sendJson(outgoing, 403, { error: { code: 'PERMISSION_DENIED' } });
+        if (incoming.headers.apikey !== PUBLIC_ANON_KEY) {
+          return sendJson(outgoing, 401, { error: { code: 'API_KEY_REQUIRED' } });
+        }
+        if (!validDeniedProcessUpdate(body, identity, processRows.get(identity.projectName))) {
+          return sendJson(outgoing, 400, { error: { code: 'INVALID_COMMAND' } });
+        }
+        return sendJson(outgoing, 403, { ok: false, error: { code: 'PERMISSION_DENIED', message: 'Process update could not be completed.' } });
       }
 
       return sendJson(outgoing, 404, { error: 'NOT_FOUND' });

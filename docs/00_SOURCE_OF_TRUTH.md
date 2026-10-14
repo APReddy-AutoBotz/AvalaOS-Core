@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Reviewer process-denial acceptance (2026-10-14)
+
+PR #299 merged as `09f6094cf7671dd7ce0a23080e1238f00b3ed0a8` with an identical tested tree, all applicable candidate/post-merge checks and independently verified preparation evidence. Its separately approved run `38517707715`, attempt 1, progressed beyond the prior setup assertion and failed at the primary process-edit click, `enterpriseLifecycleAcceptance.spec.ts:611`. Independent reconstruction verifies 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. Cleanup verifies quiescence, four revoked synthetic identities, zero active sessions/memberships/permits/residue/secret references, both providers OFF and removal of owned temporary main access. The single-run allowance is consumed.
+
+**Confirmed source defect:** the denial test unconditionally opens the edit form, but the product requires `assess.process.update` to enable that control and the hosted reviewer contract does not require it. Local preparation grants that capability to both identities and masks the restricted path. The bounded hosted diagnostic identifies the click, not the live control's disabled reason; exact runtime causation remains **suspected defect requiring deeper validation**. Preserve the existing process-edit denial criterion and permissions. Follow `docs/planning/hosted-acceptance-completion.md` for the same-session negative command plus independently observed zero-write proof already used by other restricted-user acceptance cases. No hosted case is promoted by local preparation; another hosted attempt requires separate authorization.
+
 ## Hosted setup contract integration (2026-10-14)
 
 PR #298 merged as `e124b2d5` with all applicable candidate and post-merge checks passing. Its approved run `38508323243`, attempt 1, failed in the real primary journey's `beforeAll`, at `enterpriseLifecycleAcceptance.spec.ts:504`. Independent reconstruction verifies all 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across the unchanged 108 requirements. Cleanup verifies quiescence, revoked identities/sessions, no active memberships, permits, residue or secret references, both providers OFF and removal of owned temporary main access. The one-run allowance is consumed.
