@@ -2,10 +2,73 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  authenticatedLifecycleValidateDeniedProcessAuthority,
   authenticatedLifecycleValidateSetupLabels,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
 } from './authenticatedLifecycleHarness';
+
+const deniedAuthorityInput = () => ({
+  selected: {
+    organizationId: 'organization-1',
+    workspaceId: 'workspace-1',
+    authorizationVersion: 7,
+    capabilities: ['assess.read'],
+  },
+  processRows: [{
+    id: 'process-1',
+    org_id: 'organization-1',
+    workspace_id: 'workspace-1',
+    name: 'Connected process',
+    description: 'Synthetic authenticated acceptance process.',
+    department: 'Operations',
+    criticality: 'High',
+    authority_version: 1,
+  }],
+  processLabel: 'Connected process',
+  processHeaders: { apikey: 'public-test-key' },
+});
+
+test('denied process authority requires exact scope, capability absence, current authority version and explicit metadata', () => {
+  assert.deepEqual(authenticatedLifecycleValidateDeniedProcessAuthority(deniedAuthorityInput()), {
+    context: { organizationId: 'organization-1', workspaceId: 'workspace-1', authorizationVersion: 7 },
+    process: {
+      id: 'process-1', version: 1, description: 'Synthetic authenticated acceptance process.',
+      department: 'Operations', criticality: 'High',
+    },
+    publicApiKey: 'public-test-key',
+  });
+  for (const candidate of [
+    { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected,
+      capabilities: ['assess.read', 'assess.process.update'] } },
+    { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected, workspaceId: null } },
+    { ...deniedAuthorityInput(), selected: { ...deniedAuthorityInput().selected, authorizationVersion: 0.5 } },
+  ]) assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority(candidate),
+    /ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_CONTEXT_REJECTED/u);
+});
+
+test('denied process authority rejects version fallback, nullable metadata and scope/key drift', () => {
+  const input = deniedAuthorityInput();
+  const row = input.processRows[0];
+  for (const invalidRow of [
+    { ...row, authority_version: undefined, version: 1 },
+    { ...row, authority_version: 0 },
+    { ...row, authority_version: '1' },
+    { ...row, description: null },
+    { ...row, department: null },
+    { ...row, criticality: null },
+    { ...row, criticality: ['High'] },
+    { ...row, workspace_id: 'workspace-2' },
+  ]) assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority({
+    ...input, processRows: [invalidRow],
+  }), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED/u);
+  assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority({
+    ...input, processHeaders: {},
+  }), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED/u);
+  assert.throws(() => authenticatedLifecycleValidateDeniedProcessAuthority({
+    ...input, processRows: [row, { ...row, id: 'process-2' }],
+  }), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED/u);
+});
 
 const setupLabels = (projectName: string, processName: string, deliveryProjectName: string) => ({
   projectName,

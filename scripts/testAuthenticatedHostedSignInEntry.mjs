@@ -13,7 +13,8 @@ import {
   authenticatedHostedDigest,
   startAuthenticatedHostedControllerServer,
 } from './authenticatedHostedController.mjs';
-import { authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
+import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
+  authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = '127.0.0.1';
@@ -163,7 +164,12 @@ const validDeniedProcessUpdate = (body, identity, process) => {
     && payload.criticality === process.criticality && identity.persona === 'reviewer';
 };
 
-export const startAuthenticatedHostedSignInEntryFixture = async () => {
+const PROCESS_SEED_MODES = new Set(['valid', 'nullable-reproduction']);
+
+export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMode = 'valid' } = {}) => {
+  if (!PROCESS_SEED_MODES.has(processSeedMode)) {
+    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE_REJECTED');
+  }
   let anonymousProcessCommandRequests = 0;
   const observations = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
     passwordRequests: [],
@@ -197,10 +203,12 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
     org_id: ORGANIZATION_ID,
     workspace_id: WORKSPACE_ID,
     name: `${projectName} connected lifecycle`,
-    description: 'Synthetic composed authentication process',
+    description: processSeedMode === 'nullable-reproduction'
+      ? null : AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.description,
     owner_id: identityRows[`author.${projectName}@local.invalid`].user.id,
-    department: 'Operations',
-    criticality: 'High',
+    department: processSeedMode === 'nullable-reproduction'
+      ? null : AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department,
+    criticality: AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.criticality,
     status: 'Draft',
     template_id: null,
     created_at: '2026-10-13T00:00:00.000Z',
@@ -538,7 +546,7 @@ const checkoutState = async () => (await execFileAsync('git', ['status', '--porc
   maxBuffer: 1024 * 1024,
 })).stdout;
 
-export const runAuthenticatedHostedSignInEntry = async () => {
+export const runAuthenticatedHostedSignInEntry = async ({ processSeedMode = 'valid' } = {}) => {
   const stateBefore = await checkoutState();
   let temporaryRoot;
   let fixture;
@@ -548,7 +556,7 @@ export const runAuthenticatedHostedSignInEntry = async () => {
     temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'avalaos-sign-in-entry-'));
     const buildDirectory = path.join(temporaryRoot, 'build');
     const playwrightOutputDirectory = path.join(temporaryRoot, 'playwright');
-    fixture = await startAuthenticatedHostedSignInEntryFixture();
+    fixture = await startAuthenticatedHostedSignInEntryFixture({ processSeedMode });
     const appPort = await availablePort();
     const appBaseUrl = assertAuthenticatedHostedSignInEntryLoopbackUrl(`http://${LOOPBACK_HOST}:${appPort}`);
     const baseEnvironment = authenticatedHostedSignInEntryChildEnvironment(process.env);
@@ -584,6 +592,7 @@ export const runAuthenticatedHostedSignInEntry = async () => {
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_BACKEND_URL: fixture.backendOrigin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL: fixture.baseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OUTPUT_DIR: playwrightOutputDirectory,
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE: processSeedMode,
       ENTERPRISE_LIFECYCLE_APP_BASE_URL: fixture.previewOrigin,
       ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.backendOrigin,
       ENTERPRISE_LIFECYCLE_CONTROL_URL: fixture.controlBaseUrl,
@@ -607,7 +616,12 @@ export const runAuthenticatedHostedSignInEntry = async () => {
 };
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
-if (invoked) runAuthenticatedHostedSignInEntry().then(() => {
+const invokedProcessSeedMode = process.argv.length === 2 ? 'valid'
+  : process.argv.length === 3 && process.argv[2] === '--nullable-process-reproduction'
+    ? 'nullable-reproduction' : 'rejected';
+if (invoked) runAuthenticatedHostedSignInEntry({
+  processSeedMode: invokedProcessSeedMode,
+}).then(() => {
   console.log('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PASS');
 }).catch(error => {
   console.error(error instanceof Error ? error.message : 'AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_FAILED');

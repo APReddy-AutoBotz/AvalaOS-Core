@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Fresh synthetic process contract (2026-10-14)
+
+PR #300 merged as `3d664393d437bf5c362cb30a6b06d7000f455b12` with the identical tested tree, all applicable candidate/post-merge checks and independent preparation evidence verified. Its approved run `38591514213`, attempt 1, failed at `authenticatedLifecycleHarness.ts:382` before the restricted reviewer's process command. Independent reconstruction verifies 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. Cleanup confirms quiescence, four revoked identities, zero active sessions/memberships/permits/residue/secret references, both providers OFF and owned temporary main access removed. The allowance is consumed.
+
+**Confirmed source defect:** hosted setup omits nullable process description and department, while the command helper requires strings. Local application preparation supplies those fields, and the PostgreSQL denial proof runs after an author update populates them. The retained hosted diagnostic does not identify the rejected predicate, so exact live field values remain unverified. Follow `docs/planning/hosted-acceptance-completion.md` for complete synthetic seeding and fresh-row proof before any author mutation. Preserve product permissions, the strict valid-command denial and every criterion. Local verification cannot promote the 47 hosted requirements; another hosted attempt requires separate approval.
+
 ## Reviewer process-denial acceptance (2026-10-14)
 
 PR #299 merged as `09f6094cf7671dd7ce0a23080e1238f00b3ed0a8` with an identical tested tree, all applicable candidate/post-merge checks and independently verified preparation evidence. Its separately approved run `38517707715`, attempt 1, progressed beyond the prior setup assertion and failed at the primary process-edit click, `enterpriseLifecycleAcceptance.spec.ts:611`. Independent reconstruction verifies 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. Cleanup verifies quiescence, four revoked synthetic identities, zero active sessions/memberships/permits/residue/secret references, both providers OFF and removal of owned temporary main access. The single-run allowance is consumed.

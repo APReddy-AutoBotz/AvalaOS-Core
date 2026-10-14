@@ -132,6 +132,11 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
     new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS')),
   { phase: 'PROCESS_CATALOG', code: 'PROCESS_AMBIGUOUS' });
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED')),
+  { phase: 'PROCESS_CATALOG', code: 'PROCESS_AUTHORITY_REJECTED' });
+  assert.equal(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED:sensitive-value')), null);
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('PRODUCT_NAVIGATION_SHELL_NOT_READY')),
   { phase: 'PRODUCT_NAVIGATION', code: 'SHELL_NOT_READY' });
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(

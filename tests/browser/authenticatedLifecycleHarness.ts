@@ -326,6 +326,53 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
 };
 
+export const authenticatedLifecycleValidateDeniedProcessAuthority = ({
+  selected,
+  processRows,
+  processLabel,
+  processHeaders,
+}: Readonly<{
+  selected: Readonly<Record<string, unknown>> | null;
+  processRows: readonly unknown[];
+  processLabel: string;
+  processHeaders: Readonly<Record<string, string>>;
+}>) => {
+  if (!selected || typeof selected.organizationId !== 'string' || typeof selected.workspaceId !== 'string'
+    || !Number.isSafeInteger(selected.authorizationVersion) || !Array.isArray(selected.capabilities)
+    || selected.capabilities.includes('assess.process.update')) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_CONTEXT_REJECTED');
+  }
+  const matches = processRows.filter(row => row && typeof row === 'object' && !Array.isArray(row)
+    && (row as Record<string, unknown>).org_id === selected.organizationId
+    && (row as Record<string, unknown>).workspace_id === selected.workspaceId
+    && (row as Record<string, unknown>).name === processLabel) as Array<Record<string, unknown>>;
+  const process = matches.length === 1 ? matches[0] : null;
+  const version = process?.authority_version;
+  const publicApiKey = processHeaders.apikey;
+  if (!process || typeof process.id !== 'string' || !Number.isSafeInteger(version)
+    || (version as number) < 1 || typeof process.description !== 'string' || typeof process.department !== 'string'
+    || typeof process.criticality !== 'string'
+    || !['Low', 'Medium', 'High', 'Critical'].includes(process.criticality)
+    || typeof publicApiKey !== 'string' || !publicApiKey) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED');
+  }
+  return Object.freeze({
+    context: Object.freeze({
+      organizationId: selected.organizationId,
+      workspaceId: selected.workspaceId,
+      authorizationVersion: selected.authorizationVersion as number,
+    }),
+    process: Object.freeze({
+      id: process.id,
+      version: version as number,
+      description: process.description,
+      department: process.department,
+      criticality: process.criticality,
+    }),
+    publicApiKey,
+  });
+};
+
 export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
   page: Page,
   processLabel: string,
@@ -364,23 +411,9 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
   }, contextBody.contexts) as {
     organizationId?: unknown; workspaceId?: unknown; authorizationVersion?: unknown; capabilities?: unknown;
   } | null;
-  if (!selected || typeof selected.organizationId !== 'string' || typeof selected.workspaceId !== 'string'
-    || !Number.isSafeInteger(selected.authorizationVersion) || !Array.isArray(selected.capabilities)
-    || selected.capabilities.includes('assess.process.update')) {
-    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_CONTEXT_REJECTED');
-  }
-  const matches = processBody.filter(row => row && typeof row === 'object'
-    && row.org_id === selected.organizationId && row.workspace_id === selected.workspaceId
-    && row.name === processLabel);
-  const process = matches.length === 1 ? matches[0] : null;
-  const version = process?.authority_version ?? process?.version;
-  const publicApiKey = processHeaders.apikey;
-  if (!process || typeof process.id !== 'string' || !Number.isSafeInteger(version)
-    || version < 1 || typeof process.description !== 'string' || typeof process.department !== 'string'
-    || !['Low', 'Medium', 'High', 'Critical'].includes(process.criticality)
-    || typeof publicApiKey !== 'string' || !publicApiKey) {
-    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED');
-  }
+  const authority = authenticatedLifecycleValidateDeniedProcessAuthority({
+    selected, processRows: processBody, processLabel, processHeaders,
+  });
   const requestId = crypto.randomUUID();
   const processCommandResponse = page.waitForResponse(response => {
     const url = new URL(response.url());
@@ -417,16 +450,11 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
   }, {
     baseUrl: backend.origin,
     requestId,
-    context: {
-      organizationId: selected.organizationId,
-      workspaceId: selected.workspaceId,
-      authorizationVersion: selected.authorizationVersion as number,
-    },
+    context: authority.context,
     currentProcess: {
-      id: process.id, version, description: process.description,
-      department: process.department, criticality: process.criticality,
+      ...authority.process,
     },
-    apiKey: publicApiKey,
+    apiKey: authority.publicApiKey,
   });
   const [response, result] = await Promise.all([processCommandResponse, resultPromise]);
   return { ...result, requestId, request: response.request() };

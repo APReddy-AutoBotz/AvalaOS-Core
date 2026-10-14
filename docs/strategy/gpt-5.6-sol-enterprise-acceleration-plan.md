@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Fresh process fixture contract correction (2026-10-14)
+
+Approved PR #300 run `38591514213` retains independently verified 61 PASS / 47 BLOCKED, verified cleanup/providers OFF and consumed allowance. All three read-only reviewers completed; root accepts the synthetic seed's omitted nullable metadata and preparation's post-update/non-null masking as the coherent repository correction. Under the fixed managed workspace-write profile, one worker owns complete shared fixture metadata, current-version binding, bounded diagnostics and focused first-command/PostgreSQL proofs. Root owns active documentation, provenance/CI, integration and one implementation PR. No nested agents or active reviewers during writes. Follow `docs/planning/hosted-acceptance-completion.md`; no unrelated regression campaign, schema/product-permission change or new hosted action.
+
 ## Reviewer denial proof composition (2026-10-14)
 
 PR #299's approved run `38517707715` independently retains 61 PASS / 47 BLOCKED, verified cleanup/providers OFF and consumed allowance. All three read-only reviewers finished before writes. Root reconciled an initial ownership-only interpretation against the normative catalog and existing restricted-user command proofs: ASSESS-002 requires authoritative process-edit denial and zero effects, not an enabled Save button or a particular denial reason. Do not widen reviewer permissions. Under the fixed workspace-write profile, one implementation worker owns the browser denial path, realistic local fixture and focused PostgreSQL/Edge evidence; root owns documentation, provenance/CI, integration and one substantial PR. No nested delegation, active reviewers during writes, unrelated regression campaign or new hosted action. Follow `docs/planning/hosted-acceptance-completion.md`.

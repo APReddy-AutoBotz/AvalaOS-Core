@@ -4,7 +4,8 @@ import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './auth
 import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { authenticatedHostedIdentityCategoryForStatus, authenticatedHostedIdentityUpstreamCode,
   validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
-import { authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
+import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
+  authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
@@ -362,8 +363,15 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
           [...scopeParams(),actor.id,config.scope.roleIds[persona]])).rows[0];
           if(!membership?.organization||!membership?.workspace)throw new Error('AUTHENTICATED_HOSTED_MEMBERSHIP_REUSE_REJECTED');
         }
-        await query(`INSERT INTO public.assess_processes(id,org_id,workspace_id,name,status,owner_id,created_by,updated_by)
-          VALUES($1,$2,$3,$4,'Draft',$5,$5,$5)`,[processId,...scopeParams(),fixtureIdentity.processName,identities.author.id]);
+        await query(`INSERT INTO public.assess_processes(
+          id,org_id,workspace_id,name,description,department,criticality,status,owner_id,created_by,updated_by)
+          VALUES($1,$2,$3,$4,$5,$6,$7,'Draft',$8,$8,$8)`,[
+          processId,...scopeParams(),fixtureIdentity.processName,
+          AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.description,
+          AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department,
+          AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.criticality,
+          identities.author.id,
+        ]);
         await query(`INSERT INTO public.projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id)
           VALUES($1,$2,$3,$4,$5,$5,$5,$6)`,[projectId,...scopeParams(),fixtureIdentity.deliveryProjectName,identities.author.id,processId]);
         await query(`INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true)
