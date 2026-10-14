@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Retained fixture identity evidence boundary (2026-10-14)
+
+**Executed evidence:** PR #297 approved run `38482699693`, attempt 1, independently verifies 325 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The first desktop process-row count assertion failed after Process Catalog became visible. Cleanup, quiescence, revoked identities/sessions, providers OFF and temporary main-policy removal are verified; allowance consumed.
+
+**Confirmed source defect:** hosted fixture setup reuses process and Delivery project names across runs while preserving their history. Workspace-scoped RLS correctly exposes nondeleted retained rows; name-uniqueness assumptions in browser selection therefore collide. The existing actual-app fixture supplies only one row. This is an acceptance repeatability/integrity defect, not demonstrated privilege escalation or tenant disclosure.
+
+**Suspected defect requiring deeper validation:** the retained hosted diagnostic does not distinguish missing from duplicate rows, so this source defect is not yet a proven historical cause. **Executed evidence:** the actual-app retained-row reproduction failed on Desktop and Pixel with expected one row, received three. Corrected proof passes both projects, including exact duplicate rejection and a default network-block probe. Focused local checks pass. **Planned verification:** real PostgreSQL/RLS/history proof in existing Linux CI and exact-candidate checks. All 47 hosted cases remain blocked. No RLS/schema/criteria change or new hosted action is authorized by this repository correction.
+
 ## Observation clock and first failing result (2026-10-14)
 
 Executed evidence: merged PR #296's approved run `38470948715`, attempt 1, failed. Independent reconstruction verifies all 323 sources and 108 requirements: **61 PASS / 47 BLOCKED**. Only generic first-desktop lifecycle failure survived. Exact cause remains suspected defect requiring deeper validation. Cleanup verified four revoked identities, zero active sessions/memberships/permits/residue/secret references, completed secret cleanup and providers OFF. Owned temporary main access is removed; allowance consumed.

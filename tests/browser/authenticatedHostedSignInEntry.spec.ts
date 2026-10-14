@@ -44,6 +44,10 @@ const actor = (
   };
 };
 
+test.beforeEach(async ({ context }) => {
+  await context.route('**/*', route => route.abort('blockedbyclient'));
+});
+
 const dispatchToLocalProxy = async (route: Route) => {
   const request = route.request();
   const requested = new URL(request.url());
@@ -66,11 +70,22 @@ const dispatchToLocalProxy = async (route: Route) => {
   await route.fulfill({ status: response.status, headers: responseHeaders, body: Buffer.from(await response.arrayBuffer()) });
 };
 
-test('actual application uses the shared real-auth helper for rejected, cold and cached sign-in', async ({ page }, testInfo) => {
+test('actual application uses the shared real-auth helper for rejected, cold and cached sign-in', async ({ context, page }, testInfo) => {
+  const containmentProbe = await context.newPage();
+  try {
+    await expect(containmentProbe.goto(`${localApiOrigin}/__containment_probe__`, { waitUntil: 'domcontentloaded' }))
+      .rejects.toThrow(/ERR_BLOCKED_BY_CLIENT/u);
+  } finally {
+    await containmentProbe.close();
+  }
   const projectName = testInfo.project.name;
   const setup = await authenticatedLifecycleControl<{
     aliases: { process: string };
+    deliveryProject: { name: string };
   }>('/control/setup', { projectName });
+  const fixtureSuffix = setup.aliases.process.match(/\[run 12345[.]1 [0-9a-f]{12}\]$/u)?.[0];
+  expect(fixtureSuffix).toBeTruthy();
+  expect(setup.deliveryProject.name.endsWith(fixtureSuffix ?? 'missing-fixture-suffix')).toBe(true);
   const unexpectedOrigins: string[] = [];
   let observedHttpRequests = 0;
   let networkActionError: unknown = null;
@@ -178,6 +193,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
   await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
   await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
+  await expect(page.getByLabel('Process name', { exact: true })).toHaveValue(setup.aliases.process);
   await page.getByLabel('Process name', { exact: true }).fill('Unauthorized process rename');
   const deniedResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/functions/v1/process-command');
   await page.getByRole('button', { name: 'Save process details', exact: true }).click();
@@ -225,6 +241,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     && !action.route.startsWith('/auth/'))).toBe(true);
   expect(observation.browserCases).toBe(0);
   expect(observation.serverCases).toBe(0);
+
+  await authenticatedLifecycleControl('/control/sign-in-entry-process-duplicate', { projectName, enabled: true });
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+    await expect(authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process))
+      .rejects.toThrow('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS');
+    await expect(page.getByTestId('assess-v2-workspace')).toHaveCount(0);
+  } finally {
+    await authenticatedLifecycleControl('/control/sign-in-entry-process-duplicate', { projectName, enabled: false });
+  }
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
   expect(observedHttpRequests).toBeGreaterThan(0);
   expect(unexpectedOrigins).toEqual([]);
   expect(pageErrors).toEqual([]);

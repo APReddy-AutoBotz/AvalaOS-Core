@@ -6,6 +6,7 @@ import {
   authenticatedLifecycleClickProduct as clickProduct,
   authenticatedLifecycleControl as control,
   authenticatedLifecycleEnterAs as enterAs,
+  authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   createAuthenticatedLifecycleWorkQueue,
   authenticatedHostedActionIds,
@@ -254,14 +255,6 @@ const lifecycleMeasurements = (beforeFrame: LifecycleFrame, afterFrame: Lifecycl
   return { setupExcluded: true, before, after,
     delta: Object.fromEntries(Object.keys(before).map(key => [key, after[key as keyof typeof after] - before[key as keyof typeof before]])),
     stateBeforeHash: beforeFrame.targetHash, stateAfterHash: afterFrame.targetHash };
-};
-
-const openConnectedProcess = async (page: Page, processLabel: string) => {
-  await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
-  const row = page.getByRole('row').filter({ hasText: processLabel });
-  await expect(row).toHaveCount(1);
-  await row.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
 };
 
 const enterProcessAs = async (page: Page, actor: FixtureActor, processLabel: string) => {

@@ -275,8 +275,17 @@ const connectedEvidenceClaims = [
 
 export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, processLabel: string) => {
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
-  const row = page.getByRole('row').filter({ hasText: processLabel });
-  await expect(row).toHaveCount(1);
+  const exactProcessButton = page.getByRole('button', { name: processLabel, exact: true });
+  const row = page.getByRole('row').filter({ has: exactProcessButton });
+  try {
+    await expect(row).toHaveCount(1);
+    await expect(row.getByRole('button', { name: processLabel, exact: true })).toHaveCount(1);
+  } catch {
+    const count = await exactProcessButton.count();
+    throw new Error(count === 0
+      ? 'ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NOT_FOUND'
+      : 'ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS');
+  }
   await row.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
 };

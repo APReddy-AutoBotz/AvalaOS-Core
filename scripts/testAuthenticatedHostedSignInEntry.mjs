@@ -13,6 +13,7 @@ import {
   authenticatedHostedDigest,
   startAuthenticatedHostedControllerServer,
 } from './authenticatedHostedController.mjs';
+import { authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = '127.0.0.1';
@@ -30,6 +31,10 @@ const TARGET_FINGERPRINT = digest('authenticated-hosted-composed-target');
 const PUBLIC_TARGET_DIGEST = digest(`${BACKEND_ORIGIN}\n${PUBLIC_ANON_KEY}`);
 const ORGANIZATION_ID = '20000000-0000-4000-8000-000000000001';
 const WORKSPACE_ID = '30000000-0000-4000-8000-000000000001';
+export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE = Object.freeze({
+  organizationId: ORGANIZATION_ID,
+  workspaceId: WORKSPACE_ID,
+});
 const PASSTHROUGH_ENVIRONMENT = Object.freeze([
   'ComSpec', 'PATH', 'PATHEXT', 'PLAYWRIGHT_BROWSERS_PATH', 'SystemRoot', 'TEMP', 'TMP', 'WINDIR',
 ]);
@@ -180,7 +185,18 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
     created_at: '2026-10-13T00:00:00.000Z',
     updated_at: '2026-10-13T00:00:00.000Z',
   }]));
-  const projectForIdentity = identity => processRows.get(identity.projectName);
+  const catalogRows = new Map();
+  const exactDuplicateProjects = new Set();
+  const projectForIdentity = identity => {
+    const rows = catalogRows.get(identity.projectName) ?? [];
+    if (!exactDuplicateProjects.has(identity.projectName) || rows.length === 0) return rows;
+    const projectIndex = AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.indexOf(identity.projectName);
+    return [...rows, {
+      ...rows[0],
+      id: `43000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
+      description: 'Intentional exact duplicate used to prove fail-closed catalog selection',
+    }];
+  };
   const apiServer = createServer(async (incoming, outgoing) => {
     try {
       const address = apiServer.address();
@@ -238,7 +254,9 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
 
       if (incoming.method === 'GET' && url.pathname === '/rest/v1/assess_processes') {
         const identity = identitiesByToken.get(bearerToken(incoming));
-        return identity ? sendJson(outgoing, 200, [projectForIdentity(identity)]) : sendJson(outgoing, 401, {
+        const exactScope = url.searchParams.get('org_id') === `eq.${ORGANIZATION_ID}`
+          && url.searchParams.get('workspace_id') === `eq.${WORKSPACE_ID}`;
+        return identity ? sendJson(outgoing, 200, exactScope ? projectForIdentity(identity) : []) : sendJson(outgoing, 401, {
           code: 'AUTHENTICATION_REQUIRED',
         });
       }
@@ -285,6 +303,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
     baselineDigest: digest('authenticated-hosted-composed-baseline'),
     targetPublicDigest: PUBLIC_TARGET_DIGEST,
     secretBackendKind: 'supabase_vault',
+    workflow: Object.freeze({ runId: '12345', attempt: '1' }),
     scope: Object.freeze({
       organizationId: ORGANIZATION_ID,
       workspaceId: WORKSPACE_ID,
@@ -319,13 +338,40 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
       observationStartedAt: nextTime().toISOString(),
     }),
     activate: async () => ({ activated: true }),
-    setupProject: async ({ projectName }) => {
-      const process = processRows.get(projectName);
+    setupProject: async ({ projectName, exerciseId }) => {
+      const projectIndex = AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.indexOf(projectName);
+      const baseProcess = processRows.get(projectName);
+      const labels = authenticatedHostedFixtureIdentity({
+        runId: config.workflow.runId,
+        attempt: config.workflow.attempt,
+        exerciseId,
+        projectName,
+      });
+      const process = { ...baseProcess, name: labels.processName };
+      processRows.set(projectName, process);
+      catalogRows.set(projectName, [
+        process,
+        {
+          ...baseProcess,
+          id: `41000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
+          description: 'Retained history with the former synthetic fixture name',
+          created_at: '2026-10-12T00:00:00.000Z',
+          updated_at: '2026-10-12T00:00:00.000Z',
+        },
+        {
+          ...baseProcess,
+          id: `42000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
+          name: `${labels.processName} prefix decoy`,
+          description: 'Retained history whose name contains the current fixture label as a prefix',
+          created_at: '2026-10-11T00:00:00.000Z',
+          updated_at: '2026-10-11T00:00:00.000Z',
+        },
+      ]);
       return {
         projectName,
         processId: process.id,
-        projectId: `50000000-0000-4000-8000-${String(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.indexOf(projectName) + 1).padStart(12, '0')}`,
-        deliveryProject: { id: `50000000-0000-4000-8000-${String(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.indexOf(projectName) + 1).padStart(12, '0')}`, name: `${projectName} delivery project` },
+        projectId: `50000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
+        deliveryProject: { id: `50000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`, name: labels.deliveryProjectName },
         aliases: { case: 'primary-case-1', review: 'primary-review-1', handoff: 'primary-handoff-1', artifact: 'primary-artifact-1', process: process.name },
       };
     },
@@ -337,6 +383,13 @@ export const startAuthenticatedHostedSignInEntryFixture = async () => {
     recordBrowserAction: async () => undefined,
     armPermit: async () => ({ armed: true }),
     control: async (pathname, input) => {
+      if (pathname === '/control/sign-in-entry-process-duplicate') {
+        if (!AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.includes(input.projectName)
+          || typeof input.enabled !== 'boolean') throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DUPLICATE_CONTROL_REJECTED');
+        if (input.enabled) exactDuplicateProjects.add(input.projectName);
+        else exactDuplicateProjects.delete(input.projectName);
+        return { enabled: exactDuplicateProjects.has(input.projectName) };
+      }
       if (pathname !== '/control/sign-in-entry-observation') throw new Error('AUTHENTICATED_HOSTED_CONTROL_UNSUPPORTED');
       const projectObservation = observations.get(input.projectName);
       if (!projectObservation) throw new Error('AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND');
