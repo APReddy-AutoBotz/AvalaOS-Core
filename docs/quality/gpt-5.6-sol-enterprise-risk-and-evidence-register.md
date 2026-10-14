@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Primary setup contract evidence boundary (2026-10-14)
+
+**Executed evidence:** approved PR #298 run `38508323243`, attempt 1, independently verifies 327 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. Its bounded diagnostic identifies the primary spec's startup assertion at line 504. Cleanup, quiescence, revoked identities/sessions, providers OFF and owned temporary main-policy removal are verified; allowance consumed.
+
+**Confirmed source defect:** the primary startup hook still requires the old fixed process label after hosted setup switched to run-bound labels. Existing positive preparation uses a different spec; the primary-spec bootstrap probe stops before successful setup. **Confirmed source defect:** hosted browser containment admits arbitrary loopback origins and omits them from forbidden-origin evidence, although browser product traffic needs only the exact app/backend origins. The Node control channel remains separate and token protected. No hosted exploit is asserted.
+
+**Planned verification:** shared local/hosted label validation, actual primary-hook pre-fix reproduction and corrected advancement with an owned rejecting proxy, existing provisioning rejection, exact-origin/loopback negatives, cleanup and unchanged checkout, focused tests and applicable CI. Preserve historical evidence and the 47 blocked criteria. The older catalog-cardinality cause remains unproven. Rollback is source-only with exercises/providers OFF; no new hosted action is authorized.
+
 ## Retained fixture identity evidence boundary (2026-10-14)
 
 **Executed evidence:** PR #297 approved run `38482699693`, attempt 1, independently verifies 325 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The first desktop process-row count assertion failed after Process Catalog became visible. Cleanup, quiescence, revoked identities/sessions, providers OFF and temporary main-policy removal are verified; allowance consumed.

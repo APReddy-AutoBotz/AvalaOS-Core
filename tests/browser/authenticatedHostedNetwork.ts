@@ -16,6 +16,10 @@ type InstallAuthenticatedHostedNetworkInput = Readonly<{
 }>;
 
 const webProtocol = (protocol: string) => protocol === 'http:' || protocol === 'https:';
+const loopback = (hostname: string) => ['127.0.0.1', 'localhost'].includes(hostname);
+const allowedWebOrigin = (url: URL, hosted: boolean, allowedOrigins: ReadonlySet<string>) => hosted
+  ? allowedOrigins.has(url.origin)
+  : loopback(url.hostname);
 
 export const installAuthenticatedHostedNetwork = async ({
   context,
@@ -39,8 +43,7 @@ export const installAuthenticatedHostedNetwork = async ({
 
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (webProtocol(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)
-      && !(hosted && allowedOrigins.has(url.origin))) {
+    if (webProtocol(url.protocol) && !allowedWebOrigin(url, hosted, allowedOrigins)) {
       await route.abort('blockedbyclient');
       return;
     }
@@ -60,8 +63,7 @@ export const installAuthenticatedHostedNetwork = async ({
     const url = new URL(request.url());
     if (!webProtocol(url.protocol)) return;
     onHttpRequest();
-    if (!['127.0.0.1', 'localhost'].includes(url.hostname)
-      && !(hosted && allowedOrigins.has(url.origin))) onExternalRequest(url.origin);
+    if (!allowedWebOrigin(url, hosted, allowedOrigins)) onExternalRequest(url.origin);
   });
 
   if (hosted) {

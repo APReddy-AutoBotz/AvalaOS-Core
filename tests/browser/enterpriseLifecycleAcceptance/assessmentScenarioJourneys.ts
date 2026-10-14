@@ -13,6 +13,7 @@ import {
   authenticatedLifecycleResolveEveryGovernControl as resolveGovernControls,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   authenticatedLifecycleSelectReviewer as selectReviewer,
+  authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
   type AuthenticatedAssessmentVariant,
   type AuthenticatedLifecycleSetup,
 } from '../authenticatedLifecycleHarness';
@@ -20,6 +21,7 @@ import type { StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourn
 import { authenticatedHostedActionIds } from '../authenticatedLifecycleHarness';
 
 type ScenarioCaseId = 'E2E-005' | 'E2E-006';
+const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
 const ASSERTIONS: Record<ScenarioCaseId, readonly string[]> = {
   'E2E-005': ['production-low-suitability-decision', 'low-suitability-downstream-policy-preserved'],
   'E2E-006': ['production-strong-automation-decision', 'governed-downstream-approval-preserved'],
@@ -245,6 +247,7 @@ const runScenario = async (
   const responseStart = productionResponses.length;
   const projectName = `${project}-${variant}`;
   const setup = await control<AuthenticatedLifecycleSetup>('/control/setup', { projectName });
+  validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
   const decisionBefore = await createAndFinalizeDecision(page, setup, variant);
   expect(decisionBefore.outputHash).toMatch(/^[a-f0-9]{64}$/u); expectDigest(decisionBefore.targetHash);
   expect(decisionBefore.validationStatus).toBe('reviewer-ready');

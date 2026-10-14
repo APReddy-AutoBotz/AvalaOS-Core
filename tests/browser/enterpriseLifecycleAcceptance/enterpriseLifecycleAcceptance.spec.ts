@@ -8,6 +8,7 @@ import {
   authenticatedLifecycleEnterAs as enterAs,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
+  authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
   createAuthenticatedLifecycleWorkQueue,
   authenticatedHostedActionIds,
   type AuthenticatedLifecycleActor as FixtureActor,
@@ -501,7 +502,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     try { setup = await control<FixtureSetup>('/control/setup', { projectName }); }
     catch (error) { failed = true; throw error; }
     expect(setup.journeyBinding).toMatch(/^sha256:[a-f0-9]{64}$/u);
-    expect(setup.aliases.process).toBe(`${projectName} connected lifecycle`);
+    validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
     for (const key of ['case', 'review', 'handoff', 'artifact'] as const) expect(setup.aliases[key]).toMatch(new RegExp(`^primary-${key}-\\d+$`, 'u'));
     if (hostedAuthenticatedAcceptance) {
       const backendOrigin = new URL(process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL ?? '').origin;
@@ -1346,6 +1347,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     test('independent reviewer rejects a separate current decision without mutating the approved primary chain', async ({ page }) => {
       const rejectionProjectName = `${projectName}-rejection`;
       const rejection = await control<FixtureSetup>('/control/setup', { projectName: rejectionProjectName });
+      validateSetupLabels(rejection, rejectionProjectName, hostedAuthenticatedAcceptance);
       await enterProcessAs(page,rejection.actors.author,rejection.aliases.process);
       await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
       await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
