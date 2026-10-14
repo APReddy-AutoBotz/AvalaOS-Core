@@ -647,8 +647,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               { action: 'submit', target: 'same-session process.update denial probe' },
               { action: 'reload', target: 'Process details' }]
             : [{ action: 'click', target: 'Save process details' }, { action: 'reload', target: 'Process details' }],
-          result: { denialVisible: !hostedAuthenticatedAcceptance,
-            authorizationDisabled: hostedAuthenticatedAcceptance, unchangedAfterReload: true } },
+          result: hostedAuthenticatedAcceptance
+            ? { authorizationDisabled: true, unchangedAfterReload: true }
+            : { denialVisible: true, unchangedAfterReload: true } },
           api: { productionRoutes: ['/functions/v1/process-command'],
             responses: [{ classification: 'PERMISSION_DENIED', status: deniedEditApi.status }] },
         },
