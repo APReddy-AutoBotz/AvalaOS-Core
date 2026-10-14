@@ -16,6 +16,7 @@ import {
   createAuthenticatedHostedObservationReader,
 } from './authenticatedHostedObservationAdapter.mjs';
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
+import { loadEnterpriseLifecycleProductionModule } from './enterpriseLifecyclePostgresFixture.mjs';
 import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
 
 const { Client } = pg;
@@ -63,7 +64,7 @@ const requiredCapabilities = Object.freeze({
   outsider: [],
 });
 const forbiddenCapabilities = Object.freeze({
-  reviewer: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.govern.resolve'],
+  reviewer: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.process.update','assess.v2.govern.resolve'],
   approver: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.approve'],
   outsider: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.process.update',
     'assess.v2.create','assess.v2.draft.write','assess.v2.review','assess.v2.approve','assess.v2.govern.resolve',
@@ -260,6 +261,23 @@ try {
         projects: (await db.query('SELECT id,name FROM public.projects WHERE org_id=$1 AND workspace_id=$2 AND deleted_at IS NULL',
           [workspaceId===ids.workspace?ids.org:bootstrapFixture.org,workspaceId])).rows,
       };
+    } finally { await db.query('ROLLBACK'); }
+  };
+  const visibleProcess = async (actorId, processId) => {
+    await db.query('BEGIN');
+    try {
+      await db.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[actorId]);
+      await db.query('SET LOCAL ROLE authenticated');
+      return (await db.query(`SELECT id,org_id,workspace_id,name,description,department,criticality,authority_version
+        FROM public.assess_processes WHERE id=$1`,[processId])).rows[0] ?? null;
+    } finally { await db.query('ROLLBACK'); }
+  };
+  const visibleTenantContext = async (actorId, organizationId, workspaceId) => {
+    await db.query('BEGIN');
+    try {
+      await db.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[actorId]);
+      await db.query('SET LOCAL ROLE authenticated');
+      return (await db.query('SELECT public.get_tenant_context($1,$2) value',[organizationId,workspaceId])).rows[0]?.value ?? null;
     } finally { await db.query('ROLLBACK'); }
   };
 
@@ -468,7 +486,7 @@ try {
   const deniedController = new AuthenticatedHostedController({
     config,
     now: () => new Date('2036-10-10T00:00:00.000Z'),
-    identity: { verifySession: async () => ({ actorId: ids.actors.outsider, sessionId: ids.sessions.outsider }) },
+    identity: { verifySession: async () => ({ actorId: ids.actors.reviewer, sessionId: ids.sessions.reviewer }) },
     adapter,
   });
   deniedController.exerciseId = ids.exercise;
@@ -476,31 +494,103 @@ try {
   deniedController.observationStartedAt = preflight.observationStartedAt;
   deniedController.active = true;
   deniedController.projects.set('desktop-chromium-rejection', {
-    ...rejectionProject,
+    ...project,
     lastBoundaryAt: preflight.observationStartedAt,
   });
   const deniedRequestId = randomUUID();
   const deniedAuthorizationVersion = Number((await db.query(
     'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
-    [ids.org, ids.actors.outsider],
+    [ids.org, ids.actors.reviewer],
   )).rows[0].version);
+  const reviewerProcess = await visibleProcess(ids.actors.reviewer,project.processId);
+  assert.equal(reviewerProcess?.org_id,ids.org);
+  assert.equal(reviewerProcess?.workspace_id,ids.workspace);
+  const reviewerProcessVersion = Number(reviewerProcess?.authority_version);
+  assert.equal(reviewerProcessVersion,2);
+  const deniedPayload = {
+    processId: reviewerProcess.id,
+    name: 'Unauthorized process rename',
+    description: reviewerProcess.description,
+    department: reviewerProcess.department,
+    criticality: reviewerProcess.criticality,
+  };
+  const deniedEnvelope = {
+    requestId: deniedRequestId,
+    idempotencyKey: `process.update.${deniedRequestId}`,
+    commandType: 'process.update',
+    organizationId: ids.org,
+    workspaceId: ids.workspace,
+    authorizationVersion: deniedAuthorizationVersion,
+    expectedVersion: reviewerProcessVersion,
+    payload: deniedPayload,
+  };
+  const deniedBefore = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-002' });
+  const deniedAccessToken = tokenFor(ids.actors.reviewer, ids.sessions.reviewer);
   const deniedAction = await deniedController.beginBrowserAction({
     projectName: 'desktop-chromium-rejection',
-    accessToken: tokenFor(ids.actors.outsider, ids.sessions.outsider),
+    accessToken: deniedAccessToken,
     route: '/functions/v1/process-command',
-    requestBody: { requestId: deniedRequestId, commandType: 'process.update', expectedVersion: 1 },
+    requestBody: deniedEnvelope,
   });
+  const processRouter = loadEnterpriseLifecycleProductionModule(
+    path.join(root,'supabase','functions','_shared','processCommandRouter.ts'));
+  const tenantAuthority = loadEnterpriseLifecycleProductionModule(
+    path.join(root,'supabase','functions','_shared','tenantAuthority.ts'));
+  let deniedAtomicCalls = 0;
+  let deniedAuthorityCalls = 0;
+  let deniedAuthority = null;
+  const deniedHandlerResponse = await processRouter.handleProcessCommandRequest(new Request(
+    'http://127.0.0.1/functions/v1/process-command', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${deniedAccessToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify(deniedEnvelope),
+    }), {
+    creation: {
+      authenticate: async () => { throw new Error('UNEXPECTED_CREATION_ROUTE'); },
+      authority: async () => null,
+      atomic: async () => { throw new Error('UNEXPECTED_CREATION_ATOMIC'); },
+    },
+    update: {
+      authenticate: async request => {
+        assert.equal(request.headers.get('authorization'),`Bearer ${deniedAccessToken}`);
+        return { id: ids.actors.reviewer };
+      },
+      authority: async (_request,actorId,envelope) => {
+        deniedAuthorityCalls += 1;
+        deniedAuthority = await tenantAuthority.resolveTenantAuthority(actorId, {
+          organizationId: envelope.organizationId,
+          workspaceId: envelope.workspaceId,
+          expectedAuthorizationVersion: envelope.authorizationVersion,
+        }, {
+          loadFreshProjection: input => visibleTenantContext(actorId,input.organizationId,input.workspaceId),
+        });
+        return deniedAuthority;
+      },
+      atomic: async () => { deniedAtomicCalls += 1; throw new Error('DENIED_ATOMIC_MUST_NOT_RUN'); },
+    },
+  });
+  const deniedHandlerBody = await deniedHandlerResponse.json();
+  assert.equal(deniedHandlerResponse.status,403);
+  assert.deepEqual(deniedHandlerBody,{ok:false,error:{
+    code:'PERMISSION_DENIED',message:'Process update could not be completed.',
+  }});
+  assert.equal(deniedAuthorityCalls,1);
+  assert.equal(deniedAtomicCalls,0);
+  assert.equal(deniedAuthority.userId,ids.actors.reviewer);
+  assert.equal(deniedAuthority.capabilities.includes('assess.read'),true);
+  assert.equal(deniedAuthority.capabilities.includes('assess.process.update'),false);
+  // Defense in depth: the database mutation function independently rejects the same actor and envelope.
   const deniedResult = (await serviceQuery(
     'SELECT public.update_assess_process($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) value',
-    [ids.actors.outsider, ids.org, ids.workspace, deniedAuthorizationVersion, deniedRequestId,
-      'hosted-controller-denied-update', 1, rejectionProject.processId, payload.name, payload.description,
-      payload.department, payload.criticality],
+    [ids.actors.reviewer, ids.org, ids.workspace, deniedAuthorizationVersion, deniedRequestId,
+      `process.update.${deniedRequestId}`, reviewerProcessVersion, deniedPayload.processId, deniedPayload.name, deniedPayload.description,
+      deniedPayload.department, deniedPayload.criticality],
   )).rows[0].value;
   assert.deepEqual(deniedResult, { ok: false, error: { code: 'PERMISSION_DENIED' } });
   await db.query('SELECT pg_sleep(0.01)');
   await deniedController.finishBrowserAction({
     projectName: 'desktop-chromium-rejection', actionId: deniedAction.actionId, status: 403,
-    responseBody: deniedResult,
+    responseBody: deniedHandlerBody,
   });
   await deniedController.recordBrowserCase({
     projectName: 'desktop-chromium-rejection', actionIds: [deniedAction.actionId],
@@ -516,6 +606,8 @@ try {
   assert.equal(deniedEvidence.measurements.logicalMutations, 0);
   assert.equal(deniedEvidence.measurements.receiptWrites, 0);
   assert.equal(deniedEvidence.measurements.auditWrites, 0);
+  const deniedAfter = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-002' });
+  assert.deepEqual(deniedAfter, deniedBefore, 'reviewer capability denial preserves the independently read process frame');
 
   const processFrame = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-003' });
   assert.equal(processFrame.receipts, 1);

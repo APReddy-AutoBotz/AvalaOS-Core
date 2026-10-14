@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { EventEmitter } from 'node:events';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 
 import { AuthenticatedHostedBrowserActionTracker,
   createAuthenticatedHostedRequestClassifier } from './authenticatedHostedBrowserRequestClassifier.mjs';
@@ -11,6 +14,37 @@ const classify = createAuthenticatedHostedRequestClassifier({ backendOrigin, app
 const input = (path, method = 'POST', headers = {}, origin = backendOrigin) => ({
   url: `${origin}${path}`, method, headers,
 });
+
+const loadNetworkInstaller = () => {
+  const source = readFileSync(new URL('../tests/browser/authenticatedHostedNetwork.ts', import.meta.url), 'utf8');
+  const compiled = ts.transpileModule(source, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
+  } }).outputText;
+  const exports = {};
+  new Function('exports', 'require', compiled)(exports, specifier => {
+    assert.equal(specifier, '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs');
+    return { AuthenticatedHostedBrowserActionTracker };
+  });
+  return exports.installAuthenticatedHostedNetwork;
+};
+
+const networkFixture = async startAction => {
+  const context = new EventEmitter();
+  let routeHandler;
+  context.route = async (_pattern, callback) => { routeHandler = callback; };
+  let tail = Promise.resolve();
+  const errors = []; const finishes = []; const dispatches = [];
+  const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin, startAction,
+    finishAction: async value => { finishes.push(value); },
+  });
+  await loadNetworkInstaller()({ context, hosted: true, allowedOrigins: new Set([appOrigin, backendOrigin]), tracker,
+    queueNetworkAction: operation => { tail = tail.then(operation).catch(error => { errors.push(error.message); }); },
+    onExternalRequest: () => assert.fail('unexpected external request'), onHttpRequest: () => {},
+    onTrackerError: error => { errors.push(error.message); },
+    dispatchAllowedRequest: async route => { dispatches.push(route); },
+  });
+  return { context, errors, finishes, dispatches, route: value => routeHandler(value), drain: () => tail };
+};
 
 test('only the exact backend POST attestation is public', () => {
   assert.deepEqual(classify(input(attest)), { kind: 'public-attestation', route: attest });
@@ -83,6 +117,41 @@ test('response and explicit observers cannot create a missing business-action st
     allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
   await assert.rejects(tracker.reference(request), /AUTHENTICATED_BROWSER_ACTION_START_MISSING/u);
   await assert.rejects(tracker.finish(request, 200, {}), /AUTHENTICATED_BROWSER_ACTION_START_MISSING/u);
+});
+
+test('installed network records a cancelled request before completion when no route callback runs', async () => {
+  let releaseStart;
+  const startGate = new Promise(resolve => { releaseStart = resolve; });
+  let starts = 0;
+  const network = await networkFixture(async () => { starts += 1; await startGate; return { actionId: 'primed-action' }; });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  network.context.emit('requestfailed', request);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(network.errors, []);
+  assert.deepEqual(network.finishes, []);
+  releaseStart();
+  await network.drain();
+  assert.equal(starts, 1);
+  assert.deepEqual(network.finishes,[{ actionId: 'primed-action', status: 0,
+    responseBody: { error: { code: 'BROWSER_TRANSPORT_FAILURE' } } }]);
+  assert.deepEqual(network.dispatches, []);
+});
+
+test('installed network still aborts a rejected primed start before dispatch', async () => {
+  const network = await networkFixture(async () => { throw new Error('SESSION_TOKEN_REJECTED'); });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({}), postDataJSON: () => ({}) };
+  const aborts = [];
+  network.context.emit('request', request);
+  await network.route({ request: () => request, abort: async reason => { aborts.push(reason); } });
+  network.context.emit('requestfailed', request);
+  await network.drain();
+  assert.deepEqual(aborts, ['failed']);
+  assert.ok(network.errors.length > 0 && network.errors.every(error => error === 'SESSION_TOKEN_REJECTED'));
+  assert.deepEqual(network.dispatches, []);
+  assert.deepEqual(network.finishes, []);
 });
 
 test('business requests with no token remain business actions and fail through the authority callback', async () => {

@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Request } from '@playwright/test';
 import { openProductNavigation } from './productNavigationReadiness';
 
 export const authenticatedHostedActionIds: unique symbol = Symbol('authenticatedHostedActionIds');
@@ -324,6 +324,112 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
   }
   await row.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
+};
+
+export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
+  page: Page,
+  processLabel: string,
+): Promise<Readonly<{ status: number; body: unknown; request: Request; requestId: string }>> => {
+  const backend = new URL(required(apiBaseUrl, 'API_BASE_URL'));
+  const serverContextResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.origin === backend.origin && url.pathname === '/functions/v1/tenant-session'
+      && response.request().method() === 'POST';
+  });
+  const processReadResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.origin === backend.origin && url.pathname === '/rest/v1/assess_processes'
+      && response.request().method() === 'GET';
+  });
+  const [contextResponse, processResponse] = await Promise.all([
+    serverContextResponse,
+    processReadResponse,
+    page.reload({ waitUntil: 'domcontentloaded' }),
+  ]);
+  const [contextBody, processBody, processHeaders] = await Promise.all([
+    contextResponse.json().catch(() => null),
+    processResponse.json().catch(() => null),
+    processResponse.request().allHeaders(),
+  ]);
+  if (!contextResponse.ok() || !contextBody || !Array.isArray(contextBody.contexts)
+    || !processResponse.ok() || !Array.isArray(processBody)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_READ_REJECTED');
+  }
+  const selected = await page.evaluate(contexts => {
+    let saved: Record<string, unknown> = {};
+    try { saved = JSON.parse(sessionStorage.getItem('avala.enterprise.session.selection') || '{}'); } catch { /* rejected below */ }
+    return contexts.find((candidate: Record<string, unknown>) =>
+      candidate.organizationId === saved.organizationId && candidate.workspaceId === saved.workspaceId)
+      ?? (contexts.length === 1 ? contexts[0] : null);
+  }, contextBody.contexts) as {
+    organizationId?: unknown; workspaceId?: unknown; authorizationVersion?: unknown; capabilities?: unknown;
+  } | null;
+  if (!selected || typeof selected.organizationId !== 'string' || typeof selected.workspaceId !== 'string'
+    || !Number.isSafeInteger(selected.authorizationVersion) || !Array.isArray(selected.capabilities)
+    || selected.capabilities.includes('assess.process.update')) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_CONTEXT_REJECTED');
+  }
+  const matches = processBody.filter(row => row && typeof row === 'object'
+    && row.org_id === selected.organizationId && row.workspace_id === selected.workspaceId
+    && row.name === processLabel);
+  const process = matches.length === 1 ? matches[0] : null;
+  const version = process?.authority_version ?? process?.version;
+  const publicApiKey = processHeaders.apikey;
+  if (!process || typeof process.id !== 'string' || !Number.isSafeInteger(version)
+    || version < 1 || typeof process.description !== 'string' || typeof process.department !== 'string'
+    || !['Low', 'Medium', 'High', 'Critical'].includes(process.criticality)
+    || typeof publicApiKey !== 'string' || !publicApiKey) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED');
+  }
+  const requestId = crypto.randomUUID();
+  const processCommandResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    if (url.origin !== backend.origin || url.pathname !== '/functions/v1/process-command'
+      || response.request().method() !== 'POST') return false;
+    try { return response.request().postDataJSON()?.requestId === requestId; } catch { return false; }
+  });
+  const resultPromise = page.evaluate(async ({ baseUrl, requestId: exactRequestId, context, currentProcess, apiKey }) => {
+    const storageKey = Object.keys(localStorage).find(key => key.startsWith('sb-'));
+    const session = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
+    const accessToken = session.access_token ?? session.currentSession?.access_token ?? '';
+    if (!accessToken) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SESSION_REQUIRED');
+    const response = await fetch(`${baseUrl}/functions/v1/process-command`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}`, apikey: apiKey },
+      body: JSON.stringify({
+        requestId: exactRequestId,
+        idempotencyKey: `process.update.${exactRequestId}`,
+        commandType: 'process.update',
+        organizationId: context.organizationId,
+        workspaceId: context.workspaceId,
+        authorizationVersion: context.authorizationVersion,
+        expectedVersion: currentProcess.version,
+        payload: {
+          processId: currentProcess.id,
+          name: 'Unauthorized process rename',
+          description: currentProcess.description,
+          department: currentProcess.department,
+          criticality: currentProcess.criticality,
+        },
+      }),
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  }, {
+    baseUrl: backend.origin,
+    requestId,
+    context: {
+      organizationId: selected.organizationId,
+      workspaceId: selected.workspaceId,
+      authorizationVersion: selected.authorizationVersion as number,
+    },
+    currentProcess: {
+      id: process.id, version, description: process.description,
+      department: process.department, criticality: process.criticality,
+    },
+    apiKey: publicApiKey,
+  });
+  const [response, result] = await Promise.all([processCommandResponse, resultPromise]);
+  return { ...result, requestId, request: response.request() };
 };
 
 export const authenticatedLifecycleEnterProcessAs = async (

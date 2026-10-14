@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -105,11 +106,15 @@ test('inert fixture returns only scoped retained and current process rows with o
     });
     assert.equal(signIn.status, 200);
     const session = await signIn.json();
-    const headers = { authorization: `Bearer ${session.access_token}` };
+    const headers = { authorization: `Bearer ${session.access_token}`, apikey: fixture.publicAnonKey };
     const scopedQuery = new URLSearchParams({
       org_id: `eq.${AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.organizationId}`,
       workspace_id: `eq.${AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.workspaceId}`,
     });
+    const missingApiKey = await fetch(`${fixture.baseUrl}/rest/v1/assess_processes?${scopedQuery}`, {
+      headers: { authorization: `Bearer ${session.access_token}` },
+    });
+    assert.equal(missingApiKey.status, 401);
     const scoped = await fetch(`${fixture.baseUrl}/rest/v1/assess_processes?${scopedQuery}`, { headers });
     assert.equal(scoped.status, 200);
     const rows = await scoped.json();
@@ -125,6 +130,70 @@ test('inert fixture returns only scoped retained and current process rows with o
     const foreign = await fetch(`${fixture.baseUrl}/rest/v1/assess_processes?${foreignQuery}`, { headers });
     assert.equal(foreign.status, 200);
     assert.deepEqual(await foreign.json(), []);
+  } finally {
+    assert.equal(await fixture.close(), true);
+  }
+});
+
+test('inert reviewer session omits process update authority and rejects only a valid current-row command', async () => {
+  const fixture = await startAuthenticatedHostedSignInEntryFixture();
+  try {
+    const setupResponse = await fetch(`${fixture.controlBaseUrl}/control/setup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+      body: JSON.stringify({ projectName: 'desktop-chromium' }),
+    });
+    assert.equal(setupResponse.status, 200);
+    const setup = await setupResponse.json();
+    const signIn = await fetch(`${fixture.baseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'reviewer.desktop-chromium@local.invalid', password: 'synthetic-reviewer-password',
+      }),
+    });
+    const session = await signIn.json();
+    const headers = {
+      'content-type': 'application/json', authorization: `Bearer ${session.access_token}`, apikey: fixture.publicAnonKey,
+    };
+    const tenant = await fetch(`${fixture.baseUrl}/functions/v1/tenant-session`, {
+      method: 'POST', headers, body: '{}',
+    });
+    assert.equal(tenant.status, 200);
+    const context = (await tenant.json()).contexts[0];
+    assert.deepEqual(context.capabilities, ['assess.read']);
+    const query = new URLSearchParams({ org_id: `eq.${context.organizationId}`, workspace_id: `eq.${context.workspaceId}` });
+    const rows = await (await fetch(`${fixture.baseUrl}/rest/v1/assess_processes?${query}`, { headers })).json();
+    const process = rows.find(row => row.name === setup.aliases.process);
+    assert.ok(process);
+    const requestId = randomUUID();
+    const valid = {
+      requestId,
+      idempotencyKey: `process.update.${requestId}`,
+      commandType: 'process.update',
+      organizationId: context.organizationId,
+      workspaceId: context.workspaceId,
+      authorizationVersion: context.authorizationVersion,
+      expectedVersion: process.authority_version,
+      payload: {
+        processId: process.id,
+        name: 'Unauthorized process rename',
+        description: process.description,
+        department: process.department,
+        criticality: process.criticality,
+      },
+    };
+    const denied = await fetch(`${fixture.baseUrl}/functions/v1/process-command`, {
+      method: 'POST', headers, body: JSON.stringify(valid),
+    });
+    assert.equal(denied.status, 403);
+    assert.deepEqual(await denied.json(), { ok: false, error: {
+      code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
+    } });
+    const malformed = await fetch(`${fixture.baseUrl}/functions/v1/process-command`, {
+      method: 'POST', headers, body: JSON.stringify({ ...valid, expectedVersion: process.authority_version + 1 }),
+    });
+    assert.equal(malformed.status, 400);
+    assert.deepEqual(await malformed.json(), { error: { code: 'INVALID_COMMAND' } });
   } finally {
     assert.equal(await fixture.close(), true);
   }

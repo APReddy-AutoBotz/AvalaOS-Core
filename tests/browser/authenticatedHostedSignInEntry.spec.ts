@@ -2,6 +2,7 @@ import { expect, test, type Route } from '@playwright/test';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   authenticatedLifecycleControl,
+  authenticatedLifecycleAttemptUnauthorizedProcessUpdate,
   authenticatedLifecycleEnterAs,
   authenticatedLifecycleOpenConnectedProcess,
   authenticatedLifecycleValidateSetupLabels,
@@ -122,6 +123,9 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
 
+  const loopbackFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === `${localApiOrigin}/functions/v1/process-command`,
+  });
   const arbitraryLoopbackOutcome = await page.evaluate(async origin => {
     try {
       await fetch(`${origin}/functions/v1/process-command`, { method: 'POST' });
@@ -129,6 +133,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     } catch { return 'blocked-before-loopback'; }
   }, localApiOrigin);
   expect(arbitraryLoopbackOutcome).toBe('blocked-before-loopback');
+  await loopbackFailure;
   await expect.poll(() => unexpectedOrigins).toContain(localApiOrigin);
   expect(proxiedOrigins).not.toContain(localApiOrigin);
   await networkActionTail;
@@ -143,6 +148,9 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await expect(page.getByRole('heading', { name: /Evaluate before you automate/u })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
 
+  const anonymousFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === `${apiOrigin}/functions/v1/process-command`,
+  });
   const anonymousOutcome = await page.evaluate(async backendOrigin => {
     try {
       await fetch(`${backendOrigin}/functions/v1/process-command`, {
@@ -152,6 +160,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     } catch { return 'blocked-before-backend'; }
   }, apiOrigin);
   expect(anonymousOutcome).toBe('blocked-before-backend');
+  await anonymousFailure;
   await networkActionTail;
   expect(networkActionError).toBeInstanceOf(Error);
   expect((networkActionError as Error).message).toBe('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
@@ -162,6 +171,9 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(anonymousObservation.actions).toEqual([]);
   expect(anonymousObservation.anonymousProcessCommandRequests).toBe(0);
 
+  const foreignFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === 'https://foreign.example/functions/v1/process-command',
+  });
   const foreignOutcome = await page.evaluate(async () => {
     try {
       await fetch('https://foreign.example/functions/v1/process-command', { method: 'POST' });
@@ -169,6 +181,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     } catch { return 'blocked-before-network'; }
   });
   expect(foreignOutcome).toBe('blocked-before-network');
+  await foreignFailure;
   await expect.poll(() => unexpectedOrigins).toContain('https://foreign.example');
   await networkActionTail;
   expect(networkActionError).toBeInstanceOf(Error);
@@ -211,13 +224,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(reviewerColdObservation.verifySessionCalls).toContainEqual({ actor: 'B', outcome: 'verified' });
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
   await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
-  await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
-  await expect(page.getByLabel('Process name', { exact: true })).toHaveValue(setup.aliases.process);
-  await page.getByLabel('Process name', { exact: true }).fill('Unauthorized process rename');
-  const deniedResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/functions/v1/process-command');
-  await page.getByRole('button', { name: 'Save process details', exact: true }).click();
-  expect((await deniedResponse).status()).toBe(403);
-  await expect(page.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
+  const editProcess = page.getByRole('button', { name: 'Edit process details', exact: true });
+  await expect(editProcess).toBeDisabled();
+  await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
+  await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save process details', exact: true })).toHaveCount(0);
+  const denied = await authenticatedLifecycleAttemptUnauthorizedProcessUpdate(page, setup.aliases.process);
+  expect(denied.status).toBe(403);
+  expect(denied.body).toEqual({ ok: false, error: {
+    code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
+  } });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+  await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
   await networkActionTail;
   if (networkActionError) throw networkActionError;

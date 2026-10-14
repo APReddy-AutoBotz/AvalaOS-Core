@@ -5,6 +5,7 @@ import { expect, type Page, type Request, test } from '@playwright/test';
 import {
   authenticatedLifecycleClickProduct as clickProduct,
   authenticatedLifecycleControl as control,
+  authenticatedLifecycleAttemptUnauthorizedProcessUpdate as attemptUnauthorizedProcessUpdate,
   authenticatedLifecycleEnterAs as enterAs,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
@@ -608,12 +609,28 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     const deniedEditPage = await context.newPage();
     await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process);
     const beforeDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
-    await deniedEditPage.getByRole('button', { name: 'Edit process details', exact: true }).click();
-    await deniedEditPage.getByLabel('Process name', { exact: true }).fill('Unauthorized process rename');
-    const deniedEditApi = await observeApiResponse(deniedEditPage, '/functions/v1/process-command', () =>
-      deniedEditPage.getByRole('button', { name: 'Save process details', exact: true }).click());
+    let deniedEditApi: ApiResponseObservation;
+    if (hostedAuthenticatedAcceptance) {
+      const editProcess = deniedEditPage.getByRole('button', { name: 'Edit process details', exact: true });
+      await expect(editProcess).toBeDisabled();
+      await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
+      await expect(deniedEditPage.getByTestId('process-edit-form')).toHaveCount(0);
+      await expect(deniedEditPage.getByRole('button', { name: 'Save process details', exact: true })).toHaveCount(0);
+      const denied = await attemptUnauthorizedProcessUpdate(deniedEditPage, setup.aliases.process);
+      expect(denied.body).toEqual({ ok: false, error: {
+        code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
+      } });
+      deniedEditApi = {
+        route: '/functions/v1/process-command', status: denied.status, actionId: actionReference(denied.request),
+      };
+    } else {
+      await deniedEditPage.getByRole('button', { name: 'Edit process details', exact: true }).click();
+      await deniedEditPage.getByLabel('Process name', { exact: true }).fill('Unauthorized process rename');
+      deniedEditApi = await observeApiResponse(deniedEditPage, '/functions/v1/process-command', () =>
+        deniedEditPage.getByRole('button', { name: 'Save process details', exact: true }).click());
+      await expect(deniedEditPage.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
+    }
     expect(deniedEditApi.status).toBe(403);
-    await expect(deniedEditPage.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
     await deniedEditPage.reload({ waitUntil: 'domcontentloaded' });
     await expect(deniedEditPage.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
     const afterDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
@@ -625,8 +642,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       authenticatedCases.push({
         testId: 'ASSESS-002', status: 'passed', proofMode: 'actual-ui',
         observations: {
-          browser: { actions: [{ action: 'click', target: 'Save process details' }, { action: 'reload', target: 'Process details' }],
-            result: { denialVisible: true, unchangedAfterReload: true } },
+          browser: { actions: hostedAuthenticatedAcceptance
+            ? [{ action: 'observe', target: 'authorization-disabled process editor' },
+              { action: 'submit', target: 'same-session process.update denial probe' },
+              { action: 'reload', target: 'Process details' }]
+            : [{ action: 'click', target: 'Save process details' }, { action: 'reload', target: 'Process details' }],
+          result: hostedAuthenticatedAcceptance
+            ? { authorizationDisabled: true, unchangedAfterReload: true }
+            : { denialVisible: true, unchangedAfterReload: true } },
           api: { productionRoutes: ['/functions/v1/process-command'],
             responses: [{ classification: 'PERMISSION_DENIED', status: deniedEditApi.status }] },
         },
