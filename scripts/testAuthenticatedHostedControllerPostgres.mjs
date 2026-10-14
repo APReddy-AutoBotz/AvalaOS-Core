@@ -397,7 +397,7 @@ try {
     workspace_id: ids.workspace,
     name: project.aliases.process,
     ...AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
-    authority_version: 1,
+    authority_version: '1',
   }, 'reviewer RLS sees explicit valid metadata on the fresh version-1 process before author mutation');
   assert.notEqual(project.aliases.process,retainedBefore.process.name);
   assert.notEqual(project.deliveryProject.name,retainedBefore.project.name);
