@@ -238,6 +238,65 @@ test('control transport failures retain only the closed transport code', async (
   ));
 });
 
+test('control transport bounds the complete request and reports only the closed timeout code', async () => {
+  let requestSignal: AbortSignal | null = null;
+  const operationTitles: string[] = [];
+  const control = createAuthenticatedLifecycleControl({
+    baseUrl: 'http://127.0.0.1:48123',
+    token: 'fixture-control-token',
+    timeoutMs: 20,
+    runOperation: async (title, operation) => {
+      operationTitles.push(title);
+      return operation();
+    },
+    fetchImpl: ((_target, init) => {
+      requestSignal = init?.signal ?? null;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch,
+  });
+  const startedAt = Date.now();
+  await assert.rejects(control('/control/browser-action-start', { private: 'must-not-escape' }), error => (
+    error instanceof Error
+    && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'
+    && !error.message.includes('private')
+  ));
+  assert.equal(requestSignal?.aborted, true);
+  assert.ok(Date.now() - startedAt < 500);
+  assert.deepEqual(operationTitles, ['hosted:control:action-start']);
+});
+
+test('control transport applies the same deadline while consuming the complete response body', async () => {
+  const control = createAuthenticatedLifecycleControl({
+    baseUrl: 'http://localhost:48123',
+    token: 'fixture-control-token',
+    timeoutMs: 20,
+    fetchImpl: (async () => ({
+      ok: true,
+      json: () => new Promise<unknown>(() => undefined),
+    }) as Response) as typeof fetch,
+  });
+  await assert.rejects(control('/control/process-frame'), error => (
+    error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'
+  ));
+});
+
+test('control operation titles are fixed and unknown paths use the generic boundary', async () => {
+  const operationTitles: string[] = [];
+  const control = createAuthenticatedLifecycleControl({
+    baseUrl: 'http://localhost:48123',
+    token: 'fixture-control-token',
+    runOperation: async (title, operation) => {
+      operationTitles.push(title);
+      return operation();
+    },
+    fetchImpl: async () => Response.json({ ok: true }),
+  });
+  await control('/control/arm-browser-fault', { requestId: 'private-id' });
+  await control('/control/unrecognized-private-id');
+  assert.deepEqual(operationTitles, ['hosted:control:permit-arm', 'hosted:control:other']);
+  assert.equal(operationTitles.some(title => title.includes('private')), false);
+});
+
 test('successful control responses with invalid JSON retain only the closed response code', async () => {
   const control = createAuthenticatedLifecycleControl({
     baseUrl: 'http://localhost:48123',

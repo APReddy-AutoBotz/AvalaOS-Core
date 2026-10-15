@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Control-channel liveness proof boundary (2026-10-15)
+
+The PR #303 hosted timeout has no retained operation/location and does not prove a product or permit-routing deadlock. The page and context routes share one idempotent action-start promise; session verification and before-frame capture precede exact permit arming, then fallback passes the unchanged request through the context origin/authority guard. Preserve this ordering.
+
+Bound the loopback control exchange, including response-body consumption, and explicitly abort an unresolved browser route when start/arm fails. A client deadline is not server cancellation and cannot establish zero permit effects: quiesce, revoke, clean and independently verify the exact exercise. A late committed permit must be revoked; unresolved cleanup must remain incomplete. Preserve bounded, fixed-enum operation/source diagnostics without titles, request bodies, credentials or identifiers. Local delayed/stalled actual-app preparation is evidence of this harness boundary only, not hosted success. The latest hosted report remains 61 PASS / 47 BLOCKED; no provider, production, SQL authority or acceptance-meaning change is included.
+
 ## Synthetic failure transport composition (2026-10-15)
 
 The process precommit-fault contract remains HTTP 503 / COMMAND_UNAVAILABLE after current authentication/tenant/capability authority and before atomic mutation. A browser-fabricated 500 is not proof of that path. Preparation must drive the production router with a narrowly bound, one-use local fault and separately verify the existing real permit through disposable PostgreSQL. Local fixture authority never becomes hosted evidence. Existing hosted permits retain exact session/request/payload/version/exercise binding, expiry and one-shot consumption; no schema or production authority change is included.

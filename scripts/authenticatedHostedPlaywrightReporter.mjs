@@ -14,6 +14,22 @@ const TEST_CATEGORIES = new Map([
   ['authenticated Admin, AI and private Studio controls use server authority and measured storage boundaries', 'authenticated-controls'],
 ]);
 
+const OPERATION_TITLES = new Map([
+  ['hosted:control:action-start', 'ACTION_START'],
+  ['hosted:control:permit-arm', 'PERMIT_ARM'],
+  ['hosted:control:action-finish', 'ACTION_FINISH'],
+  ['hosted:control:case-submit', 'CASE_SUBMIT'],
+  ['hosted:control:session-bind', 'SESSION_BIND'],
+  ['hosted:control:setup', 'SETUP'],
+  ['hosted:control:observe', 'OBSERVE'],
+  ['hosted:control:other', 'OTHER_CONTROL'],
+  ['hosted:queue:network-drain', 'NETWORK_DRAIN'],
+  ['hosted:queue:case-drain', 'CASE_DRAIN'],
+  ['hosted:safety:offline', 'SAFETY_OFFLINE'],
+  ['hosted:safety:server', 'SAFETY_SERVER'],
+  ['hosted:safety:timeout', 'SAFETY_TIMEOUT'],
+]);
+
 const projectCategory = test => {
   const project = test?.parent?.project?.()?.name;
   return ['desktop-chromium', 'pixel-7-chromium'].includes(project) ? project : 'unknown';
@@ -26,23 +42,57 @@ const sameFailure = (left, right) => left === right || (
   && typeof left?.location?.file === 'string' && left.location.file === right?.location?.file
   && left.location.line === right?.location?.line
 );
+const correlatedFailedOperation = (operations, primary) => {
+  const identical = operations.filter(item => item.error === primary);
+  if (identical.length > 0) return identical[0];
+  const equivalent = operations.filter(item => sameFailure(item.error, primary));
+  return equivalent.length === 1 ? equivalent[0] : null;
+};
+const boundedLocation = location => {
+  const source = typeof location?.file === 'string' ? location.file.replaceAll('\\', '/') : '';
+  const root = process.cwd().replaceAll('\\', '/');
+  const relative = source.startsWith(`${root}/`) ? source.slice(root.length + 1) : source;
+  return validateAuthenticatedHostedPlaywrightFailureLocation({ source: relative, line: location?.line });
+};
 
 export default class AuthenticatedHostedPlaywrightReporter {
   constructor() {
     this.failure = null;
     this.runnerError = false;
     this.currentHookFailures = [];
+    this.currentOperations = [];
+    this.failedOperations = [];
+    this.timedOutOperation = null;
   }
 
   onTestBegin(test) {
     if (!this.failure) {
       this.current = { project: projectCategory(test), testCategory: testCategory(test) };
       this.currentHookFailures = [];
+      this.currentOperations = [];
+      this.failedOperations = [];
+      this.timedOutOperation = null;
     }
   }
 
-  onStepEnd(test, _result, step) {
-    if (this.failure || !step?.error || step.category !== 'hook') return;
+  onStepBegin(_test, _result, step) {
+    if (this.failure) return;
+    const operation = OPERATION_TITLES.get(step?.title);
+    if (!operation) return;
+    this.currentOperations.push({ step, operation, location: boundedLocation(step.location) });
+  }
+
+  onStepEnd(test, result, step) {
+    if (this.failure) return;
+    const index = this.currentOperations.findLastIndex(item => item.step === step);
+    if (index >= 0) {
+      const [completed] = this.currentOperations.splice(index, 1);
+      if (step?.error) this.failedOperations.push({ ...completed, error: step.error });
+      if (!this.timedOutOperation && result?.status === 'timedOut' && step?.error) {
+        this.timedOutOperation = completed;
+      }
+    }
+    if (!step?.error || step.category !== 'hook') return;
     const category = step.title === 'beforeAll hook' ? 'project-bootstrap'
       : step.title === 'afterAll hook' ? 'project-teardown' : null;
     this.currentHookFailures.push({ error: step.error, category });
@@ -53,15 +103,17 @@ export default class AuthenticatedHostedPlaywrightReporter {
       const primary = result.error ?? result.errors?.[0] ?? null;
       const primaryHook = this.currentHookFailures?.find(item => sameFailure(item.error, primary));
       this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(primary);
-      if (primary?.location) {
-        const source = typeof primary.location.file === 'string'
-          ? primary.location.file.replaceAll('\\', '/') : '';
-        const root = process.cwd().replaceAll('\\', '/');
-        const relative = source.startsWith(`${root}/`) ? source.slice(root.length + 1) : source;
-        this.failureLocation = validateAuthenticatedHostedPlaywrightFailureLocation({
-          source: relative,
-          line: primary.location.line,
-        });
+      this.failureLocation = primary?.location ? boundedLocation(primary.location) : null;
+      if (this.failureDescriptor?.phase === 'CONTROL_CHANNEL'
+        && this.failureDescriptor.code === 'CONTROL_REQUEST_TIMEOUT') {
+        const correlated = correlatedFailedOperation(this.failedOperations, primary);
+        this.failureOperation = correlated?.operation;
+        this.failureLocation ??= correlated?.location ?? null;
+      }
+      if (result.status === 'timedOut' && !this.failureDescriptor && !this.failureLocation) {
+        const active = this.timedOutOperation ?? this.currentOperations.at(-1) ?? null;
+        this.failureOperation = active?.operation;
+        this.failureLocation = active?.location ?? null;
       }
       this.failure = { project: projectCategory(test),
         testCategory: primaryHook?.category ?? testCategory(test),
@@ -86,6 +138,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       project: this.failure?.project ?? this.current?.project ?? 'unknown',
       testCategory: this.failure?.testCategory ?? this.current?.testCategory ?? 'runner',
       category: this.failure?.category ?? category,
+      ...(this.failureOperation ? { operation: this.failureOperation } : {}),
       ...(this.failureDescriptor ?? {}),
       ...(this.failureLocation ? { location: this.failureLocation } : {}),
     });

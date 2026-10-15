@@ -179,6 +179,169 @@ test('an unknown first failure cannot be replaced by a later allowlisted descrip
   assert.equal(value.testCategory,'primary-lifecycle');assert.equal(JSON.stringify(value).includes('raw-sensitive'),false);
 });
 
+test('a timed out test retains only the deepest fixed active operation and allowlisted source location', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-active-operation-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'active-operation.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const outer={title:'hosted:safety:server',location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1,column:44}};
+  const inner={title:'hosted:control:permit-arm',location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:2,column:55},
+  error:new Error('fixture-sensitive-timeout')};
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},outer);
+  reporter.onStepBegin(current,{status:'running'},inner);
+  reporter.onStepEnd(current,{status:'timedOut'},inner);
+  reporter.onStepEnd(current,{status:'timedOut'},outer);
+  reporter.onTestEnd(current,{status:'timedOut',error:new Error('fixture-sensitive-timeout')});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.category,'timeout');
+  assert.equal(value.operation,'PERMIT_ARM');
+  assert.deepEqual(value.location,{source:'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',line:2});
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+  assert.equal(JSON.stringify(value).includes('hosted:'),false);
+});
+
+test('completed and unknown steps cannot supply a timeout operation', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-completed-operation-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'completed-operation.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const completed={title:'hosted:control:observe',location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1}};
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},completed);
+  reporter.onStepEnd(current,{status:'passed'},completed);
+  reporter.onStepBegin(current,{status:'running'},{title:'fixture-sensitive-arbitrary-step'});
+  reporter.onTestEnd(current,{status:'timedOut',error:new Error('fixture-sensitive-timeout')});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.category,'timeout');
+  assert.equal(Object.hasOwn(value,'operation'),false);
+  assert.equal(Object.hasOwn(value,'location'),false);
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+});
+
+test('a canonical assertion descriptor and location take precedence over an active operation', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-assertion-precedence-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'assertion-precedence.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const active={title:'hosted:control:observe',location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:2}};
+  const primary=Object.assign(new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED'),{location:{
+    file:path.resolve('tests/browser/authenticatedHostedNetwork.ts'),line:1,column:77}});
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},active);
+  reporter.onTestEnd(current,{status:'timedOut',error:primary,errors:[primary]});
+  reporter.onStepEnd(current,{status:'timedOut'},{category:'hook',title:'afterAll hook',
+    error:new Error('fixture-sensitive-later')});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.phase,'NETWORK_TRACKER');
+  assert.equal(value.code,'ACTION_START_REJECTED');
+  assert.deepEqual(value.location,{source:'tests/browser/authenticatedHostedNetwork.ts',line:1});
+  assert.equal(Object.hasOwn(value,'operation'),false);
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+});
+
+test('an unrelated earlier control timeout step cannot claim the primary timeout operation', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-timeout-correlation-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'timeout-correlation.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const earlierError=Object.assign(new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'),{location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1}});
+  const earlier={title:'hosted:control:observe',error:earlierError,location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1}};
+  const primary=Object.assign(new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'),{location:{
+    file:path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),line:2}});
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},earlier);
+  reporter.onStepEnd(current,{status:'running'},earlier);
+  reporter.onTestEnd(current,{status:'failed',error:primary,errors:[primary]});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.phase,'CONTROL_CHANNEL');
+  assert.equal(value.code,'CONTROL_REQUEST_TIMEOUT');
+  assert.deepEqual(value.location,{source:'tests/browser/authenticatedLifecycleHarness.ts',line:2});
+  assert.equal(Object.hasOwn(value,'operation'),false);
+  assert.equal(JSON.stringify(value).includes('hosted:'),false);
+});
+
+test('indistinguishable cloned control timeout errors omit ambiguous operation attribution', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-timeout-ambiguous-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'timeout-ambiguous.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const location={file:path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),line:2};
+  const timeoutError=()=>Object.assign(new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'),{location});
+  const earlier={title:'hosted:control:action-start',error:timeoutError(),location};
+  const primaryStep={title:'hosted:control:permit-arm',error:timeoutError(),location};
+  const primary=timeoutError();
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},earlier);
+  reporter.onStepEnd(current,{status:'running'},earlier);
+  reporter.onStepBegin(current,{status:'running'},primaryStep);
+  reporter.onStepEnd(current,{status:'failed'},primaryStep);
+  reporter.onTestEnd(current,{status:'failed',error:primary,errors:[primary]});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.phase,'CONTROL_CHANNEL');
+  assert.equal(value.code,'CONTROL_REQUEST_TIMEOUT');
+  assert.deepEqual(value.location,{source:'tests/browser/authenticatedLifecycleHarness.ts',line:2});
+  assert.equal(Object.hasOwn(value,'operation'),false);
+});
+
+test('nested known steps sharing the exact primary timeout retain the innermost operation', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-timeout-nested-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'timeout-nested.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const location={file:path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),line:2};
+  const primary=Object.assign(new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'),{location});
+  const outer={title:'hosted:safety:server',error:primary,location};
+  const inner={title:'hosted:control:permit-arm',error:primary,location};
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},outer);
+  reporter.onStepBegin(current,{status:'running'},inner);
+  reporter.onStepEnd(current,{status:'failed'},inner);
+  reporter.onStepEnd(current,{status:'failed'},outer);
+  reporter.onTestEnd(current,{status:'failed',error:primary,errors:[primary]});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.phase,'CONTROL_CHANNEL');
+  assert.equal(value.code,'CONTROL_REQUEST_TIMEOUT');
+  assert.equal(value.operation,'PERMIT_ARM');
+  assert.deepEqual(value.location,{source:'tests/browser/authenticatedLifecycleHarness.ts',line:2});
+});
+
 test('a real Playwright failure crosses the reporter boundary as a closed descriptor', async t => {
   const root=await mkdtemp(path.join(process.cwd(),'authenticated-reporter-integration-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
@@ -204,6 +367,73 @@ test('a real Playwright failure crosses the reporter boundary as a closed descri
   assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
   assert.equal(value.phase,'NETWORK_TRACKER');assert.equal(value.code,'ACTION_START_REJECTED');
   assert.equal(JSON.stringify(value).includes('bounded failure'),false);
+});
+
+test('a real Playwright timeout retains its fixed active operation without raw step text', async t => {
+  const root=await mkdtemp(path.join(process.cwd(),'authenticated-reporter-timeout-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const destination=path.join(root,'diagnostic.json');
+  const reporterPath=path.resolve('scripts/authenticatedHostedPlaywrightReporter.mjs');
+  const testDir=JSON.stringify(root.replaceAll('\\','/'));
+  const config=path.join(root,'playwright.config.mjs');
+  await writeFile(path.join(root,'timeout.spec.mjs'),`import { test } from '@playwright/test';\n`+
+    `test('authors, replays, rejects stale work, requests changes and resubmits through the production UI', async () => {\n`+
+    `  await test.step('hosted:control:observe', async () => {\n`+
+    `    await new Promise(() => {});\n`+
+    `  });\n`+
+    `});\n`);
+  await writeFile(config,`export default { testDir: ${testDir}, timeout: 150, projects: [{ name: 'desktop-chromium' }], `+
+    `reporter: [[${JSON.stringify(reporterPath)}]] };\n`);
+  let exitCode=0;
+  try {
+    await execFileAsync(process.execPath,[path.resolve('node_modules/@playwright/test/cli.js'),'test','--config',config],{
+      cwd:process.cwd(),env:{...process.env,AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH:destination},maxBuffer:2_000_000,
+      timeout:10_000,
+    });
+  } catch (error) { exitCode=error?.code; }
+  assert.equal(exitCode,1);
+  const serialized=await readFile(destination,'utf8');
+  const value=JSON.parse(serialized);
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
+  assert.equal(value.category,'timeout');
+  assert.equal(value.operation,'OBSERVE');
+  assert.equal(Object.hasOwn(value,'location'),false);
+  assert.equal(serialized.includes('hosted:control:observe'),false);
+  assert.equal(serialized.includes('authors, replays'),false);
+});
+
+test('a real Playwright control timeout failure retains its correlated fixed operation', async t => {
+  const root=await mkdtemp(path.join(process.cwd(),'authenticated-reporter-control-timeout-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const destination=path.join(root,'diagnostic.json');
+  const reporterPath=path.resolve('scripts/authenticatedHostedPlaywrightReporter.mjs');
+  const testDir=JSON.stringify(root.replaceAll('\\','/'));
+  const config=path.join(root,'playwright.config.mjs');
+  await writeFile(path.join(root,'control-timeout.spec.mjs'),`import { test } from '@playwright/test';\n`+
+    `test('authors, replays, rejects stale work, requests changes and resubmits through the production UI', async () => {\n`+
+    `  await test.step('hosted:control:permit-arm', async () => {\n`+
+    `    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT');\n`+
+    `  });\n`+
+    `});\n`);
+  await writeFile(config,`export default { testDir: ${testDir}, projects: [{ name: 'desktop-chromium' }], `+
+    `reporter: [[${JSON.stringify(reporterPath)}]] };\n`);
+  let exitCode=0;
+  try {
+    await execFileAsync(process.execPath,[path.resolve('node_modules/@playwright/test/cli.js'),'test','--config',config],{
+      cwd:process.cwd(),env:{...process.env,AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH:destination},maxBuffer:2_000_000,
+      timeout:10_000,
+    });
+  } catch (error) { exitCode=error?.code; }
+  assert.equal(exitCode,1);
+  const serialized=await readFile(destination,'utf8');
+  const value=JSON.parse(serialized);
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
+  assert.equal(value.category,'unexpected-failure');
+  assert.equal(value.phase,'CONTROL_CHANNEL');
+  assert.equal(value.code,'CONTROL_REQUEST_TIMEOUT');
+  assert.equal(value.operation,'PERMIT_ARM');
+  assert.equal(serialized.includes('hosted:control:permit-arm'),false);
+  assert.equal(serialized.includes('authors, replays'),false);
 });
 
 test('a real Playwright caught step cannot replace the canonical primary failure or its location', async t => {

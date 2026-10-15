@@ -126,6 +126,11 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
     new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED')),
   { phase: 'CONTROL_CHANNEL', code: 'RESPONSE_REJECTED' });
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT')),
+  { phase: 'CONTROL_CHANNEL', code: 'CONTROL_REQUEST_TIMEOUT' });
+  assert.equal(authenticatedHostedPlaywrightFailureDescriptor(
+    new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT:raw-sensitive-suffix')), null);
+  assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NOT_FOUND')),
   { phase: 'PROCESS_CATALOG', code: 'PROCESS_NOT_FOUND' });
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
@@ -163,6 +168,11 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
     new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED:raw-sensitive-suffix')), null);
   const base = { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1', project: 'desktop-chromium',
     testCategory: 'primary-lifecycle', category: 'unexpected-failure' };
+  for (const operation of ['ACTION_START','PERMIT_ARM','ACTION_FINISH','CASE_SUBMIT','SESSION_BIND','SETUP','OBSERVE',
+    'OTHER_CONTROL','NETWORK_DRAIN','CASE_DRAIN','SAFETY_OFFLINE','SAFETY_SERVER','SAFETY_TIMEOUT']) {
+    assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, operation }), { ...base, operation });
+  }
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, operation: 'raw-sensitive-operation' }), null);
   assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base,
     phase: 'IDENTITY_ENTRY', code: 'CREDENTIAL_REJECTED' }), { ...base,
     phase: 'IDENTITY_ENTRY', code: 'CREDENTIAL_REJECTED' });

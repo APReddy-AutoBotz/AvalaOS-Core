@@ -47,6 +47,21 @@ const PLAYWRIGHT_TEST_CATEGORIES = new Set([
   'unknown',
 ]);
 const PLAYWRIGHT_CATEGORIES = new Set(['unexpected-failure', 'timeout', 'interrupted', 'configuration', 'no-tests']);
+const PLAYWRIGHT_OPERATIONS = new Set([
+  'ACTION_START',
+  'PERMIT_ARM',
+  'ACTION_FINISH',
+  'CASE_SUBMIT',
+  'SESSION_BIND',
+  'SETUP',
+  'OBSERVE',
+  'OTHER_CONTROL',
+  'NETWORK_DRAIN',
+  'CASE_DRAIN',
+  'SAFETY_OFFLINE',
+  'SAFETY_SERVER',
+  'SAFETY_TIMEOUT',
+]);
 const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
   'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts',
@@ -72,6 +87,7 @@ const PLAYWRIGHT_FAILURE_DESCRIPTORS = new Map([
   ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED', ['CONTROL_CHANNEL', 'CONTROL_REJECTED']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TRANSPORT_REJECTED', ['CONTROL_CHANNEL', 'TRANSPORT_REJECTED']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED', ['CONTROL_CHANNEL', 'RESPONSE_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT', ['CONTROL_CHANNEL', 'CONTROL_REQUEST_TIMEOUT']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NOT_FOUND', ['PROCESS_CATALOG', 'PROCESS_NOT_FOUND']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS', ['PROCESS_CATALOG', 'PROCESS_AMBIGUOUS']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AUTHORITY_REJECTED', ['PROCESS_CATALOG', 'PROCESS_AUTHORITY_REJECTED']],
@@ -145,16 +161,19 @@ export function validateAuthenticatedHostedPlaywrightDiagnostic(value) {
   const hasCode = record(value) && Object.hasOwn(value, 'code');
   if (hasPhase !== hasCode) return null;
   const keys = ['schemaVersion', 'project', 'testCategory', 'category',
+    ...(value?.operation === undefined ? [] : ['operation']),
     ...(hasPhase ? ['phase', 'code'] : []),
     ...(value?.location === undefined ? [] : ['location'])];
   if (!exactKeys(value, keys)
     || value.schemaVersion !== AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA
     || !PLAYWRIGHT_PROJECTS.has(value.project) || !PLAYWRIGHT_TEST_CATEGORIES.has(value.testCategory)
     || !PLAYWRIGHT_CATEGORIES.has(value.category)
+    || (value.operation !== undefined && !PLAYWRIGHT_OPERATIONS.has(value.operation))
     || (hasPhase && !PLAYWRIGHT_FAILURE_PAIRS.has(`${value.phase}:${value.code}`))) return null;
   const location = value.location === undefined ? null : validateAuthenticatedHostedPlaywrightFailureLocation(value.location);
   return Object.freeze({ schemaVersion: value.schemaVersion, project: value.project,
     testCategory: value.testCategory, category: value.category,
+    ...(value.operation === undefined ? {} : { operation: value.operation }),
     ...(hasPhase ? { phase: value.phase, code: value.code } : {}),
     ...(location ? { location } : {}) });
 }

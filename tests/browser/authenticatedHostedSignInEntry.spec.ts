@@ -6,6 +6,7 @@ import {
   authenticatedLifecycleEnterAs,
   authenticatedLifecycleOpenConnectedProcess,
   authenticatedLifecycleValidateSetupLabels,
+  createAuthenticatedLifecycleControl,
   type AuthenticatedLifecycleActor,
 } from './authenticatedLifecycleHarness';
 import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
@@ -323,6 +324,146 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
   await networkActionTail;
   if (networkActionError) throw networkActionError;
+  await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
+  const beforeSafetyFrame = await authenticatedLifecycleControl<{
+    targetHash: string; receipts: number; audits: number; processVersion: number;
+  }>('/control/process-frame', { projectName });
+  await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
+  const safetyName = `${setup.aliases.process} safety-002`;
+  await page.getByLabel('Process name', { exact: true }).fill(safetyName);
+  const beforeSafetyObservation = await authenticatedLifecycleControl<{
+    processCommandRequests: number; controlSequence: string[];
+  }>('/control/sign-in-entry-observation', { projectName });
+  await authenticatedLifecycleControl('/control/sign-in-entry-observe-gate', {
+    projectName,
+    mode: 'hold-next',
+  });
+  const safetyRoute = async (route: Route) => {
+    try {
+      await tracker.begin(route.request());
+      const requestBody = route.request().postDataJSON();
+      const headers = await route.request().allHeaders();
+      await authenticatedLifecycleControl('/control/arm-browser-fault', {
+        projectName,
+        persona: 'author',
+        kind: 'process_server_error_precommit',
+        commandType: requestBody.commandType ?? 'process.update',
+        requestBody,
+        accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+      });
+    } catch (error) {
+      if (!networkActionError) networkActionError = error;
+      await route.abort('failed');
+      return;
+    }
+    await route.fallback();
+  };
+  await page.route('**/functions/v1/process-command', safetyRoute);
+  const safetyResponsePromise = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/functions/v1/process-command');
+  const safetySave = page.getByRole('button', { name: 'Save process details', exact: true }).click();
+  await expect.poll(async () => (await authenticatedLifecycleControl<{
+    controlSequence: string[];
+  }>('/control/sign-in-entry-observation', { projectName })).controlSequence.includes('observe-held')).toBe(true);
+  const heldSafetyObservation = await authenticatedLifecycleControl<{
+    processCommandRequests: number; permits: unknown[];
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(heldSafetyObservation.processCommandRequests).toBe(beforeSafetyObservation.processCommandRequests);
+  expect(heldSafetyObservation.permits).toEqual([]);
+  await authenticatedLifecycleControl('/control/sign-in-entry-observe-gate', {
+    projectName,
+    mode: 'release',
+  });
+  const safetyResponse = await safetyResponsePromise;
+  await safetySave;
+  expect(safetyResponse.status()).toBe(503);
+  expect(await safetyResponse.json()).toEqual({ ok: false, error: {
+    code: 'COMMAND_UNAVAILABLE', message: 'Process update could not be completed.',
+  } });
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
+  await page.unroute('**/functions/v1/process-command', safetyRoute);
+  await expect(page.getByText(
+    'Process update could not be confirmed. Your edits are still available to retry.',
+    { exact: true },
+  )).toBeVisible();
+  await expect(page.getByLabel('Process name', { exact: true })).toHaveValue(safetyName);
+  const afterSafetyFrame = await authenticatedLifecycleControl('/control/process-frame', { projectName });
+  expect(afterSafetyFrame).toEqual(beforeSafetyFrame);
+  const afterSafetyObservation = await authenticatedLifecycleControl<{
+    processCommandRequests: number;
+    processAtomicCalls: number;
+    permits: Array<{ state: string; consumed: number }>;
+    controlSequence: string[];
+    actions: Array<{ route: string; complete: boolean; status: number | null }>;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(afterSafetyObservation.processCommandRequests).toBe(beforeSafetyObservation.processCommandRequests + 1);
+  expect(afterSafetyObservation.processAtomicCalls).toBe(0);
+  expect(afterSafetyObservation.permits).toEqual([
+    expect.objectContaining({ state: 'consumed', consumed: 1 }),
+  ]);
+  const safetySequence = afterSafetyObservation.controlSequence.slice(beforeSafetyObservation.controlSequence.length);
+  expect(safetySequence.indexOf('observe-held')).toBeLessThan(safetySequence.indexOf('observe-released'));
+  expect(safetySequence.indexOf('observe-released')).toBeLessThan(safetySequence.indexOf('permit-arm'));
+  expect(safetySequence.indexOf('permit-arm')).toBeLessThan(safetySequence.indexOf('backend-arrival'));
+  expect(safetySequence.indexOf('backend-arrival')).toBeLessThan(safetySequence.indexOf('permit-consume'));
+  expect(safetySequence.indexOf('permit-consume')).toBeLessThan(safetySequence.indexOf('action-finish'));
+  expect(afterSafetyObservation.actions.filter(action => action.route === '/functions/v1/process-command'
+    && action.status === 503)).toHaveLength(1);
+
+  const boundedControl = createAuthenticatedLifecycleControl({
+    baseUrl: process.env.ENTERPRISE_LIFECYCLE_CONTROL_URL ?? '',
+    token: process.env.ENTERPRISE_LIFECYCLE_CONTROL_TOKEN ?? '',
+    timeoutMs: 50,
+    runOperation: (title, operation) => test.step(title, operation),
+  });
+  await authenticatedLifecycleControl('/control/sign-in-entry-arm-gate', {
+    projectName,
+    mode: 'stall-next',
+  });
+  let stalledArmFailure: unknown = null;
+  const stalledRoute = async (route: Route) => {
+    try {
+      await tracker.begin(route.request());
+      const requestBody = route.request().postDataJSON();
+      const headers = await route.request().allHeaders();
+      await boundedControl('/control/arm-browser-fault', {
+        projectName,
+        persona: 'author',
+        kind: 'process_server_error_precommit',
+        commandType: requestBody.commandType ?? 'process.update',
+        requestBody,
+        accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+      });
+      stalledArmFailure = new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_STALLED_ARM_DISPATCHED');
+      await route.fallback();
+    } catch (error) {
+      stalledArmFailure = error;
+      await route.abort('failed');
+    }
+  };
+  const beforeStalledCommands = afterSafetyObservation.processCommandRequests;
+  await page.route('**/functions/v1/process-command', stalledRoute);
+  await page.getByRole('button', { name: 'Save process details', exact: true }).click();
+  await expect.poll(() => stalledArmFailure instanceof Error).toBe(true);
+  expect((stalledArmFailure as Error).message).toBe('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT');
+  const stalledObservation = await authenticatedLifecycleControl<{
+    processCommandRequests: number; processAtomicCalls: number;
+    permits: Array<{ state: string; consumed: number }>;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(stalledObservation.processCommandRequests).toBe(beforeStalledCommands);
+  expect(stalledObservation.processAtomicCalls).toBe(0);
+  expect(stalledObservation.permits).toEqual([expect.objectContaining({ state: 'armed', consumed: 0 })]);
+  await authenticatedLifecycleControl('/control/sign-in-entry-arm-gate', { projectName, mode: 'release' });
+  await expect.poll(async () => (await authenticatedLifecycleControl<{
+    controlSequence: string[];
+  }>('/control/sign-in-entry-observation', { projectName })).controlSequence.includes('permit-arm-released')).toBe(true);
+  await page.unroute('**/functions/v1/process-command', stalledRoute);
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
+  await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
   const storedSessions = await page.evaluate(() => Object.entries(localStorage)
     .filter(([key]) => key.startsWith('sb-'))
     .map(([key, value]) => ({ key, value: JSON.parse(value) })));
@@ -353,16 +494,23 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       { actor: 'B', persona: 'reviewer' },
     ],
   });
-  const deniedActions = observation.actions.filter(action => action.route === '/functions/v1/process-command');
-  expect(deniedActions).toHaveLength(1);
-  expect(deniedActions[0]).toMatchObject({ persona: 'reviewer', complete: true, status: 403 });
-  expect(observation.processCommandRequests).toBe(1);
+  const processActions = observation.actions.filter(action => action.route === '/functions/v1/process-command');
+  expect(processActions).toHaveLength(3);
+  expect(processActions).toEqual([
+    expect.objectContaining({ persona: 'reviewer', complete: true, status: 403 }),
+    expect.objectContaining({ persona: 'author', complete: true, status: 503 }),
+    expect.objectContaining({ persona: 'author', complete: true, status: 0 }),
+  ]);
+  expect(observation.processCommandRequests).toBe(2);
   expect(observation.anonymousProcessCommandRequests).toBe(0);
   expect(observation.actions.every(action => action.route !== '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
     && !action.route.startsWith('/auth/'))).toBe(true);
   expect(observation.browserCases).toBe(0);
   expect(observation.serverCases).toBe(0);
 
+  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
   await authenticatedLifecycleControl('/control/sign-in-entry-process-duplicate', { projectName, enabled: true });
   try {
     await page.reload({ waitUntil: 'domcontentloaded' });

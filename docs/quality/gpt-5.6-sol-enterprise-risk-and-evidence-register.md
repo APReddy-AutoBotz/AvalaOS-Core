@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Hosted timeout and liveness evidence (2026-10-15)
+
+**Executed evidence:** PR #303 run `38687459796`, attempt 1, on `83ecb018b4caf97a901246e4d3b926dde85e601f` independently verifies all 331 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. Diagnostic: BROWSER_EXECUTION / EXIT_NONZERO, desktop-chromium, primary-lifecycle, timeout; no source/operation retained. Public/Sandbox browser execution passed 36/36. Quiescence, revoked identities/sessions/memberships, zero active permits/residue/secret references/unfinished cleanup, providers OFF and owned temporary-main removal are verified. The allowance is consumed.
+
+**Confirmed source defects:** loopback control fetch/body operations have no deadline; page fault routes do not explicitly abort after start/arm rejection; the reporter lacks safe active-operation evidence for generic timedOut results. These are harness liveness/diagnostic gaps, not demonstrated authorization escapes. **Suspected defect requiring deeper validation:** stalled control versus cumulative hosted latency; no historical operation or route deadlock is proven.
+
+**Planned verification:** reproduce a withheld control response locally, bound the full exchange without retries, prove no backend dispatch before completed start/arm, then release a delayed valid permit through shared routing to the real process router's 503 and unchanged-state proof. On expiry, abort product dispatch and verify authoritative cleanup even if arming committed before response loss. Real Playwright timeout diagnostics must retain only allowed operation/source and preserve earlier assertion precedence. Existing real PostgreSQL authority and actual-UI gates remain required. No global timeout increase, new hosted attempt or criterion promotion is authorized.
+
 ## Safety fault contract evidence (2026-10-15)
 
 **Executed evidence:** PR #302 run `38677853484`, attempt 1, independently verifies 331 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. It passed the previous restricted-command denial/reload/unchanged-state boundary and failed the shared safety HTTP-status assertion at `enterpriseLifecycleAcceptance.spec.ts:686`. Cleanup, providers OFF and temporary-main removal are verified; the allowance is consumed.

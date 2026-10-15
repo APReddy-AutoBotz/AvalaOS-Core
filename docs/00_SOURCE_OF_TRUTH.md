@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Hosted control liveness and timeout evidence (2026-10-15)
+
+PR #303 merged as `83ecb018b4caf97a901246e4d3b926dde85e601f` with identical tested tree, all 52 applicable candidate checks, three post-merge workflows and independent local browser/EI evidence verified. Its approved run `38687459796`, attempt 1, independently verifies 331 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. The desktop primary lifecycle timed out; no operation or source location was retained. The workflow's continue-on-error step conclusion is not evidence of journey success. All 36 public/Sandbox executions passed. Cleanup, quiescence, revoked access, zero active permits/residue/secret references/unfinished cleanup, providers OFF and owned temporary-main removal are verified. The allowance is consumed.
+
+**Confirmed source defects:** unbounded loopback control fetch/body waits and loss of active-operation evidence on a generic Playwright timeout. **Suspected defect requiring deeper validation:** either a stalled control or cumulative finite hosted latency may explain the historical timeout; neither is established. No source-proven permit-routing deadlock was found. Follow `docs/planning/hosted-acceptance-completion.md` for a repository-only liveness correction and composed actual-app delayed/stalled-control proof. Preserve all criteria and authority; no new hosted action is included.
+
 ## Safety response contract and real-handler preparation (2026-10-15)
 
 PR #302 merged as `818dce5b3610967ffef5ca416fac60865978bb62` with identical tested tree and verified candidate/post-merge checks. Approved run `38677853484`, attempt 1, independently verifies 331 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. The restricted process denial, final reload and unchanged-state comparison passed; the primary journey then failed its shared safety HTTP-status assertion. Cleanup, quiescence, revoked access, zero active permits/residue/secret references/unfinished cleanup, providers OFF and removal of owned temporary main access are verified. The one-run allowance is consumed.

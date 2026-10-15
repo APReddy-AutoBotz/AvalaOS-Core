@@ -76,7 +76,10 @@ test('inert fixture emits a bounded rejection diagnostic without creating a bind
       attestationRequests: 0,
       processCommandRequests: 0,
       anonymousProcessCommandRequests: 0,
+      processAtomicCalls: 0,
       verifySessionCalls: [],
+      controlSequence: [],
+      permits: [],
       diagnostic: { source: 'browser', project: 'desktop-chromium', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
       actions: [],
       browserCases: 0,
@@ -84,6 +87,79 @@ test('inert fixture emits a bounded rejection diagnostic without creating a bind
     });
   } finally {
     assert.equal(await fixture.close(), true);
+  }
+});
+
+test('an aborted late arm request can leave an armed permit until authoritative cleanup revokes it', async () => {
+  const fixture = await startAuthenticatedHostedSignInEntryFixture();
+  let closed = false;
+  const control = (pathname, body, signal) => fetch(`${fixture.controlBaseUrl}${pathname}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+    body: JSON.stringify(body),
+    signal,
+  });
+  try {
+    const projectName = 'desktop-chromium';
+    const setup = await (await control('/control/setup', { projectName })).json();
+    const signIn = await fetch(`${fixture.baseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'author.desktop-chromium@local.invalid',
+        password: 'synthetic-author-password',
+      }),
+    });
+    const session = await signIn.json();
+    assert.equal((await control('/control/bind-browser-session', {
+      projectName,
+      persona: 'author',
+      accessToken: session.access_token,
+    })).status, 200);
+    const requestId = randomUUID();
+    const requestBody = {
+      requestId,
+      idempotencyKey: `process.update.${requestId}`,
+      commandType: 'process.update',
+      organizationId: AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.organizationId,
+      workspaceId: AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.workspaceId,
+      authorizationVersion: 1,
+      expectedVersion: 1,
+      payload: {
+        processId: setup.processId,
+        name: 'Late arm remains cleanup-owned',
+        description: 'Synthetic authenticated acceptance process.',
+        department: 'Operations',
+        criticality: 'High',
+      },
+    };
+    assert.equal((await control('/control/sign-in-entry-arm-gate', {
+      projectName,
+      mode: 'stall-next',
+    })).status, 200);
+    await assert.rejects(control('/control/arm-browser-fault', {
+      projectName,
+      persona: 'author',
+      kind: 'process_server_error_precommit',
+      commandType: 'process.update',
+      requestBody,
+      accessToken: session.access_token,
+    }, AbortSignal.timeout(20)), /aborted|timeout/iu);
+    let observation;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      observation = await (await control('/control/sign-in-entry-observation', { projectName })).json();
+      if (observation.controlSequence.includes('permit-arm-held')) break;
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    assert.equal(observation.processCommandRequests, 0);
+    assert.equal(observation.processAtomicCalls, 0);
+    assert.deepEqual(observation.permits.map(permit => ({ state: permit.state, consumed: permit.consumed })), [
+      { state: 'armed', consumed: 0 },
+    ]);
+    assert.equal(await fixture.close(), true);
+    closed = true;
+  } finally {
+    if (!closed) await fixture.close().catch(() => undefined);
   }
 });
 

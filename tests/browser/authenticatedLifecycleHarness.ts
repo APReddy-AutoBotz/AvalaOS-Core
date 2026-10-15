@@ -1,4 +1,4 @@
-import { expect, type Page, type Request } from '@playwright/test';
+import { expect, test, type Page, type Request } from '@playwright/test';
 import { StorageKeys } from '../../services/storage';
 import { hasDurableProductNavigationAgreement, parseProductNavigationSearch } from '../../services/productNavigationState';
 import { areScopesEqual, isValidScope } from '../../services/viewStatePersistence';
@@ -87,8 +87,7 @@ const loopbackBaseUrl = (value: string) => {
   return url.toString().replace(/\/$/u, '');
 };
 
-const boundedControlFailure = async (response: Response) => {
-  const payload: unknown = await response.json().catch(() => null);
+const boundedControlFailure = (payload: unknown) => {
   const controllerCode = payload && typeof payload === 'object' && !Array.isArray(payload)
     && typeof (payload as { error?: unknown }).error === 'string'
     ? (payload as { error: string }).error : '';
@@ -104,40 +103,93 @@ const boundedControlFailure = async (response: Response) => {
   return 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED';
 };
 
+const authenticatedLifecycleControlTimeoutMs = 30_000;
+const authenticatedLifecycleControlStepTitles = Object.freeze<Record<string, string>>({
+  '/control/setup': 'hosted:control:setup',
+  '/control/bind-browser-session': 'hosted:control:session-bind',
+  '/control/browser-action-start': 'hosted:control:action-start',
+  '/control/browser-action': 'hosted:control:action-finish',
+  '/control/browser-case': 'hosted:control:case-submit',
+  '/control/arm-browser-fault': 'hosted:control:permit-arm',
+  '/control/process-frame': 'hosted:control:observe',
+  '/control/lifecycle-frame': 'hosted:control:observe',
+  '/control/studio-failure-frame': 'hosted:control:observe',
+  '/control/assess-v2-frame': 'hosted:control:observe',
+  '/control/snapshot': 'hosted:control:observe',
+  '/control/sign-in-entry-observation': 'hosted:control:observe',
+});
+const authenticatedLifecycleControlStepTitle = (pathname: string) =>
+  authenticatedLifecycleControlStepTitles[pathname] ?? 'hosted:control:other';
+
+type AuthenticatedLifecycleControlOperationRunner = <T>(title: string, operation: () => Promise<T>) => Promise<T>;
+
 export const createAuthenticatedLifecycleControl = ({
   baseUrl,
   token,
   fetchImpl = fetch,
-}: Readonly<{ baseUrl: string; token: string; fetchImpl?: typeof fetch }>) => async <T>(
+  timeoutMs = authenticatedLifecycleControlTimeoutMs,
+  runOperation = async (_title, operation) => operation(),
+}: Readonly<{
+  baseUrl: string;
+  token: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  runOperation?: AuthenticatedLifecycleControlOperationRunner;
+}>) => async <T>(
   pathname: string,
   body?: unknown,
-): Promise<T> => {
+): Promise<T> => runOperation(authenticatedLifecycleControlStepTitle(pathname), async () => {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > authenticatedLifecycleControlTimeoutMs) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT_REJECTED');
+  }
   const target = `${loopbackBaseUrl(baseUrl)}${pathname}`;
   const controlHeader = required(token, 'CONTROL_TOKEN');
+  const abort = new AbortController();
+  const timeoutError = new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT');
+  let timedOut = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      abort.abort();
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+  const bounded = <Value>(operation: Promise<Value>) => Promise.race([operation, timeout]);
   let response: Response;
   try {
-    response = await fetchImpl(target, {
+    response = await bounded(fetchImpl(target, {
       method: body === undefined ? 'GET' : 'POST',
       headers: {
         'content-type': 'application/json',
         'x-enterprise-lifecycle-control': controlHeader,
       },
+      signal: abort.signal,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    }));
   } catch {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    if (timedOut) throw timeoutError;
     throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TRANSPORT_REJECTED');
   }
-  if (!response.ok) throw new Error(await boundedControlFailure(response));
+  let payload: unknown;
   try {
-    return await response.json() as T;
+    payload = await bounded(response.json());
   } catch {
-    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED');
+    if (timedOut) throw timeoutError;
+    if (!response.ok) payload = null;
+    else throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED');
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
-};
+  if (!response.ok) throw new Error(boundedControlFailure(payload));
+  return payload as T;
+});
 
 export const authenticatedLifecycleControl = createAuthenticatedLifecycleControl({
   baseUrl: controlBaseUrl,
   token: controlToken,
+  runOperation: (title, operation) => test.step(title, operation),
 });
 
 export type AuthenticatedLifecycleWorkQueue = Readonly<{
