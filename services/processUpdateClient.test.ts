@@ -26,6 +26,21 @@ const main = async () => {
     async () => { throw new ProcessUpdateError('COMMAND_UNAVAILABLE'); }, async () => resource), anchor);
   assert.equal(recovered.process.version, 4);
 
+  const unchangedResource = {
+    ...sourceProcess,
+    templateId: null,
+    receiptId: '77777777-7777-4777-8777-777777777777',
+    requestId: '88888888-8888-4888-8888-888888888888',
+    idempotencyKey: 'process.update.preexisting-0001',
+  };
+  let unchangedReadbacks = 0;
+  await assert.rejects(() => updateProcessViaCommand(context, sourceProcess, input, transport(
+    async () => { throw new ProcessUpdateError('COMMAND_UNAVAILABLE'); },
+    async () => { unchangedReadbacks += 1; return unchangedResource; }), anchor),
+  (error: any) => error.code === 'COMMAND_UNAVAILABLE');
+  assert.equal(unchangedReadbacks, 1, 'a precommit 503 performs one scoped readback');
+  assert.equal(sourceProcess.name, 'Before', 'an unchanged readback cannot be presented as committed');
+
   for (const substituted of [{ ...resource, workspaceId: organizationId }, { ...resource, requestId: organizationId }, { ...resource, version: 5 }, null]) {
     await assert.rejects(() => updateProcessViaCommand(context, sourceProcess, input, transport(
       async () => { throw new ProcessUpdateError('COMMAND_UNAVAILABLE'); }, async () => substituted), anchor),
@@ -34,6 +49,6 @@ const main = async () => {
   await assert.rejects(() => updateProcessViaCommand(context, sourceProcess, input, transport(
     async () => ({ ok: false, error: { code: 'PERMISSION_DENIED' } }), async () => resource), anchor),
   (error: any) => error.code === 'PERMISSION_DENIED');
-  console.log('process update client: commit, unknown recovery, and substituted readback cases passed');
+  console.log('process update client: commit, committed response-loss recovery, precommit 503, and substituted readback cases passed');
 };
 main().catch(error => { console.error(error); process.exitCode = 1; });

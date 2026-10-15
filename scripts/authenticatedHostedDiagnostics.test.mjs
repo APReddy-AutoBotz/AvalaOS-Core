@@ -149,6 +149,16 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     { message: '\u001b[31mError: AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING\u001b[39m' }),
   { phase: 'NETWORK_TRACKER', code: 'TRACKER_MISSING' });
+  for (const [message, code] of [
+    ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_001_HTTP_STATUS_REJECTED', 'SAFETY_001_HTTP_STATUS_REJECTED'],
+    ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_HTTP_STATUS_REJECTED', 'SAFETY_002_HTTP_STATUS_REJECTED'],
+    ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_003_HTTP_STATUS_REJECTED', 'SAFETY_003_HTTP_STATUS_REJECTED'],
+    ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_RESPONSE_CODE_REJECTED', 'SAFETY_002_RESPONSE_CODE_REJECTED'],
+  ]) {
+    assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(new Error(message)),
+      { phase: 'SAFETY_BOUNDARY', code });
+    assert.equal(authenticatedHostedPlaywrightFailureDescriptor(new Error(`${message}:raw-sensitive-suffix`)), null);
+  }
   assert.equal(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED:raw-sensitive-suffix')), null);
   const base = { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1', project: 'desktop-chromium',

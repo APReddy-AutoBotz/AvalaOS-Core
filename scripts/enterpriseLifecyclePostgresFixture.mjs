@@ -22,7 +22,11 @@ const duplicateSafeMigrations = new Set([
   '20260923190853_pr_c_deferred_binding_authority.sql',
 ]);
 const sha256 = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
-const stableJson = value => JSON.stringify(value, Object.keys(value).sort());
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const stableJson = value => Array.isArray(value) ? `[${value.map(stableJson).join(',')}]`
+  : value !== null && typeof value === 'object'
+    ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
+    : JSON.stringify(value);
 const uuid = ordinal => `a1000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
 const json = (value, status = 200, extra = {}) => new Response(JSON.stringify(value), {
   status,
@@ -519,6 +523,18 @@ export async function createEnterpriseLifecycleFixture({
           const authority = await authorityFor(actorId,envelope.organizationId,envelope.workspaceId);
           return authority ? { ...authority, userId: authority.actorId } : null;
         },
+        consumePrecommitFault: async (_request,body,actorId,envelope) => {
+          const permit = processFaultPermits.get(envelope.requestId);
+          if (!permit) return false;
+          if (permit.actorId !== actorId || permit.commandType !== envelope.commandType
+            || permit.expectedVersion !== envelope.expectedVersion
+            || permit.processId !== envelope.payload.processId
+            || permit.payloadHash !== sha256(stableJson(body))) {
+            throw new Error('ENTERPRISE_LIFECYCLE_PROCESS_FAULT_PERMIT_REJECTED');
+          }
+          processFaultPermits.delete(envelope.requestId);
+          return true;
+        },
         atomic: async (actorId,envelope) => (await serviceQuery(
           'SELECT public.update_assess_process($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) value',
           [actorId,envelope.organizationId,envelope.workspaceId,envelope.authorizationVersion,envelope.requestId,
@@ -658,6 +674,7 @@ export async function createEnterpriseLifecycleFixture({
     let setupSequence = 0;
     const projectSetups = new Map();
     const foreignOutcomeProbes = new Map();
+    const processFaultPermits = new Map();
 
     const downstreamFrame = async projectName => {
       const setup = projectSetups.get(projectName);
@@ -931,6 +948,28 @@ export async function createEnterpriseLifecycleFixture({
           else if (input.enabled === false) await db.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.process.update'", [ids.role]);
           else return json({ error: 'CONTROL_INVALID' },400,cors);
           return json({ enabled: input.enabled },200,cors);
+        }
+        if (url.pathname === '/control/arm-browser-fault') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          const fixtureActor = Object.hasOwn(fixtureActors,input.persona) ? fixtureActors[input.persona] : null;
+          const actorId = typeof input.accessToken === 'string' ? tokens.get(input.accessToken) : null;
+          const body = input.requestBody;
+          const requestId = body?.requestId;
+          const expectedVersion = body?.expectedVersion;
+          if (!setup || input.kind !== 'process_server_error_precommit' || input.commandType !== 'process.update'
+            || !fixtureActor || actorId !== fixtureActor.user.id
+            || !body || typeof body !== 'object' || Array.isArray(body)
+            || typeof requestId !== 'string' || !UUID.test(requestId) || processFaultPermits.has(requestId)
+            || !Number.isSafeInteger(expectedVersion) || body.commandType !== 'process.update'
+            || body.payload?.processId !== setup.processId) {
+            return json({ error: 'CONTROL_FAULT_PERMIT_REJECTED' },409,cors);
+          }
+          processFaultPermits.set(requestId, {
+            actorId, commandType: body.commandType, expectedVersion,
+            processId: body.payload.processId, payloadHash: sha256(stableJson(body)),
+          });
+          return json({ armed: true },200,cors);
         }
         if (url.pathname === '/control/process-frame') {
           const input = await request.json().catch(() => ({}));
@@ -1267,6 +1306,8 @@ export async function createEnterpriseLifecycleFixture({
       cleanupAttempted = true;
       evidence.cleanup.attempted = true;
       const errors = [];
+      if (processFaultPermits.size !== 0) errors.push(new Error('ENTERPRISE_LIFECYCLE_PROCESS_FAULT_PERMIT_LEFTOVER'));
+      processFaultPermits.clear();
       await controlsFixture.cleanup().catch(error => errors.push(error));
       await controlsPostgres.cleanup().catch(error => errors.push(error));
       if (server) await new Promise(resolve => server.close(error => { if (error) errors.push(error); resolve(); }));

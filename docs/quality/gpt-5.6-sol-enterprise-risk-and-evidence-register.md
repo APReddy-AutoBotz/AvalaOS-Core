@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Safety fault contract evidence (2026-10-15)
+
+**Executed evidence:** PR #302 run `38677853484`, attempt 1, independently verifies 331 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. It passed the previous restricted-command denial/reload/unchanged-state boundary and failed the shared safety HTTP-status assertion at `enterpriseLifecycleAcceptance.spec.ts:686`. Cleanup, providers OFF and temporary-main removal are verified; the allowance is consumed.
+
+**Confirmed source defect:** SAFETY-002 expects and locally synthesizes HTTP 500, while the production handler returns HTTP 503 / COMMAND_UNAVAILABLE for a consumed precommit fault. Root's in-memory production-router reproduction observed 503, one fault call and zero atomic calls. **Suspected defect requiring deeper validation:** the retained hosted diagnostic does not contain actual HTTP status; source control flow narrows the invocation but does not establish the unretained response. The shared page handlers also bypass context routing with continue; this is a separate composition gap, not evidence of missing authorization or an exercise header.
+
+**Planned verification:** use the real process handler in local Desktop/Pixel safety journeys; retain input, no false success, independent unchanged target/receipt/audit frames and exact one-use fault binding. Extend the existing real PostgreSQL permit/router proof and client unchanged-read rejection. Cover shared route containment and fixed-enum diagnostics. No product handler, SQL authority, scoring, criteria or broad regression changes. Source-only revert preserves evidence and immutable history. No hosted requirement is promoted by local preparation.
+
 ## Process navigation settlement evidence (2026-10-14)
 
 **Executed evidence:** PR #301 run `38608851775`, attempt 1, independently verifies 327 source hashes and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. The exact process-command 403 assertions passed; the final reload heading failed at `enterpriseLifecycleAcceptance.spec.ts:635` before unchanged-state comparison. Cleanup, quiescence, revoked synthetic access, zero active permits/residue/secret references/unfinished secret cleanup, providers OFF and temporary-main removal are verified. The allowance is consumed.

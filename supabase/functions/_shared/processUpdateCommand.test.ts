@@ -15,17 +15,22 @@ const resource = { id: envelope.payload.processId, orgId: org, workspaceId: work
   version: 3, receiptId: '66666666-6666-4666-8666-666666666666', requestId: envelope.requestId,
   idempotencyKey: envelope.idempotencyKey, createdAt: '2026-10-10T00:00:00Z', updatedAt: '2026-10-10T00:01:00Z' };
 const request = new Request('https://example.test/process-command',{method:'POST'});
-const exercise = async (overrides: Partial<ProcessUpdateDependencies>, expected: number, expectedAtomic: number) => {
+const exercise = async (overrides: Partial<ProcessUpdateDependencies>, expected: number, expectedAtomic: number, expectedFaultCalls = 0) => {
   let atomic = 0;
+  let faultCalls = 0;
   const dependencies: ProcessUpdateDependencies = {
     authenticate: overrides.authenticate ?? (async () => ({ id: actor })),
     authority: overrides.authority ?? (async () => context),
-    ...(overrides.consumePrecommitFault ? { consumePrecommitFault: overrides.consumePrecommitFault } : {}),
+    ...(overrides.consumePrecommitFault ? { consumePrecommitFault: async (...args: Parameters<NonNullable<ProcessUpdateDependencies['consumePrecommitFault']>>) => {
+      faultCalls++;
+      return overrides.consumePrecommitFault!(...args);
+    } } : {}),
     atomic: async (actorId, command) => { atomic++; return (overrides.atomic ?? (async () => ({ ok: true, outcome: 'committed', resource })))(actorId,command); },
   };
   const response = await executeProcessUpdateRequest(request,envelope,dependencies);
   assert.equal(response.status,expected);
   assert.equal(atomic,expectedAtomic);
+  assert.equal(faultCalls,expectedFaultCalls);
   return response.json() as Promise<any>;
 };
 
@@ -34,7 +39,12 @@ const main = async () => {
   await exercise({ authenticate: async () => { throw new Error('no'); } },401,0);
   await exercise({ authority: async () => ({ ...context, capabilities: ['assess.read'] }) },403,0);
   await exercise({ authority: async () => ({ ...context, authorizationVersion: 8 }) },409,0);
-  assert.equal((await exercise({ consumePrecommitFault: async () => true },503,0)).error.code,'COMMAND_UNAVAILABLE');
+  const armedFault = async () => true;
+  await exercise({ authenticate: async () => { throw new Error('no'); }, consumePrecommitFault: armedFault },401,0);
+  await exercise({ authority: async () => ({ ...context, capabilities: ['assess.read'] }), consumePrecommitFault: armedFault },403,0);
+  await exercise({ authority: async () => ({ ...context, authorizationVersion: 8 }), consumePrecommitFault: armedFault },409,0);
+  assert.equal((await exercise({ consumePrecommitFault: armedFault },503,0,1)).error.code,'COMMAND_UNAVAILABLE');
+  assert.equal((await exercise({ consumePrecommitFault: async () => false },200,1,1)).resource.version,3);
   assert.equal((await exercise({ atomic: async () => ({ ok:false,error:{code:'VERSION_CONFLICT'} }) },409,1)).error.code,'VERSION_CONFLICT');
   assert.equal((await exercise({ atomic: async () => ({ ok:true,outcome:'committed',resource:{...resource,workspaceId:org} }) },503,1)).error.code,'COMMAND_UNAVAILABLE');
   console.log('process update command: positive and adversarial authority cases passed');

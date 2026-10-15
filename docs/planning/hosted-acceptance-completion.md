@@ -1,5 +1,44 @@
 # Hosted authenticated acceptance completion
 
+## Real-handler safety contract completion (2026-10-15)
+
+Objective: complete all three existing no-false-success safety paths through their real process-command contract, so local preparation catches the hosted runner mismatch. Baseline is merged PR #302 `818dce5b3610967ffef5ca416fac60865978bb62`, approved run `38677853484` attempt 1, independently verified 331 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. The previous denied-command/reload/unchanged-state checks passed; the shared safety HTTP assertion failed. Cleanup and providers OFF are verified; the single-run allowance is consumed.
+
+All three read-only reviewers completed and closed. Root accepted one repository-only correction under standing implementation/verified-merge authority and transitioned to writes under the fixed managed workspace-write profile. One worker owns browser/fixture/client/diagnostic code and focused proofs; root owns canonical docs, provenance/CI, integration and the single PR. Preserve unrelated CA/.agent state and stash; no nested delegation or reviewers during writes.
+
+Confirmed reproduction: the actual production router with valid synthetic input and inert authorized dependencies returns 503 / COMMAND_UNAVAILABLE after one precommit-fault consumption and zero atomic calls, while SAFETY-002 expects 500. The local browser currently fabricates 500 and masks that mismatch. Historical hosted status remains unretained. Do not change production to satisfy the mistaken test.
+
+Implementation and acceptance:
+
+- Align SAFETY-002 to exact 503 / COMMAND_UNAVAILABLE. Preserve all 108 requirement IDs, all three safety assertion sets, Desktop/Pixel bindings, edited-input preservation, no false success and independent unchanged state/receipt/audit proof. No scoring or acceptance-meaning changes.
+- Replace local browser fulfillment with an exact actor/request/payload/version-bound one-use fixture hook at the real production router's precommit-fault dependency. Retain authentication and capability checks before consumption, reject mismatches, and verify zero armed residue. Fixture controls stay token-protected and loopback-only; they cannot become product authority.
+- Extend the existing controller/disposable-PostgreSQL proof so a real armed permit reaches the real process router, returns 503, consumes the exact payload once, invokes zero atomic writes and preserves the independent target frame. Retain wrong-session/payload/version/expiry/replay negatives and zero provider/budget effects.
+- Route the original request through the shared context guard after permit arming. Apply the same mechanical composition to the two existing Studio permit routes. Verify allowed-origin dispatch, idempotent action start and foreign-origin rejection; no new authority header or Studio behavior change.
+- Add the complementary process-client proof: precommit unavailability plus an unchanged independent read must reject, while the existing committed-response-loss proof still succeeds. Retain only fixed-enum safety-case diagnostics; no raw responses, tokens or identifiers.
+- Run focused Node/TypeScript, affected browser transport preparation, typecheck, catalog/provenance/security contracts and existing applicable candidate CI. Local Docker is unavailable; existing Linux source-and-authority/connected-browser jobs provide real PostgreSQL and actual-UI Desktop/Pixel evidence. Do not substitute passing stubs for those gates or run unrelated regression campaigns. Independently verify candidate browser/EI artifacts; merge only with expected head and identical tree, then verify all three post-merge workflows and artifacts.
+
+Rollback: source-only revert of this acceptance correction, preserving failed evidence and immutable history; exercises/providers remain OFF. No backend deployment, migration, production action, paid call or new hosted inspection/run is included. Remaining requirements stay ASSESS-002/003/018/019/020; GOVERN-001–007; STUDIO-001–003/007; DELIVERY-001–006/009; MONITOR-001–004; ADMIN-001–004; AI-001–006; E2E-001–007; SAFETY-001–003 until separately authorized qualifying hosted evidence exists. Record focused and exact-candidate results before merge.
+
+Executed focused verification: diagnostics/request classification passed 16/16; the process client rejects a complete unchanged persisted resource after unavailable invocation while retaining committed-response-loss recovery. Production Edge tests pass authority-before-consumption negatives, consumed-fault 503 with zero atomic calls, and the no-fault positive. Lifecycle-spec and full project typechecks pass. The existing real Chromium two-origin proof passes page/context fallback, idempotent tracking, denied unauthenticated dispatch and zero foreign-origin server arrivals; it is transport preparation, not actual product or hosted proof. Catalog/traceability/metadata/inventory/charter pass all 108 source-backed requirements with zero uncovered. The unchanged oracle check initially hit Windows sandbox EPERM during temporary-file rename; rerunning only that credential-free check outside the sandbox passed. PR C contract/provenance, AI-boundary (zero forbidden/stale) and secret hygiene pass. The real PostgreSQL and full actual-UI proofs remain planned in exact-candidate Linux CI; controller verifier inputs cannot substitute for observed browser assertions.
+
+Focused commands:
+
+```text
+node --test scripts/authenticatedHostedDiagnostics.test.mjs scripts/authenticatedHostedBrowserRequestClassifier.test.mjs
+node scripts/runPr1fTypeScriptTest.mjs services/processUpdateContract.ts services/processUpdateClient.ts services/processUpdateClient.test.ts
+node scripts/runEdgeTypeScriptTest.mjs supabase/functions/_shared/processUpdateCommand.ts supabase/functions/_shared/processUpdateCommand.test.ts
+node_modules/.bin/tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --skipLibCheck --allowSyntheticDefaultImports --esModuleInterop tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts
+node scripts/testAuthenticatedHostedPreauthTracking.mjs
+npm run typecheck
+npm run test:acceptance:catalog
+node scripts/runAssessV1AcceptanceOracle.test.mjs
+node scripts/checkTranscriptFlowPrCCiContract.mjs
+node scripts/check-ai-boundary.mjs
+node scripts/check-secret-hygiene.mjs
+```
+
+The local browser proof used the existing `.agent/playwright-browsers` cache via `PLAYWRIGHT_BROWSERS_PATH`. Existing CI owns `npm run test:authenticated-hosted:postgres` and `node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated`; local Docker was unavailable. No new workflow, runtime dependency or broad regression suite was added.
+
 ## Durable process entry and denial proof (2026-10-14)
 
 Objective: complete the existing restricted-process denial and reload proof without changing the 108 business requirements. Baseline is merged PR #301 `14aeae5531c2e42c3e653fdb45d582e476a3ea05`, failed approved run `38608851775`, attempt 1. Independent reconstruction verifies 327 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. Exact process denial passed; the process heading after the final reload failed before the independent frame comparison. All cleanup/provider/access conditions are verified; the single-run allowance is consumed.
