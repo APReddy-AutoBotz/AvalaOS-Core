@@ -706,6 +706,9 @@ try {
           expectedVersion: envelope.expectedVersion,
         }, async (name,args) => {
           assert.equal(name,'authenticated_synthetic_consume_process_fault');
+          assert.equal(args.p_session_id,ids.sessions.author,
+            'the production adapter preserves the verified session in the test runtime');
+          assert.equal(args.p_payload_hash,await syntheticAuthority.authenticatedSyntheticPayloadHash(body));
           return (await serviceQuery(
             'SELECT public.authenticated_synthetic_consume_process_fault($1,$2,$3,$4,$5,$6,$7,$8) value',
             [args.p_actor_id,args.p_org_id,args.p_workspace_id,args.p_session_id,args.p_command_type,

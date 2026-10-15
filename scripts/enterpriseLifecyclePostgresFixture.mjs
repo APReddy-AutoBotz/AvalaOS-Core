@@ -53,7 +53,7 @@ export const loadEnterpriseLifecycleProductionModule = (() => {
   const cache = new Map();
   const context = vm.createContext({
     Request, Response, Headers, URL, URLSearchParams, TextEncoder, TextDecoder,
-    AbortController, DOMException, crypto: globalThis.crypto,
+    AbortController, DOMException, atob, crypto: globalThis.crypto,
     console, setTimeout, clearTimeout, queueMicrotask,
   });
   context.structuredClone = vm.runInContext('(value) => JSON.parse(JSON.stringify(value))', context);
