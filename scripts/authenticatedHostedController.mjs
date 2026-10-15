@@ -43,6 +43,9 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const HEX_DIGEST = /^[0-9a-f]{64}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SAFE_NAME = /^[a-z][a-z0-9-]{1,63}$/u;
+const ASSESS_FINALIZE_ROUTE = '/functions/v1/assess-command';
+const ASSESS_FINALIZE_COMMAND = 'assessment.finalize';
+const ASSESS_FINALIZE_PROOF_SCHEMA = 'authenticated-assessment-finalize-proof-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = code => { throw new Error(`AUTHENTICATED_HOSTED_CONTROLLER_${code}`); };
 const timestamp = value => typeof value === 'string'
@@ -50,6 +53,67 @@ const timestamp = value => typeof value === 'string'
   && new Date(value).toISOString() === value;
 const exactKeys = (value, expected, code) => {
   if (!record(value) || !isDeepStrictEqual(Object.keys(value).sort(), [...expected].sort())) fail(code);
+};
+
+const changedRecordHashes = (before, after) => {
+  const prior = new Map(before.records.map(item => [item.recordHash, item]));
+  const current = new Map(after.records.map(item => [item.recordHash, item]));
+  return [...new Set([...prior.keys(), ...current.keys()])].filter(recordHash => {
+    const left = prior.get(recordHash);
+    const right = current.get(recordHash);
+    return !left || !right || left.rowHash !== right.rowHash || left.active !== right.active;
+  }).sort();
+};
+
+const assertAssessmentFinalizeProof = action => {
+  const proof = action.assessmentFinalizeProof;
+  exactKeys(proof, [
+    'schemaVersion', 'verified', 'requestIdHash', 'commandBindingHash', 'actorHash', 'sessionHash',
+    'assessmentRecordHash', 'assessmentBeforeRowHash', 'assessmentAfterRowHash',
+    'receiptRecordHash', 'receiptRowHash', 'receiptIdHash', 'auditRecordHash', 'auditRowHash',
+    'commandIdHash', 'expectedVersion', 'committedVersion', 'scoreVersion',
+    'beforeCapturedAt', 'afterCapturedAt',
+  ], 'ASSESSMENT_FINALIZE_PROOF_REJECTED');
+  if (proof.schemaVersion !== ASSESS_FINALIZE_PROOF_SCHEMA || proof.verified !== true
+    || action.route !== ASSESS_FINALIZE_ROUTE || action.commandType !== ASSESS_FINALIZE_COMMAND
+    || action.status < 200 || action.status >= 300 || action.response.classification !== 'COMMITTED'
+    || ![proof.requestIdHash, proof.commandBindingHash, proof.actorHash, proof.sessionHash,
+      proof.assessmentRecordHash, proof.assessmentBeforeRowHash, proof.assessmentAfterRowHash,
+      proof.receiptRecordHash, proof.receiptRowHash, proof.receiptIdHash,
+      proof.auditRecordHash, proof.auditRowHash, proof.commandIdHash].every(value => DIGEST.test(value ?? ''))
+    || proof.requestIdHash !== action.requestIdHash || proof.commandBindingHash !== action.commandBindingHash
+    || proof.actorHash !== action.actorHash || proof.sessionHash !== action.sessionHash
+    || proof.commandIdHash !== action.response.commandIdHash || proof.receiptIdHash !== action.response.receiptIdHash
+    || !Number.isSafeInteger(proof.expectedVersion) || proof.expectedVersion < 1
+    || proof.committedVersion !== proof.expectedVersion + 1 || proof.scoreVersion !== 'assess-core-2026-05'
+    || proof.beforeCapturedAt !== action.before.capturedAt || proof.afterCapturedAt !== action.after.capturedAt) {
+    fail('ASSESSMENT_FINALIZE_PROOF_REJECTED');
+  }
+  const beforeAssessment = action.before.records.find(item => item.recordHash === proof.assessmentRecordHash);
+  const afterAssessment = action.after.records.find(item => item.recordHash === proof.assessmentRecordHash);
+  const receipt = action.after.records.find(item => item.recordHash === proof.receiptRecordHash);
+  const audit = action.after.records.find(item => item.recordHash === proof.auditRecordHash);
+  if (!beforeAssessment || beforeAssessment.source !== 'assessments'
+    || beforeAssessment.rowHash !== proof.assessmentBeforeRowHash
+    || !afterAssessment || afterAssessment.source !== 'assessments'
+    || afterAssessment.rowHash !== proof.assessmentAfterRowHash
+    || proof.assessmentBeforeRowHash === proof.assessmentAfterRowHash
+    || !receipt || receipt.source !== 'assess_command_receipts' || receipt.rowHash !== proof.receiptRowHash
+    || !audit || audit.source !== 'privileged_audit_events' || audit.rowHash !== proof.auditRowHash) {
+    fail('ASSESSMENT_FINALIZE_PROOF_REJECTED');
+  }
+  for (const row of [afterAssessment, receipt, audit]) {
+    if (row.effectKind !== ({ assessments: 'domain', assess_command_receipts: 'receipt',
+      privileged_audit_events: 'audit' })[row.source]
+      || row.actorHash !== action.actorHash || row.sessionHash !== action.sessionHash
+      || row.requestIdHash !== action.requestIdHash || row.commandBindingHash !== action.commandBindingHash
+      || row.commandIdHash !== proof.commandIdHash) fail('ASSESSMENT_FINALIZE_PROOF_REJECTED');
+  }
+  if (receipt.receiptIdHash !== proof.receiptIdHash || audit.receiptIdHash !== proof.receiptIdHash
+    || audit.auditIdHash === null || action.before.records.some(item => [proof.receiptRecordHash, proof.auditRecordHash].includes(item.recordHash))
+    || !isDeepStrictEqual(changedRecordHashes(action.before, action.after), [
+      proof.assessmentRecordHash, proof.auditRecordHash, proof.receiptRecordHash,
+    ].sort())) fail('ASSESSMENT_FINALIZE_PROOF_REJECTED');
 };
 
 export const canonicalJson = value => {
@@ -415,6 +479,10 @@ export class AuthenticatedHostedController {
     const boundActions = actionIds.map(actionId => available.find(item => item.actionId === actionId));
     if (boundActions.some(item => !item || !item.complete)) fail('BROWSER_ACTION_BINDING_REJECTED');
     const ordered = boundActions.toSorted((a, b) => Date.parse(a.before.capturedAt) - Date.parse(b.before.capturedAt));
+    if (row.testId === 'ASSESS-003') {
+      if (ordered.length !== 1) fail('ASSESSMENT_FINALIZE_PROOF_REJECTED');
+      assertAssessmentFinalizeProof(ordered[0]);
+    }
     const firstAction = ordered[0];
     const lastAction = ordered.toSorted((a, b) => Date.parse(b.after.capturedAt) - Date.parse(a.after.capturedAt))[0];
     const scope = this.projects.get(projectName);
@@ -451,7 +519,8 @@ export class AuthenticatedHostedController {
       scenario: authenticatedAcceptanceScenario(row.testId),
       window: { startedAt, completedAt },
       participants,
-      actions: actions.map(({ persona, before, after, complete, route, status, rawRequestBody, ...action }) => action),
+      actions: actions.map(({ persona, before, after, complete, route, status, rawRequestBody,
+        commandType, actorId, sessionId, assessmentFinalizeProof, ...action }) => action),
       assertions: browserAssertions.map(item => ({
         id: item.id,
         comparator: 'equals',
@@ -516,7 +585,8 @@ export class AuthenticatedHostedController {
     const actionId = authenticatedHostedDigest(this.randomId());
     const action = { actionId, occurredAt: before.capturedAt, actorHash: binding.actorHash,
       sessionHash: binding.sessionHash, ...hashes, response: null, persona: binding.persona,
-      before, after: null, complete: false, route, rawRequestBody: requestBody };
+      actorId: binding.actorId, sessionId: binding.sessionId, commandType,
+      before, after: null, complete: false, route, rawRequestBody: requestBody, assessmentFinalizeProof: null };
     const actions = this.browserActions.get(projectName) ?? [];
     actions.push(action);
     this.browserActions.set(projectName, actions);
@@ -533,7 +603,7 @@ export class AuthenticatedHostedController {
     const resource = record(response.resource) ? response.resource : {};
     const commandId = first(response.commandId, response.resourceId, response.result?.commandId, response.data?.commandId,
       resource.id, resource.resourceId, resource.artifactId, resource.caseId, resource.taskId, resource.publicationId,
-      resource.outcomeId);
+      resource.outcomeId, resource.assessmentId);
     const receiptId = first(response.receiptId, response.result?.receiptId, response.data?.receiptId, resource.receiptId);
     const classification = String(response.error?.code ?? response.errorCode ?? response.outcome
       ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
@@ -549,6 +619,32 @@ export class AuthenticatedHostedController {
         receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
     };
     action.after = after;
+    if (action.route === ASSESS_FINALIZE_ROUTE && action.commandType === ASSESS_FINALIZE_COMMAND) {
+      action.assessmentFinalizeProof = typeof this.adapter.verifyAssessmentFinalizeCase === 'function'
+        ? await this.adapter.verifyAssessmentFinalizeCase({
+          exerciseId: this.exerciseId,
+          projectName,
+          project,
+          scope: this.config.scope,
+          persona: action.persona,
+          actorId: action.actorId,
+          sessionId: action.sessionId,
+          actorHash: action.actorHash,
+          sessionHash: action.sessionHash,
+          route: action.route,
+          status,
+          requestBody: action.rawRequestBody,
+          responseBody: response,
+          before: action.before,
+          after: action.after,
+          requestIdHash: action.requestIdHash,
+          commandBindingHash: action.commandBindingHash,
+          commandIdHash: action.response.commandIdHash,
+        }) : null;
+      if (record(action.assessmentFinalizeProof) && DIGEST.test(action.assessmentFinalizeProof.receiptIdHash ?? '')) {
+        action.response.receiptIdHash = action.assessmentFinalizeProof.receiptIdHash;
+      }
+    }
     action.complete = true;
     action.status = status;
     project.lastBoundaryAt = after.capturedAt;

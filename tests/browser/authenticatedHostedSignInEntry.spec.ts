@@ -10,6 +10,10 @@ import {
   type AuthenticatedLifecycleActor,
 } from './authenticatedLifecycleHarness';
 import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
+import {
+  runV1AssessmentCompletion,
+  V1_ASSESSMENT_COMPLETION_TIMEOUT,
+} from './enterpriseLifecycleAcceptance/v1AssessmentCompletion';
 
 const appOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_APP_URL ?? '').origin;
 const apiOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').origin;
@@ -327,6 +331,147 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
   await networkActionTail;
   if (networkActionError) throw networkActionError;
+
+  type AssessmentControl = Readonly<{
+    mode: string;
+    status: string | null;
+    version: number | null;
+    commandTypes: string[];
+    finalizedReadbacks: number;
+    waiting: number;
+  }>;
+  const assessmentControl = (input: Record<string, unknown>) =>
+    authenticatedLifecycleControl<AssessmentControl>('/control/sign-in-entry-assessment', { projectName, ...input });
+  const resetAssessment = async (mode: string, seedDraft: boolean) => {
+    await assessmentControl({ action: 'reset', mode, seedDraft });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+  };
+  const exitAssessment = async () => {
+    const backToProcess = page.getByRole('button', { name: 'Back to Process', exact: true });
+    const backToCatalog = page.getByRole('button', { name: 'Back to Process Catalog', exact: true });
+    if (await backToProcess.isVisible().catch(() => false)) await backToProcess.click();
+    else if (await backToCatalog.isVisible().catch(() => false)) await backToCatalog.click();
+    const discard = page.getByRole('button', { name: 'Discard Changes', exact: true });
+    if (await discard.isVisible().catch(() => false)) await discard.click();
+    if (await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false)) {
+      await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+    }
+    if (!(await page.getByRole('heading', { name: setup.aliases.process, exact: true }).isVisible().catch(() => false))) {
+      await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
+      await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+    }
+    await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+  };
+  const completeV1 = (timeoutMs = 8_000) => runV1AssessmentCompletion({
+    page,
+    identity: { actorId: actor(projectName, 'A').user.id, processId: selectedProcessId },
+    actionReference: request => tracker.reference(request),
+    runStep: (title, operation) => test.step(title, operation),
+    timeoutMs,
+  });
+  const completePositiveV1 = async (label: string) => {
+    try {
+      return await test.step(label, () => completeV1(15_000));
+    } catch (error) {
+      const state = await assessmentControl({ action: 'inspect' });
+      throw new Error(`AUTHENTICATED_V1_POSITIVE_FAILED:${label}:${state.status ?? 'none'}:${state.commandTypes.length}:${state.finalizedReadbacks}`, { cause: error });
+    }
+  };
+  const expectDraftFinalizeFailure = (state: AssessmentControl) => {
+    expect(state.status).toBe('Draft');
+    expect(state.commandTypes.at(-1)).toBe('assessment.finalize');
+    expect(state.commandTypes.filter(type => type === 'assessment.finalize')).toHaveLength(1);
+    expect(state.commandTypes.slice(0, -1).length).toBeGreaterThan(0);
+    expect(state.commandTypes.slice(0, -1).every(type => type === 'assessment.response.upsert')).toBe(true);
+    expect(state.version).toBe(state.commandTypes.length);
+  };
+
+  await resetAssessment('reject-finalize', true);
+  let legacyDialogObserverSettled = false;
+  const legacyDialogObserver = () => { legacyDialogObserverSettled = true; };
+  page.once('dialog', legacyDialogObserver);
+  await expect(completeV1()).rejects.toThrow('V1_ASSESSMENT_FINALIZE_REJECTED');
+  await page.waitForTimeout(50);
+  expect(legacyDialogObserverSettled).toBe(false);
+  page.off('dialog', legacyDialogObserver);
+  expectDraftFinalizeFailure(await assessmentControl({ action: 'inspect' }));
+  await expect(page.getByText('Assessed & Scored', { exact: true })).toHaveCount(0);
+  await exitAssessment();
+
+  await resetAssessment('single-readback', false);
+  const delayedDiscovery = await page.addStyleTag({
+    content: '[data-testid="enterprise-assess"] { visibility: hidden !important; }',
+  });
+  await expect(completeV1(300)).rejects.toThrow(V1_ASSESSMENT_COMPLETION_TIMEOUT);
+  await delayedDiscovery.evaluate(node => (node as Element).remove());
+  await expect(page.getByTestId('enterprise-assess')).toBeVisible();
+  await page.waitForTimeout(100);
+  expect(await assessmentControl({ action: 'inspect' })).toMatchObject({
+    status: null, version: null, commandTypes: [], finalizedReadbacks: 0, waiting: 0,
+  });
+  await exitAssessment();
+
+  await resetAssessment('stall-finalize', true);
+  const stalledCompletion = completeV1(4_000);
+  await expect.poll(async () => (await assessmentControl({ action: 'inspect' })).waiting).toBe(1);
+  await expect(stalledCompletion).rejects.toThrow(V1_ASSESSMENT_COMPLETION_TIMEOUT);
+  const stalledBeforeRelease = await assessmentControl({ action: 'inspect' });
+  expect(stalledBeforeRelease.waiting).toBe(1);
+  expectDraftFinalizeFailure(stalledBeforeRelease);
+  await assessmentControl({ action: 'release-stall' });
+  await expect.poll(async () => (await assessmentControl({ action: 'inspect' })).waiting).toBe(0);
+  await page.waitForTimeout(50);
+  expectDraftFinalizeFailure(await assessmentControl({ action: 'inspect' }));
+  await expect(page.getByText('Assessed & Scored', { exact: true })).toHaveCount(0);
+  await exitAssessment();
+
+  await resetAssessment('missing-readback', true);
+  await expect(completeV1()).rejects.toThrow('V1_ASSESSMENT_READBACK_MISSING');
+  const missingReadback = await assessmentControl({ action: 'inspect' });
+  expect(missingReadback.status).toBe('Ready for Review');
+  expect(missingReadback.finalizedReadbacks).toBe(1);
+  expect(missingReadback.commandTypes.at(-1)).toBe('assessment.finalize');
+  expect(missingReadback.commandTypes.filter(type => type === 'assessment.finalize')).toHaveLength(1);
+  expect(missingReadback.commandTypes.slice(0, -1).every(type => type === 'assessment.response.upsert')).toBe(true);
+  expect(missingReadback.version).toBe(missingReadback.commandTypes.length + 1);
+  await expect(page.getByText('Assessed & Scored', { exact: true })).toHaveCount(0);
+  await exitAssessment();
+
+  await resetAssessment('single-readback', true);
+  const existingDraftCompletion = await completePositiveV1('actual-app:v1-existing-draft-success');
+  expect(existingDraftCompletion.commandTypes[0]).toBe('assessment.response.upsert');
+  expect(existingDraftCompletion.commandTypes.at(-1)).toBe('assessment.finalize');
+  expect(existingDraftCompletion.commandTypes.includes('assessment.create')).toBe(false);
+  expect(existingDraftCompletion.commandTypes.filter(type => type === 'assessment.finalize')).toHaveLength(1);
+  expect(existingDraftCompletion.commandTypes.slice(0, -1)
+    .every(type => type === 'assessment.response.upsert')).toBe(true);
+  expect(await existingDraftCompletion.finalizationActionId).toMatch(/^sha256:[a-f0-9]{64}$/u);
+  const completedExistingDraft = await assessmentControl({ action: 'inspect' });
+  expect(completedExistingDraft.status).toBe('Ready for Review');
+  expect(completedExistingDraft.finalizedReadbacks).toBe(1);
+  expect(completedExistingDraft.commandTypes).toEqual(existingDraftCompletion.commandTypes);
+  expect(completedExistingDraft.version).toBe(completedExistingDraft.commandTypes.length + 1);
+  await exitAssessment();
+
+  await resetAssessment('single-readback', false);
+  const v1Completion = await completePositiveV1('actual-app:v1-create-if-needed-success');
+  expect(v1Completion.commandTypes[0]).toBe('assessment.create');
+  expect(v1Completion.commandTypes.at(-1)).toBe('assessment.finalize');
+  expect(v1Completion.commandTypes.filter(type => type === 'assessment.create')).toHaveLength(1);
+  expect(v1Completion.commandTypes.filter(type => type === 'assessment.finalize')).toHaveLength(1);
+  expect(v1Completion.commandTypes.slice(1, -1).every(type => type === 'assessment.response.upsert')).toBe(true);
+  expect(v1Completion.logicalMutations).toBe(1);
+  expect(await v1Completion.finalizationActionId).toMatch(/^sha256:[a-f0-9]{64}$/u);
+  const completedAssessment = await assessmentControl({ action: 'inspect' });
+  expect(completedAssessment.status).toBe('Ready for Review');
+  expect(completedAssessment.finalizedReadbacks).toBe(1);
+  expect(completedAssessment.commandTypes).toEqual(v1Completion.commandTypes);
+  expect(completedAssessment.version).toBe(completedAssessment.commandTypes.length);
+  await exitAssessment();
+  await networkActionTail;
+  if (networkActionError) throw networkActionError;
+
   const beforeSafetyFrame = await authenticatedLifecycleControl<{
     targetHash: string; receipts: number; audits: number; processVersion: number;
   }>('/control/process-frame', { projectName });

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
+import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
 import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { authenticatedHostedIdentityCategoryForStatus, authenticatedHostedIdentityUpstreamCode,
   validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
@@ -249,6 +250,97 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
     return { receipts: row.receipts, audits: row.audits, targetHash: authenticatedHostedDigest(row.target) };
   };
 
+  const verifyAssessmentFinalizeCase = async input => {
+    const body=input?.requestBody;
+    const response=input?.responseBody;
+    const payload=body?.payload;
+    const expectedEnvelopeKeys=['authorizationVersion','commandType','expectedVersion','idempotencyKey',
+      'organizationId','payload','requestId','workspaceId'];
+    if(input?.route!=='/functions/v1/assess-command'||input?.persona!=='author'
+      ||input?.status<200||input?.status>=300||!body||typeof body!=='object'||Array.isArray(body)
+      ||JSON.stringify(Object.keys(body).sort())!==JSON.stringify(expectedEnvelopeKeys)
+      ||body.commandType!=='assessment.finalize'||body.organizationId!==config.scope.organizationId
+      ||body.workspaceId!==config.scope.workspaceId||!Number.isSafeInteger(body.authorizationVersion)
+      ||!Number.isSafeInteger(body.expectedVersion)||body.expectedVersion<1
+      ||!payload||typeof payload!=='object'||Array.isArray(payload)
+      ||JSON.stringify(Object.keys(payload).sort())!==JSON.stringify(['assessmentId'])
+      ||!uuid(body.requestId)||!uuid(payload.assessmentId)
+      ||typeof body.idempotencyKey!=='string'||!body.idempotencyKey
+      ||input.actorId!==input.project?.identities?.author?.id||!uuid(input.sessionId)
+      ||input.actorHash!==authenticatedHostedDigest(input.actorId)
+      ||input.sessionHash!==authenticatedHostedDigest(input.sessionId)
+      ||input.requestIdHash!==authenticatedHostedDigest(body.requestId)
+      ||input.commandBindingHash!==authenticatedEvidenceDigest({requestIdHash:input.requestIdHash,
+        actorHash:input.actorHash,commandType:'assessment.finalize'})
+      ||input.commandIdHash!==authenticatedHostedDigest(payload.assessmentId)
+      ||!response||response.ok!==true||response.outcome!=='committed'
+      ||response.resource?.assessmentId!==payload.assessmentId
+      ||response.resource?.version!==body.expectedVersion+1
+      ||response.resource?.status!=='Ready for Review'
+      ||response.resource?.scoreVersion!=='assess-core-2026-05') {
+      throw new Error('AUTHENTICATED_HOSTED_ASSESSMENT_FINALIZE_PROOF_REJECTED');
+    }
+    const result=await query(`SELECT to_jsonb(assessment) assessment,to_jsonb(receipt) receipt,to_jsonb(audit) audit,
+        authority.version::int authorization_version,session.actor_hash,session.session_hash,
+        assessment.updated_at>$9::timestamptz AND assessment.updated_at<=$10::timestamptz assessment_in_window,
+        receipt.completed_at>$9::timestamptz AND receipt.completed_at<=$10::timestamptz receipt_in_window,
+        audit.created_at>$9::timestamptz AND audit.created_at<=$10::timestamptz audit_in_window
+      FROM public.assessments assessment
+      JOIN public.assess_command_receipts receipt ON receipt.org_id=assessment.org_id
+        AND receipt.workspace_id=assessment.workspace_id AND receipt.actor_id=$4
+        AND receipt.request_id=$5 AND receipt.command_type='assessment.finalize' AND receipt.status='succeeded'
+      JOIN public.privileged_audit_events audit ON audit.org_id=assessment.org_id
+        AND audit.workspace_id=assessment.workspace_id AND audit.actor_id=receipt.actor_id
+        AND audit.request_id=receipt.request_id AND audit.action='assessment.finalize'
+        AND audit.resource_type='assessment' AND audit.resource_id=assessment.id AND audit.outcome='succeeded'
+      JOIN public.authorization_versions authority ON authority.org_id=assessment.org_id AND authority.user_id=receipt.actor_id
+      JOIN public.authenticated_synthetic_actor_sessions session ON session.exercise_id=$6
+        AND session.actor_id=receipt.actor_id AND session.session_id=$7 AND session.state='active'
+      WHERE assessment.id=$1 AND assessment.org_id=$2 AND assessment.workspace_id=$3
+        AND assessment.process_id=$8 AND assessment.deleted_at IS NULL
+        AND assessment.status='Ready for Review' AND assessment.score_version='assess-core-2026-05'
+        AND assessment.scores IS NOT NULL AND assessment.scores->>'scoreVersion'='assess-core-2026-05'`,
+    [payload.assessmentId,config.scope.organizationId,config.scope.workspaceId,input.actorId,body.requestId,
+      input.exerciseId,input.sessionId,input.project.processId,input.before?.capturedAt,input.after?.capturedAt]);
+    if(result.rows.length!==1)throw new Error('AUTHENTICATED_HOSTED_ASSESSMENT_FINALIZE_PROOF_REJECTED');
+    const row=result.rows[0];
+    const assessment=row.assessment;const receipt=row.receipt;const audit=row.audit;
+    if(row.authorization_version!==body.authorizationVersion||row.actor_hash!==input.actorHash
+      ||row.session_hash!==input.sessionHash||assessment.version!==body.expectedVersion+1
+      ||assessment.updated_by!==input.actorId||receipt.response?.ok!==true||receipt.response?.outcome!=='committed'
+      ||receipt.response?.resource?.assessmentId!==payload.assessmentId
+      ||receipt.response?.resource?.version!==assessment.version
+      ||receipt.response?.resource?.status!=='Ready for Review'
+      ||receipt.response?.resource?.scoreVersion!=='assess-core-2026-05'
+      ||audit.resource_version!==assessment.version||audit.metadata?.scoreVersion!=='assess-core-2026-05'
+      ||row.assessment_in_window!==true||row.receipt_in_window!==true||row.audit_in_window!==true) {
+      throw new Error('AUTHENTICATED_HOSTED_ASSESSMENT_FINALIZE_PROOF_REJECTED');
+    }
+    const assessmentRecordHash=authenticatedEvidenceDigest({source:'assessments',identity:{id:assessment.id}});
+    const receiptRecordHash=authenticatedEvidenceDigest({source:'assess_command_receipts',identity:{id:receipt.id}});
+    const auditRecordHash=authenticatedEvidenceDigest({source:'privileged_audit_events',identity:{id:audit.id}});
+    const assessmentAfterRowHash=authenticatedEvidenceDigest(assessment);
+    const receiptRowHash=authenticatedEvidenceDigest(receipt);
+    const auditRowHash=authenticatedEvidenceDigest(audit);
+    const assessmentBefore=input.before?.records?.find(item=>item.recordHash===assessmentRecordHash);
+    const assessmentAfter=input.after?.records?.find(item=>item.recordHash===assessmentRecordHash);
+    const receiptAfter=input.after?.records?.find(item=>item.recordHash===receiptRecordHash);
+    const auditAfter=input.after?.records?.find(item=>item.recordHash===auditRecordHash);
+    if(!assessmentBefore||assessmentBefore.source!=='assessments'||assessmentBefore.rowHash===assessmentAfterRowHash
+      ||assessmentAfter?.rowHash!==assessmentAfterRowHash||receiptAfter?.rowHash!==receiptRowHash
+      ||auditAfter?.rowHash!==auditRowHash)throw new Error('AUTHENTICATED_HOSTED_ASSESSMENT_FINALIZE_PROOF_REJECTED');
+    return Object.freeze({
+      schemaVersion:'authenticated-assessment-finalize-proof-v1',verified:true,
+      requestIdHash:input.requestIdHash,commandBindingHash:input.commandBindingHash,
+      actorHash:input.actorHash,sessionHash:input.sessionHash,
+      assessmentRecordHash,assessmentBeforeRowHash:assessmentBefore.rowHash,assessmentAfterRowHash,
+      receiptRecordHash,receiptRowHash,receiptIdHash:authenticatedHostedDigest(receipt.id),
+      auditRecordHash,auditRowHash,commandIdHash:authenticatedHostedDigest(assessment.id),
+      expectedVersion:body.expectedVersion,committedVersion:assessment.version,scoreVersion:'assess-core-2026-05',
+      beforeCapturedAt:input.before.capturedAt,afterCapturedAt:input.after.capturedAt,
+    });
+  };
+
   return {
     async preflight() {
       return withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', async () => {
@@ -321,6 +413,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       input.commandType,input.actorId,input.sessionId,input.requestId,input.payloadHash,input.expectedVersion,
       input.expiresAt]),
     quiesce: input => authority('authenticated_synthetic_quiesce', [input.exerciseId]),
+    verifyAssessmentFinalizeCase,
     async setupProject({ projectName, exerciseId, identities }) {
       sequence += 1;
       const processId = randomUUID(); const projectId = randomUUID();

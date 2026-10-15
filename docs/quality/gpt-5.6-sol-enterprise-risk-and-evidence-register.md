@@ -1,5 +1,15 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## V1 completion proof and unbounded business wait (2026-10-15)
+
+**Executed evidence:** approved PR #304 run `38700670080`, attempt 1, independently verifies 331 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. Desktop primary lifecycle timeout has no retained operation/location. Public/Sandbox passes 36/36; complete cleanup, provider-off state and owned temporary-main removal are independently verified. The allowance is consumed.
+
+**Confirmed source defects:** bare dialog promise without a deadline; pathname-only response capture mislabels create/upsert as finalization; redundant component readback can silently return null; generic process-update preparation is labeled discovery-complete; fixed reporter operation coverage does not cover ordinary primary business waits. **Suspected defect requiring deeper validation:** the particular hosted wait or cumulative finite latency that consumed the test budget. Local diagnosis cannot establish that unretained event.
+
+**Planned verification:** reproduce missing/rejected completion through actual application and shared helper; bounded error/readback failure with no false success; exact create/upsert/finalize ordering and final action identity; actual production-handler/disposable-PostgreSQL Ready-for-Review transition with one logical mutation and matching receipt/audit; generic process-update/incorrect-session/scope negatives; fixed primary milestone privacy and real-timeout reporter proof. Keep all criteria, scoring and global timeout unchanged. Relevant local and exact-candidate CI plus independent artifacts are required; no hosted retry or readiness promotion is authorized.
+
+**Executed correction evidence:** the actual-app Desktop/Pixel proof passes both positive completion paths and bounded rejected/stalled/missing-readback negatives; the bare-dialog observer remains pending on a real rejection. Disposable PostgreSQL verifies exact finalization state/receipt/audit and zero-write foreign-scope rejection. Owned database/container cleanup is verified. Controller 28/28, evidence 10/10, observation 7/7, local manifest 3/3 and diagnostic/reporter 30/30 checks pass. Candidate/release verification remains planned. The earlier positive reproduction also contained an invalid Govern-enabled assertion, so it is not isolated proof of the duplicate-read cause; author authority is preserved and that added assertion is removed. No hosted requirement or readiness claim is promoted.
+
 ## Hosted timeout and liveness evidence (2026-10-15)
 
 **Executed evidence:** PR #303 run `38687459796`, attempt 1, on `83ecb018b4caf97a901246e4d3b926dde85e601f` independently verifies all 331 sources and 61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED. Diagnostic: BROWSER_EXECUTION / EXIT_NONZERO, desktop-chromium, primary-lifecycle, timeout; no source/operation retained. Public/Sandbox browser execution passed 36/36. Quiescence, revoked identities/sessions/memberships, zero active permits/residue/secret references/unfinished cleanup, providers OFF and owned temporary-main removal are verified. The allowance is consumed.

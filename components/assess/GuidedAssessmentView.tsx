@@ -187,20 +187,20 @@ const GuidedAssessmentView: React.FC<GuidedAssessmentViewProps> = ({ processId, 
     const handleComplete = useCallback(async () => {
         if (!assessment || !currentOrganization) return;
         try {
-            await completeAssessment(assessment);
-            // Refresh to see results
-            const updated = await getAssessmentForProcess(processId);
-            if (updated) {
-                setAssessment(updated);
-                setOriginalAssessment(updated);
-                setCurrentSection(COMPLETED_SECTION_KEY as any);
-                setErrorMsg(null);
-                alert('Assessment scored and marked Ready for Review.');
+            const completed = await completeAssessment(assessment);
+            if (!completed || completed.status !== 'Ready for Review' || !completed.scores) {
+                throw new Error('The finalized assessment is not available in this workspace.');
             }
+            const snapshot = JSON.parse(JSON.stringify(completed));
+            setAssessment(snapshot);
+            setOriginalAssessment(snapshot);
+            setCurrentSection(COMPLETED_SECTION_KEY as any);
+            setErrorMsg(null);
+            alert('Assessment scored and marked Ready for Review.');
         } catch (err: any) {
             setErrorMsg(err.message || 'Validation failed. Please fill all required fields.');
         }
-    }, [assessment, currentOrganization, completeAssessment, getAssessmentForProcess, processId]);
+    }, [assessment, currentOrganization, completeAssessment]);
 
     const handleReviseRequestedChanges = useCallback(async () => {
         if (!assessment || assessment.status !== 'Changes Requested') return;

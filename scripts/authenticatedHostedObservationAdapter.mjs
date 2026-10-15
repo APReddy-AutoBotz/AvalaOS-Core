@@ -156,7 +156,8 @@ const receiptAnchor = (entry, actorHash, sessionHash) => {
     receiptId,
     receiptIdHash: scalarDigest(receiptId),
     persistedRequestHash: asDigest(row.request_hash),
-    commandId: row.resource_id ?? row.response?.commandId ?? row.response?.resourceId ?? null,
+    commandId: row.resource_id ?? row.response?.commandId ?? row.response?.resourceId
+      ?? row.response?.resource?.assessmentId ?? null,
     occurredAt: entry.occurredAt,
   };
 };

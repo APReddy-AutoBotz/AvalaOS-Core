@@ -61,11 +61,17 @@ const PLAYWRIGHT_OPERATIONS = new Set([
   'SAFETY_OFFLINE',
   'SAFETY_SERVER',
   'SAFETY_TIMEOUT',
+  'V1_ASSESSMENT_COMPLETION',
+  'PRIMARY_JOURNEY',
+  'PRIMARY_PROCESS_DENIAL',
+  'PRIMARY_SAFETY_AND_RUNTIME',
+  'PRIMARY_V2_AUTHORING_AND_REVIEW',
 ]);
 const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
   'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts',
   'tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts',
+  'tests/browser/enterpriseLifecycleAcceptance/v1AssessmentCompletion.ts',
   'tests/browser/authenticatedLifecycleHarness.ts',
   'tests/browser/authenticatedHostedNetwork.ts',
   'tests/browser/authenticatedControlsAcceptance.ts',
@@ -102,6 +108,7 @@ const PLAYWRIGHT_FAILURE_DESCRIPTORS = new Map([
   ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_HTTP_STATUS_REJECTED', ['SAFETY_BOUNDARY', 'SAFETY_002_HTTP_STATUS_REJECTED']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_003_HTTP_STATUS_REJECTED', ['SAFETY_BOUNDARY', 'SAFETY_003_HTTP_STATUS_REJECTED']],
   ['ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_RESPONSE_CODE_REJECTED', ['SAFETY_BOUNDARY', 'SAFETY_002_RESPONSE_CODE_REJECTED']],
+  ['ENTERPRISE_LIFECYCLE_BROWSER_V1_COMPLETION_TIMEOUT', ['ASSESSMENT_COMPLETION', 'V1_COMPLETION_TIMEOUT']],
 ]);
 const PLAYWRIGHT_FAILURE_PAIRS = new Set([...PLAYWRIGHT_FAILURE_DESCRIPTORS.values()]
   .map(([phase, code]) => `${phase}:${code}`));

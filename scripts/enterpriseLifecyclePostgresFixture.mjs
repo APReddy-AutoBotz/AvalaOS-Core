@@ -254,9 +254,20 @@ export async function createEnterpriseLifecycleFixture({
       role: uuid(20), process: uuid(21), case: uuid(22), rejectCase: uuid(23), deniedCase: uuid(24),
       providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27), deliveryRestrictedRole: uuid(28),
     };
+    // These are inert fixture credentials, accepted only by exact map lookup below.
+    // Claims let shared browser observers correlate the same actor/session shape
+    // as hosted sessions; decoded claims never authorize a fixture request.
+    const fixtureActors = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider'].map(persona => {
+      const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+      const payload = Buffer.from(JSON.stringify({ sub: ids[persona], session_id: randomUUID(),
+        aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+      return [persona, { token: `${header}.${payload}.fixture-only`,
+        user: { id: ids[persona], email: `${persona}@fixture.invalid` } }];
+    }));
     const tokens = new Map([
       ['enterprise-author-token', ids.author], ['enterprise-reviewer-token', ids.reviewer],
       ['enterprise-approver-token', ids.approver], ['enterprise-outsider-token', ids.outsider],
+      ...Object.values(fixtureActors).map(actor => [actor.token, actor.user.id]),
     ]);
     const controlToken = `control-${randomUUID()}`;
     const executionId = sha256(`${runId}\u0000${headSha}\u0000${randomUUID()}`);
@@ -388,12 +399,6 @@ export async function createEnterpriseLifecycleFixture({
     const serviceQuery = (sql, values) => asRole(db, 'service_role', () => db.query(sql, values));
     const fixtureQuery = (sql, values) => db.query(sql, values);
     const actorQuery = (actorId, sql, values = []) => actorTransaction(actorId, () => db.query(sql, values));
-    const fixtureActors = {
-      author: { token: 'enterprise-author-token', user: { id: ids.author, email: 'author@fixture.invalid' } },
-      reviewer: { token: 'enterprise-reviewer-token', user: { id: ids.reviewer, email: 'reviewer@fixture.invalid' } },
-      approver: { token: 'enterprise-approver-token', user: { id: ids.approver, email: 'approver@fixture.invalid' } },
-      outsider: { token: 'enterprise-outsider-token', user: { id: ids.outsider, email: 'outsider@fixture.invalid' } },
-    };
     const controlsFixture = createAuthenticatedControlsFixture({
       scope: { organizationId: ids.organization, workspaceId: ids.workspace, providerConfigId: ids.providerConfig },
       actors: fixtureActors, serviceQuery, actorQuery,
@@ -935,12 +940,7 @@ export async function createEnterpriseLifecycleFixture({
           const projectAliases = Object.fromEntries(Object.entries(aliases).map(([key, value]) => [key, `${value}-${setupSequence}`]));
           return json({ executionId, journeyBinding, projectName, projectSequence: setupSequence,
             deliveryProject: { id: deliveryProjectId, name: `${projectName} delivery project` },
-            aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, actors: {
-          author: { token: 'enterprise-author-token', user: { id: ids.author, email: 'author@fixture.invalid' } },
-          reviewer: { token: 'enterprise-reviewer-token', user: { id: ids.reviewer, email: 'reviewer@fixture.invalid' } },
-          approver: { token: 'enterprise-approver-token', user: { id: ids.approver, email: 'approver@fixture.invalid' } },
-          outsider: { token: 'enterprise-outsider-token', user: { id: ids.outsider, email: 'outsider@fixture.invalid' } },
-          } }, 200, cors);
+            aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, actors: fixtureActors }, 200, cors);
         }
         if (url.pathname === '/control/process-update-capability') {
           const input = await request.json().catch(() => ({}));
@@ -1329,12 +1329,7 @@ export async function createEnterpriseLifecycleFixture({
     return {
       baseUrl, publicAnonKey: 'sb_publishable_enterprise_lifecycle_browser_test', authStorageKey: 'sb-127-auth-token',
       controlToken, journeyBinding, aliases,
-      actors: {
-        author: { token: 'enterprise-author-token', user: { id: ids.author, email: 'author@fixture.invalid' } },
-        reviewer: { token: 'enterprise-reviewer-token', user: { id: ids.reviewer, email: 'reviewer@fixture.invalid' } },
-        approver: { token: 'enterprise-approver-token', user: { id: ids.approver, email: 'approver@fixture.invalid' } },
-        outsider: { token: 'enterprise-outsider-token', user: { id: ids.outsider, email: 'outsider@fixture.invalid' } },
-      },
+      actors: fixtureActors,
       ids, db, evidence, executeAssess, executeStudio, authorizationVersion,
       actorQuery,
       serviceQuery,
