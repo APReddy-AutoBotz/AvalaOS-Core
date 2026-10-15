@@ -15,6 +15,7 @@ import {
 } from './authenticatedHostedController.mjs';
 import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
   authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
+import { loadEnterpriseLifecycleProductionModule } from './enterpriseLifecyclePostgresFixture.mjs';
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = '127.0.0.1';
@@ -30,6 +31,9 @@ const digest = value => `sha256:${createHash('sha256').update(value).digest('hex
 const EXERCISE_DIGEST = digest('authenticated-hosted-composed-exercise');
 const TARGET_FINGERPRINT = digest('authenticated-hosted-composed-target');
 const PUBLIC_TARGET_DIGEST = digest(`${BACKEND_ORIGIN}\n${PUBLIC_ANON_KEY}`);
+const processRouter = loadEnterpriseLifecycleProductionModule(
+  path.join(process.cwd(), 'supabase', 'functions', '_shared', 'processCommandRouter.ts'),
+);
 const ORGANIZATION_ID = '20000000-0000-4000-8000-000000000001';
 const WORKSPACE_ID = '30000000-0000-4000-8000-000000000001';
 export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE = Object.freeze({
@@ -171,12 +175,35 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE_REJECTED');
   }
   let anonymousProcessCommandRequests = 0;
+  let processAtomicCalls = 0;
+  const processFaultPermits = new Map();
+  const observeGates = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
+    mode: 'open',
+    waiters: [],
+  }]));
+  const armGates = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
+    mode: 'open',
+    waiters: [],
+  }]));
+  const releaseGate = (gates, projectName, code) => {
+    const gate = gates.get(projectName);
+    if (!gate) throw new Error(code);
+    gate.mode = 'open';
+    for (const resolve of gate.waiters.splice(0)) resolve();
+  };
+  const releaseObserveGate = projectName => releaseGate(
+    observeGates, projectName, 'AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OBSERVE_GATE_REJECTED',
+  );
+  const releaseArmGate = projectName => releaseGate(
+    armGates, projectName, 'AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ARM_GATE_REJECTED',
+  );
   const observations = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
     passwordRequests: [],
     bindings: [],
     attestationRequests: 0,
     processCommandRequests: 0,
     verifySessionCalls: [],
+    controlSequence: [],
   }]));
   const attestation = Object.freeze({
     attested: true,
@@ -304,6 +331,50 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         if (incoming.headers.apikey !== PUBLIC_ANON_KEY) {
           return sendJson(outgoing, 401, { error: { code: 'API_KEY_REQUIRED' } });
         }
+        if (identity.persona === 'author') {
+          const projectObservation = observations.get(identity.projectName);
+          projectObservation.controlSequence.push('backend-arrival');
+          const response = await processRouter.handleProcessCommandRequest(new Request(
+            `${BACKEND_ORIGIN}/functions/v1/process-command`, {
+              method: 'POST',
+              headers: { authorization: `Bearer ${identity.token}`, 'content-type': 'application/json' },
+              body: JSON.stringify(body),
+            },
+          ), {
+            creation: {
+              authenticate: async () => { throw new Error('UNEXPECTED_CREATION_ROUTE'); },
+              authority: async () => null,
+              atomic: async () => { throw new Error('UNEXPECTED_CREATION_ATOMIC'); },
+            },
+            update: {
+              authenticate: async () => ({ id: identity.user.id }),
+              authority: async (_request, actorId, envelope) => ({
+                userId: actorId,
+                organizationId: envelope.organizationId,
+                workspaceId: envelope.workspaceId,
+                authorizationVersion: 1,
+                capabilities: capabilitiesForIdentity(identity),
+              }),
+              consumePrecommitFault: async (_request, requestBody, actorId, envelope) => {
+                const permit = processFaultPermits.get(identity.projectName);
+                const payloadHash = authenticatedHostedDigest(requestBody).slice('sha256:'.length);
+                if (!permit || permit.state !== 'armed' || permit.actorId !== actorId
+                  || permit.sessionId !== identity.sessionId || permit.commandType !== envelope.commandType
+                  || permit.requestId !== envelope.requestId || permit.payloadHash !== payloadHash
+                  || permit.expectedVersion !== envelope.expectedVersion) return false;
+                permit.state = 'consumed';
+                permit.consumed += 1;
+                projectObservation.controlSequence.push('permit-consume');
+                return true;
+              },
+              atomic: async () => {
+                processAtomicCalls += 1;
+                throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_UNEXPECTED_PROCESS_ATOMIC');
+              },
+            },
+          });
+          return sendJson(outgoing, response.status, await response.json());
+        }
         if (!validDeniedProcessUpdate(body, identity, processRows.get(identity.projectName))) {
           return sendJson(outgoing, 400, { error: { code: 'INVALID_COMMAND' } });
         }
@@ -415,10 +486,111 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       const identity = Object.values(identityRows).find(candidate => candidate.user.id === input.actorId);
       observations.get(identity.projectName).bindings.push({ actor: identity.actor, persona: identity.persona, sessionHash: authenticatedHostedDigest(input.sessionId) });
     },
-    observe: async () => ({ capturedAt: nextTime().toISOString(), records: [] }),
-    recordBrowserAction: async () => undefined,
-    armPermit: async () => ({ armed: true }),
+    observe: async ({ project }) => {
+      const gate = observeGates.get(project.projectName);
+      if (!gate) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OBSERVE_GATE_REJECTED');
+      if (gate.mode !== 'open') {
+        observations.get(project.projectName).controlSequence.push('observe-held');
+        await new Promise(resolve => gate.waiters.push(resolve));
+        observations.get(project.projectName).controlSequence.push('observe-released');
+      }
+      const permit = processFaultPermits.get(project.projectName);
+      const records = permit ? [{
+        source: 'authenticated_synthetic_permits',
+        recordHash: authenticatedHostedDigest(permit.permitId),
+        rowHash: authenticatedHostedDigest(permit),
+        businessRowHash: authenticatedHostedDigest(permit),
+        occurredAt: permit.armedAt,
+        classification: permit.state === 'armed' ? 'transient_control' : 'immutable_history',
+        active: permit.state === 'armed',
+        actorHash: authenticatedHostedDigest(permit.actorId),
+        sessionHash: authenticatedHostedDigest(permit.sessionId),
+        requestIdHash: authenticatedHostedDigest(permit.requestId),
+        persistedRequestHash: null,
+        persistedPayloadHash: `sha256:${permit.payloadHash}`,
+        commandBindingHash: authenticatedHostedDigest({
+          requestIdHash: authenticatedHostedDigest(permit.requestId),
+          actorHash: authenticatedHostedDigest(permit.actorId),
+          commandType: permit.commandType,
+        }),
+        commandIdHash: null,
+        receiptIdHash: null,
+        auditIdHash: null,
+        effectKind: 'control',
+        organizationHash: authenticatedHostedDigest(ORGANIZATION_ID),
+        workspaceHash: authenticatedHostedDigest(WORKSPACE_ID),
+      }] : [];
+      return { capturedAt: nextTime().toISOString(), records };
+    },
+    recordBrowserAction: async ({ projectName }) => {
+      observations.get(projectName).controlSequence.push('action-finish');
+    },
+    armPermit: async input => {
+      const identity = Object.values(identityRows).find(candidate => candidate.user.id === input.actorId);
+      if (!identity || processFaultPermits.get(identity.projectName)?.state === 'armed') {
+        throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PERMIT_REJECTED');
+      }
+      const permit = {
+        permitId: input.permitId,
+        actorId: input.actorId,
+        sessionId: input.sessionId,
+        commandType: input.commandType,
+        requestId: input.requestId,
+        payloadHash: input.payloadHash,
+        expectedVersion: input.expectedVersion,
+        armedAt: nextTime().toISOString(),
+        state: 'armed',
+        consumed: 0,
+      };
+      processFaultPermits.set(identity.projectName, permit);
+      observations.get(identity.projectName).controlSequence.push('permit-arm');
+      const gate = armGates.get(identity.projectName);
+      if (gate.mode !== 'open') {
+        observations.get(identity.projectName).controlSequence.push('permit-arm-held');
+        await new Promise(resolve => gate.waiters.push(resolve));
+        observations.get(identity.projectName).controlSequence.push('permit-arm-released');
+      }
+      return { permitId: permit.permitId, state: permit.state };
+    },
+    frame: async (pathname, { project }) => {
+      if (pathname !== '/control/process-frame') throw new Error('AUTHENTICATED_HOSTED_CONTROL_UNSUPPORTED');
+      const process = processRows.get(project.projectName);
+      return {
+        targetHash: authenticatedHostedDigest(process),
+        receipts: 0,
+        audits: 0,
+        processVersion: process.authority_version,
+      };
+    },
     control: async (pathname, input) => {
+      if (pathname === '/control/sign-in-entry-observe-gate') {
+        const gate = observeGates.get(input.projectName);
+        if (!gate || !['hold-next','stall-next','release'].includes(input.mode)) {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OBSERVE_GATE_REJECTED');
+        }
+        if (input.mode === 'release') releaseObserveGate(input.projectName);
+        else {
+          if (gate.mode !== 'open' || gate.waiters.length !== 0) {
+            throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OBSERVE_GATE_REJECTED');
+          }
+          gate.mode = input.mode;
+        }
+        return { mode: gate.mode, waiting: gate.waiters.length };
+      }
+      if (pathname === '/control/sign-in-entry-arm-gate') {
+        const gate = armGates.get(input.projectName);
+        if (!gate || !['stall-next','release'].includes(input.mode)) {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ARM_GATE_REJECTED');
+        }
+        if (input.mode === 'release') releaseArmGate(input.projectName);
+        else {
+          if (gate.mode !== 'open' || gate.waiters.length !== 0) {
+            throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ARM_GATE_REJECTED');
+          }
+          gate.mode = input.mode;
+        }
+        return { mode: gate.mode, waiting: gate.waiters.length };
+      }
       if (pathname === '/control/sign-in-entry-process-duplicate') {
         if (!AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.includes(input.projectName)
           || typeof input.enabled !== 'boolean') throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DUPLICATE_CONTROL_REJECTED');
@@ -440,20 +612,35 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       return {
         ...projectObservation,
         anonymousProcessCommandRequests,
+        processAtomicCalls,
+        permits: [...processFaultPermits.values()].filter(permit => {
+          const identity = Object.values(identityRows).find(candidate => candidate.user.id === permit.actorId);
+          return identity?.projectName === input.projectName;
+        }).map(permit => ({ state: permit.state, consumed: permit.consumed,
+          requestIdHash: authenticatedHostedDigest(permit.requestId), payloadHash: `sha256:${permit.payloadHash}` })),
         diagnostic: controller.failureDiagnostic(),
         actions,
         browserCases: controller.browserCases.length,
         serverCases: controller.serverCases.length,
       };
     },
-    quiesce: async () => ({ quiesced: true }),
-    cleanup: async () => ({ cleaned: true }),
+    quiesce: async () => {
+      for (const projectName of AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS) {
+        releaseObserveGate(projectName);
+        releaseArmGate(projectName);
+      }
+      return { quiesced: true };
+    },
+    cleanup: async () => {
+      for (const permit of processFaultPermits.values()) if (permit.state === 'armed') permit.state = 'revoked';
+      return { cleaned: true };
+    },
     verifyCleanup: async () => ({
       capturedAt: nextTime().toISOString(),
       activeSessions: 0,
       activeIdentities: 0,
       activeMemberships: 0,
-      armedPermits: 0,
+      armedPermits: [...processFaultPermits.values()].filter(permit => permit.state === 'armed').length,
       activeSecretMaterial: 0,
       unapprovedActiveResidue: 0,
       nonExerciseChanged: false,

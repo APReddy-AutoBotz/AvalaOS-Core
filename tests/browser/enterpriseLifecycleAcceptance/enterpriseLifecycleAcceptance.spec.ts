@@ -474,6 +474,27 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (!hostedBrowserActionTracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     queueNetworkAction(() => hostedBrowserActionTracker!.finish(request, status, responseBody));
   };
+  const prepareProductFaultRoute = async (
+    route: import('@playwright/test').Route,
+    prepare: () => Promise<void>,
+  ) => {
+    const owningTestWorkQueues = activeTestWorkQueues;
+    if (!owningTestWorkQueues) {
+      await route.abort('failed').catch(() => undefined);
+      throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    }
+    try {
+      await prepare();
+      return true;
+    } catch (error) {
+      await route.abort('failed').catch(() => undefined);
+      const failure = error instanceof Error
+        && /^(?:ENTERPRISE_LIFECYCLE_BROWSER_CONTROL|AUTHENTICATED_BROWSER_)[A-Z0-9_]*$/u.test(error.message)
+        ? error : new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED');
+      owningTestWorkQueues.network.enqueue(async () => { throw failure; });
+      return false;
+    }
+  };
   class AuthenticatedCaseCollector extends Array<unknown> {
     pushWithActions(row: Record<string | symbol, unknown>, ...actions: ApiResponseObservation[]) {
       Object.defineProperty(row, authenticatedHostedActionIds, { value: actions.map(item => item.actionId) });
@@ -490,7 +511,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           if(explicit){Object.defineProperty(row as object,authenticatedHostedActionIds,{value:explicit});explicitCaseActions.delete(testId);}
           owningTestWorkQueues.cases.enqueue(async () => {
             await new Promise(resolve => setTimeout(resolve, 0));
-            await owningTestWorkQueues.network.drain();
+            await test.step('hosted:queue:network-drain', () => owningTestWorkQueues.network.drain());
             const references=(row as Record<string | symbol, unknown>)[authenticatedHostedActionIds];
             if(!Array.isArray(references)||references.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${(row as any)?.testId??'unknown'}`);
             const actionIds=[...new Set((await Promise.all(references as HostedActionReference[])).filter((item): item is string=>!!item))];
@@ -557,8 +578,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let hasBoundaryFailure = false;
     if (owningTestWorkQueues) {
       await new Promise(resolve => setTimeout(resolve, 0));
-      for (const queue of [owningTestWorkQueues.network, owningTestWorkQueues.cases]) {
-        try { await queue.drain(); }
+      for (const [title, queue] of [
+        ['hosted:queue:network-drain', owningTestWorkQueues.network],
+        ['hosted:queue:case-drain', owningTestWorkQueues.cases],
+      ] as const) {
+        try { await test.step(title, () => queue.drain()); }
         catch (error) {
           if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
         }
@@ -578,8 +602,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let boundaryFailure: unknown = null;
     let hasBoundaryFailure = false;
     for (const workQueues of projectWorkQueues) {
-      for (const queue of [workQueues.network, workQueues.cases]) {
-        try { await queue.drain(); }
+      for (const [title, queue] of [
+        ['hosted:queue:network-drain', workQueues.network],
+        ['hosted:queue:case-drain', workQueues.cases],
+      ] as const) {
+        try { await test.step(title, () => queue.drain()); }
         catch (error) {
           if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
         }
@@ -683,13 +710,18 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         'SAFETY-002': 'ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_HTTP_STATUS_REJECTED',
         'SAFETY-003': 'ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_003_HTTP_STATUS_REJECTED',
       } as const);
+      const safetyStepTitles = Object.freeze({
+        'SAFETY-001': 'hosted:safety:offline',
+        'SAFETY-002': 'hosted:safety:server',
+        'SAFETY-003': 'hosted:safety:timeout',
+      } as const);
       const runSafetyCase = async (
         testId: 'SAFETY-001' | 'SAFETY-002' | 'SAFETY-003',
         classification: 'NETWORK_OFFLINE' | 'COMMAND_UNAVAILABLE' | 'NETWORK_TIMEOUT',
         status: number,
         expectedErrorCode: 'COMMAND_UNAVAILABLE' | null,
         install: () => Promise<() => Promise<void>>,
-      ) => {
+      ) => test.step(safetyStepTitles[testId], async () => {
         await enterProcessAs(page, setup.actors.author, setup.aliases.process);
         await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
         const proposed = `${setup.aliases.process} ${testId.toLowerCase()}`;
@@ -732,35 +764,44 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           cleanup: { verified: true },
         });
         await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
-      };
+      });
 
       await runSafetyCase('SAFETY-001', 'NETWORK_OFFLINE', 0, null, async () => {
         await page.route('**/functions/v1/process-command', async route => {
-          if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+          const prepared = await prepareProductFaultRoute(route, async () => {
+            if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+          });
+          if (!prepared) return;
           await route.abort('internetdisconnected');
         });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
       await runSafetyCase('SAFETY-002', 'COMMAND_UNAVAILABLE', 503, 'COMMAND_UNAVAILABLE', async () => {
         await page.route('**/functions/v1/process-command', async route => {
-          if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
-          const requestBody = route.request().postDataJSON();
-          const authorization = await route.request().allHeaders();
-          await control('/control/arm-browser-fault', {
-            projectName,
-            persona: 'author',
-            kind: 'process_server_error_precommit',
-            commandType: requestBody.commandType ?? 'process.update',
-            requestBody,
-            accessToken: (authorization.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+          const prepared = await prepareProductFaultRoute(route, async () => {
+            if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+            const requestBody = route.request().postDataJSON();
+            const authorization = await route.request().allHeaders();
+            await control('/control/arm-browser-fault', {
+              projectName,
+              persona: 'author',
+              kind: 'process_server_error_precommit',
+              commandType: requestBody.commandType ?? 'process.update',
+              requestBody,
+              accessToken: (authorization.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+            });
           });
+          if (!prepared) return;
           await route.fallback();
         });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
       await runSafetyCase('SAFETY-003', 'NETWORK_TIMEOUT', 0, null, async () => {
         await page.route('**/functions/v1/process-command', async route => {
-          if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+          const prepared = await prepareProductFaultRoute(route, async () => {
+            if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+          });
+          if (!prepared) return;
           await route.abort('timedout');
         });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
@@ -1247,17 +1288,20 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     const beforeStudioGeneration = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
     const hostedSuccessRoute = async (route: import('@playwright/test').Route) => {
-      await startProductAction(route.request());
-      const requestBody = route.request().postDataJSON();
-      const headers = await route.request().allHeaders();
-      await control('/control/arm-browser-fault', {
-        projectName,
-        persona: 'author',
-        kind: 'studio_deterministic_success',
-        commandType: requestBody.commandType ?? 'studio.document.generate',
-        requestBody,
-        accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+      const prepared = await prepareProductFaultRoute(route, async () => {
+        await startProductAction(route.request());
+        const requestBody = route.request().postDataJSON();
+        const headers = await route.request().allHeaders();
+        await control('/control/arm-browser-fault', {
+          projectName,
+          persona: 'author',
+          kind: 'studio_deterministic_success',
+          commandType: requestBody.commandType ?? 'studio.document.generate',
+          requestBody,
+          accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+        });
       });
+      if (!prepared) return;
       await route.fallback();
     };
     if (hostedAuthenticatedAcceptance) await page.route('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
@@ -1316,17 +1360,20 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       const beforeFailure = await control<StudioFailureFrame>('/control/studio-failure-frame', { projectName });
       const hostedFailureRoute = async (route: import('@playwright/test').Route) => {
-        await startProductAction(route.request());
-        const requestBody = route.request().postDataJSON();
-        const headers = await route.request().allHeaders();
-        await control('/control/arm-browser-fault', {
-          projectName,
-          persona: 'author',
-          kind: 'studio_failure_after_claim',
-          commandType: requestBody.commandType ?? 'studio.document.generate',
-          requestBody,
-          accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+        const prepared = await prepareProductFaultRoute(route, async () => {
+          await startProductAction(route.request());
+          const requestBody = route.request().postDataJSON();
+          const headers = await route.request().allHeaders();
+          await control('/control/arm-browser-fault', {
+            projectName,
+            persona: 'author',
+            kind: 'studio_failure_after_claim',
+            commandType: requestBody.commandType ?? 'studio.document.generate',
+            requestBody,
+            accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+          });
         });
+        if (!prepared) return;
         await route.fallback();
       };
       if (hostedAuthenticatedAcceptance) {

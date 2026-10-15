@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Hosted control liveness boundary (2026-10-15)
+
+PR #303 and its exact candidate/post-merge evidence are verified. Approved run `38687459796` on `83ecb018b4caf97a901246e4d3b926dde85e601f` independently remains **61 PASS / 47 BLOCKED** with all 331 source bindings verified. The desktop primary lifecycle timed out without a retained operation/location; cleanup, providers OFF and temporary-main removal are complete. The one-run allowance is consumed.
+
+All three read-only reviewers completed. Continue one repository correction under the existing implementation/verified-merge authority: bound complete control exchanges, explicitly abort fault routes after control failure, retain fixed operation/source diagnostics, and reproduce delayed/stalled shared-controller flow through the actual app and production process handler. Do not increase global test timeouts, retry hosted execution or claim the historical cause is proven. Current source shows an acyclic fail-closed start/arm/fallback chain; full hosted latency remains unknown. Preserve the original 108-case catalog, server authority, evidence and rollback. Task details remain in `docs/planning/hosted-acceptance-completion.md`.
+
 ## Real-handler safety acceptance correction (2026-10-15)
 
 Merged PR #302's approved run `38677853484` retains independently verified 61 PASS / 47 BLOCKED, complete cleanup/providers OFF and consumed allowance. Three read-only architecture/security/quality reviews completed and closed. Root synthesized the confirmed 500-versus-503 safety contract mismatch, local fabricated-response gap and shared route-composition gap; the exact historical response remains unobserved. Under the fixed managed workspace-write profile, one implementation worker owns the real-handler fixture/browser/client/diagnostic proof; root owns canonical documentation, provenance/CI, verification and one PR. No nested agents or reviewers during writes. Follow `docs/planning/hosted-acceptance-completion.md`; preserve all criteria, scoring, server authority, unrelated state and stash. No broad regression campaign or new hosted action.
