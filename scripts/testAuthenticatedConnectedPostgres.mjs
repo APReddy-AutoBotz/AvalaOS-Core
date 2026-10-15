@@ -23,7 +23,7 @@ const invokeProcessUpdate = async (fixture, expectedVersion, name, processId = f
     },
   };
   const response = await fetch(`${fixture.baseUrl}/functions/v1/process-command`, {
-    method: 'POST', headers: { authorization: 'Bearer enterprise-author-token', 'content-type': 'application/json' },
+    method: 'POST', headers: { authorization: `Bearer ${fixture.actors.author.token}`, 'content-type': 'application/json' },
     body: JSON.stringify(request),
   });
   return { status: response.status, body: await response.json(), request };
@@ -45,7 +45,7 @@ const expectRoleDenied = async (db, role, actorId, sql, values = []) => {
 
 const replayProcessUpdate = async (fixture, request) => {
   const response = await fetch(`${fixture.baseUrl}/functions/v1/process-command`, {
-    method: 'POST', headers: { authorization: 'Bearer enterprise-author-token', 'content-type': 'application/json' },
+    method: 'POST', headers: { authorization: `Bearer ${fixture.actors.author.token}`, 'content-type': 'application/json' },
     body: JSON.stringify(request),
   });
   return { status: response.status, body: await response.json() };
@@ -55,6 +55,25 @@ export const runAuthenticatedConnectedPostgres = async () => {
   const fixture = await createEnterpriseLifecycleFixture();
   let cleanup = false;
   try {
+    const sessions = new Set();
+    for (const actor of Object.values(fixture.actors)) {
+      const [header, payload, signature] = actor.token.split('.');
+      const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      assert.equal(claims.sub, actor.user.id);
+      assert.match(claims.session_id, /^[a-f0-9-]{36}$/u);
+      sessions.add(claims.session_id);
+      const accepted = await fetch(`${fixture.baseUrl}/auth/v1/user`, {
+        headers: { authorization: `Bearer ${actor.token}` },
+      });
+      assert.equal(accepted.status, 200);
+      assert.equal((await accepted.json()).id, actor.user.id);
+      const substituted = Buffer.from(JSON.stringify({ ...claims, session_id: randomUUID() })).toString('base64url');
+      const denied = await fetch(`${fixture.baseUrl}/auth/v1/user`, {
+        headers: { authorization: `Bearer ${header}.${substituted}.${signature}` },
+      });
+      assert.equal(denied.status, 401, 'claims must not authorize an unregistered fixture token');
+    }
+    assert.equal(sessions.size, 4);
     const before = await processCounts(fixture.db, fixture.ids.process);
     const committed = await invokeProcessUpdate(fixture, 1, 'Connected lifecycle updated');
     assert.equal(committed.status, 200, JSON.stringify(committed.body));
