@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Synthetic failure transport composition (2026-10-15)
+
+The process precommit-fault contract remains HTTP 503 / COMMAND_UNAVAILABLE after current authentication/tenant/capability authority and before atomic mutation. A browser-fabricated 500 is not proof of that path. Preparation must drive the production router with a narrowly bound, one-use local fault and separately verify the existing real permit through disposable PostgreSQL. Local fixture authority never becomes hosted evidence. Existing hosted permits retain exact session/request/payload/version/exercise binding, expiry and one-shot consumption; no schema or production authority change is included.
+
+Page-level permit interception must hand the original request back through the shared context containment/tracker before dispatch. The permit is bound by bearer session and payload; no new browser authority header is needed. Apply the same routing composition to the existing process and Studio permit callers without changing their business behavior. Follow `docs/planning/hosted-acceptance-completion.md`; all 47 hosted requirements remain blocked pending qualifying execution.
+
 ## Acceptance observation and failure boundaries (2026-10-14)
 
 The repository correction in `docs/planning/hosted-acceptance-completion.md` must keep observation windows in the database clock domain, with the database cutoff as the initial cursor and each authority observation's statement timestamp as its next cursor. Runner-clock times cannot widen or clamp command/receipt attribution intervals. Request/session binding and independent server reconstruction stay unchanged; this is acceptance-tooling authority, not a product schema or permission change. Reproduce the mixed-clock condition before claiming the correction verified.

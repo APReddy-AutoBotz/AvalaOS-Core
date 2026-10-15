@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Safety response contract and real-handler preparation (2026-10-15)
+
+PR #302 merged as `818dce5b3610967ffef5ca416fac60865978bb62` with identical tested tree and verified candidate/post-merge checks. Approved run `38677853484`, attempt 1, independently verifies 331 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. The restricted process denial, final reload and unchanged-state comparison passed; the primary journey then failed its shared safety HTTP-status assertion. Cleanup, quiescence, revoked access, zero active permits/residue/secret references/unfinished cleanup, providers OFF and removal of owned temporary main access are verified. The one-run allowance is consumed.
+
+**Confirmed source defect:** SAFETY-002 expects HTTP 500 and fabricates that response locally, while the production precommit-fault path returns HTTP 503 / COMMAND_UNAVAILABLE. An in-memory production-router reproduction returned 503 with one fault call and zero atomic calls. This proves the source mismatch, not the unretained historical response. Follow `docs/planning/hosted-acceptance-completion.md` for one repository correction that uses the real handler in preparation, preserves no-false-success and zero-write criteria, and composes permit routes through the shared network guard. No production behavior, criteria or authority change and no new hosted action is included.
+
 ## Process navigation acceptance boundary (2026-10-14)
 
 PR #301 merged as `14aeae5531c2e42c3e653fdb45d582e476a3ea05` with identical tested tree, applicable candidate/post-merge checks and independently verified preparation artifacts. Approved run `38608851775`, attempt 1, independently verifies 327 source hashes and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. It passed the restricted reviewer's valid process-command denial, then failed the process heading assertion after reload at `enterpriseLifecycleAcceptance.spec.ts:635`, before the independent unchanged-state comparison. Cleanup verifies quiescence, revoked identities/sessions/memberships, no active permits/residue/secret references or unfinished secret cleanup, providers OFF and owned temporary main access removed. The one-run allowance is consumed.

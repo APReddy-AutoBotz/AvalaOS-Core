@@ -70,7 +70,12 @@ type ProjectFinalization = Readonly<{
   }>;
 }>;
 type HostedActionReference = Promise<string | null>;
-type ApiResponseObservation = Readonly<{ route: string; status: number; actionId: HostedActionReference }>;
+type ApiResponseObservation = Readonly<{
+  route: string;
+  status: number;
+  errorCode?: string;
+  actionId: HostedActionReference;
+}>;
 let hostedBrowserActionTracker: AuthenticatedHostedBrowserActionTracker | null = null;
 const actionReference = (request: Request): HostedActionReference => hostedAuthenticatedAcceptance
   ? hostedBrowserActionTracker?.reference(request)
@@ -100,11 +105,19 @@ const observeApiResponse = async (
   page: Page,
   route: string,
   action: () => Promise<unknown>,
+  captureErrorCode = false,
 ): Promise<ApiResponseObservation> => {
   const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === route, { timeout: 15_000 });
   await action();
   const response = await responsePromise;
-  return { route, status: response.status(), actionId: actionReference(response.request()) };
+  const responseBody = captureErrorCode ? await response.json().catch(() => null) as unknown : null;
+  const errorCode = responseBody && typeof responseBody === 'object' && !Array.isArray(responseBody)
+    && (responseBody as { error?: unknown }).error
+    && typeof (responseBody as { error: { code?: unknown } }).error.code === 'string'
+    ? (responseBody as { error: { code: string } }).error.code
+    : undefined;
+  return { route, status: response.status(), ...(errorCode ? { errorCode } : {}),
+    actionId: actionReference(response.request()) };
 };
 
 const observeFailedApiRequest = async (
@@ -665,10 +678,16 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await deniedEditPage.close();
 
     if (authenticatedProductAcceptance) {
+      const safetyStatusDiagnostics = Object.freeze({
+        'SAFETY-001': 'ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_001_HTTP_STATUS_REJECTED',
+        'SAFETY-002': 'ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_HTTP_STATUS_REJECTED',
+        'SAFETY-003': 'ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_003_HTTP_STATUS_REJECTED',
+      } as const);
       const runSafetyCase = async (
         testId: 'SAFETY-001' | 'SAFETY-002' | 'SAFETY-003',
-        classification: 'NETWORK_OFFLINE' | 'SERVICE_UNAVAILABLE' | 'NETWORK_TIMEOUT',
+        classification: 'NETWORK_OFFLINE' | 'COMMAND_UNAVAILABLE' | 'NETWORK_TIMEOUT',
         status: number,
+        expectedErrorCode: 'COMMAND_UNAVAILABLE' | null,
         install: () => Promise<() => Promise<void>>,
       ) => {
         await enterProcessAs(page, setup.actors.author, setup.aliases.process);
@@ -682,8 +701,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           const action = () => page.getByRole('button', { name: 'Save process details', exact: true }).click({ timeout: 15_000 });
           api = status === 0
             ? await observeFailedApiRequest(page, '/functions/v1/process-command', action)
-            : await observeApiResponse(page, '/functions/v1/process-command', action);
-          expect(api.status).toBe(status);
+            : await observeApiResponse(page, '/functions/v1/process-command', action, expectedErrorCode !== null);
+          if (api.status !== status) throw new Error(safetyStatusDiagnostics[testId]);
+          if (expectedErrorCode !== null && api.errorCode !== expectedErrorCode) {
+            throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_SAFETY_002_RESPONSE_CODE_REJECTED');
+          }
           await expect(page.getByText('Process update could not be confirmed. Your edits are still available to retry.', { exact: true })).toBeVisible();
         } finally { await restore(); }
         await expect(page.getByLabel('Process name', { exact: true })).toHaveValue(proposed);
@@ -712,22 +734,16 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
       };
 
-      await runSafetyCase('SAFETY-001', 'NETWORK_OFFLINE', 0, async () => {
+      await runSafetyCase('SAFETY-001', 'NETWORK_OFFLINE', 0, null, async () => {
         await page.route('**/functions/v1/process-command', async route => {
           if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
           await route.abort('internetdisconnected');
         });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
-      await runSafetyCase('SAFETY-002', 'SERVICE_UNAVAILABLE', 500, async () => {
+      await runSafetyCase('SAFETY-002', 'COMMAND_UNAVAILABLE', 503, 'COMMAND_UNAVAILABLE', async () => {
         await page.route('**/functions/v1/process-command', async route => {
-          if (!hostedAuthenticatedAcceptance) {
-            await route.fulfill({
-              status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
-            });
-            return;
-          }
-          await startProductAction(route.request());
+          if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
           const requestBody = route.request().postDataJSON();
           const authorization = await route.request().allHeaders();
           await control('/control/arm-browser-fault', {
@@ -738,11 +754,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             requestBody,
             accessToken: (authorization.authorization ?? '').replace(/^Bearer\s+/iu, ''),
           });
-          await route.continue();
+          await route.fallback();
         });
         return async () => { await page.unroute('**/functions/v1/process-command'); };
       });
-      await runSafetyCase('SAFETY-003', 'NETWORK_TIMEOUT', 0, async () => {
+      await runSafetyCase('SAFETY-003', 'NETWORK_TIMEOUT', 0, null, async () => {
         await page.route('**/functions/v1/process-command', async route => {
           if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
           await route.abort('timedout');
@@ -1242,7 +1258,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         requestBody,
         accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
       });
-      await route.continue();
+      await route.fallback();
     };
     if (hostedAuthenticatedAcceptance) await page.route('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
     let generationApi: ApiResponseObservation;
@@ -1311,7 +1327,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           requestBody,
           accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
         });
-        await route.continue();
+        await route.fallback();
       };
       if (hostedAuthenticatedAcceptance) {
         await page.route('**/functions/v1/studio-artifact-command', hostedFailureRoute);

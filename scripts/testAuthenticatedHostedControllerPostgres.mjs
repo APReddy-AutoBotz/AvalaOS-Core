@@ -48,8 +48,10 @@ const duplicateSafe = new Set([
 const catalog = JSON.parse(readFileSync(path.join(root, 'tests', 'acceptance', 'catalog', 'test-catalog.json'), 'utf8'));
 const definition = catalog.cases.find(item => item.testId === 'ASSESS-003');
 const deniedDefinition = catalog.cases.find(item => item.testId === 'ASSESS-002');
+const safetyDefinition = catalog.cases.find(item => item.testId === 'SAFETY-002');
 assert.ok(definition);
 assert.ok(deniedDefinition);
+assert.ok(safetyDefinition);
 const requiredCapabilities = Object.freeze({
   author: ['org.admin','operations.read','assess.read','assess.create','assess.response.write','assess.finalize',
     'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
@@ -618,6 +620,175 @@ try {
   assert.equal(deniedEvidence.measurements.auditWrites, 0);
   const deniedAfter = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-002' });
   assert.deepEqual(deniedAfter, deniedBefore, 'reviewer capability denial preserves the independently read process frame');
+
+  const syntheticAuthority = loadEnterpriseLifecycleProductionModule(
+    path.join(root,'supabase','functions','_shared','authenticatedSyntheticAuthority.ts'));
+  const safetyRequestId = randomUUID();
+  const authorProcess = await visibleProcess(ids.actors.author,project.processId);
+  const safetyEnvelope = {
+    requestId: safetyRequestId,
+    idempotencyKey: `process.update.${safetyRequestId}`,
+    commandType: 'process.update',
+    organizationId: ids.org,
+    workspaceId: ids.workspace,
+    authorizationVersion,
+    expectedVersion: Number(authorProcess.authority_version),
+    payload: {
+      processId: authorProcess.id,
+      name: 'Precommit failure must remain uncommitted',
+      description: authorProcess.description,
+      department: authorProcess.department,
+      criticality: authorProcess.criticality,
+    },
+  };
+  const safetyBefore = await adapter.frame('/control/process-frame', { project, testId: 'SAFETY-002' });
+  const safetyBoundary = await adapter.observe({ exerciseId: ids.exercise,
+    from: preflight.observationStartedAt, project });
+  const safetyController = new AuthenticatedHostedController({
+    config,
+    identity: { verifySession: async () => ({ actorId: ids.actors.author, sessionId: ids.sessions.author }) },
+    adapter,
+  });
+  safetyController.exerciseId = ids.exercise;
+  safetyController.startedAt = preflight.observationStartedAt;
+  safetyController.observationStartedAt = preflight.observationStartedAt;
+  safetyController.active = true;
+  safetyController.projects.set('desktop-chromium-safety', {
+    ...project,
+    lastBoundaryAt: safetyBoundary.capturedAt,
+  });
+  const authorAccessToken = tokenFor(ids.actors.author,ids.sessions.author);
+  const safetyAction = await safetyController.beginBrowserAction({
+    projectName: 'desktop-chromium-safety',
+    accessToken: authorAccessToken,
+    route: '/functions/v1/process-command',
+    requestBody: safetyEnvelope,
+  });
+  const safetyPayloadHash = authenticatedHostedDigest(safetyEnvelope).slice('sha256:'.length);
+  const armed = await safetyController.armBrowserFault({
+    projectName: 'desktop-chromium-safety',
+    persona: 'author',
+    kind: 'process_server_error_precommit',
+    commandType: 'process.update',
+    requestBody: safetyEnvelope,
+    accessToken: authorAccessToken,
+  });
+  assert.equal(armed.state,'armed');
+  let safetyAtomicCalls = 0;
+  const safetyOrder = [];
+  const safetyDependencies = {
+    creation: {
+      authenticate: async () => { throw new Error('UNEXPECTED_CREATION_ROUTE'); },
+      authority: async () => null,
+      atomic: async () => { throw new Error('UNEXPECTED_CREATION_ATOMIC'); },
+    },
+    update: {
+      authenticate: async request => {
+        assert.equal(request.headers.get('authorization'),`Bearer ${tokenFor(ids.actors.author,ids.sessions.author)}`);
+        return { id: ids.actors.author };
+      },
+      authority: async (_request,actorId,envelope) => {
+        safetyOrder.push('authority');
+        return tenantAuthority.resolveTenantAuthority(actorId, {
+          organizationId: envelope.organizationId,
+          workspaceId: envelope.workspaceId,
+          expectedAuthorizationVersion: envelope.authorizationVersion,
+        }, { loadFreshProjection: input => visibleTenantContext(actorId,input.organizationId,input.workspaceId) });
+      },
+      consumePrecommitFault: async (request,body,actorId,envelope) => {
+        safetyOrder.push('consume');
+        return syntheticAuthority.consumeAuthenticatedSyntheticProcessFault({
+          request, body, actorId,
+          organizationId: envelope.organizationId,
+          workspaceId: envelope.workspaceId,
+          commandType: 'process.update',
+          requestId: envelope.requestId,
+          expectedVersion: envelope.expectedVersion,
+        }, async (name,args) => {
+          assert.equal(name,'authenticated_synthetic_consume_process_fault');
+          assert.equal(args.p_session_id,ids.sessions.author,
+            'the production adapter preserves the verified session in the test runtime');
+          assert.equal(args.p_payload_hash,await syntheticAuthority.authenticatedSyntheticPayloadHash(body));
+          return (await serviceQuery(
+            'SELECT public.authenticated_synthetic_consume_process_fault($1,$2,$3,$4,$5,$6,$7,$8) value',
+            [args.p_actor_id,args.p_org_id,args.p_workspace_id,args.p_session_id,args.p_command_type,
+              args.p_request_id,args.p_payload_hash,args.p_expected_version],
+          )).rows[0].value;
+        });
+      },
+      atomic: async () => { safetyAtomicCalls += 1; throw new Error('SAFETY_ATOMIC_MUST_NOT_RUN'); },
+    },
+  };
+  const safetyRequest = body => new Request('http://127.0.0.1/functions/v1/process-command', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${tokenFor(ids.actors.author,ids.sessions.author)}`,
+      'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const mismatchedSafetyResponse = await processRouter.handleProcessCommandRequest(
+    safetyRequest({ ...safetyEnvelope, payload: { ...safetyEnvelope.payload, name: 'Mismatched payload' } }),
+    safetyDependencies,
+  );
+  assert.equal(mismatchedSafetyResponse.status,503);
+  assert.equal((await db.query('SELECT state FROM public.authenticated_synthetic_permits WHERE id=$1',
+    [armed.permitId])).rows[0].state,'armed','a mismatched payload cannot consume the permit');
+  const safetyResponse = await processRouter.handleProcessCommandRequest(safetyRequest(safetyEnvelope),safetyDependencies);
+  const safetyBody = await safetyResponse.json();
+  assert.equal(safetyResponse.status,503);
+  assert.deepEqual(safetyBody,{ok:false,error:{
+    code:'COMMAND_UNAVAILABLE',message:'Process update could not be completed.',
+  }});
+  await db.query('SELECT pg_sleep(0.01)');
+  await safetyController.finishBrowserAction({
+    projectName: 'desktop-chromium-safety', actionId: safetyAction.actionId, status: 503,
+    responseBody: safetyBody,
+  });
+  assert.deepEqual(safetyOrder,['authority','consume','authority','consume'],
+    'fresh authority is established before every permit-consumption attempt');
+  assert.equal(safetyAtomicCalls,0);
+  const consumedPermit = (await db.query(`SELECT kind,command_type,actor_id,session_id,request_id,payload_hash,
+      expected_version::int,state,consumed_at IS NOT NULL consumed,
+      (SELECT count(*)::int FROM public.authenticated_synthetic_permit_events event
+        WHERE event.permit_id=permit.id AND event.event_type='consumed_precommit') consumed_events
+    FROM public.authenticated_synthetic_permits permit WHERE id=$1`,[armed.permitId])).rows[0];
+  assert.deepEqual(consumedPermit,{
+    kind:'process_server_error_precommit',command_type:'process.update',actor_id:ids.actors.author,
+    session_id:ids.sessions.author,request_id:safetyRequestId,payload_hash:safetyPayloadHash,
+    expected_version:safetyEnvelope.expectedVersion,state:'consumed',consumed:true,consumed_events:1,
+  });
+  const safetyAfter = await adapter.frame('/control/process-frame', { project, testId: 'SAFETY-002' });
+  assert.deepEqual(safetyAfter,safetyBefore,
+    'the real consumed precommit permit returns 503 without process, receipt, or audit mutation');
+  // These browser assertions are controlled verifier inputs, not observed UI proof.
+  // The separate connected-browser job must establish preserved input/no false success.
+  await safetyController.recordBrowserCase({
+    projectName: 'desktop-chromium-safety', actionIds: [safetyAction.actionId],
+    row: { testId: 'SAFETY-002', controls: { assertions: [
+      { id: 'server-error-command-not-committed', status: 'passed' },
+      { id: 'input-preserved-without-success', status: 'passed' },
+    ] } },
+  });
+  const safetyEvidence = reconstructAuthenticatedHostedCaseEvidence({
+    browser: safetyController.browserCases[0], server: safetyController.serverCases[0],
+    definition: safetyDefinition,
+  });
+  assert.equal(safetyEvidence.status,'PASS');
+  assert.equal(safetyEvidence.measurements.denialObserved,true);
+  for (const measurement of [
+    'logicalMutations','domainWrites','secretWrites','storageWrites','generationAttemptWrites',
+    'receiptWrites','auditWrites','concurrencyWrites','providerCalls',
+    'paidCalls','providerTokens','budgetReservations','budgetDebits','foreignWrites',
+  ]) assert.equal(safetyEvidence.measurements[measurement],0,`SAFETY-002 ${measurement} remains zero`);
+  assert.equal(safetyEvidence.measurements.beforeHash,safetyEvidence.measurements.afterHash,
+    'SAFETY-002 reconstructs the unchanged independent resource frame');
+  const safetyBrowserAction = safetyController.browserCases[0].actions[0];
+  assert.equal(safetyBrowserAction.requestIdHash,authenticatedHostedDigest(safetyRequestId));
+  assert.equal(safetyBrowserAction.browserPayloadHash,`sha256:${safetyPayloadHash}`);
+  assert.ok(safetyController.serverCases[0].after.records.some(row => row.effectKind === 'control'
+    && row.commandBindingHash === safetyBrowserAction.commandBindingHash
+    && row.requestIdHash === safetyBrowserAction.requestIdHash
+    && row.persistedPayloadHash === safetyBrowserAction.browserPayloadHash),
+  'SAFETY-002 server evidence correlates the exact consumed permit payload to the browser action');
 
   const processFrame = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-003' });
   assert.equal(processFrame.receipts, 1);

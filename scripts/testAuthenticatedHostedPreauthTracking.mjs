@@ -107,7 +107,9 @@ const main = async () => {
     response.writeHead(404); response.end(JSON.stringify({ error: 'NOT_FOUND' }));
   });
   const backendOrigin = await listen(backendServer);
-  appServer = createServer((_request, response) => {
+  let foreignAppArrivals = 0;
+  appServer = createServer((request, response) => {
+    if (request.headers.host?.startsWith('127.0.0.1:')) foreignAppArrivals += 1;
     response.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
     response.end('<!doctype html><html><body><main>pre-auth tracking fixture</main></body></html>');
   });
@@ -116,6 +118,7 @@ const main = async () => {
 
     const classifications = [];
     const expectedAuthorityRejections = new WeakSet();
+    const expectedContainmentRejections = new WeakSet();
     const eventTasks = [];
     const eventErrors = [];
     const queueEvent = promise => eventTasks.push(Promise.resolve(promise).catch(error => {
@@ -150,7 +153,10 @@ const main = async () => {
       const request = route.request();
       const url = new URL(request.url());
       if (!['127.0.0.1', 'localhost'].includes(url.hostname)
-        || ![appOrigin, backendOrigin].includes(url.origin)) return route.abort('blockedbyclient');
+        || ![appOrigin, backendOrigin].includes(url.origin)) {
+        expectedContainmentRejections.add(request);
+        return route.abort('blockedbyclient');
+      }
       const classification = await tracker.classify(request);
       classifications.push({ kind: classification.kind, method: request.method(), pathname: url.pathname });
       if (classification.kind === 'public-attestation' && oldPathnameRejection === null) {
@@ -178,12 +184,22 @@ const main = async () => {
       })());
     });
     context.on('requestfailed', request => {
-      if (expectedAuthorityRejections.has(request)) return;
+      if (expectedAuthorityRejections.has(request) || expectedContainmentRejections.has(request)) return;
       queueEvent(tracker.finish(request, 0, { error: { code: 'BROWSER_TRANSPORT_FAILURE' } }));
     });
     const page = await context.newPage();
     await page.goto(appOrigin);
-    const result = await page.evaluate(async ({ backend, attestationPath }) => {
+    let permitInterceptions = 0;
+    await page.route('**/functions/v1/process-command', async route => {
+      const headers = await route.request().allHeaders();
+      if (headers.authorization) {
+        await tracker.begin(route.request());
+        permitInterceptions += 1;
+      }
+      await route.fallback();
+    });
+    const foreignOrigin = appOrigin.replace('localhost', '127.0.0.1');
+    const result = await page.evaluate(async ({ backend, foreign, attestationPath }) => {
       const publicResponse = await fetch(`${backend}${attestationPath}`, { method: 'POST', headers: {
         apikey: 'fixture-public-key', 'content-type': 'application/json',
       }, body: JSON.stringify({ release: 'fixture' }) });
@@ -200,15 +216,25 @@ const main = async () => {
           'content-type': 'application/json',
         }, body: JSON.stringify({ requestId: '40000000-0000-4000-8000-000000000004', commandType: 'process.update' }) });
       } catch { unauthenticatedRejected = true; }
+      let foreignOriginRejected = false;
+      try {
+        await fetch(`${foreign}/functions/v1/process-command`, { method: 'POST', headers: {
+          'content-type': 'application/json',
+        }, body: JSON.stringify({ requestId: '50000000-0000-4000-8000-000000000005', commandType: 'process.update' }) });
+      } catch { foreignOriginRejected = true; }
       return { publicStatus: publicResponse.status, signInStatus: signIn.status,
-        deniedStatus: denied.status, unauthenticatedRejected };
-    }, { backend: backendOrigin, attestationPath: AUTHENTICATED_HOSTED_PUBLIC_ATTESTATION_PATH });
+        deniedStatus: denied.status, unauthenticatedRejected, foreignOriginRejected };
+    }, { backend: backendOrigin, foreign: foreignOrigin,
+      attestationPath: AUTHENTICATED_HOSTED_PUBLIC_ATTESTATION_PATH });
     for (let processed = 0; processed < eventTasks.length;) {
       const pending = eventTasks.slice(processed); processed = eventTasks.length; await Promise.all(pending);
     }
     if (eventErrors.length) throw eventErrors[0];
     assert.deepEqual(result, { publicStatus: 200, signInStatus: 200, deniedStatus: 403,
-      unauthenticatedRejected: true });
+      unauthenticatedRejected: true, foreignOriginRejected: true });
+    assert.equal(permitInterceptions, 1,
+      'one allowed endpoint interception falls back through the shared route and tracker begin stays idempotent');
+    assert.equal(foreignAppArrivals,0,'the foreign-origin endpoint request is blocked before server dispatch');
     assert.equal(oldPathnameRejection?.status, 409);
     assert.equal(oldPathnameRejection?.body?.error, 'AUTHENTICATED_HOSTED_CONTROLLER_SESSION_TOKEN_REJECTED');
     assert.equal(arrivals.publicAttestation, 2);

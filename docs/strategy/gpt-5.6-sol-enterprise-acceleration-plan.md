@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Real-handler safety acceptance correction (2026-10-15)
+
+Merged PR #302's approved run `38677853484` retains independently verified 61 PASS / 47 BLOCKED, complete cleanup/providers OFF and consumed allowance. Three read-only architecture/security/quality reviews completed and closed. Root synthesized the confirmed 500-versus-503 safety contract mismatch, local fabricated-response gap and shared route-composition gap; the exact historical response remains unobserved. Under the fixed managed workspace-write profile, one implementation worker owns the real-handler fixture/browser/client/diagnostic proof; root owns canonical documentation, provenance/CI, verification and one PR. No nested agents or reviewers during writes. Follow `docs/planning/hosted-acceptance-completion.md`; preserve all criteria, scoring, server authority, unrelated state and stash. No broad regression campaign or new hosted action.
+
 ## Process navigation proof correction (2026-10-14)
 
 PR #301's approved run `38608851775` retains independently verified 61 PASS / 47 BLOCKED, complete cleanup/providers OFF and consumed allowance. Three read-only architecture/security/quality reviewers completed and closed. Root accepts one repository correction: reproduce the shared process-entry synchronization gap, observe exact durable navigation before and after the authority-refresh reload, and retain the final reload and independent unchanged-state proof. Historical hosted causation remains unproven. Under the fixed managed workspace-write profile one worker owns shared harness and actual-app preparation; root owns canonical docs, provenance/CI, integration and one implementation PR. Preserve all criteria, unrelated work and stash. No product permission/schema changes, broad regression campaign or new hosted action. Follow `docs/planning/hosted-acceptance-completion.md`.
