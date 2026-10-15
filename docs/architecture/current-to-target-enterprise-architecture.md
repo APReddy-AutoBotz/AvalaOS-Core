@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## V1 completion and observation boundary (2026-10-15)
+
+The existing product path persists discovery inputs (creating an assessment when needed), finalizes through the production Assess handler and deterministic scoring, then reads the persisted assessment through the actor's workspace authority. The finalized resource, receipt and Ready-for-Review readback establish completion; a draft response or dialog alone does not. Preserve server authorization, score version, optimistic version checks and atomic receipt/audit behavior. Remove redundant silent UI readback without synthesizing success from submitted data.
+
+ASSESS-003's unchanged one logical mutation is the finalization transition. Its independent observation window must belong to the exact finalization request after prerequisite writes, with matching actor/session/scope/resource and finalization receipt. Generic process.update evidence cannot substitute. Preserve strict unexplained-write rejection and zero provider/paid/foreign effects. Bound browser waits and retain only closed milestone codes and allowlisted source/line; never retain raw dialog/error text, request payloads, credentials or identifiers. PR #304's generic timeout does not establish its historical cause. No schema, scoring, hosted, provider or acceptance-meaning change is included.
+
 ## Control-channel liveness proof boundary (2026-10-15)
 
 The PR #303 hosted timeout has no retained operation/location and does not prove a product or permit-routing deadlock. The page and context routes share one idempotent action-start promise; session verification and before-frame capture precede exact permit arming, then fallback passes the unchanged request through the context origin/authority guard. Preserve this ordering.

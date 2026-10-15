@@ -9,6 +9,8 @@ import {
   startAuthenticatedHostedControllerServer,
   validateAuthenticatedHostedControllerEnvironment,
 } from './authenticatedHostedController.mjs';
+import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
+import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { createAuthenticatedHostedIdentityAdapter, createAuthenticatedHostedPostgresAdapter,
   readAuthenticatedHostedCleanupControls } from './authenticatedHostedControllerAdapters.mjs';
@@ -22,6 +24,62 @@ const id = () => randomUUID();
 const fixtureProjectRef = 'abcdefghijklmnopqrst';
 const tokenFor = (actorId, sessionId) => `${Buffer.from('{}').toString('base64url')}.${
   Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.${'x'.repeat(48)}`;
+
+const createFinalizeProofHarness = async ({ commandType='assessment.finalize', route='/functions/v1/assess-command',
+  provideProof=true, mutateProof=value=>value, overlap=false }={}) => {
+  const config=validateAuthenticatedHostedControllerEnvironment(baseEnvironment());
+  const actorId=id();const sessionId=id();const assessmentId=id();const requestId=id();const receiptId=id();
+  const actorHash=digest(actorId);const sessionHash=digest(sessionId);const commandIdHash=digest(assessmentId);
+  const receiptIdHash=digest(receiptId);
+  const requestBody={requestId,idempotencyKey:`assessment.finalize.${requestId}`,commandType,
+    organizationId:config.scope.organizationId,workspaceId:config.scope.workspaceId,authorizationVersion:3,
+    expectedVersion:2,payload:{assessmentId}};
+  const binding=authenticatedHostedRequestBinding({requestId,actorHash,commandType,payload:requestBody,requireUuid:true});
+  const assessmentRecordHash=digest('finalize-assessment-record');
+  const receiptRecordHash=digest('finalize-receipt-record');
+  const auditRecordHash=digest('finalize-audit-record');
+  const beforeAssessment={source:'assessments',recordHash:assessmentRecordHash,rowHash:digest('assessment-before'),
+    active:false,effectKind:'domain'};
+  const correlated=(source,recordHash,rowHash,effectKind)=>({source,recordHash,rowHash,active:false,effectKind,
+    actorHash,sessionHash,requestIdHash:binding.requestIdHash,commandBindingHash:binding.commandBindingHash,
+    commandIdHash,receiptIdHash,auditIdHash:effectKind==='audit'?digest('finalize-audit-id'):null});
+  const afterRecords=[
+    correlated('assessments',assessmentRecordHash,digest('assessment-after'),'domain'),
+    correlated('assess_command_receipts',receiptRecordHash,digest('receipt-after'),'receipt'),
+    correlated('privileged_audit_events',auditRecordHash,digest('audit-after'),'audit'),
+  ];
+  if(overlap)afterRecords.push(correlated('assess_command_receipts',digest('overlap-record'),digest('overlap-row'),'receipt'));
+  const frames=[
+    {capturedAt:'2026-10-10T00:00:00.000Z',records:[beforeAssessment]},
+    {capturedAt:'2026-10-10T00:00:02.000Z',records:afterRecords},
+  ];
+  const proof={schemaVersion:'authenticated-assessment-finalize-proof-v1',verified:true,
+    requestIdHash:binding.requestIdHash,commandBindingHash:binding.commandBindingHash,actorHash,sessionHash,
+    assessmentRecordHash,assessmentBeforeRowHash:beforeAssessment.rowHash,
+    assessmentAfterRowHash:afterRecords[0].rowHash,receiptRecordHash,receiptRowHash:afterRecords[1].rowHash,
+    receiptIdHash,auditRecordHash,auditRowHash:afterRecords[2].rowHash,commandIdHash,
+    expectedVersion:2,committedVersion:3,scoreVersion:'assess-core-2026-05',
+    beforeCapturedAt:frames[0].capturedAt,afterCapturedAt:frames[1].capturedAt};
+  let capture=0;
+  const adapter={bindSession:async()=>{},observe:async()=>frames[capture++],
+    ...(provideProof?{verifyAssessmentFinalizeCase:async()=>mutateProof(structuredClone(proof))}:{})};
+  const controller=new AuthenticatedHostedController({config,adapter,
+    identity:{verifySession:async()=>({actorId,sessionId})}});
+  controller.exerciseId=id();
+  controller.projects.set('desktop-chromium',{processId:id(),identities:{author:{id:actorId}},
+    lastBoundaryAt:'2026-10-09T23:59:59.000Z'});
+  const started=await controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:tokenFor(actorId,sessionId),
+    route,requestBody});
+  await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:started.actionId,status:200,
+    responseBody:{ok:true,outcome:'committed',resource:{assessmentId,version:3,status:'Ready for Review',
+      scoreVersion:'assess-core-2026-05'}}});
+  const record=()=>controller.recordBrowserCase({projectName:'desktop-chromium',actionIds:[started.actionId],
+    row:{testId:'ASSESS-003',controls:{assertions:[
+      {id:'persisted-discovery-inputs-scored',status:'passed'},
+      {id:'production-completion-committed',status:'passed'},
+    ]}}});
+  return {controller,record,proof};
+};
 
 test('real loopback controller streams bounded JSON before dispatch', async () => {
   const calls = [];
@@ -70,6 +128,55 @@ const baseEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: 'supabase_vault', AVALA_PROVIDER_SECRET_BACKEND: 'supabase_vault',
   AUTHENTICATED_ACCEPTANCE_SCOPE: JSON.stringify({ organizationId: id(), workspaceId: id(),
     roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id() } }),
+});
+
+test('ASSESS-003 records only an independently verified exact assessment.finalize boundary', async () => {
+  const harness=await createFinalizeProofHarness();
+  await harness.record();
+  const action=harness.controller.browserCases[0].actions[0];
+  assert.equal(action.commandBindingHash,harness.proof.commandBindingHash);
+  assert.equal(action.response.classification,'COMMITTED');
+  assert.equal(action.response.receiptIdHash,harness.proof.receiptIdHash);
+  assert.equal(Object.hasOwn(action,'assessmentFinalizeProof'),false);
+  assert.equal(Object.hasOwn(action,'actorId'),false);
+  assert.equal(Object.hasOwn(action,'sessionId'),false);
+  assert.equal(Object.hasOwn(action,'commandType'),false);
+});
+
+test('ASSESS-003 rejects missing proof and command substitutions before artifact creation', async () => {
+  for (const options of [
+    {provideProof:false},
+    {commandType:'process.update'},
+    {commandType:'assessment.response.upsert'},
+    {route:'/functions/v1/process-command'},
+  ]) {
+    const harness=await createFinalizeProofHarness(options);
+    await assert.rejects(harness.record(),/ASSESSMENT_FINALIZE_PROOF_REJECTED/u);
+    assert.equal(harness.controller.browserCases.length,0);
+    assert.equal(harness.controller.serverCases.length,0);
+  }
+});
+
+test('ASSESS-003 rejects proof drift in resource, version, session and action window', async () => {
+  const mutations=[
+    proof=>({...proof,commandIdHash:digest('wrong-assessment')}),
+    proof=>({...proof,expectedVersion:1}),
+    proof=>({...proof,committedVersion:4}),
+    proof=>({...proof,sessionHash:digest('wrong-session')}),
+    proof=>({...proof,afterCapturedAt:'2026-10-10T00:00:03.000Z'}),
+  ];
+  for (const mutateProof of mutations) {
+    const harness=await createFinalizeProofHarness({mutateProof});
+    await assert.rejects(harness.record(),/ASSESSMENT_FINALIZE_PROOF_REJECTED/u);
+    assert.equal(harness.controller.browserCases.length,0);
+  }
+});
+
+test('ASSESS-003 rejects an earlier asynchronous receipt completing inside the finalize window', async () => {
+  const harness=await createFinalizeProofHarness({overlap:true});
+  await assert.rejects(harness.record(),/ASSESSMENT_FINALIZE_PROOF_REJECTED/u);
+  assert.equal(harness.controller.browserCases.length,0);
+  assert.equal(harness.controller.serverCases.length,0);
 });
 
 test('hosted environment binds the raw authenticated caller and canonical producer', () => {

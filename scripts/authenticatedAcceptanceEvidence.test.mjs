@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { profileFixture, manifestFixture, rawHostedFixtures } from './authenticatedAcceptanceTestFixtures.mjs';
 import { AUTHENTICATED_ACCEPTANCE_TEST_IDS } from './authenticatedAcceptanceCases.mjs';
-import { authenticatedRawIdentity } from './authenticatedBrowserCorrelation.mjs';
+import { authenticatedEvidenceDigest, authenticatedRawIdentity } from './authenticatedBrowserCorrelation.mjs';
 import { validateAuthenticatedAcceptanceManifest, evaluateAuthenticatedAcceptanceCase } from './authenticatedAcceptanceEvidence.mjs';
 import { produceAuthenticatedHostedEvidence } from './authenticatedHostedEvidence.mjs';
 import { validateAuthenticatedCatalogRevision } from './authenticatedAcceptanceCriteria.mjs';
@@ -89,6 +89,49 @@ test('request, receipt, audit and observation windows are independently correlat
   ]) {
     const raw = rawHostedFixtures(); change(raw);
     assert.throws(() => produceAuthenticatedHostedEvidence({ ...raw, catalog }));
+  }
+});
+
+test('ASSESS-003 accepts only one exact assessment.finalize mutation boundary', () => {
+  const valid=rawHostedFixtures();
+  assert.doesNotThrow(()=>produceAuthenticatedHostedEvidence({...valid,catalog}));
+  for(const change of [
+    raw=>{
+      const action=raw.browserCorrelations.cases.find(row=>row.testId==='ASSESS-003').actions[0];
+      action.commandBindingHash=authenticatedEvidenceDigest({requestIdHash:action.requestIdHash,
+        actorHash:action.actorHash,commandType:'process.update'});
+      const server=raw.serverObservations.cases.find(row=>row.testId==='ASSESS-003');
+      for(const record of server.after.records)if(record.requestIdHash===action.requestIdHash){
+        record.commandBindingHash=action.commandBindingHash;
+      }
+    },
+    raw=>{
+      const action=raw.browserCorrelations.cases.find(row=>row.testId==='ASSESS-003').actions[0];
+      action.commandBindingHash=authenticatedEvidenceDigest({requestIdHash:action.requestIdHash,
+        actorHash:action.actorHash,commandType:'assessment.response.upsert'});
+      const server=raw.serverObservations.cases.find(row=>row.testId==='ASSESS-003');
+      for(const record of server.after.records)if(record.requestIdHash===action.requestIdHash){
+        record.commandBindingHash=action.commandBindingHash;
+      }
+    },
+    raw=>{
+      const server=raw.serverObservations.cases.find(row=>row.testId==='ASSESS-003');
+      server.before.records.find(row=>row.source==='assessments').source='assess_processes';
+      server.after.records.find(row=>row.source==='assessments').source='assess_processes';
+    },
+    raw=>{
+      const server=raw.serverObservations.cases.find(row=>row.testId==='ASSESS-003');
+      const extra=structuredClone(server.after.records.find(row=>row.source==='assess_command_receipts'));
+      extra.recordHash=raw.binding.baselineDigest;
+      extra.rowHash=raw.binding.sourceDigest;
+      extra.businessRowHash=extra.rowHash;
+      extra.receiptIdHash=raw.binding.catalogDigest;
+      server.after.records.push(extra);
+    },
+  ]){
+    const raw=rawHostedFixtures();change(raw);
+    assert.throws(()=>produceAuthenticatedHostedEvidence({...raw,catalog}),
+      /authenticated-assessment-finalize-boundary|server-observation/u);
   }
 });
 

@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Actual V1 completion and evidence correction (2026-10-15)
+
+PR #304's approved run `38700670080` retains independently verified 61 PASS / 47 BLOCKED, complete cleanup/providers OFF and consumed allowance. Three read-only reviewers completed and closed; root reconciled their findings before writes. Under the managed fixed workspace-write profile, two exclusive workers own (1) bounded actual-app V1 completion, truthful readback and safe diagnostic milestones, and (2) exact finalization evidence/controller and real PostgreSQL proof. Root owns canonical documents, provenance, integration, applicable CI and the single verified PR. No nested delegation or active reviewers during writes.
+
+Follow `docs/planning/hosted-acceptance-completion.md`. Preserve legitimate create/upsert prerequisites, bind only the finalization action for the unchanged one-transition criterion, and reject generic process-update substitution. Local proof must drive the real application/handler and distinguish rejection, missing readback and timeout without manufacturing PASS. No global-timeout increase, hosted retry, schema/scoring change or unrelated regression campaign is authorized.
+
 ## Hosted control liveness boundary (2026-10-15)
 
 PR #303 and its exact candidate/post-merge evidence are verified. Approved run `38687459796` on `83ecb018b4caf97a901246e4d3b926dde85e601f` independently remains **61 PASS / 47 BLOCKED** with all 331 source bindings verified. The desktop primary lifecycle timed out without a retained operation/location; cleanup, providers OFF and temporary-main removal are complete. The one-run allowance is consumed.

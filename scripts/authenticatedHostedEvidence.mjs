@@ -196,6 +196,21 @@ export const reconstructAuthenticatedHostedCaseEvidence = ({ browser, server, de
     && (measurements.receiptWrites < 1 || measurements.auditWrites < 1)) errors.push(`authenticated-privileged-audit:${key}`);
   if (browser.testId === 'AI-004' && (measurements.logicalMutations !== 1 || measurements.secretWrites !== 1
     || measurements.receiptWrites !== 1 || measurements.auditWrites !== 1)) errors.push(`authenticated-secret-boundary:${key}`);
+  if (browser.testId === 'ASSESS-003') {
+    const action=browser.actions[0];
+    const expectedBinding=action?authenticatedEvidenceDigest({requestIdHash:action.requestIdHash,
+      actorHash:action.actorHash,commandType:'assessment.finalize'}):null;
+    const changedSources=changes.map(change=>change.row.source).sort();
+    if(browser.actions.length!==1||!action||action.commandBindingHash!==expectedBinding
+      ||action.response.status<200||action.response.status>=300||action.response.classification!=='COMMITTED'
+      ||!action.response.commandIdHash||!action.response.receiptIdHash
+      ||measurements.domainWrites!==1||measurements.receiptWrites!==1||measurements.auditWrites!==1
+      ||measurements.generationAttemptWrites!==0||measurements.secretWrites!==0||measurements.storageWrites!==0
+      ||measurements.concurrencyWrites!==0
+      ||!isDeepStrictEqual(changedSources,['assess_command_receipts','assessments','privileged_audit_events'])) {
+      errors.push(`authenticated-assessment-finalize-boundary:${key}`);
+    }
+  }
   const denialObserved = browser.actions.some(action => responseDenied(action.response));
   if (definition.expectedDenial === true && !denialObserved) errors.push(`authenticated-denial-not-observed:${key}`);
   if (errors.length) throw new Error(errors.join(','));

@@ -70,7 +70,9 @@ export const rawHostedFixtures = () => {
     const requestIdHash = digest(`request-id:${testId}:${project}`);
     const browserPayloadHash = digest(`browser-payload:${testId}:${project}`);
     const persistedRequestHash = digest(`persisted-request:${testId}:${project}`);
-    const commandBindingHash = digest(`command-binding:${testId}:${project}`);
+    const commandBindingHash = testId === 'ASSESS-003'
+      ? authenticatedEvidenceDigest({requestIdHash,actorHash:actor.actorHash,commandType:'assessment.finalize'})
+      : digest(`command-binding:${testId}:${project}`);
     const commandIdHash = definition.expectedMutationCount > 0 || testId === 'STUDIO-003' ? digest(`command:${testId}:${project}`) : null;
     const receiptIdHash = commandIdHash ? digest(`receipt:${testId}:${project}`) : null;
     const status = definition.expectedDenial ? 403 : testId === 'STUDIO-003' ? 500 : 200;
@@ -80,7 +82,8 @@ export const rawHostedFixtures = () => {
       participants: [participant],
       actions: [{ actionId: digest(`action:${testId}:${project}`), occurredAt: '2026-10-10T05:10:01.000Z',
         actorHash: actor.actorHash, sessionHash: actor.sessionHash, requestIdHash, browserPayloadHash, commandBindingHash,
-        response: { status, classification: status === 200 ? 'SUCCESS' : status === 500 ? 'SERVER_ERROR_PRECOMMIT' : 'AUTHORIZATION_DENIED',
+        response: { status, classification: testId === 'ASSESS-003' ? 'COMMITTED'
+          : status === 200 ? 'SUCCESS' : status === 500 ? 'SERVER_ERROR_PRECOMMIT' : 'AUTHORIZATION_DENIED',
           commandIdHash, receiptIdHash } }],
       assertions: AUTHENTICATED_CASE_ASSERTIONS[testId].map(id => ({ id, comparator: 'equals', expected: true, actual: true,
         observedAt: '2026-10-10T05:10:30.000Z', source: 'actual-product-browser' })),
@@ -90,8 +93,10 @@ export const rawHostedFixtures = () => {
     const after = [];
     if (definition.expectedMutationCount > 0 && testId !== 'AI-004') {
       before.push(rawRecord({ key: `${testId}:${project}:domain`, effectKind: 'domain', requestIdHash: null,
+        source:testId==='ASSESS-003'?'assessments':fixtureSource.domain,
         actor: null, rowHash: digest(`before:${testId}:${project}`), occurredAt: '2026-10-10T05:00:01.000Z' }));
       after.push(rawRecord({ key: `${testId}:${project}:domain`, effectKind: 'domain', requestIdHash,
+        source:testId==='ASSESS-003'?'assessments':fixtureSource.domain,
         persistedRequestHash, commandBindingHash, actor,
         rowHash: digest(`after:${testId}:${project}`), commandIdHash }));
     }

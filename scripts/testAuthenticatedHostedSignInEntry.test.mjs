@@ -82,6 +82,10 @@ test('inert fixture emits a bounded rejection diagnostic without creating a bind
       permits: [],
       diagnostic: { source: 'browser', project: 'desktop-chromium', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
       actions: [],
+      assessment: {
+        mode: 'single-readback', status: null, version: null, commandTypes: [],
+        finalizedReadbacks: 0, waiting: 0,
+      },
       browserCases: 0,
       serverCases: 0,
     });

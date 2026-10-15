@@ -135,6 +135,37 @@ test('reader captures its upper bound from the database and joins receipt, audit
     && !JSON.stringify(row).includes(ids.request) && !JSON.stringify(row).includes(ids.receipt)));
 });
 
+test('V1 assessment receipt correlation anchors create, upsert and finalize through response.resource.assessmentId', async () => {
+  for (const commandType of ['assessment.create','assessment.response.upsert','assessment.finalize']) {
+    const assessmentId=randomUUID();const requestId=randomUUID();const receiptId=randomUUID();
+    const db={async query(sql,parameters){
+      if(sql==='SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value'){
+        assert.deepEqual(parameters,[ids.exercise,from]);
+        return {rows:[{value:authorityFrame()}]};
+      }
+      assert.match(sql,/UNION ALL/u);
+      return {rows:[
+        {source:'assessments',value:{id:assessmentId,process_id:ids.process,org_id:ids.org,
+          workspace_id:ids.workspace,updated_by:ids.author,status:commandType==='assessment.finalize'
+            ?'Ready for Review':'Draft',created_at:to,updated_at:to}},
+        {source:'assess_command_receipts',value:{id:receiptId,org_id:ids.org,workspace_id:ids.workspace,
+          actor_id:ids.author,command_type:commandType,request_id:requestId,request_hash:scalar(`request:${commandType}`),
+          response:{ok:true,outcome:'committed',resource:{assessmentId}},created_at:to}},
+      ]};
+    }};
+    const reader=createAuthenticatedHostedObservationReader({db,
+      config:{scope:{organizationId:ids.org,workspaceId:ids.workspace}}});
+    const frame=await reader.capture({exerciseId:ids.exercise,from,project});
+    const assessment=frame.records.find(row=>row.source==='assessments');
+    const receipt=frame.records.find(row=>row.source==='assess_command_receipts');
+    const binding=authenticatedHostedRequestBinding({requestId,actorHash,commandType,requireUuid:true});
+    for(const row of [assessment,receipt])assert.deepEqual({commandIdHash:row.commandIdHash,
+      requestIdHash:row.requestIdHash,commandBindingHash:row.commandBindingHash,receiptIdHash:row.receiptIdHash},
+    {commandIdHash:scalar(assessmentId),requestIdHash:binding.requestIdHash,
+      commandBindingHash:binding.commandBindingHash,receiptIdHash:scalar(receiptId)});
+  }
+});
+
 test('reader rejects a persisted row with no legitimate event or modification timestamp', async () => {
   const base = fakeDb();
   const db = { async query(sql, parameters) {

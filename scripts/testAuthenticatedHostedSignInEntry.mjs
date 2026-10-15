@@ -34,6 +34,12 @@ const PUBLIC_TARGET_DIGEST = digest(`${BACKEND_ORIGIN}\n${PUBLIC_ANON_KEY}`);
 const processRouter = loadEnterpriseLifecycleProductionModule(
   path.join(process.cwd(), 'supabase', 'functions', '_shared', 'processCommandRouter.ts'),
 );
+const assessRouter = loadEnterpriseLifecycleProductionModule(
+  path.join(process.cwd(), 'supabase', 'functions', '_shared', 'assessRouter.ts'),
+);
+const { AssessCommandError } = loadEnterpriseLifecycleProductionModule(
+  path.join(process.cwd(), 'supabase', 'functions', '_shared', 'assessCommand.ts'),
+);
 const ORGANIZATION_ID = '20000000-0000-4000-8000-000000000001';
 const WORKSPACE_ID = '30000000-0000-4000-8000-000000000001';
 export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE = Object.freeze({
@@ -147,7 +153,7 @@ const projectFromRejectedEmail = email => {
   return match?.[1] ?? null;
 };
 const capabilitiesForIdentity = identity => identity.persona === 'author'
-  ? ['assess.read', 'assess.process.update'] : ['assess.read'];
+  ? ['assess.read', 'assess.process.update', 'assess.create', 'assess.response.write', 'assess.finalize'] : ['assess.read'];
 const validDeniedProcessUpdate = (body, identity, process) => {
   if (!body || typeof body !== 'object' || Array.isArray(body) || !process) return false;
   const keys = Object.keys(body).sort();
@@ -241,6 +247,54 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     created_at: '2026-10-13T00:00:00.000Z',
     updated_at: '2026-10-13T00:00:00.000Z',
   }]));
+  const assessmentRows = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, null]));
+  const assessmentControls = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
+    mode: 'single-readback',
+    finalizedReadbacks: 0,
+    waiters: [],
+    commands: [],
+  }]));
+  const releaseAssessmentGate = (projectName, nextMode = 'reject-finalize') => {
+    const control = assessmentControls.get(projectName);
+    if (!control) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ASSESSMENT_CONTROL_REJECTED');
+    control.mode = nextMode;
+    for (const resolve of control.waiters.splice(0)) resolve();
+  };
+  const resetAssessment = (projectName, { mode, seedDraft }) => {
+    const projectIndex = AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.indexOf(projectName);
+    const process = processRows.get(projectName);
+    const control = assessmentControls.get(projectName);
+    if (projectIndex < 0 || !process || !control
+      || !['single-readback', 'reject-finalize', 'stall-finalize', 'missing-readback'].includes(mode)
+      || typeof seedDraft !== 'boolean') {
+      throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ASSESSMENT_CONTROL_REJECTED');
+    }
+    releaseAssessmentGate(projectName, mode);
+    control.mode = mode;
+    control.finalizedReadbacks = 0;
+    control.commands.length = 0;
+    assessmentRows.set(projectName, seedDraft ? {
+      id: `60000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
+      process_id: process.id,
+      org_id: ORGANIZATION_ID,
+      workspace_id: WORKSPACE_ID,
+      version: 1,
+      score_version: null,
+      status: 'Draft',
+      metadata: {
+        completionQuality: 0, templateFit: false, lastSavedAt: '2026-10-15T00:00:00.000Z',
+        stakeholderCoverage: 1, evidenceQuality: 1, assumptionQuality: 1,
+      },
+      responses: {
+        processStructure: {}, workPattern: {}, dataProfile: {}, judgment: {}, systems: {}, risk: {},
+      },
+      evidence_items: [], assumptions: [], completion_by_section: {
+        processStructure: 0, workPattern: 0, dataProfile: 0, judgment: 0, systems: 0, risk: 0,
+        evidenceAndAssumptions: 0,
+      },
+      scores: null,
+    } : null);
+  };
   const catalogRows = new Map();
   const exactDuplicateProjects = new Set();
   const projectForIdentity = identity => {
@@ -320,7 +374,108 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
 
       if (incoming.method === 'GET' && url.pathname === '/rest/v1/assessments') {
         const identity = identitiesByToken.get(bearerToken(incoming));
-        return identity ? sendJson(outgoing, 200, null) : sendJson(outgoing, 401, { code: 'AUTHENTICATION_REQUIRED' });
+        if (!identity) return sendJson(outgoing, 401, { code: 'AUTHENTICATION_REQUIRED' });
+        const row = assessmentRows.get(identity.projectName);
+        const control = assessmentControls.get(identity.projectName);
+        const exactScope = url.searchParams.get('org_id') === `eq.${ORGANIZATION_ID}`
+          && url.searchParams.get('workspace_id') === `eq.${WORKSPACE_ID}`
+          && url.searchParams.get('process_id') === `eq.${processRows.get(identity.projectName)?.id}`;
+        if (!exactScope || !row) return sendJson(outgoing, 200, null);
+        if (row.status === 'Ready for Review') {
+          control.finalizedReadbacks += 1;
+          if (control.mode === 'missing-readback' || (control.mode === 'single-readback' && control.finalizedReadbacks > 1)) {
+            return sendJson(outgoing, 200, null);
+          }
+        }
+        return sendJson(outgoing, 200, row);
+      }
+
+      if (incoming.method === 'POST' && url.pathname === '/functions/v1/assess-command') {
+        const identity = identitiesByToken.get(bearerToken(incoming));
+        if (!identity) return sendJson(outgoing, 401, { error: { code: 'AUTHENTICATION_REQUIRED' } });
+        if (incoming.headers.apikey !== PUBLIC_ANON_KEY) {
+          return sendJson(outgoing, 401, { error: { code: 'API_KEY_REQUIRED' } });
+        }
+        const control = assessmentControls.get(identity.projectName);
+        const response = await assessRouter.handleAssessRequest(new Request(
+          `${BACKEND_ORIGIN}/functions/v1/assess-command`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${identity.token}`, 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          },
+        ), {
+          authenticate: async () => ({ id: identity.user.id }),
+          loadFreshAuthority: async input => ({
+            actorId: input.actorId,
+            organizationId: input.organizationId,
+            workspaceId: input.workspaceId,
+            authorizationVersion: 1,
+            permissions: capabilitiesForIdentity(identity),
+          }),
+          loadAssessmentForFinalize: async input => {
+            const row = assessmentRows.get(identity.projectName);
+            if (!row || row.id !== input.assessmentId || row.org_id !== input.organizationId
+              || row.workspace_id !== input.workspaceId || row.version !== input.expectedVersion) return null;
+            return {
+              assessmentId: row.id,
+              processId: row.process_id,
+              version: row.version,
+              responses: row.responses,
+              metadata: row.metadata,
+              evidenceItems: row.evidence_items,
+              assumptions: row.assumptions,
+            };
+          },
+          executeAtomicCommand: async command => {
+            control.commands.push({ commandType: command.commandType, actorId: command.actorId,
+              organizationId: command.organizationId, workspaceId: command.workspaceId,
+              resourceId: command.resourceId, expectedVersion: command.expectedVersion ?? null });
+            let row = assessmentRows.get(identity.projectName);
+            if (command.commandType === 'assessment.create') {
+              if (row || command.actorId !== identity.user.id || command.organizationId !== ORGANIZATION_ID
+                || command.workspaceId !== WORKSPACE_ID || command.payload.processId !== processRows.get(identity.projectName)?.id) {
+                throw new AssessCommandError('VERSION_CONFLICT');
+              }
+              row = {
+                id: command.resourceId,
+                process_id: command.payload.processId,
+                org_id: command.organizationId,
+                workspace_id: command.workspaceId,
+                version: 1,
+                score_version: null,
+                status: 'Draft',
+                metadata: {}, responses: {}, evidence_items: [], assumptions: [], completion_by_section: {}, scores: null,
+              };
+              assessmentRows.set(identity.projectName, row);
+            } else if (command.commandType === 'assessment.response.upsert') {
+              if (!row || row.id !== command.resourceId || row.version !== command.expectedVersion) {
+                throw new AssessCommandError('VERSION_CONFLICT');
+              }
+              row = { ...row, version: row.version + 1, status: 'Draft', responses: command.payload.responses,
+                metadata: command.payload.metadata, evidence_items: command.payload.evidenceItems,
+                assumptions: command.payload.assumptions };
+              assessmentRows.set(identity.projectName, row);
+            } else if (command.commandType === 'assessment.finalize') {
+              if (control.mode === 'stall-finalize') await new Promise(resolve => control.waiters.push(resolve));
+              if (control.mode === 'reject-finalize') throw new AssessCommandError('COMMAND_UNAVAILABLE');
+              row = assessmentRows.get(identity.projectName);
+              if (!row || row.id !== command.resourceId || row.version !== command.expectedVersion) {
+                throw new AssessCommandError('VERSION_CONFLICT');
+              }
+              row = { ...row, version: row.version + 1, status: 'Ready for Review', scores: command.payload.scores,
+                score_version: command.payload.scores?.scoreVersion ?? null };
+              assessmentRows.set(identity.projectName, row);
+              control.finalizedReadbacks = 0;
+            } else {
+              throw new AssessCommandError('COMMAND_NOT_SUPPORTED');
+            }
+            return { outcome: 'committed', resource: {
+              assessmentId: row.id, version: row.version, status: row.status,
+              ...(row.score_version ? { scoreVersion: row.score_version } : {}),
+            } };
+          },
+        });
+        return sendJson(outgoing, response.status, await response.json());
       }
 
       if (incoming.method === 'POST' && url.pathname === '/functions/v1/process-command') {
@@ -598,6 +753,23 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         else exactDuplicateProjects.delete(input.projectName);
         return { enabled: exactDuplicateProjects.has(input.projectName) };
       }
+      if (pathname === '/control/sign-in-entry-assessment') {
+        if (!AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.includes(input.projectName)) {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ASSESSMENT_CONTROL_REJECTED');
+        }
+        if (input.action === 'reset') {
+          resetAssessment(input.projectName, { mode: input.mode, seedDraft: input.seedDraft });
+        } else if (input.action === 'release-stall') {
+          releaseAssessmentGate(input.projectName, 'reject-finalize');
+        } else if (input.action !== 'inspect') {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ASSESSMENT_CONTROL_REJECTED');
+        }
+        const control = assessmentControls.get(input.projectName);
+        const row = assessmentRows.get(input.projectName);
+        return { mode: control.mode, status: row?.status ?? null, version: row?.version ?? null,
+          commandTypes: control.commands.map(command => command.commandType),
+          finalizedReadbacks: control.finalizedReadbacks, waiting: control.waiters.length };
+      }
       if (pathname !== '/control/sign-in-entry-observation') throw new Error('AUTHENTICATED_HOSTED_CONTROL_UNSUPPORTED');
       const projectObservation = observations.get(input.projectName);
       if (!projectObservation) throw new Error('AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND');
@@ -613,6 +785,13 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         ...projectObservation,
         anonymousProcessCommandRequests,
         processAtomicCalls,
+        assessment: (() => {
+          const control = assessmentControls.get(input.projectName);
+          const row = assessmentRows.get(input.projectName);
+          return { mode: control.mode, status: row?.status ?? null, version: row?.version ?? null,
+            commandTypes: control.commands.map(command => command.commandType),
+            finalizedReadbacks: control.finalizedReadbacks, waiting: control.waiters.length };
+        })(),
         permits: [...processFaultPermits.values()].filter(permit => {
           const identity = Object.values(identityRows).find(candidate => candidate.user.id === permit.actorId);
           return identity?.projectName === input.projectName;
@@ -628,6 +807,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       for (const projectName of AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS) {
         releaseObserveGate(projectName);
         releaseArmGate(projectName);
+        releaseAssessmentGate(projectName, 'reject-finalize');
       }
       return { quiesced: true };
     },

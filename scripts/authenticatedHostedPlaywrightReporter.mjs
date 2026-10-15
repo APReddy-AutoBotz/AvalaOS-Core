@@ -28,6 +28,11 @@ const OPERATION_TITLES = new Map([
   ['hosted:safety:offline', 'SAFETY_OFFLINE'],
   ['hosted:safety:server', 'SAFETY_SERVER'],
   ['hosted:safety:timeout', 'SAFETY_TIMEOUT'],
+  ['hosted:primary:v1-assessment-completion', 'V1_ASSESSMENT_COMPLETION'],
+  ['hosted:primary:journey', 'PRIMARY_JOURNEY'],
+  ['hosted:primary:process-denial', 'PRIMARY_PROCESS_DENIAL'],
+  ['hosted:primary:safety-and-runtime', 'PRIMARY_SAFETY_AND_RUNTIME'],
+  ['hosted:primary:v2-authoring-and-review', 'PRIMARY_V2_AUTHORING_AND_REVIEW'],
 ]);
 
 const projectCategory = test => {

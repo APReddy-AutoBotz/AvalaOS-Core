@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Page, type Request } from '@playwright/test';
 import type { FitBand } from '../../../services/assessV2/types';
 import {
   authenticatedLifecycleAttestEverySubmittedEvidence as attestEvidence,
@@ -7,7 +7,7 @@ import {
   authenticatedLifecycleCompleteRequiredAssessmentFacts as completeFacts,
   authenticatedLifecycleControl as control,
   authenticatedLifecycleEnterAs as enterAs,
-  authenticatedLifecycleEnterProcessAs as enterProcessAs,
+  authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleEnterStudioAs as enterStudioAs,
   authenticatedLifecycleFinalizeDecisionPack as finalizeDecision,
   authenticatedLifecycleResolveEveryGovernControl as resolveGovernControls,
@@ -19,12 +19,25 @@ import {
 } from '../authenticatedLifecycleHarness';
 import type { StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { authenticatedHostedActionIds } from '../authenticatedLifecycleHarness';
+import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
 
 type ScenarioCaseId = 'E2E-005' | 'E2E-006';
 const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
 const ASSERTIONS: Record<ScenarioCaseId, readonly string[]> = {
   'E2E-005': ['production-low-suitability-decision', 'low-suitability-downstream-policy-preserved'],
   'E2E-006': ['production-strong-automation-decision', 'governed-downstream-approval-preserved'],
+};
+
+const enterProcessAs = async (
+  page: Page,
+  actor: AuthenticatedLifecycleSetup['actors']['author'],
+  processLabel: string,
+) => {
+  await enterAs(page, actor);
+  if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
+    await clickProduct(page, 'Assess');
+  }
+  return openConnectedProcess(page, processLabel);
 };
 
 type LifecycleFrame = Readonly<{
@@ -111,47 +124,19 @@ const measuredResponses = (log: readonly ObservedProductionResponse[], start: nu
   Object.defineProperty(result,authenticatedHostedActionIds,{value:observed.map(item=>item.actionId??Promise.resolve(null))});
   return result;
 };
-const chooseScale = async (page: Page, label: string, value = 4) => {
-  const field = page.getByText(label, { exact: true }).locator('..');
-  await expect(field).toBeVisible();
-  await field.getByRole('button', { name: new RegExp(`^${value}(?:\\s|$)`, 'u') }).click();
-};
-
-const completeV1 = async (page: Page) => {
-  for (const label of ['Process Standardization', 'Rule Clarity', 'Process Maturity', 'Exception Predictability']) await chooseScale(page, label);
-  await page.getByRole('button', { name: /Work Pattern & Business Value$/u }).click();
-  const volume = page.getByText('Transaction Volume', { exact: true })
-    .locator('xpath=ancestor::div[.//input[@placeholder="Value"]][1]');
-  await expect(volume).toBeVisible();
-  await volume.getByPlaceholder('Value').fill('2400'); await volume.locator('select').selectOption('Year');
-  const effort = page.getByText('Average Manual Effort per Transaction', { exact: true })
-    .locator('xpath=ancestor::div[.//input[@placeholder="Value"]][1]');
-  await expect(effort).toBeVisible();
-  await effort.getByPlaceholder('Value').fill('30'); await effort.locator('select').selectOption('Minutes');
-  for (const label of ['Rework Impact', 'SLA / Turnaround Pressure']) await chooseScale(page, label);
-  await page.getByRole('button', { name: /Data Readiness$/u }).click();
-  await page.getByText('Mostly Databases & APIs (75%)', { exact: true }).click();
-  for (const label of ['Unstructured Content Load', 'Data Sensitivity']) await chooseScale(page, label);
-  await page.getByRole('button', { name: /Decision Complexity$/u }).click();
-  for (const label of ['Human Judgment Required', 'Goal Clarity']) await chooseScale(page, label);
-  await page.getByRole('button', { name: /Systems & Integration Readiness$/u }).click();
-  for (const label of ['System Readiness', 'Orchestration Complexity']) await chooseScale(page, label);
-  await page.getByRole('button', { name: /Governance, Risk & HITL$/u }).click();
-  for (const label of ['Business Risk Criticality', 'Governance / Compliance Sensitivity', 'Error Reversibility']) await chooseScale(page, label);
-  await page.getByRole('button', { name: /Evidence, Confidence & Handoff$/u }).click();
-};
-
-const createAndFinalizeDecision = async (page: Page, setup: AuthenticatedLifecycleSetup, variant: AuthenticatedAssessmentVariant) => {
-  await enterProcessAs(page, setup.actors.author, setup.aliases.process);
-  await page.getByRole('button', { name: 'Resume Assessment', exact: true }).click();
-  await expect(page.getByTestId('enterprise-assess')).toBeVisible();
-  await completeV1(page);
-  const scored = page.waitForEvent('dialog').then(async dialog => {
-    expect(dialog.message()).toBe('Assessment scored and marked Ready for Review.');
-    await dialog.accept();
+const createAndFinalizeDecision = async (
+  page: Page,
+  setup: AuthenticatedLifecycleSetup,
+  variant: AuthenticatedAssessmentVariant,
+  actionReference: (request: Request) => Promise<string | null>,
+) => {
+  const processId = await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+  await runV1AssessmentCompletion({
+    page,
+    identity: { actorId: setup.actors.author.user.id, processId },
+    actionReference,
+    runStep: (title, operation) => test.step(title, operation),
   });
-  await page.getByRole('button', { name: 'Calculate deterministic score', exact: true }).last().click();
-  await scored;
   await page.getByRole('button', { name: 'Back to Process', exact: true }).click();
   await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
   await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
@@ -242,13 +227,14 @@ const countDelta = (before: StudioDeliveryDownstreamFrame, after: StudioDelivery
 const runScenario = async (
   page: Page, project: string, variant: 'low-suitability' | 'strong-automation',
   productionResponses: readonly ObservedProductionResponse[],
+  actionReference: (request: Request) => Promise<string | null>,
 ): Promise<AssessmentScenarioCaseResult> => {
   const testId: ScenarioCaseId = variant === 'low-suitability' ? 'E2E-005' : 'E2E-006';
   const responseStart = productionResponses.length;
   const projectName = `${project}-${variant}`;
   const setup = await control<AuthenticatedLifecycleSetup>('/control/setup', { projectName });
   validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
-  const decisionBefore = await createAndFinalizeDecision(page, setup, variant);
+  const decisionBefore = await createAndFinalizeDecision(page, setup, variant, actionReference);
   expect(decisionBefore.outputHash).toMatch(/^[a-f0-9]{64}$/u); expectDigest(decisionBefore.targetHash);
   expect(decisionBefore.validationStatus).toBe('reviewer-ready');
   const writeDecisions = decisionBefore.interactionDecisions.filter(item => decisionBefore.sourceInteractions
@@ -306,15 +292,16 @@ const runScenario = async (
 };
 
 export const runAssessmentScenarioJourneys = async (page: Page, project: string,
-  startTrackedRequest?: (request: import('@playwright/test').Request)=>Promise<string|null>) => {
+  startTrackedRequest?: (request: Request)=>Promise<string|null>) => {
   const productionResponses: ObservedProductionResponse[] = [];
   page.on('response', response => {
     const route = new URL(response.url()).pathname;
     if (route.startsWith('/functions/v1/')) productionResponses.push({ route, status: response.status(),
       actionId:startTrackedRequest?.(response.request()) });
   });
+  const actionReference = (request: Request) => startTrackedRequest?.(request) ?? Promise.resolve(null);
   return [
-    await runScenario(page, project, 'low-suitability', productionResponses),
-    await runScenario(page, project, 'strong-automation', productionResponses),
+    await runScenario(page, project, 'low-suitability', productionResponses, actionReference),
+    await runScenario(page, project, 'strong-automation', productionResponses, actionReference),
   ] as const;
 };

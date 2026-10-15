@@ -434,57 +434,165 @@ try {
   assert.equal(await reader.nonExerciseDigest({ cutoff: ownershipCutoff, ownership: exerciseOwnership }),
     nonExerciseBaseline);
   const startedAt = preflight.observationStartedAt;
-  const before = await reader.capture({ exerciseId: ids.exercise, from: startedAt, project });
+  const initialFrame = await reader.capture({ exerciseId: ids.exercise, from: startedAt, project });
   const adapterBefore = await adapter.observe({ exerciseId: ids.exercise, from: startedAt, project });
-  assert.ok(Number.isFinite(Date.parse(before.capturedAt)));
+  assert.ok(Number.isFinite(Date.parse(initialFrame.capturedAt)));
   assert.ok(Number.isFinite(Date.parse(adapterBefore.capturedAt)));
-  assert.deepEqual(adapterBefore.records, before.records);
+  assert.deepEqual(adapterBefore.records, initialFrame.records);
   const authorizationVersion = Number((await db.query(
     'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [ids.org, ids.actors.author],
   )).rows[0].version);
-  const payload = {
-    name: 'Authenticated hosted discovery complete', description: 'Persisted through the production process command.',
-    department: 'Operations', criticality: 'High', expectedVersion: 1,
+  const assessCommandModule = loadEnterpriseLifecycleProductionModule(
+    path.join(root,'supabase','functions','_shared','assessCommand.ts'));
+  const assessRouter = loadEnterpriseLifecycleProductionModule(
+    path.join(root,'supabase','functions','_shared','assessRouter.ts'));
+  const tenantAuthority = loadEnterpriseLifecycleProductionModule(
+    path.join(root,'supabase','functions','_shared','tenantAuthority.ts'));
+  const authorityFor = async (actorId,organizationId,workspaceId) => {
+    try {
+      const authority=await tenantAuthority.resolveTenantAuthority(actorId,{organizationId,workspaceId},{
+        loadFreshProjection: input=>visibleTenantContext(actorId,input.organizationId,input.workspaceId),
+      });
+      return {actorId:authority.userId,organizationId:authority.organizationId,workspaceId:authority.workspaceId,
+        authorizationVersion:authority.authorizationVersion,permissions:authority.capabilities};
+    } catch(error) {
+      if(error?.code==='TENANT_ACCESS_DENIED')return null;
+      throw error;
+    }
   };
-  const result = (await serviceQuery(
-    'SELECT public.update_assess_process($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) value',
-    [ids.actors.author, ids.org, ids.workspace, authorizationVersion, ids.request,
-      'hosted-controller-process-update', 1, project.processId, payload.name, payload.description,
-      payload.department, payload.criticality],
-  )).rows[0].value;
-  assert.equal(result.ok, true);
-  assert.equal(result.outcome, 'committed');
-  assert.equal(result.resource.version, 2);
-  const after = await reader.capture({ exerciseId: ids.exercise, from: before.capturedAt, project });
-  const completedAt = after.capturedAt;
-  const participant = {
-    persona: 'author', actorHash: authenticatedHostedDigest(ids.actors.author),
-    sessionHash: authenticatedHostedDigest(ids.sessions.author),
+  const assessDependencies = {
+    authenticate: async request => {
+      assert.equal(request.headers.get('authorization'),`Bearer ${tokenFor(ids.actors.author,ids.sessions.author)}`);
+      return {id:ids.actors.author};
+    },
+    loadFreshAuthority: input=>authorityFor(input.actorId,input.organizationId,input.workspaceId),
+    loadAssessmentForFinalize: async input => {
+      const row=(await serviceQuery(`SELECT id,process_id,version,responses FROM public.assessments
+        WHERE id=$1 AND org_id=$2 AND workspace_id=$3 AND deleted_at IS NULL`,
+      [input.assessmentId,input.organizationId,input.workspaceId])).rows[0];
+      if(!row)return null;
+      if(Number(row.version)!==input.expectedVersion)throw new assessCommandModule.AssessCommandError('VERSION_CONFLICT');
+      const aggregate=row.responses;
+      if(!aggregate||typeof aggregate!=='object'||Array.isArray(aggregate)
+        ||!aggregate.responses||typeof aggregate.responses!=='object'||Array.isArray(aggregate.responses)
+        ||!aggregate.metadata||typeof aggregate.metadata!=='object'||Array.isArray(aggregate.metadata))return null;
+      return {assessmentId:row.id,processId:row.process_id,version:Number(row.version),responses:aggregate.responses,
+        metadata:aggregate.metadata,evidenceItems:Array.isArray(aggregate.evidenceItems)?aggregate.evidenceItems:[],
+        assumptions:Array.isArray(aggregate.assumptions)?aggregate.assumptions:[]};
+    },
+    executeAtomicCommand: async command => {
+      const common=[command.actorId,command.organizationId,command.workspaceId];let result;
+      if(command.commandType==='assessment.create')result=await serviceQuery(
+        'SELECT public.pr1b_create_assessment($1,$2,$3,$4,$5,$6,$7,$8) value',
+        [...common,command.payload.processId,command.resourceId,command.requestId,command.idempotencyKey,
+          command.authorizationVersion]);
+      else if(command.commandType==='assessment.response.upsert')result=await serviceQuery(
+        'SELECT public.pr1b_upsert_assessment_responses($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9) value',
+        [...common,command.resourceId,JSON.stringify(command.payload),command.expectedVersion,command.requestId,
+          command.idempotencyKey,command.authorizationVersion]);
+      else if(command.commandType==='assessment.finalize'){
+        const scores=command.payload.scores;
+        result=await serviceQuery(
+          'SELECT public.pr1b_finalize_assessment($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10) value',
+          [...common,command.resourceId,JSON.stringify(scores),scores.scoreVersion,command.expectedVersion,
+            command.requestId,command.idempotencyKey,command.authorizationVersion]);
+      }else throw new assessCommandModule.AssessCommandError('COMMAND_NOT_SUPPORTED');
+      const value=result.rows[0]?.value;
+      const mapping={VERSION_CONFLICT:'VERSION_CONFLICT',IDEMPOTENCY_CONFLICT:'IDEMPOTENCY_CONFLICT',
+        AUTHORIZATION_STALE:'AUTHORITY_STALE',NOT_FOUND:'RESOURCE_NOT_AVAILABLE',INVALID_COMMAND:'INVALID_COMMAND',
+        INVALID_SCORE_VERSION:'INVALID_COMMAND'};
+      if(value?.errorCode)throw new assessCommandModule.AssessCommandError(mapping[value.errorCode]??'COMMAND_UNAVAILABLE');
+      if(!value||!['committed','replayed'].includes(value.outcome)||!value.resource){
+        throw new assessCommandModule.AssessCommandError('COMMAND_UNAVAILABLE');
+      }
+      return {outcome:value.outcome,resource:value.resource};
+    },
   };
-  const requestBinding = authenticatedHostedRequestBinding({
-    requestId: ids.request, actorHash: participant.actorHash, commandType: 'process.update', payload, requireUuid: true,
-  });
-  const receipt = (await db.query(`SELECT id FROM public.assess_command_receipts
-    WHERE org_id=$1 AND actor_id=$2 AND request_id=$3 AND command_type='process.update'`,
-  [ids.org, ids.actors.author, ids.request])).rows[0];
-  assert.ok(receipt);
-  const browser = {
-    testId: 'ASSESS-003', project: 'desktop-chromium', scenario: authenticatedAcceptanceScenario('ASSESS-003'),
-    window: { startedAt: before.capturedAt, completedAt }, participants: [participant],
-    actions: [{ actionId: authenticatedEvidenceDigest('authenticated-hosted-controller-action'), occurredAt: completedAt,
-      actorHash: participant.actorHash, sessionHash: participant.sessionHash, ...requestBinding,
-      response: { status: 200, classification: 'SUCCESS', commandIdHash: null,
-        receiptIdHash: authenticatedHostedDigest(receipt.id) } }],
-    assertions: AUTHENTICATED_CASE_ASSERTIONS['ASSESS-003'].map(id => ({
-      id, comparator: 'equals', expected: true, actual: true, observedAt: completedAt, source: 'actual-product-browser',
-    })),
-    source: 'actual-product-browser',
+  const authorAccessToken=tokenFor(ids.actors.author,ids.sessions.author);
+  const invokeAssess=async envelope=>{
+    const response=await assessRouter.handleAssessRequest(new Request('http://127.0.0.1/functions/v1/assess-command',{
+      method:'POST',headers:{authorization:`Bearer ${authorAccessToken}`,'content-type':'application/json'},
+      body:JSON.stringify(envelope),
+    }),assessDependencies);
+    return {status:response.status,body:await response.json()};
   };
-  const server = {
-    testId: browser.testId, project: browser.project, scenario: browser.scenario,
-    window: browser.window, participants: browser.participants, before, after,
+  const foreignScopeRequestId=randomUUID();
+  const foreignScopeResult=await invokeAssess({requestId:foreignScopeRequestId,
+    idempotencyKey:`assessment.create.${foreignScopeRequestId}`,commandType:'assessment.create',
+    organizationId:randomUUID(),workspaceId:randomUUID(),authorizationVersion,
+    payload:{processId:project.processId}});
+  assert.equal(foreignScopeResult.status,404);
+  assert.deepEqual(foreignScopeResult.body,{ok:false,error:{
+    code:'RESOURCE_NOT_AVAILABLE',message:'The command could not be completed.',
+  }});
+  assert.deepEqual((await serviceQuery(`SELECT
+      (SELECT count(*)::int FROM public.assessments WHERE id=$1) assessments,
+      (SELECT count(*)::int FROM public.assess_command_receipts WHERE request_id=$1) receipts,
+      (SELECT count(*)::int FROM public.privileged_audit_events WHERE request_id=$1) audits`,
+  [foreignScopeRequestId])).rows[0],{assessments:0,receipts:0,audits:0});
+  const createRequestId=randomUUID();
+  const createEnvelope={requestId:createRequestId,idempotencyKey:`assessment.create.${createRequestId}`,
+    commandType:'assessment.create',organizationId:ids.org,workspaceId:ids.workspace,authorizationVersion,
+    payload:{processId:project.processId}};
+  const createdAssessment=await invokeAssess(createEnvelope);
+  assert.equal(createdAssessment.status,200);
+  assert.deepEqual(createdAssessment.body,{ok:true,outcome:'committed',resource:{assessmentId:createRequestId,
+    status:'Draft',version:1}});
+  const assessmentResponses={
+    processStructure:{standardization:4,ruleDeterminism:4,exceptionPredictability:3,processMaturity:4},
+    workPattern:{volume:1200,manualEffort:0.75,averageHourlyCost:65,reworkPain:3,cycleTimePain:4},
+    dataProfile:{inputStructure:80,unstructuredLoad:2,dataSensitivity:2},judgment:{judgmentIntensity:2,goalAmbiguity:2},
+    systems:{systemReadiness:4,orchestrationComplexity:3},
+    risk:{riskCriticality:2,governanceSensitivity:2,errorReversibility:4},
   };
-  const reconstructed = reconstructAuthenticatedHostedCaseEvidence({ browser, server, definition });
+  const assessmentMetadata={completionQuality:90,templateFit:true,stakeholderCoverage:4,evidenceQuality:4,assumptionQuality:4};
+  const upsertRequestId=randomUUID();
+  const upsertEnvelope={requestId:upsertRequestId,idempotencyKey:`assessment.response.upsert.${upsertRequestId}`,
+    commandType:'assessment.response.upsert',organizationId:ids.org,workspaceId:ids.workspace,authorizationVersion,
+    expectedVersion:1,payload:{assessmentId:createRequestId,responses:assessmentResponses,metadata:assessmentMetadata,
+      evidenceItems:[],assumptions:[]}};
+  const upsertedAssessment=await invokeAssess(upsertEnvelope);
+  assert.equal(upsertedAssessment.status,200);
+  assert.deepEqual(upsertedAssessment.body,{ok:true,outcome:'committed',resource:{assessmentId:createRequestId,
+    status:'Draft',version:2}});
+
+  const controller=new AuthenticatedHostedController({config,adapter,
+    identity:{verifySession:async()=>({actorId:ids.actors.author,sessionId:ids.sessions.author})}});
+  controller.exerciseId=ids.exercise;controller.startedAt=preflight.observationStartedAt;
+  controller.observationStartedAt=preflight.observationStartedAt;controller.active=true;
+  controller.projects.set('desktop-chromium',{...project,lastBoundaryAt:preflight.observationStartedAt});
+  const finalizeRequestId=randomUUID();
+  const finalizeEnvelope={requestId:finalizeRequestId,idempotencyKey:`assessment.finalize.${finalizeRequestId}`,
+    commandType:'assessment.finalize',organizationId:ids.org,workspaceId:ids.workspace,authorizationVersion,
+    expectedVersion:2,payload:{assessmentId:createRequestId}};
+  const finalizeAction=await controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:authorAccessToken,
+    route:'/functions/v1/assess-command',requestBody:finalizeEnvelope});
+  const finalizedResponse=await invokeAssess(finalizeEnvelope);
+  assert.equal(finalizedResponse.status,200);
+  await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:finalizeAction.actionId,
+    status:finalizedResponse.status,responseBody:finalizedResponse.body});
+  const persistedAssessment=(await serviceQuery(`SELECT status,version,score_version,scores,updated_by
+    FROM public.assessments WHERE id=$1 AND org_id=$2 AND workspace_id=$3`,
+  [createRequestId,ids.org,ids.workspace])).rows[0];
+  const assessmentChecks={
+    'persisted-discovery-inputs-scored':persistedAssessment?.status==='Ready for Review'
+      &&Number(persistedAssessment?.version)===3&&persistedAssessment?.score_version==='assess-core-2026-05'
+      &&persistedAssessment?.scores?.scoreVersion==='assess-core-2026-05'
+      &&persistedAssessment?.updated_by===ids.actors.author,
+    'production-completion-committed':finalizedResponse.body?.ok===true
+      &&finalizedResponse.body?.outcome==='committed'
+      &&finalizedResponse.body?.resource?.assessmentId===createRequestId
+      &&finalizedResponse.body?.resource?.status==='Ready for Review'
+      &&finalizedResponse.body?.resource?.version===3
+      &&finalizedResponse.body?.resource?.scoreVersion==='assess-core-2026-05',
+  };
+  assert.ok(Object.values(assessmentChecks).every(Boolean));
+  await controller.recordBrowserCase({projectName:'desktop-chromium',actionIds:[finalizeAction.actionId],
+    row:{testId:'ASSESS-003',controls:{assertions:AUTHENTICATED_CASE_ASSERTIONS['ASSESS-003'].map(id=>({
+      id,status:assessmentChecks[id]?'passed':'failed',
+    }))}}});
+  const reconstructed=reconstructAuthenticatedHostedCaseEvidence({browser:controller.browserCases[0],
+    server:controller.serverCases[0],definition});
   assert.equal(reconstructed.status, 'PASS');
   assert.equal(reconstructed.measurements.logicalMutations, 1);
   assert.equal(reconstructed.measurements.domainWrites, 1);
@@ -494,6 +602,12 @@ try {
   assert.equal(reconstructed.measurements.paidCalls, 0);
   assert.equal(reconstructed.measurements.budgetReservations, 0);
   assert.equal(reconstructed.measurements.budgetDebits, 0);
+  assert.equal(reconstructed.measurements.foreignWrites,0);
+  const finalAction=controller.browserCases[0].actions[0];
+  assert.equal(finalAction.commandBindingHash,authenticatedHostedRequestBinding({requestId:finalizeRequestId,
+    actorHash:authenticatedHostedDigest(ids.actors.author),commandType:'assessment.finalize',
+    payload:finalizeEnvelope,requireUuid:true}).commandBindingHash);
+  assert.ok(finalAction.response.receiptIdHash);
 
   const deniedController = new AuthenticatedHostedController({
     config,
@@ -518,7 +632,7 @@ try {
   assert.equal(reviewerProcess?.org_id,ids.org);
   assert.equal(reviewerProcess?.workspace_id,ids.workspace);
   const reviewerProcessVersion = Number(reviewerProcess?.authority_version);
-  assert.equal(reviewerProcessVersion,2);
+  assert.equal(reviewerProcessVersion,1);
   const deniedPayload = {
     processId: reviewerProcess.id,
     name: 'Unauthorized process rename',
@@ -546,8 +660,6 @@ try {
   });
   const processRouter = loadEnterpriseLifecycleProductionModule(
     path.join(root,'supabase','functions','_shared','processCommandRouter.ts'));
-  const tenantAuthority = loadEnterpriseLifecycleProductionModule(
-    path.join(root,'supabase','functions','_shared','tenantAuthority.ts'));
   let deniedAtomicCalls = 0;
   let deniedAuthorityCalls = 0;
   let deniedAuthority = null;
@@ -657,7 +769,6 @@ try {
     ...project,
     lastBoundaryAt: safetyBoundary.capturedAt,
   });
-  const authorAccessToken = tokenFor(ids.actors.author,ids.sessions.author);
   const safetyAction = await safetyController.beginBrowserAction({
     projectName: 'desktop-chromium-safety',
     accessToken: authorAccessToken,
@@ -791,12 +902,12 @@ try {
   'SAFETY-002 server evidence correlates the exact consumed permit payload to the browser action');
 
   const processFrame = await adapter.frame('/control/process-frame', { project, testId: 'ASSESS-003' });
-  assert.equal(processFrame.receipts, 1);
-  assert.equal(processFrame.audits, 1);
+  assert.equal(processFrame.receipts, 0);
+  assert.equal(processFrame.audits, 0);
   assert.match(processFrame.targetHash, /^sha256:[0-9a-f]{64}$/u);
   const lifecycleFrame = await adapter.frame('/control/lifecycle-frame', { project, testId: 'ASSESS-003' });
-  assert.equal(lifecycleFrame.receipts, 1);
-  assert.equal(lifecycleFrame.audits, 1);
+  assert.equal(lifecycleFrame.receipts, 3);
+  assert.equal(lifecycleFrame.audits, 3);
 
   assert.deepEqual(await adapter.control('/control/assess-v2-runtime', { enabled: false, project }), { enabled: false });
   assert.equal((await db.query('SELECT enabled FROM public.assess_v2_runtime_control WHERE singleton')).rows[0].enabled, false);

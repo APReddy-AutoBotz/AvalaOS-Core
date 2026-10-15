@@ -208,6 +208,26 @@ test('a timed out test retains only the deepest fixed active operation and allow
   assert.equal(JSON.stringify(value).includes('hosted:'),false);
 });
 
+test('a primary timeout inside V1 completion retains the source-owned milestone', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-v1-completion-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'v1-completion.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const milestone={title:'hosted:primary:v1-assessment-completion',location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/v1AssessmentCompletion.ts'),line:1,column:1}};
+  reporter.onTestBegin(current);reporter.onStepBegin(current,{status:'running'},milestone);
+  reporter.onTestEnd(current,{status:'timedOut',error:new Error('fixture-sensitive-timeout')});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.operation,'V1_ASSESSMENT_COMPLETION');
+  assert.deepEqual(value.location,{source:'tests/browser/enterpriseLifecycleAcceptance/v1AssessmentCompletion.ts',line:1});
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+});
+
 test('completed and unknown steps cannot supply a timeout operation', async t => {
   const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-completed-operation-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
@@ -369,7 +389,10 @@ test('a real Playwright failure crosses the reporter boundary as a closed descri
   assert.equal(JSON.stringify(value).includes('bounded failure'),false);
 });
 
-test('a real Playwright timeout retains its fixed active operation without raw step text', async t => {
+for (const [stepTitle, expectedOperation] of [
+  ['hosted:control:observe', 'OBSERVE'],
+  ['hosted:primary:journey', 'PRIMARY_JOURNEY'],
+]) test(`a real Playwright timeout retains ${expectedOperation} without raw step text`, async t => {
   const root=await mkdtemp(path.join(process.cwd(),'authenticated-reporter-timeout-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const destination=path.join(root,'diagnostic.json');
@@ -378,7 +401,7 @@ test('a real Playwright timeout retains its fixed active operation without raw s
   const config=path.join(root,'playwright.config.mjs');
   await writeFile(path.join(root,'timeout.spec.mjs'),`import { test } from '@playwright/test';\n`+
     `test('authors, replays, rejects stale work, requests changes and resubmits through the production UI', async () => {\n`+
-    `  await test.step('hosted:control:observe', async () => {\n`+
+    `  await test.step(${JSON.stringify(stepTitle)}, async () => {\n`+
     `    await new Promise(() => {});\n`+
     `  });\n`+
     `});\n`);
@@ -396,9 +419,9 @@ test('a real Playwright timeout retains its fixed active operation without raw s
   const value=JSON.parse(serialized);
   assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
   assert.equal(value.category,'timeout');
-  assert.equal(value.operation,'OBSERVE');
+  assert.equal(value.operation,expectedOperation);
   assert.equal(Object.hasOwn(value,'location'),false);
-  assert.equal(serialized.includes('hosted:control:observe'),false);
+  assert.equal(serialized.includes(stepTitle),false);
   assert.equal(serialized.includes('authors, replays'),false);
 });
 
