@@ -516,31 +516,37 @@
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
         196,
-        258
+        273,
+        274,
+        326
       ],
       "reason": "test/control documentation",
-      "futureAction": "Keep these read-only assertions limited to inert loopback Auth sessions: rejected credentials leave no session and switching actors replaces the previous token. Never read real credentials or promote this preparation proof to hosted authority."
+      "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
     },
     {
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        206,
-        207,
-        208,
-        214,
-        241,
-        242,
-        252,
-        253,
-        269,
-        270,
-        271,
-        425,
-        426
+        211,
+        212,
+        213,
+        219,
+        246,
+        247,
+        257,
+        258,
+        274,
+        275,
+        276,
+        380,
+        381,
+        541,
+        544,
+        630,
+        631
       ],
       "reason": "test/control documentation",
-      "futureAction": "Confine session handling and storage-exposure assertions to this approved acceptance harness. Real hosted sessions are independently verified; browser state never grants server authority. Do not persist provider credentials or export auth tokens."
+      "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."
     },
     {
       "pattern": "localStorage",
