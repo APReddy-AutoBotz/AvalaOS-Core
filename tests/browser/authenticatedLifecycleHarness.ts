@@ -1,7 +1,8 @@
 import { expect, type Page, type Request } from '@playwright/test';
 import { StorageKeys } from '../../services/storage';
-import { hasDurableProductNavigationAgreement } from '../../services/productNavigationState';
-import { ScopeType, View } from '../../types';
+import { hasDurableProductNavigationAgreement, parseProductNavigationSearch } from '../../services/productNavigationState';
+import { areScopesEqual, isValidScope } from '../../services/viewStatePersistence';
+import { ScopeType, View, type Scope } from '../../types';
 import { openProductNavigation } from './productNavigationReadiness';
 
 export const authenticatedHostedActionIds: unique symbol = Symbol('authenticatedHostedActionIds');
@@ -319,18 +320,50 @@ export type AuthenticatedLifecycleProcessNavigation = Readonly<{
   persistedScope: unknown;
 }>;
 
+const authenticatedLifecycleNavigationKeys = (scope: Scope, process: boolean) => [
+  'view', 'scope',
+  ...(scope.type === ScopeType.PROJECT || scope.type === ScopeType.TEAM ? ['scopeId', 'scopeName'] : []),
+  ...(scope.type === ScopeType.PROJECT ? ['projectId'] : []),
+  ...(process ? ['processId'] : []),
+].sort();
+
+const authenticatedLifecycleReadNavigationScope = (
+  params: URLSearchParams,
+  expectedView: View.PROCESS_CATALOG | View.PROCESS_DETAIL,
+  process: boolean,
+) => {
+  const target = parseProductNavigationSearch(params);
+  const scope = target.scope;
+  const expectedKeys = isValidScope(scope) ? authenticatedLifecycleNavigationKeys(scope, process) : [];
+  if (!isValidScope(scope) || params.getAll('view').length !== 1 || params.get('view') !== expectedView
+    || [...params.keys()].sort().join(',') !== expectedKeys.join(',')) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  return scope;
+};
+
+export const authenticatedLifecycleValidateProcessCatalogNavigation = (
+  navigation: AuthenticatedLifecycleProcessNavigation,
+) => {
+  const params = new URLSearchParams(navigation.search);
+  const scope = authenticatedLifecycleReadNavigationScope(params, View.PROCESS_CATALOG, false);
+  if (!hasDurableProductNavigationAgreement(params, navigation.persistedView, navigation.persistedScope)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  return Object.freeze({ scope });
+};
+
 export const authenticatedLifecycleValidateProcessNavigation = (
   navigation: AuthenticatedLifecycleProcessNavigation,
   expectedProcessId?: string,
+  expectedScope?: Scope,
 ) => {
   const params = new URLSearchParams(navigation.search);
   const processId = params.get('processId');
-  const exactKeys = [...params.keys()].sort().join(',') === 'processId,scope,view';
-  if (!exactKeys
-    || params.getAll('view').length !== 1 || params.get('view') !== View.PROCESS_DETAIL
-    || params.getAll('scope').length !== 1 || params.get('scope') !== ScopeType.MY_WORK
-    || params.getAll('processId').length !== 1 || !processId || !uuid.test(processId)
+  const scope = authenticatedLifecycleReadNavigationScope(params, View.PROCESS_DETAIL, true);
+  if (params.getAll('processId').length !== 1 || !processId || !uuid.test(processId)
     || (expectedProcessId !== undefined && processId !== expectedProcessId)
+    || (expectedScope !== undefined && !areScopesEqual(scope, expectedScope))
     || !hasDurableProductNavigationAgreement(
       params,
       navigation.persistedView,
@@ -338,7 +371,7 @@ export const authenticatedLifecycleValidateProcessNavigation = (
     )) {
     throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
   }
-  return Object.freeze({ processId });
+  return Object.freeze({ processId, scope });
 };
 
 const authenticatedLifecycleReadProcessNavigation = (page: Page) => page.evaluate(({ viewKey, scopeKey }) => {
@@ -353,16 +386,43 @@ const authenticatedLifecycleReadProcessNavigation = (page: Page) => page.evaluat
   };
 }, { viewKey: StorageKeys.VIEW, scopeKey: StorageKeys.SCOPE });
 
-const authenticatedLifecycleObserveProcessNavigation = async (page: Page, expectedProcessId?: string) => {
+const authenticatedLifecycleObserveProcessCatalogScope = async (page: Page) => {
+  let scope: Scope | null = null;
+  try {
+    await expect.poll(async () => {
+      try {
+        scope = authenticatedLifecycleValidateProcessCatalogNavigation(
+          await authenticatedLifecycleReadProcessNavigation(page),
+        ).scope;
+        return true;
+      } catch {
+        return false;
+      }
+    }).toBe(true);
+  } catch {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  }
+  if (!scope) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED');
+  return scope;
+};
+
+const authenticatedLifecycleObserveProcessNavigation = async (
+  page: Page,
+  expectedProcessId?: string,
+  expectedScope?: Scope,
+) => {
   let candidateProcessId: string | null = null;
   try {
     await expect.poll(async () => {
       const navigation = await authenticatedLifecycleReadProcessNavigation(page);
       const params = new URLSearchParams(navigation.search);
       const processId = params.get('processId');
-      const routeReady = params.getAll('view').length === 1 && params.get('view') === View.PROCESS_DETAIL
-        && params.getAll('scope').length === 1 && params.get('scope') === ScopeType.MY_WORK
-        && params.getAll('processId').length === 1 && Boolean(processId && uuid.test(processId));
+      let routeReady = false;
+      try {
+        const scope = authenticatedLifecycleReadNavigationScope(params, View.PROCESS_DETAIL, true);
+        routeReady = params.getAll('processId').length === 1 && Boolean(processId && uuid.test(processId))
+          && (expectedScope === undefined || areScopesEqual(scope, expectedScope));
+      } catch { /* keep polling until the exact route tuple exists */ }
       if (routeReady) candidateProcessId = processId;
       return routeReady;
     }).toBe(true);
@@ -379,6 +439,7 @@ const authenticatedLifecycleObserveProcessNavigation = async (page: Page, expect
         authenticatedLifecycleValidateProcessNavigation(
           await authenticatedLifecycleReadProcessNavigation(page),
           processId,
+          expectedScope,
         );
         return true;
       } catch {
@@ -393,6 +454,7 @@ const authenticatedLifecycleObserveProcessNavigation = async (page: Page, expect
 
 export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, processLabel: string) => {
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+  const catalogScope = await authenticatedLifecycleObserveProcessCatalogScope(page);
   const exactProcessButton = page.getByRole('button', { name: processLabel, exact: true });
   const row = page.getByRole('row').filter({ has: exactProcessButton });
   try {
@@ -406,7 +468,7 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
   }
   await row.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
-  return authenticatedLifecycleObserveProcessNavigation(page);
+  return authenticatedLifecycleObserveProcessNavigation(page, undefined, catalogScope);
 };
 
 export const authenticatedLifecycleValidateDeniedProcessAuthority = ({
@@ -502,6 +564,10 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
   processLabel: string,
 ): Promise<Readonly<{ status: number; body: unknown; request: Request; requestId: string }>> => {
   const selectedProcessId = await authenticatedLifecycleObserveProcessNavigation(page);
+  const selectedScope = authenticatedLifecycleValidateProcessNavigation(
+    await authenticatedLifecycleReadProcessNavigation(page),
+    selectedProcessId,
+  ).scope;
   const sessionBeforeReload = await authenticatedLifecycleReadBrowserSessionBinding(page);
   const backend = new URL(required(apiBaseUrl, 'API_BASE_URL'));
   const serverContextResponse = page.waitForResponse(response => {
@@ -519,7 +585,7 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
     processReadResponse,
     page.reload({ waitUntil: 'domcontentloaded' }),
   ]);
-  await authenticatedLifecycleObserveProcessNavigation(page, selectedProcessId);
+  await authenticatedLifecycleObserveProcessNavigation(page, selectedProcessId, selectedScope);
   await expect(page.getByRole('heading', { name: processLabel, exact: true })).toBeVisible();
   const editProcess = page.getByRole('button', { name: 'Edit process details', exact: true });
   await expect(editProcess).toBeDisabled();

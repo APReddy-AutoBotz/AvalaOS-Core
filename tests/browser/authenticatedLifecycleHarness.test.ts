@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ScopeType } from '../../types';
 
 import {
+  authenticatedLifecycleValidateProcessCatalogNavigation,
   authenticatedLifecycleValidateProcessNavigation,
   authenticatedLifecycleValidateDeniedProcessAuthority,
   authenticatedLifecycleValidateSessionBinding,
@@ -84,11 +86,29 @@ const processNavigation = () => ({
   persistedScope: { type: 'my_work' },
 });
 
+const projectScope = {
+  type: ScopeType.PROJECT,
+  id: '50000000-0000-4000-8000-000000000001',
+  name: 'Strong automation delivery',
+};
+
+const projectNavigation = (view: 'process_catalog' | 'process_detail') => {
+  const params = new URLSearchParams({
+    view,
+    scope: projectScope.type,
+    scopeId: projectScope.id,
+    scopeName: projectScope.name,
+    projectId: projectScope.id,
+  });
+  if (view === 'process_detail') params.set('processId', '40000000-0000-4000-8000-000000000001');
+  return { search: `?${params}`, persistedView: view, persistedScope: projectScope };
+};
+
 test('process navigation requires one exact URL and persisted My Work tuple', () => {
   assert.deepEqual(authenticatedLifecycleValidateProcessNavigation(
     processNavigation(),
     '40000000-0000-4000-8000-000000000001',
-  ), { processId: '40000000-0000-4000-8000-000000000001' });
+  ), { processId: '40000000-0000-4000-8000-000000000001', scope: { type: ScopeType.MY_WORK } });
   for (const candidate of [
     { ...processNavigation(), search: '?view=process_catalog&scope=my_work&processId=40000000-0000-4000-8000-000000000001' },
     { ...processNavigation(), search: '?view=process_detail&scope=organization&processId=40000000-0000-4000-8000-000000000001' },
@@ -101,6 +121,26 @@ test('process navigation requires one exact URL and persisted My Work tuple', ()
     candidate,
     '40000000-0000-4000-8000-000000000001',
   ), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED/u);
+});
+
+test('process navigation preserves the scenario profile exact project scope from catalog through detail', () => {
+  assert.deepEqual(authenticatedLifecycleValidateProcessCatalogNavigation(
+    projectNavigation('process_catalog'),
+  ), { scope: projectScope });
+  assert.deepEqual(authenticatedLifecycleValidateProcessNavigation(
+    projectNavigation('process_detail'),
+    '40000000-0000-4000-8000-000000000001',
+    projectScope,
+  ), { processId: '40000000-0000-4000-8000-000000000001', scope: projectScope });
+  assert.throws(() => authenticatedLifecycleValidateProcessNavigation(
+    projectNavigation('process_detail'),
+    '40000000-0000-4000-8000-000000000001',
+    { type: ScopeType.MY_WORK },
+  ), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED/u);
+  assert.throws(() => authenticatedLifecycleValidateProcessCatalogNavigation({
+    ...projectNavigation('process_catalog'),
+    persistedScope: { ...projectScope, name: 'Different project' },
+  }), /ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_NAVIGATION_REJECTED/u);
 });
 
 test('browser session continuity rejects actor or session substitution before dispatch', () => {
