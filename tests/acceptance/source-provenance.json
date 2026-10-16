@@ -336,7 +336,7 @@
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/acceptance/catalog/schema.json": "sha256:96cf00e298b79ca4a8c4bdc36e2d970dfb6b6537cea46755e178ae93fc8d981f",
     "tests/acceptance/catalog/test-catalog.json": "sha256:2b6928ef6e8304210d1aa37c1e5b12b19d260274b1598ccc9ffed6aebd7587b5",
-    "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:63303b71aecf972d57d7f5f1516737833f94ece3e15d824b71fdcf17a4f11475",
+    "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:5fc00fecb5415b75bf949def0ea6e80c635337a3f72cec563203555df62c77b3",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:d05dc0e6a30757b738a7347a36ca62b725fcdc52d1303a13cd97f2dcce9d51d7",
     "tests/browser/authenticatedHostedSignInEntry.spec.ts": "sha256:5c8447c8eec5c7fb16739fb3c9836d524304b008dbc3e7bf7db9034064236c37",

@@ -239,6 +239,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
 
   test('read observer retains pending headers, held bodies, cancellation and mixed duplicate lifecycle', async ({ page }) => {
     await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
     const processId = new URL(page.url()).searchParams.get('processId');
     expect(processId).toMatch(/^[0-9a-f-]{36}$/u);
     const stats = () => control<NativeStreamStats>('/control/native-postgrest-stats', { projectName });
@@ -246,6 +247,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
       projectName, resource: 'assess_v2_cases', mode,
     });
     const release = () => control('/control/native-postgrest-stream-release', { projectName });
+    await expect.poll(async () => (await stats()).active).toBe(0);
 
     await test.step('pending headers remain distinct and the snapshot is immutable after release', async () => {
       const baseline = await stats();
