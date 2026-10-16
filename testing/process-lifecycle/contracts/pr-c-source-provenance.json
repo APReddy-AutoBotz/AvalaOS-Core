@@ -3,7 +3,7 @@
   "acceptedMainBaseline": "5433cad41721355e3ec5a29bc2f87772540c77b5",
   "sourceDigests": {
     ".github/workflows/assess-document-mapping.yml": "sha256:388859c5e34c6f69afc8d492cbe835a69ac11e57d8819e5e7742b8934cdb448f",
-    ".github/workflows/authenticated-product-acceptance.yml": "sha256:42e59959b401b87832b2d3c25425e9c158d1146ae99e55aa72367e9d5aac3183",
+    ".github/workflows/authenticated-product-acceptance.yml": "sha256:a0ad829a33c1d251e0c933f5b14703cb130b886bdb6ce68ea0f12db3bf097f13",
     ".github/workflows/creation-access.yml": "sha256:f1f37763ddaafb5145e62319ec6ef5304ef44e78b6d972e9e524aedccd783a5b",
     ".github/workflows/exhaustive-acceptance.yml": "sha256:eb0d953fa4e5d275807475d49b3dc9096ebe23b70c1d7e6021966dcc8b797b20",
     ".github/workflows/legacy-delivery-authority.yml": "sha256:8d62a04ad5677d9665ee4bb4224132a45b6fe801477c07e0520ca9d327516847",
@@ -735,7 +735,7 @@
     "tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs": "sha256:3c10fef84b5fa53756b9db7456e86666b2e35b60ef7c600240e4d86128f18d6f",
     "tests/acceptance/proof-owner-registry.json": "sha256:7c5f54fa0ce03feb7a3f759f472b6119410bd604c020756928f96c8c7729f043",
     "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:f94f2141c9c883e1c668cd8068f7402a9727b6c10e793feb8d2962716583ec07",
-    "tests/acceptance/source-provenance.json": "sha256:1eb52929ac6e7cbc9764df0bf5a9e0e31c25d9af354bdae3d355fe92c6f97d5f",
+    "tests/acceptance/source-provenance.json": "sha256:b8c8e2a2777f2d0ef020ed9ae3a471fbfe2c26aa0a997386b74a7dc6eaddeff1",
     "tests/acceptance/validators/inventory-provenance.test.mjs": "sha256:051a067eaf13190c1792f78328961cd65cb5552862e0e7a074256d9420cd2e5f",
     "tests/acceptance/validators/validate-traceability.mjs": "sha256:00957d930b6d381a91b60e15ff5db769781a544e1cd115b9a1427abc0d564d08",
     "tests/browser/assessImport.spec.ts": "sha256:bd0a87efc6654f80f6dbbec375c6171fb8211dc11681b4345ae179475cbfec48",

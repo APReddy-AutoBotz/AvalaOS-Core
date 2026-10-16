@@ -3,7 +3,7 @@
   "inventoryId": "avalaos-hosted-acceptance-2026-08",
   "proofOwnerRegistrySource": "tests/acceptance/proof-owner-registry.json",
   "sourceDigests": {
-    ".github/workflows/authenticated-product-acceptance.yml": "sha256:42e59959b401b87832b2d3c25425e9c158d1146ae99e55aa72367e9d5aac3183",
+    ".github/workflows/authenticated-product-acceptance.yml": "sha256:a0ad829a33c1d251e0c933f5b14703cb130b886bdb6ce68ea0f12db3bf097f13",
     ".github/workflows/transcript-flow-pr-a.yml": "sha256:2176f261dc2979cf0ab17db46f846c3d326b58585e083d66b9782b4d70a9655c",
     "App.tsx": "sha256:77853ebf09c9d325190a9fcc7e3de4efe265c9f28163df3747301a250c27d24d",
     "components/admin/AdminSectionNav.tsx": "sha256:4fa9a40a8cdbde9259a287bdab025757fb85ccb65035752628850d20ee3787db",
