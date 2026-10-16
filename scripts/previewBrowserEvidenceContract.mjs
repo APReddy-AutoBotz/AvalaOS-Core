@@ -52,12 +52,6 @@ export const extractControlledPreviewBrowserBinding = source => ({
   publicTargetDigest: extractOne(source, 'publicTargetDigest', /(?:^|[,{])\s*(?:publicTargetDigest|["'`]publicTargetDigest["'`])\s*:\s*["'`](sha256:[0-9a-f]{64})["'`]/gu),
 });
 
-const EXPECTED_EXTERNAL_CLASSIC_SCRIPTS = new Set([
-  '/npm/mermaid@10/dist/mermaid.min.js',
-  '/npm/js-yaml@4.1.0/dist/js-yaml.min.js',
-  '/npm/marked/marked.min.js',
-]);
-
 export const selectControlledPreviewApplicationEntries = html => {
   const scripts = [...html.matchAll(/<script\b([^>]*)\bsrc=(?:"([^"]+)"|'([^']+)')[^>]*>/gu)].map(match => {
     const attributes = match[1] ?? '';
@@ -81,9 +75,7 @@ export const selectControlledPreviewApplicationEntries = html => {
       if (script.url.pathname !== '/.netlify/scripts/cdp') throw new Error('CONTROLLED_PREVIEW_PLATFORM_SCRIPT_REJECTED');
       continue;
     }
-    if (script.url.origin !== 'https://cdn.jsdelivr.net' || !EXPECTED_EXTERNAL_CLASSIC_SCRIPTS.has(script.url.pathname)) {
-      throw new Error('CONTROLLED_PREVIEW_EXTERNAL_SCRIPT_REJECTED');
-    }
+    throw new Error('CONTROLLED_PREVIEW_EXTERNAL_SCRIPT_REJECTED');
   }
   if (applicationEntries.length !== 1) throw new Error('CONTROLLED_PREVIEW_MODULE_ENTRY_COUNT');
   return Object.freeze(applicationEntries);
@@ -91,13 +83,6 @@ export const selectControlledPreviewApplicationEntries = html => {
 
 const CONTROLLED_PREVIEW_ATTESTATION_PATH = '/rest/v1/rpc/pr_c_controlled_human_public_attestation';
 const CONTROLLED_PREVIEW_PROVIDER_PATTERN = /(?:openai|groq|anthropic|gemini|provider|ai-gateway|generate|completion)/iu;
-const CONTROLLED_PREVIEW_EXTERNAL_STATIC_ORIGINS = new Set([
-  'https://cdn.jsdelivr.net',
-  'https://fonts.googleapis.com',
-  'https://fonts.gstatic.com',
-  'https://aistudiocdn.com',
-]);
-
 export const createControlledPreviewNetworkCounts = () => ({
   totalRequests: 0,
   apiContextRequests: 0,
@@ -161,11 +146,6 @@ const controlledPreviewRequestDisposition = ({ request, aliasOrigin, immutableOr
   );
   if (allowedOrigin && (method === 'GET' || method === 'HEAD') && (allowedDocument || allowedStatic)) {
     return Object.freeze({ action: 'continue', category: 'allowed' });
-  }
-  if ((method === 'GET' || method === 'HEAD')
-    && ['script', 'stylesheet', 'image', 'font'].includes(resourceType)
-    && CONTROLLED_PREVIEW_EXTERNAL_STATIC_ORIGINS.has(url.origin)) {
-    return Object.freeze({ action: 'abort-external-static', category: 'external-static' });
   }
   if (allowedOrigin && (method === 'GET' || method === 'HEAD')
     && resourceType === 'script' && url.pathname.startsWith('/.netlify/scripts/')) {
@@ -401,8 +381,7 @@ export const createControlledPreviewNetworkObserver = async ({
       }
       return;
     }
-    if (disposition.action === 'abort-external-static') counts.blockedExternalStaticRequests += 1;
-    else if (disposition.action === 'abort-platform-static') counts.blockedPlatformStaticRequests += 1;
+    if (disposition.action === 'abort-platform-static') counts.blockedPlatformStaticRequests += 1;
     else {
       counts.unexpectedRequests += 1;
       counts.unexpectedCategories[disposition.category] = (counts.unexpectedCategories[disposition.category] ?? 0) + 1;

@@ -99,12 +99,10 @@ const LoginView: React.FC = () => {
           
           {/* LEFT COLUMN: Visuals & Value Prop */}
           <section className="relative overflow-hidden rounded-[34px] p-6 shadow-2xl sm:p-8 lg:p-10 flex flex-col justify-between border border-white/60">
-            {/* Clean Office Background Image */}
-            <img 
-              alt="Office collaboration background" 
-              className="absolute inset-0 w-full h-full object-cover scale-105 blur-[3px] opacity-85 grayscale-[20%]" 
-              src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=2070&q=80" 
-              style={{ filter: 'brightness(0.95)' }} 
+            {/* First-party decorative background */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(255,188,3,0.24),transparent_35%),radial-gradient(circle_at_82%_18%,rgba(7,59,96,0.20),transparent_34%),linear-gradient(145deg,#fffaf0_0%,#eef5f8_55%,#fff7df_100%)]"
             />
             {/* Soft overlay to ensure readability */}
             <div className="absolute inset-0 bg-[#fffcf5]/80 backdrop-blur-sm"></div>

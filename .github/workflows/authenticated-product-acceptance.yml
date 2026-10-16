@@ -188,6 +188,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Verify ordinary production browser assets stay local
+        run: |
+          npm run test:local-assets:modules
+          npm run test:local-assets:browser
       - name: Cache exact disposable Assess V2 transport images
         run: |
           docker pull postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685

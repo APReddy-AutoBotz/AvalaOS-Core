@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { sanitizeMermaidSvg } from '../../services/safeMarkdown';
 
-// Make mermaid available globally for the script to use
-declare global {
-  interface Window {
-    mermaid: any;
-  }
-}
+type MermaidApi = (typeof import('mermaid'))['default'];
+
+let mermaidModule: Promise<MermaidApi> | null = null;
+const loadMermaid = () => {
+  mermaidModule ??= import('mermaid').then(module => module.default);
+  return mermaidModule;
+};
 
 interface MermaidRendererProps {
   code: string;
@@ -32,17 +33,16 @@ const MermaidRenderer: React.FC<MermaidRendererProps> = ({ code, id }) => {
 
 
   useEffect(() => {
-    // Guard against mermaid not being available on the window object
-    if (!window.mermaid) {
-        console.warn("Mermaid script not loaded yet.");
-        return;
-    }
+    let cancelled = false;
 
     // A function to render the diagram
     const renderDiagram = async () => {
+      let renderId: string | null = null;
       try {
+        const mermaid = await loadMermaid();
+        if (cancelled) return;
         // Re-initialize on every render to pick up theme changes.
-        window.mermaid.initialize({
+        mermaid.initialize({
             startOnLoad: false,
             securityLevel: 'strict',
             theme: currentTheme,
@@ -62,20 +62,29 @@ const MermaidRenderer: React.FC<MermaidRendererProps> = ({ code, id }) => {
         });
         
         // Generate a unique ID for each render to prevent mermaid from crashing on re-renders.
-        const renderId = `mermaid-svg-${id}-${Math.random().toString(36).slice(2)}`;
+        renderId = `mermaid-svg-${id}-${Math.random().toString(36).slice(2)}`;
         
-        const { svg: renderedSvg } = await window.mermaid.render(renderId, code);
+        const { svg: renderedSvg } = await mermaid.render(renderId, code);
+        if (cancelled) return;
         setSvg(sanitizeMermaidSvg(renderedSvg));
         setError(null);
       } catch (e: any) {
+        if (cancelled) return;
         console.error(`Mermaid rendering error for ID ${id}:`, e);
         setError("Could not render diagram. Please check syntax.");
         setSvg('');
+      } finally {
+        if (renderId) {
+          document.getElementById(renderId)?.remove();
+          document.getElementById(`d${renderId}`)?.remove();
+          document.getElementById(`i${renderId}`)?.remove();
+        }
       }
     };
 
     renderDiagram();
-    
+
+    return () => { cancelled = true; };
   }, [code, id, currentTheme]); // Rerun when code, id, or theme changes
 
   if (error) {

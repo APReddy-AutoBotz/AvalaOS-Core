@@ -26,21 +26,10 @@ const hostedOrigin = executionProfile.targetOrigin;
 const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8'));
 const bindings = JSON.parse(fs.readFileSync('tests/acceptance/execution-bindings.json', 'utf8'));
 const indexHtml = fs.readFileSync('index.html', 'utf8');
-const importMapMatch = indexHtml.match(/<script\b[^>]*\btype=["']importmap["'][^>]*>([\s\S]*?)<\/script>/iu);
-if (!importMapMatch) throw new Error('Hosted acceptance requires the declared index.html import map.');
-const importMap = JSON.parse(importMapMatch[1]) as { imports?: Record<string, string> };
 const declaredGoogleStylesheetUrls = new Set(
   [...indexHtml.matchAll(/<link\b[^>]*\bhref=["'](https:\/\/fonts\.googleapis\.com[^"']+)["'][^>]*>/giu)]
     .map(([, source]) => new URL(source).toString()),
 );
-const declaredJsDelivrScriptPaths = new Set(
-  [...indexHtml.matchAll(/<script\b[^>]*\bsrc=["'](https:\/\/cdn\.jsdelivr\.net[^"']+)["'][^>]*>/giu)]
-    .map(([, source]) => new URL(source).pathname),
-);
-const declaredAiStudioScriptRules = Object.values(importMap.imports ?? {})
-  .map(source => ({ source, url: new URL(source) }))
-  .filter(({ url }) => url.origin === 'https://aistudiocdn.com')
-  .map(({ source, url }) => ({ pathname: url.pathname, prefix: source.endsWith('/') }));
 const catalogById = new Map(catalog.cases.map((item: any) => [item.testId, item]));
 const personas: Array<[string, string]> = [
   ['Process Analyst', 'Maya Patel'],
@@ -117,19 +106,7 @@ const HOSTED_NETWORK_ORIGIN_CLASS = 'hosted-origin';
 const EXTERNAL_NETWORK_ORIGIN_OVERFLOW_CLASS = 'external-origin-overflow';
 const safeDocumentPath = (pathname: string): boolean => pathname === '/' || pathname === '/sandbox' || pathname === '/sign-in' || pathname.startsWith('/sandbox/');
 const safeStaticPath = (pathname: string): boolean => pathname.startsWith('/assets/') || /^\/(?:favicon(?:\.ico|\.svg)?|apple-touch-icon\.png|manifest\.webmanifest|robots\.txt)$/u.test(pathname);
-const isDeclaredAiStudioScript = (url: URL): boolean => declaredAiStudioScriptRules.some(rule => (
-  rule.prefix ? url.pathname.startsWith(rule.pathname) : url.pathname === rule.pathname
-));
-const safeExternalStaticResource = (url: URL, resourceType: string): boolean => {
-  if (url.origin === 'https://fonts.googleapis.com') {
-    // Axe re-reads the exact declared cross-origin stylesheet through XHR while
-    // inspecting accessibility. The request remains a read-only static asset
-    // and must still match the URL declared in index.html exactly.
-    return (resourceType === 'stylesheet' || resourceType === 'xhr') && declaredGoogleStylesheetUrls.has(url.toString());
-  }
-  if (url.origin === 'https://fonts.gstatic.com') return declaredGoogleStylesheetUrls.size > 0 && resourceType === 'font' && url.pathname.startsWith('/s/');
-  if (url.origin === 'https://cdn.jsdelivr.net') return resourceType === 'script' && declaredJsDelivrScriptPaths.has(url.pathname);
-  if (url.origin === 'https://aistudiocdn.com') return resourceType === 'script' && isDeclaredAiStudioScript(url);
+const safeExternalStaticResource = (_url: URL, _resourceType: string): boolean => {
   return false;
 };
 // Diagnosis only: called after rejection, never by either enforcement classifier.
@@ -200,8 +177,8 @@ test.beforeAll(() => {
     expect(executionProfile.checkoutSha, 'local source fixture must bind the exact checkout').toBe(releaseSha);
   }
   expect(declaredGoogleStylesheetUrls.size, 'the bundled-font build must not declare an external Google Fonts stylesheet').toBe(0);
-  expect(declaredJsDelivrScriptPaths.size, 'hosted acceptance must bind jsDelivr to index.html script declarations').toBeGreaterThan(0);
-  expect(declaredAiStudioScriptRules.length, 'hosted acceptance must bind AI Studio CDN to index.html import-map declarations').toBeGreaterThan(0);
+  expect(indexHtml, 'the hosted entry must not declare an import map').not.toMatch(/type=["']importmap["']/iu);
+  expect(indexHtml, 'the hosted entry must not declare an external script').not.toMatch(/<script\b[^>]*\bsrc=["']https?:\/\//iu);
 });
 
 const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>>) => {

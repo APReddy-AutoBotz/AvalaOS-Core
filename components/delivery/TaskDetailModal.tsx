@@ -364,11 +364,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions,
                     </div>
                 </div>
                 <div className="prose dark:prose-invert max-w-none text-sm text-slate-600 dark:text-slate-300">
-                    {window.marked ? (
-                        <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(task.description || 'No description provided.') }} />
-                    ) : (
-                        <p className="whitespace-pre-wrap">{task.description || 'No description provided.'}</p>
-                    )}
+                    <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(task.description || 'No description provided.') }} />
                 </div>
             </div>
             <div>

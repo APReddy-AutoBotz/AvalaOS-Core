@@ -5,16 +5,6 @@ if (!/^http:\/\/127[.]0[.]0[.]1:\d{2,5}$/u.test(LOCAL_ORIGIN ?? '')) {
   throw new Error('LOCAL_CONTROLLED_BOUNDARY_EXACT_ORIGIN_REQUIRED');
 }
 const BACKEND_OR_PROVIDER = /(?:\/auth\/v1\/|\/rest\/v1\/|\/functions\/v1\/|supabase[.]co|127[.]0[.]0[.]1:59999|api[.]openai[.]com|generativelanguage[.]googleapis[.]com)/u;
-const blockedStatic = (url: URL, method: string, resourceType: string) => method === 'GET' && (
-  (url.hostname === 'fonts.googleapis.com' && url.pathname === '/css2' && resourceType === 'stylesheet')
-  || (url.hostname === 'fonts.gstatic.com' && url.pathname.startsWith('/s/') && resourceType === 'font')
-  || (url.hostname === 'cdn.jsdelivr.net' && resourceType === 'script' && [
-    '/npm/mermaid@10/dist/mermaid.min.js',
-    '/npm/js-yaml@4.1.0/dist/js-yaml.min.js',
-    '/npm/marked/marked.min.js',
-  ].includes(url.pathname))
-);
-
 const observeBoundary = async (page: Page) => {
   const pageErrors: string[] = [];
   const backendOrProviderRequests: string[] = [];
@@ -31,10 +21,7 @@ const observeBoundary = async (page: Page) => {
       return route.abort();
     }
     if (url.origin === LOCAL_ORIGIN) return route.continue();
-    // Existing public static fonts/CDN are denied, never fetched by this test.
-    if (!blockedStatic(url, request.method(), request.resourceType())) {
-      unexpectedExternalRequests.push(url.hostname);
-    }
+    unexpectedExternalRequests.push(url.hostname);
     return route.abort();
   });
   return () => {

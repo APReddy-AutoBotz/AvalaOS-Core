@@ -1,7 +1,12 @@
 import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 
 type MarkdownParser = {
-  parse: (markdown: string) => string;
+  parse: (markdown: string) => unknown;
+};
+
+const bundledMarkdownParser: MarkdownParser = {
+  parse: markdown => marked.parse(markdown, { async: false }),
 };
 
 const markdownTags = [
@@ -69,19 +74,14 @@ export const sanitizeMermaidSvg = (svg: string) => {
 
 export const renderSafeMarkdown = (
   markdown: string,
-  parser?: MarkdownParser,
+  parser: MarkdownParser = bundledMarkdownParser,
 ) => {
-  const markdownParser = parser ?? (
-    typeof window !== 'undefined' ? window.marked as MarkdownParser | undefined : undefined
-  );
-  if (!markdownParser?.parse) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
     return escapePlainText(markdown).replace(/\r?\n/g, '<br />');
   }
-  return sanitizeMarkdownHtml(markdownParser.parse(markdown));
-};
-
-declare global {
-  interface Window {
-    marked?: MarkdownParser;
+  const rendered = parser.parse(markdown);
+  if (typeof rendered !== 'string') {
+    return escapePlainText(markdown).replace(/\r?\n/g, '<br />');
   }
-}
+  return sanitizeMarkdownHtml(rendered);
+};

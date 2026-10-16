@@ -27,12 +27,6 @@ const baseOrigin = parseFullPlatformBaseUrl(process.env.FULL_PLATFORM_BASE_URL);
 const executionMode = parseFullPlatformExecutionMode(process.env.FULL_PLATFORM_EXECUTION_MODE);
 const authorityOrigins = parseAuthorityOrigins(process.env.FULL_PLATFORM_AUTHORITY_ORIGINS);
 const providerOrigins = new Set(['https://api.openai.com', 'https://api.groq.com']);
-const externalStaticOrigins = new Set([
-  'https://fonts.googleapis.com',
-  'https://fonts.gstatic.com',
-  'https://cdn.jsdelivr.net',
-  'https://aistudiocdn.com',
-]);
 const personas: Array<[label:string,userName:string]> = [
   ['Process Analyst', 'Maya Patel'],
   ['AP Process Owner', 'Priya Nair'],
@@ -68,7 +62,6 @@ const originClass = (rawUrl:string) => {
   const authorityIndex = authorityOrigins.indexOf(origin);
   if (authorityIndex >= 0) return `authority-origin-${authorityIndex + 1}`;
   if (providerOrigins.has(origin)) return 'provider-origin';
-  if (externalStaticOrigins.has(origin)) return 'declared-static-origin';
   return 'unexpected-external-origin';
 };
 
@@ -90,9 +83,7 @@ const createObservedTransport = (page:Page, trace:SanitizedTraceEvent[]) => {
       const isAuthority = authorityOrigins.includes(origin);
       if (credentialHeader && !(executionMode === 'connected' && isAuthority)) category = 'credential-boundary';
       else if (isAuthority && executionMode !== 'connected') category = 'fixture-authority-request';
-      else if (origin !== baseOrigin && !isAuthority && !(
-        externalStaticOrigins.has(origin) && ['GET','HEAD'].includes(sample.method)
-      )) category = 'unexpected-origin';
+      else if (origin !== baseOrigin && !isAuthority) category = 'unexpected-origin';
     }
     record(sample,category);
     return category;
@@ -130,8 +121,7 @@ const installFailClosedEgressGuard = async(page:Page) => {
     const credentialHeader=Object.keys(request.headers()).some(name=>/^(?:authorization|apikey|x-api-key)$/iu.test(name));
     const allowedOrigin=
       origin===baseOrigin ||
-      (executionMode==='connected'&&isAuthority) ||
-      (externalStaticOrigins.has(origin)&&['GET','HEAD'].includes(method));
+      (executionMode==='connected'&&isAuthority);
     const credentialAllowed=executionMode==='connected'&&isAuthority;
     if(providerOrigins.has(origin)||!allowedOrigin||(credentialHeader&&!credentialAllowed)){
       await route.abort('blockedbyclient');
