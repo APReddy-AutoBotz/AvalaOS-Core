@@ -577,19 +577,20 @@
       "pattern": "localStorage",
       "path": "tests/browser/assessV2NativePostgrest.spec.ts",
       "lines": [
-        231
+        43,
+        423
       ],
       "reason": "test/control documentation",
-      "futureAction": "Keep missing-session storage removal confined to this disposable native browser negative; it is not server revocation or runtime authority."
+      "futureAction": "Keep local fixture-token reads and missing-session storage removal confined to disposable native browser checks. They are not server revocation or hosted authorization; retain no credentials."
     },
     {
       "pattern": "localStorage",
       "path": "tests/browser/v2ReloadDiagnosticObserver.ts",
       "lines": [
-        343,
-        347,
-        354,
-        355
+        538,
+        542,
+        549,
+        550
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep bounded session/navigation reads confined to the approved browser diagnostic. Pass the existing token transiently to the protected parent for verification; retain no storage values, tokens or identifiers and never treat client state as authorization."

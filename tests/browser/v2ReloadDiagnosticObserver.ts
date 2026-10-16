@@ -7,11 +7,31 @@ export type V2ReloadRenderOutcome = 'resumed' | 'workspace_error' | 'public_scre
 export type V2ReloadReadStage = typeof V2_RELOAD_READ_STAGES[number];
 export type V2ReloadReadStageStatus = 'passed' | 'failed' | 'not_reached';
 
+export type V2ReloadReadStageLifecycle = Readonly<{
+  requested: number;
+  responseStarted: number;
+  completed: number;
+  transportFailed: number;
+  pending: number;
+  bodyCompleted: number;
+  bodyFailed: number;
+  bodyPending: number;
+  transportFailures: Readonly<{
+    aborted: number;
+    timeout: number;
+    connection: number;
+    protocol: number;
+    blocked: number;
+    other: number;
+  }>;
+}>;
+
 export type V2ReloadReadStageObservation = Readonly<{
   stage: V2ReloadReadStage;
   status: V2ReloadReadStageStatus;
   httpStatus: number | null;
   rowCount: number | null;
+  lifecycle: V2ReloadReadStageLifecycle;
 }>;
 
 export type V2ReloadReadObservation = Readonly<{
@@ -25,7 +45,7 @@ export type V2ReloadReadObserverCompletion = Readonly<{
 }>;
 
 export type V2ReloadDiagnosticCheckpoint = Readonly<{
-  schemaVersion: 'authenticated-v2-reload-checkpoint-v1';
+  schemaVersion: 'authenticated-v2-reload-checkpoint-v2';
   phase: V2ReloadDiagnosticPhase;
   projectName: string;
   persona: 'author';
@@ -65,6 +85,7 @@ export const V2_RELOAD_READ_STAGES = Object.freeze([
 const SERIAL_READ_STAGES = V2_RELOAD_READ_STAGES.slice(0, 4);
 const CHILD_READ_STAGES = new Set<V2ReloadReadStage>(V2_RELOAD_READ_STAGES.slice(4));
 const V2_RELOAD_ROW_COUNT_CAP = 10_000;
+const V2_RELOAD_REQUEST_COUNT_CAP = 8;
 const V2_RELOAD_RENDER_TIMEOUT_MS = 20_000;
 const phaseOrder = Object.freeze<V2ReloadDiagnosticPhase[]>(['before-create', 'before-reload', 'after-reload']);
 const notReachedStages = () => V2_RELOAD_READ_STAGES.map(stage => Object.freeze({
@@ -72,6 +93,11 @@ const notReachedStages = () => V2_RELOAD_READ_STAGES.map(stage => Object.freeze(
   status: 'not_reached' as const,
   httpStatus: null,
   rowCount: null,
+  lifecycle: Object.freeze({
+    requested: 0, responseStarted: 0, completed: 0, transportFailed: 0, pending: 0,
+    bodyCompleted: 0, bodyFailed: 0, bodyPending: 0,
+    transportFailures: Object.freeze({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 }),
+  }),
 }));
 
 const exactKeys = (value: Record<string, unknown>, expected: readonly string[]) => {
@@ -82,6 +108,68 @@ const exactKeys = (value: Record<string, unknown>, expected: readonly string[]) 
 
 const fixedError = (code: string) => new Error(`AUTHENTICATED_V2_RELOAD_${code}`);
 
+const validateReadStageLifecycle = (input: unknown, status: V2ReloadReadStageStatus): V2ReloadReadStageLifecycle => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || !exactKeys(input as Record<string, unknown>, [
+      'requested', 'responseStarted', 'completed', 'transportFailed', 'pending',
+      'bodyCompleted', 'bodyFailed', 'bodyPending',
+      'transportFailures',
+    ])) throw fixedError('READ_STAGE_LIFECYCLE_REJECTED');
+  const row = input as Record<string, unknown>;
+  for (const key of [
+    'requested', 'responseStarted', 'completed', 'transportFailed', 'pending',
+    'bodyCompleted', 'bodyFailed', 'bodyPending',
+  ] as const) {
+    if (!Number.isSafeInteger(row[key]) || (row[key] as number) < 0
+      || (row[key] as number) > V2_RELOAD_REQUEST_COUNT_CAP) {
+      throw fixedError('READ_STAGE_LIFECYCLE_REJECTED');
+    }
+  }
+  const requested = row.requested as number;
+  const responseStarted = row.responseStarted as number;
+  const completed = row.completed as number;
+  const transportFailed = row.transportFailed as number;
+  const pending = row.pending as number;
+  const bodyCompleted = row.bodyCompleted as number;
+  const bodyFailed = row.bodyFailed as number;
+  const bodyPending = row.bodyPending as number;
+  if (!row.transportFailures || typeof row.transportFailures !== 'object' || Array.isArray(row.transportFailures)
+    || !exactKeys(row.transportFailures as Record<string, unknown>, [
+      'aborted', 'timeout', 'connection', 'protocol', 'blocked', 'other',
+    ])) throw fixedError('READ_STAGE_LIFECYCLE_REJECTED');
+  const transportFailures = row.transportFailures as Record<string, unknown>;
+  for (const key of ['aborted', 'timeout', 'connection', 'protocol', 'blocked', 'other'] as const) {
+    if (!Number.isSafeInteger(transportFailures[key]) || (transportFailures[key] as number) < 0
+      || (transportFailures[key] as number) > V2_RELOAD_REQUEST_COUNT_CAP) {
+      throw fixedError('READ_STAGE_LIFECYCLE_REJECTED');
+    }
+  }
+  const safeTransportFailures = Object.freeze({
+    aborted: transportFailures.aborted as number,
+    timeout: transportFailures.timeout as number,
+    connection: transportFailures.connection as number,
+    protocol: transportFailures.protocol as number,
+    blocked: transportFailures.blocked as number,
+    other: transportFailures.other as number,
+  });
+  const classifiedTransportFailures = Object.values(safeTransportFailures).reduce((sum, value) => sum + value, 0);
+  if (responseStarted > requested || completed > responseStarted
+    || completed + transportFailed + pending !== requested
+    || bodyCompleted + bodyFailed + bodyPending !== responseStarted
+    || classifiedTransportFailures !== transportFailed
+    || (status === 'not_reached' && requested !== 0)
+    || (status !== 'not_reached' && requested === 0)
+    || (status === 'passed' && (responseStarted !== requested || completed !== requested
+      || transportFailed !== 0 || pending !== 0 || bodyCompleted !== requested
+      || bodyFailed !== 0 || bodyPending !== 0))) {
+    throw fixedError('READ_STAGE_LIFECYCLE_REJECTED');
+  }
+  return Object.freeze({
+    requested, responseStarted, completed, transportFailed, pending, bodyCompleted, bodyFailed, bodyPending,
+    transportFailures: safeTransportFailures,
+  });
+};
+
 export const resolveAuthenticatedAcceptanceMode = (raw: string | undefined): AuthenticatedAcceptanceMode => {
   if (raw === undefined) return 'full_acceptance';
   if (raw === 'full_acceptance' || raw === 'v2_primary_prefix_diagnostic') return raw;
@@ -90,7 +178,7 @@ export const resolveAuthenticatedAcceptanceMode = (raw: string | undefined): Aut
 
 const validateReadStageObservation = (input: unknown): V2ReloadReadStageObservation => {
   if (!input || typeof input !== 'object' || Array.isArray(input)
-    || !exactKeys(input as Record<string, unknown>, ['stage', 'status', 'httpStatus', 'rowCount'])) {
+    || !exactKeys(input as Record<string, unknown>, ['stage', 'status', 'httpStatus', 'rowCount', 'lifecycle'])) {
     throw fixedError('READ_STAGE_SHAPE_REJECTED');
   }
   const row = input as Record<string, unknown>;
@@ -102,6 +190,7 @@ const validateReadStageObservation = (input: unknown): V2ReloadReadStageObservat
   const status = row.status as V2ReloadReadStageStatus;
   const httpStatus = row.httpStatus;
   const rowCount = row.rowCount;
+  const lifecycle = validateReadStageLifecycle(row.lifecycle, status);
   if (status === 'not_reached') {
     if (httpStatus !== null || rowCount !== null) throw fixedError('READ_STAGE_NOT_REACHED_REJECTED');
   } else if (status === 'passed') {
@@ -121,7 +210,14 @@ const validateReadStageObservation = (input: unknown): V2ReloadReadStageObservat
         && (rowCount as number) <= V2_RELOAD_ROW_COUNT_CAP));
     if (!noResponse && !httpFailure) throw fixedError('READ_STAGE_FAILED_REJECTED');
   }
-  return Object.freeze({ stage, status, httpStatus: httpStatus as number | null, rowCount: rowCount as number | null });
+  if (lifecycle.responseStarted === 0 && httpStatus !== null) throw fixedError('READ_STAGE_STATUS_REJECTED');
+  if (status !== 'not_reached' && lifecycle.responseStarted > 0 && httpStatus === null
+    && !(lifecycle.requested > 1 && lifecycle.transportFailed > 0)) {
+    throw fixedError('READ_STAGE_STATUS_REJECTED');
+  }
+  return Object.freeze({
+    stage, status, httpStatus: httpStatus as number | null, rowCount: rowCount as number | null, lifecycle,
+  });
 };
 
 export const createV2ReloadReadAccumulator = () => {
@@ -145,7 +241,14 @@ export const createV2ReloadReadAccumulator = () => {
         if (!observations.has(stage)) throw fixedError('READ_STAGE_INCOMPLETE');
       }
       const result = V2_RELOAD_READ_STAGES.map(stage => observations.get(stage)
-        ?? Object.freeze({ stage, status: 'not_reached' as const, httpStatus: null, rowCount: null }));
+        ?? Object.freeze({
+          stage, status: 'not_reached' as const, httpStatus: null, rowCount: null,
+          lifecycle: Object.freeze({
+            requested: 0, responseStarted: 0, completed: 0, transportFailed: 0, pending: 0,
+            bodyCompleted: 0, bodyFailed: 0, bodyPending: 0,
+            transportFailures: Object.freeze({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 }),
+          }),
+        }));
       let serialStopped = false;
       for (const stage of SERIAL_READ_STAGES) {
         const observation = result[V2_RELOAD_READ_STAGES.indexOf(stage)];
@@ -208,20 +311,52 @@ export const aggregateV2ReloadReadStageResults = (
   observed: readonly V2ReloadReadStageObservation[],
   expectedCount: number,
 ): V2ReloadReadStageObservation => {
-  if (!Number.isSafeInteger(expectedCount) || expectedCount < 1 || expectedCount > 8
+  if (!Number.isSafeInteger(expectedCount) || expectedCount < 1 || expectedCount > V2_RELOAD_REQUEST_COUNT_CAP
     || observed.length !== expectedCount) {
-    return validateReadStageObservation({ stage, status: 'failed', httpStatus: null, rowCount: null });
+    return validateReadStageObservation({
+      stage, status: 'failed', httpStatus: null, rowCount: null,
+      lifecycle: {
+        requested: expectedCount, responseStarted: 0, completed: 0, transportFailed: 0, pending: expectedCount,
+        bodyCompleted: 0, bodyFailed: 0, bodyPending: 0,
+        transportFailures: { aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 },
+      },
+    });
   }
   const validated = observed.map(validateReadStageObservation);
   if (validated.some(item => item.stage !== stage || item.status === 'not_reached')) {
     throw fixedError('READ_STAGE_AGGREGATE_REJECTED');
   }
+  const lifecycle = Object.freeze({
+    requested: validated.reduce((sum, item) => sum + item.lifecycle.requested, 0),
+    responseStarted: validated.reduce((sum, item) => sum + item.lifecycle.responseStarted, 0),
+    completed: validated.reduce((sum, item) => sum + item.lifecycle.completed, 0),
+    transportFailed: validated.reduce((sum, item) => sum + item.lifecycle.transportFailed, 0),
+    pending: validated.reduce((sum, item) => sum + item.lifecycle.pending, 0),
+    bodyCompleted: validated.reduce((sum, item) => sum + item.lifecycle.bodyCompleted, 0),
+    bodyFailed: validated.reduce((sum, item) => sum + item.lifecycle.bodyFailed, 0),
+    bodyPending: validated.reduce((sum, item) => sum + item.lifecycle.bodyPending, 0),
+    transportFailures: Object.freeze({
+      aborted: validated.reduce((sum, item) => sum + item.lifecycle.transportFailures.aborted, 0),
+      timeout: validated.reduce((sum, item) => sum + item.lifecycle.transportFailures.timeout, 0),
+      connection: validated.reduce((sum, item) => sum + item.lifecycle.transportFailures.connection, 0),
+      protocol: validated.reduce((sum, item) => sum + item.lifecycle.transportFailures.protocol, 0),
+      blocked: validated.reduce((sum, item) => sum + item.lifecycle.transportFailures.blocked, 0),
+      other: validated.reduce((sum, item) => sum + item.lifecycle.transportFailures.other, 0),
+    }),
+  });
   const failure = validated.find(item => item.status === 'failed');
-  if (failure) return failure;
+  const capturedStatuses = [...new Set(validated.flatMap(item => item.httpStatus === null ? [] : [item.httpStatus]))];
+  if (failure) return validateReadStageObservation({
+    stage,
+    status: 'failed',
+    httpStatus: failure.httpStatus ?? (capturedStatuses.length === 1 ? capturedStatuses[0] : null),
+    rowCount: failure.rowCount,
+    lifecycle,
+  });
   const first = validated[0];
   const consistent = validated.every(item => item.httpStatus === first.httpStatus && item.rowCount === first.rowCount);
-  return consistent ? first : validateReadStageObservation({
-    stage, status: 'failed', httpStatus: first.httpStatus, rowCount: null,
+  return consistent ? validateReadStageObservation({ ...first, lifecycle }) : validateReadStageObservation({
+    stage, status: 'failed', httpStatus: first.httpStatus, rowCount: null, lifecycle,
   });
 };
 
@@ -229,8 +364,15 @@ export const installV2ReloadReadObserver = (page: Page) => {
   const accumulator = createV2ReloadReadAccumulator();
   const requestStages = new Map<Request, V2ReloadReadStage>();
   const requestCounts = new Map<V2ReloadReadStage, number>();
-  const results = new Map<V2ReloadReadStage, V2ReloadReadStageObservation[]>();
-  const pending = new Set<Promise<void>>();
+  type RequestState = {
+    stage: V2ReloadReadStage;
+    httpStatus: number | null;
+    rowCount: number | null;
+    bodyState: 'pending' | 'completed' | 'failed';
+    terminal: 'pending' | 'completed' | 'transport_failed';
+    transportFailureClass: keyof V2ReloadReadStageLifecycle['transportFailures'] | null;
+  };
+  const requestStates = new Map<Request, RequestState>();
   let serverContextObserved = false;
   let observerError: unknown = null;
   let completed = false;
@@ -242,10 +384,14 @@ export const installV2ReloadReadObserver = (page: Page) => {
       const stage = classifyV2ReadRequest(request);
       if (stage) {
         const count = (requestCounts.get(stage) ?? 0) + 1;
-        if (count > 8) throw fixedError('READ_STAGE_REQUEST_COUNT_REJECTED');
+        if (count > V2_RELOAD_REQUEST_COUNT_CAP) throw fixedError('READ_STAGE_REQUEST_COUNT_REJECTED');
         requestCounts.set(stage, count);
         if (count === 1) accumulator.begin(stage);
         requestStages.set(request, stage);
+        requestStates.set(request, {
+          stage, httpStatus: null, rowCount: null, bodyState: 'pending', terminal: 'pending',
+          transportFailureClass: null,
+        });
       }
     } catch (error) { retainError(error); }
   };
@@ -256,38 +402,52 @@ export const installV2ReloadReadObserver = (page: Page) => {
     }
     const stage = requestStages.get(response.request());
     if (!stage) return;
-    const operation = (async () => {
+    const state = requestStates.get(response.request());
+    if (!state || state.httpStatus !== null) {
+      retainError(fixedError('READ_STAGE_RESPONSE_REJECTED'));
+      return;
+    }
+    state.httpStatus = response.status();
+    if (response.status() < 200 || response.status() > 299) state.bodyState = 'completed';
+    void (async () => {
       let rowCount: number | null = null;
       if (response.status() >= 200 && response.status() <= 299) {
         try { rowCount = countedRows(await response.json()); } catch (error) {
+          if (!acceptResults) return;
+          state.bodyState = 'failed';
           if (error instanceof Error && error.message.startsWith('AUTHENTICATED_V2_RELOAD_')) throw error;
+          return;
         }
       }
       if (!acceptResults) return;
-      const exactCardinality = !['case-discovery', 'case', 'draft-head'].includes(stage) || rowCount === 1;
-      const decisionCardinality = stage !== 'decision' || rowCount === 0 || rowCount === 1;
-      const passed = response.status() >= 200 && response.status() <= 299 && rowCount !== null
-        && exactCardinality && decisionCardinality;
-      const observation = validateReadStageObservation({
-        stage, status: passed ? 'passed' : 'failed', httpStatus: response.status(), rowCount,
-      });
-      results.set(stage, [...(results.get(stage) ?? []), observation]);
-    })().catch(retainError).finally(() => pending.delete(operation));
-    pending.add(operation);
+      state.rowCount = rowCount;
+      state.bodyState = 'completed';
+    })().catch(retainError);
+  };
+  const onRequestFinished = (request: Request) => {
+    const state = requestStates.get(request);
+    if (!state || !acceptResults) return;
+    if (state.terminal !== 'pending') retainError(fixedError('READ_STAGE_TERMINAL_REJECTED'));
+    else state.terminal = 'completed';
   };
   const onRequestFailed = (request: Request) => {
-    const stage = requestStages.get(request);
-    if (!stage) return;
-    try {
-      if (!acceptResults) return;
-      const observation = validateReadStageObservation({ stage, status: 'failed', httpStatus: null, rowCount: null });
-      results.set(stage, [...(results.get(stage) ?? []), observation]);
+    const state = requestStates.get(request);
+    if (!state || !acceptResults) return;
+    if (state.terminal !== 'pending') retainError(fixedError('READ_STAGE_TERMINAL_REJECTED'));
+    else {
+      state.terminal = 'transport_failed';
+      const errorText = request.failure()?.errorText ?? '';
+      state.transportFailureClass = /abort/iu.test(errorText) ? 'aborted'
+        : /timed?\s*out|timeout/iu.test(errorText) ? 'timeout'
+          : /connection|econn|socket|reset/iu.test(errorText) ? 'connection'
+            : /protocol|http2|quic/iu.test(errorText) ? 'protocol'
+              : /blocked|denied/iu.test(errorText) ? 'blocked' : 'other';
     }
-    catch (error) { retainError(error); }
   };
 
   page.on('request', onRequest);
   page.on('response', onResponse);
+  page.on('requestfinished', onRequestFinished);
   page.on('requestfailed', onRequestFailed);
 
   return Object.freeze({
@@ -296,15 +456,50 @@ export const installV2ReloadReadObserver = (page: Page) => {
       completed = true;
       page.off('request', onRequest);
       page.off('response', onResponse);
+      page.off('requestfinished', onRequestFinished);
       page.off('requestfailed', onRequestFailed);
-      await Promise.race([
-        Promise.all([...pending]),
-        new Promise<void>(resolve => setImmediate(resolve)),
-      ]);
+      // Let body parsing that already settled in this JavaScript turn publish its
+      // bounded row count. Network events are detached, so held transports remain
+      // pending and cannot race the immutable snapshot.
+      await Promise.resolve();
       acceptResults = false;
       for (const stage of requestCounts.keys()) {
         try {
-          const observed = results.get(stage) ?? [];
+          const observed = [...requestStates.values()].filter(state => state.stage === stage).map(state => {
+            const completed = state.terminal === 'completed' ? 1 : 0;
+            const transportFailed = state.terminal === 'transport_failed' ? 1 : 0;
+            const pending = state.terminal === 'pending' ? 1 : 0;
+            const transportFailures = {
+              aborted: state.transportFailureClass === 'aborted' ? 1 : 0,
+              timeout: state.transportFailureClass === 'timeout' ? 1 : 0,
+              connection: state.transportFailureClass === 'connection' ? 1 : 0,
+              protocol: state.transportFailureClass === 'protocol' ? 1 : 0,
+              blocked: state.transportFailureClass === 'blocked' ? 1 : 0,
+              other: state.transportFailureClass === 'other' ? 1 : 0,
+            };
+            const exactCardinality = !['case-discovery', 'case', 'draft-head'].includes(stage) || state.rowCount === 1;
+            const decisionCardinality = stage !== 'decision' || state.rowCount === 0 || state.rowCount === 1;
+            const passed = completed === 1 && state.bodyState === 'completed'
+              && state.httpStatus !== null && state.httpStatus >= 200 && state.httpStatus <= 299
+              && state.rowCount !== null && exactCardinality && decisionCardinality;
+            return validateReadStageObservation({
+              stage,
+              status: passed ? 'passed' : 'failed',
+              httpStatus: state.httpStatus,
+              rowCount: passed ? state.rowCount : null,
+              lifecycle: {
+                requested: 1,
+                responseStarted: state.httpStatus === null ? 0 : 1,
+                completed,
+                transportFailed,
+                pending,
+                bodyCompleted: state.httpStatus === null || state.bodyState !== 'completed' ? 0 : 1,
+                bodyFailed: state.httpStatus === null || state.bodyState !== 'failed' ? 0 : 1,
+                bodyPending: state.httpStatus === null || state.bodyState !== 'pending' ? 0 : 1,
+                transportFailures,
+              },
+            });
+          });
           const aggregate = aggregateV2ReloadReadStageResults(stage, observed, requestCounts.get(stage) ?? 0);
           accumulator.record(aggregate);
         }
@@ -413,7 +608,7 @@ export const createV2ReloadBrowserCheckpointBuilder = (
       if (phase !== 'after-reload' && renderOutcome !== 'unresolved') throw fixedError('CHECKPOINT_RENDER_REJECTED');
       nextPhase += 1;
       return Object.freeze({
-        schemaVersion: 'authenticated-v2-reload-checkpoint-v1',
+        schemaVersion: 'authenticated-v2-reload-checkpoint-v2',
         phase,
         projectName: input.projectName,
         persona: input.persona,

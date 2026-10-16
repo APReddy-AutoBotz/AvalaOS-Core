@@ -15,6 +15,7 @@ import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRunti
   verifyAuthenticatedEdgeSourceResponse,verifyAuthenticatedHostedDeployment } from './runAuthenticatedHostedAcceptance.mjs';
 import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUNT_KEYS,
   emptyAuthenticatedV2ReloadReadStages } from './authenticatedV2ReloadDiagnostic.mjs';
+const emptyTransportFailures = () => ({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 });
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command',
@@ -596,7 +597,9 @@ test('focused V2 diagnostic runner selects one Desktop prefix, cleans up, and em
       await send('before-create');
       await send('before-reload');
       const stages = emptyAuthenticatedV2ReloadReadStages().map(row => ({ ...row, status: 'passed', httpStatus: 200,
-        rowCount: ['case-discovery', 'case', 'draft-head'].includes(row.stage) ? 1 : 0 }));
+        rowCount: ['case-discovery', 'case', 'draft-head'].includes(row.stage) ? 1 : 0,
+        lifecycle: { requested: 1, responseStarted: 1, completed: 1, transportFailed: 0, pending: 0,
+          bodyCompleted: 1, bodyFailed: 0, bodyPending: 0, transportFailures: emptyTransportFailures() } }));
       await send('after-reload', browser({ resumedDraftRendered: true, readStages: stages }));
     },
   });

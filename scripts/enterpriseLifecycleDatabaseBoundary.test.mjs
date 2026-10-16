@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import test from 'node:test';
 import { PassThrough } from 'node:stream';
 import {
   readEnterpriseLifecycleRequestBody,
+  responseToEnterpriseLifecycleNode,
   validateEnterpriseLifecycleDatabaseUrl,
 } from './enterpriseLifecyclePostgresFixture.mjs';
+
+const responseSink = () => {
+  const sink = new PassThrough();
+  sink.status = null;
+  sink.headers = null;
+  sink.headersFlushed = false;
+  sink.writeHead = (status, headers) => { sink.status = status; sink.headers = headers; };
+  sink.flushHeaders = () => { sink.headersFlushed = true; sink.emit('headers-flushed'); };
+  return sink;
+};
 
 test('disposable database runner rejects remote targets and connection overrides before connecting', () => {
   for (const value of [
@@ -54,4 +66,70 @@ test('aborted fixture request bodies release the serialized request tail', async
   const nextRead = readEnterpriseLifecycleRequestBody(next);
   next.end('{"next":true}');
   assert.equal((await nextRead).toString('utf8'), '{"next":true}');
+});
+
+test('node response serialization flushes headers and forwards body chunks without buffering', async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let first = true;
+  const body = new ReadableStream({
+    async pull(controller) {
+      if (first) {
+        first = false;
+        controller.enqueue(new TextEncoder().encode('{"first":'));
+      } else {
+        await held;
+        controller.enqueue(new TextEncoder().encode('true}'));
+        controller.close();
+      }
+    },
+  });
+  const sink = responseSink();
+  const chunks = [];
+  sink.on('data', chunk => chunks.push(chunk));
+  const writing = responseToEnterpriseLifecycleNode(new Response(body, {
+    status: 200, headers: { 'content-type': 'application/json' },
+  }), sink);
+  try {
+    if (!sink.headersFlushed) await once(sink, 'headers-flushed');
+    await once(sink, 'data');
+    assert.equal(sink.status, 200);
+    assert.equal(sink.headersFlushed, true);
+    assert.equal(Buffer.concat(chunks).toString('utf8'), '{"first":');
+  } finally {
+    release();
+  }
+  await writing;
+  assert.equal(Buffer.concat(chunks).toString('utf8'), '{"first":true}');
+});
+
+test('node response serialization cancels a held upstream body when the client disconnects', async () => {
+  let release;
+  let cancelled = false;
+  const held = new Promise(resolve => { release = resolve; });
+  const body = new ReadableStream({
+    async pull() { await held; },
+    cancel() { cancelled = true; },
+  });
+  const sink = responseSink();
+  const writing = responseToEnterpriseLifecycleNode(new Response(body, { status: 200 }), sink);
+  try {
+    if (!sink.headersFlushed) await once(sink, 'headers-flushed');
+    sink.destroy(new Error('TEST_CLIENT_CANCELLED'));
+    await assert.rejects(writing, /TEST_CLIENT_CANCELLED|Premature close/u);
+    assert.equal(cancelled, true);
+  } finally {
+    release();
+  }
+});
+
+test('node response serialization propagates upstream stream errors', async () => {
+  const body = new ReadableStream({
+    start(controller) { controller.error(new Error('TEST_UPSTREAM_STREAM_FAILED')); },
+  });
+  const sink = responseSink();
+  await assert.rejects(
+    responseToEnterpriseLifecycleNode(new Response(body, { status: 200 }), sink),
+    /TEST_UPSTREAM_STREAM_FAILED/u,
+  );
 });

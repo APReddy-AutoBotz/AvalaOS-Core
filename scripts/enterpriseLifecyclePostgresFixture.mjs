@@ -3,6 +3,8 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import vm from 'node:vm';
 import pg from 'pg';
 import ts from 'typescript';
@@ -181,9 +183,14 @@ const requestHeaders = incoming => {
   return headers;
 };
 
-const responseToNode = async (response, outgoing) => {
+export const responseToEnterpriseLifecycleNode = async (response, outgoing) => {
   outgoing.writeHead(response.status, Object.fromEntries(response.headers.entries()));
-  outgoing.end(Buffer.from(await response.arrayBuffer()));
+  outgoing.flushHeaders?.();
+  if (!response.body) {
+    outgoing.end();
+    return;
+  }
+  await pipeline(Readable.fromWeb(response.body), outgoing);
 };
 
 const migrationsForChain = () => readdirSync(path.join(root, 'supabase', 'migrations'))
@@ -941,9 +948,10 @@ export async function createEnterpriseLifecycleFixture({
     ]);
     const nativePostgrestStats = {
       active: 0, maxConcurrent: 0, requests: 0, statuses: new Map(), resourceStatuses: new Map(),
-      completionOrder: [],
+      responses: 0, completed: 0, cancelled: 0, failed: 0, completionOrder: [],
     };
     let nativePostgrestFault = null;
+    let nativePostgrestStream = null;
     let nativePostgrestDelays = new Map();
     const useNativePostgrest = (value, { resourceDelays = {} } = {}) => {
       const parsed = new URL(value);
@@ -958,6 +966,56 @@ export async function createEnterpriseLifecycleFixture({
       }
       nativePostgrestOrigin = parsed.origin;
       nativePostgrestDelays = new Map(delayEntries);
+    };
+    const waitForNativeRelease = (release, signal) => new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new Error('ENTERPRISE_LIFECYCLE_NATIVE_CLIENT_CANCELLED'));
+        return;
+      }
+      const onAbort = () => {
+        signal.removeEventListener('abort', onAbort);
+        reject(new Error('ENTERPRISE_LIFECYCLE_NATIVE_CLIENT_CANCELLED'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      release.then(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, reject);
+    });
+    const holdNativeResponseBody = (response, release, finalize) => {
+      if (!response.body) {
+        finalize('completed');
+        return response;
+      }
+      const reader = response.body.getReader();
+      let released = false;
+      let cancelled = false;
+      let releaseCancellation;
+      const cancellation = new Promise(resolve => { releaseCancellation = resolve; });
+      return new Response(new ReadableStream({
+        async pull(controller) {
+          try {
+            if (!released) {
+              await Promise.race([release, cancellation]);
+              released = true;
+            }
+            if (cancelled) return;
+            const next = await reader.read();
+            if (next.done) {
+              finalize('completed');
+              controller.close();
+            } else controller.enqueue(next.value);
+          } catch {
+            finalize('failed');
+            controller.error(new Error('ENTERPRISE_LIFECYCLE_NATIVE_RESPONSE_STREAM_FAILED'));
+          }
+        },
+        async cancel(reason) {
+          cancelled = true;
+          releaseCancellation();
+          try { await reader.cancel(reason); } finally { finalize('cancelled'); }
+        },
+      }), { status: response.status, headers: response.headers });
     };
     const proxyNativePostgrest = async request => {
       actorFromRequest(request); // Exact fixture-token registration remains the local authority boundary.
@@ -974,9 +1032,31 @@ export async function createEnterpriseLifecycleFixture({
       nativePostgrestStats.active += 1;
       nativePostgrestStats.requests += 1;
       nativePostgrestStats.maxConcurrent = Math.max(nativePostgrestStats.maxConcurrent, nativePostgrestStats.active);
+      let finalized = false;
+      let responseStatus = null;
+      const finalize = outcome => {
+        if (finalized) return;
+        finalized = true;
+        nativePostgrestStats.active -= 1;
+        nativePostgrestStats[outcome] += 1;
+        if (responseStatus !== null) {
+          const resourceStatus = `${resourceClass}:${responseStatus}`;
+          if (nativePostgrestStats.completionOrder.length < 512) {
+            nativePostgrestStats.completionOrder.push(resourceStatus);
+          }
+        }
+      };
       try {
         const resourceDelay = nativePostgrestDelays.get(requestedResource) ?? 0;
         if (resourceDelay > 0) await new Promise(resolve => setTimeout(resolve, resourceDelay));
+        const streamControl = nativePostgrestStream?.resource === requestedResource
+          && nativePostgrestStream.remaining === 1 ? nativePostgrestStream : null;
+        if (streamControl) {
+          streamControl.remaining = 0;
+          if (streamControl.mode === 'hold-headers') {
+            await waitForNativeRelease(streamControl.released, request.signal);
+          }
+        }
         let response;
         if (nativePostgrestFault?.resource === requestedResource && nativePostgrestFault.remaining === 1) {
           nativePostgrestFault.remaining = 0;
@@ -986,26 +1066,51 @@ export async function createEnterpriseLifecycleFixture({
             method: request.method,
             headers,
             redirect: 'error',
-            signal: AbortSignal.timeout(15_000),
+            signal: AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]),
             ...(['GET', 'HEAD'].includes(request.method) ? {} : { body: await request.arrayBuffer() }),
           });
         }
+        responseStatus = response.status;
+        nativePostgrestStats.responses += 1;
         nativePostgrestStats.statuses.set(response.status, (nativePostgrestStats.statuses.get(response.status) ?? 0) + 1);
         const resourceStatus = `${resourceClass}:${response.status}`;
         nativePostgrestStats.resourceStatuses.set(
           resourceStatus, (nativePostgrestStats.resourceStatuses.get(resourceStatus) ?? 0) + 1,
         );
-        if (nativePostgrestStats.completionOrder.length < 512) {
-          nativePostgrestStats.completionOrder.push(resourceStatus);
-        }
         const responseHeaders = new Headers(response.headers);
         responseHeaders.set('access-control-allow-origin', request.headers.get('origin') ?? '*');
         responseHeaders.set('access-control-allow-headers', 'authorization,apikey,content-type,x-client-info');
         responseHeaders.set('access-control-allow-methods', 'GET,POST,OPTIONS');
         responseHeaders.set('cache-control', 'no-store');
-        return new Response(await response.arrayBuffer(), { status: response.status, headers: responseHeaders });
-      } finally {
-        nativePostgrestStats.active -= 1;
+        const forwarded = new Response(response.body, { status: response.status, headers: responseHeaders });
+        if (streamControl?.mode === 'hold-body') {
+          return holdNativeResponseBody(forwarded, streamControl.released, finalize);
+        }
+        if (!forwarded.body) finalize('completed');
+        else {
+          const reader = forwarded.body.getReader();
+          return new Response(new ReadableStream({
+            async pull(controller) {
+              try {
+                const next = await reader.read();
+                if (next.done) {
+                  finalize('completed');
+                  controller.close();
+                } else controller.enqueue(next.value);
+              } catch {
+                finalize('failed');
+                controller.error(new Error('ENTERPRISE_LIFECYCLE_NATIVE_RESPONSE_STREAM_FAILED'));
+              }
+            },
+            async cancel(reason) {
+              try { await reader.cancel(reason); } finally { finalize('cancelled'); }
+            },
+          }), { status: forwarded.status, headers: forwarded.headers });
+        }
+        return forwarded;
+      } catch (error) {
+        finalize(request.signal.aborted ? 'cancelled' : 'failed');
+        throw error;
       }
     };
 
@@ -1075,6 +1180,44 @@ export async function createEnterpriseLifecycleFixture({
           }
           nativePostgrestFault = { resource: input.resource, status: input.status, remaining: 1 };
           return json({ armed: true },200,cors);
+        }
+        if (url.pathname === '/control/native-postgrest-stream') {
+          const input = await request.json().catch(() => ({}));
+          if (!projectSetups.has(input.projectName) || input.resource !== 'assess_v2_cases'
+            || !['hold-headers', 'hold-body'].includes(input.mode) || nativePostgrestStream !== null) {
+            return json({ error: 'CONTROL_NATIVE_POSTGREST_STREAM_REJECTED' },409,cors);
+          }
+          let release;
+          const released = new Promise(resolve => { release = resolve; });
+          nativePostgrestStream = {
+            resource: input.resource, mode: input.mode, remaining: 1, released, release,
+          };
+          return json({ armed: true, mode: input.mode },200,cors);
+        }
+        if (url.pathname === '/control/native-postgrest-stream-release') {
+          const input = await request.json().catch(() => ({}));
+          if (!projectSetups.has(input.projectName) || nativePostgrestStream === null
+            || nativePostgrestStream.remaining !== 0) {
+            return json({ error: 'CONTROL_NATIVE_POSTGREST_STREAM_RELEASE_REJECTED' },409,cors);
+          }
+          const current = nativePostgrestStream;
+          nativePostgrestStream = null;
+          current.release();
+          return json({ released: true },200,cors);
+        }
+        if (url.pathname === '/control/native-postgrest-stats') {
+          const input = await request.json().catch(() => ({}));
+          if (!projectSetups.has(input.projectName)) {
+            return json({ error: 'CONTROL_NATIVE_POSTGREST_STATS_REJECTED' },409,cors);
+          }
+          return json({
+            active: nativePostgrestStats.active,
+            requests: nativePostgrestStats.requests,
+            responses: nativePostgrestStats.responses,
+            completed: nativePostgrestStats.completed,
+            cancelled: nativePostgrestStats.cancelled,
+            failed: nativePostgrestStats.failed,
+          },200,cors);
         }
         if (url.pathname === '/control/arm-browser-fault') {
           const input = await request.json().catch(() => ({}));
@@ -1405,6 +1548,12 @@ export async function createEnterpriseLifecycleFixture({
     let requestTail = Promise.resolve();
     const nativeRequests = new Set();
     server = createServer((incoming, outgoing) => {
+      const clientAbort = new AbortController();
+      const abortClient = () => {
+        if (!outgoing.writableFinished && !clientAbort.signal.aborted) clientAbort.abort();
+      };
+      incoming.once('aborted', abortClient);
+      outgoing.once('close', abortClient);
       const bodyResult = ['GET', 'HEAD'].includes(incoming.method ?? 'GET')
         ? Promise.resolve({ body: undefined, error: null })
         : readEnterpriseLifecycleRequestBody(incoming).then(
@@ -1417,10 +1566,20 @@ export async function createEnterpriseLifecycleFixture({
           const bodyState = await bodyResult;
           if (bodyState.error) throw bodyState.error;
           const body = bodyState.body;
-          const request = new Request(`http://127.0.0.1:${address.port}${incoming.url ?? '/'}`, { method: incoming.method, headers: requestHeaders(incoming), body: body?.length ? body : undefined });
-          await responseToNode(await route(request), outgoing);
+          const request = new Request(`http://127.0.0.1:${address.port}${incoming.url ?? '/'}`, {
+            method: incoming.method,
+            headers: requestHeaders(incoming),
+            body: body?.length ? body : undefined,
+            signal: clientAbort.signal,
+          });
+          await responseToEnterpriseLifecycleNode(await route(request), outgoing);
         } catch {
-          await responseToNode(json({ error: 'FIXTURE_FAILURE' }, 500), outgoing);
+          if (!outgoing.headersSent && !outgoing.destroyed) {
+            await responseToEnterpriseLifecycleNode(json({ error: 'FIXTURE_FAILURE' }, 500), outgoing);
+          } else if (!outgoing.destroyed) outgoing.destroy();
+        } finally {
+          incoming.off('aborted', abortClient);
+          outgoing.off('close', abortClient);
         }
       };
       const nativeProjection = nativePostgrestOrigin !== null
@@ -1443,6 +1602,11 @@ export async function createEnterpriseLifecycleFixture({
       cleanupAttempted = true;
       evidence.cleanup.attempted = true;
       const errors = [];
+      if (nativePostgrestStream !== null) {
+        const current = nativePostgrestStream;
+        nativePostgrestStream = null;
+        current.release();
+      }
       if (processFaultPermits.size !== 0) errors.push(new Error('ENTERPRISE_LIFECYCLE_PROCESS_FAULT_PERMIT_LEFTOVER'));
       processFaultPermits.clear();
       await controlsFixture.cleanup().catch(error => errors.push(error));
@@ -1471,6 +1635,10 @@ export async function createEnterpriseLifecycleFixture({
         active: nativePostgrestStats.active,
         maxConcurrent: nativePostgrestStats.maxConcurrent,
         requests: nativePostgrestStats.requests,
+        responses: nativePostgrestStats.responses,
+        completed: nativePostgrestStats.completed,
+        cancelled: nativePostgrestStats.cancelled,
+        failed: nativePostgrestStats.failed,
         statuses: Object.fromEntries([...nativePostgrestStats.statuses].sort(([left], [right]) => left - right)),
         resourceStatuses: Object.fromEntries([...nativePostgrestStats.resourceStatuses].sort(([left], [right]) => left.localeCompare(right))),
         completionOrder: [...nativePostgrestStats.completionOrder],

@@ -19,6 +19,7 @@ import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
 import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUNT_KEYS,
   emptyAuthenticatedV2ReloadReadStages } from './authenticatedV2ReloadDiagnostic.mjs';
+const emptyTransportFailures = () => ({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 });
 
 const digest = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const id = () => randomUUID();
@@ -169,7 +170,9 @@ test('focused V2 diagnostic binds exact checkpoint order, original author sessio
   const inFlight = await controller.beginBrowserAction({ projectName: 'desktop-chromium', accessToken,
     route: '/rest/v1/rpc/diagnostic_read', requestBody: { method: 'GET' } });
   const passedStages = emptyAuthenticatedV2ReloadReadStages().map(row => ({ ...row, status: 'passed', httpStatus: 200,
-    rowCount: ['case-discovery', 'case', 'draft-head'].includes(row.stage) ? 1 : 0 }));
+    rowCount: ['case-discovery', 'case', 'draft-head'].includes(row.stage) ? 1 : 0,
+    lifecycle: { requested: 1, responseStarted: 1, completed: 1, transportFailed: 0, pending: 0,
+      bodyCompleted: 1, bodyFailed: 0, bodyPending: 0, transportFailures: emptyTransportFailures() } }));
   assert.deepEqual(await checkpoint('after-reload', v2DiagnosticBrowser({ resumedDraftRendered: true,
     readStages: passedStages })), { recorded: true, phase: 'after-reload', sessionContinuity: 'verified', continue: false });
   await assert.rejects(controller.control('/control/browser-action-start', { projectName: 'desktop-chromium' }),

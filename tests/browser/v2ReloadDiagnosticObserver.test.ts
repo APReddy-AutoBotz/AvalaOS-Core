@@ -13,11 +13,33 @@ import {
   type V2ReloadReadStage,
 } from './v2ReloadDiagnosticObserver';
 
+const failureClasses = (other = 0) => ({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other });
+
 const passed = (stage: V2ReloadReadStage, rowCount = 0) => ({
   stage,
   status: 'passed' as const,
   httpStatus: 200,
   rowCount,
+  lifecycle: { requested: 1, responseStarted: 1, completed: 1, transportFailed: 0, pending: 0,
+    bodyCompleted: 1, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses() },
+});
+
+const failed = (stage: V2ReloadReadStage, httpStatus: number | null, rowCount: number | null = null) => ({
+  stage,
+  status: 'failed' as const,
+  httpStatus,
+  rowCount,
+  lifecycle: {
+    requested: 1,
+    responseStarted: httpStatus === null ? 0 : 1,
+    completed: httpStatus === null ? 0 : 1,
+    transportFailed: httpStatus === null ? 1 : 0,
+    pending: 0,
+    bodyCompleted: httpStatus === null ? 0 : 1,
+    bodyFailed: 0,
+    bodyPending: 0,
+    transportFailures: failureClasses(httpStatus === null ? 1 : 0),
+  },
 });
 
 const beginAndRecord = (
@@ -66,7 +88,7 @@ test('request failures are distinct from stages that were never reached', () => 
   const accumulator = createV2ReloadReadAccumulator();
   beginAndRecord(accumulator, 'case-discovery', 1);
   accumulator.begin('case');
-  accumulator.record({ stage: 'case', status: 'failed', httpStatus: null, rowCount: null });
+  accumulator.record(failed('case', null));
   const rows = accumulator.snapshot();
   assert.equal(rows[1].status, 'failed');
   assert.equal(rows[2].status, 'not_reached');
@@ -76,20 +98,73 @@ test('request failures are distinct from stages that were never reached', () => 
 test('successful HTTP with empty required singleton is retained as failed evidence', () => {
   const accumulator = createV2ReloadReadAccumulator();
   accumulator.begin('case-discovery');
-  accumulator.record({ stage: 'case-discovery', status: 'failed', httpStatus: 200, rowCount: 0 });
+  accumulator.record(failed('case-discovery', 200, 0));
   assert.deepEqual(accumulator.snapshot()[0], {
-    stage: 'case-discovery', status: 'failed', httpStatus: 200, rowCount: 0,
+    ...failed('case-discovery', 200, 0),
   });
 });
 
 test('a repeated read retains failure even when another response succeeded', () => {
   assert.deepEqual(aggregateV2ReloadReadStageResults('case', [
     passed('case', 1),
-    { stage: 'case', status: 'failed', httpStatus: 503, rowCount: 0 },
-  ], 2), { stage: 'case', status: 'failed', httpStatus: 503, rowCount: 0 });
+    failed('case', 503, 0),
+  ], 2), {
+    stage: 'case', status: 'failed', httpStatus: 503, rowCount: 0,
+    lifecycle: { requested: 2, responseStarted: 2, completed: 2, transportFailed: 0, pending: 0,
+      bodyCompleted: 2, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses() },
+  });
   assert.deepEqual(aggregateV2ReloadReadStageResults('case', [passed('case', 1)], 2), {
     stage: 'case', status: 'failed', httpStatus: null, rowCount: null,
+    lifecycle: { requested: 2, responseStarted: 0, completed: 0, transportFailed: 0, pending: 2,
+      bodyCompleted: 0, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses() },
   });
+});
+
+test('lifecycle evidence distinguishes pending headers, held bodies and transport failure', () => {
+  const pendingHeaders = {
+    stage: 'case' as const,
+    status: 'failed' as const,
+    httpStatus: null,
+    rowCount: null,
+    lifecycle: { requested: 1, responseStarted: 0, completed: 0, transportFailed: 0, pending: 1,
+      bodyCompleted: 0, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses() },
+  };
+  const pendingBody = {
+    ...pendingHeaders,
+    httpStatus: 200,
+    lifecycle: { requested: 1, responseStarted: 1, completed: 0, transportFailed: 0, pending: 1,
+      bodyCompleted: 0, bodyFailed: 0, bodyPending: 1, transportFailures: failureClasses() },
+  };
+  const transportFailure = {
+    ...pendingHeaders,
+    lifecycle: { requested: 1, responseStarted: 0, completed: 0, transportFailed: 1, pending: 0,
+      bodyCompleted: 0, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses(1) },
+  };
+  assert.deepEqual(aggregateV2ReloadReadStageResults('case', [pendingHeaders], 1), pendingHeaders);
+  assert.deepEqual(aggregateV2ReloadReadStageResults('case', [pendingBody], 1), pendingBody);
+  assert.deepEqual(aggregateV2ReloadReadStageResults('case', [transportFailure], 1), transportFailure);
+});
+
+test('one pending duplicate cannot be hidden by a completed sibling', () => {
+  const aggregate = aggregateV2ReloadReadStageResults('case', [
+    passed('case', 1),
+    {
+      stage: 'case', status: 'failed', httpStatus: 200, rowCount: null,
+      lifecycle: { requested: 1, responseStarted: 1, completed: 0, transportFailed: 0, pending: 1,
+        bodyCompleted: 0, bodyFailed: 0, bodyPending: 1, transportFailures: failureClasses() },
+    },
+  ], 2);
+  assert.deepEqual(aggregate, {
+    stage: 'case', status: 'failed', httpStatus: 200, rowCount: null,
+    lifecycle: { requested: 2, responseStarted: 2, completed: 1, transportFailed: 0, pending: 1,
+      bodyCompleted: 1, bodyFailed: 0, bodyPending: 1, transportFailures: failureClasses() },
+  });
+
+  const mixedTransport = aggregateV2ReloadReadStageResults('case', [passed('case', 1), failed('case', null)], 2);
+  assert.equal(mixedTransport.httpStatus, 200);
+  assert.deepEqual(mixedTransport.lifecycle,
+    { requested: 2, responseStarted: 1, completed: 1, transportFailed: 1, pending: 0,
+      bodyCompleted: 1, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses(1) });
 });
 
 test('unknown, duplicate, extra-field and impossible read evidence fail closed', () => {
@@ -118,7 +193,7 @@ test('unknown, duplicate, extra-field and impossible read evidence fail closed',
   beginAndRecord(failedHeadWithReachedChild, 'case', 1);
   beginAndRecord(failedHeadWithReachedChild, 'decision', 0);
   failedHeadWithReachedChild.begin('draft-head');
-  failedHeadWithReachedChild.record({ stage: 'draft-head', status: 'failed', httpStatus: 503, rowCount: 0 });
+  failedHeadWithReachedChild.record(failed('draft-head', 503, 0));
   beginAndRecord(failedHeadWithReachedChild, 'primitives');
   assert.equal(failedHeadWithReachedChild.snapshot().find(row => row.stage === 'primitives')?.status, 'passed');
 });
@@ -154,6 +229,8 @@ test('checkpoint builder retains transient authority only at the top and compare
       status: 'passed' as const,
       httpStatus: 200,
       rowCount: ['case-discovery', 'case', 'draft-head'].includes(stage) ? 1 : 0,
+      lifecycle: { requested: 1, responseStarted: 1, completed: 1, transportFailed: 0, pending: 0,
+        bodyCompleted: 1, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses() },
     })) },
     renderOutcome: 'resumed',
   });
@@ -193,6 +270,8 @@ test('checkpoint continuity becomes false without exposing a changed process or 
       serverContextObserved: false,
       readStages: V2_RELOAD_READ_STAGES.map(stage => ({
         stage, status: 'not_reached' as const, httpStatus: null, rowCount: null,
+        lifecycle: { requested: 0, responseStarted: 0, completed: 0, transportFailed: 0, pending: 0,
+          bodyCompleted: 0, bodyFailed: 0, bodyPending: 0, transportFailures: failureClasses() },
       })),
     },
     renderOutcome: 'public_screen',
