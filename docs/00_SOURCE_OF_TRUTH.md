@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Process reload and restricted-role native acceptance (2026-10-16)
+
+PR #308 merged as `d687a7a3` with verified candidate and release checks. Approved full run `38938446349`, attempt 1, independently retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** and 36 passing public/Sandbox executions. The primary stopped at process-heading visibility after its authority-refresh reload, before dispatching the denied command. Cleanup independently verified quiescence, four revoked identities, zero active access/permits/residue/secret cleanup, providers OFF and removal of owned temporary main access. Its allowance is consumed.
+
+The historical cause remains **suspected defect requiring deeper validation**. The source confirms lost read-error states, response validation after the failed heading assertion, and missing preparation of the composed restricted-role native read/denial/two-reload path. Follow `docs/planning/hosted-acceptance-completion.md` for one local correction based on reproduction. Preserve all 108 criteria and authority boundaries; local proof cannot promote hosted cases.
+
 ## Local browser assets and ordinary-build acceptance parity (2026-10-16)
 
 PR #307 merged as `7581048d3554ec766b37cd879640351aaea76d15` with verified candidate and release checks. Its approved focused diagnostic `38920101930`, attempt 1, independently captured all three checkpoints: the V2 draft resumed and all 11 reads returned 200 with completed transport and bodies. Session continuity was parent-verified; reload projections stayed unchanged. The workflow still failed at the final unexpected-external-request assertion. The retained artifact does not identify the originating request or establish the historical timeout cause. Cleanup independently verified quiescence, four revoked identities, zero active access/permits/residue/secret cleanup, providers OFF and owned temporary-main removal. The allowance is consumed; full acceptance remains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**.

@@ -39,7 +39,7 @@ interface ProcessDetailStubViewProps {
 const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs, captureMode = false }) => {
     const { currentOrganization } = useOrganization();
     const { currentOrganization: orgContext } = useOrganizationContext();
-    const { processes, getProcessById, loading, updateProcess, canUpdateProcess } = useProcessService();
+    const { getProcessById, readState, updateProcess, canUpdateProcess } = useProcessService();
     const { getTemplateById } = useTemplateService();
     const { getAssessmentForProcess } = useAssessmentService();
     const [assessment, setAssessment] = useState<Assessment | null>(null);
@@ -104,8 +104,17 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
 
     if (!currentOrganization) return null;
 
-    if (loading || processes.length === 0) {
+    if (readState === 'loading' || readState === 'idle') {
         return <div className="p-8 text-center text-slate-500">Loading process...</div>;
+    }
+
+    if (readState === 'error') {
+        return (
+            <div className="p-8 text-center" role="alert">
+                <p>Process details could not be loaded. Go back and try again.</p>
+                <button onClick={onBack} className="mt-4 text-primary hover:underline">Go Back</button>
+            </div>
+        );
     }
 
     if (!process) {

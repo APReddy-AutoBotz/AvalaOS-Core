@@ -159,6 +159,30 @@ test('the first bounded failure descriptor survives later teardown noise', async
   assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
 });
 
+test('process reload classifications survive reporter serialization without raw assertion details', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-process-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  for (const code of ['AUTHORITY_READ_REJECTED','PROCESS_DETAIL_MISSING','PROCESS_DETAIL_HIDDEN','PROCESS_DETAIL_AMBIGUOUS']) {
+    const destination=path.join(root,`${code}.json`);
+    process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+    const reporter=new AuthenticatedHostedPlaywrightReporter();
+    const current=fixture([...titles.keys()][0]);
+    reporter.onTestBegin(current);
+    const primary=new Error(`ENTERPRISE_LIFECYCLE_BROWSER_${code}`);
+    reporter.onTestEnd(current,{status:'failed',error:primary,errors:[primary]});
+    reporter.onTestEnd(current,{status:'failed',error:new Error('private-process-label-and-response')});
+    await reporter.onEnd({status:'failed'});
+    const value=JSON.parse(await readFile(destination,'utf8'));
+    assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
+    assert.equal(value.phase,'PROCESS_RELOAD');
+    assert.equal(value.code,code);
+    assert.equal(JSON.stringify(value).includes('private-process'),false);
+  }
+});
+
 test('an unknown first failure cannot be replaced by a later allowlisted descriptor', async t => {
   const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-unknown-primary-'));
   t.after(()=>rm(root,{recursive:true,force:true}));

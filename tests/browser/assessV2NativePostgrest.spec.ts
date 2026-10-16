@@ -7,7 +7,10 @@ import {
   authenticatedLifecycleEnterAs as enterAs,
   authenticatedLifecycleFinalizeDecisionPack as finalizeDecision,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
+  authenticatedLifecycleReadProcessNavigation as readProcessNavigation,
   authenticatedLifecycleSelectReviewer as selectReviewer,
+  authenticatedLifecycleAttemptUnauthorizedProcessUpdate as attemptUnauthorizedProcessUpdate,
+  authenticatedLifecycleValidateProcessNavigation as validateProcessNavigation,
   type AuthenticatedLifecycleSetup,
 } from './authenticatedLifecycleHarness';
 import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
@@ -30,6 +33,12 @@ type NativeStreamStats = Readonly<{
   completed: number;
   cancelled: number;
   failed: number;
+  stream: null | Readonly<{
+    resource: 'assess_v2_cases' | 'assess_processes';
+    mode: 'hold-headers' | 'hold-body';
+    entered: boolean;
+    held: boolean;
+  }>;
 }>;
 
 type DirectReadState = Readonly<{
@@ -37,6 +46,12 @@ type DirectReadState = Readonly<{
   completed: boolean;
   failed: boolean;
   status: number | null;
+}>;
+
+type ProcessFrame = Readonly<{
+  receipts: number;
+  audits: number;
+  targetHash: string;
 }>;
 
 const startDirectRead = async (page: Page, key: string, processId: string) => page.evaluate((input) => {
@@ -436,5 +451,126 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
       await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
       expect(await control('/control/assess-v2-frame', { projectName })).toEqual(before);
     });
+  });
+
+  test('restricted reviewer process denial survives its authority reload and the outer unchanged-state reload', async ({ page }) => {
+    await control('/control/restricted-delete', { projectName, enabled: true });
+    let held = false;
+    const processCommands: string[] = [];
+    const observeProcessCommand = (request: import('@playwright/test').Request) => {
+      const url = new URL(request.url());
+      if (url.origin === apiOrigin && url.pathname === '/functions/v1/process-command'
+        && request.method() === 'POST') processCommands.push(request.url());
+    };
+    try {
+      await enterProcess(page, setup.actors.reviewer, setup.aliases.process);
+      const before = await control<ProcessFrame>('/control/process-frame', { projectName });
+      expect(before.receipts).toBe(0);
+      expect(before.audits).toBe(0);
+
+      const denied = await attemptUnauthorizedProcessUpdate(page, setup.aliases.process);
+      expect(denied.status).toBe(403);
+      expect(denied.body).toEqual({ ok: false, error: {
+        code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
+      } });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
+      await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+      expect(await control<ProcessFrame>('/control/process-frame', { projectName })).toEqual(before);
+
+      const currentNavigation = validateProcessNavigation(await readProcessNavigation(page));
+      await control('/control/native-postgrest-stream', {
+        projectName, resource: 'assess_processes', mode: 'hold-body', skip: 1,
+      });
+      held = true;
+      page.on('request', observeProcessCommand);
+      let pendingFailure: unknown;
+      const pendingDenial = attemptUnauthorizedProcessUpdate(page, setup.aliases.process).catch(error => {
+        pendingFailure = error;
+        return null;
+      });
+      let heldDenied: Awaited<ReturnType<typeof attemptUnauthorizedProcessUpdate>> | null = null;
+      try {
+        await expect.poll(async () => (await control<NativeStreamStats>(
+          '/control/native-postgrest-stats', { projectName },
+        )).stream).toEqual({
+          resource: 'assess_processes', mode: 'hold-body', entered: true, held: true,
+        });
+        validateProcessNavigation(
+          await readProcessNavigation(page), currentNavigation.processId, currentNavigation.scope,
+        );
+        await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toHaveCount(0);
+        await expect(page.getByText('Loading process...', { exact: true })).toBeVisible();
+        expect(processCommands).toHaveLength(0);
+        await control('/control/native-postgrest-stream-release', { projectName });
+        held = false;
+        heldDenied = await pendingDenial;
+      } finally {
+        if (held) {
+          await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
+          held = false;
+          await pendingDenial;
+        }
+      }
+      if (pendingFailure) throw pendingFailure;
+      if (!heldDenied) throw new Error('ASSESS_V2_NATIVE_HELD_PROCESS_DENIAL_MISSING');
+      expect(heldDenied.status).toBe(403);
+      expect(heldDenied.body).toEqual({ ok: false, error: {
+        code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
+      } });
+      expect(processCommands).toHaveLength(1);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
+      await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+      expect(await control<ProcessFrame>('/control/process-frame', { projectName })).toEqual(before);
+    } finally {
+      page.off('request', observeProcessCommand);
+      if (held) await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
+      await control('/control/restricted-delete', { projectName, enabled: false }).catch(() => undefined);
+    }
+  });
+
+  test('completed empty and denied process detail reads leave the loading state without command effects', async ({ page }) => {
+    await control('/control/restricted-delete', { projectName, enabled: true });
+    let processCommands = 0;
+    const observeProcessCommand = (request: import('@playwright/test').Request) => {
+      const url = new URL(request.url());
+      if (url.origin === apiOrigin && url.pathname === '/functions/v1/process-command'
+        && request.method() === 'POST') processCommands += 1;
+    };
+    page.on('request', observeProcessCommand);
+    try {
+      await enterProcess(page, setup.actors.reviewer, setup.aliases.process);
+      const before = await control<ProcessFrame>('/control/process-frame', { projectName });
+
+      await control('/control/native-postgrest-fault', {
+        projectName, resource: 'assess_processes', outcome: 'empty', status: 200, skip: 1,
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByText('Loading process...', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('Process not found or you do not have permission.', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+      expect(processCommands).toBe(0);
+      expect(await control<ProcessFrame>('/control/process-frame', { projectName })).toEqual(before);
+
+      await control('/control/native-postgrest-fault', {
+        projectName, resource: 'assess_processes', outcome: 'denied', status: 403, skip: 1,
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByText('Loading process...', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('alert').filter({
+        hasText: 'Process details could not be loaded. Go back and try again.',
+      })).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+      expect(processCommands).toBe(0);
+      expect(await control<ProcessFrame>('/control/process-frame', { projectName })).toEqual(before);
+    } finally {
+      page.off('request', observeProcessCommand);
+      await control('/control/restricted-delete', { projectName, enabled: false }).catch(() => undefined);
+    }
   });
 });

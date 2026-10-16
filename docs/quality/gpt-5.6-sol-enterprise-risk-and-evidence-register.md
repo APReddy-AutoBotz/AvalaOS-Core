@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Process reload and restricted-role native acceptance (2026-10-16)
+
+**Executed evidence:** PR #308 run `38938446349` retains 61 PASS / 47 BLOCKED, all 36 public/Sandbox checks and verified cleanup/providers OFF/temporary-access removal. The heading assertion after the authority reload failed before command dispatch; the exact missing/hidden/ambiguous/read/session condition was not retained.
+
+**Confirmed source defects:** late response validation loses relevant failure evidence; generic response matching cannot identify the detail's separately owned read; settled empty or failed process reads can remain displayed as loading. **Confirmed preparation gap:** native SQL/RLS, restricted role and the two browser reloads were tested separately. **Suspected defect requiring deeper validation:** which condition caused the hosted failure. No unauthorized write or disclosure is established.
+
+**Planned verification:** actual-app Desktop/Pixel native restricted-role prefix, event-coordinated held response, terminal empty/error state, exact denial and unchanged database frames, focused contracts/typecheck and applicable CI. No new hosted allowance; do not promote blocked requirements from local proof.
+
 ## Local browser assets and ordinary-build acceptance parity (2026-10-16)
 
 **Executed evidence:** PR #307 focused run `38920101930` captured V2 draft resume, 11 complete HTTP 200 read stages, verified session continuity and unchanged reload projections. Workflow failure is retained at the final unexpected-external-request assertion. Independent cleanup is verified, providers OFF and temporary main access removed. Full108 remains 61 PASS / 47 BLOCKED.

@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Process reload and restricted-role native acceptance (2026-10-16)
+
+PR #308's completed attempt retains 61 PASS / 47 BLOCKED with verified cleanup and consumed hosted authority. All three read-only reviewers completed and root synthesized their findings before writes. Under the fixed managed profile, one implementation worker owns the native restricted-role reproduction and demonstrated helper/read-state corrections; root owns canonical documents, provenance, integration and the single implementation PR. No nested delegation or reviewer overlap during writes.
+
+Use the existing actual-app/PostgreSQL/PostgREST infrastructure to compose process read, restricted edit state, exact denial and both reloads. Distinguish confirmed empty/error-state and evidence-ordering defects from the unproven historical cause. Preserve timeouts, criteria and independent unchanged-state proof. No new hosted action is included.
+
 ## Local browser assets and ordinary-build acceptance parity (2026-10-16)
 
 PR #307's focused run proved V2 resume with 11 completed reads but failed the final external-request guard. The exact request is unproven. Full acceptance remains 61 PASS / 47 BLOCKED and independent cleanup is complete; no hosted allowance remains.

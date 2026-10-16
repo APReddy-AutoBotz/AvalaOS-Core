@@ -183,6 +183,13 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
   let anonymousProcessCommandRequests = 0;
   let processAtomicCalls = 0;
   const processFaultPermits = new Map();
+  const processReadFaults = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
+    outcome: null,
+    skip: 0,
+    remaining: 0,
+    consumed: 0,
+    completed: 0,
+  }]));
   const observeGates = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
     mode: 'open',
     waiters: [],
@@ -367,6 +374,16 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         if (incoming.headers.apikey !== PUBLIC_ANON_KEY) return sendJson(outgoing, 401, { code: 'API_KEY_REQUIRED' });
         const exactScope = url.searchParams.get('org_id') === `eq.${ORGANIZATION_ID}`
           && url.searchParams.get('workspace_id') === `eq.${WORKSPACE_ID}`;
+        const readFault = identity ? processReadFaults.get(identity.projectName) : null;
+        if (readFault?.remaining === 1 && readFault.skip > 0) readFault.skip -= 1;
+        else if (readFault?.remaining === 1) {
+          readFault.remaining = 0;
+          readFault.consumed += 1;
+          outgoing.once('finish', () => { readFault.completed += 1; });
+          return readFault.outcome === 'empty'
+            ? sendJson(outgoing, 200, [])
+            : sendJson(outgoing, 403, { code: 'PERMISSION_DENIED' });
+        }
         return identity ? sendJson(outgoing, 200, exactScope ? projectForIdentity(identity) : []) : sendJson(outgoing, 401, {
           code: 'AUTHENTICATION_REQUIRED',
         });
@@ -753,6 +770,25 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         else exactDuplicateProjects.delete(input.projectName);
         return { enabled: exactDuplicateProjects.has(input.projectName) };
       }
+      if (pathname === '/control/sign-in-entry-process-read') {
+        const state = processReadFaults.get(input.projectName);
+        if (!state || !['arm','inspect'].includes(input.action)) {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_CONTROL_REJECTED');
+        }
+        if (input.action === 'arm') {
+          if (!['empty','denied'].includes(input.outcome) || ![0,1].includes(input.skip)
+            || state.remaining !== 0) {
+            throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_CONTROL_REJECTED');
+          }
+          state.outcome = input.outcome;
+          state.skip = input.skip;
+          state.remaining = 1;
+        }
+        return {
+          outcome: state.outcome, skip: state.skip, remaining: state.remaining,
+          consumed: state.consumed, completed: state.completed,
+        };
+      }
       if (pathname === '/control/sign-in-entry-assessment') {
         if (!AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.includes(input.projectName)) {
           throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ASSESSMENT_CONTROL_REJECTED');
@@ -913,7 +949,9 @@ const checkoutState = async () => (await execFileAsync('git', ['status', '--porc
   maxBuffer: 1024 * 1024,
 })).stdout;
 
-export const runAuthenticatedHostedSignInEntry = async ({ processSeedMode = 'valid' } = {}) => {
+export const runAuthenticatedHostedSignInEntry = async ({
+  processSeedMode = 'valid', processReadStateOnly = false,
+} = {}) => {
   const stateBefore = await checkoutState();
   let temporaryRoot;
   let fixture;
@@ -960,6 +998,7 @@ export const runAuthenticatedHostedSignInEntry = async ({ processSeedMode = 'val
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL: fixture.baseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OUTPUT_DIR: playwrightOutputDirectory,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE: processSeedMode,
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY: String(processReadStateOnly),
       ENTERPRISE_LIFECYCLE_APP_BASE_URL: fixture.previewOrigin,
       ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.backendOrigin,
       ENTERPRISE_LIFECYCLE_CONTROL_URL: fixture.controlBaseUrl,
@@ -983,11 +1022,13 @@ export const runAuthenticatedHostedSignInEntry = async ({ processSeedMode = 'val
 };
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
-const invokedProcessSeedMode = process.argv.length === 2 ? 'valid'
+const invokedProcessSeedMode = process.argv.length === 2
+  || (process.argv.length === 3 && process.argv[2] === '--process-read-state') ? 'valid'
   : process.argv.length === 3 && process.argv[2] === '--nullable-process-reproduction'
     ? 'nullable-reproduction' : 'rejected';
 if (invoked) runAuthenticatedHostedSignInEntry({
   processSeedMode: invokedProcessSeedMode,
+  processReadStateOnly: process.argv.length === 3 && process.argv[2] === '--process-read-state',
 }).then(() => {
   console.log('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PASS');
 }).catch(error => {
