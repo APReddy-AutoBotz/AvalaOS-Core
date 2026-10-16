@@ -24,6 +24,7 @@ import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
   validateAuthenticatedHostedPlaywrightDiagnostic, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
+import { authenticatedAcceptanceMode } from './authenticatedV2ReloadDiagnostic.mjs';
 import { createControlledHumanPostgresClientConfig,
   validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
 
@@ -579,6 +580,7 @@ export function buildAuthenticatedHostedChildEnvironment(environment, config, se
     ENTERPRISE_LIFECYCLE_OUTPUT_DIR: paths.browserEvidence,
     AUTHENTICATED_HOSTED_PLAYWRIGHT_OUTPUT_DIR: paths.playwright,
     AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH: paths.diagnostic,
+    AUTHENTICATED_ACCEPTANCE_MODE: config.acceptanceMode,
   });
 }
 
@@ -589,6 +591,7 @@ const atomicJson = async (destination, document) => {
 };
 
 const removeIfPresent = async file => {
+  if (!file) return;
   try { await unlink(file); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
 };
 const safeRunCategory = (error, child) => error?.authenticatedHostedChildCategory==='EXIT_NONZERO' && !child
@@ -669,7 +672,9 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       diagnostic: path.join(browserWorkspace, 'playwright-diagnostic.json'),
     };
     const playwrightArgs=[path.resolve('node_modules/@playwright/test/cli.js'), 'test',
-      '--config=playwright.authenticated-hosted.config.ts', '--workers=1'];
+      '--config=playwright.authenticated-hosted.config.ts', '--workers=1',
+      ...(config.acceptanceMode === 'v2_primary_prefix_diagnostic'
+        ? ['--project=desktop-chromium', '--grep=@v2-primary-prefix-diagnostic'] : [])];
     const playwrightOptions={
         cwd: process.cwd(), env: buildAuthenticatedHostedChildEnvironment(environment, config, server, browserPaths),
       };
@@ -678,17 +683,20 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
     else await runAuthenticatedHostedChild(process.execPath,playwrightArgs,playwrightOptions,
       {timeoutMs:30*60_000,cancellationSignal:cancellation.signal,diagnosticPath:browserPaths.diagnostic});
     throwIfCancelled();
+    if (config.acceptanceMode === 'full_acceptance') {
+      diagnosticState.phase = 'FINALIZATION';
+      const output = await controller.finalize();
+      throwIfCancelled();
+      await Promise.all([
+        atomicJson(outputPaths.binding, output.profile),
+        atomicJson(outputPaths.browser, output.browser),
+        atomicJson(outputPaths.server, output.server),
+      ]);
+      finalized = true;
+      diagnosticState.cleanup = 'verified';
+      return { outputPaths };
+    }
     diagnosticState.phase = 'FINALIZATION';
-    const output = await controller.finalize();
-    throwIfCancelled();
-    await Promise.all([
-      atomicJson(outputPaths.binding, output.profile),
-      atomicJson(outputPaths.browser, output.browser),
-      atomicJson(outputPaths.server, output.server),
-    ]);
-    finalized = true;
-    diagnosticState.cleanup = 'verified';
-    return { outputPaths };
   } catch (error) {
     primaryError = error;
     diagnosticState.primaryError = error;
@@ -709,12 +717,27 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
     }
     if (controller.active) diagnosticState.cleanup = 'verified';
   }
+  if (config.acceptanceMode === 'v2_primary_prefix_diagnostic' && controller.quiesced) {
+    try {
+      await atomicJson(outputPaths.v2ReloadDiagnostic, controller.v2ReloadDiagnosticResult());
+    } catch (error) {
+      if (!primaryError) {
+        primaryError = error;
+        diagnosticState.primaryError = error;
+      }
+    }
+  }
+  if (!primaryError && config.acceptanceMode === 'v2_primary_prefix_diagnostic') return { outputPaths };
   throw primaryError;
 }
 
 export async function runAuthenticatedHostedAcceptance(environment = process.env, dependencies = {}) {
   const outputPaths = dependencies.outputPaths ?? AUTHENTICATED_HOSTED_OUTPUT_PATHS;
-  await removeIfPresent(outputPaths.diagnostic);
+  const mode = authenticatedAcceptanceMode(environment);
+  const stalePaths = mode === 'v2_primary_prefix_diagnostic'
+    ? [outputPaths.diagnostic, outputPaths.v2ReloadDiagnostic]
+    : [outputPaths.diagnostic];
+  await Promise.all(stalePaths.map(removeIfPresent));
   const diagnosticState = { phase: 'PREFLIGHT', cleanup: 'not-required', controller: null,
     primaryError: null, child: null };
   try {

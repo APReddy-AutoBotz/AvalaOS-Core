@@ -26,6 +26,15 @@ import {
   observeAuthenticatedStudioDownloadDenial,
 } from '../authenticatedControlsAcceptance';
 import { installAuthenticatedHostedNetwork } from '../authenticatedHostedNetwork';
+import {
+  assertV2ReloadCheckpointResponse,
+  createV2ReloadBrowserCheckpointBuilder,
+  installV2ReloadReadObserver,
+  observeV2ReloadRenderOutcome,
+  resolveAuthenticatedAcceptanceMode,
+  type V2ReloadDiagnosticCheckpointResponse,
+  type V2ReloadRenderOutcome,
+} from '../v2ReloadDiagnosticObserver';
 
 type ObservedStage = Readonly<{ id: string; uiObserved: true; reloadObserved?: true }>;
 type MutationSnapshot = Readonly<{
@@ -87,6 +96,11 @@ const outputDirectory = process.env.ENTERPRISE_LIFECYCLE_OUTPUT_DIR
   ?? path.join('output', 'acceptance', 'enterprise-lifecycle');
 const authenticatedProductAcceptance = process.env.ENTERPRISE_LIFECYCLE_AUTHENTICATED === 'true';
 const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
+const authenticatedAcceptanceMode = resolveAuthenticatedAcceptanceMode(process.env.AUTHENTICATED_ACCEPTANCE_MODE);
+const v2PrimaryPrefixDiagnostic = authenticatedAcceptanceMode === 'v2_primary_prefix_diagnostic';
+if (v2PrimaryPrefixDiagnostic && (!authenticatedProductAcceptance || !hostedAuthenticatedAcceptance)) {
+  throw new Error('AUTHENTICATED_V2_RELOAD_HOSTED_AUTH_REQUIRED');
+}
 const hostedAllowedOrigins = new Set([
   process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL,
   process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,
@@ -463,7 +477,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
     override push(...items: unknown[]) {
       const length = super.push(...items);
-      if (hostedAuthenticatedAcceptance) {
+      if (hostedAuthenticatedAcceptance && !v2PrimaryPrefixDiagnostic) {
         for (const row of items) {
           const owningTestWorkQueues = activeTestWorkQueues;
           if (!owningTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
@@ -510,7 +524,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
   });
 
-  test.beforeEach(async ({ context }) => {
+  test.beforeEach(async ({ context }, testInfo) => {
+    test.skip(v2PrimaryPrefixDiagnostic && !testInfo.tags.includes('@v2-primary-prefix-diagnostic'),
+      'focused V2 diagnostic executes only the original Desktop primary prefix');
     externalRequests = [];
     const owningTestWorkQueues = Object.freeze({
       network: createAuthenticatedLifecycleWorkQueue(),
@@ -574,6 +590,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       }
     }
     if (hasBoundaryFailure) failed = true;
+    if (v2PrimaryPrefixDiagnostic) {
+      if (hasBoundaryFailure) throw boundaryFailure;
+      return;
+    }
     if (!failed) {
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });
       expect(finalized).toMatchObject({
@@ -606,7 +626,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (hasBoundaryFailure) throw boundaryFailure;
   });
 
-  test('authors, replays, rejects stale work, requests changes and resubmits through the production UI', async ({ page, context }) => test.step('hosted:primary:journey', async () => {
+  test('authors, replays, rejects stale work, requests changes and resubmits through the production UI',
+    { tag: '@v2-primary-prefix-diagnostic' }, async ({ page, context }) => test.step('hosted:primary:journey', async () => {
+    let diagnosticPrefixComplete = false;
     await test.step('hosted:primary:process-denial', async () => {
       const deniedEditPage = await context.newPage();
       await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process);
@@ -845,6 +867,13 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
     await test.step('hosted:primary:v2-authoring-and-review', async () => {
       await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+      const diagnosticCheckpoint = v2PrimaryPrefixDiagnostic
+        ? createV2ReloadBrowserCheckpointBuilder(page, { projectName, persona: 'author' }) : null;
+      if (diagnosticCheckpoint) {
+        const response = await control<V2ReloadDiagnosticCheckpointResponse>('/control/v2-reload-diagnostic',
+          await diagnosticCheckpoint.checkpoint('before-create'));
+        assertV2ReloadCheckpointResponse(response, 'before-create');
+      }
       const beforeV2Create = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
       const createV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
@@ -853,6 +882,39 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
       observe('assess-create', 'ui.assess-created');
       if (authenticatedProductAcceptance && beforeV2Create) {
+        if (diagnosticCheckpoint) {
+          const beforeReloadResponse = await control<V2ReloadDiagnosticCheckpointResponse>('/control/v2-reload-diagnostic',
+            await diagnosticCheckpoint.checkpoint('before-reload'));
+          assertV2ReloadCheckpointResponse(beforeReloadResponse, 'before-reload');
+          const readObserver = installV2ReloadReadObserver(page);
+          let renderOutcome: V2ReloadRenderOutcome = 'unresolved';
+          let reloadFailure: unknown = null;
+          let renderFailure: unknown = null;
+          try { await page.reload({ waitUntil: 'domcontentloaded' }); }
+          catch (error) { reloadFailure = error; }
+          if (!reloadFailure) {
+            try { renderOutcome = await observeV2ReloadRenderOutcome(page); }
+            catch (error) { renderFailure = error; }
+          }
+          const readCompletion = await readObserver.complete();
+          let trackerFailure: unknown = null;
+          try {
+            if (!activeTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+            await activeTestWorkQueues.network.drain();
+          } catch (error) { trackerFailure = error; }
+          const afterReloadResponse = await control<V2ReloadDiagnosticCheckpointResponse>('/control/v2-reload-diagnostic',
+            await diagnosticCheckpoint.checkpoint('after-reload', {
+              readObservation: readCompletion.observation,
+              renderOutcome,
+            }));
+          assertV2ReloadCheckpointResponse(afterReloadResponse, 'after-reload');
+          if (trackerFailure) throw trackerFailure;
+          if (readCompletion.observerFailure) throw new Error('AUTHENTICATED_V2_RELOAD_READ_OBSERVER_REJECTED');
+          if (reloadFailure) throw reloadFailure;
+          if (renderFailure) throw renderFailure;
+          diagnosticPrefixComplete = true;
+          return;
+        }
         await page.reload({ waitUntil: 'domcontentloaded' });
         await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
         const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
@@ -1097,6 +1159,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         });
       }
     });
+    if (diagnosticPrefixComplete) return;
   }));
 
   test('independent approval, Govern separation and synthetic Studio generation retain exact lineage', async ({ page }) => {

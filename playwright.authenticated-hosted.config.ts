@@ -1,10 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 import os from 'node:os';
 import path from 'node:path';
+import { authenticatedAcceptanceMode } from './scripts/authenticatedV2ReloadDiagnostic.mjs';
 
 const baseURL = process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL;
 if (!baseURL) throw new Error('AUTHENTICATED_HOSTED_BASE_URL_REQUIRED');
 const target = new URL(baseURL);
+const acceptanceMode = authenticatedAcceptanceMode(process.env);
 if (target.protocol !== 'https:' || target.origin !== baseURL
   || target.hostname !== 'avalaos-pilot.netlify.app') {
   throw new Error('AUTHENTICATED_HOSTED_BASE_URL_REJECTED');
@@ -47,8 +49,10 @@ export default defineConfig({
     video: 'off',
     serviceWorkers: 'block',
   },
-  projects: [
-    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'pixel-7-chromium', use: { ...devices['Pixel 7'] } },
-  ],
+  projects: acceptanceMode === 'v2_primary_prefix_diagnostic'
+    ? [{ name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } }]
+    : [
+      { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+      { name: 'pixel-7-chromium', use: { ...devices['Pixel 7'] } },
+    ],
 });

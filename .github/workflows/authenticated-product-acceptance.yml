@@ -48,6 +48,14 @@ on:
         description: Exact approved non-exercise baseline digest
         required: true
         type: string
+      acceptance_mode:
+        description: Protected hosted execution mode
+        required: true
+        default: full_acceptance
+        type: choice
+        options:
+          - full_acceptance
+          - v2_primary_prefix_diagnostic
 
 permissions:
   contents: read
@@ -215,6 +223,7 @@ jobs:
       ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
       AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
       AUTHENTICATED_ACCEPTANCE_AUTH_KIND: supabase_auth
+      AUTHENTICATED_ACCEPTANCE_MODE: full_acceptance
       AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: supabase_vault
       AVALA_PROVIDER_SECRET_BACKEND: supabase_vault
       PLAYWRIGHT_JSON: artifacts/exhaustive-acceptance/playwright-results.json
@@ -367,6 +376,7 @@ jobs:
       ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
       AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
       AUTHENTICATED_ACCEPTANCE_AUTH_KIND: supabase_auth
+      AUTHENTICATED_ACCEPTANCE_MODE: ${{ inputs.acceptance_mode }}
       AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: supabase_vault
       AVALA_PROVIDER_SECRET_BACKEND: supabase_vault
       RELEASE_SHA: ${{ inputs.release_sha }}
@@ -408,6 +418,7 @@ jobs:
           [[ "$MIGRATION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$EXERCISE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$BASELINE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$AUTHENTICATED_ACCEPTANCE_MODE" =~ ^(full_acceptance|v2_primary_prefix_diagnostic)$ ]]
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -428,6 +439,7 @@ jobs:
           node tests/browser/exhaustiveHostedAcceptanceContract.test.mjs
       - name: Run exact-run retained server-authority suites
         id: retained
+        if: inputs.acceptance_mode == 'full_acceptance'
         continue-on-error: true
         env:
           TRUST_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
@@ -440,10 +452,12 @@ jobs:
         run: node scripts/runExhaustiveRetainedSuites.mjs
       - name: Run independent assessment oracle against production scoring
         id: oracle
+        if: inputs.acceptance_mode == 'full_acceptance'
         continue-on-error: true
         run: node scripts/runAssessV1AcceptanceOracle.mjs
       - name: Run same-run disposable PostgreSQL server evidence
         id: server
+        if: inputs.acceptance_mode == 'full_acceptance'
         continue-on-error: true
         env:
           PILOT_OPERATIONS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
@@ -491,19 +505,19 @@ jobs:
         run: node scripts/runAuthenticatedHostedAcceptance.mjs
       - name: Reconstruct authenticated evidence from browser actions and raw server frames
         id: authenticated_evidence
-        if: steps.authenticated.outcome == 'success'
+        if: inputs.acceptance_mode == 'full_acceptance' && steps.authenticated.outcome == 'success'
         continue-on-error: true
         run: node scripts/produceAuthenticatedHostedEvidence.mjs
       - name: Run all 18 public Sandbox cases on both browser projects
         id: hosted
-        if: always() && steps.deployment.outcome == 'success'
+        if: always() && inputs.acceptance_mode == 'full_acceptance' && steps.deployment.outcome == 'success'
         continue-on-error: true
         env:
           EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}
           ACCEPTANCE_RELEASE_SHA: ${{ inputs.release_sha }}
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1
       - name: Stage sanitized same-run manifests
-        if: always()
+        if: always() && inputs.acceptance_mode == 'full_acceptance'
         shell: bash
         run: |
           set -euo pipefail
@@ -515,15 +529,23 @@ jobs:
           test -f "$AUTHENTICATED_RESULTS_MANIFEST" && cp "$AUTHENTICATED_RESULTS_MANIFEST" acceptance-results/authenticated-results.json || true
           test -f "$AUTHENTICATED_CONTROLLER_BINDING" && cp "$AUTHENTICATED_CONTROLLER_BINDING" acceptance-results/authenticated-controller-binding.json || true
           test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json acceptance-results/authenticated-hosted-diagnostic.json || true
+      - name: Stage sanitized V2 primary-prefix diagnostic
+        if: always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostic-results
+          test -f /tmp/authenticated-v2-primary-prefix-diagnostic.json && cp /tmp/authenticated-v2-primary-prefix-diagnostic.json diagnostic-results/authenticated-v2-primary-prefix-diagnostic.json || true
+          test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json diagnostic-results/authenticated-hosted-diagnostic.json || true
       - name: Generate unified 108-case report
         id: report
-        if: always()
+        if: always() && inputs.acceptance_mode == 'full_acceptance'
         continue-on-error: true
         env:
           ACCEPTANCE_EXECUTION_DISPOSITION: ${{ steps.deployment.outcome == 'success' && 'EXECUTED' || 'BLOCKED' }}
         run: node scripts/runExhaustiveAcceptanceReport.mjs
       - name: Upload sanitized same-run acceptance evidence
-        if: always()
+        if: always() && inputs.acceptance_mode == 'full_acceptance'
         uses: actions/upload-artifact@v4
         with:
           name: authenticated-exhaustive-${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -538,8 +560,16 @@ jobs:
             tests/acceptance/proof-owner-source-contracts.mjs
             acceptance-results/
             artifacts/exhaustive-acceptance/
+      - name: Upload sanitized V2 primary-prefix diagnostic
+        if: always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-v2-primary-prefix-diagnostic-${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: diagnostic-results/
       - name: Enforce one-run complete acceptance gates
-        if: always()
+        if: always() && inputs.acceptance_mode == 'full_acceptance'
         shell: bash
         run: |
           set -euo pipefail
@@ -558,3 +588,15 @@ jobs:
           test "${{ steps.report.outcome }}" = success
           test -f "$AUTHENTICATED_RESULTS_MANIFEST"
           test -f "$AUTHENTICATED_CONTROLLER_BINDING"
+      - name: Enforce V2 primary-prefix diagnostic gate
+        if: always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            'Authenticated diagnostic outcome: ${{ steps.authenticated.outcome }}' \
+            'Deployment outcome: ${{ steps.deployment.outcome }}' | tee -a "$GITHUB_STEP_SUMMARY"
+          test "${{ steps.deployment.outcome }}" = success
+          test "${{ steps.authenticated.outcome }}" = success
+          test -f /tmp/authenticated-v2-primary-prefix-diagnostic.json
+          node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync("/tmp/authenticated-v2-primary-prefix-diagnostic.json","utf8"));if(value.schemaVersion!=="authenticated-v2-primary-prefix-diagnostic-v1"||value.mode!=="v2_primary_prefix_diagnostic"||value.diagnosticCompleted!==true||value.acceptancePromoted!==false||value.cleanup?.status!=="verified")process.exit(1)'

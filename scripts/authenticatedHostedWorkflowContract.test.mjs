@@ -42,9 +42,11 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   const normalize = value => JSON.parse(JSON.stringify(value).replaceAll('${{ inputs.release_sha }}', '${{ env.RELEASE_SHA }}'));
   const check = 'node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }';
   for (const [name, value] of Object.entries(hosted.env)) {
-    if (['RELEASE_SHA', 'NETLIFY_DEPLOY_ID', 'HOSTED_PILOT_URL'].includes(name)) continue;
+    if (['RELEASE_SHA', 'NETLIFY_DEPLOY_ID', 'HOSTED_PILOT_URL', 'AUTHENTICATED_ACCEPTANCE_MODE'].includes(name)) continue;
     assert.equal(replay.env[name], value, `${name} must match protected preactivation output/environment binding`);
   }
+  assert.equal(replay.env.AUTHENTICATED_ACCEPTANCE_MODE, 'full_acceptance');
+  assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_MODE, '${{ inputs.acceptance_mode }}');
   for (const name of [
     'Validate catalogs, evidence and hosted contracts',
     'Run exact-run retained server-authority suites',
@@ -86,10 +88,12 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.deepEqual(Object.keys(workflow.on).sort(), ['pull_request', 'push', 'workflow_dispatch']);
   const inputs = workflow.on.workflow_dispatch.inputs;
   assert.deepEqual(Object.keys(inputs).sort(), [
-    'backend_digest', 'baseline_digest', 'exercise_digest', 'expected_project_ref', 'hosted_url',
+    'acceptance_mode', 'backend_digest', 'baseline_digest', 'exercise_digest', 'expected_project_ref', 'hosted_url',
     'migration_digest', 'migration_version', 'netlify_deploy_id', 'release_sha', 'target_public_digest',
   ]);
   assert.ok(Object.values(inputs).every(input => input.required === true));
+  assert.deepEqual(inputs.acceptance_mode, { description: 'Protected hosted execution mode', required: true,
+    default: 'full_acceptance', type: 'choice', options: ['full_acceptance', 'v2_primary_prefix_diagnostic'] });
   assert.equal(workflow.jobs['source-and-authority'].if, "github.event_name != 'workflow_dispatch'");
   assert.equal(workflow.jobs['connected-browser'].if, "github.event_name != 'workflow_dispatch'");
   const sourceAuthority = workflow.jobs['source-and-authority'].steps
@@ -116,6 +120,7 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.equal(hosted.env.ACCEPTANCE_WORKFLOW_PATH, '.github/workflows/exhaustive-acceptance.yml');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND, 'hosted_authenticated_synthetic');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_AUTH_KIND, 'supabase_auth');
+  assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_MODE, '${{ inputs.acceptance_mode }}');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AVALA_PROVIDER_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN, undefined);
@@ -157,14 +162,18 @@ test('one exhaustive job owns retained, oracle, server, public browser and authe
   assert.equal(authenticated.env.AVALA_VAULT_ADDR, undefined);
   assert.equal(authenticated.env.AVALA_VAULT_TOKEN, undefined);
   assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_VAULT_SECRET_PATH, undefined);
+  for (const id of ['retained', 'oracle', 'server', 'authenticated_evidence', 'hosted', 'report']) {
+    const step = steps.find(item => item.id === id);
+    assert.match(step.if, /inputs[.]acceptance_mode == 'full_acceptance'/u, `${id} must remain full-mode only`);
+  }
   const staging = steps.find(step => step.name === 'Stage sanitized same-run manifests');
-  assert.equal(staging.if, 'always()');
+  assert.equal(staging.if, "always() && inputs.acceptance_mode == 'full_acceptance'");
   assert.ok(steps.indexOf(staging) > steps.indexOf(authenticated));
   assert.match(staging.run,
     /test -f "\$SUT_RESULTS_MANIFEST" && cp "\$SUT_RESULTS_MANIFEST" acceptance-results\/sut-oracle-results[.]json/u);
   assert.match(staging.run, /test -f \/tmp\/authenticated-hosted-diagnostic[.]json && cp \/tmp\/authenticated-hosted-diagnostic[.]json acceptance-results\/authenticated-hosted-diagnostic[.]json/u);
   const upload = steps.find(step => step.name === 'Upload sanitized same-run acceptance evidence');
-  assert.equal(upload.if, 'always()');
+  assert.equal(upload.if, "always() && inputs.acceptance_mode == 'full_acceptance'");
   assert.match(upload.with.path, /acceptance-results\//u);
   const gate = steps.find(step => step.name === 'Enforce one-run complete acceptance gates');
   assert.match(gate.run, /steps[.]authenticated[.]outcome/u);
@@ -176,6 +185,32 @@ test('one exhaustive job owns retained, oracle, server, public browser and authe
   const hostedIds = new Set([...bindings.authenticatedTests, ...bindings.hostedTests].map(item => item.testId));
   assert.equal(catalog.cases.filter(item => !hostedIds.has(item.testId)).length, 43);
   assert.equal(catalog.cases.length, 108);
+});
+
+test('V2 diagnostic dispatch is isolated from full evidence and has a dedicated non-promotion gate', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'),
+    'authenticated-product-acceptance.yml');
+  const steps = workflow.jobs['hosted-authenticated'].steps;
+  const stage = steps.find(step => step.name === 'Stage sanitized V2 primary-prefix diagnostic');
+  const upload = steps.find(step => step.name === 'Upload sanitized V2 primary-prefix diagnostic');
+  const gate = steps.find(step => step.name === 'Enforce V2 primary-prefix diagnostic gate');
+  assert.equal(stage.if, "always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'");
+  assert.match(stage.run, /authenticated-v2-primary-prefix-diagnostic[.]json/u);
+  assert.match(stage.run, /authenticated-hosted-diagnostic[.]json/u);
+  assert.doesNotMatch(stage.run, /RETAINED_RESULTS|ORACLE_RESULTS|SERVER_RESULTS|AUTHENTICATED_RESULTS/u);
+  assert.equal(upload.if, "always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'");
+  assert.equal(upload.with.path, 'diagnostic-results/');
+  assert.doesNotMatch(JSON.stringify(upload), /acceptance-results|artifacts\/exhaustive/u);
+  assert.equal(gate.if, "always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'");
+  assert.match(gate.run, /diagnosticCompleted/u);
+  assert.match(gate.run, /acceptancePromoted/u);
+  assert.match(gate.run, /cleanup/u);
+  assert.doesNotMatch(gate.run, /authenticated_evidence|steps[.]hosted|steps[.]report/u);
+  const fullGate = steps.find(step => step.name === 'Enforce one-run complete acceptance gates');
+  assert.equal(fullGate.if, "always() && inputs.acceptance_mode == 'full_acceptance'");
+  const authenticated = steps.find(step => step.id === 'authenticated');
+  assert.equal(authenticated.env.AUTHENTICATED_ACCEPTANCE_MODE, undefined,
+    'the job-level exact mode binding must be the sole child mode source');
 });
 
 test('authenticated environment derives source identities and rejects malformed protected inputs', () => {
