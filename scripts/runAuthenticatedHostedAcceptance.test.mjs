@@ -13,6 +13,8 @@ import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRunti
   observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance,
   runAuthenticatedHostedChild,
   verifyAuthenticatedEdgeSourceResponse,verifyAuthenticatedHostedDeployment } from './runAuthenticatedHostedAcceptance.mjs';
+import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUNT_KEYS,
+  emptyAuthenticatedV2ReloadReadStages } from './authenticatedV2ReloadDiagnostic.mjs';
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command',
@@ -515,17 +517,132 @@ test('browser child environment is a strict public and ephemeral allowlist', () 
     AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN:secret,
     AUTHENTICATED_ACCEPTANCE_SCOPE:secret,AVALA_VAULT_TOKEN:secret,OPENAI_API_KEY:secret,GITHUB_TOKEN:secret};
   const child=buildAuthenticatedHostedChildEnvironment(environment,
-    {origin:'https://avalaos-pilot.netlify.app',supabaseUrl:`https://${fixtureProjectRef}.supabase.co`},
+    {origin:'https://avalaos-pilot.netlify.app',supabaseUrl:`https://${fixtureProjectRef}.supabase.co`,
+      acceptanceMode:'full_acceptance'},
     {baseUrl:'http://127.0.0.1:1234',controlToken:'ephemeral-loopback-token'},
     {browserEvidence:path.join(os.tmpdir(),'owned','evidence'),playwright:path.join(os.tmpdir(),'owned','playwright'),
       diagnostic:path.join(os.tmpdir(),'owned','diagnostic.json')});
   assert.equal(child.ENTERPRISE_LIFECYCLE_CONTROL_TOKEN,'ephemeral-loopback-token');
   assert.equal(child.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,`https://${fixtureProjectRef}.supabase.co`);
+  assert.equal(child.AUTHENTICATED_ACCEPTANCE_MODE,'full_acceptance');
   assert.equal(JSON.stringify(child).includes(secret),false);
   for(const forbidden of ['NODE_OPTIONS','AUTHENTICATED_ACCEPTANCE_DATABASE_URL','AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY',
     'AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN','AUTHENTICATED_ACCEPTANCE_SCOPE','AVALA_VAULT_TOKEN','OPENAI_API_KEY','GITHUB_TOKEN']){
     assert.equal(Object.hasOwn(child,forbidden),false,forbidden);
   }
+});
+
+test('focused V2 diagnostic runner selects one Desktop prefix, cleans up, and emits no full evidence', async t => {
+  const environment = { ...hostedEnvironment(), AUTHENTICATED_ACCEPTANCE_MODE: 'v2_primary_prefix_diagnostic' };
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'authenticated-v2-output-test-'));
+  t.after(() => rm(outputRoot, { recursive: true, force: true }));
+  const outputPaths = {
+    browser: path.join(outputRoot, 'browser.json'),
+    server: path.join(outputRoot, 'server.json'),
+    binding: path.join(outputRoot, 'binding.json'),
+    diagnostic: path.join(outputRoot, 'diagnostic.json'),
+    v2ReloadDiagnostic: path.join(outputRoot, 'v2-diagnostic.json'),
+  };
+  for (const file of [outputPaths.browser, outputPaths.server, outputPaths.binding]) {
+    await writeFile(file, 'preserved-prior-evidence\n');
+  }
+  const calls = [];
+  const frameCounts = value => Object.fromEntries(AUTHENTICATED_V2_RELOAD_COUNT_KEYS.map(key => [key, value]));
+  const frames = [
+    { ...frameCounts(0), targetHash: sha('before-create') },
+    { ...frameCounts(1), targetHash: sha('after-create') },
+    { ...frameCounts(1), targetHash: sha('after-create') },
+  ];
+  let frameIndex = 0; let controller;
+  const actorId = '33333333-3333-4333-8333-333333333333';
+  const sessionId = '77777777-7777-4777-8777-777777777777';
+  const accessToken = `${Buffer.from('{}').toString('base64url')}.${
+    Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.${'x'.repeat(48)}`;
+  const adapter = {
+    preflight: async () => validPreflight(environment),
+    activate: async () => calls.push('activate'),
+    frame: async () => frames[frameIndex++],
+    quiesce: async () => calls.push('quiesce'),
+    cleanup: async () => calls.push('cleanup'),
+    verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+      activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false,
+      immutableHistoryPreserved: true }),
+  };
+  const browser = (overrides = {}) => ({ sessionObserved: true, selectedScopeObserved: true,
+    selectedProcessObserved: true, serverContextObserved: true, resumedDraftRendered: false,
+    failureRendered: false, readStages: emptyAuthenticatedV2ReloadReadStages(), ...overrides });
+  await runAuthenticatedHostedAcceptance(environment, {
+    outputPaths,
+    database: {},
+    verifyCheckout: async () => calls.push('checkout'),
+    createPostgresAdapter: () => adapter,
+    createIdentityAdapter: () => ({ verifySession: async () => ({ actorId, sessionId }),
+      revokeAll: async () => calls.push('revoke') }),
+    createBrowserWorkspace: () => mkdtemp(path.join(os.tmpdir(), 'authenticated-hosted-browser-')),
+    startServer: async value => {
+      controller = value;
+      return { baseUrl: 'http://127.0.0.1:1234', controlToken: 'ephemeral-token',
+        close: async () => calls.push('close') };
+    },
+    runPlaywright: async (_command, args, options) => {
+      assert.deepEqual(args.slice(-2), ['--project=desktop-chromium', '--grep=@v2-primary-prefix-diagnostic']);
+      assert.equal(options.env.AUTHENTICATED_ACCEPTANCE_MODE, 'v2_primary_prefix_diagnostic');
+      controller.projects.set('desktop-chromium', { identities: { author: { id: actorId } } });
+      controller.boundSessions.set('desktop-chromium:author', { actorId, sessionId });
+      const send = (phase, snapshot = browser()) => controller.recordV2ReloadDiagnosticCheckpoint({
+        schemaVersion: AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, phase, projectName: 'desktop-chromium',
+        persona: 'author', accessToken, browser: snapshot,
+      });
+      await send('before-create');
+      await send('before-reload');
+      const stages = emptyAuthenticatedV2ReloadReadStages().map(row => ({ ...row, status: 'passed', httpStatus: 200,
+        rowCount: ['case-discovery', 'case', 'draft-head'].includes(row.stage) ? 1 : 0 }));
+      await send('after-reload', browser({ resumedDraftRendered: true, readStages: stages }));
+    },
+  });
+  const result = JSON.parse(await readFile(outputPaths.v2ReloadDiagnostic, 'utf8'));
+  assert.equal(result.observedOutcome, 'draft_resumed');
+  assert.equal(result.reloadProjectionUnchanged, true);
+  assert.equal(result.acceptancePromoted, false);
+  assert.deepEqual(calls, ['checkout', 'activate', 'quiesce', 'revoke', 'cleanup', 'close']);
+  for (const file of [outputPaths.browser, outputPaths.server, outputPaths.binding]) {
+    assert.equal(await readFile(file, 'utf8'), 'preserved-prior-evidence\n');
+  }
+});
+
+test('focused V2 diagnostic browser failure still writes a partial sanitized artifact after cleanup', async t => {
+  const environment = { ...hostedEnvironment(), AUTHENTICATED_ACCEPTANCE_MODE: 'v2_primary_prefix_diagnostic' };
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'authenticated-v2-failure-output-test-'));
+  t.after(() => rm(outputRoot, { recursive: true, force: true }));
+  const outputPaths = {
+    browser: path.join(outputRoot, 'browser.json'), server: path.join(outputRoot, 'server.json'),
+    binding: path.join(outputRoot, 'binding.json'), diagnostic: path.join(outputRoot, 'diagnostic.json'),
+    v2ReloadDiagnostic: path.join(outputRoot, 'v2-diagnostic.json'),
+  };
+  const calls = [];
+  const adapter = {
+    preflight: async () => validPreflight(environment), activate: async () => calls.push('activate'),
+    quiesce: async () => calls.push('quiesce'), cleanup: async () => calls.push('cleanup'),
+    verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+      activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false,
+      immutableHistoryPreserved: true }),
+  };
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment, {
+    outputPaths, database: {}, verifyCheckout: async () => {}, createPostgresAdapter: () => adapter,
+    createIdentityAdapter: () => ({ revokeAll: async () => calls.push('revoke') }),
+    createBrowserWorkspace: () => mkdtemp(path.join(os.tmpdir(), 'authenticated-hosted-browser-')),
+    startServer: async () => ({ baseUrl: 'http://127.0.0.1:1234', controlToken: 'ephemeral-token',
+      close: async () => calls.push('close') }),
+    runPlaywright: async () => { throw new Error('private browser failure'); },
+  }), /private browser failure/u);
+  const partial = JSON.parse(await readFile(outputPaths.v2ReloadDiagnostic, 'utf8'));
+  assert.equal(partial.diagnosticCompleted, false);
+  assert.equal(partial.observedOutcome, 'control_failure');
+  assert.equal(partial.acceptancePromoted, false);
+  const diagnostic = JSON.parse(await readFile(outputPaths.diagnostic, 'utf8'));
+  assert.deepEqual(diagnostic.failure, { phase: 'BROWSER_EXECUTION', category: 'RUNNER_REJECTED' });
+  assert.equal(diagnostic.cleanup.status, 'verified');
+  assert.deepEqual(calls, ['activate', 'quiesce', 'revoke', 'cleanup', 'close']);
 });
 
 test('browser child wrapper preserves only validated nonzero diagnostics', async t => {

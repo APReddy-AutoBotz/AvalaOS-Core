@@ -21,6 +21,12 @@ import {
 } from './authenticatedHostedObserver.mjs';
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import {
+  authenticatedAcceptanceMode,
+  authenticatedV2ReloadProjectionCounts,
+  buildAuthenticatedV2ReloadDiagnostic,
+  validateAuthenticatedV2ReloadCheckpoint,
+} from './authenticatedV2ReloadDiagnostic.mjs';
 
 export const AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA = 'authenticated-hosted-controller-v1';
 export const AUTHENTICATED_HOSTED_AUTHORITY_SCHEMA = 'authenticated-synthetic-authority-observation-v1';
@@ -30,6 +36,7 @@ export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
   server: path.join(HOSTED_TEMP_ROOT, 'authenticated-server-observations.json'),
   binding: path.join(HOSTED_TEMP_ROOT, 'authenticated-controller-binding.json'),
   diagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-hosted-diagnostic.json'),
+  v2ReloadDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-v2-primary-prefix-diagnostic.json'),
 });
 export const AUTHENTICATED_HOSTED_PERSONAS = Object.freeze(['author', 'reviewer', 'approver', 'outsider']);
 export const AUTHENTICATED_HOSTED_FAULT_KINDS = Object.freeze([
@@ -158,6 +165,7 @@ const supabaseTarget = value => {
 };
 
 export function validateAuthenticatedHostedControllerEnvironment(environment) {
+  const acceptanceMode = authenticatedAcceptanceMode(environment);
   if (environment.GITHUB_ACTIONS !== 'true' || environment.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
     fail('WORKFLOW_RUNTIME_REQUIRED');
   }
@@ -217,6 +225,7 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
     sourceDigest: environment.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST,
     baselineDigest: environment.AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST,
     secretBackendKind,
+    acceptanceMode,
     workflow: Object.freeze({
       repository: environment.GITHUB_REPOSITORY,
       producer: Object.freeze({ path: '.github/workflows/exhaustive-acceptance.yml',
@@ -319,6 +328,8 @@ export class AuthenticatedHostedController {
     this.serverCases = [];
     this.parentIdentityDiagnostic = null;
     this.browserIdentityDiagnostic = null;
+    this.v2ReloadCheckpoints = [];
+    this.v2ReloadTargetHashes = [];
     this.active = false;
     this.quiesced = false;
   }
@@ -358,6 +369,9 @@ export class AuthenticatedHostedController {
 
   async setupProject(projectName) {
     if (!this.active || this.quiesced) fail('EXERCISE_NOT_ACTIVE');
+    if (this.config.acceptanceMode === 'v2_primary_prefix_diagnostic' && projectName !== 'desktop-chromium') {
+      fail('V2_RELOAD_DIAGNOSTIC_PROJECT_REJECTED');
+    }
     if (!SAFE_NAME.test(projectName) && !/^(desktop-chromium|pixel-7-chromium)(?:-[a-z0-9-]{1,63})?$/u.test(projectName)) {
       fail('PROJECT_NAME_REJECTED');
     }
@@ -416,7 +430,7 @@ export class AuthenticatedHostedController {
     return browserSetup;
   }
 
-  async verifyPresentedBrowserSession({ projectName, persona = null, accessToken }) {
+  async verifyPresentedBrowserSession({ projectName, persona = null, accessToken }, { recordFailure = true } = {}) {
     const project = this.projects.get(projectName);
     if (!project) fail('PROJECT_NOT_FOUND');
     const claims = decodeJwtClaims(accessToken);
@@ -426,7 +440,7 @@ export class AuthenticatedHostedController {
     let verified;
     try { verified = await this.identity.verifySession({ accessToken, ...claims }); }
     catch (error) {
-      this.recordIdentityDiagnostic({ projectName, diagnostic:
+      if (recordFailure) this.recordIdentityDiagnostic({ projectName, diagnostic:
         error?.authenticatedHostedIdentityDiagnostic ?? { operation: 'VERIFY_SESSION', category: 'SESSION_VERIFICATION_FAILED' } }, 'parent');
       throw error;
     }
@@ -463,6 +477,73 @@ export class AuthenticatedHostedController {
     const project = this.projects.get(input.projectName);
     if (!project) fail('PROJECT_NOT_FOUND');
     return this.adapter.frame(pathname, { ...input, project, scope: this.config.scope });
+  }
+
+  async recordV2ReloadDiagnosticCheckpoint(input) {
+    if (this.config.acceptanceMode !== 'v2_primary_prefix_diagnostic' || !this.active || this.quiesced) {
+      fail('V2_RELOAD_DIAGNOSTIC_NOT_ACTIVE');
+    }
+    const checkpoint = validateAuthenticatedV2ReloadCheckpoint(input);
+    const expectedPhase = ['before-create', 'before-reload', 'after-reload'][this.v2ReloadCheckpoints.length];
+    if (checkpoint.phase !== expectedPhase) fail('V2_RELOAD_DIAGNOSTIC_PHASE_REJECTED');
+    const project = this.projects.get(checkpoint.projectName);
+    if (!project) fail('PROJECT_NOT_FOUND');
+    const bound = this.boundSessions.get('desktop-chromium:author');
+    let sessionContinuity = checkpoint.accessToken === null ? 'missing' : 'invalid';
+    if (checkpoint.accessToken !== null && bound) {
+      try {
+        const verified = await this.verifyPresentedBrowserSession(checkpoint, { recordFailure: false });
+        if (bound.actorId === verified.claims.actorId && bound.sessionId === verified.claims.sessionId) {
+          sessionContinuity = 'verified';
+        }
+      } catch {
+        sessionContinuity = 'invalid';
+      }
+    }
+    if (checkpoint.phase !== 'after-reload') {
+      if (sessionContinuity !== 'verified'
+        || !checkpoint.browser.sessionObserved || !checkpoint.browser.selectedScopeObserved
+        || !checkpoint.browser.selectedProcessObserved || !checkpoint.browser.serverContextObserved) {
+        fail('V2_RELOAD_DIAGNOSTIC_CONTINUITY_REJECTED');
+      }
+    }
+    const frame = await this.captureFrame('/control/lifecycle-frame', { projectName: checkpoint.projectName });
+    if (!DIGEST.test(frame?.targetHash ?? '')) fail('V2_RELOAD_DIAGNOSTIC_FRAME_REJECTED');
+    if (checkpoint.phase !== ['before-create', 'before-reload', 'after-reload'][this.v2ReloadCheckpoints.length]) {
+      fail('V2_RELOAD_DIAGNOSTIC_PHASE_REJECTED');
+    }
+    this.v2ReloadCheckpoints.push(Object.freeze({
+      phase: checkpoint.phase,
+      sessionContinuity,
+      browser: checkpoint.browser,
+      projectionCounts: authenticatedV2ReloadProjectionCounts(frame),
+    }));
+    this.v2ReloadTargetHashes.push(frame.targetHash);
+    return Object.freeze({
+      recorded: true,
+      phase: checkpoint.phase,
+      sessionContinuity,
+      continue: checkpoint.phase !== 'after-reload' && sessionContinuity === 'verified',
+    });
+  }
+
+  v2ReloadDiagnosticResult() {
+    if (this.config.acceptanceMode !== 'v2_primary_prefix_diagnostic' || !this.quiesced) {
+      fail('V2_RELOAD_DIAGNOSTIC_RESULT_REJECTED');
+    }
+    return buildAuthenticatedV2ReloadDiagnostic({
+      source: {
+        releaseSha: this.config.releaseSha,
+        runId: this.config.workflow.runId,
+        attempt: this.config.workflow.attempt,
+        producer: 'protected-hosted-controller',
+        sourceDigest: this.config.sourceDigest,
+      },
+      checkpoints: this.v2ReloadCheckpoints,
+      cleanup: { status: 'verified' },
+      reloadTargetUnchanged: this.v2ReloadTargetHashes.length === 3
+        ? this.v2ReloadTargetHashes[1] === this.v2ReloadTargetHashes[2] : null,
+    });
   }
 
   async recordBrowserCase({ projectName, row, actionIds }) {
@@ -700,6 +781,15 @@ export class AuthenticatedHostedController {
   }
 
   async control(pathname, input) {
+    if (this.config.acceptanceMode === 'v2_primary_prefix_diagnostic' && this.v2ReloadCheckpoints.length === 3) {
+      const terminalAllowed = new Set([
+        '/control/browser-action', '/control/browser-case',
+        '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
+        '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',
+        '/control/authenticated-controls/frame', '/control/snapshot',
+      ]);
+      if (!terminalAllowed.has(pathname)) fail('V2_RELOAD_DIAGNOSTIC_TERMINAL');
+    }
     if (pathname === '/control/setup') return this.setupProject(input.projectName);
     if (pathname === '/control/bind-browser-session') return this.bindBrowserSession(input);
     if (pathname === '/control/browser-case') return this.recordBrowserCase(input);
@@ -708,6 +798,7 @@ export class AuthenticatedHostedController {
     if (pathname === '/control/arm-permit') return this.armPermit(input);
     if (pathname === '/control/arm-browser-fault') return this.armBrowserFault(input);
     if (pathname === '/control/browser-diagnostic') return this.recordIdentityDiagnostic(input, 'browser');
+    if (pathname === '/control/v2-reload-diagnostic') return this.recordV2ReloadDiagnosticCheckpoint(input);
     const framePaths = new Set([
       '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
       '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',

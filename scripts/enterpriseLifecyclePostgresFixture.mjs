@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -22,7 +22,24 @@ const duplicateSafeMigrations = new Set([
   '20260923190853_pr_c_deferred_binding_authority.sql',
 ]);
 const sha256 = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
+const fixtureJwt = (secret, payload) => {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+export const resolveEnterpriseLifecycleNativePostgrestTarget = (origin, requestUrl) => {
+  const source = new URL(requestUrl);
+  const prefix = '/rest/v1';
+  const nativePath = source.pathname.slice(prefix.length);
+  if (!source.pathname.startsWith(`${prefix}/`) || nativePath.startsWith('//') || nativePath.includes('\\')) {
+    throw new Error('ENTERPRISE_LIFECYCLE_POSTGREST_TARGET_REJECTED');
+  }
+  const target = new URL(`.${nativePath}${source.search}`, `${origin}/`);
+  if (target.origin !== origin) throw new Error('ENTERPRISE_LIFECYCLE_POSTGREST_TARGET_REJECTED');
+  return target;
+};
 const stableJson = value => Array.isArray(value) ? `[${value.map(stableJson).join(',')}]`
   : value !== null && typeof value === 'object'
     ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
@@ -175,7 +192,16 @@ const migrationsForChain = () => readdirSync(path.join(root, 'supabase', 'migrat
 const applyCurrentMigrationChain = async client => {
   await client.query('BEGIN');
   try {
-    await client.query("CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULLIF(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';");
+    await client.query(`CREATE SCHEMA auth;
+      CREATE TABLE auth.users(id uuid primary key);
+      CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $uid$
+        SELECT COALESCE(
+          NULLIF(current_setting('request.jwt.claim.sub',true),''),
+          NULLIF(current_setting('request.jwt.claims',true),'')::jsonb->>'sub'
+        )::uuid
+      $uid$;
+      GRANT USAGE ON SCHEMA auth TO authenticated;
+      GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     // Match the Supabase bootstrap contract before repository migrations apply
     // their narrower explicit revokes/grants. This is local transport authority,
     // not evidence about any hosted project's current ACLs.
@@ -201,14 +227,17 @@ const applyCurrentMigrationChain = async client => {
   }
 };
 
-const createRoles = async admin => {
+const createRoles = async (admin, { nativePostgrest = false } = {}) => {
   const created = [];
-  for (const [name, attributes] of [['anon', 'NOLOGIN'], ['authenticated', 'NOLOGIN'], ['service_role', 'NOLOGIN BYPASSRLS']]) {
+  const roles = [['anon', 'NOLOGIN'], ['authenticated', 'NOLOGIN'], ['service_role', 'NOLOGIN BYPASSRLS']];
+  if (nativePostgrest) roles.push(['authenticator', 'LOGIN NOINHERIT']);
+  for (const [name, attributes] of roles) {
     if (!(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [name])).rowCount) {
       await admin.query(`CREATE ROLE ${name} ${attributes}`);
       created.push(name);
     }
   }
+  if (nativePostgrest) await admin.query('GRANT anon, authenticated TO authenticator');
   return created;
 };
 
@@ -230,13 +259,14 @@ export async function createEnterpriseLifecycleFixture({
   runId = process.env.GITHUB_RUN_ID ?? `local-${process.pid}`,
   runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? '1',
   headSha = process.env.PILOT_ACCEPTANCE_HEAD ?? process.env.GITHUB_SHA ?? 'local-working-tree',
+  postgrestJwtSecret = null,
 } = {}) {
   if (!databaseUrl) throw new Error('ENTERPRISE_LIFECYCLE_DATABASE_URL_REQUIRED');
   databaseUrl = validateEnterpriseLifecycleDatabaseUrl(databaseUrl);
   const startedAt = new Date().toISOString();
   const database = `enterprise_lifecycle_${process.pid}_${Date.now()}`.toLowerCase();
   const admin = await connect(databaseUrl);
-  const createdRoles = await createRoles(admin);
+  const createdRoles = await createRoles(admin, { nativePostgrest: postgrestJwtSecret !== null });
   let db;
   let server;
   let databaseCreated = false;
@@ -257,12 +287,16 @@ export async function createEnterpriseLifecycleFixture({
     // These are inert fixture credentials, accepted only by exact map lookup below.
     // Claims let shared browser observers correlate the same actor/session shape
     // as hosted sessions; decoded claims never authorize a fixture request.
+    if (postgrestJwtSecret !== null && (typeof postgrestJwtSecret !== 'string' || postgrestJwtSecret.length < 32)) {
+      throw new Error('ENTERPRISE_LIFECYCLE_POSTGREST_JWT_SECRET_REJECTED');
+    }
     const fixtureActors = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider'].map(persona => {
-      const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
-      const payload = Buffer.from(JSON.stringify({ sub: ids[persona], session_id: randomUUID(),
-        aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
-      return [persona, { token: `${header}.${payload}.fixture-only`,
-        user: { id: ids[persona], email: `${persona}@fixture.invalid` } }];
+      const claims = { sub: ids[persona], session_id: randomUUID(),
+        aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 };
+      const token = postgrestJwtSecret === null
+        ? `${Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.fixture-only`
+        : fixtureJwt(postgrestJwtSecret, claims);
+      return [persona, { token, user: { id: ids[persona], email: `${persona}@fixture.invalid` } }];
     }));
     const tokens = new Map([
       ['enterprise-author-token', ids.author], ['enterprise-reviewer-token', ids.reviewer],
@@ -892,10 +926,94 @@ export async function createEnterpriseLifecycleFixture({
       };
     };
 
+    let nativePostgrestOrigin = null;
+    const assessV2NativeResources = new Set([
+      'assess_v2_cases', 'assess_v2_decision_versions', 'assess_v2_case_versions',
+      'assess_v2_primitives', 'assess_v2_edges', 'assess_v2_decision_points',
+      'assess_v2_exception_paths', 'assess_v2_application_assets',
+      'assess_v2_application_interactions', 'assess_v2_evidence_links',
+    ]);
+    const namedNonV2NativeResources = new Set([
+      'organizations', 'organization_members', 'assess_processes', 'assessments',
+      'projects', 'tasks', 'epics', 'sprints', 'assessment_review_events',
+      'assessment_studio_handoffs', 'audit_events', 'document_generations',
+      'handoff_ledger_entries', 'timesheet_entries',
+    ]);
+    const nativePostgrestStats = {
+      active: 0, maxConcurrent: 0, requests: 0, statuses: new Map(), resourceStatuses: new Map(),
+      completionOrder: [],
+    };
+    let nativePostgrestFault = null;
+    let nativePostgrestDelays = new Map();
+    const useNativePostgrest = (value, { resourceDelays = {} } = {}) => {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || !/^\d+$/u.test(parsed.port)
+        || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+        throw new Error('ENTERPRISE_LIFECYCLE_POSTGREST_ORIGIN_REJECTED');
+      }
+      const delayEntries = Object.entries(resourceDelays);
+      if (delayEntries.some(([resource, delay]) => !assessV2NativeResources.has(resource)
+        || !Number.isInteger(delay) || delay < 0 || delay > 250)) {
+        throw new Error('ENTERPRISE_LIFECYCLE_POSTGREST_DELAY_REJECTED');
+      }
+      nativePostgrestOrigin = parsed.origin;
+      nativePostgrestDelays = new Map(delayEntries);
+    };
+    const proxyNativePostgrest = async request => {
+      actorFromRequest(request); // Exact fixture-token registration remains the local authority boundary.
+      const source = new URL(request.url);
+      const target = resolveEnterpriseLifecycleNativePostgrestTarget(nativePostgrestOrigin, source);
+      const requestedResource = source.pathname.slice('/rest/v1/'.length).split('/')[0];
+      const resourceClass = assessV2NativeResources.has(requestedResource)
+        ? requestedResource
+        : requestedResource === 'rpc' ? 'rpc'
+          : namedNonV2NativeResources.has(requestedResource) ? requestedResource : 'non_v2_other';
+      const headers = new Headers(request.headers);
+      headers.delete('host');
+      headers.delete('origin');
+      nativePostgrestStats.active += 1;
+      nativePostgrestStats.requests += 1;
+      nativePostgrestStats.maxConcurrent = Math.max(nativePostgrestStats.maxConcurrent, nativePostgrestStats.active);
+      try {
+        const resourceDelay = nativePostgrestDelays.get(requestedResource) ?? 0;
+        if (resourceDelay > 0) await new Promise(resolve => setTimeout(resolve, resourceDelay));
+        let response;
+        if (nativePostgrestFault?.resource === requestedResource && nativePostgrestFault.remaining === 1) {
+          nativePostgrestFault.remaining = 0;
+          response = json({ error: 'FIXTURE_NATIVE_READ_DENIED' }, nativePostgrestFault.status);
+        } else {
+          response = await fetch(target, {
+            method: request.method,
+            headers,
+            redirect: 'error',
+            signal: AbortSignal.timeout(15_000),
+            ...(['GET', 'HEAD'].includes(request.method) ? {} : { body: await request.arrayBuffer() }),
+          });
+        }
+        nativePostgrestStats.statuses.set(response.status, (nativePostgrestStats.statuses.get(response.status) ?? 0) + 1);
+        const resourceStatus = `${resourceClass}:${response.status}`;
+        nativePostgrestStats.resourceStatuses.set(
+          resourceStatus, (nativePostgrestStats.resourceStatuses.get(resourceStatus) ?? 0) + 1,
+        );
+        if (nativePostgrestStats.completionOrder.length < 512) {
+          nativePostgrestStats.completionOrder.push(resourceStatus);
+        }
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.set('access-control-allow-origin', request.headers.get('origin') ?? '*');
+        responseHeaders.set('access-control-allow-headers', 'authorization,apikey,content-type,x-client-info');
+        responseHeaders.set('access-control-allow-methods', 'GET,POST,OPTIONS');
+        responseHeaders.set('cache-control', 'no-store');
+        return new Response(await response.arrayBuffer(), { status: response.status, headers: responseHeaders });
+      } finally {
+        nativePostgrestStats.active -= 1;
+      }
+    };
+
     const route = async request => {
       const url = new URL(request.url);
       const cors = { 'access-control-allow-origin': request.headers.get('origin') ?? '*', 'access-control-allow-headers': 'authorization,apikey,content-type,x-client-info,x-enterprise-lifecycle-control', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+      if (nativePostgrestOrigin && url.pathname.startsWith('/rest/v1/')) return proxyNativePostgrest(request);
       if (url.pathname === '/health') return json({ ok: true, schemaVersion: evidence.schemaVersion, journeyBinding }, 200, cors);
       if (url.pathname.startsWith('/control/')) {
         if (request.headers.get('x-enterprise-lifecycle-control') !== controlToken) return json({ error: 'CONTROL_DENIED' }, 403, cors);
@@ -948,6 +1066,15 @@ export async function createEnterpriseLifecycleFixture({
           else if (input.enabled === false) await db.query("DELETE FROM role_capabilities WHERE role_id=$1 AND capability_key='assess.process.update'", [ids.role]);
           else return json({ error: 'CONTROL_INVALID' },400,cors);
           return json({ enabled: input.enabled },200,cors);
+        }
+        if (url.pathname === '/control/native-postgrest-fault') {
+          const input = await request.json().catch(() => ({}));
+          if (!projectSetups.has(input.projectName) || input.resource !== 'assess_v2_primitives'
+            || input.status !== 403 || nativePostgrestFault?.remaining === 1) {
+            return json({ error: 'CONTROL_NATIVE_POSTGREST_FAULT_REJECTED' },409,cors);
+          }
+          nativePostgrestFault = { resource: input.resource, status: input.status, remaining: 1 };
+          return json({ armed: true },200,cors);
         }
         if (url.pathname === '/control/arm-browser-fault') {
           const input = await request.json().catch(() => ({}));
@@ -1276,6 +1403,7 @@ export async function createEnterpriseLifecycleFixture({
     };
 
     let requestTail = Promise.resolve();
+    const nativeRequests = new Set();
     server = createServer((incoming, outgoing) => {
       const bodyResult = ['GET', 'HEAD'].includes(incoming.method ?? 'GET')
         ? Promise.resolve({ body: undefined, error: null })
@@ -1283,7 +1411,7 @@ export async function createEnterpriseLifecycleFixture({
           body => ({ body, error: null }),
           error => ({ body: undefined, error }),
         );
-      const run = requestTail.then(async () => {
+      const handle = async () => {
         try {
           const address = server.address();
           const bodyState = await bodyResult;
@@ -1294,8 +1422,17 @@ export async function createEnterpriseLifecycleFixture({
         } catch {
           await responseToNode(json({ error: 'FIXTURE_FAILURE' }, 500), outgoing);
         }
-      });
-      requestTail = run.catch(() => {});
+      };
+      const nativeProjection = nativePostgrestOrigin !== null
+        && (incoming.url ?? '').startsWith('/rest/v1/');
+      if (nativeProjection) {
+        const run = handle();
+        nativeRequests.add(run);
+        void run.finally(() => nativeRequests.delete(run));
+      } else {
+        const run = requestTail.then(handle);
+        requestTail = run.catch(() => {});
+      }
     });
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen({ host: '127.0.0.1', port, exclusive: true }, resolve); });
     const address = server.address();
@@ -1312,6 +1449,7 @@ export async function createEnterpriseLifecycleFixture({
       await controlsPostgres.cleanup().catch(error => errors.push(error));
       if (server) await new Promise(resolve => server.close(error => { if (error) errors.push(error); resolve(); }));
       await requestTail;
+      await Promise.allSettled([...nativeRequests]);
       await actorTransactionTail;
       if (db) await db.end().catch(error => errors.push(error));
       if (databaseCreated) await admin.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`).catch(error => errors.push(error));
@@ -1328,6 +1466,15 @@ export async function createEnterpriseLifecycleFixture({
 
     return {
       baseUrl, publicAnonKey: 'sb_publishable_enterprise_lifecycle_browser_test', authStorageKey: 'sb-127-auth-token',
+      databaseName: database, useNativePostgrest,
+      nativePostgrestStats: () => ({
+        active: nativePostgrestStats.active,
+        maxConcurrent: nativePostgrestStats.maxConcurrent,
+        requests: nativePostgrestStats.requests,
+        statuses: Object.fromEntries([...nativePostgrestStats.statuses].sort(([left], [right]) => left - right)),
+        resourceStatuses: Object.fromEntries([...nativePostgrestStats.resourceStatuses].sort(([left], [right]) => left.localeCompare(right))),
+        completionOrder: [...nativePostgrestStats.completionOrder],
+      }),
       controlToken, journeyBinding, aliases,
       actors: fixtureActors,
       ids, db, evidence, executeAssess, executeStudio, authorizationVersion,

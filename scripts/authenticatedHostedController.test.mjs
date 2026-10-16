@@ -17,6 +17,8 @@ import { createAuthenticatedHostedIdentityAdapter, createAuthenticatedHostedPost
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
+import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUNT_KEYS,
+  emptyAuthenticatedV2ReloadReadStages } from './authenticatedV2ReloadDiagnostic.mjs';
 
 const digest = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const id = () => randomUUID();
@@ -24,6 +26,10 @@ const id = () => randomUUID();
 const fixtureProjectRef = 'abcdefghijklmnopqrst';
 const tokenFor = (actorId, sessionId) => `${Buffer.from('{}').toString('base64url')}.${
   Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.${'x'.repeat(48)}`;
+const v2DiagnosticCounts = value => Object.fromEntries(AUTHENTICATED_V2_RELOAD_COUNT_KEYS.map(key => [key, value]));
+const v2DiagnosticBrowser = (overrides = {}) => ({ sessionObserved: true, selectedScopeObserved: true,
+  selectedProcessObserved: true, serverContextObserved: true, resumedDraftRendered: false,
+  failureRendered: false, readStages: emptyAuthenticatedV2ReloadReadStages(), ...overrides });
 
 const createFinalizeProofHarness = async ({ commandType='assessment.finalize', route='/functions/v1/assess-command',
   provideProof=true, mutateProof=value=>value, overlap=false }={}) => {
@@ -128,6 +134,123 @@ const baseEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: 'supabase_vault', AVALA_PROVIDER_SECRET_BACKEND: 'supabase_vault',
   AUTHENTICATED_ACCEPTANCE_SCOPE: JSON.stringify({ organizationId: id(), workspaceId: id(),
     roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id() } }),
+});
+
+test('focused V2 diagnostic binds exact checkpoint order, original author session and safe frame deltas', async () => {
+  const environment = { ...baseEnvironment(), AUTHENTICATED_ACCEPTANCE_MODE: 'v2_primary_prefix_diagnostic' };
+  const config = validateAuthenticatedHostedControllerEnvironment(environment);
+  const actorId = id(); const sessionId = id(); const accessToken = tokenFor(actorId, sessionId);
+  const frames = [v2DiagnosticCounts(0), v2DiagnosticCounts(1), v2DiagnosticCounts(1)];
+  let frameIndex = 0;
+  let observationIndex = 0;
+  const controller = new AuthenticatedHostedController({ config,
+    identity: { verifySession: async () => ({ actorId, sessionId }) },
+    adapter: { frame: async pathname => {
+      assert.equal(pathname, '/control/lifecycle-frame');
+      return { ...frames[frameIndex++], targetHash: digest('private-frame') };
+    }, observe: async () => ({
+      capturedAt: `2026-10-16T00:00:0${++observationIndex}.000Z`,
+      records: [],
+    }) },
+  });
+  controller.active = true;
+  controller.projects.set('desktop-chromium', { identities: { author: { id: actorId } },
+    lastBoundaryAt: '2026-10-16T00:00:00.000Z' });
+  controller.boundSessions.set('desktop-chromium:author', { actorId, sessionId,
+    actorHash: digest('diagnostic-actor'), sessionHash: digest('diagnostic-session'), persona: 'author' });
+  const checkpoint = (phase, browser = v2DiagnosticBrowser()) => controller.control('/control/v2-reload-diagnostic', {
+    schemaVersion: AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, phase, projectName: 'desktop-chromium', persona: 'author',
+    accessToken, browser,
+  });
+  assert.deepEqual(await checkpoint('before-create'), { recorded: true, phase: 'before-create',
+    sessionContinuity: 'verified', continue: true });
+  assert.deepEqual(await checkpoint('before-reload'), { recorded: true, phase: 'before-reload',
+    sessionContinuity: 'verified', continue: true });
+  const inFlight = await controller.beginBrowserAction({ projectName: 'desktop-chromium', accessToken,
+    route: '/rest/v1/rpc/diagnostic_read', requestBody: { method: 'GET' } });
+  const passedStages = emptyAuthenticatedV2ReloadReadStages().map(row => ({ ...row, status: 'passed', httpStatus: 200,
+    rowCount: ['case-discovery', 'case', 'draft-head'].includes(row.stage) ? 1 : 0 }));
+  assert.deepEqual(await checkpoint('after-reload', v2DiagnosticBrowser({ resumedDraftRendered: true,
+    readStages: passedStages })), { recorded: true, phase: 'after-reload', sessionContinuity: 'verified', continue: false });
+  await assert.rejects(controller.control('/control/browser-action-start', { projectName: 'desktop-chromium' }),
+    /V2_RELOAD_DIAGNOSTIC_TERMINAL/u);
+  await assert.rejects(controller.control('/control/arm-browser-fault', { projectName: 'desktop-chromium' }),
+    /V2_RELOAD_DIAGNOSTIC_TERMINAL/u);
+  await assert.rejects(controller.control('/control/assess-v2-runtime', { enabled: false }),
+    /V2_RELOAD_DIAGNOSTIC_TERMINAL/u);
+  await assert.rejects(controller.control('/control/browser-diagnostic', {}),
+    /V2_RELOAD_DIAGNOSTIC_TERMINAL/u);
+  assert.deepEqual(await controller.control('/control/browser-action', { projectName: 'desktop-chromium',
+    actionId: inFlight.actionId, status: 200, responseBody: {} }), { recorded: true, actionId: inFlight.actionId });
+  await assert.rejects(controller.control('/control/browser-case', { projectName: 'desktop-chromium', row: {},
+    actionIds: [inFlight.actionId] }), error => /BROWSER_CASE_REJECTED/u.test(error.message)
+      && !/V2_RELOAD_DIAGNOSTIC_TERMINAL/u.test(error.message));
+  controller.quiesced = true;
+  const result = controller.v2ReloadDiagnosticResult();
+  assert.equal(result.observedOutcome, 'draft_resumed');
+  assert.equal(result.acceptancePromoted, false);
+  assert.equal(result.reloadProjectionUnchanged, true);
+  assert.equal(result.creationDelta.cases, 1);
+  assert.doesNotMatch(JSON.stringify(result), /private-frame|accessToken|targetHash/iu);
+});
+
+test('post-reload missing session is evidence, while pre-reload loss and full-mode endpoint use fail closed', async () => {
+  const actorId = id(); const sessionId = id();
+  const diagnosticConfig = validateAuthenticatedHostedControllerEnvironment({ ...baseEnvironment(),
+    AUTHENTICATED_ACCEPTANCE_MODE: 'v2_primary_prefix_diagnostic' });
+  const controller = new AuthenticatedHostedController({ config: diagnosticConfig,
+    identity: { verifySession: async () => ({ actorId, sessionId }) },
+    adapter: { frame: async () => ({ ...v2DiagnosticCounts(0), targetHash: digest('frame') }) },
+  });
+  controller.active = true;
+  controller.projects.set('desktop-chromium', { identities: { author: { id: actorId } } });
+  controller.boundSessions.set('desktop-chromium:author', { actorId, sessionId });
+  await assert.rejects(controller.setupProject('pixel-7-chromium'), /V2_RELOAD_DIAGNOSTIC_PROJECT_REJECTED/u);
+  const input = phase => ({ schemaVersion: AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, phase,
+    projectName: 'desktop-chromium', persona: 'author', accessToken: tokenFor(actorId, sessionId),
+    browser: v2DiagnosticBrowser() });
+  await controller.recordV2ReloadDiagnosticCheckpoint(input('before-create'));
+  await assert.rejects(controller.recordV2ReloadDiagnosticCheckpoint({ ...input('before-reload'), accessToken: null }),
+    /CHECKPOINT_REJECTED/u);
+  await controller.recordV2ReloadDiagnosticCheckpoint(input('before-reload'));
+  assert.deepEqual(await controller.recordV2ReloadDiagnosticCheckpoint({ ...input('after-reload'), accessToken: null,
+    browser: v2DiagnosticBrowser({ sessionObserved: false, selectedScopeObserved: false,
+      selectedProcessObserved: false, serverContextObserved: false }) }),
+  { recorded: true, phase: 'after-reload', sessionContinuity: 'missing', continue: false });
+
+  const fullController = new AuthenticatedHostedController({
+    config: validateAuthenticatedHostedControllerEnvironment(baseEnvironment()), adapter: {}, identity: {},
+  });
+  fullController.active = true;
+  await assert.rejects(fullController.recordV2ReloadDiagnosticCheckpoint(input('before-create')),
+    /V2_RELOAD_DIAGNOSTIC_NOT_ACTIVE/u);
+});
+
+test('concurrent duplicate diagnostic checkpoints cannot pass the post-capture phase fence', async () => {
+  const actorId = id(); const sessionId = id();
+  const config = validateAuthenticatedHostedControllerEnvironment({ ...baseEnvironment(),
+    AUTHENTICATED_ACCEPTANCE_MODE: 'v2_primary_prefix_diagnostic' });
+  const controller = new AuthenticatedHostedController({ config,
+    identity: { verifySession: async () => ({ actorId, sessionId }) },
+    adapter: { frame: async () => {
+      await new Promise(resolve => setImmediate(resolve));
+      return { ...v2DiagnosticCounts(0), targetHash: digest('concurrent-frame') };
+    } },
+  });
+  controller.active = true;
+  controller.projects.set('desktop-chromium', { identities: { author: { id: actorId } } });
+  controller.boundSessions.set('desktop-chromium:author', { actorId, sessionId });
+  const input = { schemaVersion: AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, phase: 'before-create',
+    projectName: 'desktop-chromium', persona: 'author', accessToken: tokenFor(actorId, sessionId),
+    browser: v2DiagnosticBrowser() };
+  const outcomes = await Promise.allSettled([
+    controller.recordV2ReloadDiagnosticCheckpoint(input), controller.recordV2ReloadDiagnosticCheckpoint(input),
+  ]);
+  assert.equal(outcomes.filter(outcome => outcome.status === 'fulfilled').length, 1);
+  assert.equal(outcomes.filter(outcome => outcome.status === 'rejected'
+    && /V2_RELOAD_DIAGNOSTIC_PHASE_REJECTED/u.test(outcome.reason?.message)).length, 1);
+  assert.equal(controller.v2ReloadCheckpoints.length, 1);
+  assert.equal(controller.v2ReloadTargetHashes.length, 1);
 });
 
 test('ASSESS-003 records only an independently verified exact assessment.finalize boundary', async () => {
