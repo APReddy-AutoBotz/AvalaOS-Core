@@ -1,15 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { dump, load } from 'js-yaml';
 import { DocTemplate, TemplateSection, GeneratedArtifacts } from '../../types';
 import { PlusCircleIcon, TrashIcon, GripVerticalIcon, EyeIcon, CodeBracketIcon, SparklesIcon } from '../shared/icons';
-
-// Make js-yaml available globally from the script tag in index.html
-declare const jsyaml: any;
 
 interface TemplateEditorProps {
     template?: DocTemplate;
     onSave: (template: DocTemplate | Omit<DocTemplate, 'id'>) => void;
     onCancel: () => void;
 }
+
+type EditableTemplate = DocTemplate | Omit<DocTemplate, 'id'>;
+
+export const serializeTemplateYaml = (value: EditableTemplate, omitId = false) => {
+    const templateForYaml = { ...value } as EditableTemplate & { id?: string };
+    if (omitId) delete templateForYaml.id;
+    return dump(templateForYaml, { indent: 2, skipInvalid: true });
+};
+
+export const parseTemplateYaml = (source: string, currentId?: string): EditableTemplate => {
+    const parsed = load(source) as Record<string, unknown> | null;
+    if (typeof parsed !== 'object' || parsed === null || typeof parsed.title !== 'string' || !parsed.title || !Array.isArray(parsed.sections)) {
+        throw new Error("Invalid template structure. 'title' and 'sections' are required.");
+    }
+    return { ...(currentId && { id: currentId }), ...parsed } as EditableTemplate;
+};
 
 type EditorView = 'visual' | 'yaml';
 
@@ -29,21 +43,15 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave, onCan
 
     // Sync from object to YAML string when switching to YAML view or when the base template changes
     useEffect(() => {
-        if (jsyaml) {
-            try {
-                // When we switch to YAML, we generate the string from the current object state.
-                // For new templates, we remove the placeholder ID from the YAML view to avoid confusion.
-                const templateForYaml = { ...editedTemplate };
-                if ('id' in templateForYaml && !template) {
-                    delete (templateForYaml as any).id;
-                }
-                setYamlString(jsyaml.dump(templateForYaml, { indent: 2, skipInvalid: true }));
-                setYamlError(null);
-            } catch (e: any) {
-                const errorMessage = `YAML Generation Error: ${e.message}`;
-                setYamlString(errorMessage);
-                setYamlError(errorMessage);
-            }
+        try {
+            // When we switch to YAML, we generate the string from the current object state.
+            // For new templates, we remove the placeholder ID from the YAML view to avoid confusion.
+            setYamlString(serializeTemplateYaml(editedTemplate, !template));
+            setYamlError(null);
+        } catch (e: any) {
+            const errorMessage = `YAML Generation Error: ${e.message}`;
+            setYamlString(errorMessage);
+            setYamlError(errorMessage);
         }
     }, [editedTemplate, template]);
 
@@ -57,14 +65,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave, onCan
         const newYamlString = e.target.value;
         setYamlString(newYamlString);
         try {
-            const parsed = jsyaml.load(newYamlString);
-            // Basic validation
-            if (typeof parsed !== 'object' || parsed === null || !parsed.title || !Array.isArray(parsed.sections)) {
-                throw new Error("Invalid template structure. 'title' and 'sections' are required.");
-            }
-            
             const currentId = 'id' in editedTemplate ? editedTemplate.id : undefined;
-            setEditedTemplate({ ...(currentId && { id: currentId }), ...parsed });
+            setEditedTemplate(parseTemplateYaml(newYamlString, currentId));
             setYamlError(null);
         } catch (e: any) {
             setYamlError(`Invalid YAML: ${e.message}`);

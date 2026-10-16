@@ -181,9 +181,6 @@ test('minified built-asset binding accepts backtick values and rejects missing o
 
 test('mixed hosted HTML selects only the exact same-origin module entry and rejects hostile modules', () => {
   const mixed = [
-    '<script defer src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>',
-    '<script defer src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>',
-    '<script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>',
     '<script type="module" crossorigin src="/assets/index-Ab_12.js"></script>',
     '<script src="/.netlify/scripts/cdp"></script>',
   ].join('');
@@ -192,6 +189,9 @@ test('mixed hosted HTML selects only the exact same-origin module entry and reje
     '<script type="module" crossorigin src="/assets/index-Ab_12.js"></script>',
     '<script type="module" src="https://hostile.invalid/assets/index-Ab_12.js"></script>',
   )), /MODULE_ENTRY_REJECTED/u);
+  assert.throws(() => selectControlledPreviewApplicationEntries(
+    `${mixed}<script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>`,
+  ), /EXTERNAL_SCRIPT_REJECTED/u);
 });
 
 test('binding loader disables redirects, verifies every final response identity, and accounts API context traffic', async () => {

@@ -339,6 +339,12 @@ jobs:
           npx playwright install --with-deps chromium
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
+      - name: Verify ordinary production browser assets stay local
+        run: |-
+          npm run test:local-assets:modules
+          npm run test:local-assets:browser
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
       - name: Verify original source attestation against loopback multipart
         run: |-
           node scripts/testAuthenticatedSupabaseMultipart.mjs

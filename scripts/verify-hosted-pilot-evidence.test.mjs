@@ -205,22 +205,16 @@ test('mobile and desktop persona surfaces are explicit and mobile sign-out is ac
   assert.match(spec, /getByTestId\('desktop-current-user'\)/u);
   assert.match(spec, /getByTestId\('mobile-sign-out'\)/u);
 });
-test('external hosted resource allowlists are derived from exact index declarations', async () => {
+test('hosted browser rejects all external static resources after local bundling', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');
   assert.match(spec, /const indexHtml = fs\.readFileSync\('index\.html', 'utf8'\);/u);
   assert.match(spec, /declaredGoogleStylesheetUrls/u);
   assert.match(spec, /fonts\\\.googleapis\\\.com/u);
-  assert.match(spec, /declaredGoogleStylesheetUrls\.has\(url\.toString\(\)\)/u);
   assert.doesNotMatch(spec, /url\.pathname === '\/css2'/u);
-  assert.match(spec, /declaredJsDelivrScriptPaths/u);
-  assert.match(spec, /cdn\\\.jsdelivr\\\.net/u);
-  assert.match(spec, /declaredJsDelivrScriptPaths\.has\(url\.pathname\)/u);
-  assert.doesNotMatch(spec, /url\.pathname\.startsWith\('\/npm\/'\)/u);
-  assert.match(spec, /importMapMatch/u);
-  assert.match(spec, /Object\.values\(importMap\.imports \?\? \{\}\)/u);
-  assert.match(spec, /url\.origin === 'https:\/\/aistudiocdn\.com'/u);
-  assert.match(spec, /prefix: source\.endsWith\('\/'\)/u);
-  assert.match(spec, /isDeclaredAiStudioScript\(url\)/u);
+  assert.doesNotMatch(spec, /importMapMatch|declaredAiStudioScriptRules|declaredJsDelivrScriptPaths/u);
+  assert.match(spec, /safeExternalStaticResource = \(_url: URL, _resourceType: string\): boolean => \{\s*return false;/u);
+  assert.match(spec, /hosted entry must not declare an import map/u);
+  assert.match(spec, /hosted entry must not declare an external script/u);
 });
 test('mobile-safe Admin scenarios enter Workbench and Users / Roles before the separate denied Assess Intelligence route', async () => {
   const spec = await readFile('tests/browser/exhaustiveHostedAcceptance.spec.ts', 'utf8');

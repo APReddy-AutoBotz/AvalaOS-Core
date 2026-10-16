@@ -265,7 +265,7 @@ assert.match(
   'SAFETY-004 must enforce exact persisted project agreement on the canonical Boards destination through reload',
 );
 
-const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(url: URL, resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
+const allowlistBody = hostedSpec.match(/const safeExternalStaticResource = \(_url: URL, _resourceType: string\): boolean => \{([\s\S]*?)\n\};/u);
 assert.ok(allowlistBody, 'safeExternalStaticResource must remain structurally inspectable');
 assert.doesNotMatch(indexHtml, /https:\/\/fonts\.(?:googleapis|gstatic)\.com/iu, 'the shipped page must not initiate external Google Fonts requests');
 assert.match(indexEntry, /@fontsource-variable\/inter\/wght\.css/u);
@@ -275,13 +275,8 @@ assert.match(indexCss, /--kp-font-display:\s*"Outfit Variable"/u);
 const allowedOrigins = [...allowlistBody[1].matchAll(/url\.origin === '([^']+)'/gu)].map(([, origin]) => origin);
 assert.deepEqual(
   allowedOrigins,
-  [
-    'https://fonts.googleapis.com',
-    'https://fonts.gstatic.com',
-    'https://cdn.jsdelivr.net',
-    'https://aistudiocdn.com',
-  ],
-  'diagnostic changes must not broaden the explicit external static-resource allowlist',
+  [],
+  'the bundled build must not allow an external static-resource origin',
 );
 
 // Execute the actual source-owned classifier and diagnostic functions, not a
@@ -320,14 +315,14 @@ const assertDiagnosticPair = (diagnostic, knownOriginClass, pathClass) => {
   assert.equal(diagnostic.pathClass, pathClass);
 };
 for (const [url, resourceType, expected, expectedOriginClass, expectedPathClass] of [
-  ['https://fonts.gstatic.com/s/inter/test.woff2', 'font', null, 'google-font-assets', 'font-s-prefix'],
+  ['https://fonts.gstatic.com/s/inter/test.woff2', 'font', 'unexpected-origin', 'google-font-assets', 'font-s-prefix'],
   ['https://fonts.gstatic.com/l/font?private-query=synthetic', 'font', 'unexpected-origin', 'google-font-assets', 'font-l-endpoint'],
   ['https://fonts.gstatic.com/other/test.woff2', 'font', 'unexpected-origin', 'google-font-assets', 'other-font-path'],
   ['https://fonts.gstatic.com/s/inter/test.woff2', 'fetch', 'unexpected-origin', 'google-font-assets', 'font-s-prefix'],
   ['https://fonts.gstatic.com.evil.invalid/s/inter/test.woff2', 'font', 'unexpected-origin', 'opaque-other-origin', 'unclassified-path'],
   ['https://unknown.invalid/private-path?private-query=synthetic#private-fragment', 'font', 'unexpected-origin', 'opaque-other-origin', 'unclassified-path'],
-  [staticStylesheet, 'stylesheet', null, 'google-font-styles', 'unclassified-path'],
-  [staticStylesheet, 'xhr', null, 'google-font-styles', 'unclassified-path'],
+  [staticStylesheet, 'stylesheet', 'unexpected-origin', 'google-font-styles', 'unclassified-path'],
+  [staticStylesheet, 'xhr', 'unexpected-origin', 'google-font-styles', 'unclassified-path'],
   [staticStylesheet, 'font', 'unexpected-origin', 'google-font-styles', 'unclassified-path'],
   ['http://127.0.0.1:4201/assets/local.woff2', 'font', null, 'opaque-other-origin', 'unclassified-path'],
   ['http://127.0.0.1:4201/api/private', 'xhr', 'authority-request', 'opaque-other-origin', 'unclassified-path'],

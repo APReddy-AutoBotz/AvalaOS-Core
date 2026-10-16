@@ -112,7 +112,7 @@
     "test:runtime-mode": "node scripts/runTypeScriptTest.mjs types.ts services/runtimeMode.ts services/runtimeMode.test.ts",
     "test:edge-export-security": "node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/storageBoundary.ts supabase/functions/_shared/exportPolicy.ts supabase/functions/_shared/exportPolicy.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/storageBoundary.ts supabase/functions/_shared/exportPolicy.ts supabase/functions/_shared/exportHandler.ts supabase/functions/_shared/exportHandler.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/_shared/supabase.ts supabase/functions/_shared/storageBoundary.ts supabase/functions/_shared/storage.ts supabase/functions/_shared/storageRemoval.test.ts",
     "test:privileged-audit": "node scripts/runTypeScriptTest.mjs types.ts supabase/functions/_shared/auditBoundary.test.ts",
-    "test:unsafe-rendering": "node scripts/runTypeScriptTest.mjs types.ts services/safeMarkdown.ts services/safeMarkdown.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/safeMarkdown.ts services/documentHtmlExport.ts services/documentHtmlExport.test.ts",
+    "test:unsafe-rendering": "node scripts/runEnterpriseIntelligenceTest.mjs types.ts services/safeMarkdown.ts services/safeMarkdown.test.ts && node scripts/runEnterpriseIntelligenceTest.mjs types.ts services/safeMarkdown.ts services/documentHtmlExport.ts services/documentHtmlExport.test.ts",
     "test:false-success": "node scripts/runTypeScriptTest.mjs types.ts services/falseSuccess.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/persistenceTransition.ts services/persistenceTransition.test.ts",
     "test:migration-contract": "node scripts/checkPr1aMigrationContract.mjs",
     "test:pr1a-coverage": "node --test scripts/runTypeScriptTest.test.mjs scripts/runPr1aCoverage.test.mjs && node scripts/runPr1aCoverage.mjs",
@@ -314,13 +314,18 @@
     "test:authenticated-hosted:postgres": "node scripts/testAuthenticatedSyntheticAuthorityPostgres.mjs && node scripts/testAuthenticatedHostedControllerPostgres.mjs",
     "test:provider-secret-backend": "node scripts/runEnterpriseIntelligenceTest.mjs supabase/functions/deno.d.ts supabase/functions/_shared/providerSecretAdapter.ts supabase/functions/_shared/providerSecretAdapter.test.ts",
     "test:provider-secret-backend:postgres": "node scripts/testSupabaseProviderSecretBackendPostgres.mjs",
-    "test:authenticated-v2-diagnostic": "node --test scripts/authenticatedV2ReloadDiagnostic.test.mjs && node scripts/runPr1fTypeScriptTest.mjs tests/browser/v2ReloadDiagnosticObserver.ts tests/browser/v2ReloadDiagnosticObserver.test.ts"
+    "test:authenticated-v2-diagnostic": "node --test scripts/authenticatedV2ReloadDiagnostic.test.mjs && node scripts/runPr1fTypeScriptTest.mjs tests/browser/v2ReloadDiagnosticObserver.ts tests/browser/v2ReloadDiagnosticObserver.test.ts",
+    "test:local-assets:modules": "node scripts/runPr1fTypeScriptTest.mjs components/docs/TemplateEditor.tsx components/docs/TemplateEditor.test.ts",
+    "test:local-assets:browser": "node scripts/runLocalAssetsProductionBuild.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource-variable/outfit": "5.3.0",
     "@supabase/supabase-js": "^2.105.0",
     "dompurify": "^3.4.13",
+    "js-yaml": "4.3.2",
+    "marked": "18.1.1",
+    "mermaid": "12.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -328,6 +333,7 @@
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "4.3.3",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "ajv": "^8.20.0",
