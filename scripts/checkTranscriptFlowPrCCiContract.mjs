@@ -7,6 +7,7 @@ const read = file => readFileSync(file, 'utf8');
 export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
   'playwright.config.ts',
   'playwright.assess-import.config.ts',
+  'playwright.assess-v2-native-postgrest.config.ts',
   'playwright.authenticated-hosted-sign-in-entry.config.ts',
   'playwright.authenticated-hosted.config.ts',
   'playwright.controlled-preview-boundary.config.ts',
@@ -79,7 +80,7 @@ const rootEntries = readdirSync('.', { withFileTypes: true });
 assert(rootEntries.filter(entry => isPlaywrightRootConfigFileNameForTest(entry.name)).every(entry => entry.isFile()),
   'root Playwright configs must be regular files, not links or directories');
 const actualPlaywrightConfigs = assertPlaywrightConfigInventoryForTest(rootEntries.map(entry => entry.name));
-assert.equal(actualPlaywrightConfigs.length, 28);
+assert.equal(actualPlaywrightConfigs.length, 29);
 assert.deepEqual(assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'README.md']),
   [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort());
 for (const extension of ['ts','js','mts','mjs','cts','cjs']) {
@@ -290,6 +291,11 @@ for (const [file, expected] of [
 }
 
 const defaultPlaywright = read('playwright.config.ts');
+assert.match(
+  defaultPlaywright,
+  /testIgnore:\s*\[[^\]]*'assessV2NativePostgrest\.spec\.ts'/u,
+  'the retained browser suite must exclude the native V2 spec owned by its disposable PostgREST harness',
+);
 assert.match(
   defaultPlaywright,
   /baseURL:\s*'http:\/\/127\.0\.0\.1:4173'/u,
