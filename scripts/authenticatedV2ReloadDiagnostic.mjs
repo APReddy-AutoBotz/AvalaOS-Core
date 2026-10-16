@@ -4,8 +4,8 @@ export const AUTHENTICATED_ACCEPTANCE_MODES = Object.freeze([
   'full_acceptance',
   'v2_primary_prefix_diagnostic',
 ]);
-export const AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA = 'authenticated-v2-reload-checkpoint-v1';
-export const AUTHENTICATED_V2_RELOAD_DIAGNOSTIC_SCHEMA = 'authenticated-v2-primary-prefix-diagnostic-v1';
+export const AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA = 'authenticated-v2-reload-checkpoint-v2';
+export const AUTHENTICATED_V2_RELOAD_DIAGNOSTIC_SCHEMA = 'authenticated-v2-primary-prefix-diagnostic-v2';
 export const AUTHENTICATED_V2_RELOAD_PHASES = Object.freeze([
   'before-create',
   'before-reload',
@@ -50,6 +50,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const POSITIVE_INTEGER_TEXT = /^[1-9][0-9]*$/u;
 const MAX_STAGE_ROWS = 10_000;
+const MAX_STAGE_REQUESTS = 8;
 const MAX_DOCUMENT_BYTES = 64 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = code => { throw new Error(`AUTHENTICATED_V2_RELOAD_DIAGNOSTIC_${code}`); };
@@ -68,16 +69,58 @@ export const emptyAuthenticatedV2ReloadReadStages = () => AUTHENTICATED_V2_RELOA
   status: 'not_reached',
   httpStatus: null,
   rowCount: null,
+  lifecycle: {
+    requested: 0, responseStarted: 0, completed: 0, transportFailed: 0, pending: 0,
+    bodyCompleted: 0, bodyFailed: 0, bodyPending: 0,
+    transportFailures: { aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 },
+  },
 }));
+
+const validateLifecycle = (value, status) => {
+  exactKeys(value, [
+    'requested', 'responseStarted', 'completed', 'transportFailed', 'pending',
+    'bodyCompleted', 'bodyFailed', 'bodyPending',
+    'transportFailures',
+  ],
+    'READ_STAGE_LIFECYCLE_REJECTED');
+  for (const key of [
+    'requested', 'responseStarted', 'completed', 'transportFailed', 'pending',
+    'bodyCompleted', 'bodyFailed', 'bodyPending',
+  ]) {
+    if (!Number.isSafeInteger(value[key]) || value[key] < 0 || value[key] > MAX_STAGE_REQUESTS) {
+      fail('READ_STAGE_LIFECYCLE_REJECTED');
+    }
+  }
+  exactKeys(value.transportFailures, ['aborted', 'timeout', 'connection', 'protocol', 'blocked', 'other'],
+    'READ_STAGE_LIFECYCLE_REJECTED');
+  for (const key of ['aborted', 'timeout', 'connection', 'protocol', 'blocked', 'other']) {
+    if (!Number.isSafeInteger(value.transportFailures[key]) || value.transportFailures[key] < 0
+      || value.transportFailures[key] > MAX_STAGE_REQUESTS) fail('READ_STAGE_LIFECYCLE_REJECTED');
+  }
+  const classifiedTransportFailures = Object.values(value.transportFailures).reduce((sum, count) => sum + count, 0);
+  if (value.responseStarted > value.requested || value.completed > value.responseStarted
+    || value.completed + value.transportFailed + value.pending !== value.requested
+    || value.bodyCompleted + value.bodyFailed + value.bodyPending !== value.responseStarted
+    || classifiedTransportFailures !== value.transportFailed
+    || (status === 'not_reached' && value.requested !== 0)
+    || (status !== 'not_reached' && value.requested === 0)
+    || (status === 'passed' && (value.responseStarted !== value.requested
+      || value.completed !== value.requested || value.transportFailed !== 0 || value.pending !== 0
+      || value.bodyCompleted !== value.requested || value.bodyFailed !== 0 || value.bodyPending !== 0))) {
+    fail('READ_STAGE_LIFECYCLE_REJECTED');
+  }
+  return Object.freeze({ ...value, transportFailures: Object.freeze({ ...value.transportFailures }) });
+};
 
 export function validateAuthenticatedV2ReloadReadStages(value) {
   if (!Array.isArray(value) || value.length !== AUTHENTICATED_V2_RELOAD_READ_STAGES.length) {
     fail('READ_STAGES_REJECTED');
   }
   const normalized = value.map((row, index) => {
-    exactKeys(row, ['stage', 'status', 'httpStatus', 'rowCount'], 'READ_STAGE_REJECTED');
+    exactKeys(row, ['stage', 'status', 'httpStatus', 'rowCount', 'lifecycle'], 'READ_STAGE_REJECTED');
     if (row.stage !== AUTHENTICATED_V2_RELOAD_READ_STAGES[index]
       || !['passed', 'failed', 'not_reached'].includes(row.status)) fail('READ_STAGE_REJECTED');
+    const lifecycle = validateLifecycle(row.lifecycle, row.status);
     if (row.status === 'not_reached') {
       if (row.httpStatus !== null || row.rowCount !== null) fail('READ_STAGE_REJECTED');
     } else if (row.status === 'passed') {
@@ -100,7 +143,10 @@ export function validateAuthenticatedV2ReloadReadStages(value) {
       }
       if (row.httpStatus === null && row.rowCount !== null) fail('READ_STAGE_REJECTED');
     }
-    return Object.freeze({ ...row });
+    if (lifecycle.responseStarted === 0 && row.httpStatus !== null) fail('READ_STAGE_REJECTED');
+    if (lifecycle.responseStarted > 0 && row.httpStatus === null
+      && !(lifecycle.requested > 1 && lifecycle.transportFailed > 0)) fail('READ_STAGE_REJECTED');
+    return Object.freeze({ ...row, lifecycle });
   });
   const serial = normalized.slice(0, 4);
   for (let index = 1; index < serial.length; index += 1) {

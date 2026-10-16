@@ -20,7 +20,55 @@ import {
 
 const appOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL ?? 'http://127.0.0.1:4431').origin;
 const apiOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? 'http://127.0.0.1:4432').origin;
+const authStorageKey = process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token';
 if (appOrigin === apiOrigin) throw new Error('ASSESS_V2_NATIVE_ORIGINS_NOT_DISTINCT');
+
+type NativeStreamStats = Readonly<{
+  active: number;
+  requests: number;
+  responses: number;
+  completed: number;
+  cancelled: number;
+  failed: number;
+}>;
+
+type DirectReadState = Readonly<{
+  headers: boolean;
+  completed: boolean;
+  failed: boolean;
+  status: number | null;
+}>;
+
+const startDirectRead = async (page: Page, key: string, processId: string) => page.evaluate((input) => {
+  const stored = JSON.parse(localStorage.getItem(input.authStorageKey) ?? '{}');
+  const accessToken = stored.access_token ?? stored.currentSession?.access_token;
+  if (typeof accessToken !== 'string' || !accessToken) throw new Error('ASSESS_V2_NATIVE_DIRECT_READ_SESSION_MISSING');
+  const controller = new AbortController();
+  const state = { headers: false, completed: false, failed: false, status: null as number | null };
+  Reflect.set(globalThis, input.key, { controller, state });
+  const url = new URL('/rest/v1/assess_v2_cases', input.apiOrigin);
+  url.searchParams.set('select', 'id');
+  url.searchParams.set('process_id', `eq.${input.processId}`);
+  void fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}`, apikey: 'local-native-browser-fixture' },
+    signal: controller.signal,
+  }).then(async response => {
+    state.headers = true;
+    state.status = response.status;
+    await response.json();
+    state.completed = true;
+  }).catch(() => { state.failed = true; });
+}, { apiOrigin, authStorageKey, key, processId });
+
+const directReadState = (page: Page, key: string) => page.evaluate((inputKey) => {
+  const value = Reflect.get(globalThis, inputKey) as { state?: DirectReadState } | undefined;
+  return value?.state ?? { headers: false, completed: false, failed: false, status: null };
+}, key);
+
+const abortDirectRead = (page: Page, key: string) => page.evaluate((inputKey) => {
+  const value = Reflect.get(globalThis, inputKey) as { controller?: AbortController } | undefined;
+  value?.controller?.abort();
+}, key);
 
 const enterProcess = async (
   page: Page,
@@ -187,6 +235,152 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Primitive 1 name', { exact: true })).toHaveValue('Native persisted capture');
+  });
+
+  test('read observer retains pending headers, held bodies, cancellation and mixed duplicate lifecycle', async ({ page }) => {
+    await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+    const processId = new URL(page.url()).searchParams.get('processId');
+    expect(processId).toMatch(/^[0-9a-f-]{36}$/u);
+    const stats = () => control<NativeStreamStats>('/control/native-postgrest-stats', { projectName });
+    const arm = (mode: 'hold-headers' | 'hold-body') => control('/control/native-postgrest-stream', {
+      projectName, resource: 'assess_v2_cases', mode,
+    });
+    const release = () => control('/control/native-postgrest-stream-release', { projectName });
+    await expect.poll(async () => (await stats()).active).toBe(0);
+
+    await test.step('pending headers remain distinct and the snapshot is immutable after release', async () => {
+      const baseline = await stats();
+      let armed = false;
+      let observer: ReturnType<typeof installV2ReloadReadObserver> | null = null;
+      let observerCompleted = false;
+      try {
+        await arm('hold-headers');
+        armed = true;
+        observer = installV2ReloadReadObserver(page);
+        await startDirectRead(page, '__v2PendingHeaders', processId!);
+        await expect.poll(async () => (await stats()).active).toBe(baseline.active + 1);
+        const completion = await observer.complete();
+        observerCompleted = true;
+        expect(completion.observerFailure).toBe(false);
+        const row = completion.observation.readStages.find(item => item.stage === 'case-discovery');
+        expect(row).toMatchObject({
+          status: 'failed', httpStatus: null, rowCount: null,
+          lifecycle: { requested: 1, responseStarted: 0, completed: 0, transportFailed: 0, pending: 1,
+            bodyCompleted: 0, bodyFailed: 0, bodyPending: 0 },
+        });
+        const retained = structuredClone(completion);
+        await release();
+        armed = false;
+        await expect.poll(() => directReadState(page, '__v2PendingHeaders')).toMatchObject({
+          headers: true, completed: true, failed: false, status: 200,
+        });
+        expect(completion).toEqual(retained);
+      } finally {
+        if (observer && !observerCompleted) await observer.complete().catch(() => undefined);
+        if (armed) await release().catch(() => undefined);
+      }
+    });
+
+    await test.step('held body retains response status and body-pending state', async () => {
+      const baseline = await stats();
+      let armed = false;
+      let observer: ReturnType<typeof installV2ReloadReadObserver> | null = null;
+      let observerCompleted = false;
+      try {
+        await arm('hold-body');
+        armed = true;
+        observer = installV2ReloadReadObserver(page);
+        await startDirectRead(page, '__v2HeldBody', processId!);
+        await expect.poll(() => directReadState(page, '__v2HeldBody')).toMatchObject({
+          headers: true, completed: false, failed: false, status: 200,
+        });
+        expect((await stats()).completed).toBe(baseline.completed);
+        const completion = await observer.complete();
+        observerCompleted = true;
+        expect(completion.observerFailure).toBe(false);
+        const row = completion.observation.readStages.find(item => item.stage === 'case-discovery');
+        expect(row).toMatchObject({
+          status: 'failed', httpStatus: 200, rowCount: null,
+          lifecycle: { requested: 1, responseStarted: 1, completed: 0, transportFailed: 0, pending: 1,
+            bodyCompleted: 0, bodyFailed: 0, bodyPending: 1 },
+        });
+        const retained = structuredClone(completion);
+        await release();
+        armed = false;
+        await expect.poll(() => directReadState(page, '__v2HeldBody')).toMatchObject({ completed: true, failed: false });
+        expect(completion).toEqual(retained);
+      } finally {
+        if (observer && !observerCompleted) await observer.complete().catch(() => undefined);
+        if (armed) await release().catch(() => undefined);
+      }
+    });
+
+    await test.step('client cancellation cancels the upstream stream and retains an allowlisted class', async () => {
+      const baseline = await stats();
+      let armed = false;
+      let observer: ReturnType<typeof installV2ReloadReadObserver> | null = null;
+      let observerCompleted = false;
+      try {
+        await arm('hold-body');
+        armed = true;
+        observer = installV2ReloadReadObserver(page);
+        await startDirectRead(page, '__v2CancelledBody', processId!);
+        await expect.poll(() => directReadState(page, '__v2CancelledBody')).toMatchObject({ headers: true });
+        await abortDirectRead(page, '__v2CancelledBody');
+        await expect.poll(() => directReadState(page, '__v2CancelledBody')).toMatchObject({ failed: true });
+        await expect.poll(async () => (await stats()).cancelled).toBe(baseline.cancelled + 1);
+        const completion = await observer.complete();
+        observerCompleted = true;
+        expect(completion.observerFailure).toBe(false);
+        const row = completion.observation.readStages.find(item => item.stage === 'case-discovery');
+        expect(row).toMatchObject({
+          status: 'failed', httpStatus: 200, rowCount: null,
+          lifecycle: { requested: 1, responseStarted: 1, completed: 0, transportFailed: 1, pending: 0,
+            bodyCompleted: 0, bodyFailed: 1, bodyPending: 0,
+            transportFailures: { aborted: 1, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 } },
+        });
+        await release();
+        armed = false;
+      } finally {
+        if (observer && !observerCompleted) await observer.complete().catch(() => undefined);
+        if (armed) await release().catch(() => undefined);
+      }
+    });
+
+    await test.step('one pending duplicate cannot be hidden by one completed duplicate', async () => {
+      let armed = false;
+      let observer: ReturnType<typeof installV2ReloadReadObserver> | null = null;
+      let observerCompleted = false;
+      try {
+        await arm('hold-body');
+        armed = true;
+        observer = installV2ReloadReadObserver(page);
+        await startDirectRead(page, '__v2MixedHeld', processId!);
+        await expect.poll(() => directReadState(page, '__v2MixedHeld')).toMatchObject({ headers: true, completed: false });
+        await startDirectRead(page, '__v2MixedComplete', processId!);
+        await expect.poll(() => directReadState(page, '__v2MixedComplete')).toMatchObject({
+          completed: true, failed: false, status: 200,
+        });
+        const completion = await observer.complete();
+        observerCompleted = true;
+        expect(completion.observerFailure).toBe(false);
+        const row = completion.observation.readStages.find(item => item.stage === 'case-discovery');
+        expect(row).toMatchObject({
+          status: 'failed', httpStatus: 200, rowCount: null,
+          lifecycle: { requested: 2, responseStarted: 2, completed: 1, transportFailed: 0, pending: 1,
+            bodyCompleted: 1, bodyFailed: 0, bodyPending: 1 },
+        });
+        const retained = structuredClone(completion);
+        await release();
+        armed = false;
+        await expect.poll(() => directReadState(page, '__v2MixedHeld')).toMatchObject({ completed: true, failed: false });
+        expect(completion).toEqual(retained);
+      } finally {
+        if (observer && !observerCompleted) await observer.complete().catch(() => undefined);
+        if (armed) await release().catch(() => undefined);
+      }
+    });
   });
 
   test('denied child read never shows a resumed case or allows duplicate creation', async ({ page }) => {

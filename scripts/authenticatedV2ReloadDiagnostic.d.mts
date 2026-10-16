@@ -18,6 +18,24 @@ export interface AuthenticatedV2ReloadReadStageRow {
   status: 'passed' | 'failed' | 'not_reached';
   httpStatus: number | null;
   rowCount: number | null;
+  lifecycle: {
+    requested: number;
+    responseStarted: number;
+    completed: number;
+    transportFailed: number;
+    pending: number;
+    bodyCompleted: number;
+    bodyFailed: number;
+    bodyPending: number;
+    transportFailures: {
+      aborted: number;
+      timeout: number;
+      connection: number;
+      protocol: number;
+      blocked: number;
+      other: number;
+    };
+  };
 }
 
 export interface AuthenticatedV2ReloadBrowserSnapshot {
@@ -31,7 +49,7 @@ export interface AuthenticatedV2ReloadBrowserSnapshot {
 }
 
 export interface AuthenticatedV2ReloadCheckpointRequest {
-  schemaVersion: 'authenticated-v2-reload-checkpoint-v1';
+  schemaVersion: 'authenticated-v2-reload-checkpoint-v2';
   phase: AuthenticatedV2ReloadPhase;
   projectName: 'desktop-chromium';
   persona: 'author';
@@ -40,8 +58,8 @@ export interface AuthenticatedV2ReloadCheckpointRequest {
 }
 
 export const AUTHENTICATED_ACCEPTANCE_MODES: readonly AuthenticatedAcceptanceMode[];
-export const AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA: 'authenticated-v2-reload-checkpoint-v1';
-export const AUTHENTICATED_V2_RELOAD_DIAGNOSTIC_SCHEMA: 'authenticated-v2-primary-prefix-diagnostic-v1';
+export const AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA: 'authenticated-v2-reload-checkpoint-v2';
+export const AUTHENTICATED_V2_RELOAD_DIAGNOSTIC_SCHEMA: 'authenticated-v2-primary-prefix-diagnostic-v2';
 export const AUTHENTICATED_V2_RELOAD_PHASES: readonly AuthenticatedV2ReloadPhase[];
 export const AUTHENTICATED_V2_RELOAD_READ_STAGES: readonly AuthenticatedV2ReloadReadStage[];
 export const AUTHENTICATED_V2_RELOAD_COUNT_KEYS: readonly string[];
