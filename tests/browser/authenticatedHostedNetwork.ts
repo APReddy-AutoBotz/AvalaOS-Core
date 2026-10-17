@@ -21,6 +21,34 @@ type InstallAuthenticatedHostedNetworkInput = Readonly<{
 
 export const authenticatedHostedResponseBodyTimeoutMs = 30_000;
 
+export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
+  settleResponseBodies,
+  drainNetworkActions,
+  activeActionCount,
+  waitForNextObservation = () => new Promise<void>(resolve => setTimeout(resolve, 50)),
+}: Readonly<{
+  settleResponseBodies: () => Promise<void>;
+  drainNetworkActions: () => Promise<void>;
+  activeActionCount: () => number;
+  waitForNextObservation?: () => Promise<void>;
+}>) => {
+  const deadline = Date.now() + 15_000;
+  let stableEmptyObservations = 0;
+  for (;;) {
+    await settleResponseBodies();
+    await drainNetworkActions();
+    await settleResponseBodies();
+    if (activeActionCount() === 0) {
+      stableEmptyObservations += 1;
+      if (stableEmptyObservations >= 2) return;
+    } else {
+      stableEmptyObservations = 0;
+    }
+    if (Date.now() >= deadline) throw new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT');
+    await waitForNextObservation();
+  }
+};
+
 export const readAuthenticatedHostedResponseBody = async (
   context: BrowserContext,
   response: Readonly<{ json: () => Promise<unknown> }>,

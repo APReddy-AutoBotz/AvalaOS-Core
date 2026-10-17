@@ -13,7 +13,10 @@ import {
   authenticatedLifecycleValidateProcessNavigation as validateProcessNavigation,
   type AuthenticatedLifecycleSetup,
 } from './authenticatedLifecycleHarness';
-import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
+import {
+  authenticatedLifecycleSettleActorNavigationBoundary as settleActorNavigationBoundary,
+  installAuthenticatedHostedNetwork,
+} from './authenticatedHostedNetwork';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   createV2ReloadBrowserCheckpointBuilder,
@@ -89,8 +92,9 @@ const enterProcess = async (
   page: Page,
   actor: AuthenticatedLifecycleSetup['actors']['author'],
   processName: string,
+  beforeActorNavigation: () => Promise<void>,
 ) => {
-  await enterAs(page, actor);
+  await enterAs(page, actor, beforeActorNavigation);
   if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
     await clickProduct(page, 'Assess');
   }
@@ -109,6 +113,21 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   let networkActionTail: Promise<void> = Promise.resolve();
   let activeActions = new Set<string>();
   let networkLifecycle: Awaited<ReturnType<typeof installAuthenticatedHostedNetwork>> | null = null;
+  const settleActorTransitionEvidence = async () => {
+    if (!networkLifecycle) throw new Error('ASSESS_V2_NATIVE_NETWORK_LIFECYCLE_MISSING');
+    await settleActorNavigationBoundary({
+      settleResponseBodies: networkLifecycle.settleResponseBodies,
+      drainNetworkActions: async () => {
+        for (;;) {
+          const current = networkActionTail;
+          await current;
+          if (current === networkActionTail) break;
+        }
+        if (trackerError) throw trackerError;
+      },
+      activeActionCount: () => activeActions.size,
+    });
+  };
 
   test.beforeAll(async ({}, testInfo) => {
     projectName = `native-${testInfo.project.name}`;
@@ -192,7 +211,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   });
 
   test('create, save, finalize and requested revision survive hard reloads', async ({ page }) => {
-    await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
     const checkpoints = createV2ReloadBrowserCheckpointBuilder(page, { projectName, persona: 'author' });
     const beforeCreate = await checkpoints.checkpoint('before-create');
     expect(beforeCreate.browser.serverContextObserved).toBe(true);
@@ -247,7 +266,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
 
-    await enterProcess(page, setup.actors.reviewer, setup.aliases.process);
+    await enterProcess(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Reviewer-ready');
     await selectReviewer(page, setup.actors.reviewer);
     await page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
@@ -258,7 +277,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     await reviewWorkspace.getByRole('button', { name: 'Request changes', exact: true }).click();
     await expect(page.getByText('Review resolution committed: Changes requested.', { exact: true })).toBeVisible();
 
-    await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
     await page.getByLabel('Review rationale', { exact: true }).fill('Begin requested revision.');
     await page.getByRole('button', { name: 'Start new draft revision', exact: true }).click();
     await expect(page.getByText('New immutable draft revision committed.', { exact: true })).toBeVisible();
@@ -268,7 +287,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   });
 
   test('read observer retains pending headers, held bodies, cancellation and mixed duplicate lifecycle', async ({ page }) => {
-    await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
     await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
     const processId = new URL(page.url()).searchParams.get('processId');
     expect(processId).toMatch(/^[0-9a-f-]{36}$/u);
@@ -414,7 +433,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   });
 
   test('denied child read never shows a resumed case or allows duplicate creation', async ({ page }) => {
-    await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
     await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
     const before = await control<{
       caseCount: number; decisionCount: number; receipts: number; audits: number; targetHash: string;
@@ -443,7 +462,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   });
 
   test('missing session reload never shows a resumed case or allows duplicate creation', async ({ page }) => {
-    await enterProcess(page, setup.actors.author, setup.aliases.process);
+    await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
     await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
     const before = await control<{
       caseCount: number; decisionCount: number; receipts: number; audits: number; targetHash: string;
@@ -478,7 +497,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
         && request.method() === 'POST') processCommands.push(request.url());
     };
     try {
-      await enterProcess(page, setup.actors.reviewer, setup.aliases.process);
+      await enterProcess(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
       const before = await control<ProcessFrame>('/control/process-frame', { projectName });
       expect(before.receipts).toBe(0);
       expect(before.audits).toBe(0);
@@ -557,7 +576,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     };
     page.on('request', observeProcessCommand);
     try {
-      await enterProcess(page, setup.actors.reviewer, setup.aliases.process);
+      await enterProcess(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
       const before = await control<ProcessFrame>('/control/process-frame', { projectName });
 
       await control('/control/native-postgrest-fault', {

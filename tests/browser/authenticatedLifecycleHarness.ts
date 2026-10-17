@@ -284,12 +284,18 @@ const sessionFor = (actor: AuthenticatedLifecycleActor) => ({
   user: { ...actor.user, aud: 'authenticated', role: 'authenticated', user_metadata: {}, app_metadata: { provider: 'fixture' } },
 });
 
-export const authenticatedLifecycleEnterAs = async (page: Page, actor: AuthenticatedLifecycleActor) => {
+export const authenticatedLifecycleEnterAs = async (
+  page: Page,
+  actor: AuthenticatedLifecycleActor,
+  beforeIntentionalNavigation: () => Promise<void> = async () => undefined,
+) => {
   if (hostedRealAuth) {
     if (actor.authKind !== 'supabase_auth' || !actor.persona || !actor.projectName || !actor.password) {
       throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_ACTOR_REQUIRED');
     }
+    await beforeIntentionalNavigation();
     await page.goto('/');
+    await beforeIntentionalNavigation();
     await page.evaluate(() => {
       for (const key of Object.keys(localStorage)) if (key.startsWith('sb-')) localStorage.removeItem(key);
       localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
@@ -299,6 +305,7 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
     const cacheKey = `${actor.user.id}:${actor.persona}`;
     const cached = hostedSessionCache.get(cacheKey);
     if (cached) {
+      await beforeIntentionalNavigation();
       await page.evaluate(({ key, value }) => localStorage.setItem(key, value), cached);
       await page.reload({ waitUntil: 'domcontentloaded' });
     } else {
@@ -352,7 +359,9 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
     });
     return;
   }
+  await beforeIntentionalNavigation();
   await page.goto('/');
+  await beforeIntentionalNavigation();
   await page.evaluate(({ key, session }) => {
     localStorage.setItem(key, JSON.stringify(session));
     localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));

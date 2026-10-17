@@ -8,9 +8,72 @@ import {
   authenticatedLifecycleValidateDeniedProcessAuthority,
   authenticatedLifecycleValidateSessionBinding,
   authenticatedLifecycleValidateSetupLabels,
+  authenticatedLifecycleEnterAs,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
 } from './authenticatedLifecycleHarness';
+import { authenticatedLifecycleSettleActorNavigationBoundary } from './authenticatedHostedNetwork';
+
+const actorEntryFixture = {
+  token: 'fixture-actor-token',
+  user: { id: '10000000-0000-4000-8000-000000000001', email: 'actor@example.invalid' },
+};
+
+const actorEntryPage = (events: string[]) => ({
+  goto: async (target: string) => { events.push(`goto:${target}`); },
+  evaluate: async () => { events.push('session-write'); },
+}) as unknown as import('@playwright/test').Page;
+
+test('local actor entry joins owned evidence before each intentional navigation disposal', async () => {
+  const events: string[] = [];
+  let boundary = 0;
+  await authenticatedLifecycleEnterAs(actorEntryPage(events), actorEntryFixture, async () => {
+    events.push(`boundary:${++boundary}`);
+  });
+  assert.deepEqual(events, [
+    'boundary:1', 'goto:/', 'boundary:2', 'session-write', 'goto:/'
+  ]);
+});
+
+test('actor-entry boundary failure prevents the following session mutation and navigation', async () => {
+  const firstEvents: string[] = [];
+  await assert.rejects(authenticatedLifecycleEnterAs(actorEntryPage(firstEvents), actorEntryFixture, async () => {
+    throw new Error('OWNED_EVIDENCE_REJECTED');
+  }), /OWNED_EVIDENCE_REJECTED/u);
+  assert.deepEqual(firstEvents, []);
+
+  const secondEvents: string[] = [];
+  let boundary = 0;
+  await assert.rejects(authenticatedLifecycleEnterAs(actorEntryPage(secondEvents), actorEntryFixture, async () => {
+    boundary += 1;
+    if (boundary === 2) throw new Error('OWNED_EVIDENCE_REJECTED');
+    secondEvents.push('boundary:1');
+  }), /OWNED_EVIDENCE_REJECTED/u);
+  assert.deepEqual(secondEvents, ['boundary:1', 'goto:/']);
+});
+
+test('actor-entry boundary retains a started request until its headers and owned finish settle', async () => {
+  let active = 1;
+  let responseOwned = false;
+  let bodySettles = 0;
+  let networkDrains = 0;
+  let observations = 0;
+  await authenticatedLifecycleSettleActorNavigationBoundary({
+    settleResponseBodies: async () => { bodySettles += 1; },
+    drainNetworkActions: async () => { networkDrains += 1; },
+    activeActionCount: () => active,
+    waitForNextObservation: async () => {
+      observations += 1;
+      if (observations === 1) responseOwned = true;
+      else if (responseOwned) active = 0;
+    },
+  });
+  assert.equal(active, 0);
+  assert.equal(responseOwned, true);
+  assert.equal(observations, 3);
+  assert.equal(networkDrains, 4);
+  assert.equal(bodySettles, 8);
+});
 
 const deniedAuthorityInput = () => ({
   selected: {

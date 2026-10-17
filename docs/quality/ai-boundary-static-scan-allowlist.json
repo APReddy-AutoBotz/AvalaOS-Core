@@ -527,23 +527,23 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        294,
-        295,
-        296,
+        300,
+        301,
         302,
-        329,
-        330,
-        340,
-        341,
-        357,
-        358,
-        359,
-        463,
-        464,
-        624,
-        627,
-        778,
-        779
+        309,
+        336,
+        337,
+        347,
+        348,
+        366,
+        367,
+        368,
+        472,
+        473,
+        633,
+        636,
+        787,
+        788
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -577,8 +577,8 @@
       "pattern": "localStorage",
       "path": "tests/browser/assessV2NativePostgrest.spec.ts",
       "lines": [
-        58,
-        455
+        61,
+        474
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep local fixture-token reads and missing-session storage removal confined to disposable native browser checks. They are not server revocation or hosted authorization; retain no credentials."
