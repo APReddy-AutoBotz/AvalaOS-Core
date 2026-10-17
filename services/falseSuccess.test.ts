@@ -56,7 +56,7 @@ assert.match(
 );
 assert.match(
   appSource,
-  /if \(productNavigationTargetIsWaiting\([\s\S]*?processReadState,[\s\S]*?projectIndexReadState:[\s\S]*?\)\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
+  /if \(productNavigationTargetIsWaiting\([\s\S]*?processReadState,[\s\S]*?projectIndexReadState,[\s\S]*?\)\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
   'valid durable navigation must wait only for the authoritative data required by its exact route',
 );
 assert.match(
