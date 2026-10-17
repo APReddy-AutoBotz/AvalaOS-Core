@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -1105,7 +1105,10 @@ export const runAuthenticatedHostedSignInEntry = async ({
   const scopedNavigationEvidencePath = scopedNavigationOnly
     ? path.resolve('output/local-private/authenticated-product-acceptance/scoped-navigation-corrected.jsonl')
     : '';
-  if (scopedNavigationEvidencePath) await rm(scopedNavigationEvidencePath, { force: true });
+  if (scopedNavigationEvidencePath) {
+    await mkdir(path.dirname(scopedNavigationEvidencePath), { recursive: true });
+    await rm(scopedNavigationEvidencePath, { force: true });
+  }
   let temporaryRoot;
   let fixture;
   let preview;
