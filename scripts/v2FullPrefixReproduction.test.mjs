@@ -12,7 +12,10 @@ import {
 } from './v2FullPrefixReproduction.mjs';
 import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
 import { AuthenticatedHostedController } from './authenticatedHostedController.mjs';
-import { createV2FullPrefixAdapterQuery } from './v2FullPrefixLocalController.mjs';
+import {
+  createV2FullPrefixAdapterQuery,
+  validateV2FullPrefixFixturePrerequisites,
+} from './v2FullPrefixLocalController.mjs';
 
 const stages = [
   'case-discovery', 'case', 'decision', 'draft-head', 'primitives', 'edges',
@@ -40,6 +43,7 @@ const passing = variant => ({
     queues: { network: 'passed', cases: 'passed' },
   },
   controller: {
+    fixturePrerequisites: 'passed',
     setupProbe: 'passed', setupActionCount: 1,
     browserCaseCount: 7, serverCaseCount: 7, actionCount: 9, completedActionCount: 9,
     caseIds: ['ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-020', 'SAFETY-001', 'SAFETY-002', 'SAFETY-003'],
@@ -127,6 +131,28 @@ test('local adapter serializes queries and scopes service role to authority RPCs
   assert.deepEqual(first.rows[0].values, ['one']);
   assert.deepEqual(second.rows[0].values, ['two']);
   assert.equal(transactionActive, false);
+});
+
+test('full-prefix fixture prerequisites preserve restricted reviewer and author capabilities', () => {
+  const ready = {
+    reviewerRestricted: true,
+    reviewerCanRead: true,
+    reviewerCannotUpdateProcess: true,
+    authorRoleRetained: true,
+    authorPrefixCapabilitiesReady: true,
+    processWritesReady: true,
+    v2RuntimeReady: true,
+    projectReady: true,
+  };
+  assert.equal(validateV2FullPrefixFixturePrerequisites(ready), true);
+  assert.throws(
+    () => validateV2FullPrefixFixturePrerequisites({ ...ready, reviewerCannotUpdateProcess: false }),
+    /V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED/u,
+  );
+  assert.throws(
+    () => validateV2FullPrefixFixturePrerequisites({ ...ready, authorPrefixCapabilitiesReady: false }),
+    /V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED/u,
+  );
 });
 
 test('fixture session is present before the controlled first product request', async () => {
@@ -237,6 +263,10 @@ test('failure evidence preserves bounded lifecycle counts and removes arbitrary 
   assert.equal(result.status, 'failed');
   assert.equal(result.conclusion, 'reproduced');
   assert.doesNotMatch(JSON.stringify(result), /sensitive/u);
+
+  const unsafePrerequisites = passing('barrier');
+  unsafePrerequisites.controller.fixturePrerequisites = 'failed';
+  assert.equal(buildV2FullPrefixVariantResult(unsafePrerequisites).status, 'failed');
 });
 
 test('local selector rejects hosted, unauthenticated, diagnostic and unknown modes', () => {

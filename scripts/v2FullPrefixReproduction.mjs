@@ -24,6 +24,7 @@ const FAILURE_CODES = new Set([
   'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_START_REJECTED',
   'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_FINISH_REJECTED',
   'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_BINDING_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED',
   'AUTHENTICATED_SYNTHETIC_ACTIVATION_REJECTED',
   'AUTHENTICATED_SYNTHETIC_SESSION_REJECTED',
   'AUTHENTICATED_SYNTHETIC_OBSERVATION_REJECTED',
@@ -144,6 +145,8 @@ const browser = (value, variant) => {
   });
 };
 const controller = value => value && typeof value === 'object' ? Object.freeze({
+  fixturePrerequisites: ['passed', 'failed'].includes(value.fixturePrerequisites)
+    ? value.fixturePrerequisites : 'not_run',
   setupProbe: ['passed', 'failed'].includes(value.setupProbe) ? value.setupProbe : 'not_run',
   setupActionCount: number(value.setupActionCount),
   browserCaseCount: number(value.browserCaseCount),
@@ -176,7 +179,10 @@ export function buildV2FullPrefixVariantResult(input) {
     && safeBrowser.barrier === (variant === 'barrier' ? 'lifecycle-frame' : 'none')
     && safeBrowser.lifecycleFrameCaptured && safeBrowser.caseDelta === 1 && safeBrowser.caseVersionDelta === 1
     && safeBrowser.failureStage === null && safeBrowser.queues.network === 'passed'
-    && safeBrowser.queues.cases === 'passed' && safeController?.contractSatisfied === true;
+    && safeBrowser.queues.cases === 'passed'
+    && safeController?.fixturePrerequisites === 'passed'
+    && safeController.setupProbe === 'passed' && safeController.setupActionCount === 1
+    && safeController.contractSatisfied === true;
   return Object.freeze({
     variant,
     status: passed ? 'passed' : 'failed',

@@ -598,14 +598,21 @@
     {
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.mjs",
-      "lines": [69],
+      "lines": [
+        70
+      ],
       "reason": "test/control documentation",
       "futureAction": "Confine one-shot synthetic fixture-session priming to the loopback-only reproduction selector. Never use it for hosted sessions, product authorization or provider credentials."
     },
     {
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.test.mjs",
-      "lines": [149, 151, 170, 171],
+      "lines": [
+        175,
+        177,
+        196,
+        197
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep the in-memory storage mock confined to the no-Docker fixture-session contract test; restore global descriptors and never read real credentials."
     }

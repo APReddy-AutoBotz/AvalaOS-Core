@@ -21,6 +21,16 @@ const DIRECT_FIXTURE_CONTROLS = new Set([
   '/control/arm-browser-fault',
   '/control/assess-v2-runtime',
 ]);
+const PREFIX_PREREQUISITE_FIELDS = Object.freeze([
+  'reviewerRestricted',
+  'reviewerCanRead',
+  'reviewerCannotUpdateProcess',
+  'authorRoleRetained',
+  'authorPrefixCapabilitiesReady',
+  'processWritesReady',
+  'v2RuntimeReady',
+  'projectReady',
+]);
 const digest = character => `sha256:${character.repeat(64)}`;
 const decodeClaims = token => {
   const parts = typeof token === 'string' ? token.split('.') : [];
@@ -56,6 +66,13 @@ const requestFixtureControl = async (fixture, pathname, body) => {
   if (!response.ok) throw new Error(`V2_FULL_PREFIX_LOCAL_FIXTURE_CONTROL_REJECTED:${pathname}`);
   return payload;
 };
+
+export function validateV2FullPrefixFixturePrerequisites(value) {
+  if (!value || PREFIX_PREREQUISITE_FIELDS.some(field => value[field] !== true)) {
+    throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
+  }
+  return true;
+}
 
 export function createV2FullPrefixAdapterQuery(client) {
   if (!client || typeof client.query !== 'function') {
@@ -201,6 +218,8 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
   controller.observationStartedAt = observationStartedAt;
 
   const projectSetups = new Map();
+  let fixturePrerequisites = 'not_run';
+  let reviewerRestrictedProject = null;
   const registerProject = async (projectName, browserSetup) => {
     const processId = fixture.expectedBrowserCaseProcesses()
       .find(item => item.projectName === projectName)?.processId;
@@ -217,6 +236,50 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
        SELECT * FROM unnest($1::uuid[],$2::uuid[]) ON CONFLICT(id) DO NOTHING`,
       [sessions.map(item => item.sessionId), sessions.map(item => item.actorId)],
     );
+    fixturePrerequisites = 'failed';
+    let restricted;
+    try {
+      restricted = await requestFixtureControl(fixture, '/control/restricted-delete', {
+        projectName,
+        enabled: true,
+      });
+    } catch {
+      throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
+    }
+    if (restricted?.enabled !== true || restricted?.actor !== 'reviewer') {
+      throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
+    }
+    reviewerRestrictedProject = projectName;
+    const prerequisites = (await fixture.db.query(`SELECT
+        EXISTS(SELECT 1 FROM public.organization_members
+          WHERE org_id=$1 AND user_id=$3 AND role_id=$6 AND status='active' AND deleted_at IS NULL) "reviewerRestricted",
+        EXISTS(SELECT 1 FROM public.role_capabilities
+          WHERE role_id=$6 AND capability_key='assess.read') "reviewerCanRead",
+        NOT EXISTS(SELECT 1 FROM public.role_capabilities
+          WHERE role_id=$6 AND capability_key='assess.process.update') "reviewerCannotUpdateProcess",
+        EXISTS(SELECT 1 FROM public.organization_members
+          WHERE org_id=$1 AND user_id=$4 AND role_id=$5 AND status='active' AND deleted_at IS NULL) "authorRoleRetained",
+        (SELECT count(*)=6 FROM public.role_capabilities WHERE role_id=$5
+          AND capability_key IN('assess.process.update','assess.create','assess.response.write','assess.finalize',
+            'assess.v2.read','assess.v2.create')) "authorPrefixCapabilitiesReady",
+        EXISTS(SELECT 1 FROM public.process_update_workspace_controls
+          WHERE org_id=$1 AND workspace_id=$2 AND enabled=true AND read_only=false) "processWritesReady",
+        EXISTS(SELECT 1 FROM public.assess_v2_runtime_control
+          WHERE singleton=true AND enabled=true AND read_only=false) "v2RuntimeReady",
+        EXISTS(SELECT 1 FROM public.assess_processes process
+          JOIN public.projects project ON project.source_process_id=process.id
+          WHERE process.id=$7 AND project.id=$8 AND process.org_id=$1 AND process.workspace_id=$2) "projectReady"`, [
+        fixture.ids.organization,
+        fixture.ids.workspace,
+        fixture.ids.reviewer,
+        fixture.ids.author,
+        fixture.ids.role,
+        fixture.ids.deliveryRestrictedRole,
+        processId,
+        browserSetup.deliveryProject.id,
+    ])).rows[0];
+    validateV2FullPrefixFixturePrerequisites(prerequisites);
+    fixturePrerequisites = 'passed';
     controller.projects.set(projectName, {
       projectName,
       processId,
@@ -345,6 +408,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       const serverCaseCount = controller.serverCases.filter(item => item.project === browserProject).length;
       return Object.freeze({
         project: projectName.endsWith('-barrier') ? 'barrier' : 'immediate',
+        fixturePrerequisites,
         setupProbe,
         setupActionCount,
         browserCaseCount: browserCases.length,
@@ -352,7 +416,8 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
         actionCount: browserActions.length,
         completedActionCount: browserActions.filter(item => item.complete === true).length,
         caseIds,
-        contractSatisfied: setupProbe === 'passed' && setupActionCount === 1
+        contractSatisfied: fixturePrerequisites === 'passed'
+          && setupProbe === 'passed' && setupActionCount === 1
           && caseIds.length === EXPECTED_PREFIX_CASES.length
           && JSON.stringify(caseIds) === JSON.stringify([...EXPECTED_PREFIX_CASES].sort())
           && serverCaseCount === EXPECTED_PREFIX_CASES.length
@@ -362,8 +427,21 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
     async close() {
       if (closed) return;
       closed = true;
-      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-      await postgresAdapter.quiesce({ exerciseId: controller.exerciseId });
+      let cleanupError = null;
+      try { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+      catch (error) { cleanupError = error; }
+      if (reviewerRestrictedProject !== null) {
+        try {
+          await requestFixtureControl(fixture, '/control/restricted-delete', {
+            projectName: reviewerRestrictedProject,
+            enabled: false,
+          });
+          reviewerRestrictedProject = null;
+        } catch (error) { cleanupError ??= error; }
+      }
+      try { await postgresAdapter.quiesce({ exerciseId: controller.exerciseId }); }
+      catch (error) { cleanupError ??= error; }
+      if (cleanupError) throw cleanupError;
     },
   });
 }
