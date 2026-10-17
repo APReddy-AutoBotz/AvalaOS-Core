@@ -608,10 +608,10 @@
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.test.mjs",
       "lines": [
-        182,
-        184,
-        203,
-        204
+        187,
+        189,
+        208,
+        209
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the in-memory storage mock confined to the no-Docker fixture-session contract test; restore global descriptors and never read real credentials."

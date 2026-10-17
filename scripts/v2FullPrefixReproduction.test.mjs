@@ -145,6 +145,7 @@ test('full-prefix fixture prerequisites preserve restricted reviewer and author 
     reviewerRestricted: true,
     reviewerCanRead: true,
     reviewerCannotUpdateProcess: true,
+    reviewerPrimaryCapabilitiesReady: true,
     authorRoleRetained: true,
     authorPrefixCapabilitiesReady: true,
     processWritesReady: true,
@@ -154,6 +155,10 @@ test('full-prefix fixture prerequisites preserve restricted reviewer and author 
   assert.equal(validateV2FullPrefixFixturePrerequisites(ready), true);
   assert.throws(
     () => validateV2FullPrefixFixturePrerequisites({ ...ready, reviewerCannotUpdateProcess: false }),
+    /V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED/u,
+  );
+  assert.throws(
+    () => validateV2FullPrefixFixturePrerequisites({ ...ready, reviewerPrimaryCapabilitiesReady: false }),
     /V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED/u,
   );
   assert.throws(
@@ -336,4 +341,9 @@ test('local control wrapper delegates action and case routes to the production c
   assert.match(source, /CREATE TABLE IF NOT EXISTS auth[.]sessions/u);
   assert.match(source, /origin: 'https:\/\/avalaos-pilot[.]netlify[.]app'/u);
   assert.match(source, /authenticatedHostedDigest\(`local-v2-full-prefix:\$\{variant\}`\)/u);
+  assert.match(source, /primaryLifecycle: true/u);
+  assert.match(source, /fixture[.]ids[.]primaryRestrictedReviewerRole/u);
+  const fixtureSource = await readFile(new URL('./enterpriseLifecyclePostgresFixture.mjs', import.meta.url), 'utf8');
+  assert.match(fixtureSource, /primaryRestrictedReviewerRole: uuid\(29\)/u);
+  assert.match(fixtureSource, /capability_key<>'assess[.]process[.]update'/u);
 });

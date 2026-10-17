@@ -23,6 +23,7 @@ const PREFIX_PREREQUISITE_FIELDS = Object.freeze([
   'reviewerRestricted',
   'reviewerCanRead',
   'reviewerCannotUpdateProcess',
+  'reviewerPrimaryCapabilitiesReady',
   'authorRoleRetained',
   'authorPrefixCapabilitiesReady',
   'processWritesReady',
@@ -241,11 +242,13 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       restricted = await requestFixtureControl(fixture, '/control/restricted-delete', {
         projectName,
         enabled: true,
+        primaryLifecycle: true,
       });
     } catch {
       throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
     }
-    if (restricted?.enabled !== true || restricted?.actor !== 'reviewer') {
+    if (restricted?.enabled !== true || restricted?.actor !== 'reviewer'
+      || restricted?.profile !== 'primary-lifecycle') {
       throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
     }
     reviewerRestrictedProject = projectName;
@@ -256,6 +259,9 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
           WHERE role_id=$6 AND capability_key='assess.read') "reviewerCanRead",
         NOT EXISTS(SELECT 1 FROM public.role_capabilities
           WHERE role_id=$6 AND capability_key='assess.process.update') "reviewerCannotUpdateProcess",
+        (SELECT count(*)=7 FROM public.role_capabilities WHERE role_id=$6
+          AND capability_key IN('assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest',
+            'assess.v2.approve','assess.v2.govern.resolve','assess.v2.studio.handoff')) "reviewerPrimaryCapabilitiesReady",
         EXISTS(SELECT 1 FROM public.organization_members
           WHERE org_id=$1 AND user_id=$4 AND role_id=$5 AND status='active' AND deleted_at IS NULL) "authorRoleRetained",
         (SELECT count(*)=6 FROM public.role_capabilities WHERE role_id=$5
@@ -273,7 +279,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
         fixture.ids.reviewer,
         fixture.ids.author,
         fixture.ids.role,
-        fixture.ids.deliveryRestrictedRole,
+        fixture.ids.primaryRestrictedReviewerRole,
         processId,
         browserSetup.deliveryProject.id,
     ])).rows[0];
@@ -437,6 +443,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
           await requestFixtureControl(fixture, '/control/restricted-delete', {
             projectName: reviewerRestrictedProject,
             enabled: false,
+            primaryLifecycle: true,
           });
           reviewerRestrictedProject = null;
         } catch (error) { cleanupError ??= error; }
