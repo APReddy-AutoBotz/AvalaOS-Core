@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Full V2 reload and concurrent acceptance evidence (2026-10-17)
+
+PR #309 merged as `6e253b2c` with verified candidate/release evidence. Its approved full run `38995528431`, attempt 1, independently verifies 373 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. All 36 public/Sandbox executions passed. The primary passed the earlier process-reload checkpoint and stopped at the immediate V2 draft-resumption assertion. Cleanup independently verified quiescence, four revoked identities, zero active access/permits/residue/secret cleanup, providers OFF and owned temporary-main removal. Its allowance is consumed.
+
+The V2 failure remains **suspected defect requiring deeper validation**. Full acceptance submits queued case evidence; the successful focused diagnostic suppresses that work and adds read-only checkpoints before reload. Both use the same 20-second render bound. Local preparation must reproduce the composed full prefix and actual controller workload before attributing the UI failure. A separate local production-controller probe confirms that delayed or rejected case submissions can rewind the observation cutoff; the bounded correction preserves each action's original frames and monotonic observation progress. This evidence defect is not established as the UI cause. Follow `docs/planning/hosted-acceptance-completion.md`; no additional hosted action is authorized.
+
 ## Process reload and restricted-role native acceptance (2026-10-16)
 
 PR #308 merged as `d687a7a3` with verified candidate and release checks. Approved full run `38938446349`, attempt 1, independently retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** and 36 passing public/Sandbox executions. The primary stopped at process-heading visibility after its authority-refresh reload, before dispatching the denied command. Cleanup independently verified quiescence, four revoked identities, zero active access/permits/residue/secret cleanup, providers OFF and removal of owned temporary main access. Its allowance is consumed.

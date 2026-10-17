@@ -209,6 +209,23 @@ jobs:
         run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
       - name: Independently verify case observations and cleanup
         run: node scripts/verifyAuthenticatedLocalEvidence.mjs output/acceptance/authenticated-product/local-evidence.json
+      - name: Compare native V2 full prefix with real controller observations
+        env:
+          ASSESS_V2_FULL_PREFIX_REPRODUCTION: '1'
+        run: node scripts/testAssessV2NativePostgrest.mjs
+      - name: Verify full-prefix fixture cleanup
+        if: always()
+        run: |
+          test -z "$(docker ps -aq --filter label=avalaos.assess-v2-native-run)"
+          test -z "$(docker network ls -q --filter label=avalaos.assess-v2-native-run)"
+      - name: Retain sanitized V2 full-prefix comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-v2-prefix-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/local-private/authenticated-product-acceptance/v2-full-prefix-reproduction/result.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Retain sanitized local evidence only
         if: always()
         uses: actions/upload-artifact@v4

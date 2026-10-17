@@ -587,10 +587,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/v2ReloadDiagnosticObserver.ts",
       "lines": [
-        538,
-        542,
+        545,
         549,
-        550
+        556,
+        557
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep bounded session/navigation reads confined to the approved browser diagnostic. Pass the existing token transiently to the protected parent for verification; retain no storage values, tokens or identifiers and never treat client state as authorization."

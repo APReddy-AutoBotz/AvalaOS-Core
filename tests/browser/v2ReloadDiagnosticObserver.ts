@@ -44,6 +44,13 @@ export type V2ReloadReadObserverCompletion = Readonly<{
   observerFailure: boolean;
 }>;
 
+export type V2ReloadBrowserStateObservation = Readonly<{
+  sessionObserved: boolean;
+  scopeNavigationObserved: boolean;
+  processNavigationObserved: boolean;
+  serverContextObserved: boolean;
+}>;
+
 export type V2ReloadDiagnosticCheckpoint = Readonly<{
   schemaVersion: 'authenticated-v2-reload-checkpoint-v2';
   phase: V2ReloadDiagnosticPhase;
@@ -578,6 +585,18 @@ const readRawBrowserState = async (page: Page): Promise<RawBrowserState> => {
       serverContextVisible: await page.getByText('Server context active', { exact: true }).isVisible().catch(() => false),
     });
   }
+};
+
+export const observeV2ReloadBrowserState = async (
+  page: Page,
+): Promise<V2ReloadBrowserStateObservation> => {
+  const state = await readRawBrowserState(page);
+  return Object.freeze({
+    sessionObserved: state.accessToken !== null,
+    scopeNavigationObserved: state.scopeBinding !== null,
+    processNavigationObserved: state.processBinding !== null,
+    serverContextObserved: state.serverContextVisible,
+  });
 };
 
 export const createV2ReloadBrowserCheckpointBuilder = (
