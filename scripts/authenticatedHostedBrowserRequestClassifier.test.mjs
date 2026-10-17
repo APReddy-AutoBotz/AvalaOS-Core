@@ -71,8 +71,13 @@ test('response body ownership fails closed and joins context cancellation before
   assert.equal(closeCalls, 0);
 
   await assert.rejects(readAuthenticatedHostedResponseBody(normalContext, {
-    json: async () => { throw new Error('private malformed body'); },
+    json: async () => { throw new Error('private protocol body failure'); },
   }, 20), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED$/u);
+  assert.equal(closeCalls, 0);
+
+  await assert.rejects(readAuthenticatedHostedResponseBody(normalContext, {
+    json: async () => JSON.parse('{'),
+  }, 20), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON$/u);
   assert.equal(closeCalls, 0);
 
   let releaseBody;
@@ -149,11 +154,27 @@ test('installed network keeps an unpaired malformed response fail closed', async
   network.context.emit('request', request);
   await new Promise(resolve => setImmediate(resolve));
   network.context.emit('response', { request: () => request, status: () => 200,
-    json: async () => { throw new Error('private malformed response'); } });
+    json: async () => JSON.parse('{') });
   await assert.rejects(network.lifecycle.settleResponseBodies(),
-    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED$/u);
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON$/u);
   await network.drain();
-  assert.deepEqual(network.errors, ['AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED']);
+  assert.deepEqual(network.errors, ['AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON']);
+  assert.deepEqual(network.finishes, []);
+});
+
+test('installed network never reclassifies malformed JSON as a paired transport failure', async () => {
+  const network = await networkFixture(async () => ({ actionId: 'paired-malformed-action' }));
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', { request: () => request, status: () => 200,
+    json: async () => JSON.parse('{') });
+  network.context.emit('requestfailed', request);
+  await assert.rejects(network.lifecycle.settleResponseBodies(),
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON$/u);
+  await network.drain();
+  assert.deepEqual(network.errors, ['AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON']);
   assert.deepEqual(network.finishes, []);
 });
 

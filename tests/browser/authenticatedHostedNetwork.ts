@@ -31,7 +31,7 @@ export const readAuthenticatedHostedResponseBody = async (
   }
   const body = response.json().then(
     value => Object.freeze({ state: 'fulfilled' as const, value }),
-    () => Object.freeze({ state: 'rejected' as const }),
+    error => Object.freeze({ state: 'rejected' as const, error }),
   );
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<'expired'>(resolve => {
@@ -41,7 +41,16 @@ export const readAuthenticatedHostedResponseBody = async (
   if (first === 'body') {
     if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     const settled = await body;
-    if (settled.state === 'rejected') throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED');
+    if (settled.state === 'rejected') {
+      // Playwright implements Response.json() by awaiting the protocol body and
+      // then calling JSON.parse. Preserve that fixed distinction: malformed or
+      // empty JSON is not a browser transport failure and can never be paired
+      // with requestfailed to manufacture a status-zero success frame.
+      if (settled.error instanceof SyntaxError) {
+        throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON');
+      }
+      throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED');
+    }
     return settled.value;
   }
   const closed = context.close({ reason: 'authenticated response body timeout' }).then(
@@ -118,6 +127,7 @@ export const installAuthenticatedHostedNetwork = async ({
     queueNetworkAction(() => tracker.finish(request, status, responseBody));
   };
   const transportFailed = new WeakSet<Request>();
+  const responseObserved = new WeakSet<Request>();
 
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -155,6 +165,7 @@ export const installAuthenticatedHostedNetwork = async ({
   if (hosted) {
     context.on('response', response => {
       const request = response.request();
+      responseObserved.add(request);
       if (!tracker) {
         onTrackerError(new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING'));
         return;
@@ -198,7 +209,13 @@ export const installAuthenticatedHostedNetwork = async ({
     });
     context.on('requestfailed', request => {
       transportFailed.add(request);
-      finishProductAction(request, 0, { error: { code: 'BROWSER_TRANSPORT_FAILURE' } });
+      // When response headers were observed, the owned response-body operation
+      // has enough information to distinguish a genuine browser transport
+      // failure from malformed JSON. It alone may emit status zero. A request
+      // which failed before any response still needs this direct completion.
+      if (!responseObserved.has(request)) {
+        finishProductAction(request, 0, { error: { code: 'BROWSER_TRANSPORT_FAILURE' } });
+      }
     });
   }
 

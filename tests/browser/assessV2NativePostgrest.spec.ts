@@ -108,6 +108,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   let trackerError: unknown = null;
   let networkActionTail: Promise<void> = Promise.resolve();
   let activeActions = new Set<string>();
+  let networkLifecycle: Awaited<ReturnType<typeof installAuthenticatedHostedNetwork>> | null = null;
 
   test.beforeAll(async ({}, testInfo) => {
     projectName = `native-${testInfo.project.name}`;
@@ -122,6 +123,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     trackerError = null;
     networkActionTail = Promise.resolve();
     activeActions = new Set();
+    networkLifecycle = null;
     const registeredTokens = new Set(Object.values(setup.actors).map(actor => actor.token));
     const tracker = new AuthenticatedHostedBrowserActionTracker({
       backendOrigin: apiOrigin,
@@ -143,7 +145,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
         trackerFinishes += 1;
       },
     });
-    await installAuthenticatedHostedNetwork({
+    networkLifecycle = await installAuthenticatedHostedNetwork({
       context,
       hosted: true,
       allowedOrigins: new Set([appOrigin, apiOrigin]),
@@ -159,16 +161,29 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   });
 
   test.afterEach(async () => {
-    await expect.poll(async () => {
-      await networkActionTail;
-      return activeActions.size;
-    }, { timeout: 15_000 }).toBe(0);
+    if (!networkLifecycle) throw new Error('ASSESS_V2_NATIVE_NETWORK_LIFECYCLE_MISSING');
+    const deadline = Date.now() + 15_000;
+    let boundaryError: unknown = trackerError;
     for (;;) {
-      const current = networkActionTail;
-      await current;
-      if (current === networkActionTail) break;
+      try { await networkLifecycle.settleResponseBodies(); }
+      catch (error) { boundaryError ??= error; }
+      for (;;) {
+        const current = networkActionTail;
+        await current;
+        if (current === networkActionTail) break;
+      }
+      try { await networkLifecycle.settleResponseBodies(); }
+      catch (error) { boundaryError ??= error; }
+      boundaryError ??= trackerError;
+      if (activeActions.size === 0 || Date.now() >= deadline) break;
+      // Preserve the original bounded readiness window for requests which
+      // started before response headers and therefore are not yet represented
+      // in the response-body set or serialized finish tail.
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
-    expect(trackerError).toBeNull();
+    // Surface the causal fixed-code network/body failure before the secondary
+    // action-balance symptom while still completing the bounded cleanup above.
+    if (boundaryError) throw boundaryError;
     expect(activeActions.size).toBe(0);
     expect(trackerStarts).toBeGreaterThan(0);
     expect(trackerFinishes).toBe(trackerStarts);
