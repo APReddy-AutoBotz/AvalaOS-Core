@@ -70,7 +70,11 @@ const createFinalizeProofHarness = async ({ commandType='assessment.finalize', r
     beforeCapturedAt:frames[0].capturedAt,afterCapturedAt:frames[1].capturedAt};
   let capture=0;
   const adapter={bindSession:async()=>{},observe:async()=>frames[capture++],
-    ...(provideProof?{verifyAssessmentFinalizeCase:async()=>mutateProof(structuredClone(proof))}:{})};
+    ...(provideProof?{verifyAssessmentFinalizeCase:async input=>{
+      assert.deepEqual(input.before,frames[0],'finalize proof needs the original before-frame');
+      assert.deepEqual(input.after,frames[1],'finalize proof needs the freshly captured after-frame');
+      return mutateProof(structuredClone(proof));
+    }}:{})};
   const controller=new AuthenticatedHostedController({config,adapter,
     identity:{verifySession:async()=>({actorId,sessionId})}});
   controller.active = true;

@@ -824,7 +824,7 @@ export class AuthenticatedHostedController {
           requestBody: action.rawRequestBody,
           responseBody: response,
           before: action.before,
-          after: action.after,
+          after,
           requestIdHash: action.requestIdHash,
           commandBindingHash: action.commandBindingHash,
           commandIdHash: responseObservation.commandIdHash,
