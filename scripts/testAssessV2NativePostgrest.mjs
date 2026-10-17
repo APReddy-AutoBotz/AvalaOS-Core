@@ -20,6 +20,7 @@ import {
 import { createV2FullPrefixLocalController } from './v2FullPrefixLocalController.mjs';
 import {
   buildV2FullPrefixResult,
+  classifyV2FullPrefixFailure,
   runIndependentV2FullPrefixVariants,
 } from './v2FullPrefixReproduction.mjs';
 
@@ -276,14 +277,18 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
       const variants = await runIndependentV2FullPrefixVariants(async variant => {
         const projectName = `desktop-chromium-${variant}`;
         const fragmentPath = `${reproductionDirectory}/browser-${projectName}.json`;
-        await rm(fragmentPath, { force: true });
         let localController = null;
         let execution = 'failed';
         let cleanup = 'not_started';
         let browser = null;
         let controller = null;
+        let failureStage = 'artifact-reset';
+        let setupFailure = null;
         try {
-          localController = await createV2FullPrefixLocalController({ fixture, origin: appBaseUrl });
+          await rm(fragmentPath, { force: true });
+          failureStage = 'controller-create';
+          localController = await createV2FullPrefixLocalController({ fixture, origin: appBaseUrl, variant });
+          failureStage = 'browser-execution';
           await run([
             'node_modules/@playwright/test/cli.js', 'test',
             '--config=playwright.v2-full-prefix-reproduction.config.ts',
@@ -303,8 +308,9 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
             },
           });
           execution = 'passed';
-        } catch {
+        } catch (error) {
           execution = 'failed';
+          setupFailure = classifyV2FullPrefixFailure(error, failureStage);
         } finally {
           if (localController) {
             try { controller = localController.projectSummary(projectName); }
@@ -312,15 +318,24 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
             try {
               await localController.close();
               cleanup = 'passed';
-            } catch { cleanup = 'failed'; }
+            } catch (error) {
+              cleanup = 'failed';
+              setupFailure ??= classifyV2FullPrefixFailure(error, 'controller-quiesce');
+            }
           }
         }
         try { browser = JSON.parse(await readFile(fragmentPath, 'utf8')); }
-        catch { browser = null; }
+        catch {
+          browser = null;
+          setupFailure ??= classifyV2FullPrefixFailure(
+            new Error('ARTIFACT_UNAVAILABLE'), 'artifact-read',
+          );
+        }
         return {
           variant,
           execution,
           cleanup,
+          setupFailure,
           artifactObserved: browser !== null,
           browser: browser?.v2FullPrefixReproduction ?? null,
           controller,

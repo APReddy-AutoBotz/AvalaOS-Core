@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   buildV2FullPrefixResult,
   buildV2FullPrefixVariantResult,
+  classifyV2FullPrefixFailure,
   resolveV2FullPrefixLocalSelection,
   runIndependentV2FullPrefixVariants,
 } from './v2FullPrefixReproduction.mjs';
@@ -52,8 +53,21 @@ test('an immediate failure is retained while the fresh barrier comparison still 
   assert.deepEqual(attempted, ['immediate', 'barrier']);
   assert.equal(results[0].status, 'failed');
   assert.equal(results[0].browser, null);
+  assert.deepEqual(results[0].setupFailure, { stage: 'variant-execution', code: 'UNCLASSIFIED' });
   assert.equal(results[1].status, 'passed');
   assert.doesNotMatch(JSON.stringify(results), /secret failure detail/u);
+});
+
+test('pre-browser setup failures retain only allowlisted codes or SQLSTATE', () => {
+  assert.deepEqual(classifyV2FullPrefixFailure(
+    new Error('AUTHENTICATED_SYNTHETIC_ACTIVATION_REJECTED: private detail'),
+    'controller-create',
+  ), { stage: 'controller-create', code: 'AUTHENTICATED_SYNTHETIC_ACTIVATION_REJECTED' });
+  const sqlError = new Error('private relation and identifier detail');
+  sqlError.code = '42P01';
+  const classified = classifyV2FullPrefixFailure(sqlError, 'controller-create');
+  assert.deepEqual(classified, { stage: 'controller-create', code: 'SQLSTATE_42P01' });
+  assert.doesNotMatch(JSON.stringify(classified), /private|relation|identifier/u);
 });
 
 test('failure evidence preserves bounded lifecycle counts and removes arbitrary fields', () => {
@@ -102,4 +116,7 @@ test('local control wrapper delegates action and case routes to the production c
   assert.match(source, /controller[.]control\(url[.]pathname, input\)/u);
   assert.doesNotMatch(source, /beginBrowserAction\s*\(/u);
   assert.doesNotMatch(source, /recordBrowserCase\s*\(/u);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS auth[.]sessions/u);
+  assert.match(source, /origin: 'https:\/\/avalaos-pilot[.]netlify[.]app'/u);
+  assert.match(source, /authenticatedHostedDigest\(`local-v2-full-prefix:\$\{variant\}`\)/u);
 });

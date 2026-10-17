@@ -56,16 +56,28 @@ const requestFixtureControl = async (fixture, pathname, body) => {
   return payload;
 };
 
-export async function createV2FullPrefixLocalController({ fixture, origin }) {
+export async function createV2FullPrefixLocalController({ fixture, origin, variant }) {
   if (!fixture?.db?.query || typeof fixture.serviceQuery !== 'function'
     || typeof fixture.expectedBrowserCaseProcesses !== 'function') {
     throw new Error('V2_FULL_PREFIX_LOCAL_FIXTURE_REJECTED');
+  }
+  if (!['immediate', 'barrier'].includes(variant)) {
+    throw new Error('V2_FULL_PREFIX_LOCAL_VARIANT_REJECTED');
   }
   const targetOrigin = new URL(origin);
   if (targetOrigin.protocol !== 'http:' || targetOrigin.hostname !== '127.0.0.1') {
     throw new Error('V2_FULL_PREFIX_LOCAL_ORIGIN_REJECTED');
   }
 
+  // Supabase owns this table in hosted environments. The repository-local
+  // PostgreSQL fixture creates only auth.users, so reproduce the tested local
+  // controller prerequisite without changing the product migration chain.
+  await fixture.db.query(`CREATE TABLE IF NOT EXISTS auth.sessions(
+    id uuid PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    not_after timestamptz,
+    refreshed_at timestamptz NOT NULL DEFAULT statement_timestamp()
+  )`);
   await fixture.db.query(
     'UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=false WHERE singleton',
   );
@@ -83,11 +95,13 @@ export async function createV2FullPrefixLocalController({ fixture, origin }) {
     acceptanceMode: 'full_acceptance',
     releaseSha: 'a'.repeat(40),
     deploymentId: 'b'.repeat(24),
-    origin: targetOrigin.origin,
+    // The immutable activation authority requires this exact metadata value.
+    // The executable app and every HTTP server remain loopback-only.
+    origin: 'https://avalaos-pilot.netlify.app',
     backendDigest: digest('c'),
     migrationVersion,
     migrationDigest: digest('d'),
-    exerciseDigest: digest('e'),
+    exerciseDigest: authenticatedHostedDigest(`local-v2-full-prefix:${variant}`),
     profileVersion: 'hosted-authenticated-synthetic-profile-v3',
     catalogDigest: digest('f'),
     sourceDigest: digest('1'),

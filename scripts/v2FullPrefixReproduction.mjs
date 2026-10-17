@@ -5,6 +5,33 @@ const READ_STAGES = new Set([
 ]);
 const number = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const boolean = value => value === true;
+const FAILURE_STAGES = new Set([
+  'artifact-reset', 'controller-create', 'browser-execution', 'controller-quiesce',
+  'artifact-read', 'variant-execution',
+]);
+const FAILURE_CODES = new Set([
+  'V2_FULL_PREFIX_LOCAL_FIXTURE_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_VARIANT_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_ORIGIN_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_MIGRATION_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_PROJECT_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_SERVER_REJECTED',
+  'AUTHENTICATED_SYNTHETIC_ACTIVATION_REJECTED',
+  'BROWSER_PROCESS_EXIT_NONZERO',
+  'ARTIFACT_UNAVAILABLE',
+  'UNCLASSIFIED',
+]);
+
+export function classifyV2FullPrefixFailure(error, stage) {
+  const safeStage = FAILURE_STAGES.has(stage) ? stage : 'variant-execution';
+  const message = typeof error?.message === 'string' ? error.message : '';
+  let code = [...FAILURE_CODES].find(item => message.includes(item)) ?? null;
+  if (message.startsWith('ASSESS_V2_NATIVE_COMMAND_FAILED:')) code = 'BROWSER_PROCESS_EXIT_NONZERO';
+  if (code === null && typeof error?.code === 'string' && /^[0-9A-Z]{5}$/u.test(error.code)) {
+    code = `SQLSTATE_${error.code}`;
+  }
+  return Object.freeze({ stage: safeStage, code: code ?? 'UNCLASSIFIED' });
+}
 
 export function resolveV2FullPrefixLocalSelection({ variant, authenticated, hosted, mode }) {
   if (!variant) return null;
@@ -80,8 +107,12 @@ export function buildV2FullPrefixVariantResult(input) {
   const safeController = controller(input?.controller);
   const execution = input?.execution === 'passed' ? 'passed' : 'failed';
   const cleanup = ['passed', 'failed'].includes(input?.cleanup) ? input.cleanup : 'not_started';
+  const setupFailure = input?.setupFailure && FAILURE_STAGES.has(input.setupFailure.stage)
+    && (FAILURE_CODES.has(input.setupFailure.code) || /^SQLSTATE_[0-9A-Z]{5}$/u.test(input.setupFailure.code))
+    ? Object.freeze({ stage: input.setupFailure.stage, code: input.setupFailure.code }) : null;
   const readStages = safeBrowser?.readStages ?? [];
-  const passed = input?.artifactObserved === true && execution === 'passed' && cleanup === 'passed'
+  const passed = setupFailure === null && input?.artifactObserved === true
+    && execution === 'passed' && cleanup === 'passed'
     && safeBrowser?.navigation === 'passed' && safeBrowser.renderOutcome === 'resumed'
     && safeBrowser.observerFailure === false && safeBrowser.serverContextObserved
     && safeBrowser.sessionObserved && safeBrowser.scopeNavigationObserved && safeBrowser.processNavigationObserved
@@ -97,6 +128,7 @@ export function buildV2FullPrefixVariantResult(input) {
     status: passed ? 'passed' : 'failed',
     execution,
     cleanup,
+    setupFailure,
     artifactObserved: input?.artifactObserved === true,
     browser: safeBrowser,
     controller: safeController,
@@ -111,7 +143,12 @@ export async function runIndependentV2FullPrefixVariants(execute) {
   const results = [];
   for (const variant of VARIANTS) {
     try { results.push(buildV2FullPrefixVariantResult(await execute(variant))); }
-    catch { results.push(buildV2FullPrefixVariantResult({ variant })); }
+    catch (error) {
+      results.push(buildV2FullPrefixVariantResult({
+        variant,
+        setupFailure: classifyV2FullPrefixFailure(error, 'variant-execution'),
+      }));
+    }
   }
   return Object.freeze(results);
 }
