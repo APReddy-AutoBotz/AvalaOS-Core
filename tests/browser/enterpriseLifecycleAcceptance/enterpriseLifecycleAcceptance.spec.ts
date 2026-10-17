@@ -30,6 +30,7 @@ import {
   observeAuthenticatedStudioDownloadDenial,
 } from '../authenticatedControlsAcceptance';
 import {
+  authenticatedHostedConfigureChromiumDurableResponseBodies,
   authenticatedLifecycleSettleActorNavigationBoundary as settleActorNavigationBoundary,
   installAuthenticatedHostedNetwork,
 } from '../authenticatedHostedNetwork';
@@ -652,10 +653,13 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
   });
 
-  test.beforeEach(async ({ context }, testInfo) => {
+  test.beforeEach(async ({ context, page }, testInfo) => {
     test.skip((v2PrimaryPrefixDiagnostic || v2FullPrefixReproduction)
       && !testInfo.tags.includes('@v2-primary-prefix-diagnostic'),
     'focused V2 execution runs only the original Desktop primary prefix');
+    if (controllerBackedAcceptance) {
+      await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
+    }
     externalRequests = [];
     const owningTestWorkQueues = Object.freeze({
       network: createAuthenticatedLifecycleWorkQueue(),
@@ -783,6 +787,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let diagnosticPrefixComplete = false;
     await test.step('hosted:primary:process-denial', async () => {
       const deniedEditPage = await context.newPage();
+      if (controllerBackedAcceptance) {
+        await authenticatedHostedConfigureChromiumDurableResponseBodies(context, deniedEditPage);
+      }
       await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
       const beforeDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       let deniedEditApi: ApiResponseObservation;
@@ -1288,6 +1295,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       const replayPage = await context.newPage();
       const stalePage = await context.newPage();
+      if (controllerBackedAcceptance) {
+        await authenticatedHostedConfigureChromiumDurableResponseBodies(context, replayPage);
+        await authenticatedHostedConfigureChromiumDurableResponseBodies(context, stalePage);
+      }
       for (const reviewPage of [page, replayPage, stalePage]) {
         await enterProcessAs(reviewPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
         await expect(reviewPage.getByTestId('assess-v2-review-workspace')).toContainText('Reviewer-ready');

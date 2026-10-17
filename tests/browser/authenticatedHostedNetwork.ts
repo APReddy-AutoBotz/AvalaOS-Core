@@ -1,4 +1,4 @@
-import type { BrowserContext, Request, Route } from '@playwright/test';
+import type { BrowserContext, Page, Request, Route } from '@playwright/test';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 
 type QueueNetworkAction = (
@@ -20,6 +20,29 @@ type InstallAuthenticatedHostedNetworkInput = Readonly<{
 }>;
 
 export const authenticatedHostedResponseBodyTimeoutMs = 30_000;
+
+// The acceptance browser can observe a 12,000,000-byte payload whose JSON or
+// base64 envelope remains below 16 MiB. Keep at most four such envelopes in
+// Chromium-owned memory while immediate reloads replace the renderer. Nothing
+// is persisted and Playwright remains the sole response-body reader.
+export const authenticatedHostedDurableResponseBodyResourceBytes = 16 * 1024 * 1024;
+export const authenticatedHostedDurableResponseBodyTotalBytes = 64 * 1024 * 1024;
+
+export const authenticatedHostedConfigureChromiumDurableResponseBodies = async (
+  context: BrowserContext,
+  page: Page,
+) => {
+  try {
+    const session = await context.newCDPSession(page);
+    await session.send('Network.enable');
+    await session.send('Network.configureDurableMessages', {
+      maxTotalBufferSize: authenticatedHostedDurableResponseBodyTotalBytes,
+      maxResourceBufferSize: authenticatedHostedDurableResponseBodyResourceBytes,
+    });
+  } catch {
+    throw new Error('AUTHENTICATED_BROWSER_DURABLE_RESPONSE_BODIES_UNAVAILABLE');
+  }
+};
 
 export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
   settleResponseBodies,

@@ -90,6 +90,39 @@ test('response body ownership fails closed and joins context cancellation before
   assert.equal(closeCalls, 1);
 });
 
+test('Chromium durable response bodies use bounded browser memory before navigation', async () => {
+  const {
+    authenticatedHostedConfigureChromiumDurableResponseBodies,
+    authenticatedHostedDurableResponseBodyResourceBytes,
+    authenticatedHostedDurableResponseBodyTotalBytes,
+  } = loadNetworkInstaller();
+  const calls = [];
+  const page = Object.freeze({ fixture: true });
+  const context = {
+    newCDPSession: async receivedPage => {
+      assert.equal(receivedPage, page);
+      return { send: async (method, parameters) => { calls.push({ method, parameters }); } };
+    },
+  };
+  await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
+  assert.equal(authenticatedHostedDurableResponseBodyResourceBytes, 16 * 1024 * 1024);
+  assert.equal(authenticatedHostedDurableResponseBodyTotalBytes, 64 * 1024 * 1024);
+  assert.deepEqual(calls, [
+    { method: 'Network.enable', parameters: undefined },
+    { method: 'Network.configureDurableMessages', parameters: {
+      maxTotalBufferSize: 64 * 1024 * 1024,
+      maxResourceBufferSize: 16 * 1024 * 1024,
+    } },
+  ]);
+});
+
+test('Chromium durable response body setup fails with a fixed error code', async () => {
+  const { authenticatedHostedConfigureChromiumDurableResponseBodies } = loadNetworkInstaller();
+  await assert.rejects(authenticatedHostedConfigureChromiumDurableResponseBodies({
+    newCDPSession: async () => { throw new Error('private protocol detail'); },
+  }, {}), /^Error: AUTHENTICATED_BROWSER_DURABLE_RESPONSE_BODIES_UNAVAILABLE$/u);
+});
+
 test('response body close failure returns cleanup-incomplete without fabricating a body', async () => {
   const { readAuthenticatedHostedResponseBody } = loadNetworkInstaller();
   const never = new Promise(() => {});

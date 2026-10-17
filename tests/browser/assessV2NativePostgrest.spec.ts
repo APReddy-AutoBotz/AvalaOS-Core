@@ -14,6 +14,7 @@ import {
   type AuthenticatedLifecycleSetup,
 } from './authenticatedLifecycleHarness';
 import {
+  authenticatedHostedConfigureChromiumDurableResponseBodies,
   authenticatedLifecycleSettleActorNavigationBoundary as settleActorNavigationBoundary,
   installAuthenticatedHostedNetwork,
 } from './authenticatedHostedNetwork';
@@ -134,7 +135,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     setup = await control<AuthenticatedLifecycleSetup>('/control/setup', { projectName });
   });
 
-  test.beforeEach(async ({ context }) => {
+  test.beforeEach(async ({ context, page }) => {
     observedHttpRequests = 0;
     nonLoopbackRequests = 0;
     trackerStarts = 0;
@@ -143,6 +144,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     networkActionTail = Promise.resolve();
     activeActions = new Set();
     networkLifecycle = null;
+    await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
     const registeredTokens = new Set(Object.values(setup.actors).map(actor => actor.token));
     const tracker = new AuthenticatedHostedBrowserActionTracker({
       backendOrigin: apiOrigin,
