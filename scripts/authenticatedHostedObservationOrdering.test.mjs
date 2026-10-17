@@ -20,6 +20,7 @@ test('out-of-order action observations preserve a monotonic cutoff and each orig
   const controller = new AuthenticatedHostedController({ config: {}, identity: {}, adapter: {
     observe: input => { const pending = deferred(); observations.push({ ...pending, from: input.from }); return pending.promise; },
   } });
+  controller.active = true;
   // Session authorization is outside this scheduling test; production frame
   // capture and action/case methods are exercised without a network or tokens.
   controller.resolveBrowserActionBinding = async () => binding;
@@ -57,6 +58,7 @@ test('out-of-order action observations preserve a monotonic cutoff and each orig
 
 for (const invalid of [false, true]) test(`late ${invalid ? 'rejected' : 'accepted'} case submission cannot rewind the observation cutoff`, async () => {
   const controller = new AuthenticatedHostedController({ config: {}, identity: {}, adapter: {} });
+  controller.active = true;
   controller.projects.set(projectName, { lastBoundaryAt: at(10) });
   const actionId = digest('old-action');
   controller.browserActions.set(projectName, [{ actionId, occurredAt: at(1), ...binding,

@@ -1,4 +1,12 @@
 const VARIANTS = Object.freeze(['immediate', 'barrier']);
+export const V2_FULL_PRIMARY_EXPECTED_CASES = Object.freeze([
+  'ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-019', 'ASSESS-020',
+  'E2E-004',
+  'GOVERN-001', 'GOVERN-002', 'GOVERN-003', 'GOVERN-004',
+  'SAFETY-001', 'SAFETY-002', 'SAFETY-003',
+]);
+const exactPrimaryCases = value => Array.isArray(value)
+  && JSON.stringify([...value].sort()) === JSON.stringify(V2_FULL_PRIMARY_EXPECTED_CASES);
 const READ_STAGES = new Set([
   'case-discovery', 'case', 'decision', 'draft-head', 'primitives', 'edges',
   'decision-points', 'exception-paths', 'application-assets', 'application-interactions', 'evidence-links',
@@ -119,7 +127,10 @@ const stage = value => {
 };
 const browser = (value, variant) => {
   if (!value || typeof value !== 'object') return null;
+  const completion = value.primaryCompletion && typeof value.primaryCompletion === 'object'
+    ? value.primaryCompletion : {};
   return Object.freeze({
+    scope: value.scope === 'desktop-primary-lifecycle' ? value.scope : 'unknown',
     variant,
     navigation: value.navigation === 'passed' ? 'passed' : 'failed',
     renderOutcome: ['resumed', 'workspace_error', 'public_screen', 'unresolved'].includes(value.renderOutcome)
@@ -140,6 +151,13 @@ const browser = (value, variant) => {
     deliveryPendingFrameStable: boolean(value.deliveryPendingFrameStable),
     caseDelta: Number.isSafeInteger(value.caseDelta) ? value.caseDelta : null,
     caseVersionDelta: Number.isSafeInteger(value.caseVersionDelta) ? value.caseVersionDelta : null,
+    primaryCompletion: Object.freeze({
+      status: completion.status === 'passed' ? 'passed' : 'failed',
+      terminalCaseId: completion.terminalCaseId === 'GOVERN-004' ? completion.terminalCaseId : null,
+      lifecycleFrameCaptured: boolean(completion.lifecycleFrameCaptured),
+      caseIds: Object.freeze((Array.isArray(completion.caseIds) ? completion.caseIds : [])
+        .filter(item => typeof item === 'string' && /^[A-Z0-9]+-[0-9]{3}$/u.test(item)).sort()),
+    }),
     failureStage: ['navigation', 'render', 'read-observer', 'browser-state', 'network-queue',
       'lifecycle-frame', 'assertion'].includes(value.failureStage) ? value.failureStage : null,
     queues: Object.freeze({
@@ -158,7 +176,7 @@ const controller = value => value && typeof value === 'object' ? Object.freeze({
   actionCount: number(value.actionCount),
   completedActionCount: number(value.completedActionCount),
   caseIds: Object.freeze((Array.isArray(value.caseIds) ? value.caseIds : [])
-    .filter(item => typeof item === 'string' && /^[A-Z]+-[0-9]{3}$/u.test(item))),
+    .filter(item => typeof item === 'string' && /^[A-Z0-9]+-[0-9]{3}$/u.test(item)).sort()),
   contractSatisfied: boolean(value.contractSatisfied),
 }) : null;
 
@@ -185,10 +203,19 @@ export function buildV2FullPrefixVariantResult(input) {
     && safeBrowser.processVisibleWhileDeliveryPending && safeBrowser.v2VisibleWhileDeliveryPending
     && safeBrowser.deliveryPendingFrameStable
     && safeBrowser.caseDelta === 1 && safeBrowser.caseVersionDelta === 1
+    && safeBrowser.scope === 'desktop-primary-lifecycle'
+    && safeBrowser.primaryCompletion.status === 'passed'
+    && safeBrowser.primaryCompletion.terminalCaseId === 'GOVERN-004'
+    && safeBrowser.primaryCompletion.lifecycleFrameCaptured
+    && exactPrimaryCases(safeBrowser.primaryCompletion.caseIds)
     && safeBrowser.failureStage === null && safeBrowser.queues.network === 'passed'
     && safeBrowser.queues.cases === 'passed'
     && safeController?.fixturePrerequisites === 'passed'
     && safeController.setupProbe === 'passed' && safeController.setupActionCount === 1
+    && safeController.browserCaseCount === V2_FULL_PRIMARY_EXPECTED_CASES.length
+    && safeController.serverCaseCount === V2_FULL_PRIMARY_EXPECTED_CASES.length
+    && exactPrimaryCases(safeController.caseIds)
+    && safeController.actionCount === safeController.completedActionCount
     && safeController.contractSatisfied === true;
   return Object.freeze({
     variant,
@@ -234,8 +261,13 @@ export function buildV2FullPrefixResult({ variants, native, baseline }) {
   const reproduced = safeVariants.some(item => item.browser?.navigation === 'passed'
     && item.browser.renderOutcome !== 'resumed');
   return Object.freeze({
-    schemaVersion: 'v2-full-prefix-local-reproduction-v2',
+    schemaVersion: 'authenticated-native-primary-local-reproduction-v1',
     status: passed ? 'passed' : 'failed',
+    coverage: Object.freeze({
+      scope: 'desktop-primary-lifecycle',
+      expectedCaseIds: V2_FULL_PRIMARY_EXPECTED_CASES,
+      separateAcceptanceTestsIncluded: false,
+    }),
     source: Object.freeze({
       baseline: /^[a-f0-9]{40}$/u.test(baseline ?? '') ? baseline : 'unknown',
       localOnly: true,
@@ -247,6 +279,12 @@ export function buildV2FullPrefixResult({ variants, native, baseline }) {
         && item.browser.processVisibleWhileDeliveryPending
         && item.browser.v2VisibleWhileDeliveryPending
         && item.browser.deliveryPendingFrameStable) ? 'passed' : 'failed',
+      primaryLifecycle: safeVariants.every(item => item.status === 'passed'
+        && item.browser?.primaryCompletion.status === 'passed'
+        && item.browser.primaryCompletion.terminalCaseId === 'GOVERN-004'
+        && item.browser.primaryCompletion.lifecycleFrameCaptured
+        && exactPrimaryCases(item.browser.primaryCompletion.caseIds)
+        && item.controller?.contractSatisfied === true) ? 'passed' : 'failed',
     }),
     variants: safeVariants,
     native: safeNative,

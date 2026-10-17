@@ -297,6 +297,7 @@ export async function createEnterpriseLifecycleFixture({
       author: uuid(10), reviewer: uuid(11), approver: uuid(12), outsider: uuid(13),
       role: uuid(20), process: uuid(21), case: uuid(22), rejectCase: uuid(23), deniedCase: uuid(24),
       providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27), deliveryRestrictedRole: uuid(28),
+      primaryRestrictedReviewerRole: uuid(29),
     };
     // These are inert fixture credentials, accepted only by exact map lookup below.
     // Claims let shared browser observers correlate the same actor/session shape
@@ -337,8 +338,10 @@ export async function createEnterpriseLifecycleFixture({
     await db.query("INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,'Lifecycle workspace','lifecycle'),($3,$4,'Foreign workspace','foreign-lifecycle')", [ids.workspace, ids.organization, ids.foreignWorkspace, ids.foreignOrganization]);
     await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Lifecycle authority','lifecycle-authority','organization','[]')", [ids.role, ids.organization]);
     await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Restricted Delivery operator','restricted-delivery-operator','organization','[]')", [ids.deliveryRestrictedRole, ids.organization]);
+    await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Primary lifecycle reviewer','primary-lifecycle-reviewer','organization','[]')", [ids.primaryRestrictedReviewerRole, ids.organization]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('org.admin','assess.read','assess.create','assess.response.write','assess.finalize','assess.process.update','govern.resolve','studio.handoff.create','workitems.import','project.read','project.manage','backlog.read','backlog.manage','monitor.read') OR capability_key LIKE 'assess.v2.%' OR capability_key LIKE 'studio.%' OR capability_key LIKE 'task.%' OR capability_key LIKE 'delivery.%'", [ids.role]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read')", [ids.deliveryRestrictedRole]);
+    await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM role_capabilities WHERE role_id=$2 AND capability_key<>'assess.process.update'", [ids.primaryRestrictedReviewerRole, ids.role]);
     for (const actor of [ids.author, ids.reviewer, ids.approver]) {
       await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [ids.organization, actor, ids.role]);
       await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [ids.organization, ids.workspace, actor]);
@@ -1367,21 +1370,27 @@ export async function createEnterpriseLifecycleFixture({
           const input = await request.json().catch(() => ({}));
           const setup = projectSetups.get(input.projectName);
           if (!setup || typeof input.enabled !== 'boolean') return json({ error: 'CONTROL_INVALID' },400,cors);
+          const targetRole = input.primaryLifecycle === true
+            ? ids.primaryRestrictedReviewerRole : ids.deliveryRestrictedRole;
           if (input.enabled) {
             const restrictedCapabilities = new Set((await db.query(
-              'SELECT capability_key FROM public.role_capabilities WHERE role_id=$1', [ids.deliveryRestrictedRole],
+              'SELECT capability_key FROM public.role_capabilities WHERE role_id=$1', [targetRole],
             )).rows.map(row => row.capability_key));
-            const required = ['assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read'];
-            const forbidden = ['task.update','task.assign','task.delete'];
+            const required = input.primaryLifecycle === true
+              ? ['assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest','assess.v2.approve']
+              : ['assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read'];
+            const forbidden = input.primaryLifecycle === true
+              ? ['assess.process.update'] : ['task.update','task.assign','task.delete'];
             if (required.some(capability => !restrictedCapabilities.has(capability))
               || forbidden.some(capability => restrictedCapabilities.has(capability))) {
               return json({ error: 'CONTROL_RESTRICTED_ROLE_INVALID' },500,cors);
             }
           }
           await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
-            [ids.organization,ids.reviewer,input.enabled ? ids.deliveryRestrictedRole : ids.role]);
+            [ids.organization,ids.reviewer,input.enabled ? targetRole : ids.role]);
           return json({
-            enabled: input.enabled, actor: 'reviewer', authorizationVersion: await authorizationVersion(ids.reviewer),
+            enabled: input.enabled, actor: 'reviewer', profile: input.primaryLifecycle === true ? 'primary-lifecycle' : 'delivery',
+            authorizationVersion: await authorizationVersion(ids.reviewer),
             organizationId: ids.organization, workspaceId: ids.workspace,
           },200,cors);
         }

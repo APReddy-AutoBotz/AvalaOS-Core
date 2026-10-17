@@ -11,7 +11,7 @@ export default defineConfig({
   workers: 1,
   maxFailures: 1,
   reporter: 'list',
-  outputDir: '.agent/v2-full-prefix-reproduction-playwright',
+  outputDir: '.agent/authenticated-native-primary-reproduction-playwright',
   timeout: 300_000,
   expect: { timeout: 20_000 },
   use: {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
-import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
+import { authenticatedHostedDigest, AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS,
+  AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
 import { withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { authenticatedHostedIdentityCategoryForStatus, authenticatedHostedIdentityUpstreamCode,
@@ -68,6 +69,7 @@ const FORBIDDEN_PERSONA_CAPABILITIES=Object.freeze({
 
 export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl = fetch }) {
   const created = new Map();
+  const unknownMutationOutcomes = new Set();
   const identityError = (operation, category, body = {}) => {
     const upstreamCode = authenticatedHostedIdentityUpstreamCode(body?.error_code ?? body?.code ?? body?.error);
     const error = new Error(`AUTHENTICATED_HOSTED_IDENTITY_${category}`);
@@ -78,26 +80,33 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
     });
     return error;
   };
-  const request = async (path, init = {}) => {
+  const request = async (path, init = {}, { mutation = false } = {}) => {
     let response;
     try {
+      const deadline = AbortSignal.timeout(AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS);
+      const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
       response = await fetchImpl(`${config.supabaseUrl}${path}`, {
         ...init,
+        signal,
         headers: { ...authHeaders(config), ...(init.headers ?? {}) },
       });
-    } catch { throw identityError('PROVISION', 'TRANSPORT_FAILURE'); }
+    } catch {
+      if (mutation) unknownMutationOutcomes.add('PROVISION');
+      throw identityError('PROVISION', 'TRANSPORT_FAILURE');
+    }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw identityError('PROVISION', authenticatedHostedIdentityCategoryForStatus(response.status), body);
     return body;
   };
   return {
-    async provisionProject({ projectName, exerciseDigest, personas }) {
+    async provisionProject({ projectName, exerciseDigest, personas, signal }) {
       const result = {};
       for (const persona of personas) {
         const email = `hosted.${config.workflow.runId}.${config.workflow.attempt}.${projectName}.${persona}@example.invalid`;
         const password = createPassword();
         const body = await request('/auth/v1/admin/users', {
           method: 'POST',
+          signal,
           body: JSON.stringify({
             email,
             password,
@@ -105,18 +114,23 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
             user_metadata: { synthetic: true, exerciseDigest, persona, browserProject: projectName },
             app_metadata: { provider: 'email', providers: ['email'], synthetic_acceptance: true },
           }),
-        });
+        }, { mutation: true });
         const user = body.user ?? body;
-        if (!uuid(user.id)) throw new Error('AUTHENTICATED_HOSTED_IDENTITY_CREATE_REJECTED');
+        if (!uuid(user.id)) {
+          unknownMutationOutcomes.add('PROVISION');
+          throw new Error('AUTHENTICATED_HOSTED_IDENTITY_CREATE_REJECTED');
+        }
         result[persona] = { id: user.id, email, password };
         created.set(user.id, { email, persona, projectName });
       }
       return result;
     },
-    async verifySession({ accessToken, actorId, sessionId }) {
+    async verifySession({ accessToken, actorId, sessionId, signal }) {
       let response;
       try {
+        const deadline = AbortSignal.timeout(AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS);
         response = await fetchImpl(`${config.supabaseUrl}/auth/v1/user`, {
+          signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
           headers: { apikey: config.serviceRoleKey, authorization: `Bearer ${accessToken}` },
         });
       } catch { throw identityError('VERIFY_SESSION', 'TRANSPORT_FAILURE'); }
@@ -144,6 +158,7 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
       if(errors.length)throw new AggregateError(errors,'AUTHENTICATED_HOSTED_IDENTITY_REVOCATION_INCOMPLETE');
     },
     created,
+    unknownMutationOutcomes,
   };
 }
 

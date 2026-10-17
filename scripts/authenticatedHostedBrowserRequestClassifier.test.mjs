@@ -25,11 +25,12 @@ const loadNetworkInstaller = () => {
     assert.equal(specifier, '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs');
     return { AuthenticatedHostedBrowserActionTracker };
   });
-  return exports.installAuthenticatedHostedNetwork;
+  return exports;
 };
 
-const networkFixture = async startAction => {
+const networkFixture = async (startAction, options = {}) => {
   const context = new EventEmitter();
+  context.close = async value => context.closeHook?.(value);
   let routeHandler;
   context.route = async (_pattern, callback) => { routeHandler = callback; };
   let tail = Promise.resolve();
@@ -37,14 +38,199 @@ const networkFixture = async startAction => {
   const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin, startAction,
     finishAction: async value => { finishes.push(value); },
   });
-  await loadNetworkInstaller()({ context, hosted: true, allowedOrigins: new Set([appOrigin, backendOrigin]), tracker,
-    queueNetworkAction: operation => { tail = tail.then(operation).catch(error => { errors.push(error.message); }); },
+  const lifecycle = await loadNetworkInstaller().installAuthenticatedHostedNetwork({ context, hosted: true,
+    allowedOrigins: new Set([appOrigin, backendOrigin]), tracker,
+    queueNetworkAction: (operation, ownedWork) => {
+      const ownedSettlement = ownedWork
+        ? Promise.resolve(ownedWork).then(() => undefined, () => undefined) : Promise.resolve();
+      tail = tail.then(async () => { await ownedSettlement; await operation(); })
+        .catch(error => { errors.push(error.message); });
+    },
     onExternalRequest: () => assert.fail('unexpected external request'), onHttpRequest: () => {},
     onTrackerError: error => { errors.push(error.message); },
     dispatchAllowedRequest: async route => { dispatches.push(route); },
+    ...(options.responseBodyTimeoutMs ? { responseBodyTimeoutMs: options.responseBodyTimeoutMs } : {}),
   });
-  return { context, errors, finishes, dispatches, route: value => routeHandler(value), drain: () => tail };
+  const drain = async () => {
+    for (;;) {
+      const snapshot = tail;
+      await snapshot;
+      if (snapshot === tail) return;
+    }
+  };
+  return { context, errors, finishes, dispatches, lifecycle, route: value => routeHandler(value), drain };
 };
+
+test('response body ownership fails closed and joins context cancellation before returning', async () => {
+  const { readAuthenticatedHostedResponseBody } = loadNetworkInstaller();
+  let closeCalls = 0;
+  const normalContext = { close: async () => { closeCalls += 1; } };
+  assert.deepEqual(await readAuthenticatedHostedResponseBody(normalContext, {
+    json: async () => ({ outcome: 'committed' }),
+  }, 20), { outcome: 'committed' });
+  assert.equal(closeCalls, 0);
+
+  await assert.rejects(readAuthenticatedHostedResponseBody(normalContext, {
+    json: async () => { throw new Error('private protocol body failure'); },
+  }, 20), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED$/u);
+  assert.equal(closeCalls, 0);
+
+  await assert.rejects(readAuthenticatedHostedResponseBody(normalContext, {
+    json: async () => JSON.parse('{'),
+  }, 20), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON$/u);
+  assert.equal(closeCalls, 0);
+
+  let releaseBody;
+  let bodySettled = false;
+  const heldBody = new Promise(resolve => { releaseBody = () => { bodySettled = true; resolve({ late: true }); }; });
+  const closingContext = { close: async () => { closeCalls += 1; releaseBody(); } };
+  await assert.rejects(readAuthenticatedHostedResponseBody(closingContext, { json: () => heldBody }, 10),
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT$/u);
+  assert.equal(bodySettled, true);
+  assert.equal(closeCalls, 1);
+});
+
+test('Chromium durable response bodies use bounded browser memory before navigation', async () => {
+  const {
+    authenticatedHostedConfigureChromiumDurableResponseBodies,
+    authenticatedHostedDurableResponseBodyResourceBytes,
+    authenticatedHostedDurableResponseBodyTotalBytes,
+  } = loadNetworkInstaller();
+  const calls = [];
+  const page = Object.freeze({ fixture: true });
+  const context = {
+    newCDPSession: async receivedPage => {
+      assert.equal(receivedPage, page);
+      return { send: async (method, parameters) => { calls.push({ method, parameters }); } };
+    },
+  };
+  await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
+  assert.equal(authenticatedHostedDurableResponseBodyResourceBytes, 16 * 1024 * 1024);
+  assert.equal(authenticatedHostedDurableResponseBodyTotalBytes, 64 * 1024 * 1024);
+  assert.deepEqual(calls, [
+    { method: 'Network.enable', parameters: undefined },
+    { method: 'Network.configureDurableMessages', parameters: {
+      maxTotalBufferSize: 64 * 1024 * 1024,
+      maxResourceBufferSize: 16 * 1024 * 1024,
+    } },
+  ]);
+});
+
+test('Chromium durable response body setup fails with a fixed error code', async () => {
+  const { authenticatedHostedConfigureChromiumDurableResponseBodies } = loadNetworkInstaller();
+  await assert.rejects(authenticatedHostedConfigureChromiumDurableResponseBodies({
+    newCDPSession: async () => { throw new Error('private protocol detail'); },
+  }, {}), /^Error: AUTHENTICATED_BROWSER_DURABLE_RESPONSE_BODIES_UNAVAILABLE$/u);
+});
+
+test('response body close failure returns cleanup-incomplete without fabricating a body', async () => {
+  const { readAuthenticatedHostedResponseBody } = loadNetworkInstaller();
+  const never = new Promise(() => {});
+  await assert.rejects(readAuthenticatedHostedResponseBody({
+    close: async () => { throw new Error('private close failure'); },
+  }, { json: () => never }, 5), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE$/u);
+});
+
+test('installed network acquires a business response body before serialized finish work drains', async () => {
+  const network = await networkFixture(async () => ({ actionId: 'eager-action' }));
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  let pageClosed = false;
+  let bodyReads = 0;
+  let releaseBody;
+  const body = new Promise(resolve => { releaseBody = () => resolve({ outcome: 'committed' }); });
+  const response = { request: () => request, status: () => 200,
+    json: () => {
+      bodyReads += 1;
+      if (pageClosed) return Promise.reject(new Error('page already closed'));
+      return body;
+    },
+  };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', response);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(bodyReads, 1);
+  let barrierSettled = false;
+  const barrier = network.lifecycle.settleResponseBodies().then(() => { barrierSettled = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(barrierSettled, false);
+  pageClosed = true;
+  releaseBody();
+  await barrier;
+  await network.drain();
+  assert.deepEqual(network.errors, []);
+  assert.deepEqual(network.finishes, [{ actionId: 'eager-action', status: 200,
+    responseBody: { outcome: 'committed' } }]);
+});
+
+test('installed network records an observed response transport failure without fabricating a body', async () => {
+  const network = await networkFixture(async () => ({ actionId: 'transport-action' }));
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', { request: () => request, status: () => 200,
+    json: async () => { throw new Error('private browser transport failure'); } });
+  network.context.emit('requestfailed', request);
+  await network.lifecycle.settleResponseBodies();
+  await network.drain();
+  assert.deepEqual(network.errors, []);
+  assert.deepEqual(network.finishes, [{ actionId: 'transport-action', status: 0,
+    responseBody: { error: { code: 'BROWSER_TRANSPORT_FAILURE' } } }]);
+});
+
+test('installed network keeps an unpaired malformed response fail closed', async () => {
+  const network = await networkFixture(async () => ({ actionId: 'malformed-action' }));
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', { request: () => request, status: () => 200,
+    json: async () => JSON.parse('{') });
+  await assert.rejects(network.lifecycle.settleResponseBodies(),
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON$/u);
+  await network.drain();
+  assert.deepEqual(network.errors, ['AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON']);
+  assert.deepEqual(network.finishes, []);
+});
+
+test('installed network never reclassifies malformed JSON as a paired transport failure', async () => {
+  const network = await networkFixture(async () => ({ actionId: 'paired-malformed-action' }));
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', { request: () => request, status: () => 200,
+    json: async () => JSON.parse('{') });
+  network.context.emit('requestfailed', request);
+  await assert.rejects(network.lifecycle.settleResponseBodies(),
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON$/u);
+  await network.drain();
+  assert.deepEqual(network.errors, ['AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON']);
+  assert.deepEqual(network.finishes, []);
+});
+
+test('response timeout remains fail closed when context cancellation emits requestfailed', async () => {
+  const network = await networkFixture(async () => ({ actionId: 'timeout-action' }), {
+    responseBodyTimeoutMs: 5,
+  });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  let rejectBody;
+  const body = new Promise((_resolve, reject) => { rejectBody = reject; });
+  network.context.closeHook = async () => {
+    network.context.emit('requestfailed', request);
+    rejectBody(new Error('private cancelled body'));
+  };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', { request: () => request, status: () => 200, json: () => body });
+  await assert.rejects(network.lifecycle.settleResponseBodies(),
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT$/u);
+  await network.drain();
+  assert.ok(network.errors.includes('AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT'));
+});
 
 test('only the exact backend POST attestation is public', () => {
   assert.deepEqual(classify(input(attest)), { kind: 'public-attestation', route: attest });
