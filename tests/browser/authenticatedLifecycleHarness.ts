@@ -216,7 +216,7 @@ export const authenticatedLifecycleControl = createAuthenticatedLifecycleControl
 });
 
 export type AuthenticatedLifecycleWorkQueue = Readonly<{
-  enqueue: (operation: () => Promise<unknown>) => void;
+  enqueue: (operation: () => Promise<unknown>, ownedWork?: Promise<unknown>) => void;
   drain: () => Promise<void>;
 }>;
 
@@ -224,8 +224,16 @@ export const createAuthenticatedLifecycleWorkQueue = (): AuthenticatedLifecycleW
   let tail: Promise<void> = Promise.resolve();
   let hasFailure = false;
   let firstFailure: unknown;
-  const enqueue = (operation: () => Promise<unknown>) => {
+  const enqueue = (operation: () => Promise<unknown>, ownedWork?: Promise<unknown>) => {
+    // Attach settlement handlers immediately so eagerly-started browser work
+    // remains owned even when an earlier queued action fails. At this queue
+    // position we join that work, but preserve the first failure and never run
+    // a later controller commit after failure.
+    const ownedSettlement = ownedWork
+      ? Promise.resolve(ownedWork).then(() => undefined, () => undefined)
+      : Promise.resolve();
     const work = tail.then(async () => {
+      await ownedSettlement;
       if (!hasFailure) await operation();
     });
     tail = work.catch(error => {

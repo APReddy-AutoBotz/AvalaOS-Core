@@ -351,6 +351,26 @@ test('work queue attaches an immediate rejection handler and retains its first f
   }
 });
 
+test('work queue joins eager owned work after an earlier failure without running its controller commit', async () => {
+  const queue = createAuthenticatedLifecycleWorkQueue();
+  const first = new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_ACTION_REJECTED');
+  let releaseOwned: (() => void) | undefined;
+  const owned = new Promise<void>(resolve => { releaseOwned = resolve; });
+  let laterOperationRan = false;
+  queue.enqueue(async () => { throw first; });
+  queue.enqueue(async () => { laterOperationRan = true; }, owned);
+  let drainSettled = false;
+  const drain = queue.drain().then(
+    () => { drainSettled = true; },
+    error => { drainSettled = true; throw error; },
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(drainSettled, false);
+  releaseOwned?.();
+  await assert.rejects(drain, error => error === first);
+  assert.equal(laterOperationRan, false);
+});
+
 test('work queue drains work appended by an owning operation exactly once', async () => {
   const queue = createAuthenticatedLifecycleWorkQueue();
   const observed: string[] = [];

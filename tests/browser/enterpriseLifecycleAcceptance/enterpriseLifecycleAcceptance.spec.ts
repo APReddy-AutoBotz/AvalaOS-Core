@@ -502,10 +502,16 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     cases: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
   }>;
   let activeTestWorkQueues: TestWorkQueues | null = null;
+  let activeNetworkLifecycle: Awaited<ReturnType<typeof installAuthenticatedHostedNetwork>> | null = null;
   const projectWorkQueues: TestWorkQueues[] = [];
   const queueNetworkAction = (operation: () => Promise<unknown>) => {
     if (!activeTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     activeTestWorkQueues.network.enqueue(operation);
+  };
+  const closePageAfterResponseBodies = async (ownedPage: Page) => {
+    if (!activeNetworkLifecycle) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    await activeNetworkLifecycle.settleResponseBodies();
+    await ownedPage.close();
   };
   const explicitCaseActions = new Map<string, HostedActionReference[]>();
   const bindObservedCase = (testId: string,...actions: HostedActionReference[]) => {
@@ -612,12 +618,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     });
     activeTestWorkQueues = owningTestWorkQueues;
     projectWorkQueues.push(owningTestWorkQueues);
-    await installAuthenticatedHostedNetwork({
+    activeNetworkLifecycle = await installAuthenticatedHostedNetwork({
       context,
       hosted: controllerBackedAcceptance,
       allowedOrigins: hostedAllowedOrigins,
       tracker: hostedBrowserActionTracker,
-      queueNetworkAction: operation => owningTestWorkQueues.network.enqueue(operation),
+      queueNetworkAction: (operation, ownedWork) => owningTestWorkQueues.network.enqueue(operation, ownedWork),
       onExternalRequest: origin => {
         nonLoopbackRequests += 1;
         externalRequests.push(origin);
@@ -787,7 +793,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           cleanup: { verified: true },
         });
       }
-      await deniedEditPage.close();
+      await closePageAfterResponseBodies(deniedEditPage);
     });
 
     if (authenticatedProductAcceptance) {
@@ -1315,8 +1321,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           ] }, measurements, cleanup: { verified: true },
         });
       }
-      await replayPage.close();
-      await stalePage.close();
+      await closePageAfterResponseBodies(replayPage);
+      await closePageAfterResponseBodies(stalePage);
 
       const beforeAttestation = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
