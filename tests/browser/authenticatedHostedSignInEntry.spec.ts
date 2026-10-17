@@ -1,4 +1,5 @@
 import { expect, test, type Route } from '@playwright/test';
+import { appendFile } from 'node:fs/promises';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   authenticatedLifecycleControl,
@@ -21,6 +22,8 @@ const localAppOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LO
 const localApiOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL ?? '').origin;
 const processSeedMode = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE ?? '';
 const processReadStateOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY === 'true';
+const scopedNavigationOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_ONLY === 'true';
+const scopedNavigationEvidencePath = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_EVIDENCE_PATH ?? '';
 const syntheticProjectRef = 'abcdefghijklmnopqrst';
 if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
   || apiOrigin !== `https://${syntheticProjectRef}.supabase.co`
@@ -323,6 +326,222 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(denied.body).toEqual({ ok: false, error: {
     code: 'PERMISSION_DENIED', message: 'Process update could not be completed.',
   } });
+  if (scopedNavigationOnly) {
+    type DeliveryTaskGate = {
+      mode: string; waiting: number; requests: number; completed: number; held: number;
+      actors: string[]; authorityVersions: number[];
+    };
+    const deliveryTaskGate = (action: 'hold-next' | 'release' | 'reject' | 'inspect') =>
+      authenticatedLifecycleControl<DeliveryTaskGate>('/control/sign-in-entry-delivery-task-gate', { projectName, action });
+    type ReadinessObservation = {
+      tenantSessionRequests: number; tenantSessionCompleted: number;
+      processReadRequests: number; processReadCompleted: number;
+      projectIndexRequests: number; projectIndexCompleted: number;
+    };
+    const beforeHold = await deliveryTaskGate('inspect');
+    const beforeReadiness = await authenticatedLifecycleControl<ReadinessObservation>(
+      '/control/sign-in-entry-observation', { projectName },
+    );
+    const beforeFrame = await authenticatedLifecycleControl<{
+      targetHash: string; receipts: number; audits: number; processVersion: number;
+    }>('/control/process-frame', { projectName });
+    await deliveryTaskGate('hold-next');
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect.poll(() => deliveryTaskGate('inspect')).toMatchObject({
+        mode: 'held', waiting: 1, requests: beforeHold.requests + 1,
+        completed: beforeHold.completed, held: beforeHold.held + 1,
+      });
+      await expect.poll(async () => {
+        const observation = await authenticatedLifecycleControl<ReadinessObservation>(
+          '/control/sign-in-entry-observation', { projectName },
+        );
+        return {
+          tenantSessionRequests: observation.tenantSessionRequests,
+          tenantSessionCompleted: observation.tenantSessionCompleted,
+          projectIndexRequests: observation.projectIndexRequests,
+          projectIndexCompleted: observation.projectIndexCompleted,
+          processReadsSettled: observation.processReadRequests === observation.processReadCompleted,
+          processReadDelta: observation.processReadRequests - beforeReadiness.processReadRequests,
+        };
+      }).toMatchObject({
+        tenantSessionRequests: beforeReadiness.tenantSessionRequests + 1,
+        tenantSessionCompleted: beforeReadiness.tenantSessionCompleted + 1,
+        projectIndexRequests: beforeReadiness.projectIndexRequests + 1,
+        projectIndexCompleted: beforeReadiness.projectIndexCompleted + 1,
+        processReadsSettled: true,
+      });
+      const heldReadiness = await authenticatedLifecycleControl<ReadinessObservation>(
+        '/control/sign-in-entry-observation', { projectName },
+      );
+      expect(heldReadiness.processReadRequests - beforeReadiness.processReadRequests).toBeGreaterThanOrEqual(1);
+      const heldSearch = new URL(page.url()).search;
+      expect(new URLSearchParams(heldSearch).get('view')).toBe('process_detail');
+      expect(new URLSearchParams(heldSearch).get('processId')).toBe(selectedProcessId);
+      await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
+      expect(await authenticatedLifecycleControl('/control/process-frame', { projectName })).toEqual(beforeFrame);
+    } finally {
+      await deliveryTaskGate('reject');
+    }
+    await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Delivery data could not be loaded:',
+    })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Edit process details', exact: true }))
+      .toHaveAttribute('title', 'Process editing is not authorized for this role.');
+    expect(await authenticatedLifecycleControl('/control/process-frame', { projectName })).toEqual(beforeFrame);
+    await expect.poll(() => deliveryTaskGate('inspect')).toMatchObject({
+      mode: 'open', waiting: 0, requests: beforeHold.requests + 2,
+      completed: beforeHold.completed + 2, held: beforeHold.held + 1,
+    });
+
+    for (const outcome of ['empty', 'denied'] as const) {
+      const beforeFault = await authenticatedLifecycleControl<{
+        outcome: string | null; skip: number; remaining: number; consumed: number; completed: number;
+      }>('/control/sign-in-entry-process-read', { projectName, action: 'inspect' });
+      await authenticatedLifecycleControl('/control/sign-in-entry-process-read', {
+        projectName, action: 'arm', outcome, skip: 0,
+      });
+      const responsePromise = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.origin === apiOrigin && url.pathname === '/rest/v1/assess_processes'
+          && response.request().method() === 'GET';
+      });
+      const [processResponse] = await Promise.all([
+        responsePromise,
+        page.reload({ waitUntil: 'domcontentloaded' }),
+      ]);
+      expect(await processResponse.finished()).toBeNull();
+      expect(processResponse.status()).toBe(outcome === 'empty' ? 200 : 403);
+      await expect.poll(async () => authenticatedLifecycleControl<{
+        outcome: string | null; skip: number; remaining: number; consumed: number; completed: number;
+      }>('/control/sign-in-entry-process-read', { projectName, action: 'inspect' })).toMatchObject({
+        outcome, remaining: 0, consumed: beforeFault.consumed + 1, completed: beforeFault.completed + 1,
+      });
+      if (outcome === 'empty') {
+        await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+        await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('process_catalog');
+        expect(new URL(page.url()).searchParams.has('processId')).toBe(false);
+        await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'));
+        await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+      } else {
+        await expect(page.getByRole('alert').filter({ hasText: 'Process data could not be loaded for this workspace.' })).toBeVisible();
+        const settledSearch = new URL(page.url()).searchParams;
+        expect(settledSearch.get('view')).toBe('process_detail');
+        expect(settledSearch.get('processId')).toBe(selectedProcessId);
+      }
+    }
+
+    const beforeAuthoritySwitch = await deliveryTaskGate('inspect');
+    await deliveryTaskGate('hold-next');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect.poll(async () => {
+      const gate = await deliveryTaskGate('inspect');
+      const actors = gate.actors.slice(beforeAuthoritySwitch.actors.length);
+      const versions = gate.authorityVersions.slice(beforeAuthoritySwitch.authorityVersions.length);
+      return {
+        mode: gate.mode,
+        waiting: gate.waiting,
+        held: gate.held,
+        requestStarted: gate.requests > beforeAuthoritySwitch.requests,
+        exactlyOnePending: gate.requests === gate.completed + 1,
+        actorsAreReviewer: actors.length > 0 && actors.every(actorName => actorName === 'reviewer'),
+        versionsAreOne: versions.length > 0 && versions.every(version => version === 1),
+      };
+    }).toMatchObject({
+      mode: 'held', waiting: 1, held: beforeAuthoritySwitch.held + 1,
+      requestStarted: true, exactlyOnePending: true, actorsAreReviewer: true, versionsAreOne: true,
+    });
+    let priorAuthorityReleased = false;
+    try {
+      expect(await authenticatedLifecycleControl('/control/sign-in-entry-authority-version', {
+        projectName, action: 'advance',
+      })).toEqual({ current: 2, priorRead: 1 });
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await expect.poll(async () => {
+        const gate = await deliveryTaskGate('inspect');
+        const actors = gate.actors.slice(beforeAuthoritySwitch.actors.length);
+        const versions = gate.authorityVersions.slice(beforeAuthoritySwitch.authorityVersions.length);
+        return {
+          mode: gate.mode,
+          waiting: gate.waiting,
+          held: gate.held,
+          exactlyOnePending: gate.requests === gate.completed + 1,
+          actorsAreReviewer: actors.length > 0 && actors.every(actorName => actorName === 'reviewer'),
+          versionsAreScoped: versions.length > 0 && versions.every(version => version === 1 || version === 2),
+          currentAuthorityObserved: versions.includes(2),
+        };
+      }).toMatchObject({
+        mode: 'held', waiting: 1, held: beforeAuthoritySwitch.held + 1,
+        exactlyOnePending: true, actorsAreReviewer: true, versionsAreScoped: true,
+        currentAuthorityObserved: true,
+      });
+      await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
+      await deliveryTaskGate('reject');
+      priorAuthorityReleased = true;
+    } finally {
+      if (!priorAuthorityReleased) await deliveryTaskGate('reject').catch(() => undefined);
+    }
+    await expect.poll(async () => {
+      const gate = await deliveryTaskGate('inspect');
+      const actors = gate.actors.slice(beforeAuthoritySwitch.actors.length);
+      const versions = gate.authorityVersions.slice(beforeAuthoritySwitch.authorityVersions.length);
+      return {
+        mode: gate.mode,
+        waiting: gate.waiting,
+        held: gate.held,
+        settled: gate.requests === gate.completed,
+        actorsAreReviewer: actors.length > 0 && actors.every(actorName => actorName === 'reviewer'),
+        versionsAreScoped: versions.length > 0 && versions.every(version => version === 1 || version === 2),
+        currentAuthorityObserved: versions.includes(2),
+      };
+    }).toMatchObject({
+      mode: 'open', waiting: 0, held: beforeAuthoritySwitch.held + 1,
+      settled: true, actorsAreReviewer: true, versionsAreScoped: true, currentAuthorityObserved: true,
+    });
+    const settledAuthority = await deliveryTaskGate('inspect');
+    const observedAuthorityVersions = settledAuthority.authorityVersions
+      .slice(beforeAuthoritySwitch.authorityVersions.length);
+    await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('view')).toBe('process_detail');
+    expect(new URL(page.url()).searchParams.get('processId')).toBe(selectedProcessId);
+    await expect(page.getByRole('alert').filter({
+      hasText: 'Delivery data could not be loaded:',
+    })).toHaveCount(0);
+    expect(await authenticatedLifecycleControl('/control/process-frame', { projectName })).toEqual(beforeFrame);
+    await networkActionTail;
+    if (networkActionError) throw networkActionError;
+    expect(pageErrors).toEqual([]);
+    if (!scopedNavigationEvidencePath) throw new Error('SCOPED_NAVIGATION_EVIDENCE_PATH_REQUIRED');
+    await appendFile(scopedNavigationEvidencePath, `${JSON.stringify({
+      schemaVersion: 'scoped-navigation-readiness.v1',
+      phase: 'corrected',
+      browserProject: projectName,
+      exactApplication: true,
+      registeredSameWorkspaceProject: true,
+      heldDeliveryResponseBeforeHeaders: true,
+      tenantProcessAndProjectIndexCompletedWhileHeld: true,
+      durableProcessRoutePreservedWhileHeld: true,
+      processRenderedWithinOriginalBoundWhileUnrelatedTaskPending: true,
+      renderBoundMs: 20_000,
+      processRemainedRenderedAfterUnrelatedTaskRejection: true,
+      deliveryErrorVisibleAfterCurrentAuthorityTaskFailure: true,
+      latePriorAuthorityResponseReleasedWithoutVisibleError: true,
+      sameActorAuthorizationVersionRefresh: true,
+      authorityRefreshRequestCount: settledAuthority.requests - beforeAuthoritySwitch.requests,
+      authorityRefreshCompletedCount: settledAuthority.completed - beforeAuthoritySwitch.completed,
+      authorityRefreshObservedVersions: observedAuthorityVersions,
+      serverFrameUnchanged: true,
+      restrictedEditorRemainedDisabled: true,
+      processEmptyCanonicalizedAsMissing: true,
+      processReadErrorPreservedDurableRoute: true,
+      historicalHostedCauseProven: false,
+    })}\n`, 'utf8');
+    return;
+  }
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
   await expect(page.getByTestId('process-edit-form')).toHaveCount(0);

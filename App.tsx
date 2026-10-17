@@ -39,6 +39,8 @@ import {
   hasDurableProductNavigationAgreement,
   hasProductNavigationSearch,
   parseProductNavigationSearch,
+  productNavigationTargetIsWaiting,
+  productNavigationViewRequiresProcess,
   resolveProductNavigationState,
   isStructurallyValidProductNavigationSearch,
 } from './services/productNavigationState';
@@ -149,8 +151,8 @@ function App() {
     projects,
     epics,
     sprints,
-    loading: deliveryLoading,
     error: deliveryError,
+    projectIndexReadState,
     addTask: deliveryAddTask,
     addTasks: deliveryAddTasks,
     addEpics: deliveryAddEpics,
@@ -163,7 +165,7 @@ function App() {
     reorderTask: deliveryReorderTask,
     deleteTask: deliveryDeleteTask,
   } = useDelivery();
-  const { processes, loading: processesLoading } = useProcessService();
+  const { processes, readState: processReadState } = useProcessService();
   const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, localRuntimeEnabled ? MOCK_TEAMS : [], { enabled: localRuntimeEnabled });
   const [users, setUsers] = usePersistentState<User[]>(StorageKeys.USERS, localRuntimeEnabled ? MOCK_USERS : [], { enabled: localRuntimeEnabled });
   const [docTemplates, setDocTemplates] = usePersistentState<DocTemplate[]>(StorageKeys.DOC_TEMPLATES, localRuntimeEnabled ? MOCK_DOC_TEMPLATES : [], { enabled: localRuntimeEnabled });
@@ -202,6 +204,7 @@ function App() {
   } | null>(null);
   const navigationController = useRef(createProductNavigationController(explicitNavigationIntent));
   const pendingNavigationTransition = useRef<ProductNavigationTransition | null>(null);
+  const pendingPopStateSearch = useRef<string | null>(null);
   const navigationAuthorityKey = [currentUser?.id ?? 'anonymous', currentOrganization?.id ?? 'no-organization', currentWorkspace?.id ?? 'no-workspace', tenantContext?.authorizationVersion ?? 'no-authorization', sessionState].join(':');
   const canAssignDeliveryTasks = Boolean(dataAccess === 'server' && sessionState === 'ready' && tenantContext
     && ['task.assign', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => tenantContext.capabilities.includes(value)));
@@ -620,12 +623,15 @@ function App() {
       return;
     }
 
-    // Invalid durable navigation is rejected immediately. Only valid entity
-    // reconstruction waits for process data required by route resolution.
-    if (processesLoading || (dataAccess === 'server' && deliveryLoading)) return;
+    const navigationTarget = parseProductNavigationSearch(window.location.search);
+    if (productNavigationTargetIsWaiting({
+      ...navigationTarget,
+      processReadState,
+      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+    })) return;
 
     const resolvedNavigation = resolveProductNavigationState({
-      ...parseProductNavigationSearch(window.location.search),
+      ...navigationTarget,
       user: currentUser,
       authLoading: guardLoading,
       organization: currentOrganization,
@@ -634,6 +640,8 @@ function App() {
       processes,
       projects,
       documentGenerations,
+      processReadState,
+      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
       preserveOrganizationWorkspace: true,
     });
 
@@ -662,13 +670,13 @@ function App() {
     currentUser,
     authoritativeViewCapabilities,
     documentGenerations,
-    deliveryLoading,
     dataAccess,
     enabledModules,
     explicitNavigationIntent,
     guardLoading,
     processes,
-    processesLoading,
+    processReadState,
+    projectIndexReadState,
     persistedScope,
     persistedView,
     projects,
@@ -680,7 +688,15 @@ function App() {
   useEffect(() => {
     if (guardLoading || !currentUser || !currentOrganization) return;
     if (navigationController.current.needsClassification()) return;
-    if (processesLoading || (dataAccess === 'server' && deliveryLoading)) return;
+    if (pendingPopStateSearch.current === window.location.search) return;
+    if (productNavigationTargetIsWaiting({
+      view: currentView,
+      scope: currentScope,
+      processId: selectedProcessId,
+      documentGenerationId: activeGenerationId,
+      processReadState,
+      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+    })) return;
 
     // Effects later in the same flush can observe ref writes from URL hydration
     // while still closing over the pre-hydration render. Keep reconciliation
@@ -724,6 +740,8 @@ function App() {
       processes,
       projects,
       documentGenerations,
+      processReadState,
+      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
       preserveOrganizationWorkspace: true,
     });
 
@@ -757,13 +775,13 @@ function App() {
     currentUser,
     currentView,
     documentGenerations,
-    deliveryLoading,
     dataAccess,
     enabledModules,
     explicitNavigationIntent,
     guardLoading,
     processes,
-    processesLoading,
+    processReadState,
+    projectIndexReadState,
     projects,
     writeProductNavigationSearch,
     selectedProcessId,
@@ -785,26 +803,47 @@ function App() {
   }, [navigationAuthorityKey]);
 
   useEffect(() => {
-    if (guardLoading || !currentUser || !currentOrganization || processesLoading || (dataAccess === 'server' && deliveryLoading)) return;
-    const handlePopState = () => {
-      const search = window.location.search;
+    if (guardLoading || !currentUser || !currentOrganization) return;
+    const applyPopState = (search: string) => {
       const target = isStructurallyValidProductNavigationSearch(search)
         ? parseProductNavigationSearch(search)
         : { view: DEFAULT_PERSISTED_VIEW, scope: DEFAULT_PERSISTED_SCOPE };
-      const resolved = resolveProductNavigationState({ ...target, user: currentUser, authLoading: guardLoading, organization: currentOrganization, enabledModules, authoritativeCapabilities: authoritativeViewCapabilities, processes, projects, documentGenerations, preserveOrganizationWorkspace: true });
-      pendingNavigationTransition.current = navigationController.current.beginSettlement(
-        isStructurallyValidProductNavigationSearch(search),
-        'popstate',
-      );
+      if (productNavigationTargetIsWaiting({
+        ...target,
+        processReadState,
+        projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+      })) {
+        if (pendingPopStateSearch.current !== search) {
+          pendingNavigationTransition.current = navigationController.current.beginSettlement(
+            isStructurallyValidProductNavigationSearch(search),
+            'popstate',
+          );
+        }
+        pendingPopStateSearch.current = search;
+        return;
+      }
+      const pendingTransition = pendingPopStateSearch.current === search
+        ? pendingNavigationTransition.current
+        : null;
+      pendingPopStateSearch.current = null;
+      const resolved = resolveProductNavigationState({ ...target, user: currentUser, authLoading: guardLoading, organization: currentOrganization, enabledModules, authoritativeCapabilities: authoritativeViewCapabilities, processes, projects, documentGenerations, processReadState, projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready', preserveOrganizationWorkspace: true });
+      pendingNavigationTransition.current = pendingTransition?.origin === 'popstate'
+        ? pendingTransition
+        : navigationController.current.beginSettlement(
+          isStructurallyValidProductNavigationSearch(search),
+          'popstate',
+        );
       pendingNavigationHydration.current = { view: resolved.view, scope: resolved.scope, selectedProcessId: resolved.selectedProcessId, activeGenerationId: resolved.activeGenerationId };
       setScopeIfChanged(resolved.scope);
       setCurrentView(resolved.view);
       setSelectedProcessId(resolved.selectedProcessId);
       setActiveGenerationId(resolved.activeGenerationId);
     };
+    const handlePopState = () => applyPopState(window.location.search);
     window.addEventListener('popstate', handlePopState);
+    if (pendingPopStateSearch.current === window.location.search) applyPopState(window.location.search);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [authoritativeViewCapabilities, currentOrganization, currentUser, dataAccess, deliveryLoading, documentGenerations, enabledModules, guardLoading, processes, processesLoading, projects, setCurrentView, setScopeIfChanged]);
+  }, [authoritativeViewCapabilities, currentOrganization, currentUser, dataAccess, documentGenerations, enabledModules, guardLoading, processReadState, processes, projectIndexReadState, projects, setCurrentView, setScopeIfChanged]);
   const handleReorderTask = (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     const task = tasks.find(item => item.id === taskIdToMove);
     if (!ensureProductAction('project.task.reorder', { projectId: task?.projectId })) return;
@@ -1230,6 +1269,14 @@ function App() {
           </div>
         </div>
       );
+    }
+
+    if (productNavigationViewRequiresProcess(currentView) && processReadState === 'error') {
+      return <div role="alert" className="mx-auto max-w-3xl p-8 text-center">Process data could not be loaded for this workspace. The requested route has been preserved so you can retry safely.</div>;
+    }
+    if (dataAccess === 'server' && projectIndexReadState === 'error'
+      && (currentScope.type === ScopeType.PROJECT || (currentView === View.WORKSPACE && Boolean(activeGenerationId)))) {
+      return <div role="alert" className="mx-auto max-w-3xl p-8 text-center">Project data could not be loaded for this workspace. The requested route has been preserved so you can retry safely.</div>;
     }
 
     // If we are currently viewing a specific process detail

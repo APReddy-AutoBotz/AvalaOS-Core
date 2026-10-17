@@ -17,6 +17,7 @@ import {
   hasProductNavigationSearch,
   isStructurallyValidProductNavigationSearch,
   parseProductNavigationSearch,
+  productNavigationTargetIsWaiting,
   resolveProductNavigationState,
 } from './productNavigationState';
 
@@ -416,6 +417,26 @@ const validProcessNavigation = resolveProductNavigationState({
 assert.equal(validProcessNavigation.view, View.PROCESS_DETAIL);
 assert.equal(validProcessNavigation.selectedProcessId, navigationProcess.id);
 assert.deepEqual(validProcessNavigation.issues, []);
+assert.equal(productNavigationTargetIsWaiting({
+  view: View.PROCESS_DETAIL,
+  scope: { type: ScopeType.MY_WORK },
+  processId: navigationProcess.id,
+  processReadState: 'ready',
+  projectIndexReadState: 'loading',
+}), false, 'process navigation must not wait for unrelated Delivery task or project work');
+
+const processReadErrorNavigation = resolveProductNavigationState({
+  ...navigationContext,
+  processes: [],
+  processReadState: 'error',
+  user: processAnalyst,
+  view: View.PROCESS_DETAIL,
+  scope: { type: ScopeType.MY_WORK },
+  processId: navigationProcess.id,
+});
+assert.equal(processReadErrorNavigation.view, View.PROCESS_DETAIL);
+assert.equal(processReadErrorNavigation.selectedProcessId, navigationProcess.id);
+assert.deepEqual(processReadErrorNavigation.issues, ['process_read_error']);
 
 const missingProcessNavigation = resolveProductNavigationState({
   ...navigationContext,
@@ -459,6 +480,28 @@ const projectDocsNavigation = resolveProductNavigationState({
 });
 assert.equal(projectDocsNavigation.view, View.DOCS);
 assert.deepEqual(projectDocsNavigation.scope, { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name });
+assert.equal(productNavigationTargetIsWaiting({
+  view: View.DOCS,
+  scope: { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+  projectId: navigationProject.id,
+  processReadState: 'ready',
+  projectIndexReadState: 'loading',
+}), true, 'selected-project navigation waits for the authoritative project index');
+
+const projectIndexErrorNavigation = resolveProductNavigationState({
+  ...navigationContext,
+  projects: [],
+  projectIndexReadState: 'error',
+  user: deliveryUser,
+  view: View.DELIVERY_PACK,
+  scope: { type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name },
+  projectId: navigationProject.id,
+});
+assert.equal(projectIndexErrorNavigation.view, View.DELIVERY_PACK);
+assert.deepEqual(projectIndexErrorNavigation.scope, {
+  type: ScopeType.PROJECT, id: navigationProject.id, name: navigationProject.name,
+});
+assert.deepEqual(projectIndexErrorNavigation.issues, ['project_index_read_error']);
 
 const invalidProjectNavigation = resolveProductNavigationState({
   ...navigationContext,
@@ -469,6 +512,21 @@ const invalidProjectNavigation = resolveProductNavigationState({
 assert.equal(invalidProjectNavigation.view, View.BOARDS);
 assert.deepEqual(invalidProjectNavigation.scope, { type: ScopeType.MY_WORK });
 assert.deepEqual(invalidProjectNavigation.issues, ['invalid_project_id']);
+
+const workspaceProjectIndexErrorNavigation = resolveProductNavigationState({
+  ...navigationContext,
+  projects: [],
+  projectIndexReadState: 'error',
+  user: docsReviewer,
+  view: View.WORKSPACE,
+  scope: { type: ScopeType.MY_WORK },
+  documentGenerationId: navigationGeneration.id,
+});
+assert.equal(workspaceProjectIndexErrorNavigation.activeGenerationId, navigationGeneration.id);
+assert.equal(workspaceProjectIndexErrorNavigation.view, View.WORKSPACE);
+assert.deepEqual(workspaceProjectIndexErrorNavigation.scope, { type: ScopeType.MY_WORK });
+assert.equal(workspaceProjectIndexErrorNavigation.issues.includes('project_index_read_error'), true);
+assert.equal(workspaceProjectIndexErrorNavigation.access.allowed, false);
 
 const validWorkspaceNavigation = resolveProductNavigationState({
   ...navigationContext,

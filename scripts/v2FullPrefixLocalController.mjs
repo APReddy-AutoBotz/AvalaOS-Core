@@ -20,6 +20,9 @@ const DIRECT_FIXTURE_CONTROLS = new Set([
   '/control/setup',
   '/control/arm-browser-fault',
   '/control/assess-v2-runtime',
+  '/control/native-postgrest-stream',
+  '/control/native-postgrest-stream-release',
+  '/control/native-postgrest-stats',
 ]);
 const PREFIX_PREREQUISITE_FIELDS = Object.freeze([
   'reviewerRestricted',

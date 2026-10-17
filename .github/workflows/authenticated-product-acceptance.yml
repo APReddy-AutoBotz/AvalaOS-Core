@@ -102,6 +102,7 @@ jobs:
         run: |
           npm run test:authenticated-product:source
           npm run test:provider-secret-backend
+          node scripts/runPr1fTypeScriptTest.mjs services/deliveryReadiness.ts services/deliveryReadiness.test.ts
           npm run typecheck
           npm run typecheck:edge
           node scripts/exhaustiveAcceptanceValidate.mjs
@@ -385,6 +386,19 @@ jobs:
           node scripts/testAuthenticatedHostedSignInEntry.mjs --process-read-state
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
+      - name: Verify scoped navigation while unrelated Delivery reads are pending
+        run: |-
+          node scripts/testAuthenticatedHostedSignInEntry.mjs --scoped-navigation
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Retain scoped navigation preparation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-scoped-navigation-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/local-private/authenticated-product-acceptance/scoped-navigation-corrected.jsonl
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify final preactivation checkout
         if: always()
         shell: bash

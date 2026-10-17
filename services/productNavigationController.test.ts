@@ -39,6 +39,15 @@ assert.equal(ordered.commitSettlement(slowInvalid), false, 'a stale invalid comp
 assert.equal(ordered.commitSettlement(fastValid), true);
 assert.equal(ordered.settlement(), 'settled-valid');
 
+const lateProjectIndex = createProductNavigationController();
+const oldCurrentView = lateProjectIndex.begin('hydrate');
+const pendingPopstate = lateProjectIndex.beginSettlement(true, 'popstate');
+assert.equal(lateProjectIndex.settlementPending(), true);
+assert.equal(lateProjectIndex.writeFor(oldCurrentView), null,
+  'old reconciliation cannot overwrite a popstate target while its project index is pending');
+assert.equal(lateProjectIndex.commitSettlement(pendingPopstate), true);
+assert.equal(lateProjectIndex.writeFor(pendingPopstate), 'replace');
+
 const identitySwitch = createProductNavigationController(true);
 const formerIdentity = identitySwitch.beginSettlement(true);
 identitySwitch.rebind();

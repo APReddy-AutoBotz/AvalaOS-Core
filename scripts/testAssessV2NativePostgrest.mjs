@@ -385,7 +385,7 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           failed: nativeStats.failed - stats.failed,
           statusClasses: nativeStatusDelta,
         },
-        baseline: '6e253b2c3d4c18a9106ee53449cc374d2214d4cb',
+        baseline: 'a5338f190dfce23c2a38c2346ee1d9d012eed72c',
       });
       await writeFile(`${reproductionDirectory}/result.json`, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
       process.stdout.write(`# V2_FULL_PREFIX_LOCAL_REPRODUCTION_RESULT ${JSON.stringify({

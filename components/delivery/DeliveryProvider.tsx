@@ -4,6 +4,7 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { deliveryAdapter, LegacyDeliveryPendingReconciledError } from '../../services/adapters/deliveryAdapter';
 import { useAuth } from '../auth/AuthProvider';
 import { getRuntimeDataAccess } from '../../services/supabaseClient';
+import { deliveryReadCompletionMatches, type DeliveryProjectIndexReadState, visibleDeliveryProjectIndexReadiness } from '../../services/deliveryReadiness';
 import { assertCanCreateDeliveryTask, assertCanUpdateDeliveryTask, canDeleteDeliveryTask, canManageProjectDelivery, DeliveryPolicyError, hasDeliveryPermission } from '../../services/deliveryPolicy';
 import {
   assertProjectLifecycleMutationAllowed,
@@ -24,6 +25,8 @@ interface DeliveryContextType {
   sprints: Sprint[];
   loading: boolean;
   error: string | null;
+  projectIndexReadState: DeliveryProjectIndexReadState;
+  projectIndexError: string | null;
   addTask: (task: Partial<Task>) => Promise<Task | undefined>;
   addTasks: (tasks: Task[]) => Promise<Task[]>;
   addEpics: (epics: Epic[]) => Promise<Epic[]>;
@@ -134,17 +137,35 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [loading, setLoading] = useState(runtimeDataAccess === 'server');
   const [error, setError] = useState<string | null>(null);
-  const [loadedAuthorityKey, setLoadedAuthorityKey] = useState<string | null>(null);
+  const [projectIndexReadState, setProjectIndexReadState] = useState<DeliveryProjectIndexReadState>(
+    runtimeDataAccess === 'server' ? 'loading' : 'idle',
+  );
+  const [projectIndexError, setProjectIndexError] = useState<string | null>(null);
+  const [projectIndexStateAuthorityKey, setProjectIndexStateAuthorityKey] = useState<string | null>(null);
+  const [loadedProjectIndexAuthorityKey, setLoadedProjectIndexAuthorityKey] = useState<string | null>(null);
+  const [loadedTaskAuthorityKey, setLoadedTaskAuthorityKey] = useState<string | null>(null);
   const fetchSequence = useRef(0);
   const authorityKey = tenantContext
     ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}`
     : 'no-server-authority';
   const activeAuthorityKey = useRef(authorityKey);
   activeAuthorityKey.current = authorityKey;
+  const currentRequestMatches = (requestSequence: number, requestAuthorityKey: string) =>
+    deliveryReadCompletionMatches({
+      requestSequence,
+      requestAuthorityKey,
+      currentSequence: fetchSequence.current,
+      currentAuthorityKey: activeAuthorityKey.current,
+    });
 
   const requireCurrentAuthority = (startedWith: string) => {
     if (activeAuthorityKey.current !== startedWith) {
       throw new DeliveryPolicyError('The Delivery workspace changed while the request was running. Refresh the current workspace before retrying.');
+    }
+  };
+  const requireCurrentTaskProjection = () => {
+    if (runtimeDataAccess === 'server' && loadedTaskAuthorityKey !== authorityKey) {
+      throw new DeliveryPolicyError('Delivery work is still loading for the current workspace.');
     }
   };
 
@@ -155,7 +176,11 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setTasks([]);
       setEpics([]);
       setSprints([]);
-      setLoadedAuthorityKey(null);
+      setLoadedProjectIndexAuthorityKey(null);
+      setLoadedTaskAuthorityKey(null);
+      setProjectIndexReadState(runtimeDataAccess === 'server' ? 'loading' : 'idle');
+      setProjectIndexError(null);
+      setProjectIndexStateAuthorityKey(null);
       // Keep project navigation waiting while a server session is being established.
       setLoading(runtimeDataAccess === 'server');
       setError(null);
@@ -165,24 +190,38 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const requestAuthorityKey = authorityKey;
     setLoading(true);
     setError(null);
+    let projectIndexCommitted = false;
     try {
       if (getRuntimeDataAccess() === 'server') {
-        setLoadedAuthorityKey(null);
+        setLoadedProjectIndexAuthorityKey(null);
+        setLoadedTaskAuthorityKey(null);
+        setProjectIndexReadState('loading');
+        setProjectIndexError(null);
+        setProjectIndexStateAuthorityKey(requestAuthorityKey);
         setProjects([]);
         setTasks([]);
         setEpics([]);
         setSprints([]);
         if (!tenantContext) {
-          setError('A current server workspace is required before Delivery data can be loaded.');
+          const message = 'A current server workspace is required before Delivery data can be loaded.';
+          setProjectIndexReadState('error');
+          setProjectIndexError(message);
+          setError(message);
           return;
         }
-        const workspace = await deliveryAdapter.getAuthoritativeWorkspace(tenantContext);
-        if (fetchSequence.current !== requestSequence || activeAuthorityKey.current !== requestAuthorityKey) return;
-        setProjects(workspace.projects);
-        setTasks(sortTasksForDisplay(workspace.tasks));
-        setEpics(workspace.epics);
+        const authoritativeProjects = await deliveryAdapter.getAuthoritativeProjects(tenantContext);
+        if (!currentRequestMatches(requestSequence, requestAuthorityKey)) return;
+        setProjects(authoritativeProjects);
+        setLoadedProjectIndexAuthorityKey(requestAuthorityKey);
+        setProjectIndexReadState(authoritativeProjects.length === 0 ? 'empty' : 'ready');
+        projectIndexCommitted = true;
+
+        const projection = await deliveryAdapter.getAuthoritativeTaskProjection(tenantContext, authoritativeProjects);
+        if (!currentRequestMatches(requestSequence, requestAuthorityKey)) return;
+        setTasks(sortTasksForDisplay(projection.tasks));
+        setEpics(projection.epics);
         setSprints([]);
-        setLoadedAuthorityKey(requestAuthorityKey);
+        setLoadedTaskAuthorityKey(requestAuthorityKey);
         return;
       }
       const [projData, taskData, epicData, sprintData] = await Promise.all([
@@ -191,24 +230,35 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deliveryAdapter.getEpics(currentOrganization.id),
         deliveryAdapter.getSprints(currentOrganization.id)
       ]);
-      if (fetchSequence.current !== requestSequence) return;
+      if (!currentRequestMatches(requestSequence, requestAuthorityKey)) return;
       setProjects(projData);
       setTasks(sortTasksForDisplay(taskData));
       setEpics(epicData);
       setSprints(sprintData);
-      setLoadedAuthorityKey('local');
+      setLoadedProjectIndexAuthorityKey('local');
+      setLoadedTaskAuthorityKey('local');
+      setProjectIndexReadState(projData.length === 0 ? 'empty' : 'ready');
+      setProjectIndexError(null);
+      setProjectIndexStateAuthorityKey('local');
     } catch (err) {
       console.error('Failed to fetch delivery data:', err);
-      if (fetchSequence.current === requestSequence && activeAuthorityKey.current === requestAuthorityKey) {
-        setProjects([]);
+      if (currentRequestMatches(requestSequence, requestAuthorityKey)) {
         setTasks([]);
         setEpics([]);
         setSprints([]);
-        setLoadedAuthorityKey(null);
-        setError(err instanceof Error ? err.message : 'Delivery data could not be loaded.');
+        setLoadedTaskAuthorityKey(null);
+        const message = err instanceof Error ? err.message : 'Delivery data could not be loaded.';
+        if (!projectIndexCommitted) {
+          setProjects([]);
+          setLoadedProjectIndexAuthorityKey(null);
+          setProjectIndexReadState('error');
+          setProjectIndexError(message);
+          setProjectIndexStateAuthorityKey(requestAuthorityKey);
+        }
+        setError(message);
       }
     } finally {
-      if (fetchSequence.current === requestSequence) setLoading(false);
+      if (currentRequestMatches(requestSequence, requestAuthorityKey)) setLoading(false);
     }
   };
 
@@ -219,6 +269,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addTask = async (task: Partial<Task>) => {
     if (!currentOrganization || !user) return;
     if (getRuntimeDataAccess() === 'server') {
+      requireCurrentTaskProjection();
       if (!tenantContext) throw new DeliveryPolicyError('A current server workspace is required before creating Delivery work.');
       const requestAuthorityKey = authorityKey;
       let saved: Task;
@@ -320,6 +371,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateTask = async (task: Task) => {
     if (!currentOrganization || !user) return;
+    requireCurrentTaskProjection();
     const existingTask = tasks.find(t => t.id === task.id);
     if (!existingTask) return;
     if (getRuntimeDataAccess() === 'server') {
@@ -359,6 +411,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
+    requireCurrentTaskProjection();
     const task = tasks.find(t => t.id === taskId);
     if (task) {
       await updateTask({ ...task, status });
@@ -366,6 +419,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateTaskSprint = async (taskId: string, sprintId: string | null) => {
+    requireCurrentTaskProjection();
     const task = tasks.find(t => t.id === taskId);
     if (task) {
       assertTaskSprintAssignmentAllowed({
@@ -380,6 +434,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const reorderTask = async (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => {
     if (!currentOrganization || !user) return;
+    requireCurrentTaskProjection();
     if (getRuntimeDataAccess() === 'server') {
       throw new DeliveryPolicyError('Backlog reordering remains read only in the connected Delivery workspace.');
     }
@@ -446,6 +501,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteTask = async (taskId: string) => {
     if (!currentOrganization || !user) return;
+    requireCurrentTaskProjection();
     const task = tasks.find(t => t.id === taskId);
     if (!task) {
       throw new DeliveryPolicyError('Open a delivery work item before deleting it.');
@@ -524,13 +580,23 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return committed;
   };
 
+  const visibleProjectIndexReadiness = visibleDeliveryProjectIndexReadiness({
+    server: runtimeDataAccess === 'server',
+    currentAuthorityKey: authorityKey,
+    stateAuthorityKey: projectIndexStateAuthorityKey,
+    state: projectIndexReadState,
+    error: projectIndexError,
+  });
+
   return (
     <DeliveryContext.Provider value={{ 
-      projects: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? projects : [],
-      tasks: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? tasks : [],
-      epics: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? epics : [],
-      sprints: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedAuthorityKey === authorityKey) ? sprints : [],
+      projects: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedProjectIndexAuthorityKey === authorityKey) ? projects : [],
+      tasks: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedTaskAuthorityKey === authorityKey) ? tasks : [],
+      epics: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedTaskAuthorityKey === authorityKey) ? epics : [],
+      sprints: runtimeDataAccess === 'local' || (runtimeDataAccess === 'server' && loadedTaskAuthorityKey === authorityKey) ? sprints : [],
       loading, error,
+      projectIndexReadState: visibleProjectIndexReadiness.state,
+      projectIndexError: visibleProjectIndexReadiness.error,
       addTask, addTasks, addEpics, importGeneratedWorkItems, updateProject, updateSprint, updateTask, updateTaskStatus, updateTaskSprint, reorderTask, deleteTask, refresh: fetchAllData
     }}>
       {children}

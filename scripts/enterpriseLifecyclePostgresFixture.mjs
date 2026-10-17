@@ -1210,8 +1210,11 @@ export async function createEnterpriseLifecycleFixture({
         }
         if (url.pathname === '/control/native-postgrest-stream') {
           const input = await request.json().catch(() => ({}));
+          const nativeResource = ['assess_v2_cases', 'assess_processes'].includes(input.resource);
+          const deliveryTaskBody = input.resource === 'legacy-delivery-query'
+            && input.mode === 'hold-body' && input.skip === undefined;
           if (!projectSetups.has(input.projectName)
-            || !['assess_v2_cases', 'assess_processes'].includes(input.resource)
+            || (!nativeResource && !deliveryTaskBody)
             || !['hold-headers', 'hold-body'].includes(input.mode)
             || (input.skip !== undefined && input.skip !== 0 && input.skip !== 1)
             || nativePostgrestStream !== null) {
@@ -1227,14 +1230,13 @@ export async function createEnterpriseLifecycleFixture({
         }
         if (url.pathname === '/control/native-postgrest-stream-release') {
           const input = await request.json().catch(() => ({}));
-          if (!projectSetups.has(input.projectName) || nativePostgrestStream === null
-            || nativePostgrestStream.remaining !== 0) {
+          if (!projectSetups.has(input.projectName) || nativePostgrestStream === null) {
             return json({ error: 'CONTROL_NATIVE_POSTGREST_STREAM_RELEASE_REJECTED' },409,cors);
           }
           const current = nativePostgrestStream;
           nativePostgrestStream = null;
           current.release();
-          return json({ released: true },200,cors);
+          return json({ released: true, entered: current.entered },200,cors);
         }
         if (url.pathname === '/control/native-postgrest-stats') {
           const input = await request.json().catch(() => ({}));
@@ -1546,6 +1548,14 @@ export async function createEnterpriseLifecycleFixture({
       if (url.pathname === '/functions/v1/legacy-delivery-query') {
         const response = await legacyDeliveryQueryModule.handleLegacyDeliveryQuery(request,legacyDeliveryDependencies(request));
         for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        const streamControl = nativePostgrestStream?.resource === 'legacy-delivery-query'
+          && nativePostgrestStream.remaining === 1 ? nativePostgrestStream : null;
+        if (streamControl) {
+          streamControl.remaining = 0;
+          streamControl.entered = true;
+          return holdNativeResponseBody(response, streamControl.released, () => undefined,
+            () => { streamControl.held = true; });
+        }
         return response;
       }
       if (url.pathname === '/auth/v1/user') {
