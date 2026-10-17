@@ -35,6 +35,7 @@ export const PR_C_PLAYWRIGHT_CONFIG_FILES = Object.freeze([
   'playwright.synthetic-admin.config.ts',
   'playwright.transcript-flow-pr-a.config.ts',
   'playwright.trust-assurance.config.ts',
+  'playwright.v2-full-prefix-reproduction.config.ts',
   'playwright.v2-reload-transport.config.ts',
 ]);
 const rejectPlaywrightCapture = code => { throw new Error(`PR_C_PLAYWRIGHT_GIT_CAPTURE_REJECTED:${code}`); };
@@ -82,7 +83,7 @@ const rootEntries = readdirSync('.', { withFileTypes: true });
 assert(rootEntries.filter(entry => isPlaywrightRootConfigFileNameForTest(entry.name)).every(entry => entry.isFile()),
   'root Playwright configs must be regular files, not links or directories');
 const actualPlaywrightConfigs = assertPlaywrightConfigInventoryForTest(rootEntries.map(entry => entry.name));
-assert.equal(actualPlaywrightConfigs.length, 31);
+assert.equal(actualPlaywrightConfigs.length, 32);
 assert.deepEqual(assertPlaywrightConfigInventoryForTest([...PR_C_PLAYWRIGHT_CONFIG_FILES, 'README.md']),
   [...PR_C_PLAYWRIGHT_CONFIG_FILES].sort());
 for (const extension of ['ts','js','mts','mjs','cts','cjs']) {

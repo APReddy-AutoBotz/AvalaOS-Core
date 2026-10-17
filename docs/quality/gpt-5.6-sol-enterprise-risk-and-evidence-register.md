@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Full V2 reload and evidence ordering (2026-10-17)
+
+- **Executed evidence:** PR #309 full run `38995528431`, attempt 1, independently verifies 373 sources, 61 PASS / 47 BLOCKED and 36 passing public/Sandbox executions. V2 creation succeeded before the immediate-reload resumed-draft assertion failed. Cleanup, providers OFF and owned temporary-main removal are verified; no hosted allowance remains.
+- **Suspected defect requiring deeper validation:** the missing resumed draft. Retained diagnostics cannot distinguish session/navigation restoration, empty discovery, read/body failure or delayed rendering. Full and focused render limits are both 20 seconds. The focused diagnostic omits case submissions and adds pre-reload read-only barriers; its success does not reproduce full-mode workload.
+- **Confirmed source defect:** an executed local production-controller probe shows accepted and rejected delayed case submissions rewind the live observation cutoff. Out-of-order action frame completion can also overwrite a newer cutoff. The correction keeps action frames unchanged, advances the live cutoff monotonically and makes case submission independent of that cursor. This is not proof of the historical UI cause.
+- **Executed evidence:** controller and focused ordering tests passed 34/34, including real loopback control, authority rejection, exact finalization evidence, out-of-order observation and rejected-case no-cursor-change checks. No hosted case is promoted by these local tests.
+- **Blocked:** native local browser/PostgreSQL/PostgREST reproduction while Docker's Linux engine is unavailable after ordinary startup. No reset/system configuration change was attempted. Faithful full-prefix execution, exact-candidate CI and release verification remain planned verification.
+
 ## Process reload and restricted-role native acceptance (2026-10-16)
 
 **Executed evidence:** PR #308 run `38938446349` retains 61 PASS / 47 BLOCKED, all 36 public/Sandbox checks and verified cleanup/providers OFF/temporary-access removal. The heading assertion after the authority reload failed before command dispatch; the exact missing/hidden/ambiguous/read/session condition was not retained.

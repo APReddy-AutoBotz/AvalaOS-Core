@@ -580,7 +580,8 @@ export class AuthenticatedHostedController {
     const independent = { before: firstAction.before, after: lastAction.after };
     const startedAt = independent.before.capturedAt;
     const completedAt = independent.after.capturedAt;
-    scope.lastBoundaryAt = completedAt;
+    // Case submission consumes retained action frames. It must not move the
+    // live observation cutoff, especially when queued behind newer actions.
     const actions = ordered;
     if (!actions.length) fail('BROWSER_ACTION_MISSING');
     const participants = [...new Map(actions.map(item => [
@@ -662,7 +663,9 @@ export class AuthenticatedHostedController {
     if (!timestamp(project.lastBoundaryAt)) fail('OBSERVATION_CUTOFF_REJECTED');
     const before = await this.adapter.observe({ exerciseId: this.exerciseId, from: project.lastBoundaryAt, project });
     if (!record(before) || !timestamp(before.capturedAt) || !Array.isArray(before.records)) fail('AUTHORITY_FRAME_REJECTED');
-    project.lastBoundaryAt = before.capturedAt;
+    if (Date.parse(before.capturedAt) > Date.parse(project.lastBoundaryAt)) {
+      project.lastBoundaryAt = before.capturedAt;
+    }
     const actionId = authenticatedHostedDigest(this.randomId());
     const action = { actionId, occurredAt: before.capturedAt, actorHash: binding.actorHash,
       sessionHash: binding.sessionHash, ...hashes, response: null, persona: binding.persona,
@@ -728,7 +731,9 @@ export class AuthenticatedHostedController {
     }
     action.complete = true;
     action.status = status;
-    project.lastBoundaryAt = after.capturedAt;
+    if (Date.parse(after.capturedAt) > Date.parse(project.lastBoundaryAt)) {
+      project.lastBoundaryAt = after.capturedAt;
+    }
     try{
       await this.adapter.recordBrowserAction?.({ exerciseId: this.exerciseId, projectName, persona: action.persona,
         route: action.route, status, requestBody: action.rawRequestBody, responseBody: response });

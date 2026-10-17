@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Full V2 prefix and evidence ordering (2026-10-17)
+
+PR #309's approved full run retains 61 PASS / 47 BLOCKED with verified cleanup and consumed allowance. All three read-only reviewers completed; root reconciled the successful diagnostic's missing case workload and pre-reload barriers against the failing full path. No product cause is proven. Under the fixed managed workspace-write profile, one implementation worker owns faithful local full-prefix/native reproduction, and root owns the demonstrated controller observation-ordering correction, canonical documents, provenance and integration. No nested delegation or reviewer overlap during writes.
+
+Reuse the actual application, current SQL/native PostgREST and production controller methods. Compare the immediate reload with an otherwise identical read-only barrier variant, preserving full evidence submissions, the 20-second render bound and all criteria. Do not substitute inert callbacks, invent a product correction, or create a diagnostic-only closure PR. Ordinary local Docker startup did not recover the engine; native execution is blocked locally until a suitable existing local/CI runtime is available. No hosted attempt, deployment, schema, production or paid action is included.
+
 ## Process reload and restricted-role native acceptance (2026-10-16)
 
 PR #308's completed attempt retains 61 PASS / 47 BLOCKED with verified cleanup and consumed hosted authority. All three read-only reviewers completed and root synthesized their findings before writes. Under the fixed managed profile, one implementation worker owns the native restricted-role reproduction and demonstrated helper/read-state corrections; root owns canonical documents, provenance, integration and the single implementation PR. No nested delegation or reviewer overlap during writes.

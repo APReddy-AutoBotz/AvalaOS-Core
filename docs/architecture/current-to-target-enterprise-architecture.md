@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Full-prefix acceptance evidence boundary (2026-10-17)
+
+The full V2 create/reload path must be prepared with the same controller action and case-evidence workload as full acceptance. The focused diagnostic's extra read-only barriers and suppressed case submissions are observable behavior differences, not proof that the ordinary path is reliable. Native direct-table reads retain SQL/RLS authority; browser observations do not grant access or manufacture acceptance evidence.
+
+The controller's live observation cutoff advances monotonically as action frames complete. Retained case submission consumes its original action frames without changing that live cutoff; rejected case submissions must not mutate it. Out-of-order completion must preserve each action's original before/after window. This corrects a locally reproduced evidence-integrity defect without claiming it caused the hosted V2 rendering failure. No product authority, schema, scoring or deployment boundary changes.
+
 ## Process reload and restricted-role native acceptance (2026-10-16)
 
 The process route and detail view own separate process-service reads. Persisted navigation agreement does not establish fresh render hydration, and the first matching response need not supply the detail heading. At the PR #308 baseline, the acceptance helper validated captured bodies only after heading visibility, and failed or empty process reads could remain displayed as loading. The correction validates fresh scoped responses before the heading/command and distinguishes pending, empty and error presentation under the existing authority fence.

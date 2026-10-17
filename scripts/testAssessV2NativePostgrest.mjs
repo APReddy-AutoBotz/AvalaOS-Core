@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { inspectV2ReadCatalog, runV2RowFreeProbes } from './assessV2ReadDiagnostic.mjs';
 import { createServer } from 'node:net';
 import { test } from 'node:test';
@@ -17,6 +17,15 @@ import {
   PROJECTION_POSTGREST_IMAGE,
   selectProjectionRpcSubnet,
 } from './projectionRpcPostgrestContract.mjs';
+import {
+  createV2FullPrefixLocalController,
+  createV2FullPrefixAdapterQuery,
+} from './v2FullPrefixLocalController.mjs';
+import {
+  buildV2FullPrefixResult,
+  classifyV2FullPrefixFailure,
+  runIndependentV2FullPrefixVariants,
+} from './v2FullPrefixReproduction.mjs';
 
 const { Client } = pg;
 const docker = (...args) => execFileSync('docker', args, {
@@ -98,7 +107,8 @@ test('native PostgREST target rejects scheme-relative escape before dispatch', (
   );
 });
 
-test('native PostgREST resumes a freshly created Assess V2 version 1 under real RLS', { timeout: 300_000 }, async () => {
+const nativeTestTimeoutMs = process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1' ? 780_000 : 300_000;
+test('native PostgREST resumes a freshly created Assess V2 version 1 under real RLS', { timeout: nativeTestTimeoutMs }, async () => {
   const createTransport = await loadProductionTransport();
   const runId = randomUUID();
   const label = 'avalaos.assess-v2-native-run';
@@ -264,6 +274,129 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
       'node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(appPort),
     ], { cwd: process.cwd(), stdio: 'inherit', env: appEnvironment });
     await waitForHttp(appBaseUrl);
+    if (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1') {
+      const reproductionDirectory = 'output/local-private/authenticated-product-acceptance/v2-full-prefix-reproduction';
+      await mkdir(reproductionDirectory, { recursive: true });
+      const variants = await runIndependentV2FullPrefixVariants(async variant => {
+        const projectName = `desktop-chromium-${variant}`;
+        const fragmentPath = `${reproductionDirectory}/browser-${projectName}.json`;
+        let localController = null;
+        let adapterClient = null;
+        let execution = 'failed';
+        let cleanup = 'not_started';
+        let browser = null;
+        let controller = null;
+        let failureStage = 'artifact-reset';
+        let setupFailure = null;
+        try {
+          await rm(fragmentPath, { force: true });
+          failureStage = 'controller-create';
+          const adapterDatabaseUrl = new URL(databaseUrl);
+          adapterDatabaseUrl.pathname = `/${fixture.databaseName}`;
+          adapterClient = new Client({ connectionString: adapterDatabaseUrl.toString() });
+          await adapterClient.connect();
+          localController = await createV2FullPrefixLocalController({
+            fixture,
+            origin: appBaseUrl,
+            variant,
+            adapterQuery: createV2FullPrefixAdapterQuery(adapterClient),
+          });
+          failureStage = 'controller-first-action';
+          await localController.verifyFirstBrowserAction(projectName);
+          failureStage = 'browser-execution';
+          await run([
+            'node_modules/@playwright/test/cli.js', 'test',
+            '--config=playwright.v2-full-prefix-reproduction.config.ts',
+          ], {
+            env: {
+              ...process.env,
+              ENTERPRISE_LIFECYCLE_APP_BASE_URL: appBaseUrl,
+              ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.baseUrl,
+              ENTERPRISE_LIFECYCLE_CONTROL_URL: localController.baseUrl,
+              ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: localController.controlToken,
+              ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY: fixture.authStorageKey,
+              ENTERPRISE_LIFECYCLE_OUTPUT_DIR: reproductionDirectory,
+              ENTERPRISE_LIFECYCLE_AUTHENTICATED: 'true',
+              ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH: 'false',
+              AUTHENTICATED_ACCEPTANCE_MODE: 'full_acceptance',
+              ENTERPRISE_LIFECYCLE_V2_FULL_PREFIX_REPRODUCTION: variant,
+            },
+          });
+          execution = 'passed';
+        } catch (error) {
+          execution = 'failed';
+          setupFailure = classifyV2FullPrefixFailure(error, failureStage);
+        } finally {
+          if (localController) {
+            try { controller = localController.projectSummary(projectName); }
+            catch { controller = null; }
+            const controlFailureCode = localController.controlFailureCode();
+            if (controlFailureCode && setupFailure?.code === 'BROWSER_PROCESS_EXIT_NONZERO') {
+              setupFailure = classifyV2FullPrefixFailure(
+                new Error(controlFailureCode), 'browser-execution',
+              );
+            }
+            try {
+              await localController.close();
+              cleanup = 'passed';
+            } catch (error) {
+              cleanup = 'failed';
+              setupFailure ??= classifyV2FullPrefixFailure(error, 'controller-quiesce');
+            }
+          }
+          if (adapterClient) {
+            try { await adapterClient.end(); }
+            catch (error) {
+              cleanup = 'failed';
+              setupFailure ??= classifyV2FullPrefixFailure(error, 'controller-quiesce');
+            }
+          }
+        }
+        try { browser = JSON.parse(await readFile(fragmentPath, 'utf8')); }
+        catch {
+          browser = null;
+          setupFailure ??= classifyV2FullPrefixFailure(
+            new Error('ARTIFACT_UNAVAILABLE'), 'artifact-read',
+          );
+        }
+        return {
+          variant,
+          execution,
+          cleanup,
+          setupFailure,
+          artifactObserved: browser !== null,
+          browser: browser?.v2FullPrefixReproduction ?? null,
+          controller,
+          network: browser?.network ?? null,
+        };
+      });
+      const nativeStats = fixture.nativePostgrestStats();
+      const nativeStatusDelta = Object.fromEntries(Object.entries(nativeStats.statuses)
+        .map(([status, count]) => [status, count - (stats.statuses[status] ?? 0)])
+        .filter(([, count]) => count > 0));
+      const result = buildV2FullPrefixResult({
+        variants,
+        native: {
+          active: nativeStats.active,
+          requests: nativeStats.requests - browserRequestBaseline,
+          responses: nativeStats.responses - stats.responses,
+          completed: nativeStats.completed - stats.completed,
+          cancelled: nativeStats.cancelled - stats.cancelled,
+          failed: nativeStats.failed - stats.failed,
+          statusClasses: nativeStatusDelta,
+        },
+        baseline: '6e253b2c3d4c18a9106ee53449cc374d2214d4cb',
+      });
+      await writeFile(`${reproductionDirectory}/result.json`, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+      process.stdout.write(`# V2_FULL_PREFIX_LOCAL_REPRODUCTION_RESULT ${JSON.stringify({
+        variants: variants.map(item => item.variant),
+        controllerCases: variants.map(item => item.controller?.browserCaseCount ?? 0),
+        nativeRequests: result.native.requests,
+        conclusion: result.conclusion,
+      })}\n`);
+      assert.equal(result.status, 'passed', 'V2_FULL_PREFIX_LOCAL_REPRODUCTION_FAILED');
+      return;
+    }
     await run([
       'node_modules/@playwright/test/cli.js', 'test',
       '--config=playwright.assess-v2-native-postgrest.config.ts',

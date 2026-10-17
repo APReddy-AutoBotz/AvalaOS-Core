@@ -21,6 +21,10 @@ import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
+  primeV2FullPrefixFixtureSession,
+  resolveV2FullPrefixLocalSelection,
+} from '../../../scripts/v2FullPrefixReproduction.mjs';
+import {
   observeAuthenticatedAdminControls,
   observeAuthenticatedAiControls,
   observeAuthenticatedStudioDownloadDenial,
@@ -30,9 +34,13 @@ import {
   assertV2ReloadCheckpointResponse,
   createV2ReloadBrowserCheckpointBuilder,
   installV2ReloadReadObserver,
+  observeV2ReloadBrowserState,
   observeV2ReloadRenderOutcome,
   resolveAuthenticatedAcceptanceMode,
+  type V2ReloadBrowserStateObservation,
   type V2ReloadDiagnosticCheckpointResponse,
+  type V2ReloadReadObserverCompletion,
+  type V2ReloadReadStageObservation,
   type V2ReloadRenderOutcome,
 } from '../v2ReloadDiagnosticObserver';
 
@@ -86,8 +94,31 @@ type ApiResponseObservation = Readonly<{
   errorCode?: string;
   actionId: HostedActionReference;
 }>;
+type V2FullPrefixReproductionVariant = 'immediate' | 'barrier';
+type V2FullPrefixReproductionObservation = Readonly<{
+  variant: V2FullPrefixReproductionVariant;
+  navigation: 'passed' | 'failed';
+  renderOutcome: V2ReloadRenderOutcome;
+  observerFailure: boolean;
+  serverContextObserved: boolean;
+  sessionObserved: boolean;
+  scopeNavigationObserved: boolean;
+  processNavigationObserved: boolean;
+  readStages: readonly V2ReloadReadStageObservation[];
+  barrier: 'none' | 'lifecycle-frame';
+  diagnosticCheckpointEquivalent: false;
+  lifecycleFrameCaptured: boolean;
+  caseDelta: number | null;
+  caseVersionDelta: number | null;
+  failureStage: 'navigation' | 'render' | 'read-observer' | 'browser-state' | 'network-queue'
+    | 'lifecycle-frame' | 'assertion' | null;
+}>;
+type V2FullPrefixQueueObservation = Readonly<{
+  network: 'not_run' | 'passed' | 'failed';
+  cases: 'not_run' | 'passed' | 'failed';
+}>;
 let hostedBrowserActionTracker: AuthenticatedHostedBrowserActionTracker | null = null;
-const actionReference = (request: Request): HostedActionReference => hostedAuthenticatedAcceptance
+const actionReference = (request: Request): HostedActionReference => controllerBackedAcceptance
   ? hostedBrowserActionTracker?.reference(request)
     ?? Promise.reject(new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING'))
   : Promise.resolve(null);
@@ -98,11 +129,20 @@ const authenticatedProductAcceptance = process.env.ENTERPRISE_LIFECYCLE_AUTHENTI
 const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
 const authenticatedAcceptanceMode = resolveAuthenticatedAcceptanceMode(process.env.AUTHENTICATED_ACCEPTANCE_MODE);
 const v2PrimaryPrefixDiagnostic = authenticatedAcceptanceMode === 'v2_primary_prefix_diagnostic';
+const v2FullPrefixReproductionVariant = resolveV2FullPrefixLocalSelection({
+  variant: process.env.ENTERPRISE_LIFECYCLE_V2_FULL_PREFIX_REPRODUCTION,
+  authenticated: authenticatedProductAcceptance,
+  hosted: hostedAuthenticatedAcceptance,
+  mode: authenticatedAcceptanceMode,
+});
+const v2FullPrefixReproduction = v2FullPrefixReproductionVariant !== null;
+const controllerBackedAcceptance = hostedAuthenticatedAcceptance || v2FullPrefixReproduction;
 if (v2PrimaryPrefixDiagnostic && (!authenticatedProductAcceptance || !hostedAuthenticatedAcceptance)) {
   throw new Error('AUTHENTICATED_V2_RELOAD_HOSTED_AUTH_REQUIRED');
 }
 const hostedAllowedOrigins = new Set([
   process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL,
+  process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL,
   process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,
 ].filter((value): value is string => !!value).map(value => new URL(value).origin));
 const measuredCounters = (value: Partial<Record<string, number>> = {}) => ({
@@ -288,6 +328,13 @@ const lifecycleMeasurements = (beforeFrame: LifecycleFrame, afterFrame: Lifecycl
 };
 
 const enterProcessAs = async (page: Page, actor: FixtureActor, processLabel: string) => {
+  if (v2FullPrefixReproduction) {
+    await primeV2FullPrefixFixtureSession(
+      page,
+      actor,
+      process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token',
+    );
+  }
   await enterAs(page, actor);
   if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
     await clickProduct(page, 'Assess');
@@ -424,6 +471,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let reworkJourneyBefore: LifecycleFrame | null = null;
   let reworkJourneyApiResponses: ApiResponseObservation[] = [];
   let approvedDecisionApi: ApiResponseObservation | null = null;
+  let v2FullPrefixObservation: V2FullPrefixReproductionObservation | null = null;
+  let v2FullPrefixQueues: V2FullPrefixQueueObservation = Object.freeze({ network: 'not_run', cases: 'not_run' });
   type TestWorkQueues = Readonly<{
     network: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
     cases: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
@@ -477,7 +526,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
     override push(...items: unknown[]) {
       const length = super.push(...items);
-      if (hostedAuthenticatedAcceptance && !v2PrimaryPrefixDiagnostic) {
+      if (controllerBackedAcceptance && !v2PrimaryPrefixDiagnostic) {
         for (const row of items) {
           const owningTestWorkQueues = activeTestWorkQueues;
           if (!owningTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
@@ -507,15 +556,19 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   };
 
   test.beforeAll(async ({}, testInfo) => {
-    projectName = testInfo.project.name;
+    projectName = v2FullPrefixReproductionVariant
+      ? `${testInfo.project.name}-${v2FullPrefixReproductionVariant}`
+      : testInfo.project.name;
     projectStartedAt = new Date().toISOString();
     try { setup = await control<FixtureSetup>('/control/setup', { projectName }); }
     catch (error) { failed = true; throw error; }
     expect(setup.journeyBinding).toMatch(/^sha256:[a-f0-9]{64}$/u);
     validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
     for (const key of ['case', 'review', 'handoff', 'artifact'] as const) expect(setup.aliases[key]).toMatch(new RegExp(`^primary-${key}-\\d+$`, 'u'));
-    if (hostedAuthenticatedAcceptance) {
-      const backendOrigin = new URL(process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL ?? '').origin;
+    if (controllerBackedAcceptance) {
+      const backendOrigin = new URL(hostedAuthenticatedAcceptance
+        ? process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL ?? ''
+        : process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').origin;
       const appOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL ?? '').origin;
       hostedBrowserActionTracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
         startAction: input => control<{ actionId: string }>('/control/browser-action-start', { projectName, ...input }),
@@ -525,8 +578,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   });
 
   test.beforeEach(async ({ context }, testInfo) => {
-    test.skip(v2PrimaryPrefixDiagnostic && !testInfo.tags.includes('@v2-primary-prefix-diagnostic'),
-      'focused V2 diagnostic executes only the original Desktop primary prefix');
+    test.skip((v2PrimaryPrefixDiagnostic || v2FullPrefixReproduction)
+      && !testInfo.tags.includes('@v2-primary-prefix-diagnostic'),
+    'focused V2 execution runs only the original Desktop primary prefix');
     externalRequests = [];
     const owningTestWorkQueues = Object.freeze({
       network: createAuthenticatedLifecycleWorkQueue(),
@@ -536,7 +590,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     projectWorkQueues.push(owningTestWorkQueues);
     await installAuthenticatedHostedNetwork({
       context,
-      hosted: hostedAuthenticatedAcceptance,
+      hosted: controllerBackedAcceptance,
       allowedOrigins: hostedAllowedOrigins,
       tracker: hostedBrowserActionTracker,
       queueNetworkAction: operation => owningTestWorkQueues.network.enqueue(operation),
@@ -578,23 +632,38 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (!setup || !projectName || !projectStartedAt) return;
     let boundaryFailure: unknown = null;
     let hasBoundaryFailure = false;
+    let reproductionNetworkQueue: V2FullPrefixQueueObservation['network'] = 'not_run';
+    let reproductionCaseQueue: V2FullPrefixQueueObservation['cases'] = 'not_run';
     for (const workQueues of projectWorkQueues) {
       for (const [title, queue] of [
         ['hosted:queue:network-drain', workQueues.network],
         ['hosted:queue:case-drain', workQueues.cases],
       ] as const) {
-        try { await test.step(title, () => queue.drain()); }
+        try {
+          await test.step(title, () => queue.drain());
+          if (v2FullPrefixReproduction) {
+            if (title.includes('network') && reproductionNetworkQueue !== 'failed') reproductionNetworkQueue = 'passed';
+            else if (!title.includes('network') && reproductionCaseQueue !== 'failed') reproductionCaseQueue = 'passed';
+          }
+        }
         catch (error) {
+          if (v2FullPrefixReproduction) {
+            if (title.includes('network')) reproductionNetworkQueue = 'failed';
+            else reproductionCaseQueue = 'failed';
+          }
           if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
         }
       }
+    }
+    if (v2FullPrefixReproduction) {
+      v2FullPrefixQueues = Object.freeze({ network: reproductionNetworkQueue, cases: reproductionCaseQueue });
     }
     if (hasBoundaryFailure) failed = true;
     if (v2PrimaryPrefixDiagnostic) {
       if (hasBoundaryFailure) throw boundaryFailure;
       return;
     }
-    if (!failed) {
+    if (!failed && !v2FullPrefixReproduction) {
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });
       expect(finalized).toMatchObject({
         journeyBinding: setup.journeyBinding,
@@ -620,6 +689,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       stages: [...stages.values()],
       assertions: [...assertions.values()],
       ...(authenticatedProductAcceptance ? { authenticatedCases } : {}),
+      ...(v2FullPrefixObservation ? { v2FullPrefixReproduction: {
+        ...v2FullPrefixObservation,
+        queues: v2FullPrefixQueues,
+      } } : {}),
     };
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(path.join(outputDirectory, `browser-${projectName}.json`), `${JSON.stringify(fragment, null, 2)}\n`, 'utf8');
@@ -634,7 +707,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process);
       const beforeDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       let deniedEditApi: ApiResponseObservation;
-      if (hostedAuthenticatedAcceptance) {
+      if (controllerBackedAcceptance) {
         const editProcess = deniedEditPage.getByRole('button', { name: 'Edit process details', exact: true });
         await expect(editProcess).toBeDisabled();
         await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
@@ -755,7 +828,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await runSafetyCase('SAFETY-001', 'NETWORK_OFFLINE', 0, null, async () => {
           await page.route('**/functions/v1/process-command', async route => {
             const prepared = await prepareProductFaultRoute(route, async () => {
-              if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+              if (controllerBackedAcceptance) await startProductAction(route.request());
             });
             if (!prepared) return;
             await route.abort('internetdisconnected');
@@ -765,7 +838,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await runSafetyCase('SAFETY-002', 'COMMAND_UNAVAILABLE', 503, 'COMMAND_UNAVAILABLE', async () => {
           await page.route('**/functions/v1/process-command', async route => {
             const prepared = await prepareProductFaultRoute(route, async () => {
-              if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+              if (controllerBackedAcceptance) await startProductAction(route.request());
               const requestBody = route.request().postDataJSON();
               const authorization = await route.request().allHeaders();
               await control('/control/arm-browser-fault', {
@@ -785,7 +858,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await runSafetyCase('SAFETY-003', 'NETWORK_TIMEOUT', 0, null, async () => {
           await page.route('**/functions/v1/process-command', async route => {
             const prepared = await prepareProductFaultRoute(route, async () => {
-              if (hostedAuthenticatedAcceptance) await startProductAction(route.request());
+              if (controllerBackedAcceptance) await startProductAction(route.request());
             });
             if (!prepared) return;
             await route.abort('timedout');
@@ -876,12 +949,118 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       }
       const beforeV2Create = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
+      const reproductionReadObserver = v2FullPrefixReproduction
+        ? installV2ReloadReadObserver(page) : null;
       const createV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
         page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
       expect(createV2Api.status).toBe(200);
       await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
       observe('assess-create', 'ui.assess-created');
       if (authenticatedProductAcceptance && beforeV2Create) {
+        if (v2FullPrefixReproductionVariant && reproductionReadObserver) {
+          let barrier: V2FullPrefixReproductionObservation['barrier'] = 'none';
+          let navigation: V2FullPrefixReproductionObservation['navigation'] = 'failed';
+          let renderOutcome: V2ReloadRenderOutcome = 'unresolved';
+          let readCompletion: V2ReloadReadObserverCompletion | null = null;
+          let browserState: V2ReloadBrowserStateObservation = Object.freeze({
+            sessionObserved: false,
+            scopeNavigationObserved: false,
+            processNavigationObserved: false,
+            serverContextObserved: false,
+          });
+          let afterV2Create: LifecycleFrame | null = null;
+          let retainedFailure: unknown = null;
+          let failureStage: V2FullPrefixReproductionObservation['failureStage'] = null;
+          const retainFailure = (
+            stage: Exclude<V2FullPrefixReproductionObservation['failureStage'], null>,
+            error: unknown,
+          ) => {
+            if (failureStage === null) {
+              failureStage = stage;
+              retainedFailure = error;
+            }
+          };
+          try {
+            if (v2FullPrefixReproductionVariant === 'barrier') {
+              barrier = 'lifecycle-frame';
+              try {
+                const barrierFrame = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+                expect(barrierFrame.cases).toBe(beforeV2Create.cases + 1);
+                expect(barrierFrame.caseVersions).toBe(beforeV2Create.caseVersions + 1);
+              } catch (error) { retainFailure('lifecycle-frame', error); }
+            }
+            if (retainedFailure === null) {
+              try {
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                navigation = 'passed';
+              } catch (error) { retainFailure('navigation', error); }
+            }
+            if (navigation === 'passed') {
+              try { renderOutcome = await observeV2ReloadRenderOutcome(page); }
+              catch (error) { retainFailure('render', error); }
+            }
+            try { readCompletion = await reproductionReadObserver.complete(); }
+            catch (error) { retainFailure('read-observer', error); }
+            try { browserState = await observeV2ReloadBrowserState(page); }
+            catch (error) { retainFailure('browser-state', error); }
+            if (!activeTestWorkQueues) retainFailure('network-queue', new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING'));
+            else {
+              try { await activeTestWorkQueues.network.drain(); }
+              catch (error) { retainFailure('network-queue', error); }
+            }
+            try { afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }); }
+            catch (error) { retainFailure('lifecycle-frame', error); }
+            if (retainedFailure !== null) throw retainedFailure;
+            expect(readCompletion?.observerFailure).toBe(false);
+            expect(renderOutcome).toBe('resumed');
+            expect(readCompletion?.observation.readStages).toHaveLength(11);
+            expect(readCompletion?.observation.readStages.every(stage => stage.status === 'passed')).toBe(true);
+            await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
+            expect(afterV2Create?.cases).toBe(beforeV2Create.cases + 1);
+            expect(afterV2Create?.caseVersions).toBe(beforeV2Create.caseVersions + 1);
+            bindObservedCase('ASSESS-018',createV2Api.actionId);
+            authenticatedCases.push({
+              testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
+              observations: {
+                browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
+                  result: { createVisible: true, currentDraftReloaded: true } },
+                api: { productionRoutes: ['/functions/v1/assess-v2-command'],
+                  responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
+              },
+              controls: { assertions: [
+                { id: 'v2-case-created-by-command', status: 'passed' },
+                { id: 'v2-case-visible-after-reload', status: 'passed' },
+              ] },
+              measurements: lifecycleMeasurements(beforeV2Create,afterV2Create!,beforeV2Create.cases,afterV2Create!.cases),
+              cleanup: { verified: true },
+            });
+            diagnosticPrefixComplete = true;
+          } catch (error) {
+            retainFailure('assertion', error);
+            throw error;
+          } finally {
+            v2FullPrefixObservation = Object.freeze({
+              variant: v2FullPrefixReproductionVariant,
+              navigation,
+              renderOutcome,
+              observerFailure: readCompletion?.observerFailure ?? true,
+              serverContextObserved: readCompletion?.observation.serverContextObserved
+                ?? browserState.serverContextObserved,
+              sessionObserved: browserState.sessionObserved,
+              scopeNavigationObserved: browserState.scopeNavigationObserved,
+              processNavigationObserved: browserState.processNavigationObserved,
+              readStages: readCompletion?.observation.readStages ?? [],
+              barrier,
+              diagnosticCheckpointEquivalent: false,
+              lifecycleFrameCaptured: afterV2Create !== null,
+              caseDelta: afterV2Create ? afterV2Create.cases - beforeV2Create.cases : null,
+              caseVersionDelta: afterV2Create ? afterV2Create.caseVersions - beforeV2Create.caseVersions : null,
+              failureStage,
+            });
+          }
+          return;
+        }
         if (diagnosticCheckpoint) {
           const beforeReloadResponse = await control<V2ReloadDiagnosticCheckpointResponse>('/control/v2-reload-diagnostic',
             await diagnosticCheckpoint.checkpoint('before-reload'));
