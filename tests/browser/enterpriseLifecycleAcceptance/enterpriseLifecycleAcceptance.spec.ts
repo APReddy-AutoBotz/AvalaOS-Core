@@ -108,6 +108,10 @@ type V2FullPrefixReproductionObservation = Readonly<{
   barrier: 'none' | 'lifecycle-frame';
   diagnosticCheckpointEquivalent: false;
   lifecycleFrameCaptured: boolean;
+  deliveryTaskBodyPending: boolean;
+  processVisibleWhileDeliveryPending: boolean;
+  v2VisibleWhileDeliveryPending: boolean;
+  deliveryPendingFrameStable: boolean;
   caseDelta: number | null;
   caseVersionDelta: number | null;
   failureStage: 'navigation' | 'render' | 'read-observer' | 'browser-state' | 'network-queue'
@@ -116,6 +120,14 @@ type V2FullPrefixReproductionObservation = Readonly<{
 type V2FullPrefixQueueObservation = Readonly<{
   network: 'not_run' | 'passed' | 'failed';
   cases: 'not_run' | 'passed' | 'failed';
+}>;
+type NativeDeliveryStreamStats = Readonly<{
+  stream: Readonly<{
+    resource: string;
+    mode: 'hold-headers' | 'hold-body';
+    entered: boolean;
+    held: boolean;
+  }> | null;
 }>;
 let hostedBrowserActionTracker: AuthenticatedHostedBrowserActionTracker | null = null;
 const actionReference = (request: Request): HostedActionReference => controllerBackedAcceptance
@@ -951,8 +963,29 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
       const reproductionReadObserver = v2FullPrefixReproduction
         ? installV2ReloadReadObserver(page) : null;
-      const createV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-        page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
+      let deliveryTaskBodyArmed = false;
+      if (v2FullPrefixReproduction) {
+        await control('/control/native-postgrest-stream', {
+          projectName, resource: 'legacy-delivery-query', mode: 'hold-body',
+        });
+        deliveryTaskBodyArmed = true;
+        await expect.poll(async () => (await control<NativeDeliveryStreamStats>(
+          '/control/native-postgrest-stats', { projectName },
+        )).stream).toEqual({
+          resource: 'legacy-delivery-query', mode: 'hold-body', entered: false, held: false,
+        });
+      }
+      let createV2Api: ApiResponseObservation;
+      try {
+        createV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+          page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
+      } catch (error) {
+        if (deliveryTaskBodyArmed) {
+          await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
+          deliveryTaskBodyArmed = false;
+        }
+        throw error;
+      }
       expect(createV2Api.status).toBe(200);
       await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
       observe('assess-create', 'ui.assess-created');
@@ -969,6 +1002,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             serverContextObserved: false,
           });
           let afterV2Create: LifecycleFrame | null = null;
+          let deliveryPendingFrame: LifecycleFrame | null = null;
+          let deliveryTaskBodyPending = false;
+          let processVisibleWhileDeliveryPending = false;
+          let v2VisibleWhileDeliveryPending = false;
+          let deliveryPendingFrameStable = false;
           let retainedFailure: unknown = null;
           let failureStage: V2FullPrefixReproductionObservation['failureStage'] = null;
           const retainFailure = (
@@ -996,8 +1034,28 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               } catch (error) { retainFailure('navigation', error); }
             }
             if (navigation === 'passed') {
-              try { renderOutcome = await observeV2ReloadRenderOutcome(page); }
-              catch (error) { retainFailure('render', error); }
+              try {
+                await expect.poll(async () => (await control<NativeDeliveryStreamStats>(
+                  '/control/native-postgrest-stats', { projectName },
+                )).stream).toEqual({
+                  resource: 'legacy-delivery-query', mode: 'hold-body', entered: true, held: true,
+                });
+                deliveryTaskBodyPending = true;
+                await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+                processVisibleWhileDeliveryPending = true;
+                await expect(page.getByText(
+                  'Existing V2 draft resumed from the current immutable authoring version.', { exact: true },
+                )).toBeVisible();
+                v2VisibleWhileDeliveryPending = true;
+                renderOutcome = await observeV2ReloadRenderOutcome(page);
+                deliveryPendingFrame = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+              } catch (error) { retainFailure('render', error); }
+              finally {
+                if (deliveryTaskBodyArmed) {
+                  await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
+                  deliveryTaskBodyArmed = false;
+                }
+              }
             }
             try { readCompletion = await reproductionReadObserver.complete(); }
             catch (error) { retainFailure('read-observer', error); }
@@ -1019,6 +1077,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
             expect(afterV2Create?.cases).toBe(beforeV2Create.cases + 1);
             expect(afterV2Create?.caseVersions).toBe(beforeV2Create.caseVersions + 1);
+            expect(deliveryPendingFrame).not.toBeNull();
+            expect(afterV2Create).toEqual(deliveryPendingFrame);
+            deliveryPendingFrameStable = true;
             bindObservedCase('ASSESS-018',createV2Api.actionId);
             authenticatedCases.push({
               testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
@@ -1040,6 +1101,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             retainFailure('assertion', error);
             throw error;
           } finally {
+            if (deliveryTaskBodyArmed) {
+              await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
+            }
             v2FullPrefixObservation = Object.freeze({
               variant: v2FullPrefixReproductionVariant,
               navigation,
@@ -1054,6 +1118,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               barrier,
               diagnosticCheckpointEquivalent: false,
               lifecycleFrameCaptured: afterV2Create !== null,
+              deliveryTaskBodyPending,
+              processVisibleWhileDeliveryPending,
+              v2VisibleWhileDeliveryPending,
+              deliveryPendingFrameStable,
               caseDelta: afterV2Create ? afterV2Create.cases - beforeV2Create.cases : null,
               caseVersionDelta: afterV2Create ? afterV2Create.caseVersions - beforeV2Create.caseVersions : null,
               failureStage,

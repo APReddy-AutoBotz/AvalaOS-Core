@@ -515,10 +515,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        202,
-        279,
-        280,
-        678
+        205,
+        282,
+        283,
+        897
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
@@ -608,10 +608,10 @@
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.test.mjs",
       "lines": [
-        175,
         177,
-        196,
-        197
+        179,
+        198,
+        199
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the in-memory storage mock confined to the no-Docker fixture-session contract test; restore global descriptors and never read real credentials."

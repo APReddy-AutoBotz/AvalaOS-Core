@@ -82,6 +82,16 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   assert.equal(processReads.run.trim(), `node scripts/testAuthenticatedHostedSignInEntry.mjs --process-read-state\n${check}`);
   assert.equal(processReads.env, undefined);
   assert.equal(processReads['continue-on-error'], undefined);
+  const navigation = replay.steps.find(step => step.name === 'Verify scoped navigation while unrelated Delivery reads are pending');
+  assert.equal(navigation.run.trim(), `node scripts/testAuthenticatedHostedSignInEntry.mjs --scoped-navigation\n${check}`);
+  assert.equal(navigation.env, undefined);
+  assert.equal(navigation['continue-on-error'], undefined);
+  const navigationEvidence = replay.steps.find(step => step.name === 'Retain scoped navigation preparation evidence');
+  assert.equal(navigationEvidence.if, 'always()');
+  assert.equal(navigationEvidence.uses, 'actions/upload-artifact@v4');
+  assert.equal(navigationEvidence.with.name, 'authenticated-scoped-navigation-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.equal(navigationEvidence.with.path, 'output/local-private/authenticated-product-acceptance/scoped-navigation-corrected.jsonl');
+  assert.equal(navigationEvidence.with['if-no-files-found'], 'error');
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
@@ -106,6 +116,9 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.match(workflow.jobs['source-and-authority'].steps
     .find(step => step.name === 'Feature contracts and evidence rejection').run,
   /npm run test:provider-secret-backend/u);
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
+  /node scripts\/runPr1fTypeScriptTest\.mjs services\/deliveryReadiness\.ts services\/deliveryReadiness\.test\.ts/u);
   const nativeBackend=workflow.jobs['native-provider-secret-backend'];
   assert.equal(nativeBackend.if,"github.event_name != 'workflow_dispatch'");
   assert.equal(nativeBackend.services['supabase-vault-postgres'].image,

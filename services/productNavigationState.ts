@@ -11,7 +11,11 @@ export type ProductNavigationIssue =
   | 'invalid_project_id'
   | 'missing_document_generation_id'
   | 'invalid_document_generation_id'
-  | 'document_generation_project_mismatch';
+  | 'document_generation_project_mismatch'
+  | 'process_read_error'
+  | 'project_index_read_error';
+
+export type ProductNavigationReadState = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 export interface ProductNavigationTarget {
   view?: unknown;
@@ -32,6 +36,8 @@ export interface ResolveProductNavigationStateInput extends ProductNavigationTar
   processes: AssessProcess[];
   projects: Project[];
   documentGenerations: DocumentGeneration[];
+  processReadState?: ProductNavigationReadState;
+  projectIndexReadState?: ProductNavigationReadState;
   preserveOrganizationWorkspace?: boolean;
 }
 
@@ -105,6 +111,23 @@ export function productNavigationViewUsesProject(view: View) {
 
 export function productNavigationViewUsesDocumentGeneration(view: View) {
   return view === View.WORKSPACE;
+}
+
+export function productNavigationTargetIsWaiting(input: ProductNavigationTarget & {
+  processReadState: ProductNavigationReadState;
+  projectIndexReadState: ProductNavigationReadState;
+}) {
+  const view = normalizePersistedView(input.view);
+  const scope = normalizePersistedScope(input.scope);
+  const needsProcessRead = productNavigationViewRequiresProcess(view);
+  const needsProjectIndex = Boolean(
+    cleanString(input.projectId)
+    || scope.type === ScopeType.PROJECT
+    || (view === View.WORKSPACE && cleanString(input.documentGenerationId)),
+  );
+  const unsettled = (state: ProductNavigationReadState) => state === 'idle' || state === 'loading';
+  return (needsProcessRead && unsettled(input.processReadState))
+    || (needsProjectIndex && unsettled(input.projectIndexReadState));
 }
 
 export function hasProductNavigationSearch(search: string | URLSearchParams) {
@@ -241,15 +264,21 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
   let scope = normalizePersistedScope(input.scope);
   let selectedProcessId = cleanString(input.processId);
   let activeGenerationId = cleanString(input.documentGenerationId);
+  const processReadState = input.processReadState ?? 'ready';
+  const projectIndexReadState = input.projectIndexReadState ?? 'ready';
   const requestedProjectId = cleanString(input.projectId) ?? (scope.type === ScopeType.PROJECT ? scope.id : null);
   const requestedProject = requestedProjectId
     ? input.projects.find(project => project.id === requestedProjectId)
     : undefined;
 
   if (requestedProjectId && !requestedProject) {
-    addIssue('invalid_project_id');
-    if (scope.type === ScopeType.PROJECT && scope.id === requestedProjectId) {
-      scope = { type: ScopeType.MY_WORK };
+    if (projectIndexReadState === 'error') {
+      addIssue('project_index_read_error');
+    } else {
+      addIssue('invalid_project_id');
+      if (scope.type === ScopeType.PROJECT && scope.id === requestedProjectId) {
+        scope = { type: ScopeType.MY_WORK };
+      }
     }
   }
 
@@ -272,7 +301,9 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
       view = View.PROCESS_CATALOG;
     } else {
       const process = input.processes.find(item => item.id === selectedProcessId && processBelongsToOrganization(item, input.organization));
-      if (!process) {
+      if (!process && processReadState === 'error') {
+        addIssue('process_read_error');
+      } else if (!process) {
         addIssue('invalid_process_id');
         selectedProcessId = null;
         view = View.PROCESS_CATALOG;
@@ -280,11 +311,11 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
     }
   }
 
-  if (view === View.WORKSPACE && scope.type !== ScopeType.ORGANIZATION) {
-    if (!activeGenerationId) {
+  if (view === View.WORKSPACE) {
+    if (!activeGenerationId && scope.type !== ScopeType.ORGANIZATION) {
       addIssue('missing_document_generation_id');
       view = scope.type === ScopeType.PROJECT ? View.DOCS : View.DOCS_FORGE;
-    } else {
+    } else if (activeGenerationId) {
       const generation = input.documentGenerations.find(item => item.id === activeGenerationId);
       if (!generation) {
         addIssue('invalid_document_generation_id');
@@ -298,6 +329,8 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
         const generationProject = input.projects.find(project => project.id === generation.projectId);
         if (generationProject) {
           scope = { type: ScopeType.PROJECT, id: generationProject.id, name: generationProject.name };
+        } else if (projectIndexReadState === 'error') {
+          addIssue('project_index_read_error');
         } else {
           addIssue('invalid_project_id');
           activeGenerationId = null;
@@ -306,7 +339,8 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
         }
       }
     }
-  } else if (view !== View.WORKSPACE) {
+  }
+  if (view !== View.WORKSPACE) {
     activeGenerationId = null;
   }
 
@@ -320,22 +354,30 @@ export function resolveProductNavigationState(input: ResolveProductNavigationSta
     authoritativeCapabilities: input.authoritativeCapabilities,
     preserveOrganizationWorkspace: input.preserveOrganizationWorkspace,
   });
+  const preservesUnresolvedProjectTarget = projectIndexReadState === 'error'
+    && issues.includes('project_index_read_error');
+  const resolvedView = preservesUnresolvedProjectTarget ? view : resolved.view;
+  const resolvedScope = preservesUnresolvedProjectTarget ? scope : resolved.scope;
 
-  if (!productNavigationViewRequiresProcess(resolved.view)) {
+  if (!productNavigationViewRequiresProcess(resolvedView)) {
     selectedProcessId = null;
   }
 
-  if (resolved.view !== View.WORKSPACE || resolved.scope.type !== ScopeType.PROJECT) {
+  const preservesGenerationDuringProjectIndexError = resolvedView === View.WORKSPACE
+    && projectIndexReadState === 'error'
+    && Boolean(activeGenerationId);
+  if (!preservesGenerationDuringProjectIndexError
+    && (resolvedView !== View.WORKSPACE || resolvedScope.type !== ScopeType.PROJECT)) {
     activeGenerationId = null;
   }
 
   return {
-    view: resolved.view,
-    scope: resolved.scope,
+    view: resolvedView,
+    scope: resolvedScope,
     selectedProcessId,
     activeGenerationId,
     issues,
-    fallbackApplied: resolved.fallbackApplied,
+    fallbackApplied: preservesUnresolvedProjectTarget ? false : resolved.fallbackApplied,
     access: resolved.access,
   };
 }

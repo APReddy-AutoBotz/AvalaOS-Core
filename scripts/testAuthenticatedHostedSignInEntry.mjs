@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -198,6 +198,20 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     mode: 'open',
     waiters: [],
   }]));
+  const deliveryTaskGates = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
+    mode: 'open',
+    rejectRemaining: 0,
+    waiters: [],
+    requests: 0,
+    completed: 0,
+    held: 0,
+    actors: [],
+    authorityVersions: [],
+  }]));
+  const authorityVersions = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
+    current: 1,
+    priorRead: null,
+  }]));
   const releaseGate = (gates, projectName, code) => {
     const gate = gates.get(projectName);
     if (!gate) throw new Error(code);
@@ -210,11 +224,20 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
   const releaseArmGate = projectName => releaseGate(
     armGates, projectName, 'AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_ARM_GATE_REJECTED',
   );
+  const releaseDeliveryTaskGate = projectName => releaseGate(
+    deliveryTaskGates, projectName, 'AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_TASK_GATE_REJECTED',
+  );
   const observations = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
     passwordRequests: [],
     bindings: [],
     attestationRequests: 0,
     processCommandRequests: 0,
+    tenantSessionRequests: 0,
+    tenantSessionCompleted: 0,
+    processReadRequests: 0,
+    processReadCompleted: 0,
+    projectIndexRequests: 0,
+    projectIndexCompleted: 0,
     verifySessionCalls: [],
     controlSequence: [],
   }]));
@@ -254,6 +277,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     created_at: '2026-10-13T00:00:00.000Z',
     updated_at: '2026-10-13T00:00:00.000Z',
   }]));
+  const deliveryProjects = new Map();
   const assessmentRows = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, null]));
   const assessmentControls = new Map(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.map(projectName => [projectName, {
     mode: 'single-readback',
@@ -358,13 +382,18 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       if (incoming.method === 'POST' && url.pathname === '/functions/v1/tenant-session') {
         const identity = identitiesByToken.get(bearerToken(incoming));
         if (!identity) return sendJson(outgoing, 401, { error: { code: 'AUTHENTICATION_REQUIRED' } });
+        const observation = observations.get(identity.projectName);
+        const authority = authorityVersions.get(identity.projectName);
+        if (!authority) return sendJson(outgoing, 409, { error: { code: 'SESSION_CONTEXT_UNAVAILABLE' } });
+        observation.tenantSessionRequests += 1;
+        outgoing.once('finish', () => { observation.tenantSessionCompleted += 1; });
         return sendJson(outgoing, 200, { contexts: [{
           userId: identity.user.id,
           organizationId: ORGANIZATION_ID,
           organizationName: 'Loopback organization',
           workspaceId: WORKSPACE_ID,
           workspaceName: 'Loopback workspace',
-          authorizationVersion: 1,
+          authorizationVersion: authority.current,
           capabilities: capabilitiesForIdentity(identity),
         }] });
       }
@@ -372,6 +401,11 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       if (incoming.method === 'GET' && url.pathname === '/rest/v1/assess_processes') {
         const identity = identitiesByToken.get(bearerToken(incoming));
         if (incoming.headers.apikey !== PUBLIC_ANON_KEY) return sendJson(outgoing, 401, { code: 'API_KEY_REQUIRED' });
+        const observation = identity ? observations.get(identity.projectName) : null;
+        if (observation) {
+          observation.processReadRequests += 1;
+          outgoing.once('finish', () => { observation.processReadCompleted += 1; });
+        }
         const exactScope = url.searchParams.get('org_id') === `eq.${ORGANIZATION_ID}`
           && url.searchParams.get('workspace_id') === `eq.${WORKSPACE_ID}`;
         const readFault = identity ? processReadFaults.get(identity.projectName) : null;
@@ -386,6 +420,67 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         }
         return identity ? sendJson(outgoing, 200, exactScope ? projectForIdentity(identity) : []) : sendJson(outgoing, 401, {
           code: 'AUTHENTICATION_REQUIRED',
+        });
+      }
+
+      if (incoming.method === 'GET' && url.pathname === '/rest/v1/projects') {
+        const identity = identitiesByToken.get(bearerToken(incoming));
+        if (!identity) return sendJson(outgoing, 401, { code: 'AUTHENTICATION_REQUIRED' });
+        const observation = observations.get(identity.projectName);
+        observation.projectIndexRequests += 1;
+        outgoing.once('finish', () => { observation.projectIndexCompleted += 1; });
+        const project = deliveryProjects.get(identity.projectName);
+        const exactScope = url.searchParams.get('org_id') === `eq.${ORGANIZATION_ID}`
+          && url.searchParams.get('workspace_id') === `eq.${WORKSPACE_ID}`
+          && url.searchParams.get('status') === 'eq.active'
+          && url.searchParams.get('archived_at') === 'is.null'
+          && url.searchParams.get('deleted_at') === 'is.null';
+        return sendJson(outgoing, 200, exactScope && project ? [project] : []);
+      }
+
+      if (incoming.method === 'POST' && url.pathname === '/functions/v1/legacy-delivery-query') {
+        const identity = identitiesByToken.get(bearerToken(incoming));
+        const project = identity ? deliveryProjects.get(identity.projectName) : null;
+        const gate = identity ? deliveryTaskGates.get(identity.projectName) : null;
+        const authority = identity ? authorityVersions.get(identity.projectName) : null;
+        if (!identity || !project || !gate || !authority) {
+          return sendJson(outgoing, 401, { ok: false, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required.' } });
+        }
+        const exactQuery = body?.schemaVersion === 'legacy-delivery-query.v1'
+          && body.organizationId === ORGANIZATION_ID
+          && body.workspaceId === WORKSPACE_ID
+          && (body.expectedAuthorizationVersion === authority.current
+            || (authority.priorRead !== null && body.expectedAuthorizationVersion === authority.priorRead))
+          && body.projectId === project.id
+          && body.limit === 100
+          && body.cursor === null
+          && body.sourceGenerationId === null
+          && body.includeRetained === true;
+        if (!exactQuery) {
+          return sendJson(outgoing, 400, { ok: false, error: { code: 'INVALID_COMMAND', message: 'Request is invalid.' } });
+        }
+        gate.requests += 1;
+        gate.actors.push(identity.persona);
+        gate.authorityVersions.push(body.expectedAuthorizationVersion);
+        if (gate.mode === 'hold-next') {
+          gate.mode = 'held';
+          gate.held += 1;
+          await new Promise(resolve => gate.waiters.push(resolve));
+        }
+        outgoing.once('finish', () => { gate.completed += 1; });
+        if (gate.rejectRemaining > 0) {
+          gate.rejectRemaining -= 1;
+          return sendJson(outgoing, 503, { ok: false, error: {
+            code: 'QUERY_UNAVAILABLE', message: 'Delivery data could not be loaded.',
+          } });
+        }
+        return sendJson(outgoing, 200, {
+          ok: true,
+          schemaVersion: 'legacy-delivery-query.v1',
+          projectId: project.id,
+          items: [],
+          page: { limit: 100, nextCursor: null, hasMore: false },
+          source: null,
         });
       }
 
@@ -646,11 +741,26 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
           updated_at: '2026-10-11T00:00:00.000Z',
         },
       ]);
+      const deliveryProject = {
+        id: `50000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
+        org_id: ORGANIZATION_ID,
+        workspace_id: WORKSPACE_ID,
+        name: labels.deliveryProjectName,
+        description: 'Registered same-workspace project unrelated to the Assess process route.',
+        owner_id: identityRows[`author.${projectName}@local.invalid`].user.id,
+        lifecycle_stage: 'Planning',
+        health_status: 'On Track',
+        status: 'active',
+        archived_at: null,
+        deleted_at: null,
+        created_at: '2026-10-13T00:00:00.000Z',
+      };
+      deliveryProjects.set(projectName, deliveryProject);
       return {
         projectName,
         processId: process.id,
-        projectId: `50000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`,
-        deliveryProject: { id: `50000000-0000-4000-8000-${String(projectIndex + 1).padStart(12, '0')}`, name: labels.deliveryProjectName },
+        projectId: deliveryProject.id,
+        deliveryProject: { id: deliveryProject.id, name: deliveryProject.name },
         aliases: { case: 'primary-case-1', review: 'primary-review-1', handoff: 'primary-handoff-1', artifact: 'primary-artifact-1', process: process.name },
       };
     },
@@ -763,6 +873,44 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         }
         return { mode: gate.mode, waiting: gate.waiters.length };
       }
+      if (pathname === '/control/sign-in-entry-delivery-task-gate') {
+        const gate = deliveryTaskGates.get(input.projectName);
+        if (!gate || !['hold-next','release','reject','inspect'].includes(input.action)) {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_TASK_GATE_REJECTED');
+        }
+        if (input.action === 'hold-next') {
+          if (gate.mode !== 'open' || gate.waiters.length !== 0) {
+            throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_TASK_GATE_REJECTED');
+          }
+          gate.mode = 'hold-next';
+        } else if (input.action === 'release' || input.action === 'reject') {
+          if (input.action === 'reject') gate.rejectRemaining = 2;
+          releaseDeliveryTaskGate(input.projectName);
+        }
+        return {
+          mode: gate.mode,
+          waiting: gate.waiters.length,
+          requests: gate.requests,
+          completed: gate.completed,
+          held: gate.held,
+          actors: [...gate.actors],
+          authorityVersions: [...gate.authorityVersions],
+        };
+      }
+      if (pathname === '/control/sign-in-entry-authority-version') {
+        const authority = authorityVersions.get(input.projectName);
+        if (!authority || !['advance','inspect'].includes(input.action)) {
+          throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_AUTHORITY_VERSION_REJECTED');
+        }
+        if (input.action === 'advance') {
+          if (authority.current !== 1 || authority.priorRead !== null) {
+            throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_AUTHORITY_VERSION_REJECTED');
+          }
+          authority.priorRead = authority.current;
+          authority.current = 2;
+        }
+        return { current: authority.current, priorRead: authority.priorRead };
+      }
       if (pathname === '/control/sign-in-entry-process-duplicate') {
         if (!AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.includes(input.projectName)
           || typeof input.enabled !== 'boolean') throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DUPLICATE_CONTROL_REJECTED');
@@ -843,6 +991,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       for (const projectName of AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS) {
         releaseObserveGate(projectName);
         releaseArmGate(projectName);
+        releaseDeliveryTaskGate(projectName);
         releaseAssessmentGate(projectName, 'reject-finalize');
       }
       return { quiesced: true };
@@ -950,9 +1099,16 @@ const checkoutState = async () => (await execFileAsync('git', ['status', '--porc
 })).stdout;
 
 export const runAuthenticatedHostedSignInEntry = async ({
-  processSeedMode = 'valid', processReadStateOnly = false,
+  processSeedMode = 'valid', processReadStateOnly = false, scopedNavigationOnly = false,
 } = {}) => {
   const stateBefore = await checkoutState();
+  const scopedNavigationEvidencePath = scopedNavigationOnly
+    ? path.resolve('output/local-private/authenticated-product-acceptance/scoped-navigation-corrected.jsonl')
+    : '';
+  if (scopedNavigationEvidencePath) {
+    await mkdir(path.dirname(scopedNavigationEvidencePath), { recursive: true });
+    await rm(scopedNavigationEvidencePath, { force: true });
+  }
   let temporaryRoot;
   let fixture;
   let preview;
@@ -999,6 +1155,8 @@ export const runAuthenticatedHostedSignInEntry = async ({
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OUTPUT_DIR: playwrightOutputDirectory,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE: processSeedMode,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY: String(processReadStateOnly),
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_ONLY: String(scopedNavigationOnly),
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_EVIDENCE_PATH: scopedNavigationEvidencePath,
       ENTERPRISE_LIFECYCLE_APP_BASE_URL: fixture.previewOrigin,
       ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.backendOrigin,
       ENTERPRISE_LIFECYCLE_CONTROL_URL: fixture.controlBaseUrl,
@@ -1023,12 +1181,13 @@ export const runAuthenticatedHostedSignInEntry = async ({
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 const invokedProcessSeedMode = process.argv.length === 2
-  || (process.argv.length === 3 && process.argv[2] === '--process-read-state') ? 'valid'
+  || (process.argv.length === 3 && ['--process-read-state', '--scoped-navigation'].includes(process.argv[2])) ? 'valid'
   : process.argv.length === 3 && process.argv[2] === '--nullable-process-reproduction'
     ? 'nullable-reproduction' : 'rejected';
 if (invoked) runAuthenticatedHostedSignInEntry({
   processSeedMode: invokedProcessSeedMode,
   processReadStateOnly: process.argv.length === 3 && process.argv[2] === '--process-read-state',
+  scopedNavigationOnly: process.argv.length === 3 && process.argv[2] === '--scoped-navigation',
 }).then(() => {
   console.log('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PASS');
 }).catch(error => {

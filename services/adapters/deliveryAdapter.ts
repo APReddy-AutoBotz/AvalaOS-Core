@@ -403,11 +403,15 @@ export const deliveryAdapter = {
 
   async getAuthoritativeWorkspace(context: TenantContextProjection) {
     const projects = await this.getAuthoritativeProjects(context);
+    const projection = await this.getAuthoritativeTaskProjection(context, projects);
+    return { projects, ...projection };
+  },
+
+  async getAuthoritativeTaskProjection(context: TenantContextProjection, projects: Project[]) {
     const projections = (await Promise.all(
       projects.map(project => queryAllAuthoritativeTasks(context, project.id)),
     )).flat();
     return {
-      projects,
       tasks: projections.map(mapLegacyDeliveryTask),
       epics: mapAuthoritativeEpics(projections),
     };

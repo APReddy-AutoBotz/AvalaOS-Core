@@ -51,13 +51,18 @@ assert.match(
 );
 assert.match(
   appSource,
-  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| !navigationController\.current\.needsClassification\(\)\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?beginSettlement\(false\);[\s\S]*?return;\s*\}\s*[^]*?if \(processesLoading \|\| \(dataAccess === 'server' && deliveryLoading\)\) return;/,
+  /useLayoutEffect\(\(\) => \{\s*if \(guardLoading \|\| !currentUser \|\| !currentOrganization\) return;\s*if \(!explicitNavigationIntent \|\| !navigationController\.current\.needsClassification\(\)\) return;\s*if \(!hasDurableProductNavigationAgreement\([\s\S]*?\)\) \{[\s\S]*?beginSettlement\(false\);[\s\S]*?return;\s*\}\s*[^]*?productNavigationTargetIsWaiting\(/,
   'invalid durable navigation must be rejected in the layout phase before product hydration can observe a stale render',
 );
 assert.match(
   appSource,
-  /if \(processesLoading \|\| \(dataAccess === 'server' && deliveryLoading\)\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
-  'valid durable navigation must wait for process data and connected Delivery project data before canonical route reconstruction',
+  /if \(productNavigationTargetIsWaiting\([\s\S]*?processReadState,[\s\S]*?projectIndexReadState,[\s\S]*?\)\) return;\s*const resolvedNavigation = resolveProductNavigationState\(/,
+  'valid durable navigation must wait only for the authoritative data required by its exact route',
+);
+assert.match(
+  appSource,
+  /if \(pendingPopStateSearch\.current === window\.location\.search\) return;[\s\S]*?beginSettlement\([\s\S]*?'popstate'[\s\S]*?pendingPopStateSearch\.current = search;/,
+  'late project-index settlement must block old reconciliation from overwriting the pending popstate target',
 );
 
 const providerSource = readFileSync('components/docs/DocsProvider.tsx', 'utf8');

@@ -39,6 +39,8 @@ const passing = variant => ({
     processNavigationObserved: true, readStages: stages,
     barrier: variant === 'barrier' ? 'lifecycle-frame' : 'none',
     diagnosticCheckpointEquivalent: false, lifecycleFrameCaptured: true,
+    deliveryTaskBodyPending: true, processVisibleWhileDeliveryPending: true,
+    v2VisibleWhileDeliveryPending: true, deliveryPendingFrameStable: true,
     caseDelta: 1, caseVersionDelta: 1, failureStage: null,
     queues: { network: 'passed', cases: 'passed' },
   },
@@ -262,11 +264,16 @@ test('failure evidence preserves bounded lifecycle counts and removes arbitrary 
   });
   assert.equal(result.status, 'failed');
   assert.equal(result.conclusion, 'reproduced');
+  assert.equal(result.readiness.scopedNavigation, 'failed');
   assert.doesNotMatch(JSON.stringify(result), /sensitive/u);
 
   const unsafePrerequisites = passing('barrier');
   unsafePrerequisites.controller.fixturePrerequisites = 'failed';
   assert.equal(buildV2FullPrefixVariantResult(unsafePrerequisites).status, 'failed');
+
+  const missingPendingProof = passing('barrier');
+  missingPendingProof.browser.deliveryTaskBodyPending = false;
+  assert.equal(buildV2FullPrefixVariantResult(missingPendingProof).status, 'failed');
 });
 
 test('local selector rejects hosted, unauthenticated, diagnostic and unknown modes', () => {

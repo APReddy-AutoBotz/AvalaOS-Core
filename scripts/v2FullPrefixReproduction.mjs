@@ -134,6 +134,10 @@ const browser = (value, variant) => {
     barrier: value.barrier === 'lifecycle-frame' ? 'lifecycle-frame' : 'none',
     diagnosticCheckpointEquivalent: false,
     lifecycleFrameCaptured: boolean(value.lifecycleFrameCaptured),
+    deliveryTaskBodyPending: boolean(value.deliveryTaskBodyPending),
+    processVisibleWhileDeliveryPending: boolean(value.processVisibleWhileDeliveryPending),
+    v2VisibleWhileDeliveryPending: boolean(value.v2VisibleWhileDeliveryPending),
+    deliveryPendingFrameStable: boolean(value.deliveryPendingFrameStable),
     caseDelta: Number.isSafeInteger(value.caseDelta) ? value.caseDelta : null,
     caseVersionDelta: Number.isSafeInteger(value.caseVersionDelta) ? value.caseVersionDelta : null,
     failureStage: ['navigation', 'render', 'read-observer', 'browser-state', 'network-queue',
@@ -177,7 +181,10 @@ export function buildV2FullPrefixVariantResult(input) {
       && item.lifecycle.completed > 0 && item.lifecycle.pending === 0
       && item.lifecycle.bodyCompleted > 0 && item.lifecycle.bodyFailed === 0 && item.lifecycle.bodyPending === 0)
     && safeBrowser.barrier === (variant === 'barrier' ? 'lifecycle-frame' : 'none')
-    && safeBrowser.lifecycleFrameCaptured && safeBrowser.caseDelta === 1 && safeBrowser.caseVersionDelta === 1
+    && safeBrowser.lifecycleFrameCaptured && safeBrowser.deliveryTaskBodyPending
+    && safeBrowser.processVisibleWhileDeliveryPending && safeBrowser.v2VisibleWhileDeliveryPending
+    && safeBrowser.deliveryPendingFrameStable
+    && safeBrowser.caseDelta === 1 && safeBrowser.caseVersionDelta === 1
     && safeBrowser.failureStage === null && safeBrowser.queues.network === 'passed'
     && safeBrowser.queues.cases === 'passed'
     && safeController?.fixturePrerequisites === 'passed'
@@ -227,13 +234,20 @@ export function buildV2FullPrefixResult({ variants, native, baseline }) {
   const reproduced = safeVariants.some(item => item.browser?.navigation === 'passed'
     && item.browser.renderOutcome !== 'resumed');
   return Object.freeze({
-    schemaVersion: 'v2-full-prefix-local-reproduction-v1',
+    schemaVersion: 'v2-full-prefix-local-reproduction-v2',
     status: passed ? 'passed' : 'failed',
     source: Object.freeze({
       baseline: /^[a-f0-9]{40}$/u.test(baseline ?? '') ? baseline : 'unknown',
       localOnly: true,
     }),
     conclusion: passed ? 'not_reproduced' : reproduced ? 'reproduced' : 'inconclusive',
+    readiness: Object.freeze({
+      scopedNavigation: safeVariants.every(item => item.status === 'passed'
+        && item.browser?.deliveryTaskBodyPending
+        && item.browser.processVisibleWhileDeliveryPending
+        && item.browser.v2VisibleWhileDeliveryPending
+        && item.browser.deliveryPendingFrameStable) ? 'passed' : 'failed',
+    }),
     variants: safeVariants,
     native: safeNative,
     authority: Object.freeze({

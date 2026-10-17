@@ -193,6 +193,13 @@ export const responseToEnterpriseLifecycleNode = async (response, outgoing) => {
   await pipeline(Readable.fromWeb(response.body), outgoing);
 };
 
+export const scheduleEnterpriseLifecycleRequest = (previous, handle, detachResponse = false) => {
+  let routeFinished;
+  const responseReady = new Promise(resolve => { routeFinished = resolve; });
+  const completed = previous.then(() => handle(routeFinished)).finally(routeFinished);
+  return { completed, serialized: (detachResponse ? responseReady : completed).catch(() => {}) };
+};
+
 const migrationsForChain = () => readdirSync(path.join(root, 'supabase', 'migrations'))
   .filter(name => name.endsWith('.sql')).sort();
 
@@ -1210,8 +1217,11 @@ export async function createEnterpriseLifecycleFixture({
         }
         if (url.pathname === '/control/native-postgrest-stream') {
           const input = await request.json().catch(() => ({}));
+          const nativeResource = ['assess_v2_cases', 'assess_processes'].includes(input.resource);
+          const deliveryTaskBody = input.resource === 'legacy-delivery-query'
+            && input.mode === 'hold-body' && input.skip === undefined;
           if (!projectSetups.has(input.projectName)
-            || !['assess_v2_cases', 'assess_processes'].includes(input.resource)
+            || (!nativeResource && !deliveryTaskBody)
             || !['hold-headers', 'hold-body'].includes(input.mode)
             || (input.skip !== undefined && input.skip !== 0 && input.skip !== 1)
             || nativePostgrestStream !== null) {
@@ -1227,14 +1237,13 @@ export async function createEnterpriseLifecycleFixture({
         }
         if (url.pathname === '/control/native-postgrest-stream-release') {
           const input = await request.json().catch(() => ({}));
-          if (!projectSetups.has(input.projectName) || nativePostgrestStream === null
-            || nativePostgrestStream.remaining !== 0) {
+          if (!projectSetups.has(input.projectName) || nativePostgrestStream === null) {
             return json({ error: 'CONTROL_NATIVE_POSTGREST_STREAM_RELEASE_REJECTED' },409,cors);
           }
           const current = nativePostgrestStream;
           nativePostgrestStream = null;
           current.release();
-          return json({ released: true },200,cors);
+          return json({ released: true, entered: current.entered },200,cors);
         }
         if (url.pathname === '/control/native-postgrest-stats') {
           const input = await request.json().catch(() => ({}));
@@ -1546,6 +1555,14 @@ export async function createEnterpriseLifecycleFixture({
       if (url.pathname === '/functions/v1/legacy-delivery-query') {
         const response = await legacyDeliveryQueryModule.handleLegacyDeliveryQuery(request,legacyDeliveryDependencies(request));
         for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        const streamControl = nativePostgrestStream?.resource === 'legacy-delivery-query'
+          && nativePostgrestStream.remaining === 1 ? nativePostgrestStream : null;
+        if (streamControl) {
+          streamControl.remaining = 0;
+          streamControl.entered = true;
+          return holdNativeResponseBody(response, streamControl.released, () => undefined,
+            () => { streamControl.held = true; });
+        }
         return response;
       }
       if (url.pathname === '/auth/v1/user') {
@@ -1597,7 +1614,7 @@ export async function createEnterpriseLifecycleFixture({
           body => ({ body, error: null }),
           error => ({ body: undefined, error }),
         );
-      const handle = async () => {
+      const handle = async (routeFinished = () => {}) => {
         try {
           const address = server.address();
           const bodyState = await bodyResult;
@@ -1609,7 +1626,9 @@ export async function createEnterpriseLifecycleFixture({
             body: body?.length ? body : undefined,
             signal: clientAbort.signal,
           });
-          await responseToEnterpriseLifecycleNode(await route(request), outgoing);
+          const response = await route(request);
+          routeFinished();
+          await responseToEnterpriseLifecycleNode(response, outgoing);
         } catch {
           if (!outgoing.headersSent && !outgoing.destroyed) {
             await responseToEnterpriseLifecycleNode(json({ error: 'FIXTURE_FAILURE' }, 500), outgoing);
@@ -1626,8 +1645,19 @@ export async function createEnterpriseLifecycleFixture({
         nativeRequests.add(run);
         void run.finally(() => nativeRequests.delete(run));
       } else {
-        const run = requestTail.then(handle);
-        requestTail = run.catch(() => {});
+        // Keep all handler/database work serialized. Only the native test's
+        // Delivery response body may remain pending while later controls run.
+        const detachResponse = nativePostgrestOrigin !== null
+          && (incoming.url ?? '').split('?')[0] === '/functions/v1/legacy-delivery-query';
+        const scheduled = scheduleEnterpriseLifecycleRequest(requestTail, handle, detachResponse);
+        requestTail = scheduled.serialized;
+        if (detachResponse) {
+          nativeRequests.add(scheduled.completed);
+          void scheduled.completed.then(
+            () => nativeRequests.delete(scheduled.completed),
+            () => nativeRequests.delete(scheduled.completed),
+          );
+        }
       }
     });
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen({ host: '127.0.0.1', port, exclusive: true }, resolve); });
