@@ -196,19 +196,6 @@ jobs:
         run: |
           docker pull postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
           docker pull public.ecr.aws/supabase/postgrest@sha256:bca3f86f69d8ef7aa1e5ee65e66ce9a20c6c147be637517a7be8399e102901d1
-      - name: Verify bounded V2 transport lifecycle in Chromium
-        run: npx playwright test --config=playwright.v2-reload-transport.config.ts --workers=1
-      - name: Verify native Assess V2 PostgREST lifecycle
-        run: node scripts/testAssessV2NativePostgrest.mjs
-      - name: Verify native Assess V2 fixture cleanup
-        if: always()
-        run: |
-          test -z "$(docker ps -aq --filter label=avalaos.assess-v2-native-run)"
-          test -z "$(docker network ls -q --filter label=avalaos.assess-v2-native-run)"
-      - name: Actual product cases on desktop and Pixel 7
-        run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
-      - name: Independently verify case observations and cleanup
-        run: node scripts/verifyAuthenticatedLocalEvidence.mjs output/acceptance/authenticated-product/local-evidence.json
       - name: Compare native V2 full prefix with real controller observations
         env:
           ASSESS_V2_FULL_PREFIX_REPRODUCTION: '1'
@@ -226,6 +213,19 @@ jobs:
           path: output/local-private/authenticated-product-acceptance/v2-full-prefix-reproduction/result.json
           if-no-files-found: error
           retention-days: 14
+      - name: Verify bounded V2 transport lifecycle in Chromium
+        run: npx playwright test --config=playwright.v2-reload-transport.config.ts --workers=1
+      - name: Verify native Assess V2 PostgREST lifecycle
+        run: node scripts/testAssessV2NativePostgrest.mjs
+      - name: Verify native Assess V2 fixture cleanup
+        if: always()
+        run: |
+          test -z "$(docker ps -aq --filter label=avalaos.assess-v2-native-run)"
+          test -z "$(docker network ls -q --filter label=avalaos.assess-v2-native-run)"
+      - name: Actual product cases on desktop and Pixel 7
+        run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
+      - name: Independently verify case observations and cleanup
+        run: node scripts/verifyAuthenticatedLocalEvidence.mjs output/acceptance/authenticated-product/local-evidence.json
       - name: Retain sanitized local evidence only
         if: always()
         uses: actions/upload-artifact@v4

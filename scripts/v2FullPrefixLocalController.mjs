@@ -5,6 +5,7 @@ import {
   authenticatedHostedDigest,
 } from './authenticatedHostedController.mjs';
 import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
+import { classifyV2FullPrefixFailure } from './v2FullPrefixReproduction.mjs';
 
 const EXPECTED_PREFIX_CASES = Object.freeze([
   'ASSESS-002',
@@ -56,8 +57,34 @@ const requestFixtureControl = async (fixture, pathname, body) => {
   return payload;
 };
 
-export async function createV2FullPrefixLocalController({ fixture, origin, variant }) {
-  if (!fixture?.db?.query || typeof fixture.serviceQuery !== 'function'
+export function createV2FullPrefixAdapterQuery(client) {
+  if (!client || typeof client.query !== 'function') {
+    throw new Error('V2_FULL_PREFIX_LOCAL_AUTHORITY_CLIENT_REJECTED');
+  }
+  let tail = Promise.resolve();
+  return (sql, values = []) => {
+    const run = tail.then(async () => {
+      if (!/^SELECT public[.]authenticated_synthetic_/u.test(sql.trim())) {
+        return client.query(sql, values);
+      }
+      await client.query('BEGIN');
+      try {
+        await client.query('SET LOCAL ROLE service_role');
+        const result = await client.query(sql, values);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    });
+    tail = run.catch(() => undefined);
+    return run;
+  };
+}
+
+export async function createV2FullPrefixLocalController({ fixture, origin, variant, adapterQuery }) {
+  if (!fixture?.db?.query || typeof adapterQuery !== 'function'
     || typeof fixture.expectedBrowserCaseProcesses !== 'function') {
     throw new Error('V2_FULL_PREFIX_LOCAL_FIXTURE_REJECTED');
   }
@@ -121,7 +148,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
   });
   const postgresAdapter = createAuthenticatedHostedPostgresAdapter({
     config,
-    db: { query: fixture.serviceQuery },
+    db: { query: adapterQuery },
     verifyDeployment: async () => { throw new Error('V2_FULL_PREFIX_LOCAL_PREFLIGHT_FORBIDDEN'); },
     verifySecretBackend: async () => { throw new Error('V2_FULL_PREFIX_LOCAL_PREFLIGHT_FORBIDDEN'); },
   });
@@ -166,13 +193,14 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
     workspaceId: config.scope.workspaceId,
     expiresAt: new Date(Date.now() + 60 * 60_000),
   });
-  const observationStartedAt = (await fixture.serviceQuery(
+  const observationStartedAt = (await adapterQuery(
     'SELECT statement_timestamp() value',
   )).rows[0].value.toISOString();
   controller.active = true;
   controller.startedAt = observationStartedAt;
   controller.observationStartedAt = observationStartedAt;
 
+  const projectSetups = new Map();
   const registerProject = async (projectName, browserSetup) => {
     const processId = fixture.expectedBrowserCaseProcesses()
       .find(item => item.projectName === projectName)?.processId;
@@ -197,9 +225,11 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       browserSetup,
       lastBoundaryAt: observationStartedAt,
     });
+    projectSetups.set(projectName, browserSetup);
   };
 
   const controlToken = authenticatedHostedDigest(controller.controlToken).slice('sha256:'.length);
+  let firstControlFailureCode = null;
   const server = createServer(async (request, response) => {
     const send = (status, body) => {
       response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -216,15 +246,21 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       }
       const input = await safeJson(request);
       if (DIRECT_FIXTURE_CONTROLS.has(url.pathname)) {
+        if (url.pathname === '/control/setup' && projectSetups.has(input.projectName)) {
+          return send(200, projectSetups.get(input.projectName));
+        }
         const result = await requestFixtureControl(fixture, url.pathname, input);
         if (url.pathname === '/control/setup') await registerProject(input.projectName, result);
         return send(200, result);
       }
       return send(200, await controller.control(url.pathname, input));
     } catch (error) {
+      const classified = classifyV2FullPrefixFailure(error, 'browser-execution');
+      const code = classified.code === 'UNCLASSIFIED'
+        ? 'V2_FULL_PREFIX_LOCAL_CONTROL_FAILED' : classified.code;
+      firstControlFailureCode ??= code;
       return send(409, {
-        error: String(error?.message ?? error).match(/^[A-Z0-9_:.-]+/u)?.[0]
-          ?? 'V2_FULL_PREFIX_LOCAL_CONTROL_FAILED',
+        error: code,
       });
     }
   });
@@ -234,29 +270,93 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('V2_FULL_PREFIX_LOCAL_SERVER_REJECTED');
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const requestControl = async (pathname, body) => {
+    const response = await fetch(new URL(pathname, baseUrl), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-enterprise-lifecycle-control': controlToken,
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const code = typeof payload?.error === 'string' && /^[A-Z][A-Z0-9_:.-]{1,159}$/u.test(payload.error)
+        ? payload.error : 'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_REJECTED';
+      throw new Error(code);
+    }
+    return payload;
+  };
 
   let closed = false;
+  let setupProbe = 'not_run';
+  let setupProbeActionId = null;
   return Object.freeze({
-    baseUrl: `http://127.0.0.1:${address.port}`,
+    baseUrl,
     controlToken,
+    controlFailureCode: () => firstControlFailureCode,
+    async verifyFirstBrowserAction(projectName) {
+      setupProbe = 'failed';
+      const setup = await requestControl('/control/setup', { projectName });
+      const actor = setup?.actors?.reviewer;
+      const claims = decodeClaims(actor?.token);
+      if (claims.actorId !== actor?.user?.id) {
+        throw new Error('V2_FULL_PREFIX_LOCAL_FIRST_ACTION_IDENTITY_REJECTED');
+      }
+      const started = await requestControl('/control/browser-action-start', {
+        projectName,
+        accessToken: actor.token,
+        route: '/functions/v1/tenant-session',
+        requestBody: { method: 'POST', route: '/functions/v1/tenant-session' },
+      });
+      if (typeof started?.actionId !== 'string') {
+        throw new Error('V2_FULL_PREFIX_LOCAL_FIRST_ACTION_START_REJECTED');
+      }
+      setupProbeActionId = started.actionId;
+      const finished = await requestControl('/control/browser-action', {
+        projectName,
+        actionId: started.actionId,
+        status: 200,
+        responseBody: { ok: true, contexts: [] },
+      });
+      if (finished?.recorded !== true) {
+        throw new Error('V2_FULL_PREFIX_LOCAL_FIRST_ACTION_FINISH_REJECTED');
+      }
+      const rows = (await adapterQuery(
+        `SELECT persona,state FROM public.authenticated_synthetic_actor_sessions
+         WHERE exercise_id=$1 AND actor_id=$2 AND session_id=$3`,
+        [controller.exerciseId, claims.actorId, claims.sessionId],
+      )).rows;
+      if (rows.length !== 1 || rows[0].persona !== 'reviewer_desktop-chromium' || rows[0].state !== 'active') {
+        throw new Error('V2_FULL_PREFIX_LOCAL_FIRST_ACTION_BINDING_REJECTED');
+      }
+      setupProbe = 'passed';
+      return Object.freeze({ setup: true, actionStarted: true, actionFinished: true, bindingVerified: true });
+    },
     projectSummary(projectName) {
       const browserProject = projectName.startsWith('desktop-chromium')
         ? 'desktop-chromium' : 'pixel-7-chromium';
       const browserCases = controller.browserCases.filter(item => item.project === browserProject);
       const projectActions = controller.browserActions.get(projectName) ?? [];
+      const setupActionCount = projectActions.filter(item => item.actionId === setupProbeActionId).length;
+      const browserActions = projectActions.filter(item => item.actionId !== setupProbeActionId);
       const caseIds = browserCases.map(item => item.testId).sort();
       const serverCaseCount = controller.serverCases.filter(item => item.project === browserProject).length;
       return Object.freeze({
         project: projectName.endsWith('-barrier') ? 'barrier' : 'immediate',
+        setupProbe,
+        setupActionCount,
         browserCaseCount: browserCases.length,
         serverCaseCount,
-        actionCount: projectActions.length,
-        completedActionCount: projectActions.filter(item => item.complete === true).length,
+        actionCount: browserActions.length,
+        completedActionCount: browserActions.filter(item => item.complete === true).length,
         caseIds,
-        contractSatisfied: caseIds.length === EXPECTED_PREFIX_CASES.length
+        contractSatisfied: setupProbe === 'passed' && setupActionCount === 1
+          && caseIds.length === EXPECTED_PREFIX_CASES.length
           && JSON.stringify(caseIds) === JSON.stringify([...EXPECTED_PREFIX_CASES].sort())
           && serverCaseCount === EXPECTED_PREFIX_CASES.length
-          && projectActions.every(item => item.complete === true),
+          && browserActions.every(item => item.complete === true),
       });
     },
     async close() {

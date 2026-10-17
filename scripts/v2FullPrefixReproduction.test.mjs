@@ -12,6 +12,7 @@ import {
 } from './v2FullPrefixReproduction.mjs';
 import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
 import { AuthenticatedHostedController } from './authenticatedHostedController.mjs';
+import { createV2FullPrefixAdapterQuery } from './v2FullPrefixLocalController.mjs';
 
 const stages = [
   'case-discovery', 'case', 'decision', 'draft-head', 'primitives', 'edges',
@@ -39,6 +40,7 @@ const passing = variant => ({
     queues: { network: 'passed', cases: 'passed' },
   },
   controller: {
+    setupProbe: 'passed', setupActionCount: 1,
     browserCaseCount: 7, serverCaseCount: 7, actionCount: 9, completedActionCount: 9,
     caseIds: ['ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-020', 'SAFETY-001', 'SAFETY-002', 'SAFETY-003'],
     contractSatisfied: true,
@@ -71,6 +73,60 @@ test('pre-browser setup failures retain only allowlisted codes or SQLSTATE', () 
   const classified = classifyV2FullPrefixFailure(sqlError, 'controller-create');
   assert.deepEqual(classified, { stage: 'controller-create', code: 'SQLSTATE_42P01' });
   assert.doesNotMatch(JSON.stringify(classified), /private|relation|identifier/u);
+  assert.deepEqual(classifyV2FullPrefixFailure(
+    new Error('AUTHENTICATED_SYNTHETIC_SESSION_REJECTED'),
+    'controller-first-action',
+  ), { stage: 'controller-first-action', code: 'AUTHENTICATED_SYNTHETIC_SESSION_REJECTED' });
+  assert.deepEqual(classifyV2FullPrefixFailure(
+    new Error('SQLSTATE_42501'),
+    'controller-first-action',
+  ), { stage: 'controller-first-action', code: 'SQLSTATE_42501' });
+});
+
+test('local adapter serializes queries and scopes service role to authority RPCs', async () => {
+  const calls = [];
+  let transactionActive = false;
+  let releaseAuthority;
+  let authorityStarted;
+  let directStarted = false;
+  const authorityGate = new Promise(resolve => { releaseAuthority = resolve; });
+  const authorityEntered = new Promise(resolve => { authorityStarted = resolve; });
+  const client = { query: async (sql, values = []) => {
+    calls.push(sql);
+    if (sql === 'BEGIN') {
+      assert.equal(transactionActive, false);
+      transactionActive = true;
+    } else if (sql === 'COMMIT' || sql === 'ROLLBACK') {
+      assert.equal(transactionActive, true);
+      transactionActive = false;
+    } else if (sql === 'SET LOCAL ROLE service_role'
+      || /^SELECT public[.]authenticated_synthetic_/u.test(sql.trim())) {
+      assert.equal(transactionActive, true);
+    } else {
+      assert.equal(transactionActive, false);
+      directStarted = true;
+    }
+    if (/authenticated_synthetic/u.test(sql)) {
+      authorityStarted();
+      await authorityGate;
+    }
+    return { rows: [{ sql, values }] };
+  } };
+  const query = createV2FullPrefixAdapterQuery(client);
+  const firstQuery = query('SELECT public.authenticated_synthetic_observe($1)', ['one']);
+  await authorityEntered;
+  const secondQuery = query('SELECT * FROM public.enterprise_ai_budget_reservations', ['two']);
+  await Promise.resolve();
+  assert.equal(directStarted, false);
+  releaseAuthority();
+  const [first, second] = await Promise.all([firstQuery, secondQuery]);
+  assert.deepEqual(calls, [
+    'BEGIN', 'SET LOCAL ROLE service_role', 'SELECT public.authenticated_synthetic_observe($1)', 'COMMIT',
+    'SELECT * FROM public.enterprise_ai_budget_reservations',
+  ]);
+  assert.deepEqual(first.rows[0].values, ['one']);
+  assert.deepEqual(second.rows[0].values, ['two']);
+  assert.equal(transactionActive, false);
 });
 
 test('fixture session is present before the controlled first product request', async () => {

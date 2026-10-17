@@ -6,7 +6,7 @@ const READ_STAGES = new Set([
 const number = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const boolean = value => value === true;
 const FAILURE_STAGES = new Set([
-  'artifact-reset', 'controller-create', 'browser-execution', 'controller-quiesce',
+  'artifact-reset', 'controller-create', 'controller-first-action', 'browser-execution', 'controller-quiesce',
   'artifact-read', 'variant-execution',
 ]);
 const FAILURE_CODES = new Set([
@@ -16,7 +16,30 @@ const FAILURE_CODES = new Set([
   'V2_FULL_PREFIX_LOCAL_MIGRATION_REJECTED',
   'V2_FULL_PREFIX_LOCAL_PROJECT_REJECTED',
   'V2_FULL_PREFIX_LOCAL_SERVER_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_AUTHORITY_CLIENT_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_CONTROL_FAILED',
+  'V2_FULL_PREFIX_LOCAL_SESSION_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_IDENTITY_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_START_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_FINISH_REJECTED',
+  'V2_FULL_PREFIX_LOCAL_FIRST_ACTION_BINDING_REJECTED',
   'AUTHENTICATED_SYNTHETIC_ACTIVATION_REJECTED',
+  'AUTHENTICATED_SYNTHETIC_SESSION_REJECTED',
+  'AUTHENTICATED_SYNTHETIC_OBSERVATION_REJECTED',
+  'AUTHENTICATED_SYNTHETIC_EXERCISE_NOT_FOUND',
+  'AUTHENTICATED_HOSTED_CONTROLLER_SESSION_TOKEN_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_SESSION_CLAIMS_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_SESSION_ACTOR_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_SESSION_VERIFY_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_SESSION_ROTATION_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_BROWSER_ACTION_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_BROWSER_ACTION_SESSION_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_AUTHORITY_FRAME_REJECTED',
+  'AUTHENTICATED_HOSTED_CONTROLLER_OBSERVATION_CUTOFF_REJECTED',
+  'AUTHENTICATED_HOSTED_OBSERVATION_CAPTURE_REJECTED',
+  'AUTHENTICATED_HOSTED_OBSERVATION_PROJECT_ACTORS_REJECTED',
+  'AUTHENTICATED_HOSTED_OBSERVATION_AUTHORITY_FRAME_REJECTED',
   'BROWSER_PROCESS_EXIT_NONZERO',
   'ARTIFACT_UNAVAILABLE',
   'UNCLASSIFIED',
@@ -55,6 +78,7 @@ export function classifyV2FullPrefixFailure(error, stage) {
   const message = typeof error?.message === 'string' ? error.message : '';
   let code = [...FAILURE_CODES].find(item => message.includes(item)) ?? null;
   if (message.startsWith('ASSESS_V2_NATIVE_COMMAND_FAILED:')) code = 'BROWSER_PROCESS_EXIT_NONZERO';
+  if (code === null && /^SQLSTATE_[0-9A-Z]{5}$/u.test(message)) code = message;
   if (code === null && typeof error?.code === 'string' && /^[0-9A-Z]{5}$/u.test(error.code)) {
     code = `SQLSTATE_${error.code}`;
   }
@@ -120,6 +144,8 @@ const browser = (value, variant) => {
   });
 };
 const controller = value => value && typeof value === 'object' ? Object.freeze({
+  setupProbe: ['passed', 'failed'].includes(value.setupProbe) ? value.setupProbe : 'not_run',
+  setupActionCount: number(value.setupActionCount),
   browserCaseCount: number(value.browserCaseCount),
   serverCaseCount: number(value.serverCaseCount),
   actionCount: number(value.actionCount),

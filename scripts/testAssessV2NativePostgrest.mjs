@@ -17,7 +17,10 @@ import {
   PROJECTION_POSTGREST_IMAGE,
   selectProjectionRpcSubnet,
 } from './projectionRpcPostgrestContract.mjs';
-import { createV2FullPrefixLocalController } from './v2FullPrefixLocalController.mjs';
+import {
+  createV2FullPrefixLocalController,
+  createV2FullPrefixAdapterQuery,
+} from './v2FullPrefixLocalController.mjs';
 import {
   buildV2FullPrefixResult,
   classifyV2FullPrefixFailure,
@@ -278,6 +281,7 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
         const projectName = `desktop-chromium-${variant}`;
         const fragmentPath = `${reproductionDirectory}/browser-${projectName}.json`;
         let localController = null;
+        let adapterClient = null;
         let execution = 'failed';
         let cleanup = 'not_started';
         let browser = null;
@@ -287,7 +291,18 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
         try {
           await rm(fragmentPath, { force: true });
           failureStage = 'controller-create';
-          localController = await createV2FullPrefixLocalController({ fixture, origin: appBaseUrl, variant });
+          const adapterDatabaseUrl = new URL(databaseUrl);
+          adapterDatabaseUrl.pathname = `/${fixture.databaseName}`;
+          adapterClient = new Client({ connectionString: adapterDatabaseUrl.toString() });
+          await adapterClient.connect();
+          localController = await createV2FullPrefixLocalController({
+            fixture,
+            origin: appBaseUrl,
+            variant,
+            adapterQuery: createV2FullPrefixAdapterQuery(adapterClient),
+          });
+          failureStage = 'controller-first-action';
+          await localController.verifyFirstBrowserAction(projectName);
           failureStage = 'browser-execution';
           await run([
             'node_modules/@playwright/test/cli.js', 'test',
@@ -315,10 +330,23 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           if (localController) {
             try { controller = localController.projectSummary(projectName); }
             catch { controller = null; }
+            const controlFailureCode = localController.controlFailureCode();
+            if (controlFailureCode && setupFailure?.code === 'BROWSER_PROCESS_EXIT_NONZERO') {
+              setupFailure = classifyV2FullPrefixFailure(
+                new Error(controlFailureCode), 'browser-execution',
+              );
+            }
             try {
               await localController.close();
               cleanup = 'passed';
             } catch (error) {
+              cleanup = 'failed';
+              setupFailure ??= classifyV2FullPrefixFailure(error, 'controller-quiesce');
+            }
+          }
+          if (adapterClient) {
+            try { await adapterClient.end(); }
+            catch (error) {
               cleanup = 'failed';
               setupFailure ??= classifyV2FullPrefixFailure(error, 'controller-quiesce');
             }
