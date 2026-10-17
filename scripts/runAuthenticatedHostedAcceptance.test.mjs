@@ -8,10 +8,10 @@ import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
-  buildAuthenticatedHostedChildEnvironment,
+  buildAuthenticatedHostedChildEnvironment, createAuthenticatedHostedDatabaseClientConfig,
   downloadAndVerifyAuthenticatedEdgeSources,
   observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance,
-  runAuthenticatedHostedChild,
+  runAuthenticatedHostedChild, stopAuthenticatedHostedRuntime,
   verifyAuthenticatedEdgeSourceResponse,verifyAuthenticatedHostedDeployment } from './runAuthenticatedHostedAcceptance.mjs';
 import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUNT_KEYS,
   emptyAuthenticatedV2ReloadReadStages } from './authenticatedV2ReloadDiagnostic.mjs';
@@ -29,6 +29,30 @@ const contract = 'export const value = 1;\n';
 const entry = "import { value } from '../_shared/shared.ts';\nexport default value;\n";
 // Deterministic fixture identity; never a configured hosted project.
 const fixtureProjectRef = 'abcdefghijklmnopqrst';
+
+test('acceptance database client owns matching client and server query deadlines', () => {
+  const config = createAuthenticatedHostedDatabaseClientConfig(
+    `postgresql://postgres:synthetic-password@db.${fixtureProjectRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+  );
+  assert.equal(config.query_timeout, 30_000);
+  assert.equal(config.statement_timeout, 29_000);
+  assert.equal(config.application_name, 'authenticated_hosted_acceptance');
+});
+
+test('runtime settlement joins both owners and retains every settlement failure', async () => {
+  const calls = [];
+  await assert.rejects(stopAuthenticatedHostedRuntime({
+    stopAndDrain: async () => { calls.push('server'); throw new Error('server work incomplete'); },
+  }, {
+    stopControlIntakeAndJoin: async () => { calls.push('controller'); throw new Error('controller work incomplete'); },
+  }), error => {
+    assert.equal(error.message, 'AUTHENTICATED_HOSTED_RUNNER_RUNTIME_SETTLEMENT_INCOMPLETE');
+    assert.equal(error.errors.length, 2);
+    return true;
+  });
+  assert.deepEqual(calls, ['server', 'controller']);
+});
+
 const hostedEnvironment = () => ({
   GITHUB_ACTIONS:'true',GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REPOSITORY:'APReddy-AutoBotz/AvalaOS-Core',
   GITHUB_WORKFLOW_REF:'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/heads/main',
@@ -483,15 +507,17 @@ test('preflight diagnostics stop before activation without exposing the injected
   assert.deepEqual(calls,['preflight']);
 });
 
-test('activation diagnostics retain the exact activation stage and do not run active cleanup', async () => {
+test('activation diagnostics retain the exact stage and clean an unknown activation outcome', async () => {
   const environment=hostedEnvironment();const calls=[];
   const adapter={preflight:async()=>validPreflight(environment),
     activate:async()=>{calls.push('activate');throw new Error('fixture-sensitive-value-must-never-appear');},
-    quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup')};
+    quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup'),
+    verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
+      activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true})};
   await assert.rejects(runAuthenticatedHostedAcceptance(environment,{database:{},verifyCheckout:async()=>{},
-    createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({})}),
+    createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({revokeAll:async()=>calls.push('revoke')})}),
   /^Error: AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_ACTIVATION_UNCLASSIFIED$/u);
-  assert.deepEqual(calls,['activate']);
+  assert.deepEqual(calls,['activate','quiesce','revoke','cleanup']);
 });
 
 test('runner cancellation after activation stops before finalization and follows cleanup', async () => {
@@ -506,8 +532,38 @@ test('runner cancellation after activation stops before finalization and follows
     createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({revokeAll:async()=>calls.push('revoke')}),
     startServer:async()=>({baseUrl:'http://127.0.0.1:1',controlToken:'token',close:async()=>calls.push('close')}),
     runPlaywright:async()=>signalSource.emit('SIGINT')}),/AUTHENTICATED_HOSTED_RUNNER_BROWSER_CANCELLED/u);
-  assert.deepEqual(calls,['activate','quiesce','revoke','cleanup','close']);
+  assert.deepEqual(calls,['activate','close','quiesce','revoke','cleanup']);
   assert.equal(signalSource.listenerCount('SIGINT'),0);assert.equal(signalSource.listenerCount('SIGTERM'),0);
+});
+
+test('unsettled runtime preserves the primary failure and skips cleanup and database close', async t => {
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'authenticated-unsettled-runtime-test-'));
+  t.after(() => rm(outputRoot, { recursive: true, force: true }));
+  const outputPaths = {
+    browser: path.join(outputRoot, 'browser.json'), server: path.join(outputRoot, 'server.json'),
+    binding: path.join(outputRoot, 'binding.json'), diagnostic: path.join(outputRoot, 'diagnostic.json'),
+    v2ReloadDiagnostic: path.join(outputRoot, 'v2.json'),
+  };
+  const environment = hostedEnvironment(); const calls = [];
+  const adapter = {
+    preflight: async () => validPreflight(environment), activate: async () => calls.push('activate'),
+    quiesce: async () => calls.push('quiesce'), cleanup: async () => calls.push('cleanup'),
+  };
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment, {
+    outputPaths,
+    createDatabase: () => ({ connect: async () => calls.push('connect'), end: async () => calls.push('end') }),
+    verifyCheckout: async () => undefined,
+    createPostgresAdapter: () => adapter,
+    createIdentityAdapter: () => ({ revokeAll: async () => calls.push('revoke') }),
+    startServer: async () => ({ baseUrl: 'http://127.0.0.1:1', controlToken: 'token',
+      stopAndDrain: async () => { calls.push('stop'); throw new Error('owned handler still running'); } }),
+    runPlaywright: async () => { throw new Error('primary browser failure'); },
+  }), error => {
+    assert.equal(error.message, 'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+    assert.match(String(error.errors?.[0]?.message), /primary browser failure/u);
+    return true;
+  });
+  assert.deepEqual(calls, ['connect', 'activate', 'stop']);
 });
 
 test('browser child environment is a strict public and ephemeral allowlist', () => {
@@ -607,7 +663,7 @@ test('focused V2 diagnostic runner selects one Desktop prefix, cleans up, and em
   assert.equal(result.observedOutcome, 'draft_resumed');
   assert.equal(result.reloadProjectionUnchanged, true);
   assert.equal(result.acceptancePromoted, false);
-  assert.deepEqual(calls, ['checkout', 'activate', 'quiesce', 'revoke', 'cleanup', 'close']);
+  assert.deepEqual(calls, ['checkout', 'activate', 'close', 'quiesce', 'revoke', 'cleanup']);
   for (const file of [outputPaths.browser, outputPaths.server, outputPaths.binding]) {
     assert.equal(await readFile(file, 'utf8'), 'preserved-prior-evidence\n');
   }
@@ -645,7 +701,7 @@ test('focused V2 diagnostic browser failure still writes a partial sanitized art
   const diagnostic = JSON.parse(await readFile(outputPaths.diagnostic, 'utf8'));
   assert.deepEqual(diagnostic.failure, { phase: 'BROWSER_EXECUTION', category: 'RUNNER_REJECTED' });
   assert.equal(diagnostic.cleanup.status, 'verified');
-  assert.deepEqual(calls, ['activate', 'quiesce', 'revoke', 'cleanup', 'close']);
+  assert.deepEqual(calls, ['activate', 'close', 'quiesce', 'revoke', 'cleanup']);
 });
 
 test('browser child wrapper preserves only validated nonzero diagnostics', async t => {

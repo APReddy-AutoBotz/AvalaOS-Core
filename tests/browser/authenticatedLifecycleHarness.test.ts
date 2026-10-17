@@ -251,7 +251,9 @@ test('control transport bounds the complete request and reports only the closed 
     },
     fetchImpl: ((_target, init) => {
       requestSignal = init?.signal ?? null;
-      return new Promise<Response>(() => undefined);
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener('abort', () => reject(new Error('private abort detail')), { once: true });
+      });
     }) as typeof fetch,
   });
   const startedAt = Date.now();
@@ -266,17 +268,33 @@ test('control transport bounds the complete request and reports only the closed 
 });
 
 test('control transport applies the same deadline while consuming the complete response body', async () => {
+  let requestSignal: AbortSignal | null = null;
   const control = createAuthenticatedLifecycleControl({
     baseUrl: 'http://localhost:48123',
     token: 'fixture-control-token',
     timeoutMs: 20,
-    fetchImpl: (async () => ({
+    fetchImpl: (async (_target, init) => {
+      requestSignal = init?.signal ?? null;
+      return ({
       ok: true,
-      json: () => new Promise<unknown>(() => undefined),
-    }) as Response) as typeof fetch,
+      json: () => new Promise<unknown>((_resolve, reject) => {
+        requestSignal?.addEventListener('abort', () => reject(new Error('private body abort detail')), { once: true });
+      }),
+    }) as Response;
+    }) as typeof fetch,
   });
   await assert.rejects(control('/control/process-frame'), error => (
     error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'
+  ));
+});
+
+test('control transport reports cleanup-incomplete when cancellation cannot settle owned work', async () => {
+  const control = createAuthenticatedLifecycleControl({
+    baseUrl: 'http://localhost:48123', token: 'fixture-control-token', timeoutMs: 5,
+    fetchImpl: (() => new Promise<Response>(() => undefined)) as typeof fetch,
+  });
+  await assert.rejects(control('/control/setup'), error => (
+    error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE'
   ));
 });
 

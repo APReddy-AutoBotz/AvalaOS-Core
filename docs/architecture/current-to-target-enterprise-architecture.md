@@ -1,5 +1,13 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Acceptance work ownership and shutdown (2026-10-17)
+
+The authenticated acceptance controller must own every accepted control operation through completion. Shutdown stops intake, bounds or cancels pending body/authority work, joins accepted operations, and only then quiesces, revokes, cleans and independently verifies. A client timeout is not proof that server work stopped. If owned work cannot settle, cleanup is incomplete; late continuations cannot record actions after verification. Successful finalization needs the same ownership boundary as failure cleanup.
+
+Browser dispatch must still await a verified current session and independent before-frame; completion must retain the corresponding after-frame. Bounded body/queue failure cannot fabricate an empty successful response, detach authority work or publish a case. Keep per-request evidence and immutable frame correlations. Generic whole-test timeout attribution may retain only uniquely correlated fixed operations and validated repository locations, never raw step text or payloads. Native preparation must distinguish its seven-case prefix from the complete primary body; neither constitutes hosted proof.
+
+**Executed correction preparation:** the controller/network tests passed 45/45, runner 62/62, observation ordering 3/3, lifecycle harness 16/16, reporter/native-result/diagnostic contracts 43/43, and the final expanded diagnostic privacy checks 10/10. Typecheck, protected workflow contracts 6/6, workflow YAML and diff checks passed. Accepted work is joined before cleanup, late commits are rejected, uncertain identity creation cannot certify cleanup, and activation attempts retain cleanup ownership. Response parsing rejects malformed or stalled bodies without fabricated success. Root reviewed the implementation and exact-release CI binding. Native complete-primary and 94-case connected-browser execution remain required in existing Linux CI because the local Docker/database engine is unavailable. No hosted case is promoted and the historical timeout cause remains unproven.
+
 ## Navigation data dependencies (2026-10-17)
 
 Durable route reconstruction must wait for the data that validates its requested identity. Process routes need current-authority process reads; project-scoped and document-generation routes also need the current-authority project index. Unrelated Delivery task hydration is view data, not process-route authority. At the PR #310 baseline one global Delivery loading flag blocks all three navigation paths until every active project's paged task query settles.

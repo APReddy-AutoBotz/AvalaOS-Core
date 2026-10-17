@@ -1,5 +1,17 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Authenticated controller lifecycle (2026-10-17)
+
+- **Executed evidence:** PR #311 run `39022997242`, attempt 1, independently verifies 386 sources, 61 PASS / 47 BLOCKED and 36 public/Sandbox passes. The retained authenticated diagnostic is a Desktop primary-lifecycle timeout without location. Cleanup/providers OFF and owned-main removal are independently verified; allowance consumed.
+- **Confirmed source defect:** the runner verifies cleanup before joining accepted control handlers, which can resume after awaited observations; request/body and serial queue waits lack independent bounds. No occurrence of late hosted mutation or residual access was demonstrated.
+- **Confirmed source defect:** generic timeout reporting can discard a known step before `onTestEnd`, unlike the existing control-timeout correlation path.
+- **Confirmed preparation gap:** native comparison completes seven prefix cases and returns before ASSESS-019 and later Govern/E2E primary operations. Broader 94-case loopback fixture evidence is not complete native composition.
+- **Suspected defect requiring deeper validation:** the historical timeout's exact operation/cause and the effect of cumulative per-request observation overhead. Do not label structural work volume as a demonstrated performance failure.
+- **Planned verification:** deterministic prechange/corrected body, cancellation and cleanup-order reproductions; truthful timeout correlation/privacy negatives; complete-primary native execution under unchanged limits; applicable candidate/release verification. No hosted PASS is promoted by local proof. Rollback is a coherent source revert with owned resources closed and failed evidence preserved.
+- **Executed prechange reproduction:** real controller/server accepted a start action, then cleanup verified while its inert identity dependency was gated; after release the handler returned 200 and committed the action. Actual network installer/work queue remained pending until a held response body was released. These deterministic local reproductions establish the source defects without proving historical hosted causation. Reporter event ordering separately reproduced missing timeout operation/location.
+
+**Executed correction preparation:** the controller/network tests passed 45/45, runner 62/62, observation ordering 3/3, lifecycle harness 16/16, reporter/native-result/diagnostic contracts 43/43, and the final expanded diagnostic privacy checks 10/10. Typecheck, protected workflow contracts 6/6, workflow YAML and diff checks passed. Accepted work is joined before cleanup, late commits are rejected, uncertain identity creation cannot certify cleanup, and activation attempts retain cleanup ownership. Response parsing rejects malformed or stalled bodies without fabricated success. Root reviewed the implementation and exact-release CI binding. Native complete-primary and 94-case connected-browser execution remain required in existing Linux CI because the local Docker/database engine is unavailable. No hosted case is promoted and the historical timeout cause remains unproven.
+
 ## Scoped navigation readiness (2026-10-17)
 
 - **Executed evidence:** PR #310 run `39009658689`, attempt 1, independently verifies 379 sources, 61 PASS / 47 BLOCKED, 36 passing public/Sandbox cases and complete cleanup/providers OFF/owned-main removal. The primary failed its process-heading assertion after the denied command and second reload, before case submission or V2. The allowance is consumed.

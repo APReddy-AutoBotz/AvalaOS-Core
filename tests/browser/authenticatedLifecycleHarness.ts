@@ -148,17 +148,38 @@ export const createAuthenticatedLifecycleControl = ({
   const timeoutError = new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT');
   let timedOut = false;
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
+  const timeout = new Promise<'expired'>(resolve => {
     timeoutHandle = setTimeout(() => {
       timedOut = true;
       abort.abort();
-      reject(timeoutError);
+      resolve('expired');
     }, timeoutMs);
   });
-  const bounded = <Value>(operation: Promise<Value>) => Promise.race([operation, timeout]);
+  const settleOwned = async <Value>(operation: Promise<Value>): Promise<Value> => {
+    const settled = operation.then(
+      value => Object.freeze({ state: 'fulfilled' as const, value }),
+      error => Object.freeze({ state: 'rejected' as const, error }),
+    );
+    const first = await Promise.race([settled.then(() => 'settled' as const), timeout]);
+    if (first === 'expired') {
+      let cleanupHandle: ReturnType<typeof setTimeout> | undefined;
+      const cleanupExpired = new Promise<'expired'>(resolve => {
+        cleanupHandle = setTimeout(() => resolve('expired'), timeoutMs);
+      });
+      if (await Promise.race([settled.then(() => 'settled' as const), cleanupExpired]) === 'expired') {
+        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE');
+      }
+      if (cleanupHandle !== undefined) clearTimeout(cleanupHandle);
+      await settled;
+      throw timeoutError;
+    }
+    const result = await settled;
+    if (result.state === 'rejected') throw result.error;
+    return result.value;
+  };
   let response: Response;
   try {
-    response = await bounded(fetchImpl(target, {
+    response = await settleOwned(fetchImpl(target, {
       method: body === undefined ? 'GET' : 'POST',
       headers: {
         'content-type': 'application/json',
@@ -167,15 +188,17 @@ export const createAuthenticatedLifecycleControl = ({
       signal: abort.signal,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }));
-  } catch {
+  } catch (error) {
     if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    if (error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE') throw error;
     if (timedOut) throw timeoutError;
     throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TRANSPORT_REJECTED');
   }
   let payload: unknown;
   try {
-    payload = await bounded(response.json());
-  } catch {
+    payload = await settleOwned(response.json());
+  } catch (error) {
+    if (error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE') throw error;
     if (timedOut) throw timeoutError;
     if (!response.ok) payload = null;
     else throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED');

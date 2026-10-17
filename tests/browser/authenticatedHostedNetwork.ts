@@ -13,7 +13,53 @@ type InstallAuthenticatedHostedNetworkInput = Readonly<{
   onHttpRequest: () => void;
   onTrackerError: (error: unknown) => void;
   dispatchAllowedRequest?: (route: Route) => Promise<void>;
+  responseBodyTimeoutMs?: number;
 }>;
+
+export const authenticatedHostedResponseBodyTimeoutMs = 30_000;
+
+export const readAuthenticatedHostedResponseBody = async (
+  context: BrowserContext,
+  response: Readonly<{ json: () => Promise<unknown> }>,
+  timeoutMs = authenticatedHostedResponseBodyTimeoutMs,
+) => {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > authenticatedHostedResponseBodyTimeoutMs) {
+    throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT_REJECTED');
+  }
+  const body = response.json().then(
+    value => Object.freeze({ state: 'fulfilled' as const, value }),
+    () => Object.freeze({ state: 'rejected' as const }),
+  );
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<'expired'>(resolve => {
+    timeoutHandle = setTimeout(() => resolve('expired'), timeoutMs);
+  });
+  const first = await Promise.race([body.then(() => 'body' as const), expired]);
+  if (first === 'body') {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    const settled = await body;
+    if (settled.state === 'rejected') throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED');
+    return settled.value;
+  }
+  const closed = context.close({ reason: 'authenticated response body timeout' }).then(
+    () => Object.freeze({ state: 'fulfilled' as const }),
+    () => Object.freeze({ state: 'rejected' as const }),
+  );
+  let cleanupHandle: ReturnType<typeof setTimeout> | undefined;
+  const cleanupExpired = new Promise<'expired'>(resolve => {
+    cleanupHandle = setTimeout(() => resolve('expired'), timeoutMs);
+  });
+  const cleanup = Promise.all([body, closed]);
+  if (await Promise.race([cleanup.then(() => 'settled' as const), cleanupExpired]) === 'expired') {
+    throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE');
+  }
+  if (cleanupHandle !== undefined) clearTimeout(cleanupHandle);
+  const [, closeResult] = await cleanup;
+  if (closeResult.state === 'rejected') {
+    throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE');
+  }
+  throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT');
+};
 
 const webProtocol = (protocol: string) => protocol === 'http:' || protocol === 'https:';
 const loopback = (hostname: string) => ['127.0.0.1', 'localhost'].includes(hostname);
@@ -31,6 +77,7 @@ export const installAuthenticatedHostedNetwork = async ({
   onHttpRequest,
   onTrackerError,
   dispatchAllowedRequest,
+  responseBodyTimeoutMs = authenticatedHostedResponseBodyTimeoutMs,
 }: InstallAuthenticatedHostedNetworkInput) => {
   const startProductAction = (request: Request) => {
     if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
@@ -81,7 +128,7 @@ export const installAuthenticatedHostedNetwork = async ({
         if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
         const classification = await tracker.classify(request);
         if (classification.kind !== 'business-action') return;
-        const responseBody = await response.json().catch(() => ({}));
+        const responseBody = await readAuthenticatedHostedResponseBody(context, response, responseBodyTimeoutMs);
         await tracker.finish(request, response.status(), responseBody);
       });
     });

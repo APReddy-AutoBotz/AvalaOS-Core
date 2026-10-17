@@ -252,6 +252,83 @@ test('a primary timeout inside V1 completion retains the source-owned milestone'
   assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
 });
 
+test('a completed later-primary step retains its exact primary timeout before onTestEnd marks the test timed out', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-completed-primary-timeout-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'completed-primary-timeout.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const primary=new Error('fixture-sensitive-primary-timeout');
+  const step={title:'hosted:primary:v2-finalization-and-review',error:primary,location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1187}};
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},step);
+  reporter.onStepEnd(current,{status:'running'},step);
+  reporter.onTestEnd(current,{status:'timedOut',error:primary,errors:[primary]});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.category,'timeout');
+  assert.equal(value.operation,'PRIMARY_V2_FINALIZATION_AND_REVIEW');
+  assert.deepEqual(value.location,{source:'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',line:1187});
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+});
+
+test('a cloned generic timeout shared by completed operations remains unattributed', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-generic-timeout-ambiguous-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'generic-timeout-ambiguous.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const location={file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1187};
+  const timeout=()=>Object.assign(new Error('fixture-sensitive-primary-timeout'),{location});
+  reporter.onTestBegin(current);
+  for(const title of ['hosted:primary:v2-finalization-and-review','hosted:queue:teardown']){
+    const step={title,error:timeout(),location};
+    reporter.onStepBegin(current,{status:'running'},step);
+    reporter.onStepEnd(current,{status:'running'},step);
+  }
+  reporter.onTestEnd(current,{status:'timedOut',error:timeout(),errors:[timeout()]});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.category,'timeout');
+  assert.equal(Object.hasOwn(value,'operation'),false);
+  assert.deepEqual(value.location,{source:'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',line:1187});
+  assert.equal(JSON.stringify(value).includes('fixture-sensitive'),false);
+});
+
+test('a caught earlier generic error cannot claim a later primary timeout', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-generic-timeout-caught-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'generic-timeout-caught.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture([...titles.keys()][0]);
+  const earlier=Object.assign(new Error('caught-earlier'),{location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'),line:1187}});
+  const step={title:'hosted:primary:v2-finalization-and-review',error:earlier,location:earlier.location};
+  const primary=Object.assign(new Error('primary-timeout'),{location:{
+    file:path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),line:2}});
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current,{status:'running'},step);
+  reporter.onStepEnd(current,{status:'running'},step);
+  reporter.onTestEnd(current,{status:'timedOut',error:primary,errors:[primary]});
+  await reporter.onEnd({status:'failed'});
+  const value=JSON.parse(await readFile(destination,'utf8'));
+  assert.equal(value.category,'timeout');
+  assert.equal(Object.hasOwn(value,'operation'),false);
+  assert.deepEqual(value.location,{source:'tests/browser/authenticatedLifecycleHarness.ts',line:2});
+  assert.equal(JSON.stringify(value).includes('caught-earlier'),false);
+  assert.equal(JSON.stringify(value).includes('primary-timeout'),false);
+});
+
 test('completed and unknown steps cannot supply a timeout operation', async t => {
   const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-completed-operation-'));
   t.after(()=>rm(root,{recursive:true,force:true}));

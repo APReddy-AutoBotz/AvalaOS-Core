@@ -25,7 +25,7 @@ const loadNetworkInstaller = () => {
     assert.equal(specifier, '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs');
     return { AuthenticatedHostedBrowserActionTracker };
   });
-  return exports.installAuthenticatedHostedNetwork;
+  return exports;
 };
 
 const networkFixture = async startAction => {
@@ -37,7 +37,8 @@ const networkFixture = async startAction => {
   const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin, startAction,
     finishAction: async value => { finishes.push(value); },
   });
-  await loadNetworkInstaller()({ context, hosted: true, allowedOrigins: new Set([appOrigin, backendOrigin]), tracker,
+  await loadNetworkInstaller().installAuthenticatedHostedNetwork({ context, hosted: true,
+    allowedOrigins: new Set([appOrigin, backendOrigin]), tracker,
     queueNetworkAction: operation => { tail = tail.then(operation).catch(error => { errors.push(error.message); }); },
     onExternalRequest: () => assert.fail('unexpected external request'), onHttpRequest: () => {},
     onTrackerError: error => { errors.push(error.message); },
@@ -45,6 +46,38 @@ const networkFixture = async startAction => {
   });
   return { context, errors, finishes, dispatches, route: value => routeHandler(value), drain: () => tail };
 };
+
+test('response body ownership fails closed and joins context cancellation before returning', async () => {
+  const { readAuthenticatedHostedResponseBody } = loadNetworkInstaller();
+  let closeCalls = 0;
+  const normalContext = { close: async () => { closeCalls += 1; } };
+  assert.deepEqual(await readAuthenticatedHostedResponseBody(normalContext, {
+    json: async () => ({ outcome: 'committed' }),
+  }, 20), { outcome: 'committed' });
+  assert.equal(closeCalls, 0);
+
+  await assert.rejects(readAuthenticatedHostedResponseBody(normalContext, {
+    json: async () => { throw new Error('private malformed body'); },
+  }, 20), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED$/u);
+  assert.equal(closeCalls, 0);
+
+  let releaseBody;
+  let bodySettled = false;
+  const heldBody = new Promise(resolve => { releaseBody = () => { bodySettled = true; resolve({ late: true }); }; });
+  const closingContext = { close: async () => { closeCalls += 1; releaseBody(); } };
+  await assert.rejects(readAuthenticatedHostedResponseBody(closingContext, { json: () => heldBody }, 10),
+    /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT$/u);
+  assert.equal(bodySettled, true);
+  assert.equal(closeCalls, 1);
+});
+
+test('response body close failure returns cleanup-incomplete without fabricating a body', async () => {
+  const { readAuthenticatedHostedResponseBody } = loadNetworkInstaller();
+  const never = new Promise(() => {});
+  await assert.rejects(readAuthenticatedHostedResponseBody({
+    close: async () => { throw new Error('private close failure'); },
+  }, { json: () => never }, 5), /^Error: AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE$/u);
+});
 
 test('only the exact backend POST attestation is public', () => {
   assert.deepEqual(classify(input(attest)), { kind: 'public-attestation', route: attest });

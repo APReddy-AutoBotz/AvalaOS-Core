@@ -275,7 +275,7 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     ], { cwd: process.cwd(), stdio: 'inherit', env: appEnvironment });
     await waitForHttp(appBaseUrl);
     if (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1') {
-      const reproductionDirectory = 'output/local-private/authenticated-product-acceptance/v2-full-prefix-reproduction';
+      const reproductionDirectory = 'output/local-private/authenticated-product-acceptance/authenticated-native-primary-reproduction';
       await mkdir(reproductionDirectory, { recursive: true });
       const variants = await runIndependentV2FullPrefixVariants(async variant => {
         const projectName = `desktop-chromium-${variant}`;
@@ -385,10 +385,10 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           failed: nativeStats.failed - stats.failed,
           statusClasses: nativeStatusDelta,
         },
-        baseline: 'a5338f190dfce23c2a38c2346ee1d9d012eed72c',
+        baseline: process.env.RELEASE_SHA ?? process.env.GITHUB_SHA ?? 'unknown',
       });
       await writeFile(`${reproductionDirectory}/result.json`, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
-      process.stdout.write(`# V2_FULL_PREFIX_LOCAL_REPRODUCTION_RESULT ${JSON.stringify({
+      process.stdout.write(`# AUTHENTICATED_NATIVE_PRIMARY_LOCAL_REPRODUCTION_RESULT ${JSON.stringify({
         variants: variants.map(item => item.variant),
         controllerCases: variants.map(item => item.controller?.browserCaseCount ?? 0),
         nativeRequests: result.native.requests,

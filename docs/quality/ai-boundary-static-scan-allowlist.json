@@ -527,23 +527,23 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        263,
-        264,
-        265,
-        271,
-        298,
-        299,
-        309,
-        310,
-        326,
-        327,
-        328,
-        432,
-        433,
-        593,
-        596,
-        747,
-        748
+        286,
+        287,
+        288,
+        294,
+        321,
+        322,
+        332,
+        333,
+        349,
+        350,
+        351,
+        455,
+        456,
+        616,
+        619,
+        770,
+        771
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -599,7 +599,7 @@
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.mjs",
       "lines": [
-        70
+        78
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine one-shot synthetic fixture-session priming to the loopback-only reproduction selector. Never use it for hosted sessions, product authorization or provider credentials."
@@ -608,10 +608,10 @@
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.test.mjs",
       "lines": [
-        177,
-        179,
-        198,
-        199
+        182,
+        184,
+        203,
+        204
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the in-memory storage mock confined to the no-Docker fixture-session contract test; restore global descriptors and never read real credentials."

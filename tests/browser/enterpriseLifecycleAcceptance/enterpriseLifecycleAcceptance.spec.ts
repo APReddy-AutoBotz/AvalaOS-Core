@@ -95,7 +95,13 @@ type ApiResponseObservation = Readonly<{
   actionId: HostedActionReference;
 }>;
 type V2FullPrefixReproductionVariant = 'immediate' | 'barrier';
+const V2_FULL_PRIMARY_EXPECTED_CASE_IDS = Object.freeze([
+  'ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-019', 'ASSESS-020', 'E2E-004',
+  'GOVERN-001', 'GOVERN-002', 'GOVERN-003', 'GOVERN-004',
+  'SAFETY-001', 'SAFETY-002', 'SAFETY-003',
+] as const);
 type V2FullPrefixReproductionObservation = Readonly<{
+  scope: 'desktop-primary-lifecycle';
   variant: V2FullPrefixReproductionVariant;
   navigation: 'passed' | 'failed';
   renderOutcome: V2ReloadRenderOutcome;
@@ -116,6 +122,12 @@ type V2FullPrefixReproductionObservation = Readonly<{
   caseVersionDelta: number | null;
   failureStage: 'navigation' | 'render' | 'read-observer' | 'browser-state' | 'network-queue'
     | 'lifecycle-frame' | 'assertion' | null;
+  primaryCompletion: Readonly<{
+    status: 'passed' | 'failed';
+    terminalCaseId: 'GOVERN-004' | null;
+    lifecycleFrameCaptured: boolean;
+    caseIds: readonly string[];
+  }>;
 }>;
 type V2FullPrefixQueueObservation = Readonly<{
   network: 'not_run' | 'passed' | 'failed';
@@ -621,15 +633,17 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let hasBoundaryFailure = false;
     if (owningTestWorkQueues) {
       await new Promise(resolve => setTimeout(resolve, 0));
-      for (const [title, queue] of [
-        ['hosted:queue:network-drain', owningTestWorkQueues.network],
-        ['hosted:queue:case-drain', owningTestWorkQueues.cases],
-      ] as const) {
-        try { await test.step(title, () => queue.drain()); }
-        catch (error) {
-          if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+      await test.step('hosted:queue:teardown', async () => {
+        for (const [title, queue] of [
+          ['hosted:queue:network-drain', owningTestWorkQueues.network],
+          ['hosted:queue:case-drain', owningTestWorkQueues.cases],
+        ] as const) {
+          try { await test.step(title, () => queue.drain()); }
+          catch (error) {
+            if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+          }
         }
-      }
+      });
     }
     if (hasBoundaryFailure) failed = true;
     if (testInfo.status !== testInfo.expectedStatus) failed = true;
@@ -647,25 +661,27 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let reproductionNetworkQueue: V2FullPrefixQueueObservation['network'] = 'not_run';
     let reproductionCaseQueue: V2FullPrefixQueueObservation['cases'] = 'not_run';
     for (const workQueues of projectWorkQueues) {
-      for (const [title, queue] of [
-        ['hosted:queue:network-drain', workQueues.network],
-        ['hosted:queue:case-drain', workQueues.cases],
-      ] as const) {
-        try {
-          await test.step(title, () => queue.drain());
-          if (v2FullPrefixReproduction) {
-            if (title.includes('network') && reproductionNetworkQueue !== 'failed') reproductionNetworkQueue = 'passed';
-            else if (!title.includes('network') && reproductionCaseQueue !== 'failed') reproductionCaseQueue = 'passed';
+      await test.step('hosted:queue:teardown', async () => {
+        for (const [title, queue] of [
+          ['hosted:queue:network-drain', workQueues.network],
+          ['hosted:queue:case-drain', workQueues.cases],
+        ] as const) {
+          try {
+            await test.step(title, () => queue.drain());
+            if (v2FullPrefixReproduction) {
+              if (title.includes('network') && reproductionNetworkQueue !== 'failed') reproductionNetworkQueue = 'passed';
+              else if (!title.includes('network') && reproductionCaseQueue !== 'failed') reproductionCaseQueue = 'passed';
+            }
+          }
+          catch (error) {
+            if (v2FullPrefixReproduction) {
+              if (title.includes('network')) reproductionNetworkQueue = 'failed';
+              else reproductionCaseQueue = 'failed';
+            }
+            if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
           }
         }
-        catch (error) {
-          if (v2FullPrefixReproduction) {
-            if (title.includes('network')) reproductionNetworkQueue = 'failed';
-            else reproductionCaseQueue = 'failed';
-          }
-          if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
-        }
-      }
+      });
     }
     if (v2FullPrefixReproduction) {
       v2FullPrefixQueues = Object.freeze({ network: reproductionNetworkQueue, cases: reproductionCaseQueue });
@@ -1105,6 +1121,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
             }
             v2FullPrefixObservation = Object.freeze({
+              scope: 'desktop-primary-lifecycle',
               variant: v2FullPrefixReproductionVariant,
               navigation,
               renderOutcome,
@@ -1125,11 +1142,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               caseDelta: afterV2Create ? afterV2Create.cases - beforeV2Create.cases : null,
               caseVersionDelta: afterV2Create ? afterV2Create.caseVersions - beforeV2Create.caseVersions : null,
               failureStage,
+              primaryCompletion: Object.freeze({
+                status: 'failed', terminalCaseId: null, lifecycleFrameCaptured: false, caseIds: Object.freeze([]),
+              }),
             });
           }
-          return;
-        }
-        if (diagnosticCheckpoint) {
+        } else if (diagnosticCheckpoint) {
           const beforeReloadResponse = await control<V2ReloadDiagnosticCheckpointResponse>('/control/v2-reload-diagnostic',
             await diagnosticCheckpoint.checkpoint('before-reload'));
           assertV2ReloadCheckpointResponse(beforeReloadResponse, 'before-reload');
@@ -1161,29 +1179,31 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           if (renderFailure) throw renderFailure;
           diagnosticPrefixComplete = true;
           return;
+        } else {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+          const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+          expect(afterV2Create.cases).toBe(beforeV2Create.cases + 1);
+          bindObservedCase('ASSESS-018',createV2Api.actionId);
+          authenticatedCases.push({
+            testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
+            observations: {
+              browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
+                result: { createVisible: true, currentDraftReloaded: true } },
+              api: { productionRoutes: ['/functions/v1/assess-v2-command'],
+                responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
+            },
+            controls: { assertions: [
+              { id: 'v2-case-created-by-command', status: 'passed' },
+              { id: 'v2-case-visible-after-reload', status: 'passed' },
+            ] },
+            measurements: lifecycleMeasurements(beforeV2Create,afterV2Create,beforeV2Create.cases,afterV2Create.cases),
+            cleanup: { verified: true },
+          });
         }
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
-        const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
-        expect(afterV2Create.cases).toBe(beforeV2Create.cases + 1);
-        bindObservedCase('ASSESS-018',createV2Api.actionId);
-        authenticatedCases.push({
-          testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
-          observations: {
-            browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
-              result: { createVisible: true, currentDraftReloaded: true } },
-            api: { productionRoutes: ['/functions/v1/assess-v2-command'],
-              responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
-          },
-          controls: { assertions: [
-            { id: 'v2-case-created-by-command', status: 'passed' },
-            { id: 'v2-case-visible-after-reload', status: 'passed' },
-          ] },
-          measurements: lifecycleMeasurements(beforeV2Create,afterV2Create,beforeV2Create.cases,afterV2Create.cases),
-          cleanup: { verified: true },
-        });
       }
 
+      await test.step('hosted:primary:v2-finalization-and-review', async () => {
       await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
       await completeRequiredAssessmentFacts(page);
       await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
@@ -1405,7 +1425,22 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           ] }, measurements, cleanup: { verified: true },
         });
       }
+      });
     });
+    if (v2FullPrefixReproduction && v2FullPrefixObservation) {
+      const completionFrame = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+      expect(completionFrame.decisions).toBeGreaterThanOrEqual(2);
+      const caseIds = authenticatedCases.map(row => (row as { testId?: unknown }).testId)
+        .filter((testId): testId is string => typeof testId === 'string').sort();
+      expect(caseIds).toEqual([...V2_FULL_PRIMARY_EXPECTED_CASE_IDS]);
+      v2FullPrefixObservation = Object.freeze({
+        ...v2FullPrefixObservation,
+        primaryCompletion: Object.freeze({
+          status: 'passed', terminalCaseId: 'GOVERN-004', lifecycleFrameCaptured: true,
+          caseIds: Object.freeze(caseIds),
+        }),
+      });
+    }
     if (diagnosticPrefixComplete) return;
   }));
 

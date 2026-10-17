@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Owned acceptance-controller lifecycle (2026-10-17)
+
+PR #311's full run retains 61 PASS / 47 BLOCKED with a generic Desktop primary timeout and independently verified cleanup. Its allowance is consumed. All three read-only reviewers completed before writes. Root synthesized the accepted-handler/cleanup race, unbounded body/queue waits, timeout-attribution gap and incomplete native-primary preparation. Per-request observation volume is confirmed; its performance impact and the historical failure cause remain unproven.
+
+Under the fixed managed workspace-write profile, one worker owns local lifecycle reproductions and controller/runner/network shutdown correction. A second owns timeout correlation and complete-primary native preparation. Root owns canonical documentation, provenance, CI integration, independent verification and the single implementation PR. No nested agents or reviewer/write overlap. Preserve every authority check and observation, criteria and timeouts; do not batch away evidence or add a diagnostic-only PR. Docker Linux remains unavailable locally; existing Linux CI owns native execution. No new hosted action is included.
+
+**Executed correction preparation:** the controller/network tests passed 45/45, runner 62/62, observation ordering 3/3, lifecycle harness 16/16, reporter/native-result/diagnostic contracts 43/43, and the final expanded diagnostic privacy checks 10/10. Typecheck, protected workflow contracts 6/6, workflow YAML and diff checks passed. Accepted work is joined before cleanup, late commits are rejected, uncertain identity creation cannot certify cleanup, and activation attempts retain cleanup ownership. Response parsing rejects malformed or stalled bodies without fabricated success. Root reviewed the implementation and exact-release CI binding. Native complete-primary and 94-case connected-browser execution remain required in existing Linux CI because the local Docker/database engine is unavailable. No hosted case is promoted and the historical timeout cause remains unproven.
+
 ## Scoped navigation readiness (2026-10-17)
 
 PR #310's approved run retains 61 PASS / 47 BLOCKED with verified cleanup and consumed allowance. The three read-only reviewers completed before writes. Root synthesized the global Delivery hydration dependency and read-error/empty conflation; the exact hosted cause remains unproven. Under the fixed managed workspace-write profile, one implementation worker owns the actual-app reproduction, bounded route/provider correction and focused tests. Root owns canonical documents, provenance, verification and one coherent implementation PR. No nested delegation or concurrent reviewers during writes.

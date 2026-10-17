@@ -9,6 +9,7 @@ import {
   primeV2FullPrefixFixtureSession,
   resolveV2FullPrefixLocalSelection,
   runIndependentV2FullPrefixVariants,
+  V2_FULL_PRIMARY_EXPECTED_CASES,
 } from './v2FullPrefixReproduction.mjs';
 import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
 import { AuthenticatedHostedController } from './authenticatedHostedController.mjs';
@@ -34,7 +35,7 @@ const passing = variant => ({
   cleanup: 'passed',
   artifactObserved: true,
   browser: {
-    variant, navigation: 'passed', renderOutcome: 'resumed', observerFailure: false,
+    scope: 'desktop-primary-lifecycle', variant, navigation: 'passed', renderOutcome: 'resumed', observerFailure: false,
     serverContextObserved: true, sessionObserved: true, scopeNavigationObserved: true,
     processNavigationObserved: true, readStages: stages,
     barrier: variant === 'barrier' ? 'lifecycle-frame' : 'none',
@@ -42,13 +43,17 @@ const passing = variant => ({
     deliveryTaskBodyPending: true, processVisibleWhileDeliveryPending: true,
     v2VisibleWhileDeliveryPending: true, deliveryPendingFrameStable: true,
     caseDelta: 1, caseVersionDelta: 1, failureStage: null,
+    primaryCompletion: {
+      status: 'passed', terminalCaseId: 'GOVERN-004', lifecycleFrameCaptured: true,
+      caseIds: V2_FULL_PRIMARY_EXPECTED_CASES,
+    },
     queues: { network: 'passed', cases: 'passed' },
   },
   controller: {
     fixturePrerequisites: 'passed',
     setupProbe: 'passed', setupActionCount: 1,
-    browserCaseCount: 7, serverCaseCount: 7, actionCount: 9, completedActionCount: 9,
-    caseIds: ['ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-020', 'SAFETY-001', 'SAFETY-002', 'SAFETY-003'],
+    browserCaseCount: 13, serverCaseCount: 13, actionCount: 19, completedActionCount: 19,
+    caseIds: V2_FULL_PRIMARY_EXPECTED_CASES,
     contractSatisfied: true,
   },
   network: { observedHttpRequests: 30, nonLoopbackRequests: 0 },
@@ -219,6 +224,8 @@ test('fixture session is present before the controlled first product request', a
       },
     },
   });
+  controller.active = true;
+  controller.controlIntake = 'accepting';
   controller.projects.set('desktop-chromium-immediate', {
     identities: { author: { id: actorId } },
     lastBoundaryAt: '2026-10-16T23:59:59.000Z',
@@ -274,6 +281,34 @@ test('failure evidence preserves bounded lifecycle counts and removes arbitrary 
   const missingPendingProof = passing('barrier');
   missingPendingProof.browser.deliveryTaskBodyPending = false;
   assert.equal(buildV2FullPrefixVariantResult(missingPendingProof).status, 'failed');
+
+  const prefixOnly = passing('barrier');
+  prefixOnly.browser.primaryCompletion = {
+    status: 'failed', terminalCaseId: null, lifecycleFrameCaptured: false,
+    caseIds: ['ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-020', 'SAFETY-001', 'SAFETY-002', 'SAFETY-003'],
+  };
+  prefixOnly.controller.browserCaseCount = 7;
+  prefixOnly.controller.serverCaseCount = 7;
+  prefixOnly.controller.caseIds = prefixOnly.browser.primaryCompletion.caseIds;
+  assert.equal(buildV2FullPrefixVariantResult(prefixOnly).status, 'failed');
+});
+
+test('the complete-primary result is explicit about its bounded scope and terminal proof', () => {
+  const result = buildV2FullPrefixResult({
+    variants: [passing('immediate'), passing('barrier')],
+    native: { active: 0, requests: 40, responses: 40, completed: 40, cancelled: 0, failed: 0,
+      statusClasses: { 200: 40 } },
+    baseline: '95f30cf0ca39aad43f048250343ef0bb537680b3',
+  });
+  assert.equal(result.schemaVersion, 'authenticated-native-primary-local-reproduction-v1');
+  assert.equal(result.status, 'passed');
+  assert.deepEqual(result.coverage, {
+    scope: 'desktop-primary-lifecycle', expectedCaseIds: V2_FULL_PRIMARY_EXPECTED_CASES,
+    separateAcceptanceTestsIncluded: false,
+  });
+  assert.equal(result.readiness.scopedNavigation, 'passed');
+  assert.equal(result.readiness.primaryLifecycle, 'passed');
+  assert.equal(result.variants.every(item => item.browser.primaryCompletion.terminalCaseId === 'GOVERN-004'), true);
 });
 
 test('local selector rejects hosted, unauthenticated, diagnostic and unknown modes', () => {

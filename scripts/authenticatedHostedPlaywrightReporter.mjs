@@ -25,6 +25,7 @@ const OPERATION_TITLES = new Map([
   ['hosted:control:other', 'OTHER_CONTROL'],
   ['hosted:queue:network-drain', 'NETWORK_DRAIN'],
   ['hosted:queue:case-drain', 'CASE_DRAIN'],
+  ['hosted:queue:teardown', 'QUEUE_TEARDOWN'],
   ['hosted:safety:offline', 'SAFETY_OFFLINE'],
   ['hosted:safety:server', 'SAFETY_SERVER'],
   ['hosted:safety:timeout', 'SAFETY_TIMEOUT'],
@@ -33,6 +34,7 @@ const OPERATION_TITLES = new Map([
   ['hosted:primary:process-denial', 'PRIMARY_PROCESS_DENIAL'],
   ['hosted:primary:safety-and-runtime', 'PRIMARY_SAFETY_AND_RUNTIME'],
   ['hosted:primary:v2-authoring-and-review', 'PRIMARY_V2_AUTHORING_AND_REVIEW'],
+  ['hosted:primary:v2-finalization-and-review', 'PRIMARY_V2_FINALIZATION_AND_REVIEW'],
 ]);
 
 const projectCategory = test => {
@@ -109,8 +111,9 @@ export default class AuthenticatedHostedPlaywrightReporter {
       const primaryHook = this.currentHookFailures?.find(item => sameFailure(item.error, primary));
       this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(primary);
       this.failureLocation = primary?.location ? boundedLocation(primary.location) : null;
-      if (this.failureDescriptor?.phase === 'CONTROL_CHANNEL'
-        && this.failureDescriptor.code === 'CONTROL_REQUEST_TIMEOUT') {
+      if ((this.failureDescriptor?.phase === 'CONTROL_CHANNEL'
+        && this.failureDescriptor.code === 'CONTROL_REQUEST_TIMEOUT')
+        || (result.status === 'timedOut' && !this.failureDescriptor)) {
         const correlated = correlatedFailedOperation(this.failedOperations, primary);
         this.failureOperation = correlated?.operation;
         this.failureLocation ??= correlated?.location ?? null;
