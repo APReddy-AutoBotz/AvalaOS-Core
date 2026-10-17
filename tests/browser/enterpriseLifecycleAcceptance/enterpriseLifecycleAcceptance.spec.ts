@@ -1247,14 +1247,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       const beforeAssignmentLifecycle = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-      const beforeAssignment = await control<MutationSnapshot>('/control/snapshot');
+      const beforeAssignment = await control<MutationSnapshot>('/control/snapshot', { projectName });
       const assignmentApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
         page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
       expect(assignmentApi.status).toBe(200);
       await expect(page.getByText(/Reviewer assignment committed\./u)).toBeVisible();
       const afterAssignmentLifecycle = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-      const afterAssignment = await control<MutationSnapshot>('/control/snapshot');
+      const afterAssignment = await control<MutationSnapshot>('/control/snapshot', { projectName });
       expect(afterAssignment).toEqual({
         reviewAssignments: beforeAssignment.reviewAssignments + 1,
         governResolutions: beforeAssignment.governResolutions,
@@ -1267,7 +1267,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         replayPage.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
       expect(replayApi.status).toBe(200);
       await expect(replayPage.getByText(/Reviewer assignment committed\./u)).toBeVisible();
-      expect(await control<MutationSnapshot>('/control/snapshot')).toEqual(afterAssignment);
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
       observe('command-replay', 'ui.replay-no-new-effect');
 
       const staleApi = await observeApiResponse(stalePage, '/functions/v1/assess-v2-command', () =>
@@ -1275,7 +1275,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       expect(staleApi.status).toBe(409);
       await expect(stalePage.getByText('This assessment changed on the server. Reload it before retrying the action.', { exact: true })).toBeVisible();
       await expect(stalePage.getByText(/Reviewer assignment committed\./u)).toHaveCount(0);
-      expect(await control<MutationSnapshot>('/control/snapshot')).toEqual(afterAssignment);
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
       observe('command-stale-denial', 'ui.stale-no-false-success');
       if (authenticatedProductAcceptance && beforeAssignmentLifecycle && afterAssignmentLifecycle) {
         expect(afterAssignmentLifecycle.assignments).toBe(beforeAssignmentLifecycle.assignments + 1);
@@ -1485,14 +1485,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await reviewWorkspace.getByLabel('Govern rationale', { exact: true }).fill('The final reviewer must not resolve this financial high-impact decision.');
     const beforeGovernBoundary = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-    const beforeFinalReviewerDenial = await control<MutationSnapshot>('/control/snapshot');
+    const beforeFinalReviewerDenial = await control<MutationSnapshot>('/control/snapshot', { projectName });
     const governDenialApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
       reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click());
     expect(governDenialApi.status).toBe(400);
     await expect(page.getByRole('heading', { name: 'Workspace unavailable', exact: true })).toBeVisible();
     await expect(page.getByText('The command could not be completed. No success was recorded.', { exact: true })).toBeVisible();
     await expect(page.getByText('Govern resolution committed.', { exact: true })).toHaveCount(0);
-    expect(await control<MutationSnapshot>('/control/snapshot')).toEqual(beforeFinalReviewerDenial);
+    expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(beforeFinalReviewerDenial);
     observe('govern-separation-denial', 'ui.separation-denied');
     observe('govern-separation-denial', 'ui.final-reviewer-govern-denied');
 

@@ -578,6 +578,29 @@ test('browser action binding rejects an unknown project with a bounded controlle
     /^Error: AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND$/u);
 });
 
+test('snapshot controls require an explicit registered project and preserve its observation scope', async () => {
+  const config=validateAuthenticatedHostedControllerEnvironment(baseEnvironment());
+  const calls=[];
+  const snapshot={reviewAssignments:2,governResolutions:1,commandReceipts:4,privilegedAudits:4};
+  const controller=new AuthenticatedHostedController({config,identity:{},adapter:{
+    frame:async (pathname,input)=>{calls.push({pathname,input});return snapshot;},
+  }});
+  const desktop={processId:id()};const pixel={processId:id()};
+  controller.active=true;
+  controller.projects.set('desktop-chromium',desktop);
+  controller.projects.set('pixel-7',pixel);
+  for (const input of [{},{projectName:'unregistered-project'}]) {
+    await assert.rejects(controller.control('/control/snapshot',input),
+      /^Error: AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND$/u);
+  }
+  assert.equal(calls.length,0,'missing scope must never default to another project');
+  assert.deepEqual(await controller.control('/control/snapshot',{projectName:'desktop-chromium'}),snapshot);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].pathname,'/control/snapshot');
+  assert.equal(calls[0].input.project,desktop);
+  assert.equal(calls[0].input.scope,config.scope);
+});
+
 test('Studio fault arming uses the production expectedAggregateVersion envelope', async () => {
   const actorId=id();const sessionId=id();let permit;
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
