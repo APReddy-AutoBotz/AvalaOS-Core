@@ -21,6 +21,34 @@ const FAILURE_CODES = new Set([
   'ARTIFACT_UNAVAILABLE',
   'UNCLASSIFIED',
 ]);
+const primedFixturePages = new WeakSet();
+
+export async function primeV2FullPrefixFixtureSession(page, actor, storageKey) {
+  if (!page || typeof page.addInitScript !== 'function' || !actor
+    || typeof actor.token !== 'string' || actor.token.length < 32
+    || typeof actor.user?.id !== 'string' || typeof actor.user?.email !== 'string'
+    || typeof storageKey !== 'string' || !storageKey.startsWith('sb-')) {
+    throw new Error('V2_FULL_PREFIX_LOCAL_SESSION_REJECTED');
+  }
+  if (primedFixturePages.has(page)) return false;
+  const session = {
+    access_token: actor.token,
+    refresh_token: `${actor.token}-refresh`,
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user: { ...actor.user, aud: 'authenticated', role: 'authenticated',
+      user_metadata: {}, app_metadata: { provider: 'fixture' } },
+  };
+  await page.addInitScript(({ key, value }) => {
+    const marker = 'avala.v2-full-prefix.fixture-session-primed';
+    if (sessionStorage.getItem(marker) === 'true') return;
+    localStorage.setItem(key, value);
+    sessionStorage.setItem(marker, 'true');
+  }, { key: storageKey, value: JSON.stringify(session) });
+  primedFixturePages.add(page);
+  return true;
+}
 
 export function classifyV2FullPrefixFailure(error, stage) {
   const safeStage = FAILURE_STAGES.has(stage) ? stage : 'variant-execution';

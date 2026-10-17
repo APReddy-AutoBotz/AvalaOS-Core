@@ -6,9 +6,12 @@ import {
   buildV2FullPrefixResult,
   buildV2FullPrefixVariantResult,
   classifyV2FullPrefixFailure,
+  primeV2FullPrefixFixtureSession,
   resolveV2FullPrefixLocalSelection,
   runIndependentV2FullPrefixVariants,
 } from './v2FullPrefixReproduction.mjs';
+import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
+import { AuthenticatedHostedController } from './authenticatedHostedController.mjs';
 
 const stages = [
   'case-discovery', 'case', 'decision', 'draft-head', 'primitives', 'edges',
@@ -68,6 +71,92 @@ test('pre-browser setup failures retain only allowlisted codes or SQLSTATE', () 
   const classified = classifyV2FullPrefixFailure(sqlError, 'controller-create');
   assert.deepEqual(classified, { stage: 'controller-create', code: 'SQLSTATE_42P01' });
   assert.doesNotMatch(JSON.stringify(classified), /private|relation|identifier/u);
+});
+
+test('fixture session is present before the controlled first product request', async () => {
+  const actorId = '10000000-0000-4000-8000-000000000001';
+  const sessionId = '20000000-0000-4000-8000-000000000001';
+  const token = `${Buffer.from('{}').toString('base64url')}.${
+    Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.${'x'.repeat(48)}`;
+  let initScript = null;
+  let initValue = null;
+  const page = { addInitScript: async (script, value) => { initScript = script; initValue = value; } };
+  assert.equal(await primeV2FullPrefixFixtureSession(page, {
+    token, user: { id: actorId, email: 'author@fixture.invalid' },
+  }, 'sb-127-auth-token'), true);
+  assert.equal(await primeV2FullPrefixFixtureSession(page, {
+    token, user: { id: actorId, email: 'author@fixture.invalid' },
+  }, 'sb-127-auth-token'), false);
+
+  const values = new Map();
+  const sessionValues = new Map();
+  const priorLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const priorSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  } });
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: {
+    getItem: key => sessionValues.get(key) ?? null,
+    setItem: (key, value) => sessionValues.set(key, value),
+  } });
+  try {
+    initScript(initValue);
+    const transitioned = JSON.stringify({ access_token: 'reviewer-transition-token' });
+    values.set('sb-127-auth-token', transitioned);
+    initScript(initValue);
+    assert.equal(values.get('sb-127-auth-token'), transitioned);
+    values.delete('sb-127-auth-token');
+    initScript(initValue);
+    assert.equal(values.has('sb-127-auth-token'), false);
+    values.set('sb-127-auth-token', initValue.value);
+  } finally {
+    if (priorLocalStorage) Object.defineProperty(globalThis, 'localStorage', priorLocalStorage);
+    else delete globalThis.localStorage;
+    if (priorSessionStorage) Object.defineProperty(globalThis, 'sessionStorage', priorSessionStorage);
+    else delete globalThis.sessionStorage;
+  }
+  const stored = JSON.parse(values.get('sb-127-auth-token'));
+  assert.equal(stored.access_token, token);
+
+  let bindCalls = 0;
+  let observeCalls = 0;
+  const controller = new AuthenticatedHostedController({
+    config: {},
+    identity: { verifySession: async input => {
+      if (input.accessToken !== token) throw new Error('AUTHENTICATED_HOSTED_CONTROLLER_SESSION_TOKEN_REJECTED');
+      return { actorId, sessionId };
+    } },
+    adapter: {
+      bindSession: async () => { bindCalls += 1; },
+      observe: async () => {
+        observeCalls += 1;
+        return { capturedAt: '2026-10-17T00:00:00.000Z', records: [] };
+      },
+    },
+  });
+  controller.projects.set('desktop-chromium-immediate', {
+    identities: { author: { id: actorId } },
+    lastBoundaryAt: '2026-10-16T23:59:59.000Z',
+  });
+  const tracker = new AuthenticatedHostedBrowserActionTracker({
+    backendOrigin: 'http://127.0.0.1:54321',
+    appOrigin: 'http://127.0.0.1:4173',
+    startAction: input => controller.beginBrowserAction({ projectName: 'desktop-chromium-immediate', ...input }),
+    finishAction: async () => undefined,
+  });
+  const request = authorization => ({
+    url: () => 'http://127.0.0.1:54321/functions/v1/tenant-session',
+    method: () => 'POST',
+    allHeaders: async () => ({ authorization }),
+    postDataJSON: () => ({ method: 'POST', route: '/functions/v1/tenant-session' }),
+  });
+  await assert.rejects(tracker.begin(request('')), /SESSION_TOKEN_REJECTED/u);
+  assert.equal(observeCalls, 0);
+  const actionId = await tracker.begin(request(`Bearer ${stored.access_token}`));
+  assert.match(actionId, /^sha256:[a-f0-9]{64}$/u);
+  assert.equal(bindCalls, 1);
+  assert.equal(observeCalls, 1);
 });
 
 test('failure evidence preserves bounded lifecycle counts and removes arbitrary fields', () => {

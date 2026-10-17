@@ -20,7 +20,10 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
-import { resolveV2FullPrefixLocalSelection } from '../../../scripts/v2FullPrefixReproduction.mjs';
+import {
+  primeV2FullPrefixFixtureSession,
+  resolveV2FullPrefixLocalSelection,
+} from '../../../scripts/v2FullPrefixReproduction.mjs';
 import {
   observeAuthenticatedAdminControls,
   observeAuthenticatedAiControls,
@@ -325,6 +328,13 @@ const lifecycleMeasurements = (beforeFrame: LifecycleFrame, afterFrame: Lifecycl
 };
 
 const enterProcessAs = async (page: Page, actor: FixtureActor, processLabel: string) => {
+  if (v2FullPrefixReproduction) {
+    await primeV2FullPrefixFixtureSession(
+      page,
+      actor,
+      process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token',
+    );
+  }
   await enterAs(page, actor);
   if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
     await clickProduct(page, 'Assess');
