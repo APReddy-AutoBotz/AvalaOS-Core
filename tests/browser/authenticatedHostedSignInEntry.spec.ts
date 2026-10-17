@@ -20,6 +20,7 @@ const apiOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').o
 const localAppOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_APP_URL ?? '').origin;
 const localApiOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL ?? '').origin;
 const processSeedMode = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE ?? '';
+const processReadStateOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY === 'true';
 const syntheticProjectRef = 'abcdefghijklmnopqrst';
 if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
   || apiOrigin !== `https://${syntheticProjectRef}.supabase.co`
@@ -325,6 +326,71 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
   await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+  if (processReadStateOnly) {
+    const beforeProcessReadFrame = await authenticatedLifecycleControl<{
+      targetHash: string; receipts: number; audits: number; processVersion: number;
+    }>('/control/process-frame', { projectName });
+    const beforeProcessReadObservation = await authenticatedLifecycleControl<{
+      processCommandRequests: number;
+    }>('/control/sign-in-entry-observation', { projectName });
+    for (const outcome of ['empty', 'denied'] as const) {
+      await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'));
+      await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+      const beforeFault = await authenticatedLifecycleControl<{
+        outcome: string | null; skip: number; remaining: number; consumed: number; completed: number;
+      }>('/control/sign-in-entry-process-read', { projectName, action: 'inspect' });
+      const exactProcessButton = page.getByRole('button', { name: setup.aliases.process, exact: true });
+      const processRow = page.getByRole('row').filter({ has: exactProcessButton });
+      await expect(processRow).toHaveCount(1);
+      await authenticatedLifecycleControl('/control/sign-in-entry-process-read', {
+        projectName, action: 'arm', outcome, skip: 0,
+      });
+      const processResponsePromise = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.origin === apiOrigin && url.pathname === '/rest/v1/assess_processes'
+          && response.request().method() === 'GET';
+      });
+      const [processResponse] = await Promise.all([
+        processResponsePromise,
+        processRow.getByRole('button', { name: 'View', exact: true }).click(),
+      ]);
+      expect(await processResponse.finished()).toBeNull();
+      expect(processResponse.status()).toBe(outcome === 'empty' ? 200 : 403);
+      expect(await processResponse.json()).toEqual(outcome === 'empty' ? [] : { code: 'PERMISSION_DENIED' });
+      await expect.poll(async () => authenticatedLifecycleControl<{
+        outcome: string | null; skip: number; remaining: number; consumed: number; completed: number;
+      }>('/control/sign-in-entry-process-read', { projectName, action: 'inspect' })).toMatchObject({
+        outcome, skip: 0, remaining: 0,
+        consumed: beforeFault.consumed + 1,
+        completed: beforeFault.completed + 1,
+      });
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect(page.getByText('Loading process...', { exact: true })).toHaveCount(0);
+      if (outcome === 'empty') {
+        await expect(page.getByText('Process not found or you do not have permission.', { exact: true })).toBeVisible();
+      } else {
+        await expect(page.getByRole('alert').filter({
+          hasText: 'Process details could not be loaded. Go back and try again.',
+        })).toHaveCount(1);
+      }
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
+      expect(await authenticatedLifecycleControl('/control/process-frame', { projectName })).toEqual(beforeProcessReadFrame);
+      const readObservation = await authenticatedLifecycleControl<{
+        processCommandRequests: number; anonymousProcessCommandRequests: number;
+      }>('/control/sign-in-entry-observation', { projectName });
+      expect(readObservation.processCommandRequests).toBe(beforeProcessReadObservation.processCommandRequests);
+      expect(readObservation.anonymousProcessCommandRequests).toBe(0);
+    }
+    await networkActionTail;
+    if (networkActionError) throw networkActionError;
+    expect(observedHttpRequests).toBeGreaterThan(0);
+    expect(proxiedOrigins.length).toBeGreaterThan(0);
+    expect(proxiedOrigins.every(origin => origin === appOrigin || origin === apiOrigin)).toBe(true);
+    expect(unexpectedOrigins).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    return;
+  }
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
   await networkActionTail;
   if (networkActionError) throw networkActionError;

@@ -982,7 +982,7 @@ export async function createEnterpriseLifecycleFixture({
         resolve();
       }, reject);
     });
-    const holdNativeResponseBody = (response, release, finalize) => {
+    const holdNativeResponseBody = (response, release, finalize, markHeld) => {
       if (!response.body) {
         finalize('completed');
         return response;
@@ -996,6 +996,7 @@ export async function createEnterpriseLifecycleFixture({
         async pull(controller) {
           try {
             if (!released) {
+              markHeld();
               await Promise.race([release, cancellation]);
               released = true;
             }
@@ -1049,18 +1050,35 @@ export async function createEnterpriseLifecycleFixture({
       try {
         const resourceDelay = nativePostgrestDelays.get(requestedResource) ?? 0;
         if (resourceDelay > 0) await new Promise(resolve => setTimeout(resolve, resourceDelay));
-        const streamControl = nativePostgrestStream?.resource === requestedResource
+        let streamControl = nativePostgrestStream?.resource === requestedResource
           && nativePostgrestStream.remaining === 1 ? nativePostgrestStream : null;
+        if (streamControl?.skip > 0) {
+          streamControl.skip -= 1;
+          streamControl = null;
+        }
         if (streamControl) {
           streamControl.remaining = 0;
+          streamControl.entered = true;
           if (streamControl.mode === 'hold-headers') {
+            streamControl.held = true;
             await waitForNativeRelease(streamControl.released, request.signal);
           }
         }
         let response;
-        if (nativePostgrestFault?.resource === requestedResource && nativePostgrestFault.remaining === 1) {
+        if (nativePostgrestFault?.resource === requestedResource && nativePostgrestFault.skip > 0) {
+          nativePostgrestFault.skip -= 1;
+          response = await fetch(target, {
+            method: request.method,
+            headers,
+            redirect: 'error',
+            signal: AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]),
+            ...(['GET', 'HEAD'].includes(request.method) ? {} : { body: await request.arrayBuffer() }),
+          });
+        } else if (nativePostgrestFault?.resource === requestedResource && nativePostgrestFault.remaining === 1) {
           nativePostgrestFault.remaining = 0;
-          response = json({ error: 'FIXTURE_NATIVE_READ_DENIED' }, nativePostgrestFault.status);
+          response = nativePostgrestFault.outcome === 'empty'
+            ? json([], 200)
+            : json({ error: 'FIXTURE_NATIVE_READ_DENIED' }, nativePostgrestFault.status);
         } else {
           response = await fetch(target, {
             method: request.method,
@@ -1084,7 +1102,7 @@ export async function createEnterpriseLifecycleFixture({
         responseHeaders.set('cache-control', 'no-store');
         const forwarded = new Response(response.body, { status: response.status, headers: responseHeaders });
         if (streamControl?.mode === 'hold-body') {
-          return holdNativeResponseBody(forwarded, streamControl.released, finalize);
+          return holdNativeResponseBody(forwarded, streamControl.released, finalize, () => { streamControl.held = true; });
         }
         if (!forwarded.body) finalize('completed');
         else {
@@ -1174,23 +1192,36 @@ export async function createEnterpriseLifecycleFixture({
         }
         if (url.pathname === '/control/native-postgrest-fault') {
           const input = await request.json().catch(() => ({}));
-          if (!projectSetups.has(input.projectName) || input.resource !== 'assess_v2_primitives'
-            || input.status !== 403 || nativePostgrestFault?.remaining === 1) {
+          const v2Denied = input.resource === 'assess_v2_primitives'
+            && input.outcome === undefined && input.status === 403 && input.skip === undefined;
+          const processOutcome = input.resource === 'assess_processes'
+            && ['empty', 'denied'].includes(input.outcome)
+            && input.status === (input.outcome === 'empty' ? 200 : 403)
+            && (input.skip === undefined || input.skip === 0 || input.skip === 1);
+          if (!projectSetups.has(input.projectName) || (!v2Denied && !processOutcome)
+            || nativePostgrestFault?.remaining === 1) {
             return json({ error: 'CONTROL_NATIVE_POSTGREST_FAULT_REJECTED' },409,cors);
           }
-          nativePostgrestFault = { resource: input.resource, status: input.status, remaining: 1 };
+          nativePostgrestFault = {
+            resource: input.resource, status: input.status, outcome: input.outcome ?? 'denied',
+            skip: input.skip ?? 0, remaining: 1,
+          };
           return json({ armed: true },200,cors);
         }
         if (url.pathname === '/control/native-postgrest-stream') {
           const input = await request.json().catch(() => ({}));
-          if (!projectSetups.has(input.projectName) || input.resource !== 'assess_v2_cases'
-            || !['hold-headers', 'hold-body'].includes(input.mode) || nativePostgrestStream !== null) {
+          if (!projectSetups.has(input.projectName)
+            || !['assess_v2_cases', 'assess_processes'].includes(input.resource)
+            || !['hold-headers', 'hold-body'].includes(input.mode)
+            || (input.skip !== undefined && input.skip !== 0 && input.skip !== 1)
+            || nativePostgrestStream !== null) {
             return json({ error: 'CONTROL_NATIVE_POSTGREST_STREAM_REJECTED' },409,cors);
           }
           let release;
           const released = new Promise(resolve => { release = resolve; });
           nativePostgrestStream = {
-            resource: input.resource, mode: input.mode, remaining: 1, released, release,
+            resource: input.resource, mode: input.mode, skip: input.skip ?? 0,
+            remaining: 1, entered: false, held: false, released, release,
           };
           return json({ armed: true, mode: input.mode },200,cors);
         }
@@ -1217,6 +1248,12 @@ export async function createEnterpriseLifecycleFixture({
             completed: nativePostgrestStats.completed,
             cancelled: nativePostgrestStats.cancelled,
             failed: nativePostgrestStats.failed,
+            stream: nativePostgrestStream === null ? null : {
+              resource: nativePostgrestStream.resource,
+              mode: nativePostgrestStream.mode,
+              entered: nativePostgrestStream.entered,
+              held: nativePostgrestStream.held,
+            },
           },200,cors);
         }
         if (url.pathname === '/control/arm-browser-fault') {

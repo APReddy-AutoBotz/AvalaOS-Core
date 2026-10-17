@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Process reload and restricted-role native acceptance (2026-10-16)
+
+The process route and detail view own separate process-service reads. Persisted navigation agreement does not establish fresh render hydration, and the first matching response need not supply the detail heading. At the PR #308 baseline, the acceptance helper validated captured bodies only after heading visibility, and failed or empty process reads could remain displayed as loading. The correction validates fresh scoped responses before the heading/command and distinguishes pending, empty and error presentation under the existing authority fence.
+
+The local correction must preserve server-issued tenant authority, authenticated RLS reads, current scoped process/version, session continuity and production command authorization. Pending, failed and empty reads must remain fail-closed and distinguishable. Browser state remains an observation, never permission. Native preparation must execute the restricted reviewer's exact 403 denial and both reloads with unchanged independent frames. No migration or server-authority change is justified by the retained hosted evidence.
+
 ## Local browser assets and ordinary-build acceptance parity (2026-10-16)
 
 The ordinary browser asset graph is part of the application trust boundary. The current entry point loads third-party executable scripts while the connected local build removes them; those preparation results cannot prove ordinary-build origin confinement. The sign-in image adds a separate external resource dependency. PR #307's retained diagnostic identifies the final origin assertion as the failure boundary, not the exact originating request.

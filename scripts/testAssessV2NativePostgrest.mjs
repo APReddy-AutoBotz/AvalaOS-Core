@@ -285,6 +285,7 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
       'assess_v2_primitives', 'assess_v2_edges', 'assess_v2_decision_points',
       'assess_v2_exception_paths', 'assess_v2_application_assets',
       'assess_v2_application_interactions', 'assess_v2_evidence_links',
+      'assess_processes',
     ];
     assert.equal(browserStats.active, 0);
     assert.ok(browserStats.requests > browserRequestBaseline);
@@ -300,9 +301,10 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     assert.equal(browserResourceDelta['assess_v2_primitives:403'], 2);
     assert.deepEqual(
       Object.keys(browserResourceDelta).filter(key => !key.endsWith(':200')).sort(),
-      ['assess_v2_primitives:403', 'handoff_ledger_entries:404', 'timesheet_entries:404'],
+      ['assess_processes:403', 'assess_v2_primitives:403', 'handoff_ledger_entries:404', 'timesheet_entries:404'],
       `ASSESS_V2_NATIVE_UNEXPECTED_NON_SUCCESS:${JSON.stringify(browserResourceDelta)}`,
     );
+    assert.equal(browserResourceDelta['assess_processes:403'], 2);
     process.stdout.write(`# ASSESS_V2_NATIVE_RESOURCE_STATUS_CLASSES ${JSON.stringify(browserResourceDelta)}\n`);
   } finally {
     await stop(preview).catch(() => undefined);

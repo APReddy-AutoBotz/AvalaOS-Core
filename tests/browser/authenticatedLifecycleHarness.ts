@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request } from '@playwright/test';
+import { expect, test, type Page, type Request, type Response as PlaywrightResponse } from '@playwright/test';
 import { StorageKeys } from '../../services/storage';
 import { hasDurableProductNavigationAgreement, parseProductNavigationSearch } from '../../services/productNavigationState';
 import { areScopesEqual, isValidScope } from '../../services/viewStatePersistence';
@@ -426,7 +426,7 @@ export const authenticatedLifecycleValidateProcessNavigation = (
   return Object.freeze({ processId, scope });
 };
 
-const authenticatedLifecycleReadProcessNavigation = (page: Page) => page.evaluate(({ viewKey, scopeKey }) => {
+export const authenticatedLifecycleReadProcessNavigation = (page: Page) => page.evaluate(({ viewKey, scopeKey }) => {
   let persistedView: unknown = null;
   let persistedScope: unknown = null;
   try { persistedView = JSON.parse(localStorage.getItem(viewKey) || 'null'); } catch { /* rejected by validation */ }
@@ -621,56 +621,121 @@ export const authenticatedLifecycleAttemptUnauthorizedProcessUpdate = async (
     selectedProcessId,
   ).scope;
   const sessionBeforeReload = await authenticatedLifecycleReadBrowserSessionBinding(page);
+  const selectedBeforeReload = await page.evaluate(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('avala.enterprise.session.selection') || '{}') as Record<string, unknown>;
+      return typeof saved.organizationId === 'string' && typeof saved.workspaceId === 'string'
+        ? { organizationId: saved.organizationId, workspaceId: saved.workspaceId } : null;
+    } catch { return null; }
+  });
   const backend = new URL(required(apiBaseUrl, 'API_BASE_URL'));
+  let reloadDocumentStarted = false;
+  const requestsAfterReloadStart = new WeakSet<Request>();
+  const observeReloadStart = (request: Request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()
+      && request.method() === 'GET') {
+      reloadDocumentStarted = true;
+      return;
+    }
+    if (reloadDocumentStarted) requestsAfterReloadStart.add(request);
+  };
+  page.on('request', observeReloadStart);
   const serverContextResponse = page.waitForResponse(response => {
     const url = new URL(response.url());
-    return url.origin === backend.origin && url.pathname === '/functions/v1/tenant-session'
+    return requestsAfterReloadStart.has(response.request())
+      && url.origin === backend.origin && url.pathname === '/functions/v1/tenant-session'
       && response.request().method() === 'POST';
   });
   const processReadResponse = page.waitForResponse(response => {
     const url = new URL(response.url());
-    return url.origin === backend.origin && url.pathname === '/rest/v1/assess_processes'
-      && response.request().method() === 'GET';
+    const organizationFilter = url.searchParams.getAll('org_id');
+    const workspaceFilter = url.searchParams.getAll('workspace_id');
+    return requestsAfterReloadStart.has(response.request())
+      && url.origin === backend.origin && url.pathname === '/rest/v1/assess_processes'
+      && response.request().method() === 'GET'
+      && organizationFilter.length === 1 && organizationFilter[0].startsWith('eq.')
+      && uuid.test(organizationFilter[0].slice(3))
+      && workspaceFilter.length === 1 && workspaceFilter[0].startsWith('eq.')
+      && uuid.test(workspaceFilter[0].slice(3));
   });
-  const [contextResponse, processResponse] = await Promise.all([
-    serverContextResponse,
-    processReadResponse,
-    page.reload({ waitUntil: 'domcontentloaded' }),
+  let contextResponse: PlaywrightResponse;
+  let processResponse: PlaywrightResponse;
+  try {
+    [contextResponse, processResponse] = await Promise.all([
+      serverContextResponse,
+      processReadResponse,
+      page.reload({ waitUntil: 'domcontentloaded' }),
+    ]);
+  } finally {
+    page.off('request', observeReloadStart);
+  }
+  const readBoundedJson = async (response: PlaywrightResponse) => {
+    let result: Readonly<{ state: 'pending' | 'fulfilled' | 'rejected'; value?: unknown }> = { state: 'pending' };
+    const completion = response.json().then(
+      value => { result = { state: 'fulfilled', value }; },
+      () => { result = { state: 'rejected' }; },
+    );
+    try {
+      await expect.poll(() => result.state).not.toBe('pending');
+    } catch {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_READ_REJECTED');
+    }
+    await completion;
+    return result;
+  };
+  const [contextResult, processResult, processHeaders] = await Promise.all([
+    readBoundedJson(contextResponse),
+    readBoundedJson(processResponse),
+    processResponse.request().allHeaders(),
   ]);
+  const contextBody = contextResult.value as { contexts?: unknown } | undefined;
+  const processBody = processResult.value;
+  if (!contextResponse.ok() || contextResult.state !== 'fulfilled' || !contextBody || !Array.isArray(contextBody.contexts)
+    || !processResponse.ok() || processResult.state !== 'fulfilled' || !Array.isArray(processBody)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_READ_REJECTED');
+  }
+  const selected = (selectedBeforeReload ? contextBody.contexts.find((candidate: Record<string, unknown>) =>
+    candidate.organizationId === selectedBeforeReload.organizationId
+      && candidate.workspaceId === selectedBeforeReload.workspaceId) : undefined)
+    ?? (contextBody.contexts.length === 1 ? contextBody.contexts[0] : undefined) as {
+    userId?: unknown; organizationId?: unknown; workspaceId?: unknown; authorizationVersion?: unknown; capabilities?: unknown;
+  } | undefined;
+  const processReadUrl = new URL(processResponse.url());
+  if (!selected || processReadUrl.searchParams.get('org_id') !== `eq.${String(selected.organizationId)}`
+    || processReadUrl.searchParams.get('workspace_id') !== `eq.${String(selected.workspaceId)}`) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_READ_REJECTED');
+  }
+  const authority = authenticatedLifecycleValidateDeniedProcessAuthority({
+    selected: selected ?? null, processRows: processBody, processLabel, selectedProcessId, processHeaders,
+  });
   await authenticatedLifecycleObserveProcessNavigation(page, selectedProcessId, selectedScope);
-  await expect(page.getByRole('heading', { name: processLabel, exact: true })).toBeVisible();
+  const sessionAfterReload = await authenticatedLifecycleReadBrowserSessionBinding(page);
+  authenticatedLifecycleValidateSessionBinding(sessionAfterReload, sessionBeforeReload);
+  authenticatedLifecycleValidateSessionBinding({
+    actorId: authority.context.actorId,
+    sessionId: sessionAfterReload.sessionId,
+  }, sessionAfterReload);
+  const heading = page.getByRole('heading', { name: processLabel, exact: true });
+  try {
+    await expect(heading).toBeVisible();
+  } catch (error) {
+    const inspectionHeading = page.getByRole('heading', { name: processLabel, exact: true, includeHidden: true });
+    let count: number;
+    try { count = await inspectionHeading.count(); } catch { throw error; }
+    if (count === 0) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_DETAIL_MISSING');
+    if (count !== 1) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_DETAIL_AMBIGUOUS');
+    let visible: boolean;
+    try { visible = await inspectionHeading.isVisible(); } catch { throw error; }
+    if (!visible) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_DETAIL_HIDDEN');
+    }
+    throw error;
+  }
   const editProcess = page.getByRole('button', { name: 'Edit process details', exact: true });
   await expect(editProcess).toBeDisabled();
   await expect(editProcess).toHaveAttribute('title', 'Process editing is not authorized for this role.');
   await expect(page.getByTestId('process-edit-form')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Save process details', exact: true })).toHaveCount(0);
-  const sessionAfterReload = await authenticatedLifecycleReadBrowserSessionBinding(page);
-  authenticatedLifecycleValidateSessionBinding(sessionAfterReload, sessionBeforeReload);
-  const [contextBody, processBody, processHeaders] = await Promise.all([
-    contextResponse.json().catch(() => null),
-    processResponse.json().catch(() => null),
-    processResponse.request().allHeaders(),
-  ]);
-  if (!contextResponse.ok() || !contextBody || !Array.isArray(contextBody.contexts)
-    || !processResponse.ok() || !Array.isArray(processBody)) {
-    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_AUTHORITY_READ_REJECTED');
-  }
-  const selected = await page.evaluate(contexts => {
-    let saved: Record<string, unknown> = {};
-    try { saved = JSON.parse(sessionStorage.getItem('avala.enterprise.session.selection') || '{}'); } catch { /* rejected below */ }
-    return contexts.find((candidate: Record<string, unknown>) =>
-      candidate.organizationId === saved.organizationId && candidate.workspaceId === saved.workspaceId)
-      ?? (contexts.length === 1 ? contexts[0] : null);
-  }, contextBody.contexts) as {
-    userId?: unknown; organizationId?: unknown; workspaceId?: unknown; authorizationVersion?: unknown; capabilities?: unknown;
-  } | null;
-  const authority = authenticatedLifecycleValidateDeniedProcessAuthority({
-    selected, processRows: processBody, processLabel, selectedProcessId, processHeaders,
-  });
-  authenticatedLifecycleValidateSessionBinding({
-    actorId: authority.context.actorId,
-    sessionId: sessionAfterReload.sessionId,
-  }, sessionAfterReload);
   const requestId = crypto.randomUUID();
   const processCommandResponse = page.waitForResponse(response => {
     const url = new URL(response.url());

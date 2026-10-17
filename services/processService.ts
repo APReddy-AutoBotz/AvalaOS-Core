@@ -23,6 +23,7 @@ export function useProcessService() {
     const [processes, setProcesses] = useState<AssessProcess[]>([]);
     const [loading, setLoading] = useState(false);
     const [settledContextKey, setSettledContextKey] = useState<string | null>(null);
+    const [settledReadState, setSettledReadState] = useState<'ready' | 'empty' | 'error' | null>(null);
     const requestGate = useRef(createContextRequestGate()).current;
 
     const authorizedKey = processReadAuthorityKey({
@@ -42,6 +43,9 @@ export function useProcessService() {
     // the previous context's empty process collection before the fetch begins.
     const contextLoading = Boolean(authorizedKey && (loading || settledContextKey !== authorizedKey));
     const visibleProcesses = visibleProcessesForAuthority(processes,settledContextKey,authorizedKey);
+    const readState = !authorizedKey ? 'idle'
+        : contextLoading ? 'loading'
+            : settledReadState ?? 'loading';
     const latestAuthorityKey = useRef(authorizedKey);
     latestAuthorityKey.current = authorizedKey;
 
@@ -51,16 +55,24 @@ export function useProcessService() {
             setProcesses([]);
             setLoading(false);
             setSettledContextKey(null);
+            setSettledReadState(null);
             return;
         }
         const ticket = requestGate.start(requestContext);
         setProcesses([]);
         setLoading(true);
+        setSettledReadState(null);
         try {
             const data = await assessAdapter.getProcesses(currentOrganization.id, currentWorkspace.id);
-            if (requestGate.accepts(ticket, requestContext) && latestAuthorityKey.current === authorizedKey) setProcesses(data);
+            if (requestGate.accepts(ticket, requestContext) && latestAuthorityKey.current === authorizedKey) {
+                setProcesses(data);
+                setSettledReadState(data.length === 0 ? 'empty' : 'ready');
+            }
         } catch (err) {
             console.error('Failed to fetch processes:', err);
+            if (requestGate.accepts(ticket, requestContext) && latestAuthorityKey.current === authorizedKey) {
+                setSettledReadState('error');
+            }
         } finally {
             if (requestGate.accepts(ticket, requestContext) && latestAuthorityKey.current === authorizedKey) {
                 setSettledContextKey(authorizedKey);
@@ -179,6 +191,7 @@ export function useProcessService() {
     return {
         processes: visibleProcesses,
         loading: contextLoading,
+        readState,
         createProcess,
         createProcessFromTemplate,
         getProcessById,

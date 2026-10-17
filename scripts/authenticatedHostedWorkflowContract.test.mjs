@@ -78,6 +78,10 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   assert.equal(signInEntry.run.trim(), `node scripts/testAuthenticatedHostedSignInEntry.mjs\n${check}`);
   assert.equal(signInEntry.env, undefined);
   assert.equal(signInEntry['continue-on-error'], undefined);
+  const processReads = replay.steps.find(step => step.name === 'Verify completed process-read failure states');
+  assert.equal(processReads.run.trim(), `node scripts/testAuthenticatedHostedSignInEntry.mjs --process-read-state\n${check}`);
+  assert.equal(processReads.env, undefined);
+  assert.equal(processReads['continue-on-error'], undefined);
   assert.equal(replay.steps.at(-1).if, 'always()');
   assert.equal(replay.steps.at(-1).run.trim(), check);
 });
