@@ -5,6 +5,7 @@ import { PassThrough } from 'node:stream';
 import {
   readEnterpriseLifecycleRequestBody,
   responseToEnterpriseLifecycleNode,
+  scheduleEnterpriseLifecycleRequest,
   validateEnterpriseLifecycleDatabaseUrl,
 } from './enterpriseLifecyclePostgresFixture.mjs';
 
@@ -132,4 +133,54 @@ test('node response serialization propagates upstream stream errors', async () =
     responseToEnterpriseLifecycleNode(new Response(body, { status: 200 }), sink),
     /TEST_UPSTREAM_STREAM_FAILED/u,
   );
+});
+
+test('a held Delivery body does not block its queued release control after the handler finishes', { timeout: 2000 }, async () => {
+  let finishHandler;
+  let releaseBody;
+  const handlerGate = new Promise(resolve => { finishHandler = resolve; });
+  const bodyGate = new Promise(resolve => { releaseBody = resolve; });
+  const sink = responseSink();
+  const chunks = [];
+  sink.on('data', chunk => chunks.push(chunk));
+  let handlerCommitted = false;
+  let releaseControlRan = false;
+  let bodyCompleted = false;
+  const first = scheduleEnterpriseLifecycleRequest(Promise.resolve(), async routeFinished => {
+    await handlerGate;
+    handlerCommitted = true;
+    const body = new ReadableStream({ async start(controller) {
+      await bodyGate;
+      controller.enqueue(new TextEncoder().encode('[]'));
+      controller.close();
+    } });
+    routeFinished();
+    await responseToEnterpriseLifecycleNode(new Response(body), sink);
+    bodyCompleted = true;
+  }, true);
+  const second = scheduleEnterpriseLifecycleRequest(first.serialized, async () => {
+    assert.equal(handlerCommitted, true);
+    assert.equal(bodyCompleted, false);
+    releaseControlRan = true;
+    releaseBody();
+  });
+  try {
+    await Promise.resolve();
+    assert.equal(releaseControlRan, false, 'later controls cannot overtake handler/database work');
+    finishHandler();
+    await second.completed;
+    await first.completed;
+    assert.equal(bodyCompleted, true);
+    assert.equal(Buffer.concat(chunks).toString(), '[]');
+  } finally { finishHandler(); releaseBody(); }
+});
+
+test('failed detached handlers release the queue and retain their failure', async () => {
+  const first = scheduleEnterpriseLifecycleRequest(Promise.resolve(), async () => {
+    throw new Error('TEST_HANDLER_FAILED');
+  }, true);
+  await assert.rejects(first.completed, /TEST_HANDLER_FAILED/u);
+  let nextRan = false;
+  await scheduleEnterpriseLifecycleRequest(first.serialized, async () => { nextRan = true; }).completed;
+  assert.equal(nextRan, true);
 });

@@ -627,7 +627,7 @@ function App() {
     if (productNavigationTargetIsWaiting({
       ...navigationTarget,
       processReadState,
-      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+      projectIndexReadState,
     })) return;
 
     const resolvedNavigation = resolveProductNavigationState({
@@ -641,7 +641,7 @@ function App() {
       projects,
       documentGenerations,
       processReadState,
-      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+      projectIndexReadState,
       preserveOrganizationWorkspace: true,
     });
 
@@ -695,7 +695,7 @@ function App() {
       processId: selectedProcessId,
       documentGenerationId: activeGenerationId,
       processReadState,
-      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+      projectIndexReadState,
     })) return;
 
     // Effects later in the same flush can observe ref writes from URL hydration
@@ -741,7 +741,7 @@ function App() {
       projects,
       documentGenerations,
       processReadState,
-      projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+      projectIndexReadState,
       preserveOrganizationWorkspace: true,
     });
 
@@ -811,7 +811,7 @@ function App() {
       if (productNavigationTargetIsWaiting({
         ...target,
         processReadState,
-        projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready',
+        projectIndexReadState,
       })) {
         if (pendingPopStateSearch.current !== search) {
           pendingNavigationTransition.current = navigationController.current.beginSettlement(
@@ -826,7 +826,7 @@ function App() {
         ? pendingNavigationTransition.current
         : null;
       pendingPopStateSearch.current = null;
-      const resolved = resolveProductNavigationState({ ...target, user: currentUser, authLoading: guardLoading, organization: currentOrganization, enabledModules, authoritativeCapabilities: authoritativeViewCapabilities, processes, projects, documentGenerations, processReadState, projectIndexReadState: dataAccess === 'server' ? projectIndexReadState : 'ready', preserveOrganizationWorkspace: true });
+      const resolved = resolveProductNavigationState({ ...target, user: currentUser, authLoading: guardLoading, organization: currentOrganization, enabledModules, authoritativeCapabilities: authoritativeViewCapabilities, processes, projects, documentGenerations, processReadState, projectIndexReadState, preserveOrganizationWorkspace: true });
       pendingNavigationTransition.current = pendingTransition?.origin === 'popstate'
         ? pendingTransition
         : navigationController.current.beginSettlement(
