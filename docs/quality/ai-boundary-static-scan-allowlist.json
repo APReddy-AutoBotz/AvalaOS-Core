@@ -515,12 +515,14 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        222,
-        269,
-        270,
-        365,
-        366,
-        979
+        264,
+        305,
+        306,
+        391,
+        392,
+        487,
+        488,
+        1101
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
@@ -580,7 +582,7 @@
       "path": "tests/browser/assessV2NativePostgrest.spec.ts",
       "lines": [
         62,
-        479
+        480
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep local fixture-token reads and missing-session storage removal confined to disposable native browser checks. They are not server revocation or hosted authorization; retain no credentials."

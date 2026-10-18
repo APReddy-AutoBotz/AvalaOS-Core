@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Primary actor-entry completion (2026-10-18)
+
+PR #313 merged as `e803d5631df06eda22643de024ad609caa29e08f` with identical-tree verification, 52 applicable candidate checks, three release workflows and independently verified browser/EI/native evidence. Its separately approved run `39116998418`, attempt 1, retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** across 108 requirements. All 36 public/Sandbox executions passed. Cleanup independently verified quiescence, revoked identities and access, zero active permits/residue/secret references/unfinished cleanup, providers OFF and removal of owned temporary main access. The single-run allowance is consumed.
+
+The same actor-transition guard failed at its shifted line 81. The auxiliary-disposal correction remains locally proven, but did not resolve this hosted failure. The retained diagnostic does not distinguish outstanding work from expired drainage; historical causation remains unproven. Continue the repository-only primary-entry comparison in `docs/planning/hosted-acceptance-completion.md`, preserving all criteria and authority checks. No new hosted inspection, run, deployment, migration, production or paid action is authorized.
+
+The actual-browser comparison now proves that the boundary can return while request classification remains pending and the existing counters show zero. The selected correction joins that owned admission and rejects empty-state success after deadline expiry. The normal actor switch did not demonstrate the proposed extra old-author action, so navigation remains unchanged. Corrected local browser verification is incomplete: both the corrected fixture and an isolated, byte-verified copy of merged PR #313 failed under the unchanged limits. Exact-candidate Linux browser evidence is required before merge; these local results establish neither a passing correction nor the hosted cause.
+
 ## Actor-transition completion boundary (2026-10-18)
 
 PR #312 merged as `252d85f60c87ca3b4b817d1a617079040cd5bc55` with an identical tested tree, 52 applicable candidate checks, three successful release workflows and independent browser/EI/complete-native verification. Its separately approved full run `39105934648`, attempt 1, independently verifies 389 sources and **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. All 36 public/Sandbox executions passed. Read-only cleanup verified quiescence, four revoked identities, zero active sessions/memberships/permits/residue/secret references/unfinished cleanup, providers OFF and owned temporary-main removal. The single-run allowance is consumed.

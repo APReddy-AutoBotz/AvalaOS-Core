@@ -164,6 +164,127 @@ test('installed network acquires a business response body before serialized fini
     responseBody: { outcome: 'committed' } }]);
 });
 
+test('actor boundary owns a tracker admission before action-start accounting begins', async () => {
+  let releaseHeaders;
+  let headersPending = false;
+  let starts = 0;
+  const headers = new Promise(resolve => { releaseHeaders = () => resolve({ authorization: 'Bearer fixture.jwt.token' }); });
+  const network = await networkFixture(async () => { starts += 1; return { actionId: 'admitted-action' }; });
+  const request = {
+    url: () => `${backendOrigin}/functions/v1/tenant-session`,
+    method: () => 'POST',
+    allHeaders: async () => { headersPending = true; return headers; },
+    postDataJSON: () => ({}),
+  };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(headersPending, true);
+  assert.equal(starts, 0);
+  let boundarySettled = false;
+  const boundary = loadNetworkInstaller().authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: network.lifecycle.settleActionAdmissions,
+    settleResponseBodies: network.lifecycle.settleResponseBodies,
+    drainNetworkActions: network.drain,
+    activeActionCount: () => 0,
+    waitForNextObservation: () => new Promise(resolve => setImmediate(resolve)),
+  }).then(() => { boundarySettled = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(boundarySettled, false);
+  releaseHeaders();
+  await boundary;
+  assert.equal(starts, 1);
+});
+
+test('request and route observations share one owned action admission', async () => {
+  let releaseStart;
+  const startGate = new Promise(resolve => { releaseStart = resolve; });
+  let starts = 0;
+  const network = await networkFixture(async () => {
+    starts += 1;
+    await startGate;
+    return { actionId: 'shared-admission' };
+  });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  const route = network.route({ request: () => request, abort: async () => assert.fail('unexpected abort') });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(starts, 1);
+  releaseStart();
+  await network.lifecycle.settleActionAdmissions();
+  await route;
+  assert.equal(starts, 1);
+  assert.equal(network.dispatches.length, 1);
+});
+
+test('a rejected pending admission prevents actor-boundary success', async () => {
+  let releaseStart;
+  const startGate = new Promise(resolve => { releaseStart = resolve; });
+  const network = await networkFixture(async () => {
+    await startGate;
+    throw new Error('SESSION_TOKEN_REJECTED');
+  });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  const aborts = [];
+  const route = network.route({ request: () => request, abort: async reason => { aborts.push(reason); } });
+  const boundary = loadNetworkInstaller().authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: network.lifecycle.settleActionAdmissions,
+    settleResponseBodies: network.lifecycle.settleResponseBodies,
+    drainNetworkActions: network.drain,
+    activeActionCount: () => 0,
+    waitForNextObservation: () => new Promise(resolve => setImmediate(resolve)),
+  });
+  releaseStart();
+  await assert.rejects(boundary, /SESSION_TOKEN_REJECTED/u);
+  await route;
+  await network.drain();
+  assert.deepEqual(aborts, ['failed']);
+  assert.ok(network.errors.length > 0 && network.errors.every(error => error === 'SESSION_TOKEN_REJECTED'));
+});
+
+test('actor boundary joins every pending admission before reporting the first rejection', async () => {
+  let rejectFirst;
+  let releaseSecond;
+  let secondSettled = false;
+  const firstGate = new Promise((_resolve, reject) => { rejectFirst = reject; });
+  const secondGate = new Promise(resolve => { releaseSecond = resolve; });
+  const network = await networkFixture(async ({ route }) => {
+    if (route === '/functions/v1/process-command') return firstGate;
+    await secondGate;
+    secondSettled = true;
+    return { actionId: 'second-admission' };
+  });
+  const first = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  const second = { url: () => `${backendOrigin}/functions/v1/tenant-session`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', first);
+  network.context.emit('request', second);
+  await new Promise(resolve => setImmediate(resolve));
+  let settlement = null;
+  const boundary = loadNetworkInstaller().authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: network.lifecycle.settleActionAdmissions,
+    settleResponseBodies: network.lifecycle.settleResponseBodies,
+    drainNetworkActions: network.drain,
+    activeActionCount: () => 0,
+    waitForNextObservation: () => new Promise(resolve => setImmediate(resolve)),
+  }).then(
+    () => { settlement = { state: 'fulfilled' }; },
+    error => { settlement = { state: 'rejected', error }; },
+  );
+  rejectFirst(new Error('FIRST_ADMISSION_REJECTED'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settlement, null);
+  assert.equal(secondSettled, false);
+  releaseSecond({ actionId: 'second-admission' });
+  await boundary;
+  assert.equal(secondSettled, true);
+  assert.equal(settlement.state, 'rejected');
+  assert.match(settlement.error.message, /^FIRST_ADMISSION_REJECTED$/u);
+});
+
 test('installed network records an observed response transport failure without fabricating a body', async () => {
   const network = await networkFixture(async () => ({ actionId: 'transport-action' }));
   const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',

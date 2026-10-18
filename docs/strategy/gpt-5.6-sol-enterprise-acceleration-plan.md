@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Primary actor-entry preparation after PR #313 (2026-10-18)
+
+PR #313's verified merged release `e803d563` and approved run `39116998418` retain 61 PASS / 47 BLOCKED. Cleanup and providers OFF are verified; the hosted allowance is consumed. The same guard failure does not establish the underlying cause. Three read-only reviews are complete, and root has authorized one existing-fixture comparison under the fixed workspace-write profile: test primary actor entry, pre-classification ownership and bounded observation latency before selecting a correction. Preserve the 15-second actor, 30-second body and 300-second journey limits, real session verification and independent frames. Do not substitute a longer timeout, smaller acceptance gate or diagnostic-only PR.
+
+The comparison reproduced an early boundary return during held classification. Join those begin promises and check expiry before success; preserve root navigation because the normal comparison did not demonstrate an extra old-author action. The corrected and exact merged-baseline browser fixtures both failed locally under unchanged limits. Continue focused ownership verification and require the existing Linux sign-in/native/connected-browser gates before merge. Do not infer that a red baseline proves the correction regression-free or that local proof resolves the hosted failure.
+
 ## Actor-transition completion after PR #312 (2026-10-18)
 
 Merged PR #312 `252d85f6` passed its 52 candidate checks, three release workflows and independent browser/EI/complete-native verification. Its approved run `39105934648` attempt 1 independently retains 61 PASS / 47 BLOCKED with verified cleanup and providers OFF; the hosted allowance is consumed. The primary failure now has an actor-transition source location, but that guard can fail after a slow drain reaches zero and before its second empty sample, so the error alone does not identify an unfinished request or historical cause.

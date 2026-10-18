@@ -117,6 +117,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
   const settleActorTransitionEvidence = async () => {
     if (!networkLifecycle) throw new Error('ASSESS_V2_NATIVE_NETWORK_LIFECYCLE_MISSING');
     await settleActorNavigationBoundary({
+      settleActionAdmissions: networkLifecycle.settleActionAdmissions,
       settleResponseBodies: networkLifecycle.settleResponseBodies,
       drainNetworkActions: async () => {
         for (;;) {

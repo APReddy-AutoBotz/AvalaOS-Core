@@ -1,4 +1,4 @@
-import { expect, test, type Route } from '@playwright/test';
+import { expect, test, type Request, type Route } from '@playwright/test';
 import { appendFile } from 'node:fs/promises';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
@@ -98,6 +98,17 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   let networkActionTail: Promise<unknown> = Promise.resolve();
   const activeActions = new Set<string>();
   let pendingActionStarts = 0;
+  type AdmissionGate = {
+    armed: boolean;
+    waiting: boolean;
+    released: boolean;
+    request: Request | null;
+    wait: Promise<void>;
+    onWait: () => void;
+    release: () => void;
+  };
+  let admissionGate: AdmissionGate | null = null;
+  const gatedRequests = new WeakMap<Request, Request>();
   const queueNetworkAction = (operation: () => Promise<unknown>) => {
     networkActionTail = networkActionTail.then(operation).catch(error => {
       if (!networkActionError) networkActionError = error;
@@ -122,11 +133,41 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       return result;
     },
   });
+  const gatedRequestFor = (request: Request) => {
+    const existing = gatedRequests.get(request);
+    if (existing) return existing;
+    const gated = new Proxy(request, {
+      get(target, property) {
+        if (property === 'allHeaders') return async () => {
+          const gate = admissionGate;
+          if (gate?.armed && new URL(target.url()).pathname === '/functions/v1/tenant-session') {
+            gate.armed = false;
+            gate.waiting = true;
+            gate.request = target;
+            gate.onWait();
+            await gate.wait;
+            gate.waiting = false;
+          }
+          return target.allHeaders();
+        };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    gatedRequests.set(request, gated);
+    return gated;
+  };
+  const networkTracker = {
+    classify: (request: Request) => tracker.classify(gatedRequestFor(request)),
+    begin: (request: Request) => tracker.begin(gatedRequestFor(request)),
+    reference: (request: Request) => tracker.reference(gatedRequestFor(request)),
+    finish: (request: Request, status: number, body: unknown) => tracker.finish(gatedRequestFor(request), status, body),
+  } as AuthenticatedHostedBrowserActionTracker;
   const networkLifecycle = await installAuthenticatedHostedNetwork({
     context: page.context(),
     hosted: true,
     allowedOrigins: new Set([appOrigin, apiOrigin]),
-    tracker,
+    tracker: networkTracker,
     queueNetworkAction,
     onExternalRequest: origin => unexpectedOrigins.push(origin),
     onHttpRequest: () => { observedHttpRequests += 1; },
@@ -137,6 +178,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     },
   });
   const settleActorTransitionEvidence = () => authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: networkLifecycle.settleActionAdmissions,
     settleResponseBodies: networkLifecycle.settleResponseBodies,
     drainNetworkActions: async () => {
       for (;;) {
@@ -236,6 +278,86 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(rejectedObservation.attestationRequests).toBeGreaterThan(0);
 
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
+  await settleActorTransitionEvidence();
+  const authorEntryObservation = await authenticatedLifecycleControl<{
+    actions: Array<{ route: string; persona: string; complete: boolean; status: number | null }>;
+  }>('/control/sign-in-entry-observation', { projectName });
+  {
+    let releaseAdmission!: () => void;
+    const admissionWait = new Promise<void>(resolve => { releaseAdmission = resolve; });
+    let automaticRelease: ReturnType<typeof setTimeout> | undefined;
+    admissionGate = {
+      armed: true,
+      waiting: false,
+      released: false,
+      request: null,
+      wait: admissionWait,
+      onWait: () => {
+        automaticRelease = setTimeout(() => admissionGate?.release(), 2_000);
+      },
+      release: () => {
+        if (admissionGate?.released) return;
+        if (admissionGate) admissionGate.released = true;
+        releaseAdmission();
+      },
+    };
+    const requestOutcome = page.evaluate(async backendOrigin => {
+      const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
+      const stored = key ? JSON.parse(localStorage.getItem(key) || '{}') : {};
+      const accessToken = stored.access_token ?? stored.currentSession?.access_token ?? '';
+      const response = await fetch(`${backendOrigin}/functions/v1/tenant-session`, {
+        method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: '{}',
+      });
+      await response.json();
+      return response.status;
+    }, apiOrigin).then(
+      status => Object.freeze({ state: 'fulfilled' as const, status }),
+      error => Object.freeze({ state: 'rejected' as const, error }),
+    );
+    let boundaryOutcome: Promise<Readonly<{ state: 'fulfilled' }> | Readonly<{ state: 'rejected'; error: unknown }>> | null = null;
+    try {
+      await expect.poll(() => admissionGate?.waiting).toBe(true);
+      expect(pendingActionStarts).toBe(0);
+      expect(activeActions.size).toBe(0);
+      let boundaryResult: Readonly<{ state: 'fulfilled' }> | Readonly<{ state: 'rejected'; error: unknown }> | null = null;
+      boundaryOutcome = settleActorTransitionEvidence().then(
+        () => (boundaryResult = Object.freeze({ state: 'fulfilled' as const })),
+        error => (boundaryResult = Object.freeze({ state: 'rejected' as const, error })),
+      );
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(boundaryResult).toBeNull();
+      expect(admissionGate.released).toBe(false);
+      const settledBoundary = await boundaryOutcome;
+      if (settledBoundary.state === 'rejected') throw settledBoundary.error;
+      expect(admissionGate.released).toBe(true);
+      const settledRequest = await requestOutcome;
+      if (settledRequest.state === 'rejected') throw settledRequest.error;
+      expect(settledRequest.status).toBe(200);
+      await settleActorTransitionEvidence();
+      const heldRequest = admissionGate.request;
+      expect(heldRequest).not.toBeNull();
+      const heldActionId = await networkTracker.reference(heldRequest as Request);
+      expect(typeof heldActionId).toBe('string');
+      expect(activeActions.has(heldActionId as string)).toBe(false);
+      const afterAdmission = await authenticatedLifecycleControl<{
+        actions: Array<{ route: string; persona: string; complete: boolean; status: number | null }>;
+      }>('/control/sign-in-entry-observation', { projectName });
+      const admittedActions = afterAdmission.actions.slice(authorEntryObservation.actions.length);
+      expect(admittedActions.every(action => action.complete && action.status !== null)).toBe(true);
+      expect(admittedActions.filter(action => action.route === '/functions/v1/tenant-session'
+        && action.persona === 'author')).toEqual([
+        expect.objectContaining({ complete: true, status: 200 }),
+      ]);
+      expect(pendingActionStarts).toBe(0);
+      expect(activeActions.size).toBe(0);
+    } finally {
+      if (automaticRelease !== undefined) clearTimeout(automaticRelease);
+      admissionGate?.release();
+      await boundaryOutcome?.catch(() => undefined);
+      await requestOutcome.catch(() => undefined);
+      admissionGate = null;
+    }
+  }
   await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'), settleActorTransitionEvidence);
   const reviewerColdObservation = await authenticatedLifecycleControl<{
     passwordRequests: unknown[]; bindings: unknown[]; verifySessionCalls: unknown[];
@@ -732,7 +854,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   const completeV1 = (timeoutMs = 8_000) => runV1AssessmentCompletion({
     page,
     identity: { actorId: actor(projectName, 'A').user.id, processId: selectedProcessId },
-    actionReference: request => tracker.reference(request),
+    actionReference: request => networkTracker.reference(request),
     runStep: (title, operation) => test.step(title, operation),
     timeoutMs,
   });
@@ -853,7 +975,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   });
   const safetyRoute = async (route: Route) => {
     try {
-      await tracker.begin(route.request());
+      await networkTracker.begin(route.request());
       const requestBody = route.request().postDataJSON();
       const headers = await route.request().allHeaders();
       await authenticatedLifecycleControl('/control/arm-browser-fault', {
@@ -938,7 +1060,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   let stalledArmFailure: unknown = null;
   const stalledRoute = async (route: Route) => {
     try {
-      await tracker.begin(route.request());
+      await networkTracker.begin(route.request());
       const requestBody = route.request().postDataJSON();
       const headers = await route.request().allHeaders();
       await boundedControl('/control/arm-browser-fault', {
