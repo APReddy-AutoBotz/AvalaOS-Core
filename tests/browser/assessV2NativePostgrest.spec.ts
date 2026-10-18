@@ -184,27 +184,25 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
 
   test.afterEach(async () => {
     if (!networkLifecycle) throw new Error('ASSESS_V2_NATIVE_NETWORK_LIFECYCLE_MISSING');
-    const deadline = Date.now() + 15_000;
     let boundaryError: unknown = trackerError;
-    for (;;) {
-      try { await networkLifecycle.settleResponseBodies(); }
-      catch (error) { boundaryError ??= error; }
-      for (;;) {
-        const current = networkActionTail;
-        await current;
-        if (current === networkActionTail) break;
-      }
-      try { await networkLifecycle.settleResponseBodies(); }
-      catch (error) { boundaryError ??= error; }
-      boundaryError ??= trackerError;
-      if (activeActions.size === 0 || Date.now() >= deadline) break;
-      // Preserve the original bounded readiness window for requests which
-      // started before response headers and therefore are not yet represented
-      // in the response-body set or serialized finish tail.
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    // Surface the causal fixed-code network/body failure before the secondary
-    // action-balance symptom while still completing the bounded cleanup above.
+    try {
+      await settleActorNavigationBoundary({
+        settleActionAdmissions: networkLifecycle.settleActionAdmissions,
+        settleResponseBodies: networkLifecycle.settleResponseBodies,
+        drainNetworkActions: async () => {
+          for (;;) {
+            const current = networkActionTail;
+            await current;
+            if (current === networkActionTail) break;
+          }
+          if (trackerError) throw trackerError;
+        },
+        activeActionCount: () => activeActions.size,
+      });
+    } catch (error) { boundaryError ??= error; }
+    boundaryError ??= trackerError;
+    // Surface the first causal admission/network/body failure after joining
+    // all accepted terminal work and before Playwright disposes the context.
     if (boundaryError) throw boundaryError;
     expect(activeActions.size).toBe(0);
     expect(trackerStarts).toBeGreaterThan(0);

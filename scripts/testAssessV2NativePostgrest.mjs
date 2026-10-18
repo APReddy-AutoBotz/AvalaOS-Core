@@ -18,6 +18,7 @@ import {
   selectProjectionRpcSubnet,
 } from './projectionRpcPostgrestContract.mjs';
 import {
+  closeAndSummarizeV2FullPrefixLocalController,
   createV2FullPrefixLocalController,
   createV2FullPrefixAdapterQuery,
 } from './v2FullPrefixLocalController.mjs';
@@ -328,20 +329,17 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           setupFailure = classifyV2FullPrefixFailure(error, failureStage);
         } finally {
           if (localController) {
-            try { controller = localController.projectSummary(projectName); }
-            catch { controller = null; }
+            const terminal = await closeAndSummarizeV2FullPrefixLocalController(localController, projectName);
+            cleanup = terminal.cleanup;
+            controller = terminal.controller;
+            if (terminal.cleanupError) {
+              setupFailure ??= classifyV2FullPrefixFailure(terminal.cleanupError, 'controller-quiesce');
+            }
             const controlFailureCode = localController.controlFailureCode();
             if (controlFailureCode && setupFailure?.code === 'BROWSER_PROCESS_EXIT_NONZERO') {
               setupFailure = classifyV2FullPrefixFailure(
                 new Error(controlFailureCode), 'browser-execution',
               );
-            }
-            try {
-              await localController.close();
-              cleanup = 'passed';
-            } catch (error) {
-              cleanup = 'failed';
-              setupFailure ??= classifyV2FullPrefixFailure(error, 'controller-quiesce');
             }
           }
           if (adapterClient) {

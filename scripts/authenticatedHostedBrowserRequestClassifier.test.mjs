@@ -244,6 +244,51 @@ test('a rejected pending admission prevents actor-boundary success', async () =>
   assert.ok(network.errors.length > 0 && network.errors.every(error => error === 'SESSION_TOKEN_REJECTED'));
 });
 
+test('an admission rejection remains owned after it settles before terminal settlement begins', async () => {
+  const firstFailure = new Error('ALREADY_SETTLED_ADMISSION_REJECTED');
+  const network = await networkFixture(async () => { throw firstFailure; });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(network.lifecycle.settleActionAdmissions(), error => error === firstFailure);
+  await assert.rejects(network.lifecycle.settleActionAdmissions(), error => error === firstFailure);
+});
+
+test('a retained admission rejection still joins later accepted work before it is reported', async () => {
+  let releaseSecond;
+  let secondSettled = false;
+  const secondGate = new Promise(resolve => { releaseSecond = resolve; });
+  const firstFailure = new Error('RETAINED_FIRST_ADMISSION_REJECTED');
+  const network = await networkFixture(async ({ route }) => {
+    if (route === '/functions/v1/process-command') throw firstFailure;
+    await secondGate;
+    secondSettled = true;
+    return { actionId: 'later-admission' };
+  });
+  const first = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  const second = { url: () => `${backendOrigin}/functions/v1/tenant-session`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', first);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('request', second);
+  await new Promise(resolve => setImmediate(resolve));
+  let settlement = null;
+  const settled = network.lifecycle.settleActionAdmissions().then(
+    () => { settlement = { state: 'fulfilled' }; },
+    error => { settlement = { state: 'rejected', error }; },
+  );
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settlement, null);
+  assert.equal(secondSettled, false);
+  releaseSecond({ actionId: 'later-admission' });
+  await settled;
+  assert.equal(secondSettled, true);
+  assert.equal(settlement.state, 'rejected');
+  assert.equal(settlement.error, firstFailure);
+});
+
 test('actor boundary joins every pending admission before reporting the first rejection', async () => {
   let rejectFirst;
   let releaseSecond;

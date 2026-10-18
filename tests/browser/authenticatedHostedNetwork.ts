@@ -70,25 +70,49 @@ export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
 }>) => {
   const deadline = Date.now() + 15_000;
   let stableEmptyObservations = 0;
+  let firstFailure: unknown;
+  let hasFailure = false;
+  const retainFailure = async (operation: () => Promise<void>) => {
+    try { await operation(); }
+    catch (error) {
+      if (!hasFailure) {
+        firstFailure = error;
+        hasFailure = true;
+      }
+    }
+  };
   for (;;) {
-    await settleActionAdmissions();
-    await settleResponseBodies();
-    await drainNetworkActions();
-    await settleActionAdmissions();
-    await settleResponseBodies();
+    await retainFailure(settleActionAdmissions);
+    await retainFailure(settleResponseBodies);
+    await retainFailure(drainNetworkActions);
+    await retainFailure(settleActionAdmissions);
+    await retainFailure(settleResponseBodies);
     const activeActions = activeActionCount();
     const expired = Date.now() >= deadline;
     if (activeActions === 0) {
       if (expired) {
-        throw new Error(stableEmptyObservations === 0
-          ? 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE'
-          : 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_STABILITY_AFTER_DEADLINE');
+        if (!hasFailure) {
+          firstFailure = new Error(stableEmptyObservations === 0
+            ? 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE'
+            : 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_STABILITY_AFTER_DEADLINE');
+          hasFailure = true;
+        }
+        throw firstFailure;
       }
       stableEmptyObservations += 1;
-      if (stableEmptyObservations >= 2) return;
+      if (stableEmptyObservations >= 2) {
+        if (hasFailure) throw firstFailure;
+        return;
+      }
     } else {
       stableEmptyObservations = 0;
-      if (expired) throw new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT');
+      if (expired) {
+        if (!hasFailure) {
+          firstFailure = new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT');
+          hasFailure = true;
+        }
+        throw firstFailure;
+      }
     }
     await waitForNextObservation();
   }
@@ -192,29 +216,30 @@ export const installAuthenticatedHostedNetwork = async ({
       }
     }
   };
+  let firstActionAdmissionFailure: unknown;
+  let actionAdmissionFailed = false;
   const ownActionAdmission = <T>(operation: Promise<T>) => {
     actionAdmissions.add(operation);
     void operation.then(
       () => { actionAdmissions.delete(operation); },
-      () => { actionAdmissions.delete(operation); },
+      error => {
+        actionAdmissions.delete(operation);
+        if (!actionAdmissionFailed) {
+          firstActionAdmissionFailure = error;
+          actionAdmissionFailed = true;
+        }
+      },
     );
     return operation;
   };
   const settleActionAdmissions = async () => {
-    let firstFailure: unknown;
-    let failed = false;
     for (;;) {
       const snapshot = [...actionAdmissions];
       if (snapshot.length === 0) {
-        if (failed) throw firstFailure;
+        if (actionAdmissionFailed) throw firstActionAdmissionFailure;
         return;
       }
-      for (const outcome of await Promise.allSettled(snapshot)) {
-        if (outcome.status === 'rejected' && !failed) {
-          firstFailure = outcome.reason;
-          failed = true;
-        }
-      }
+      await Promise.allSettled(snapshot);
     }
   };
   const startProductAction = (request: Request) => {

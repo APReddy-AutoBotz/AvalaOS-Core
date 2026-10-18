@@ -76,6 +76,72 @@ const dispatchToLocalProxy = async (route: Route) => {
   await route.continue();
 };
 
+test('anonymous business actions retain their rejected admission inside an isolated network lifecycle', async ({ context, page }, testInfo) => {
+  const projectName = testInfo.project.name;
+  await authenticatedLifecycleControl('/control/setup', { projectName });
+  let networkActionError: unknown = null;
+  let networkActionTail: Promise<unknown> = Promise.resolve();
+  const queueNetworkAction = (operation: () => Promise<unknown>) => {
+    networkActionTail = networkActionTail.then(operation).catch(error => {
+      if (!networkActionError) networkActionError = error;
+    });
+  };
+  const tracker = new AuthenticatedHostedBrowserActionTracker({
+    backendOrigin: apiOrigin,
+    appOrigin,
+    startAction: input => authenticatedLifecycleControl<{ actionId: string }>('/control/browser-action-start', {
+      projectName, ...input,
+    }),
+    finishAction: input => authenticatedLifecycleControl('/control/browser-action', { projectName, ...input }),
+  });
+  const proxiedOrigins: string[] = [];
+  const networkLifecycle = await installAuthenticatedHostedNetwork({
+    context,
+    hosted: true,
+    allowedOrigins: new Set([appOrigin, apiOrigin]),
+    tracker,
+    queueNetworkAction,
+    onExternalRequest: () => undefined,
+    onHttpRequest: () => undefined,
+    onTrackerError: error => { if (!networkActionError) networkActionError = error; },
+    dispatchAllowedRequest: async route => {
+      proxiedOrigins.push(new URL(route.request().url()).origin);
+      await dispatchToLocalProxy(route);
+    },
+  });
+  const anonymousFailure = context.waitForEvent('requestfailed', {
+    predicate: request => request.url() === `${apiOrigin}/functions/v1/process-command`,
+  });
+  const anonymousOutcome = await page.evaluate(async backendOrigin => {
+    try {
+      await fetch(`${backendOrigin}/functions/v1/process-command`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commandType: 'process.update' }),
+      });
+      return 'reached-backend';
+    } catch { return 'blocked-before-backend'; }
+  }, apiOrigin);
+  expect(anonymousOutcome).toBe('blocked-before-backend');
+  await anonymousFailure;
+  await expect(networkLifecycle.settleActionAdmissions())
+    .rejects.toThrow('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
+  await expect(networkLifecycle.settleActionAdmissions())
+    .rejects.toThrow('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
+  await networkLifecycle.settleResponseBodies();
+  for (;;) {
+    const current = networkActionTail;
+    await current;
+    if (current === networkActionTail) break;
+  }
+  expect(networkActionError).toBeInstanceOf(Error);
+  expect((networkActionError as Error).message).toBe('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
+  expect(proxiedOrigins).toEqual([]);
+  const anonymousObservation = await authenticatedLifecycleControl<{
+    actions: unknown[]; anonymousProcessCommandRequests: number;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(anonymousObservation.actions).toEqual([]);
+  expect(anonymousObservation.anonymousProcessCommandRequests).toBe(0);
+});
+
 test('actual application uses the shared real-auth helper for rejected, cold and cached sign-in', async ({ context, page }, testInfo) => {
   const containmentProbe = await context.newPage();
   try {
@@ -217,29 +283,6 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /Evaluate before you automate/u })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
-
-  const anonymousFailure = context.waitForEvent('requestfailed', {
-    predicate: request => request.url() === `${apiOrigin}/functions/v1/process-command`,
-  });
-  const anonymousOutcome = await page.evaluate(async backendOrigin => {
-    try {
-      await fetch(`${backendOrigin}/functions/v1/process-command`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ commandType: 'process.update' }),
-      });
-      return 'reached-backend';
-    } catch { return 'blocked-before-backend'; }
-  }, apiOrigin);
-  expect(anonymousOutcome).toBe('blocked-before-backend');
-  await anonymousFailure;
-  await networkActionTail;
-  expect(networkActionError).toBeInstanceOf(Error);
-  expect((networkActionError as Error).message).toBe('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_SESSION_REJECTED');
-  networkActionError = null;
-  const anonymousObservation = await authenticatedLifecycleControl<{
-    actions: unknown[]; anonymousProcessCommandRequests: number;
-  }>('/control/sign-in-entry-observation', { projectName });
-  expect(anonymousObservation.actions).toEqual([]);
-  expect(anonymousObservation.anonymousProcessCommandRequests).toBe(0);
 
   const foreignFailure = context.waitForEvent('requestfailed', {
     predicate: request => request.url() === 'https://foreign.example/functions/v1/process-command',
@@ -533,7 +576,10 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   } });
   if (scopedNavigationOnly) {
     type DeliveryTaskGate = {
-      mode: string; waiting: number; requests: number; completed: number; held: number;
+      mode: string; waiting: number; requests: number; completed: number; terminal: number;
+      committed: number; aborted: number; terminalSignals: number; duplicateTerminalSignals: number;
+      terminalOutcomes: Array<{ outcome: 'committed' | 'aborted'; status: number | null }>;
+      held: number;
       actors: string[]; authorityVersions: number[];
     };
     const deliveryTaskGate = (action: 'hold-next' | 'release' | 'reject' | 'inspect') =>
@@ -640,6 +686,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     }
 
     const beforeAuthoritySwitch = await deliveryTaskGate('inspect');
+    const latePriorAuthorityResponseResult = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      if (url.origin !== apiOrigin || url.pathname !== '/functions/v1/legacy-delivery-query'
+        || response.request().method() !== 'POST' || response.status() !== 503) return false;
+      try {
+        return response.request().postDataJSON()?.expectedAuthorizationVersion === 1;
+      } catch {
+        return false;
+      }
+    }).then(
+      response => ({ response, error: null }),
+      error => ({ response: null, error }),
+    );
     await deliveryTaskGate('hold-next');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(async () => {
@@ -683,10 +742,21 @@ test('actual application uses the shared real-auth helper for rejected, cold and
         exactlyOnePending: true, actorsAreReviewer: true, versionsAreScoped: true,
         currentAuthorityObserved: true,
       });
-      await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
       await deliveryTaskGate('reject');
       priorAuthorityReleased = true;
+      const latePriorAuthorityResult = await latePriorAuthorityResponseResult;
+      if (latePriorAuthorityResult.error) throw latePriorAuthorityResult.error;
+      const latePriorAuthorityResponse = latePriorAuthorityResult.response;
+      if (!latePriorAuthorityResponse) {
+        throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_RESPONSE_NOT_COMMITTED');
+      }
+      expect(await latePriorAuthorityResponse.finished()).toBeNull();
+      expect(latePriorAuthorityResponse.status()).toBe(503);
+      expect(await latePriorAuthorityResponse.json()).toEqual({ ok: false, error: {
+        code: 'QUERY_UNAVAILABLE', message: 'Delivery data could not be loaded.',
+      } });
+      await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Edit process details', exact: true })).toBeDisabled();
     } finally {
       if (!priorAuthorityReleased) await deliveryTaskGate('reject').catch(() => undefined);
     }
@@ -708,6 +778,15 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       settled: true, actorsAreReviewer: true, versionsAreScoped: true, currentAuthorityObserved: true,
     });
     const settledAuthority = await deliveryTaskGate('inspect');
+    const requestDelta = settledAuthority.requests - beforeAuthoritySwitch.requests;
+    const completedDelta = settledAuthority.completed - beforeAuthoritySwitch.completed;
+    const terminalDelta = settledAuthority.terminal - beforeAuthoritySwitch.terminal;
+    const committedDelta = settledAuthority.committed - beforeAuthoritySwitch.committed;
+    const abortedDelta = settledAuthority.aborted - beforeAuthoritySwitch.aborted;
+    if (requestDelta < 2 || completedDelta !== requestDelta || terminalDelta !== requestDelta
+      || committedDelta !== requestDelta || abortedDelta !== 0) {
+      throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_RESPONSE_NOT_COMMITTED');
+    }
     const observedAuthorityVersions = settledAuthority.authorityVersions
       .slice(beforeAuthoritySwitch.authorityVersions.length);
     await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
@@ -735,8 +814,13 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       deliveryErrorVisibleAfterCurrentAuthorityTaskFailure: true,
       latePriorAuthorityResponseReleasedWithoutVisibleError: true,
       sameActorAuthorizationVersionRefresh: true,
-      authorityRefreshRequestCount: settledAuthority.requests - beforeAuthoritySwitch.requests,
-      authorityRefreshCompletedCount: settledAuthority.completed - beforeAuthoritySwitch.completed,
+      authorityRefreshRequestCount: requestDelta,
+      authorityRefreshCompletedCount: completedDelta,
+      authorityRefreshTerminalCount: terminalDelta,
+      authorityRefreshCommittedCount: committedDelta,
+      authorityRefreshAbortedCount: abortedDelta,
+      latePriorAuthorityResponseStatus: 503,
+      latePriorAuthorityResponseCommitted: true,
       authorityRefreshObservedVersions: observedAuthorityVersions,
       serverFrameUnchanged: true,
       restrictedEditorRemainedDisabled: true,

@@ -17,6 +17,61 @@ import {
   startAuthenticatedHostedSignInEntryTlsBridge,
 } from './testAuthenticatedHostedSignInEntry.mjs';
 
+const BACKEND_HOST = 'abcdefghijklmnopqrst.supabase.co';
+
+const waitFor = async (operation, predicate, message) => {
+  const deadline = Date.now() + 2_000;
+  let value;
+  while (Date.now() < deadline) {
+    value = await operation();
+    if (predicate(value)) return value;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.fail(`${message}:${JSON.stringify(value)}`);
+};
+
+const startTlsDeliveryRequest = async ({ bridge, ca, accessToken, body }) => {
+  const proxy = new URL(bridge.origin);
+  const socket = await new Promise((resolve, reject) => {
+    const candidate = connect({ host: proxy.hostname, port: Number(proxy.port) }, () => {
+      candidate.write(`CONNECT ${BACKEND_HOST}:443 HTTP/1.1\r\nHost: ${BACKEND_HOST}:443\r\n\r\n`);
+    });
+    candidate.once('error', reject);
+    candidate.once('data', data => {
+      assert.match(data.toString(), /200 Connection Established/u);
+      resolve(candidate);
+    });
+  });
+  const encoded = JSON.stringify(body);
+  const tls = connectTls({ socket, ca, servername: 'localhost' });
+  const response = new Promise(resolve => {
+    const chunks = [];
+    let ended = false;
+    tls.on('data', data => chunks.push(data));
+    tls.once('end', () => { ended = true; });
+    tls.once('close', () => resolve({ ended, raw: Buffer.concat(chunks).toString() }));
+  });
+  await new Promise((resolve, reject) => {
+    tls.once('secureConnect', resolve);
+    tls.once('error', reject);
+  });
+  tls.write(`POST /functions/v1/legacy-delivery-query HTTP/1.1\r\nHost: ${BACKEND_HOST}\r\nAuthorization: Bearer ${accessToken}\r\napikey: sb_publishable_authenticated_hosted_sign_in_entry\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(encoded)}\r\nConnection: close\r\n\r\n${encoded}`);
+  return { response, tls };
+};
+
+const assertCommittedDeliverySettlement = (before, after) => {
+  const requests = after.requests - before.requests;
+  const completed = after.completed - before.completed;
+  const terminal = after.terminal - before.terminal;
+  const committed = after.committed - before.committed;
+  const aborted = after.aborted - before.aborted;
+  if (requests < 1 || terminal !== requests || completed !== requests
+    || committed !== requests || aborted !== 0) {
+    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_RESPONSE_NOT_COMMITTED');
+  }
+  return { requests, completed, terminal, committed, aborted };
+};
+
 test('local TLS bridge preserves requests, rejects other targets/redirects and closes owned tunnels', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'avalaos-bridge-test-'));
   let requests = 0;
@@ -93,6 +148,132 @@ test('local TLS bridge preserves requests, rejects other targets/redirects and c
     assert(path.basename(directory).startsWith('avalaos-bridge-test-'));
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('held Delivery responses record one committed or aborted terminal outcome through real TLS', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'avalaos-delivery-terminal-test-'));
+  let fixture;
+  let bridge;
+  let primaryFailure = null;
+  try {
+    fixture = await startAuthenticatedHostedSignInEntryFixture();
+    bridge = await startAuthenticatedHostedSignInEntryTlsBridge({
+      directory, appBaseUrl: fixture.baseUrl, apiBaseUrl: fixture.baseUrl,
+    });
+    const ca = await readFile(path.join(directory, 'loopback-cert.pem'));
+    const control = async (pathname, body) => {
+      const response = await fetch(`${fixture.controlBaseUrl}${pathname}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const prepare = async projectName => {
+      const setup = await control('/control/setup', { projectName });
+      const signIn = await fetch(`${fixture.baseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: `reviewer.${projectName}@local.invalid`, password: 'synthetic-reviewer-password',
+        }),
+      });
+      assert.equal(signIn.status, 200);
+      const session = await signIn.json();
+      return {
+        accessToken: session.access_token,
+        body: {
+          schemaVersion: 'legacy-delivery-query.v1',
+          organizationId: AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.organizationId,
+          workspaceId: AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE.workspaceId,
+          expectedAuthorizationVersion: 1,
+          projectId: setup.deliveryProject.id,
+          limit: 100,
+          cursor: null,
+          sourceGenerationId: null,
+          includeRetained: true,
+        },
+      };
+    };
+    const inspect = projectName => control('/control/sign-in-entry-delivery-task-gate', {
+      projectName, action: 'inspect',
+    });
+    const gate = (projectName, action) => control('/control/sign-in-entry-delivery-task-gate', {
+      projectName, action,
+    });
+    const abortedProject = 'desktop-chromium';
+    const abortedInput = await prepare(abortedProject);
+    const abortedBefore = await inspect(abortedProject);
+    await gate(abortedProject, 'hold-next');
+    const abortedExchange = await startTlsDeliveryRequest({ bridge, ca, ...abortedInput });
+    try {
+      await waitFor(() => inspect(abortedProject), value => value.mode === 'held' && value.waiting === 1,
+        'DELIVERY_ABORTED_REQUEST_NOT_HELD');
+    } catch (error) {
+      const early = await Promise.race([
+        abortedExchange.response,
+        new Promise(resolve => setTimeout(() => resolve(null), 250)),
+      ]);
+      if (early) {
+        const status = /^HTTP\/1[.]1 ([0-9]{3})/u.exec(early.raw)?.[1] ?? 'missing';
+        const category = early.raw.includes('INVALID_COMMAND') ? 'INVALID_COMMAND'
+          : early.raw.includes('AUTHENTICATION_REQUIRED') ? 'AUTHENTICATION_REQUIRED' : 'UNKNOWN';
+        throw new Error(`DELIVERY_ABORTED_REQUEST_EARLY_RESPONSE:${status}:${category}`, { cause: error });
+      }
+      throw error;
+    }
+    abortedExchange.tls.destroy();
+    const disconnected = await abortedExchange.response;
+    assert.equal(disconnected.ended, false);
+    const abortedTerminal = await waitFor(() => inspect(abortedProject),
+      value => value.terminal === abortedBefore.terminal + 1 && value.completed === abortedBefore.completed
+        && value.aborted === abortedBefore.aborted + 1,
+      'DELIVERY_ABORTED_TERMINAL_OUTCOME_MISSING');
+    await gate(abortedProject, 'release');
+    await waitFor(() => inspect(abortedProject), value => value.mode === 'open' && value.waiting === 0,
+      'DELIVERY_ABORTED_HANDLER_NOT_RELEASED');
+    assert.throws(() => assertCommittedDeliverySettlement(abortedBefore, abortedTerminal),
+      /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_DELIVERY_RESPONSE_NOT_COMMITTED/u);
+
+    const committedProject = 'pixel-7-chromium';
+    const committedInput = await prepare(committedProject);
+    const committedBefore = await inspect(committedProject);
+    await gate(committedProject, 'hold-next');
+    const committedExchange = await startTlsDeliveryRequest({ bridge, ca, ...committedInput });
+    await waitFor(() => inspect(committedProject), value => value.mode === 'held' && value.waiting === 1,
+      'DELIVERY_COMMITTED_REQUEST_NOT_HELD');
+    await gate(committedProject, 'reject');
+    const connected = await committedExchange.response;
+    assert.equal(connected.ended, true);
+    assert.match(connected.raw, /HTTP\/1[.]1 503 Service Unavailable/u);
+    assert.match(connected.raw, /QUERY_UNAVAILABLE/u);
+    const committedTerminal = await waitFor(() => inspect(committedProject), value =>
+      value.completed === committedBefore.completed + 1 && value.committed === committedBefore.committed + 1
+        && value.terminalSignals >= committedBefore.terminalSignals + 2,
+    'DELIVERY_COMMITTED_TERMINAL_OUTCOME_MISSING');
+    assert.deepEqual(assertCommittedDeliverySettlement(committedBefore, committedTerminal), {
+      requests: 1, completed: 1, terminal: 1, committed: 1, aborted: 0,
+    });
+    assert.equal(committedTerminal.duplicateTerminalSignals - committedBefore.duplicateTerminalSignals, 1,
+      'finish plus close must publish one terminal outcome');
+  } catch (error) {
+    primaryFailure = error;
+  }
+  const cleanupErrors = [];
+  try { if (bridge) assert.equal(await bridge.close(), true); } catch (error) { cleanupErrors.push(error); }
+  try { if (fixture) assert.equal(await fixture.close(), true); } catch (error) { cleanupErrors.push(error); }
+  try {
+    assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+    assert(path.basename(directory).startsWith('avalaos-delivery-terminal-test-'));
+    await rm(directory, { recursive: true, force: true });
+  } catch (error) { cleanupErrors.push(error); }
+  if (primaryFailure) {
+    if (cleanupErrors.length) Object.defineProperty(primaryFailure, 'cause', {
+      value: new AggregateError(cleanupErrors, 'DELIVERY_TERMINAL_TEST_CLEANUP_FAILED'), configurable: true,
+    });
+    throw primaryFailure;
+  }
+  if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'DELIVERY_TERMINAL_TEST_CLEANUP_FAILED');
 });
 
 test('child environment admits only operational keys plus explicit synthetic overrides', () => {

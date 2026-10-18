@@ -14,6 +14,7 @@ import {
 import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
 import { AuthenticatedHostedController } from './authenticatedHostedController.mjs';
 import {
+  closeAndSummarizeV2FullPrefixLocalController,
   createV2FullPrefixAdapterQuery,
   validateV2FullPrefixFixturePrerequisites,
 } from './v2FullPrefixLocalController.mjs';
@@ -57,6 +58,62 @@ const passing = variant => ({
     contractSatisfied: true,
   },
   network: { observedHttpRequests: 30, nonLoopbackRequests: 0 },
+});
+
+test('native controller summary is read only after terminal close joins accepted work', async () => {
+  let releaseClose;
+  const closeGate = new Promise(resolve => { releaseClose = resolve; });
+  let closeJoined = false;
+  let summaryCalls = 0;
+  const terminalPromise = closeAndSummarizeV2FullPrefixLocalController({
+    close: async () => {
+      await closeGate;
+      closeJoined = true;
+    },
+    projectSummary: projectName => {
+      summaryCalls += 1;
+      assert.equal(projectName, 'desktop-chromium-immediate');
+      assert.equal(closeJoined, true);
+      return { actionCount: 1, completedActionCount: 1, contractSatisfied: true };
+    },
+  }, 'desktop-chromium-immediate');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(summaryCalls, 0);
+  releaseClose();
+  const terminal = await terminalPromise;
+  assert.equal(terminal.cleanup, 'passed');
+  assert.equal(terminal.cleanupError, null);
+  assert.deepEqual(terminal.controller, {
+    actionCount: 1, completedActionCount: 1, contractSatisfied: true,
+  });
+});
+
+test('native controller close failure retains a best-effort incomplete summary without success', async () => {
+  const firstFailure = new Error('TERMINAL_CONTROLLER_CLOSE_REJECTED');
+  let acceptedWorkJoined = false;
+  const terminal = await closeAndSummarizeV2FullPrefixLocalController({
+    close: async () => {
+      acceptedWorkJoined = true;
+      throw firstFailure;
+    },
+    projectSummary: () => {
+      assert.equal(acceptedWorkJoined, true);
+      return {
+        ...passing('immediate').controller,
+        actionCount: 20,
+        completedActionCount: 19,
+        contractSatisfied: false,
+      };
+    },
+  }, 'desktop-chromium-immediate');
+  assert.equal(terminal.cleanup, 'failed');
+  assert.equal(terminal.cleanupError, firstFailure);
+  assert.equal(terminal.controller.actionCount, 20);
+  assert.equal(terminal.controller.completedActionCount, 19);
+  const candidate = passing('immediate');
+  candidate.cleanup = terminal.cleanup;
+  candidate.controller = terminal.controller;
+  assert.equal(buildV2FullPrefixVariantResult(candidate).status, 'failed');
 });
 
 test('an immediate failure is retained while the fresh barrier comparison still runs', async () => {

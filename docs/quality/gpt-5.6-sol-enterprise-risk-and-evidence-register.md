@@ -1,5 +1,15 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Terminal acceptance evidence integrity (2026-10-18)
+
+- **Executed evidence:** PR #314 candidate passed all 52 applicable checks and independent browser/EI/native validation; merged `943c0721` has the identical tree. Release Core CI and Legacy Delivery passed. Acceptance Preparation `39128128853`, attempt 1, failed: immediate native 13 cases with 130/131 actions complete; barrier 13 cases with 160/160 complete; both cleanups passed. Desktop scoped navigation retained only `settled=false`; Pixel passed. The 94-case browser release gate was not run.
+- **Confirmed source defects:** primary teardown drains queues without joining all admission/body phases; native teardown omits admission settlement; native controller summary precedes accepted-operation join; already-settled admission rejection can be forgotten; held Delivery fixture responses register finish-only accounting after the hold.
+- **Suspected defect requiring deeper validation:** missed terminal browser work, stale pre-close summary or uncommitted held response may explain the release failures. The artifacts cannot identify the historical mechanism. The TLS bridge's existing 30-second bound is a plausible abort source, not proven causation.
+- **Planned verification:** faithful held-admission/disposal and pre-close/post-join comparisons; rejection-before-boundary negative; actual HTTP held-response connected/abort controls; corrected Desktop/Pixel scoped navigation and both complete native variants. Retain 15s/30s/300s lifecycle budgets and the existing fixture limits. Cancellation never substitutes for required late-response commitment.
+- **Readiness boundary:** repository corrections promote no hosted cases. Original totals remain 61 PASS / 47 BLOCKED; providers OFF and previous cleanup verified. No new hosted, backend, production or paid authority. Rollback reverts this coherent fixture/lifecycle slice and closes owned resources while preserving failed evidence.
+
+- **Executed correction preparation:** classifier 22/22, lifecycle 27/27, native summary 11/11 and real TLS fixture 10/10 passed; actual Chromium proves terminal joining and durable rejection. The initial actual-app attempt stopped before Delivery because the intentionally rejected anonymous probe reused a now-durable failed lifecycle. Isolating that negative in its own context preserves the rejection. Corrected Desktop/Pixel execution passed all four checks, including the actual committed late response and zero aborts; main journeys took 24.0s/20.3s with unchanged limits. Typecheck and owned cleanup passed. Exact-candidate composed native/browser/CI and release evidence remain pending. No local result establishes historical hosted causation.
+
 ## Primary actor-entry boundary after PR #313 (2026-10-18)
 
 - **Executed evidence:** run `39116998418`, attempt 1, on merged `e803d563` independently retains 61 PASS / 47 BLOCKED, 36 passing public/Sandbox executions and verified cleanup/providers OFF/owned-main removal. No new hosted allowance remains.
