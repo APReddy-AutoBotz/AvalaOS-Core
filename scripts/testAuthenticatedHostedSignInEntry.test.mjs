@@ -166,8 +166,12 @@ test('an aborted late arm request can leave an armed permit until authoritative 
     assert.deepEqual(observation.permits.map(permit => ({ state: permit.state, consumed: permit.consumed })), [
       { state: 'armed', consumed: 0 },
     ]);
-    assert.equal(await fixture.close(), true);
+    const closing = fixture.close();
+    assert.equal(fixture.close(), closing, 'concurrent close must join the same cleanup');
+    assert.equal(await closing, true);
     closed = true;
+    await assert.rejects(fetch(`${fixture.controlBaseUrl}/health`), /fetch failed/iu);
+    await assert.rejects(fetch(`${fixture.baseUrl}/health`), /fetch failed/iu);
   } finally {
     if (!closed) await fixture.close().catch(() => undefined);
   }

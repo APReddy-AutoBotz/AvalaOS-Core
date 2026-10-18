@@ -1033,7 +1033,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     await new Promise(resolve => apiServer.close(() => resolve()));
     throw error;
   }
-  let closed = false;
+  let closing;
   return {
     baseUrl,
     backendOrigin: BACKEND_ORIGIN,
@@ -1046,13 +1046,30 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     exerciseDigest: EXERCISE_DIGEST,
     targetFingerprint: TARGET_FINGERPRINT,
     publicTargetDigest: PUBLIC_TARGET_DIGEST,
-    async close() {
-      if (closed) return true;
-      closed = true;
-      await controller.abortAndQuiesce();
-      await controlServer.close();
-      await new Promise((resolve, reject) => apiServer.close(error => error ? reject(error) : resolve()));
-      return true;
+    close() {
+      if (closing) return closing;
+      closing = (async () => {
+        // Fixture gates model delayed dependencies, so release them only after
+        // intake stops and before the controller joins its accepted work.
+        controller.stopControlIntake();
+        for (const projectName of AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS) {
+          releaseObserveGate(projectName);
+          releaseArmGate(projectName);
+          releaseDeliveryTaskGate(projectName);
+          releaseAssessmentGate(projectName, 'reject-finalize');
+        }
+        const errors = [];
+        const attempt = async operation => {
+          try { await operation(); } catch (error) { errors.push(error); }
+        };
+        await attempt(() => controlServer.close());
+        await attempt(() => controller.abortAndQuiesce());
+        await attempt(() => new Promise((resolve, reject) =>
+          apiServer.close(error => error ? reject(error) : resolve())));
+        if (errors.length) throw new AggregateError(errors, 'AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
+        return true;
+      })();
+      return closing;
     },
   };
 };
