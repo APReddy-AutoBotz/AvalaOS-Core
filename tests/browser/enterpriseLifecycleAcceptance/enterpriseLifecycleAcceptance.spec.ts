@@ -685,20 +685,25 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
   test.afterEach(async ({}, testInfo) => {
     const owningTestWorkQueues = activeTestWorkQueues;
+    const owningNetworkLifecycle = activeNetworkLifecycle;
     let boundaryFailure: unknown = null;
     let hasBoundaryFailure = false;
-    if (owningTestWorkQueues) {
+    const retainBoundaryFailure = (error: unknown) => {
+      if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+    };
+    if (owningTestWorkQueues && owningNetworkLifecycle) {
       await new Promise(resolve => setTimeout(resolve, 0));
       await test.step('hosted:queue:teardown', async () => {
-        for (const [title, queue] of [
-          ['hosted:queue:network-drain', owningTestWorkQueues.network],
-          ['hosted:queue:case-drain', owningTestWorkQueues.cases],
-        ] as const) {
-          try { await test.step(title, () => queue.drain()); }
-          catch (error) {
-            if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
-          }
-        }
+        try {
+          await settleActorNavigationBoundary({
+            settleActionAdmissions: owningNetworkLifecycle.settleActionAdmissions,
+            settleResponseBodies: owningNetworkLifecycle.settleResponseBodies,
+            drainNetworkActions: () => test.step('hosted:queue:network-drain', () => owningTestWorkQueues.network.drain()),
+            activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,
+          });
+        } catch (error) { retainBoundaryFailure(error); }
+        try { await test.step('hosted:queue:case-drain', () => owningTestWorkQueues.cases.drain()); }
+        catch (error) { retainBoundaryFailure(error); }
       });
     }
     if (hasBoundaryFailure) failed = true;

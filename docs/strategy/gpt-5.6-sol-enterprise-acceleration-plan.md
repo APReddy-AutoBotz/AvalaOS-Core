@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Terminal acceptance settlement (2026-10-18)
+
+PR #314 is merged with an identical candidate/release tree and all candidate gates passed, but its release preparation failed: immediate native actions 130/131 complete, barrier 160/160, both cleanups passed; Desktop scoped response settlement failed while Pixel passed. The connected-browser release gate did not run. Hosted acceptance remains 61 PASS / 47 BLOCKED and its allowance is consumed.
+
+All three read-only reviewers completed before writes. Root synthesized the findings and entered the fixed managed workspace-write phase on `codex/acceptance-terminal-settlement`, based on merged `943c0721`. One implementation worker owns terminal browser/admission/controller settlement; a second owns the existing sign-in fixture's response lifecycle and scoped-navigation proof. Root owns canonical documents, bindings, integration, exact verification and one substantial PR. No nested delegation or concurrent reviewer activity during writes.
+
+First reproduce the ownership and response-accounting gaps, then correct the demonstrated behavior. Reuse the existing settlement boundary rather than creating a new lifecycle framework. Preserve original session/scope/version checks, every independent frame, 108 criteria and all timeout budgets. A stale response that aborts must fail the required committed late-response proof. Keep earlier failures and uncertainty about historical causation. Verify focused source/fixture behavior and existing exact-candidate native/browser/release gates; no unrelated regression campaign, diagnostic-only PR or hosted retry.
+
 ## Primary actor-entry preparation after PR #313 (2026-10-18)
 
 PR #313's verified merged release `e803d563` and approved run `39116998418` retain 61 PASS / 47 BLOCKED. Cleanup and providers OFF are verified; the hosted allowance is consumed. The same guard failure does not establish the underlying cause. Three read-only reviews are complete, and root has authorized one existing-fixture comparison under the fixed workspace-write profile: test primary actor entry, pre-classification ownership and bounded observation latency before selecting a correction. Preserve the 15-second actor, 30-second body and 300-second journey limits, real session verification and independent frames. Do not substitute a longer timeout, smaller acceptance gate or diagnostic-only PR.

@@ -456,3 +456,24 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
 }
 
 export const V2_FULL_PREFIX_EXPECTED_CASES = EXPECTED_PRIMARY_CASES;
+
+export async function closeAndSummarizeV2FullPrefixLocalController(localController, projectName) {
+  if (!localController || typeof localController.close !== 'function'
+    || typeof localController.projectSummary !== 'function' || typeof projectName !== 'string' || !projectName) {
+    throw new Error('V2_FULL_PREFIX_LOCAL_CONTROLLER_REJECTED');
+  }
+  let cleanup = 'passed';
+  let cleanupError = null;
+  try { await localController.close(); }
+  catch (error) {
+    cleanup = 'failed';
+    cleanupError = error;
+  }
+  let controller = null;
+  try { controller = localController.projectSummary(projectName); }
+  catch (error) {
+    cleanup = 'failed';
+    cleanupError ??= error;
+  }
+  return Object.freeze({ cleanup, cleanupError, controller });
+}

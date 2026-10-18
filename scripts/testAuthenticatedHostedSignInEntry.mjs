@@ -112,6 +112,30 @@ const sendJson = (outgoing, status, value) => {
   outgoing.end(value === undefined ? '' : JSON.stringify(value));
 };
 
+const observeDeliveryResponseTerminal = (outgoing, gate) => {
+  let outcome = null;
+  const observe = signal => {
+    gate.terminalSignals += 1;
+    if (outcome !== null) {
+      gate.duplicateTerminalSignals += 1;
+      return;
+    }
+    const committed = signal === 'finish' || (signal === 'close' && outgoing.writableFinished);
+    outcome = committed ? 'committed' : 'aborted';
+    gate.terminal += 1;
+    if (committed) gate.completed += 1;
+    gate[outcome] += 1;
+    gate.terminalOutcomes.push({ outcome, status: committed ? outgoing.statusCode : null });
+  };
+  // Register every terminal signal before a controlled hold. A normal response
+  // emits finish then close; the first signal owns the outcome and later
+  // signals are evidence of idempotence, never another completion.
+  outgoing.on('finish', () => observe('finish'));
+  outgoing.on('close', () => observe('close'));
+  outgoing.on('error', () => observe('error'));
+  return { outcome: () => outcome };
+};
+
 const tokenFor = (actorId, sessionId) => `${Buffer.from('{}').toString('base64url')}.${
   Buffer.from(JSON.stringify({ sub: actorId, session_id: sessionId })).toString('base64url')}.${'x'.repeat(48)}`;
 const personaDefinition = Object.freeze({
@@ -205,6 +229,12 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     waiters: [],
     requests: 0,
     completed: 0,
+    terminal: 0,
+    committed: 0,
+    aborted: 0,
+    terminalSignals: 0,
+    duplicateTerminalSignals: 0,
+    terminalOutcomes: [],
     held: 0,
     actors: [],
     authorityVersions: [],
@@ -463,12 +493,13 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         gate.requests += 1;
         gate.actors.push(identity.persona);
         gate.authorityVersions.push(body.expectedAuthorizationVersion);
+        const terminal = observeDeliveryResponseTerminal(outgoing, gate);
         if (gate.mode === 'hold-next') {
           gate.mode = 'held';
           gate.held += 1;
           await new Promise(resolve => gate.waiters.push(resolve));
         }
-        outgoing.once('finish', () => { gate.completed += 1; });
+        if (terminal.outcome() === 'aborted') return;
         if (gate.rejectRemaining > 0) {
           gate.rejectRemaining -= 1;
           return sendJson(outgoing, 503, { ok: false, error: {
@@ -893,6 +924,12 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
           waiting: gate.waiters.length,
           requests: gate.requests,
           completed: gate.completed,
+          terminal: gate.terminal,
+          committed: gate.committed,
+          aborted: gate.aborted,
+          terminalSignals: gate.terminalSignals,
+          duplicateTerminalSignals: gate.duplicateTerminalSignals,
+          terminalOutcomes: gate.terminalOutcomes.map(outcome => ({ ...outcome })),
           held: gate.held,
           actors: [...gate.actors],
           authorityVersions: [...gate.authorityVersions],

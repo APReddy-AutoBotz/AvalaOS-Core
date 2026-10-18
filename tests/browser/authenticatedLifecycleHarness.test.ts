@@ -79,6 +79,47 @@ test('actor-entry boundary retains a started request until its headers and owned
   assert.equal(bodySettles, 8);
 });
 
+test('terminal settlement retains the first admission failure while joining body and action cleanup', async () => {
+  const firstFailure = new Error('TERMINAL_ADMISSION_REJECTED');
+  let admissionSettles = 0;
+  let bodySettles = 0;
+  let networkDrains = 0;
+  let observations = 0;
+  await assert.rejects(authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: async () => {
+      admissionSettles += 1;
+      throw firstFailure;
+    },
+    settleResponseBodies: async () => { bodySettles += 1; },
+    drainNetworkActions: async () => { networkDrains += 1; },
+    activeActionCount: () => 0,
+    waitForNextObservation: async () => { observations += 1; },
+  }), error => error === firstFailure);
+  assert.equal(admissionSettles, 4);
+  assert.equal(bodySettles, 4);
+  assert.equal(networkDrains, 2);
+  assert.equal(observations, 1);
+});
+
+test('retained admission failure joins terminal work and prevents the next actor mutation', async () => {
+  const events: string[] = [];
+  const firstFailure = new Error('TERMINAL_ADMISSION_REJECTED');
+  let bodySettles = 0;
+  let networkDrains = 0;
+  await assert.rejects(authenticatedLifecycleEnterAs(actorEntryPage(events), actorEntryFixture, () => (
+    authenticatedLifecycleSettleActorNavigationBoundary({
+      settleActionAdmissions: async () => { throw firstFailure; },
+      settleResponseBodies: async () => { bodySettles += 1; },
+      drainNetworkActions: async () => { networkDrains += 1; },
+      activeActionCount: () => 0,
+      waitForNextObservation: async () => undefined,
+    })
+  )), error => error === firstFailure);
+  assert.equal(bodySettles, 4);
+  assert.equal(networkDrains, 2);
+  assert.deepEqual(events, []);
+});
+
 test('actor boundary rejects a first empty observation sampled after its deadline', async () => {
   const originalNow = Date.now;
   let now = 0;

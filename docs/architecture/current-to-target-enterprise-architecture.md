@@ -1,5 +1,13 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Terminal browser and controller ownership (2026-10-18)
+
+A completed browser assertion or empty serialized callback queue is not a terminal evidence boundary. Request admission, response-body acquisition and controller action completion are separately owned phases. Final test teardown must join them while the owning browser context is alive, preserve the first failure and establish zero accepted outstanding work before disposal. An admission rejection remains a failure even if it settled before the next ownership snapshot.
+
+Native evidence must be captured after controller intake stops and accepted control operations join. Cleanup success does not imply every recorded action completed; the final snapshot still requires exact action balance and all independent case evidence. Do not clear incomplete actions, fabricate transport outcomes or move a stale snapshot into a passing result.
+
+The scoped-navigation fixture must observe response lifecycle before an artificial hold. Successful commitment, premature close and transport error are distinct outcomes. The original proof requires a late prior-authority HTTP response with expected semantics, not cancellation. Release that response after observing the new authority and before later UI assertions, retaining current-authority success, stale-state rejection, restricted editing and unchanged server frames. Existing request, render and test budgets remain fixed. These source findings do not establish the cause of PR #314's intermittent release failures or earlier hosted failures.
+
 ## Primary actor-entry ownership (2026-10-18)
 
 Request classification precedes the existing controller-start counter. A request's asynchronous classification/begin promise therefore needs explicit ownership before the boundary can infer absence of work; a pending controller count alone does not cover that phase. Actor entry also navigates to the root under the old session before clearing storage, even from an existing app-origin document. An actual-app comparison must establish whether that navigation is redundant and whether removing it avoids fresh old-actor work without losing canonical-origin entry or subsequent session verification. Neither source observation proves PR #313's hosted cause.
