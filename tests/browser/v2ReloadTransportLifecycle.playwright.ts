@@ -235,9 +235,12 @@ test.describe('V2 reload transport lifecycle observer', () => {
         expect(stage(completion)).toMatchObject({
           status: 'failed', httpStatus: 200, rowCount: null,
           lifecycle: { requested: 1, responseStarted: 1, completed: 0, transportFailed: 1, pending: 0,
-            bodyCompleted: 0, bodyFailed: 1, bodyPending: 0,
+            bodyCompleted: 0,
             transportFailures: { aborted: 1, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 } },
         });
+        // Snapshot body settlement independently from the terminal transport event.
+        const row = stage(completion)!;
+        expect([[1, 0], [0, 1]]).toContainEqual([row.lifecycle.bodyFailed, row.lifecycle.bodyPending]);
       } finally {
         current.released.resolve();
         if (!observerCompleted) await observer.complete().catch(() => undefined);

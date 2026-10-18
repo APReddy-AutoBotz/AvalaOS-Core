@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export const PROJECTION_POSTGREST_IMAGE = 'public.ecr.aws/supabase/postgrest@sha256:bca3f86f69d8ef7aa1e5ee65e66ce9a20c6c147be637517a7be8399e102901d1';
+export const PROJECTION_POSTGREST_IMAGE = 'postgrest/postgrest@sha256:bca3f86f69d8ef7aa1e5ee65e66ce9a20c6c147be637517a7be8399e102901d1';
 export const PROJECTION_POSTGRES_IMAGE = 'postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685';
 export const PROJECTION_RPC_NAMES = Object.freeze(['enterprise_delivery_workspace_projection', 'enterprise_monitor_approved_baselines_projection']);
 export const PROJECTION_RPC_CORRECTION = '20260916203406_projection_rpc_volatility_authority.sql';

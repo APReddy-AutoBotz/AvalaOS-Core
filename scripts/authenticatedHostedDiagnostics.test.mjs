@@ -16,6 +16,19 @@ const classified = async (stage, error, options) => {
   assert.fail('expected diagnostic failure');
 };
 
+test('owned-work failures retain only fixed safe descriptors', () => {
+  for (const [message, phase, code] of [
+    ['ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE', 'CONTROL_CHANNEL', 'CONTROL_CLEANUP_INCOMPLETE'],
+    ['AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON', 'NETWORK_TRACKER', 'RESPONSE_BODY_INVALID_JSON'],
+    ['AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED', 'NETWORK_TRACKER', 'RESPONSE_BODY_READ_FAILED'],
+    ['AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT', 'NETWORK_TRACKER', 'RESPONSE_BODY_TIMEOUT'],
+    ['AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE', 'NETWORK_TRACKER', 'RESPONSE_BODY_CLEANUP_INCOMPLETE'],
+  ]) {
+    assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(new Error(message)), { phase, code });
+    assert.equal(authenticatedHostedPlaywrightFailureDescriptor(new Error(`${message}:private-detail`)), null);
+  }
+});
+
 test('diagnostics emit only fixed stage and SQLSTATE categories', async () => {
   const secret = 'postgresql://service-role:do-not-emit@example.invalid/postgres';
   const error = Object.assign(new Error(`connection failed ${secret}`), { code: '28P01', detail: secret });

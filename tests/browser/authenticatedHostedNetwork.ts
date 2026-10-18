@@ -1,7 +1,10 @@
-import type { BrowserContext, Request, Route } from '@playwright/test';
+import type { BrowserContext, Page, Request, Route } from '@playwright/test';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 
-type QueueNetworkAction = (operation: () => Promise<unknown>) => void;
+type QueueNetworkAction = (
+  operation: () => Promise<unknown>,
+  ownedWork?: Promise<unknown>,
+) => void;
 
 type InstallAuthenticatedHostedNetworkInput = Readonly<{
   context: BrowserContext;
@@ -13,7 +16,113 @@ type InstallAuthenticatedHostedNetworkInput = Readonly<{
   onHttpRequest: () => void;
   onTrackerError: (error: unknown) => void;
   dispatchAllowedRequest?: (route: Route) => Promise<void>;
+  responseBodyTimeoutMs?: number;
 }>;
+
+export const authenticatedHostedResponseBodyTimeoutMs = 30_000;
+
+// The acceptance browser can observe a 12,000,000-byte payload whose JSON or
+// base64 envelope remains below 16 MiB. Keep at most four such envelopes in
+// Chromium-owned memory while immediate reloads replace the renderer. Nothing
+// is persisted and Playwright remains the sole response-body reader.
+export const authenticatedHostedDurableResponseBodyResourceBytes = 16 * 1024 * 1024;
+export const authenticatedHostedDurableResponseBodyTotalBytes = 64 * 1024 * 1024;
+
+export const authenticatedHostedConfigureChromiumDurableResponseBodies = async (
+  context: BrowserContext,
+  page: Page,
+) => {
+  try {
+    const session = await context.newCDPSession(page);
+    await session.send('Network.enable');
+    await session.send('Network.configureDurableMessages', {
+      maxTotalBufferSize: authenticatedHostedDurableResponseBodyTotalBytes,
+      maxResourceBufferSize: authenticatedHostedDurableResponseBodyResourceBytes,
+    });
+  } catch {
+    throw new Error('AUTHENTICATED_BROWSER_DURABLE_RESPONSE_BODIES_UNAVAILABLE');
+  }
+};
+
+export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
+  settleResponseBodies,
+  drainNetworkActions,
+  activeActionCount,
+  waitForNextObservation = () => new Promise<void>(resolve => setTimeout(resolve, 50)),
+}: Readonly<{
+  settleResponseBodies: () => Promise<void>;
+  drainNetworkActions: () => Promise<void>;
+  activeActionCount: () => number;
+  waitForNextObservation?: () => Promise<void>;
+}>) => {
+  const deadline = Date.now() + 15_000;
+  let stableEmptyObservations = 0;
+  for (;;) {
+    await settleResponseBodies();
+    await drainNetworkActions();
+    await settleResponseBodies();
+    if (activeActionCount() === 0) {
+      stableEmptyObservations += 1;
+      if (stableEmptyObservations >= 2) return;
+    } else {
+      stableEmptyObservations = 0;
+    }
+    if (Date.now() >= deadline) throw new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT');
+    await waitForNextObservation();
+  }
+};
+
+export const readAuthenticatedHostedResponseBody = async (
+  context: BrowserContext,
+  response: Readonly<{ json: () => Promise<unknown> }>,
+  timeoutMs = authenticatedHostedResponseBodyTimeoutMs,
+) => {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > authenticatedHostedResponseBodyTimeoutMs) {
+    throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT_REJECTED');
+  }
+  const body = response.json().then(
+    value => Object.freeze({ state: 'fulfilled' as const, value }),
+    error => Object.freeze({ state: 'rejected' as const, error }),
+  );
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<'expired'>(resolve => {
+    timeoutHandle = setTimeout(() => resolve('expired'), timeoutMs);
+  });
+  const first = await Promise.race([body.then(() => 'body' as const), expired]);
+  if (first === 'body') {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    const settled = await body;
+    if (settled.state === 'rejected') {
+      // Playwright implements Response.json() by awaiting the protocol body and
+      // then calling JSON.parse. Preserve that fixed distinction: malformed or
+      // empty JSON is not a browser transport failure and can never be paired
+      // with requestfailed to manufacture a status-zero success frame.
+      if (settled.error instanceof SyntaxError) {
+        throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_INVALID_JSON');
+      }
+      throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED');
+    }
+    return settled.value;
+  }
+  const closed = context.close({ reason: 'authenticated response body timeout' }).then(
+    () => Object.freeze({ state: 'fulfilled' as const }),
+    () => Object.freeze({ state: 'rejected' as const }),
+  );
+  let cleanupHandle: ReturnType<typeof setTimeout> | undefined;
+  const cleanupExpired = new Promise<'expired'>(resolve => {
+    cleanupHandle = setTimeout(() => resolve('expired'), timeoutMs);
+  });
+  const cleanup = Promise.all([body, closed]);
+  if (await Promise.race([cleanup.then(() => 'settled' as const), cleanupExpired]) === 'expired') {
+    throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE');
+  }
+  if (cleanupHandle !== undefined) clearTimeout(cleanupHandle);
+  const [, closeResult] = await cleanup;
+  if (closeResult.state === 'rejected') {
+    throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_CLEANUP_INCOMPLETE');
+  }
+  throw new Error('AUTHENTICATED_BROWSER_RESPONSE_BODY_TIMEOUT');
+};
 
 const webProtocol = (protocol: string) => protocol === 'http:' || protocol === 'https:';
 const loopback = (hostname: string) => ['127.0.0.1', 'localhost'].includes(hostname);
@@ -31,7 +140,35 @@ export const installAuthenticatedHostedNetwork = async ({
   onHttpRequest,
   onTrackerError,
   dispatchAllowedRequest,
+  responseBodyTimeoutMs = authenticatedHostedResponseBodyTimeoutMs,
 }: InstallAuthenticatedHostedNetworkInput) => {
+  const responseBodies = new Set<Promise<unknown>>();
+  const responseBodyFailures = new Set<Readonly<{ request: Request; error: unknown }>>();
+  const ownResponseBody = <T>(operation: Promise<T>) => {
+    responseBodies.add(operation);
+    void operation.then(
+      () => { responseBodies.delete(operation); },
+      () => { responseBodies.delete(operation); },
+    );
+    return operation;
+  };
+  const settleResponseBodies = async () => {
+    for (;;) {
+      const snapshot = [...responseBodies];
+      if (snapshot.length === 0) break;
+      await Promise.allSettled(snapshot);
+    }
+    // Allow Chromium's paired requestfailed event to be observed before
+    // deciding whether a body-read failure is an explicit transport failure.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    for (const failure of responseBodyFailures) {
+      if (!(failure.error instanceof Error
+        && failure.error.message === 'AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED'
+        && transportFailed.has(failure.request))) {
+        throw failure.error;
+      }
+    }
+  };
   const startProductAction = (request: Request) => {
     if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     return tracker.begin(request);
@@ -40,6 +177,8 @@ export const installAuthenticatedHostedNetwork = async ({
     if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     queueNetworkAction(() => tracker.finish(request, status, responseBody));
   };
+  const transportFailed = new WeakSet<Request>();
+  const responseObserved = new WeakSet<Request>();
 
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -77,18 +216,59 @@ export const installAuthenticatedHostedNetwork = async ({
   if (hosted) {
     context.on('response', response => {
       const request = response.request();
+      responseObserved.add(request);
+      if (!tracker) {
+        onTrackerError(new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING'));
+        return;
+      }
+      // Begin owning the Playwright response body at the response event. The
+      // request route already awaited tracker.begin(), so classification is
+      // settled before dispatch and this continuation starts the body read
+      // before a test can close its page. Controller writes remain serialized
+      // in queue order; only body acquisition runs eagerly.
+      const acquired = ownResponseBody((async () => {
+        try {
+          const classification = await tracker.classify(request);
+          if (classification.kind !== 'business-action') {
+            return Object.freeze({ state: 'ignored' as const });
+          }
+          return Object.freeze({ state: 'fulfilled' as const,
+            value: await readAuthenticatedHostedResponseBody(context, response, responseBodyTimeoutMs) });
+        } catch (error) {
+          responseBodyFailures.add(Object.freeze({ request, error }));
+          return Object.freeze({ state: 'rejected' as const, error });
+        }
+      })());
       queueNetworkAction(async () => {
-        if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
-        const classification = await tracker.classify(request);
-        if (classification.kind !== 'business-action') return;
-        const responseBody = await response.json().catch(() => ({}));
-        await tracker.finish(request, response.status(), responseBody);
-      });
+        const body = await acquired;
+        if (body.state === 'ignored') return;
+        if (body.state === 'rejected') {
+          // Chromium emits requestfailed immediately after a response-body
+          // transport failure. Give that paired event one turn to be observed;
+          // without it, preserve the fail-closed body error.
+          await new Promise(resolve => setTimeout(resolve, 0));
+          if (body.error instanceof Error
+            && body.error.message === 'AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED'
+            && transportFailed.has(request)) {
+            await tracker.finish(request, 0, { error: { code: 'BROWSER_TRANSPORT_FAILURE' } });
+            return;
+          }
+          throw body.error;
+        }
+        await tracker.finish(request, response.status(), body.value);
+      }, acquired);
     });
-    context.on('requestfailed', request => finishProductAction(request, 0, {
-      error: { code: 'BROWSER_TRANSPORT_FAILURE' },
-    }));
+    context.on('requestfailed', request => {
+      transportFailed.add(request);
+      // When response headers were observed, the owned response-body operation
+      // has enough information to distinguish a genuine browser transport
+      // failure from malformed JSON. It alone may emit status zero. A request
+      // which failed before any response still needs this direct completion.
+      if (!responseObserved.has(request)) {
+        finishProductAction(request, 0, { error: { code: 'BROWSER_TRANSPORT_FAILURE' } });
+      }
+    });
   }
 
-  return Object.freeze({ startProductAction, finishProductAction });
+  return Object.freeze({ startProductAction, finishProductAction, settleResponseBodies });
 };

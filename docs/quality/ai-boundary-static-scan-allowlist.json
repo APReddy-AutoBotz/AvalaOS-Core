@@ -515,10 +515,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        205,
-        282,
-        283,
-        897
+        221,
+        298,
+        299,
+        911
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
@@ -527,23 +527,23 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        263,
-        264,
-        265,
-        271,
-        298,
-        299,
+        300,
+        301,
+        302,
         309,
-        310,
-        326,
-        327,
-        328,
-        432,
-        433,
-        593,
-        596,
-        747,
-        748
+        336,
+        337,
+        347,
+        348,
+        366,
+        367,
+        368,
+        472,
+        473,
+        639,
+        642,
+        793,
+        794
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -577,8 +577,8 @@
       "pattern": "localStorage",
       "path": "tests/browser/assessV2NativePostgrest.spec.ts",
       "lines": [
-        58,
-        440
+        62,
+        479
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep local fixture-token reads and missing-session storage removal confined to disposable native browser checks. They are not server revocation or hosted authorization; retain no credentials."
@@ -599,7 +599,7 @@
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.mjs",
       "lines": [
-        70
+        78
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine one-shot synthetic fixture-session priming to the loopback-only reproduction selector. Never use it for hosted sessions, product authorization or provider credentials."
@@ -608,10 +608,10 @@
       "pattern": "localStorage",
       "path": "scripts/v2FullPrefixReproduction.test.mjs",
       "lines": [
-        177,
-        179,
-        198,
-        199
+        187,
+        189,
+        208,
+        209
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the in-memory storage mock confined to the no-Docker fixture-session contract test; restore global descriptors and never read real credentials."

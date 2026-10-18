@@ -30,6 +30,7 @@ import {
 
 export const AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA = 'authenticated-hosted-controller-v1';
 export const AUTHENTICATED_HOSTED_AUTHORITY_SCHEMA = 'authenticated-synthetic-authority-observation-v1';
+export const AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS = 30_000;
 const HOSTED_TEMP_ROOT = process.platform === 'win32' ? os.tmpdir() : '/tmp';
 export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
   browser: path.join(HOSTED_TEMP_ROOT, 'authenticated-browser-correlations.json'),
@@ -279,27 +280,52 @@ export function controllerProfile(config, window, actors) {
   };
 }
 
-const safeJson = async request => {
-  const maximumBytes = 2_000_000;
-  const declaredLength = request.headers?.['content-length'];
-  if (typeof declaredLength === 'string' && /^\d+$/u.test(declaredLength)
-    && Number(declaredLength) > maximumBytes) {
-    request.resume();
-    fail('REQUEST_TOO_LARGE');
+const waitForAuthenticatedHostedSettlement = async (operations, timeoutMs, code) => {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS) {
+    fail('SETTLEMENT_TIMEOUT_REJECTED');
   }
-  const chunks = [];
-  let bytes = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    bytes += buffer.byteLength;
-    if (bytes > maximumBytes) {
+  const startedAt = Date.now();
+  while (operations.size > 0) {
+    const remaining = timeoutMs - (Date.now() - startedAt);
+    if (remaining <= 0) fail(code);
+    let timeout;
+    const expired = new Promise(resolve => { timeout = setTimeout(() => resolve(false), remaining); });
+    const settled = Promise.allSettled([...operations]).then(() => true);
+    const completed = await Promise.race([settled, expired]);
+    clearTimeout(timeout);
+    if (!completed && operations.size > 0) fail(code);
+  }
+};
+
+const safeJson = async (request, { signal } = {}) => {
+  const maximumBytes = 2_000_000;
+  const abortRequest = () => request.destroy(new Error('AUTHENTICATED_HOSTED_CONTROLLER_REQUEST_ABORTED'));
+  if (signal?.aborted) abortRequest();
+  else signal?.addEventListener('abort', abortRequest, { once: true });
+  const declaredLength = request.headers?.['content-length'];
+  try {
+    if (typeof declaredLength === 'string' && /^\d+$/u.test(declaredLength)
+      && Number(declaredLength) > maximumBytes) {
       request.resume();
       fail('REQUEST_TOO_LARGE');
     }
-    chunks.push(buffer);
+    const chunks = [];
+    let bytes = 0;
+    for await (const chunk of request) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += buffer.byteLength;
+      if (bytes > maximumBytes) {
+        request.resume();
+        fail('REQUEST_TOO_LARGE');
+      }
+      chunks.push(buffer);
+    }
+    if (signal?.aborted) fail('REQUEST_ABORTED');
+    const raw = Buffer.concat(chunks, bytes).toString('utf8');
+    try { return raw ? JSON.parse(raw) : {}; } catch { fail('REQUEST_JSON_REJECTED'); }
+  } finally {
+    signal?.removeEventListener('abort', abortRequest);
   }
-  const raw = Buffer.concat(chunks, bytes).toString('utf8');
-  try { return raw ? JSON.parse(raw) : {}; } catch { fail('REQUEST_JSON_REJECTED'); }
 };
 
 const assertSecretFree = value => {
@@ -321,6 +347,7 @@ export class AuthenticatedHostedController {
     this.observationStartedAt = null;
     this.controlToken = randomBytes(32).toString('base64url');
     this.projects = new Map();
+    this.ownedProjects = new Map();
     this.projectIdentitySets = new Map();
     this.boundSessions = new Map();
     this.browserActions = new Map();
@@ -331,7 +358,61 @@ export class AuthenticatedHostedController {
     this.v2ReloadCheckpoints = [];
     this.v2ReloadTargetHashes = [];
     this.active = false;
+    this.activationAttempted = false;
     this.quiesced = false;
+    this.controlIntake = 'inactive';
+    this.controlAbort = new AbortController();
+    this.controlOperations = new Set();
+  }
+
+  assertControlCommitAllowed(signal) {
+    if (this.controlIntake === 'inactive' && this.active && !this.quiesced) this.controlIntake = 'accepting';
+    if (signal?.aborted || this.controlIntake !== 'accepting' || !this.active || this.quiesced) {
+      fail('INTAKE_CLOSED');
+    }
+  }
+
+  stopControlIntake() {
+    if (this.controlIntake === 'stopped' || this.controlIntake === 'stopping') return;
+    this.controlIntake = 'stopping';
+    this.controlAbort.abort('CONTROL_INTAKE_STOPPED');
+  }
+
+  async joinControlOperations({ timeoutMs = AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS } = {}) {
+    if (this.controlIntake === 'accepting') fail('INTAKE_STILL_OPEN');
+    await waitForAuthenticatedHostedSettlement(this.controlOperations, timeoutMs, 'CONTROL_WORK_INCOMPLETE');
+    this.controlIntake = 'stopped';
+    return { settled: true };
+  }
+
+  async stopControlIntakeAndJoin(options) {
+    this.stopControlIntake();
+    return this.joinControlOperations(options);
+  }
+
+  cleanupProjects() {
+    return [...new Map([...this.projects, ...this.ownedProjects]).values()];
+  }
+
+  runControlOperation(operation, externalSignal) {
+    if (this.controlIntake === 'inactive' && this.active && !this.quiesced) this.controlIntake = 'accepting';
+    if (this.controlIntake !== 'accepting' || !this.active || this.quiesced) fail('INTAKE_CLOSED');
+    const ownedAbort = new AbortController();
+    const abortOwned = () => ownedAbort.abort('CONTROL_OPERATION_ABORTED');
+    if (this.controlAbort.signal.aborted || externalSignal?.aborted) abortOwned();
+    else {
+      this.controlAbort.signal.addEventListener('abort', abortOwned, { once: true });
+      externalSignal?.addEventListener('abort', abortOwned, { once: true });
+    }
+    const running = Promise.resolve().then(() => operation(ownedAbort.signal));
+    this.controlOperations.add(running);
+    const release = () => {
+      this.controlOperations.delete(running);
+      this.controlAbort.signal.removeEventListener('abort', abortOwned);
+      externalSignal?.removeEventListener('abort', abortOwned);
+    };
+    running.then(release, release);
+    return running;
   }
 
   async preflightAndActivate() {
@@ -347,6 +428,10 @@ export class AuthenticatedHostedController {
       || preflight.scopeReady!==true || !timestamp(preflight.observationStartedAt)) fail('PREFLIGHT_REJECTED');
     this.observationStartedAt = preflight.observationStartedAt;
     this.startedAt = preflight.observationStartedAt;
+    // Activation is a mutating authority call. Record ownership before dispatch
+    // so a transport or client timeout cannot turn an unknown commit outcome into
+    // a false "cleanup not required" result.
+    this.activationAttempted = true;
     await this.adapter.activate({
       exerciseId: this.exerciseId,
       releaseSha: this.config.releaseSha,
@@ -364,11 +449,12 @@ export class AuthenticatedHostedController {
       expiresAt: new Date(this.now().getTime() + 45 * 60_000).toISOString(),
     });
     this.active = true;
+    this.controlIntake = 'accepting';
     return { ok: true, schemaVersion: AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA };
   }
 
-  async setupProject(projectName) {
-    if (!this.active || this.quiesced) fail('EXERCISE_NOT_ACTIVE');
+  async setupProject(projectName, signal) {
+    this.assertControlCommitAllowed(signal);
     if (this.config.acceptanceMode === 'v2_primary_prefix_diagnostic' && projectName !== 'desktop-chromium') {
       fail('V2_RELOAD_DIAGNOSTIC_PROJECT_REJECTED');
     }
@@ -388,12 +474,14 @@ export class AuthenticatedHostedController {
           exerciseDigest: this.config.exerciseDigest,
           scope: this.config.scope,
           personas: AUTHENTICATED_HOSTED_PERSONAS,
+          signal,
         });
       } catch (error) {
         this.recordIdentityDiagnostic({ projectName: browserProject,
           diagnostic: error?.authenticatedHostedIdentityDiagnostic ?? { operation: 'PROVISION', category: 'PROVISION_FAILED' } }, 'parent');
         throw error;
       }
+      this.assertControlCommitAllowed(signal);
       this.projectIdentitySets.set(browserProject, identities);
     }
     const project = await this.adapter.setupProject({
@@ -402,7 +490,13 @@ export class AuthenticatedHostedController {
       exerciseDigest: this.config.exerciseDigest,
       scope: this.config.scope,
       identities,
+      signal,
     });
+    // setupProject commits its transaction before returning. Retain that ownership
+    // before observing cancellation so cleanup cannot lose a successfully created
+    // project whose response arrived while intake was stopping.
+    this.ownedProjects.set(projectName, { ...project, identities });
+    this.assertControlCommitAllowed(signal);
     const actors = Object.fromEntries(AUTHENTICATED_HOSTED_PERSONAS.map(persona => {
       const actor = identities[persona];
       if (!actor || !UUID.test(actor.id) || typeof actor.email !== 'string' || typeof actor.password !== 'string') {
@@ -426,11 +520,13 @@ export class AuthenticatedHostedController {
       actors,
     };
     if (!timestamp(this.observationStartedAt)) fail('OBSERVATION_CUTOFF_REJECTED');
-    this.projects.set(projectName, { ...project, identities, browserSetup, lastBoundaryAt: this.observationStartedAt });
+    const ownedProject = { ...project, identities, browserSetup, lastBoundaryAt: this.observationStartedAt };
+    this.projects.set(projectName, ownedProject);
+    this.ownedProjects.set(projectName, ownedProject);
     return browserSetup;
   }
 
-  async verifyPresentedBrowserSession({ projectName, persona = null, accessToken }, { recordFailure = true } = {}) {
+  async verifyPresentedBrowserSession({ projectName, persona = null, accessToken }, { recordFailure = true, signal } = {}) {
     const project = this.projects.get(projectName);
     if (!project) fail('PROJECT_NOT_FOUND');
     const claims = decodeJwtClaims(accessToken);
@@ -438,17 +534,18 @@ export class AuthenticatedHostedController {
       .find(candidate => project.identities[candidate]?.id === claims.actorId);
     if (!resolvedPersona || project.identities[resolvedPersona]?.id !== claims.actorId) fail('SESSION_ACTOR_REJECTED');
     let verified;
-    try { verified = await this.identity.verifySession({ accessToken, ...claims }); }
+    try { verified = await this.identity.verifySession({ accessToken, ...claims, signal }); }
     catch (error) {
       if (recordFailure) this.recordIdentityDiagnostic({ projectName, diagnostic:
         error?.authenticatedHostedIdentityDiagnostic ?? { operation: 'VERIFY_SESSION', category: 'SESSION_VERIFICATION_FAILED' } }, 'parent');
       throw error;
     }
+    this.assertControlCommitAllowed(signal);
     if (!verified || verified.actorId !== claims.actorId || verified.sessionId !== claims.sessionId) fail('SESSION_VERIFY_REJECTED');
     return { project, persona: resolvedPersona, claims };
   }
 
-  async bindVerifiedBrowserSession({ projectName, persona, claims }) {
+  async bindVerifiedBrowserSession({ projectName, persona, claims }, signal) {
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
     const key = `${browserProject}:${persona}`;
     const binding = {
@@ -461,25 +558,28 @@ export class AuthenticatedHostedController {
     if (prior && (prior.actorId !== claims.actorId || prior.sessionId !== claims.sessionId)) fail('SESSION_ROTATION_REJECTED');
     if (!prior) {
       await this.adapter.bindSession({ exerciseId: this.exerciseId, actorId: claims.actorId, sessionId: claims.sessionId,
-        persona: `${persona}_${browserProject}` });
+        persona: `${persona}_${browserProject}`, signal });
+      this.assertControlCommitAllowed(signal);
       this.boundSessions.set(key, { ...binding, actorId: claims.actorId, sessionId: claims.sessionId });
     }
     return { bound: true, actorHash: binding.actorHash, sessionHash: binding.sessionHash };
   }
 
-  async bindBrowserSession({ projectName, persona, accessToken }) {
+  async bindBrowserSession({ projectName, persona, accessToken }, signal) {
     if (!this.projects.has(projectName) || !AUTHENTICATED_HOSTED_PERSONAS.includes(persona)) fail('SESSION_SCOPE_REJECTED');
-    const verified = await this.verifyPresentedBrowserSession({ projectName, persona, accessToken });
-    return this.bindVerifiedBrowserSession({ projectName, persona, claims: verified.claims });
+    const verified = await this.verifyPresentedBrowserSession({ projectName, persona, accessToken }, { signal });
+    return this.bindVerifiedBrowserSession({ projectName, persona, claims: verified.claims }, signal);
   }
 
-  async captureFrame(pathname, input) {
+  async captureFrame(pathname, input, signal) {
     const project = this.projects.get(input.projectName);
     if (!project) fail('PROJECT_NOT_FOUND');
-    return this.adapter.frame(pathname, { ...input, project, scope: this.config.scope });
+    const frame = await this.adapter.frame(pathname, { ...input, project, scope: this.config.scope, signal });
+    this.assertControlCommitAllowed(signal);
+    return frame;
   }
 
-  async recordV2ReloadDiagnosticCheckpoint(input) {
+  async recordV2ReloadDiagnosticCheckpoint(input, signal) {
     if (this.config.acceptanceMode !== 'v2_primary_prefix_diagnostic' || !this.active || this.quiesced) {
       fail('V2_RELOAD_DIAGNOSTIC_NOT_ACTIVE');
     }
@@ -492,7 +592,7 @@ export class AuthenticatedHostedController {
     let sessionContinuity = checkpoint.accessToken === null ? 'missing' : 'invalid';
     if (checkpoint.accessToken !== null && bound) {
       try {
-        const verified = await this.verifyPresentedBrowserSession(checkpoint, { recordFailure: false });
+        const verified = await this.verifyPresentedBrowserSession(checkpoint, { recordFailure: false, signal });
         if (bound.actorId === verified.claims.actorId && bound.sessionId === verified.claims.sessionId) {
           sessionContinuity = 'verified';
         }
@@ -507,11 +607,12 @@ export class AuthenticatedHostedController {
         fail('V2_RELOAD_DIAGNOSTIC_CONTINUITY_REJECTED');
       }
     }
-    const frame = await this.captureFrame('/control/lifecycle-frame', { projectName: checkpoint.projectName });
+    const frame = await this.captureFrame('/control/lifecycle-frame', { projectName: checkpoint.projectName }, signal);
     if (!DIGEST.test(frame?.targetHash ?? '')) fail('V2_RELOAD_DIAGNOSTIC_FRAME_REJECTED');
     if (checkpoint.phase !== ['before-create', 'before-reload', 'after-reload'][this.v2ReloadCheckpoints.length]) {
       fail('V2_RELOAD_DIAGNOSTIC_PHASE_REJECTED');
     }
+    this.assertControlCommitAllowed(signal);
     this.v2ReloadCheckpoints.push(Object.freeze({
       phase: checkpoint.phase,
       sessionContinuity,
@@ -546,7 +647,7 @@ export class AuthenticatedHostedController {
     });
   }
 
-  async recordBrowserCase({ projectName, row, actionIds }) {
+  async recordBrowserCase({ projectName, row, actionIds }, signal) {
     if (!this.projects.has(projectName) || !record(row) || !AUTHENTICATED_ACCEPTANCE_TEST_IDS.includes(row.testId)) {
       fail('BROWSER_CASE_REJECTED');
     }
@@ -573,10 +674,12 @@ export class AuthenticatedHostedController {
         projectName,
         project: scope,
         testId: row.testId,
+        signal,
       });
       if (!record(physical) || physical.backendKind !== this.config.secretBackendKind
         || physical.exists !== true || physical.fingerprintMatches !== true) fail('SECRET_MATERIAL_EVIDENCE_REJECTED');
     }
+    this.assertControlCommitAllowed(signal);
     const independent = { before: firstAction.before, after: lastAction.after };
     const startedAt = independent.before.capturedAt;
     const completedAt = independent.after.capturedAt;
@@ -625,8 +728,8 @@ export class AuthenticatedHostedController {
     return { recorded: true, key };
   }
 
-  async resolveBrowserActionBinding({ projectName, accessToken }) {
-    const verified = await this.verifyPresentedBrowserSession({ projectName, accessToken });
+  async resolveBrowserActionBinding({ projectName, accessToken }, signal) {
+    const verified = await this.verifyPresentedBrowserSession({ projectName, accessToken }, { signal });
     const { claims, persona } = verified;
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
     const key = `${browserProject}:${persona}`;
@@ -635,17 +738,17 @@ export class AuthenticatedHostedController {
       fail('SESSION_ROTATION_REJECTED');
     }
     if (!binding) {
-      await this.bindVerifiedBrowserSession({ projectName, persona, claims });
+      await this.bindVerifiedBrowserSession({ projectName, persona, claims }, signal);
       binding = this.boundSessions.get(key);
     }
     if (!binding) fail('BROWSER_ACTION_SESSION_REJECTED');
     return binding;
   }
 
-  async beginBrowserAction({ projectName, accessToken, requestBody, route }) {
+  async beginBrowserAction({ projectName, accessToken, requestBody, route }, signal) {
     if (!this.projects.has(projectName) || !record(requestBody) || typeof route !== 'string'
       || !/^\/(?:functions\/v1\/[a-z0-9-]+|rest\/v1\/rpc\/[a-z0-9_]+)$/u.test(route)) fail('BROWSER_ACTION_REJECTED');
-    const binding = await this.resolveBrowserActionBinding({ projectName, accessToken });
+    const binding = await this.resolveBrowserActionBinding({ projectName, accessToken }, signal);
     const project = this.projects.get(projectName);
     const method = typeof requestBody.method === 'string' && /^(?:GET|POST|PATCH|PUT|DELETE)$/u.test(requestBody.method)
       ? requestBody.method : 'POST';
@@ -661,8 +764,9 @@ export class AuthenticatedHostedController {
     const hashes = authenticatedHostedRequestBinding({ requestId, actorHash: binding.actorHash,
       commandType, payload: requestBody, requireUuid: mutationBinding });
     if (!timestamp(project.lastBoundaryAt)) fail('OBSERVATION_CUTOFF_REJECTED');
-    const before = await this.adapter.observe({ exerciseId: this.exerciseId, from: project.lastBoundaryAt, project });
+    const before = await this.adapter.observe({ exerciseId: this.exerciseId, from: project.lastBoundaryAt, project, signal });
     if (!record(before) || !timestamp(before.capturedAt) || !Array.isArray(before.records)) fail('AUTHORITY_FRAME_REJECTED');
+    this.assertControlCommitAllowed(signal);
     if (Date.parse(before.capturedAt) > Date.parse(project.lastBoundaryAt)) {
       project.lastBoundaryAt = before.capturedAt;
     }
@@ -677,7 +781,7 @@ export class AuthenticatedHostedController {
     return { actionId };
   }
 
-  async finishBrowserAction({ projectName, actionId, responseBody, status }) {
+  async finishBrowserAction({ projectName, actionId, responseBody, status }, signal) {
     if (!this.projects.has(projectName) || !DIGEST.test(actionId ?? '') || !Number.isInteger(status)
       || status < 0 || status > 599) fail('BROWSER_ACTION_REJECTED');
     const action = (this.browserActions.get(projectName) ?? []).find(item => item.actionId === actionId);
@@ -693,18 +797,18 @@ export class AuthenticatedHostedController {
       ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
       .toUpperCase().replace(/[^A-Z0-9_]/gu, '_').slice(0, 80);
     const project = this.projects.get(projectName);
-    const after = await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt, project });
+    const after = await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt, project, signal });
     if (!record(after) || !timestamp(after.capturedAt) || !Array.isArray(after.records)
       || Date.parse(after.capturedAt) <= Date.parse(action.before.capturedAt)) fail('AUTHORITY_FRAME_REJECTED');
-    action.response = {
+    const responseObservation = {
         status,
         classification: /^[A-Z][A-Z0-9_]{1,80}$/u.test(classification) ? classification : 'COMMAND_OBSERVED',
         commandIdHash: commandId ? authenticatedHostedDigest(commandId) : null,
         receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
     };
-    action.after = after;
+    let assessmentFinalizeProof = null;
     if (action.route === ASSESS_FINALIZE_ROUTE && action.commandType === ASSESS_FINALIZE_COMMAND) {
-      action.assessmentFinalizeProof = typeof this.adapter.verifyAssessmentFinalizeCase === 'function'
+      assessmentFinalizeProof = typeof this.adapter.verifyAssessmentFinalizeCase === 'function'
         ? await this.adapter.verifyAssessmentFinalizeCase({
           exerciseId: this.exerciseId,
           projectName,
@@ -720,34 +824,39 @@ export class AuthenticatedHostedController {
           requestBody: action.rawRequestBody,
           responseBody: response,
           before: action.before,
-          after: action.after,
+          after,
           requestIdHash: action.requestIdHash,
           commandBindingHash: action.commandBindingHash,
-          commandIdHash: action.response.commandIdHash,
+          commandIdHash: responseObservation.commandIdHash,
+          signal,
         }) : null;
-      if (record(action.assessmentFinalizeProof) && DIGEST.test(action.assessmentFinalizeProof.receiptIdHash ?? '')) {
-        action.response.receiptIdHash = action.assessmentFinalizeProof.receiptIdHash;
+      if (record(assessmentFinalizeProof) && DIGEST.test(assessmentFinalizeProof.receiptIdHash ?? '')) {
+        responseObservation.receiptIdHash = assessmentFinalizeProof.receiptIdHash;
       }
     }
+    try{
+      await this.adapter.recordBrowserAction?.({ exerciseId: this.exerciseId, projectName, persona: action.persona,
+        route: action.route, status, requestBody: action.rawRequestBody, responseBody: response, signal });
+    }finally{delete action.rawRequestBody;}
+    this.assertControlCommitAllowed(signal);
+    action.response = responseObservation;
+    action.after = after;
+    action.assessmentFinalizeProof = assessmentFinalizeProof;
     action.complete = true;
     action.status = status;
     if (Date.parse(after.capturedAt) > Date.parse(project.lastBoundaryAt)) {
       project.lastBoundaryAt = after.capturedAt;
     }
-    try{
-      await this.adapter.recordBrowserAction?.({ exerciseId: this.exerciseId, projectName, persona: action.persona,
-        route: action.route, status, requestBody: action.rawRequestBody, responseBody: response });
-    }finally{delete action.rawRequestBody;}
     return { recorded: true, actionId: action.actionId };
   }
 
-  async armPermit(input) {
+  async armPermit(input, signal) {
     if (!this.active || this.quiesced || !AUTHENTICATED_HOSTED_FAULT_KINDS.includes(input.kind)
       || !UUID.test(input.actorId) || !UUID.test(input.sessionId) || !UUID.test(input.requestId)
       || !HEX_DIGEST.test(input.payloadHash) || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
       fail('PERMIT_REJECTED');
     }
-    return this.adapter.armPermit({
+    const permit = await this.adapter.armPermit({
       exerciseId: this.exerciseId,
       permitId: this.randomId(),
       kind: input.kind,
@@ -758,13 +867,16 @@ export class AuthenticatedHostedController {
       payloadHash: input.payloadHash,
       expectedVersion: input.expectedVersion,
       expiresAt: new Date(this.now().getTime() + 5 * 60_000).toISOString(),
+      signal,
     });
+    this.assertControlCommitAllowed(signal);
+    return permit;
   }
 
-  async armBrowserFault({ projectName, persona, kind, commandType, requestBody, accessToken }) {
+  async armBrowserFault({ projectName, persona, kind, commandType, requestBody, accessToken }, signal) {
     if (!this.projects.has(projectName) || !AUTHENTICATED_HOSTED_PERSONAS.includes(persona)
       || !record(requestBody) || typeof commandType !== 'string') fail('PERMIT_REJECTED');
-    const verified = await this.verifyPresentedBrowserSession({ projectName, persona, accessToken });
+    const verified = await this.verifyPresentedBrowserSession({ projectName, persona, accessToken }, { signal });
     const browserProject = projectName.startsWith('desktop-chromium') ? 'desktop-chromium' : 'pixel-7-chromium';
     const bound = this.boundSessions.get(`${browserProject}:${persona}`);
     if (!bound || bound.actorId !== verified.claims.actorId || bound.sessionId !== verified.claims.sessionId) {
@@ -782,10 +894,18 @@ export class AuthenticatedHostedController {
       requestId,
       payloadHash: authenticatedHostedDigest(requestBody).slice('sha256:'.length),
       expectedVersion,
-    });
+    }, signal);
   }
 
-  async control(pathname, input) {
+  async control(pathname, input, { signal } = {}) {
+    return this.runControlOperation(
+      ownedSignal => this.controlAccepted(pathname, input, ownedSignal),
+      signal,
+    );
+  }
+
+  async controlAccepted(pathname, input, signal) {
+    this.assertControlCommitAllowed(signal);
     if (this.config.acceptanceMode === 'v2_primary_prefix_diagnostic' && this.v2ReloadCheckpoints.length === 3) {
       const terminalAllowed = new Set([
         '/control/browser-action', '/control/browser-case',
@@ -795,27 +915,28 @@ export class AuthenticatedHostedController {
       ]);
       if (!terminalAllowed.has(pathname)) fail('V2_RELOAD_DIAGNOSTIC_TERMINAL');
     }
-    if (pathname === '/control/setup') return this.setupProject(input.projectName);
-    if (pathname === '/control/bind-browser-session') return this.bindBrowserSession(input);
-    if (pathname === '/control/browser-case') return this.recordBrowserCase(input);
-    if (pathname === '/control/browser-action-start') return this.beginBrowserAction(input);
-    if (pathname === '/control/browser-action') return this.finishBrowserAction(input);
-    if (pathname === '/control/arm-permit') return this.armPermit(input);
-    if (pathname === '/control/arm-browser-fault') return this.armBrowserFault(input);
+    if (pathname === '/control/setup') return this.setupProject(input.projectName, signal);
+    if (pathname === '/control/bind-browser-session') return this.bindBrowserSession(input, signal);
+    if (pathname === '/control/browser-case') return this.recordBrowserCase(input, signal);
+    if (pathname === '/control/browser-action-start') return this.beginBrowserAction(input, signal);
+    if (pathname === '/control/browser-action') return this.finishBrowserAction(input, signal);
+    if (pathname === '/control/arm-permit') return this.armPermit(input, signal);
+    if (pathname === '/control/arm-browser-fault') return this.armBrowserFault(input, signal);
     if (pathname === '/control/browser-diagnostic') return this.recordIdentityDiagnostic(input, 'browser');
-    if (pathname === '/control/v2-reload-diagnostic') return this.recordV2ReloadDiagnosticCheckpoint(input);
+    if (pathname === '/control/v2-reload-diagnostic') return this.recordV2ReloadDiagnosticCheckpoint(input, signal);
     const framePaths = new Set([
       '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
       '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',
       '/control/authenticated-controls/frame', '/control/snapshot',
     ]);
-    if (framePaths.has(pathname)) return this.captureFrame(pathname, input);
+    if (framePaths.has(pathname)) return this.captureFrame(pathname, input, signal);
     if (pathname === '/control/fail-next-studio-provider') fail('LEGACY_FAULT_CONTROL_REJECTED');
     return this.adapter.control(pathname, {
       ...input,
       exerciseId: this.exerciseId,
       project: this.projects.get(input.projectName),
       scope: this.config.scope,
+      signal,
     });
   }
 
@@ -837,25 +958,28 @@ export class AuthenticatedHostedController {
 
   async finalize() {
     if (this.quiesced) fail('ALREADY_QUIESCED');
+    await this.stopControlIntakeAndJoin();
     const expected = AUTHENTICATED_ACCEPTANCE_TEST_IDS.length * AUTHENTICATED_ACCEPTANCE_PROJECTS.length;
     if (this.browserCases.length !== expected || this.serverCases.length !== expected) fail('CASE_INVENTORY_INCOMPLETE');
     for (const testId of AUTHENTICATED_ACCEPTANCE_TEST_IDS) for (const project of AUTHENTICATED_ACCEPTANCE_PROJECTS) {
       if (!this.browserCases.some(item => item.testId === testId && item.project === project)) fail('CASE_INVENTORY_INCOMPLETE');
     }
     const quiesce = await this.adapter.quiesce({ exerciseId: this.exerciseId });
-    await this.identity.revokeAll({ sessions: [...this.boundSessions.values()], projects: [...this.projects.values()] });
+    const ownedProjects = this.cleanupProjects();
+    await this.identity.revokeAll({ sessions: [...this.boundSessions.values()], projects: ownedProjects });
     const cleanup = await this.adapter.cleanup({
       exerciseId: this.exerciseId,
-      projects: [...this.projects.values()],
+      projects: ownedProjects,
       sessions: [...this.boundSessions.values()],
     });
     const verified = await this.adapter.verifyCleanup({ exerciseId: this.exerciseId,
-      actorIds: [...(this.identity.created?.keys?.() ?? [])], projects: [...this.projects.values()] });
+      actorIds: [...(this.identity.created?.keys?.() ?? [])], projects: ownedProjects });
     if (!verified || verified.activeSessions !== 0 || verified.activeIdentities !== 0 || verified.activeMemberships !== 0
       || verified.armedPermits !== 0 || verified.activeSecretMaterial !== 0
       || verified.unapprovedActiveResidue !== 0 || verified.nonExerciseChanged !== false
       || verified.immutableHistoryPreserved !== true || !timestamp(verified.capturedAt)
-      || Date.parse(verified.capturedAt) < Date.parse(this.startedAt)) fail('CLEANUP_REJECTED');
+      || Date.parse(verified.capturedAt) < Date.parse(this.startedAt)
+      || (this.identity.unknownMutationOutcomes?.size ?? 0) > 0) fail('CLEANUP_REJECTED');
     this.quiesced = true;
     const completedAt = verified.capturedAt;
     const profile = controllerProfile(this.config, { startedAt: this.startedAt, completedAt }, [...this.boundSessions.values()]);
@@ -883,43 +1007,111 @@ export class AuthenticatedHostedController {
   }
 
   async abortAndQuiesce() {
-    if (!this.active || this.quiesced) return { quiesced: this.quiesced };
+    if ((!this.active && !this.activationAttempted) || this.quiesced) return { quiesced: this.quiesced };
     const errors=[];const attempt=async operation=>{try{return await operation();}catch(error){errors.push(error);return null;}};
+    await attempt(()=>this.stopControlIntakeAndJoin());
+    if (this.controlOperations.size > 0 || this.controlIntake !== 'stopped') {
+      throw new AggregateError(errors.length ? errors : [new Error('AUTHENTICATED_HOSTED_CONTROLLER_CONTROL_WORK_INCOMPLETE')],
+        'AUTHENTICATED_HOSTED_CONTROLLER_ABORT_CLEANUP_REJECTED');
+    }
+    const ownedProjects=this.cleanupProjects();
     await attempt(()=>this.adapter.quiesce({ exerciseId: this.exerciseId }));
-    await attempt(()=>this.identity.revokeAll({ sessions: [...this.boundSessions.values()], projects: [...this.projects.values()] }));
-    await attempt(()=>this.adapter.cleanup({exerciseId:this.exerciseId,projects:[...this.projects.values()],
+    await attempt(()=>this.identity.revokeAll({ sessions: [...this.boundSessions.values()], projects: ownedProjects }));
+    await attempt(()=>this.adapter.cleanup({exerciseId:this.exerciseId,projects:ownedProjects,
       sessions:[...this.boundSessions.values()]}));
     const verified=await attempt(()=>this.adapter.verifyCleanup({exerciseId:this.exerciseId,
-      actorIds:[...(this.identity.created?.keys?.()??[])],projects:[...this.projects.values()]}));
+      actorIds:[...(this.identity.created?.keys?.()??[])],projects:ownedProjects}));
     if (!verified || verified.activeSessions !== 0 || verified.activeIdentities !== 0 || verified.activeMemberships !== 0
       || verified.armedPermits !== 0 || verified.activeSecretMaterial !== 0
       || verified.unapprovedActiveResidue !== 0 || verified.nonExerciseChanged !== false
-      || verified.immutableHistoryPreserved !== true) errors.push(new Error('AUTHENTICATED_HOSTED_CONTROLLER_ABORT_CLEANUP_REJECTED'));
+      || verified.immutableHistoryPreserved !== true || (this.identity.unknownMutationOutcomes?.size ?? 0) > 0) {
+      errors.push(new Error('AUTHENTICATED_HOSTED_CONTROLLER_ABORT_CLEANUP_REJECTED'));
+    }
     if(errors.length)throw new AggregateError(errors,'AUTHENTICATED_HOSTED_CONTROLLER_ABORT_CLEANUP_REJECTED');
     this.quiesced = true;
     return { quiesced: true };
   }
 }
 
-export async function startAuthenticatedHostedControllerServer(controller, { host = '127.0.0.1', port = 0 } = {}) {
+export async function startAuthenticatedHostedControllerServer(controller, { host = '127.0.0.1', port = 0,
+  requestTimeoutMs = AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS,
+  settlementTimeoutMs = AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS } = {}) {
   if (host !== '127.0.0.1') fail('NON_LOOPBACK_BIND_REJECTED');
-  const server = createServer(async (request, response) => {
-    const send = (status, body) => {
-      response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      response.end(JSON.stringify(body));
+  if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1
+    || requestTimeoutMs > AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS) fail('REQUEST_TIMEOUT_REJECTED');
+  const handlers = new Set();
+  const active = new Set();
+  let accepting = true;
+  let stopping = null;
+  const send = (response, status, body) => new Promise((resolve, reject) => {
+    if (response.destroyed || response.writableEnded) { reject(new Error('AUTHENTICATED_HOSTED_CONTROLLER_RESPONSE_ABORTED')); return; }
+    const cleanup = () => {
+      response.removeListener('finish', onFinish);
+      response.removeListener('close', onClose);
+      response.removeListener('error', onError);
     };
-    try {
-      const url = new URL(request.url, `http://${host}`);
-      if (request.method === 'GET' && url.pathname === '/health') return send(200, { ok: true, schemaVersion: AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA });
-      if (request.method !== 'POST' || !url.pathname.startsWith('/control/')) return send(404, { error: 'NOT_FOUND' });
-      if (request.headers['x-enterprise-lifecycle-control'] !== controller.controlToken) return send(403, { error: 'CONTROL_DENIED' });
-      const result = await controller.control(url.pathname, await safeJson(request));
-      return send(200, result);
-    } catch (error) {
-      const code = String(error?.message ?? error).match(/AUTHENTICATED_HOSTED_CONTROLLER_[A-Z0-9_]+/u)?.[0]
-        ?? 'AUTHENTICATED_HOSTED_CONTROLLER_FAILED';
-      return send(code.endsWith('_NOT_FOUND') ? 404 : 409, { error: code });
-    }
+    const onFinish = () => { cleanup(); resolve(); };
+    const onClose = () => {
+      if (response.writableFinished) onFinish();
+      else { cleanup(); reject(new Error('AUTHENTICATED_HOSTED_CONTROLLER_RESPONSE_ABORTED')); }
+    };
+    const onError = () => { cleanup(); reject(new Error('AUTHENTICATED_HOSTED_CONTROLLER_RESPONSE_ABORTED')); };
+    response.once('finish', onFinish);
+    response.once('close', onClose);
+    response.once('error', onError);
+    response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    response.end(JSON.stringify(body));
+  });
+  const server = createServer((request, response) => {
+    const abort = new AbortController();
+    const abortRequest = () => {
+      abort.abort('REQUEST_ABORTED');
+      if (!request.complete && !request.destroyed) request.destroy();
+      if (!response.writableEnded && !response.destroyed) response.destroy();
+    };
+    const onRequestAborted = () => abortRequest();
+    const onRequestClose = () => { if (!request.complete) abortRequest(); };
+    const onResponseClose = () => { if (!response.writableEnded) abortRequest(); };
+    request.once('aborted', onRequestAborted);
+    request.once('close', onRequestClose);
+    response.once('close', onResponseClose);
+    const timer = setTimeout(abortRequest, requestTimeoutMs);
+    timer.unref?.();
+    const entry = { abort: abortRequest };
+    active.add(entry);
+    const running = (async () => {
+      if (!accepting) return send(response, 503, { error: 'AUTHENTICATED_HOSTED_CONTROLLER_INTAKE_CLOSED' });
+      try {
+        const url = new URL(request.url, `http://${host}`);
+        if (request.method === 'GET' && url.pathname === '/health') {
+          return await send(response, 200, { ok: true, schemaVersion: AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA });
+        }
+        if (request.method !== 'POST' || !url.pathname.startsWith('/control/')) {
+          return await send(response, 404, { error: 'NOT_FOUND' });
+        }
+        if (request.headers['x-enterprise-lifecycle-control'] !== controller.controlToken) {
+          return await send(response, 403, { error: 'CONTROL_DENIED' });
+        }
+        const result = await controller.control(url.pathname, await safeJson(request, { signal: abort.signal }),
+          { signal: abort.signal });
+        return await send(response, 200, result);
+      } catch (error) {
+        const code = String(error?.message ?? error).match(/AUTHENTICATED_HOSTED_CONTROLLER_[A-Z0-9_]+/u)?.[0]
+          ?? 'AUTHENTICATED_HOSTED_CONTROLLER_FAILED';
+        if (!response.destroyed && !response.writableEnded) {
+          await send(response, code.endsWith('_NOT_FOUND') ? 404 : 409, { error: code }).catch(() => undefined);
+        }
+      }
+    })().finally(() => {
+      clearTimeout(timer);
+      request.removeListener('aborted', onRequestAborted);
+      request.removeListener('close', onRequestClose);
+      response.removeListener('close', onResponseClose);
+      active.delete(entry);
+      handlers.delete(running);
+    });
+    handlers.add(running);
+    running.catch(() => undefined);
   });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -927,9 +1119,30 @@ export async function startAuthenticatedHostedControllerServer(controller, { hos
   });
   const address = server.address();
   if (!address || typeof address === 'string') fail('SERVER_BIND_REJECTED');
+  const stopAndDrain = () => {
+    if (stopping) return stopping;
+    accepting = false;
+    controller.stopControlIntake?.();
+    const closeResult = new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    closeResult.catch(() => undefined);
+    for (const entry of active) entry.abort();
+    server.closeIdleConnections?.();
+    stopping = (async () => {
+      await waitForAuthenticatedHostedSettlement(handlers, settlementTimeoutMs, 'SERVER_WORK_INCOMPLETE');
+      await controller.joinControlOperations?.({ timeoutMs: settlementTimeoutMs });
+      server.closeAllConnections?.();
+      const closing = new Set([closeResult]);
+      closeResult.then(() => closing.delete(closeResult), () => closing.delete(closeResult));
+      await waitForAuthenticatedHostedSettlement(closing, settlementTimeoutMs, 'SERVER_CLOSE_INCOMPLETE');
+      return { settled: true };
+    })();
+    stopping.catch(() => undefined);
+    return stopping;
+  };
   return {
     baseUrl: `http://${host}:${address.port}`,
     controlToken: controller.controlToken,
-    close: () => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())),
+    stopAndDrain,
+    close: stopAndDrain,
   };
 }

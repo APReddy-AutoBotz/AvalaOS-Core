@@ -11,6 +11,7 @@ import ts from 'typescript';
 
 import { canonicalDigest, canonicalFileDigest } from './assessV1OracleEvidence.mjs';
 import {
+  AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS,
   AUTHENTICATED_HOSTED_OUTPUT_PATHS,
   AuthenticatedHostedController,
   startAuthenticatedHostedControllerServer,
@@ -608,6 +609,35 @@ const removeOwnedBrowserWorkspace = async directory => {
   await rm(resolved, { recursive: true, force: true });
 };
 
+export function createAuthenticatedHostedDatabaseClientConfig(databaseUrl) {
+  return Object.freeze({
+    ...createControlledHumanPostgresClientConfig(databaseUrl, {
+      allowLoopback: false,
+      applicationName: 'authenticated_hosted_acceptance',
+      connectionTimeoutMillis: 20_000,
+    }),
+    query_timeout: AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS,
+    // The server cancels first; the client deadline is only a bounded fallback.
+    // pg.Client remains serial, so cleanup queries cannot overtake a statement.
+    statement_timeout: AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS - 1_000,
+  });
+}
+
+export async function stopAuthenticatedHostedRuntime(server, controller) {
+  const errors = [];
+  if (server) {
+    try {
+      if (typeof server.stopAndDrain === 'function') await server.stopAndDrain();
+      else if (typeof server.close === 'function') await server.close();
+      else errors.push(new Error('AUTHENTICATED_HOSTED_RUNNER_SERVER_SETTLEMENT_REQUIRED'));
+    } catch (error) { errors.push(error); }
+  }
+  try { await controller.stopControlIntakeAndJoin(); }
+  catch (error) { errors.push(error); }
+  if (errors.length) throw new AggregateError(errors, 'AUTHENTICATED_HOSTED_RUNNER_RUNTIME_SETTLEMENT_INCOMPLETE');
+  return { settled: true };
+}
+
 async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, diagnosticState, outputPaths) {
   const config = validateAuthenticatedHostedControllerEnvironment(environment);
   validateAuthenticatedDatabaseTarget(config);
@@ -615,8 +645,7 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
   const ownsDatabase = !dependencies.database;
   const database = dependencies.database ?? await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', async () =>
     (dependencies.createDatabase ?? (clientConfig => new pg.Client(clientConfig)))(
-      createControlledHumanPostgresClientConfig(config.databaseUrl,{
-        allowLoopback:false,applicationName:'authenticated_hosted_acceptance',connectionTimeoutMillis:20_000})));
+      createAuthenticatedHostedDatabaseClientConfig(config.databaseUrl)));
   if (ownsDatabase) {
     try {
       await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.connect());
@@ -658,8 +687,10 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
   let server;
   let browserWorkspace;
   let finalized = false;
+  let runtimeSettled = false;
   let primaryError = null;
   try {
+    throwIfCancelled();
     await controller.preflightAndActivate();
     throwIfCancelled();
     diagnosticState.phase = 'CONTROLLER_START';
@@ -685,6 +716,8 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
     throwIfCancelled();
     if (config.acceptanceMode === 'full_acceptance') {
       diagnosticState.phase = 'FINALIZATION';
+      await stopAuthenticatedHostedRuntime(server, controller);
+      runtimeSettled = true;
       const output = await controller.finalize();
       throwIfCancelled();
       await Promise.all([
@@ -703,10 +736,19 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
     diagnosticState.child = error?.authenticatedHostedPlaywrightDiagnostic ?? null;
   } finally {
     const cleanupErrors=[];
-    if (!finalized) try { await controller.abortAndQuiesce(); } catch (error) { cleanupErrors.push(error); }
-    try { await server?.close(); } catch (error) { cleanupErrors.push(error); }
-    if (ownsDatabase) try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
-    catch (error) { cleanupErrors.push(error); }
+    if (!runtimeSettled) {
+      try {
+        await stopAuthenticatedHostedRuntime(server, controller);
+        runtimeSettled = true;
+      } catch (error) { cleanupErrors.push(error); }
+    }
+    if (!finalized && runtimeSettled) {
+      try { await controller.abortAndQuiesce(); } catch (error) { cleanupErrors.push(error); }
+    }
+    if (ownsDatabase && runtimeSettled) {
+      try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
+      catch (error) { cleanupErrors.push(error); }
+    }
     try { await removeOwnedBrowserWorkspace(browserWorkspace); }
     catch { cleanupErrors.push(new Error('AUTHENTICATED_HOSTED_RUNNER_TEMP_CLEANUP_INCOMPLETE')); }
     signalSource.removeListener('SIGTERM',cancelSigterm);signalSource.removeListener('SIGINT',cancelSigint);
@@ -715,7 +757,7 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       throw new AggregateError([...(primaryError?[primaryError]:[]),...cleanupErrors],
         'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
     }
-    if (controller.active) diagnosticState.cleanup = 'verified';
+    if (controller.active || controller.activationAttempted) diagnosticState.cleanup = 'verified';
   }
   if (config.acceptanceMode === 'v2_primary_prefix_diagnostic' && controller.quiesced) {
     try {

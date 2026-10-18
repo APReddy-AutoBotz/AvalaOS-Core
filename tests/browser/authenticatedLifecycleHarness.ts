@@ -148,17 +148,38 @@ export const createAuthenticatedLifecycleControl = ({
   const timeoutError = new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT');
   let timedOut = false;
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
+  const timeout = new Promise<'expired'>(resolve => {
     timeoutHandle = setTimeout(() => {
       timedOut = true;
       abort.abort();
-      reject(timeoutError);
+      resolve('expired');
     }, timeoutMs);
   });
-  const bounded = <Value>(operation: Promise<Value>) => Promise.race([operation, timeout]);
+  const settleOwned = async <Value>(operation: Promise<Value>): Promise<Value> => {
+    const settled = operation.then(
+      value => Object.freeze({ state: 'fulfilled' as const, value }),
+      error => Object.freeze({ state: 'rejected' as const, error }),
+    );
+    const first = await Promise.race([settled.then(() => 'settled' as const), timeout]);
+    if (first === 'expired') {
+      let cleanupHandle: ReturnType<typeof setTimeout> | undefined;
+      const cleanupExpired = new Promise<'expired'>(resolve => {
+        cleanupHandle = setTimeout(() => resolve('expired'), timeoutMs);
+      });
+      if (await Promise.race([settled.then(() => 'settled' as const), cleanupExpired]) === 'expired') {
+        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE');
+      }
+      if (cleanupHandle !== undefined) clearTimeout(cleanupHandle);
+      await settled;
+      throw timeoutError;
+    }
+    const result = await settled;
+    if (result.state === 'rejected') throw result.error;
+    return result.value;
+  };
   let response: Response;
   try {
-    response = await bounded(fetchImpl(target, {
+    response = await settleOwned(fetchImpl(target, {
       method: body === undefined ? 'GET' : 'POST',
       headers: {
         'content-type': 'application/json',
@@ -167,15 +188,17 @@ export const createAuthenticatedLifecycleControl = ({
       signal: abort.signal,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }));
-  } catch {
+  } catch (error) {
     if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    if (error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE') throw error;
     if (timedOut) throw timeoutError;
     throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TRANSPORT_REJECTED');
   }
   let payload: unknown;
   try {
-    payload = await bounded(response.json());
-  } catch {
+    payload = await settleOwned(response.json());
+  } catch (error) {
+    if (error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE') throw error;
     if (timedOut) throw timeoutError;
     if (!response.ok) payload = null;
     else throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_RESPONSE_REJECTED');
@@ -193,7 +216,7 @@ export const authenticatedLifecycleControl = createAuthenticatedLifecycleControl
 });
 
 export type AuthenticatedLifecycleWorkQueue = Readonly<{
-  enqueue: (operation: () => Promise<unknown>) => void;
+  enqueue: (operation: () => Promise<unknown>, ownedWork?: Promise<unknown>) => void;
   drain: () => Promise<void>;
 }>;
 
@@ -201,8 +224,16 @@ export const createAuthenticatedLifecycleWorkQueue = (): AuthenticatedLifecycleW
   let tail: Promise<void> = Promise.resolve();
   let hasFailure = false;
   let firstFailure: unknown;
-  const enqueue = (operation: () => Promise<unknown>) => {
+  const enqueue = (operation: () => Promise<unknown>, ownedWork?: Promise<unknown>) => {
+    // Attach settlement handlers immediately so eagerly-started browser work
+    // remains owned even when an earlier queued action fails. At this queue
+    // position we join that work, but preserve the first failure and never run
+    // a later controller commit after failure.
+    const ownedSettlement = ownedWork
+      ? Promise.resolve(ownedWork).then(() => undefined, () => undefined)
+      : Promise.resolve();
     const work = tail.then(async () => {
+      await ownedSettlement;
       if (!hasFailure) await operation();
     });
     tail = work.catch(error => {
@@ -253,12 +284,18 @@ const sessionFor = (actor: AuthenticatedLifecycleActor) => ({
   user: { ...actor.user, aud: 'authenticated', role: 'authenticated', user_metadata: {}, app_metadata: { provider: 'fixture' } },
 });
 
-export const authenticatedLifecycleEnterAs = async (page: Page, actor: AuthenticatedLifecycleActor) => {
+export const authenticatedLifecycleEnterAs = async (
+  page: Page,
+  actor: AuthenticatedLifecycleActor,
+  beforeIntentionalNavigation: () => Promise<void> = async () => undefined,
+) => {
   if (hostedRealAuth) {
     if (actor.authKind !== 'supabase_auth' || !actor.persona || !actor.projectName || !actor.password) {
       throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_ACTOR_REQUIRED');
     }
+    await beforeIntentionalNavigation();
     await page.goto('/');
+    await beforeIntentionalNavigation();
     await page.evaluate(() => {
       for (const key of Object.keys(localStorage)) if (key.startsWith('sb-')) localStorage.removeItem(key);
       localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
@@ -268,6 +305,7 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
     const cacheKey = `${actor.user.id}:${actor.persona}`;
     const cached = hostedSessionCache.get(cacheKey);
     if (cached) {
+      await beforeIntentionalNavigation();
       await page.evaluate(({ key, value }) => localStorage.setItem(key, value), cached);
       await page.reload({ waitUntil: 'domcontentloaded' });
     } else {
@@ -321,7 +359,9 @@ export const authenticatedLifecycleEnterAs = async (page: Page, actor: Authentic
     });
     return;
   }
+  await beforeIntentionalNavigation();
   await page.goto('/');
+  await beforeIntentionalNavigation();
   await page.evaluate(({ key, session }) => {
     localStorage.setItem(key, JSON.stringify(session));
     localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
@@ -510,6 +550,12 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
   const exactProcessButton = page.getByRole('button', { name: processLabel, exact: true });
   const row = page.getByRole('row').filter({ has: exactProcessButton });
   try {
+    // Absence can be loading; multiple exact matches are already ambiguous.
+    // Never wait for an ambiguous catalog to become a unique selection.
+    await expect.poll(() => exactProcessButton.count()).toBeGreaterThan(0);
+    if (await exactProcessButton.count() > 1 || await row.count() > 1) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS');
+    }
     await expect(row).toHaveCount(1);
     await expect(row.getByRole('button', { name: processLabel, exact: true })).toHaveCount(1);
   } catch {

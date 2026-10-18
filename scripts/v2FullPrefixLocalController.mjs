@@ -5,17 +5,12 @@ import {
   authenticatedHostedDigest,
 } from './authenticatedHostedController.mjs';
 import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
-import { classifyV2FullPrefixFailure } from './v2FullPrefixReproduction.mjs';
+import {
+  classifyV2FullPrefixFailure,
+  V2_FULL_PRIMARY_EXPECTED_CASES,
+} from './v2FullPrefixReproduction.mjs';
 
-const EXPECTED_PREFIX_CASES = Object.freeze([
-  'ASSESS-002',
-  'ASSESS-003',
-  'ASSESS-018',
-  'ASSESS-020',
-  'SAFETY-001',
-  'SAFETY-002',
-  'SAFETY-003',
-]);
+const EXPECTED_PRIMARY_CASES = V2_FULL_PRIMARY_EXPECTED_CASES;
 const DIRECT_FIXTURE_CONTROLS = new Set([
   '/control/setup',
   '/control/arm-browser-fault',
@@ -28,6 +23,7 @@ const PREFIX_PREREQUISITE_FIELDS = Object.freeze([
   'reviewerRestricted',
   'reviewerCanRead',
   'reviewerCannotUpdateProcess',
+  'reviewerPrimaryCapabilitiesReady',
   'authorRoleRetained',
   'authorPrefixCapabilitiesReady',
   'processWritesReady',
@@ -192,7 +188,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
     observe: input => postgresAdapter.observe(input),
     frame: (pathname, input) => postgresAdapter.frame(pathname, input),
     verifyAssessmentFinalizeCase: input => postgresAdapter.verifyAssessmentFinalizeCase(input),
-    // The selected prefix never exercises the outcome/secret cases that need the
+    // The selected primary lifecycle never exercises the outcome/secret cases that need the
     // hosted adapter's supplemental browser-action recorder.
     recordBrowserAction: async () => {},
   });
@@ -217,6 +213,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
     'SELECT statement_timestamp() value',
   )).rows[0].value.toISOString();
   controller.active = true;
+  controller.controlIntake = 'accepting';
   controller.startedAt = observationStartedAt;
   controller.observationStartedAt = observationStartedAt;
 
@@ -245,11 +242,13 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       restricted = await requestFixtureControl(fixture, '/control/restricted-delete', {
         projectName,
         enabled: true,
+        primaryLifecycle: true,
       });
     } catch {
       throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
     }
-    if (restricted?.enabled !== true || restricted?.actor !== 'reviewer') {
+    if (restricted?.enabled !== true || restricted?.actor !== 'reviewer'
+      || restricted?.profile !== 'primary-lifecycle') {
       throw new Error('V2_FULL_PREFIX_LOCAL_PREFIX_PREREQUISITES_REJECTED');
     }
     reviewerRestrictedProject = projectName;
@@ -260,6 +259,9 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
           WHERE role_id=$6 AND capability_key='assess.read') "reviewerCanRead",
         NOT EXISTS(SELECT 1 FROM public.role_capabilities
           WHERE role_id=$6 AND capability_key='assess.process.update') "reviewerCannotUpdateProcess",
+        (SELECT count(*)=7 FROM public.role_capabilities WHERE role_id=$6
+          AND capability_key IN('assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest',
+            'assess.v2.approve','assess.v2.govern.resolve','assess.v2.studio.handoff')) "reviewerPrimaryCapabilitiesReady",
         EXISTS(SELECT 1 FROM public.organization_members
           WHERE org_id=$1 AND user_id=$4 AND role_id=$5 AND status='active' AND deleted_at IS NULL) "authorRoleRetained",
         (SELECT count(*)=6 FROM public.role_capabilities WHERE role_id=$5
@@ -277,7 +279,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
         fixture.ids.reviewer,
         fixture.ids.author,
         fixture.ids.role,
-        fixture.ids.deliveryRestrictedRole,
+        fixture.ids.primaryRestrictedReviewerRole,
         processId,
         browserSetup.deliveryProject.id,
     ])).rows[0];
@@ -421,9 +423,9 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
         caseIds,
         contractSatisfied: fixturePrerequisites === 'passed'
           && setupProbe === 'passed' && setupActionCount === 1
-          && caseIds.length === EXPECTED_PREFIX_CASES.length
-          && JSON.stringify(caseIds) === JSON.stringify([...EXPECTED_PREFIX_CASES].sort())
-          && serverCaseCount === EXPECTED_PREFIX_CASES.length
+          && caseIds.length === EXPECTED_PRIMARY_CASES.length
+          && JSON.stringify(caseIds) === JSON.stringify(EXPECTED_PRIMARY_CASES)
+          && serverCaseCount === EXPECTED_PRIMARY_CASES.length
           && browserActions.every(item => item.complete === true),
       });
     },
@@ -431,13 +433,17 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       if (closed) return;
       closed = true;
       let cleanupError = null;
+      controller.stopControlIntake();
       try { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
       catch (error) { cleanupError = error; }
+      try { await controller.joinControlOperations(); }
+      catch (error) { cleanupError ??= error; }
       if (reviewerRestrictedProject !== null) {
         try {
           await requestFixtureControl(fixture, '/control/restricted-delete', {
             projectName: reviewerRestrictedProject,
             enabled: false,
+            primaryLifecycle: true,
           });
           reviewerRestrictedProject = null;
         } catch (error) { cleanupError ??= error; }
@@ -449,4 +455,4 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
   });
 }
 
-export const V2_FULL_PREFIX_EXPECTED_CASES = EXPECTED_PREFIX_CASES;
+export const V2_FULL_PREFIX_EXPECTED_CASES = EXPECTED_PRIMARY_CASES;

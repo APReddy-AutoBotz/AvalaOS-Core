@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { Page } from '@playwright/test';
@@ -9,11 +10,50 @@ import {
   classifyV2ReloadRenderOutcome,
   createV2ReloadBrowserCheckpointBuilder,
   createV2ReloadReadAccumulator,
+  installV2ReloadReadObserver,
   resolveAuthenticatedAcceptanceMode,
   type V2ReloadReadStage,
 } from './v2ReloadDiagnosticObserver';
 
 const failureClasses = (other = 0) => ({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other });
+
+for (const rejectionTiming of ['before-snapshot', 'after-snapshot'] as const) {
+  test(`transport cancellation preserves independent body state: ${rejectionTiming}`, async () => {
+    const page = new EventEmitter();
+    const observer = installV2ReloadReadObserver(page as unknown as Page);
+    const request = {
+      url: () => 'http://127.0.0.1/rest/v1/assess_v2_cases?select=id',
+      method: () => 'GET',
+      failure: () => ({ errorText: 'net::ERR_ABORTED' }),
+    };
+    let rejectBody!: (reason: Error) => void;
+    const body = new Promise<never>((_resolve, reject) => { rejectBody = reject; });
+    page.emit('request', request);
+    page.emit('response', { url: request.url, request: () => request, status: () => 200, json: () => body });
+    page.emit('requestfailed', request);
+    if (rejectionTiming === 'before-snapshot') {
+      rejectBody(new Error('body unavailable'));
+      await Promise.resolve();
+    }
+    const completion = await observer.complete();
+    assert.equal(completion.observerFailure, false);
+    assert.deepEqual(completion.observation.readStages[0], {
+      stage: 'case-discovery', status: 'failed', httpStatus: 200, rowCount: null,
+      lifecycle: {
+        requested: 1, responseStarted: 1, completed: 0, transportFailed: 1, pending: 0,
+        bodyCompleted: 0, bodyFailed: rejectionTiming === 'before-snapshot' ? 1 : 0,
+        bodyPending: rejectionTiming === 'after-snapshot' ? 1 : 0,
+        transportFailures: { ...failureClasses(), aborted: 1 },
+      },
+    });
+    const retained = structuredClone(completion);
+    if (rejectionTiming === 'after-snapshot') rejectBody(new Error('late body unavailable'));
+    await body.catch(() => undefined);
+    await Promise.resolve();
+    assert.deepEqual(completion, retained, 'late body settlement must not rewrite the retained snapshot');
+    assert.equal(page.eventNames().length, 0);
+  });
+}
 
 const passed = (stage: V2ReloadReadStage, rowCount = 0) => ({
   stage,

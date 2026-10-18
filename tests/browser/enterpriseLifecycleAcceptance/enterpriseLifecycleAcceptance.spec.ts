@@ -29,7 +29,11 @@ import {
   observeAuthenticatedAiControls,
   observeAuthenticatedStudioDownloadDenial,
 } from '../authenticatedControlsAcceptance';
-import { installAuthenticatedHostedNetwork } from '../authenticatedHostedNetwork';
+import {
+  authenticatedHostedConfigureChromiumDurableResponseBodies,
+  authenticatedLifecycleSettleActorNavigationBoundary as settleActorNavigationBoundary,
+  installAuthenticatedHostedNetwork,
+} from '../authenticatedHostedNetwork';
 import {
   assertV2ReloadCheckpointResponse,
   createV2ReloadBrowserCheckpointBuilder,
@@ -95,7 +99,13 @@ type ApiResponseObservation = Readonly<{
   actionId: HostedActionReference;
 }>;
 type V2FullPrefixReproductionVariant = 'immediate' | 'barrier';
+const V2_FULL_PRIMARY_EXPECTED_CASE_IDS = Object.freeze([
+  'ASSESS-002', 'ASSESS-003', 'ASSESS-018', 'ASSESS-019', 'ASSESS-020', 'E2E-004',
+  'GOVERN-001', 'GOVERN-002', 'GOVERN-003', 'GOVERN-004',
+  'SAFETY-001', 'SAFETY-002', 'SAFETY-003',
+] as const);
 type V2FullPrefixReproductionObservation = Readonly<{
+  scope: 'desktop-primary-lifecycle';
   variant: V2FullPrefixReproductionVariant;
   navigation: 'passed' | 'failed';
   renderOutcome: V2ReloadRenderOutcome;
@@ -116,6 +126,12 @@ type V2FullPrefixReproductionObservation = Readonly<{
   caseVersionDelta: number | null;
   failureStage: 'navigation' | 'render' | 'read-observer' | 'browser-state' | 'network-queue'
     | 'lifecycle-frame' | 'assertion' | null;
+  primaryCompletion: Readonly<{
+    status: 'passed' | 'failed';
+    terminalCaseId: 'GOVERN-004' | null;
+    lifecycleFrameCaptured: boolean;
+    caseIds: readonly string[];
+  }>;
 }>;
 type V2FullPrefixQueueObservation = Readonly<{
   network: 'not_run' | 'passed' | 'failed';
@@ -339,7 +355,12 @@ const lifecycleMeasurements = (beforeFrame: LifecycleFrame, afterFrame: Lifecycl
     stateBeforeHash: beforeFrame.targetHash, stateAfterHash: afterFrame.targetHash };
 };
 
-const enterProcessAs = async (page: Page, actor: FixtureActor, processLabel: string) => {
+const enterProcessAs = async (
+  page: Page,
+  actor: FixtureActor,
+  processLabel: string,
+  beforeActorNavigation: () => Promise<void> = async () => undefined,
+) => {
   if (v2FullPrefixReproduction) {
     await primeV2FullPrefixFixtureSession(
       page,
@@ -347,7 +368,7 @@ const enterProcessAs = async (page: Page, actor: FixtureActor, processLabel: str
       process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token',
     );
   }
-  await enterAs(page, actor);
+  await enterAs(page, actor, beforeActorNavigation);
   if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
     await clickProduct(page, 'Assess');
   }
@@ -399,8 +420,12 @@ const assertNoHorizontalViewportOverflow = async (page: Page) => {
     .toBeLessThanOrEqual(dimensions.viewportWidth + 1);
 };
 
-const enterStudioAs = async (page: Page, actor: FixtureActor) => {
-  await enterAs(page, actor);
+const enterStudioAs = async (
+  page: Page,
+  actor: FixtureActor,
+  beforeActorNavigation: () => Promise<void> = async () => undefined,
+) => {
+  await enterAs(page, actor, beforeActorNavigation);
   await clickProduct(page, 'Studio');
   await expect(page.getByTestId('governed-studio-creation-route')).toBeVisible();
   await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
@@ -490,10 +515,31 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     cases: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
   }>;
   let activeTestWorkQueues: TestWorkQueues | null = null;
+  let activeNetworkLifecycle: Awaited<ReturnType<typeof installAuthenticatedHostedNetwork>> | null = null;
+  const activeTrackedActionIds = new Set<string>();
+  let pendingTrackedActionStarts = 0;
   const projectWorkQueues: TestWorkQueues[] = [];
   const queueNetworkAction = (operation: () => Promise<unknown>) => {
     if (!activeTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     activeTestWorkQueues.network.enqueue(operation);
+  };
+  const closePageAfterResponseBodies = async (ownedPage: Page) => {
+    if (!activeNetworkLifecycle) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    await activeNetworkLifecycle.settleResponseBodies();
+    await ownedPage.close();
+  };
+  const settleActorTransitionEvidence = async () => {
+    if (!activeNetworkLifecycle || !activeTestWorkQueues) {
+      throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
+    }
+    // Actor entry intentionally disposes two documents. Join body ownership
+    // and only the network action queue at each boundary; case work and normal
+    // V2 reloads retain their existing independent lifecycle.
+    await settleActorNavigationBoundary({
+      settleResponseBodies: activeNetworkLifecycle.settleResponseBodies,
+      drainNetworkActions: activeTestWorkQueues.network.drain,
+      activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,
+    });
   };
   const explicitCaseActions = new Map<string, HostedActionReference[]>();
   const bindObservedCase = (testId: string,...actions: HostedActionReference[]) => {
@@ -583,16 +629,37 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         : process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').origin;
       const appOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL ?? '').origin;
       hostedBrowserActionTracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
-        startAction: input => control<{ actionId: string }>('/control/browser-action-start', { projectName, ...input }),
-        finishAction: input => control('/control/browser-action', { projectName, ...input }),
+        startAction: async input => {
+          pendingTrackedActionStarts += 1;
+          try {
+            const result = await control<{ actionId: string }>('/control/browser-action-start', { projectName, ...input });
+            if (activeTrackedActionIds.has(result.actionId)) {
+              throw new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED');
+            }
+            activeTrackedActionIds.add(result.actionId);
+            return result;
+          } finally {
+            pendingTrackedActionStarts -= 1;
+          }
+        },
+        finishAction: async input => {
+          if (!activeTrackedActionIds.has(input.actionId)) {
+            throw new Error('AUTHENTICATED_BROWSER_ACTION_START_MISSING');
+          }
+          await control('/control/browser-action', { projectName, ...input });
+          activeTrackedActionIds.delete(input.actionId);
+        },
       });
     }
   });
 
-  test.beforeEach(async ({ context }, testInfo) => {
+  test.beforeEach(async ({ context, page }, testInfo) => {
     test.skip((v2PrimaryPrefixDiagnostic || v2FullPrefixReproduction)
       && !testInfo.tags.includes('@v2-primary-prefix-diagnostic'),
     'focused V2 execution runs only the original Desktop primary prefix');
+    if (controllerBackedAcceptance) {
+      await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
+    }
     externalRequests = [];
     const owningTestWorkQueues = Object.freeze({
       network: createAuthenticatedLifecycleWorkQueue(),
@@ -600,12 +667,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     });
     activeTestWorkQueues = owningTestWorkQueues;
     projectWorkQueues.push(owningTestWorkQueues);
-    await installAuthenticatedHostedNetwork({
+    activeNetworkLifecycle = await installAuthenticatedHostedNetwork({
       context,
       hosted: controllerBackedAcceptance,
       allowedOrigins: hostedAllowedOrigins,
       tracker: hostedBrowserActionTracker,
-      queueNetworkAction: operation => owningTestWorkQueues.network.enqueue(operation),
+      queueNetworkAction: (operation, ownedWork) => owningTestWorkQueues.network.enqueue(operation, ownedWork),
       onExternalRequest: origin => {
         nonLoopbackRequests += 1;
         externalRequests.push(origin);
@@ -621,15 +688,17 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let hasBoundaryFailure = false;
     if (owningTestWorkQueues) {
       await new Promise(resolve => setTimeout(resolve, 0));
-      for (const [title, queue] of [
-        ['hosted:queue:network-drain', owningTestWorkQueues.network],
-        ['hosted:queue:case-drain', owningTestWorkQueues.cases],
-      ] as const) {
-        try { await test.step(title, () => queue.drain()); }
-        catch (error) {
-          if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+      await test.step('hosted:queue:teardown', async () => {
+        for (const [title, queue] of [
+          ['hosted:queue:network-drain', owningTestWorkQueues.network],
+          ['hosted:queue:case-drain', owningTestWorkQueues.cases],
+        ] as const) {
+          try { await test.step(title, () => queue.drain()); }
+          catch (error) {
+            if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
+          }
         }
-      }
+      });
     }
     if (hasBoundaryFailure) failed = true;
     if (testInfo.status !== testInfo.expectedStatus) failed = true;
@@ -647,25 +716,27 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let reproductionNetworkQueue: V2FullPrefixQueueObservation['network'] = 'not_run';
     let reproductionCaseQueue: V2FullPrefixQueueObservation['cases'] = 'not_run';
     for (const workQueues of projectWorkQueues) {
-      for (const [title, queue] of [
-        ['hosted:queue:network-drain', workQueues.network],
-        ['hosted:queue:case-drain', workQueues.cases],
-      ] as const) {
-        try {
-          await test.step(title, () => queue.drain());
-          if (v2FullPrefixReproduction) {
-            if (title.includes('network') && reproductionNetworkQueue !== 'failed') reproductionNetworkQueue = 'passed';
-            else if (!title.includes('network') && reproductionCaseQueue !== 'failed') reproductionCaseQueue = 'passed';
+      await test.step('hosted:queue:teardown', async () => {
+        for (const [title, queue] of [
+          ['hosted:queue:network-drain', workQueues.network],
+          ['hosted:queue:case-drain', workQueues.cases],
+        ] as const) {
+          try {
+            await test.step(title, () => queue.drain());
+            if (v2FullPrefixReproduction) {
+              if (title.includes('network') && reproductionNetworkQueue !== 'failed') reproductionNetworkQueue = 'passed';
+              else if (!title.includes('network') && reproductionCaseQueue !== 'failed') reproductionCaseQueue = 'passed';
+            }
+          }
+          catch (error) {
+            if (v2FullPrefixReproduction) {
+              if (title.includes('network')) reproductionNetworkQueue = 'failed';
+              else reproductionCaseQueue = 'failed';
+            }
+            if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
           }
         }
-        catch (error) {
-          if (v2FullPrefixReproduction) {
-            if (title.includes('network')) reproductionNetworkQueue = 'failed';
-            else reproductionCaseQueue = 'failed';
-          }
-          if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
-        }
-      }
+      });
     }
     if (v2FullPrefixReproduction) {
       v2FullPrefixQueues = Object.freeze({ network: reproductionNetworkQueue, cases: reproductionCaseQueue });
@@ -716,7 +787,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let diagnosticPrefixComplete = false;
     await test.step('hosted:primary:process-denial', async () => {
       const deniedEditPage = await context.newPage();
-      await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process);
+      if (controllerBackedAcceptance) {
+        await authenticatedHostedConfigureChromiumDurableResponseBodies(context, deniedEditPage);
+      }
+      await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
       const beforeDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       let deniedEditApi: ApiResponseObservation;
       if (controllerBackedAcceptance) {
@@ -771,7 +845,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           cleanup: { verified: true },
         });
       }
-      await deniedEditPage.close();
+      await closePageAfterResponseBodies(deniedEditPage);
     });
 
     if (authenticatedProductAcceptance) {
@@ -793,7 +867,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           expectedErrorCode: 'COMMAND_UNAVAILABLE' | null,
           install: () => Promise<() => Promise<void>>,
         ) => test.step(safetyStepTitles[testId], async () => {
-          await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+          await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
           await page.getByRole('button', { name: 'Edit process details', exact: true }).click();
           const proposed = `${setup.aliases.process} ${testId.toLowerCase()}`;
           await page.getByLabel('Process name', { exact: true }).fill(proposed);
@@ -878,7 +952,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           return async () => { await page.unroute('**/functions/v1/process-command'); };
         });
 
-        await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+        await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
         await control('/control/assess-v2-runtime', { enabled: false });
         const beforeDisabled = await control<AssessV2Frame>('/control/assess-v2-frame', { projectName });
         try {
@@ -917,7 +991,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         }
       });
 
-      const v1ProcessId = await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+      const v1ProcessId = await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
       const beforeDiscovery = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       const discovery = await runV1AssessmentCompletion({
         page,
@@ -951,7 +1025,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
 
     await test.step('hosted:primary:v2-authoring-and-review', async () => {
-      await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+      await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
       const diagnosticCheckpoint = v2PrimaryPrefixDiagnostic
         ? createV2ReloadBrowserCheckpointBuilder(page, { projectName, persona: 'author' }) : null;
       if (diagnosticCheckpoint) {
@@ -1105,6 +1179,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
             }
             v2FullPrefixObservation = Object.freeze({
+              scope: 'desktop-primary-lifecycle',
               variant: v2FullPrefixReproductionVariant,
               navigation,
               renderOutcome,
@@ -1125,11 +1200,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
               caseDelta: afterV2Create ? afterV2Create.cases - beforeV2Create.cases : null,
               caseVersionDelta: afterV2Create ? afterV2Create.caseVersions - beforeV2Create.caseVersions : null,
               failureStage,
+              primaryCompletion: Object.freeze({
+                status: 'failed', terminalCaseId: null, lifecycleFrameCaptured: false, caseIds: Object.freeze([]),
+              }),
             });
           }
-          return;
-        }
-        if (diagnosticCheckpoint) {
+        } else if (diagnosticCheckpoint) {
           const beforeReloadResponse = await control<V2ReloadDiagnosticCheckpointResponse>('/control/v2-reload-diagnostic',
             await diagnosticCheckpoint.checkpoint('before-reload'));
           assertV2ReloadCheckpointResponse(beforeReloadResponse, 'before-reload');
@@ -1161,29 +1237,31 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           if (renderFailure) throw renderFailure;
           diagnosticPrefixComplete = true;
           return;
+        } else {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+          const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+          expect(afterV2Create.cases).toBe(beforeV2Create.cases + 1);
+          bindObservedCase('ASSESS-018',createV2Api.actionId);
+          authenticatedCases.push({
+            testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
+            observations: {
+              browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
+                result: { createVisible: true, currentDraftReloaded: true } },
+              api: { productionRoutes: ['/functions/v1/assess-v2-command'],
+                responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
+            },
+            controls: { assertions: [
+              { id: 'v2-case-created-by-command', status: 'passed' },
+              { id: 'v2-case-visible-after-reload', status: 'passed' },
+            ] },
+            measurements: lifecycleMeasurements(beforeV2Create,afterV2Create,beforeV2Create.cases,afterV2Create.cases),
+            cleanup: { verified: true },
+          });
         }
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
-        const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
-        expect(afterV2Create.cases).toBe(beforeV2Create.cases + 1);
-        bindObservedCase('ASSESS-018',createV2Api.actionId);
-        authenticatedCases.push({
-          testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
-          observations: {
-            browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
-              result: { createVisible: true, currentDraftReloaded: true } },
-            api: { productionRoutes: ['/functions/v1/assess-v2-command'],
-              responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
-          },
-          controls: { assertions: [
-            { id: 'v2-case-created-by-command', status: 'passed' },
-            { id: 'v2-case-visible-after-reload', status: 'passed' },
-          ] },
-          measurements: lifecycleMeasurements(beforeV2Create,afterV2Create,beforeV2Create.cases,afterV2Create.cases),
-          cleanup: { verified: true },
-        });
       }
 
+      await test.step('hosted:primary:v2-finalization-and-review', async () => {
       await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
       await completeRequiredAssessmentFacts(page);
       await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
@@ -1217,8 +1295,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       const replayPage = await context.newPage();
       const stalePage = await context.newPage();
+      if (controllerBackedAcceptance) {
+        await authenticatedHostedConfigureChromiumDurableResponseBodies(context, replayPage);
+        await authenticatedHostedConfigureChromiumDurableResponseBodies(context, stalePage);
+      }
       for (const reviewPage of [page, replayPage, stalePage]) {
-        await enterProcessAs(reviewPage, setup.actors.reviewer, setup.aliases.process);
+        await enterProcessAs(reviewPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
         await expect(reviewPage.getByTestId('assess-v2-review-workspace')).toContainText('Reviewer-ready');
       }
       await selectReviewer(page, setup.actors.reviewer);
@@ -1227,14 +1309,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       const beforeAssignmentLifecycle = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-      const beforeAssignment = await control<MutationSnapshot>('/control/snapshot');
+      const beforeAssignment = await control<MutationSnapshot>('/control/snapshot', { projectName });
       const assignmentApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
         page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
       expect(assignmentApi.status).toBe(200);
       await expect(page.getByText(/Reviewer assignment committed\./u)).toBeVisible();
       const afterAssignmentLifecycle = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-      const afterAssignment = await control<MutationSnapshot>('/control/snapshot');
+      const afterAssignment = await control<MutationSnapshot>('/control/snapshot', { projectName });
       expect(afterAssignment).toEqual({
         reviewAssignments: beforeAssignment.reviewAssignments + 1,
         governResolutions: beforeAssignment.governResolutions,
@@ -1247,7 +1329,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         replayPage.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
       expect(replayApi.status).toBe(200);
       await expect(replayPage.getByText(/Reviewer assignment committed\./u)).toBeVisible();
-      expect(await control<MutationSnapshot>('/control/snapshot')).toEqual(afterAssignment);
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
       observe('command-replay', 'ui.replay-no-new-effect');
 
       const staleApi = await observeApiResponse(stalePage, '/functions/v1/assess-v2-command', () =>
@@ -1255,7 +1337,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       expect(staleApi.status).toBe(409);
       await expect(stalePage.getByText('This assessment changed on the server. Reload it before retrying the action.', { exact: true })).toBeVisible();
       await expect(stalePage.getByText(/Reviewer assignment committed\./u)).toHaveCount(0);
-      expect(await control<MutationSnapshot>('/control/snapshot')).toEqual(afterAssignment);
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
       observe('command-stale-denial', 'ui.stale-no-false-success');
       if (authenticatedProductAcceptance && beforeAssignmentLifecycle && afterAssignmentLifecycle) {
         expect(afterAssignmentLifecycle.assignments).toBe(beforeAssignmentLifecycle.assignments + 1);
@@ -1295,8 +1377,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           ] }, measurements, cleanup: { verified: true },
         });
       }
-      await replayPage.close();
-      await stalePage.close();
+      await closePageAfterResponseBodies(replayPage);
+      await closePageAfterResponseBodies(stalePage);
 
       const beforeAttestation = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
@@ -1338,7 +1420,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const afterChanges = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
 
-      await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+      await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
       await expect(page.getByRole('button', { name: 'Start new draft revision', exact: true })).toBeVisible();
       if (authenticatedProductAcceptance && beforeChanges && afterChanges) {
         expect(afterChanges.changesRequested).toBe(beforeChanges.changesRequested + 1);
@@ -1405,12 +1487,27 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           ] }, measurements, cleanup: { verified: true },
         });
       }
+      });
     });
+    if (v2FullPrefixReproduction && v2FullPrefixObservation) {
+      const completionFrame = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+      expect(completionFrame.decisions).toBeGreaterThanOrEqual(2);
+      const caseIds = authenticatedCases.map(row => (row as { testId?: unknown }).testId)
+        .filter((testId): testId is string => typeof testId === 'string').sort();
+      expect(caseIds).toEqual([...V2_FULL_PRIMARY_EXPECTED_CASE_IDS]);
+      v2FullPrefixObservation = Object.freeze({
+        ...v2FullPrefixObservation,
+        primaryCompletion: Object.freeze({
+          status: 'passed', terminalCaseId: 'GOVERN-004', lifecycleFrameCaptured: true,
+          caseIds: Object.freeze(caseIds),
+        }),
+      });
+    }
     if (diagnosticPrefixComplete) return;
   }));
 
   test('independent approval, Govern separation and synthetic Studio generation retain exact lineage', async ({ page }) => {
-    await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process);
+    await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
     let reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
     await selectReviewer(page, setup.actors.reviewer);
     await reviewWorkspace.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
@@ -1450,18 +1547,18 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await reviewWorkspace.getByLabel('Govern rationale', { exact: true }).fill('The final reviewer must not resolve this financial high-impact decision.');
     const beforeGovernBoundary = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-    const beforeFinalReviewerDenial = await control<MutationSnapshot>('/control/snapshot');
+    const beforeFinalReviewerDenial = await control<MutationSnapshot>('/control/snapshot', { projectName });
     const governDenialApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
       reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click());
     expect(governDenialApi.status).toBe(400);
     await expect(page.getByRole('heading', { name: 'Workspace unavailable', exact: true })).toBeVisible();
     await expect(page.getByText('The command could not be completed. No success was recorded.', { exact: true })).toBeVisible();
     await expect(page.getByText('Govern resolution committed.', { exact: true })).toHaveCount(0);
-    expect(await control<MutationSnapshot>('/control/snapshot')).toEqual(beforeFinalReviewerDenial);
+    expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(beforeFinalReviewerDenial);
     observe('govern-separation-denial', 'ui.separation-denied');
     observe('govern-separation-denial', 'ui.final-reviewer-govern-denied');
 
-    await enterProcessAs(page, setup.actors.approver, setup.aliases.process);
+    await enterProcessAs(page, setup.actors.approver, setup.aliases.process, settleActorTransitionEvidence);
     reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
     expect(await resolveEveryGovernControl(page)).toBeGreaterThan(0);
     await reviewWorkspace.getByLabel('Govern rationale', { exact: true }).fill('Independent resolver confirmed every required control.');
@@ -1502,19 +1599,19 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Handed off to Studio');
 
-    await enterStudioAs(page, setup.actors.approver);
+    await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
     await commitStudioHandoffAction(page, 'Request handoff');
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
-    await enterStudioAs(page, setup.actors.reviewer);
+    await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
     await commitStudioHandoffAction(page, 'Approve review', 'Independent Studio handoff review approved.');
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
-    await enterStudioAs(page, setup.actors.author);
+    await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
     await commitStudioHandoffAction(page, 'Final accept', 'Final Studio handoff acceptance by an independent actor.');
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
-    await enterStudioAs(page, setup.actors.approver);
+    await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
     const sourcePackageApi = await commitStudioHandoffAction(page, 'Start Studio draft', undefined, 'Outbox');
     expect(sourcePackageApi.status).toBe(201);
     await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\./u)).toBeVisible();
@@ -1606,15 +1703,15 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (authenticatedProductAcceptance) {
       await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
       await expect(page.getByText('Reviewer ready committed.', { exact: true })).toBeVisible();
-      await enterStudioAs(page, setup.actors.author);
+      await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
       await page.getByLabel('Eligible independent reviewer', { exact: true }).selectOption(setup.actors.reviewer.user.id);
       await page.getByRole('button', { name: 'Assign reviewer', exact: true }).click();
       await expect(page.getByText('In review committed.', { exact: true })).toBeVisible();
-      await enterStudioAs(page, setup.actors.reviewer);
+      await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
       await page.getByLabel('Rationale', { exact: true }).fill('Independent Studio reviewer approved the exact generated version.');
       await page.getByRole('button', { name: 'Approve review', exact: true }).click();
       await expect(page.getByText('Approval ready committed.', { exact: true })).toBeVisible();
-      await enterStudioAs(page, setup.actors.author);
+      await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
       await page.getByLabel('Rationale', { exact: true }).fill('Independent final approval binds the exact reviewed Studio version.');
       await page.getByRole('button', { name: 'Final approve', exact: true }).click();
       await expect(page.getByText('Approved committed.', { exact: true })).toBeVisible();
@@ -1696,7 +1793,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const rejectionProjectName = `${projectName}-rejection`;
       const rejection = await control<FixtureSetup>('/control/setup', { projectName: rejectionProjectName });
       validateSetupLabels(rejection, rejectionProjectName, hostedAuthenticatedAcceptance);
-      await enterProcessAs(page,rejection.actors.author,rejection.aliases.process);
+      await enterProcessAs(page,rejection.actors.author,rejection.aliases.process,settleActorTransitionEvidence);
       await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
       await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
@@ -1704,7 +1801,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
       await finalizeDecisionPack(page);
       await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
-      await enterProcessAs(page,rejection.actors.reviewer,rejection.aliases.process);
+      await enterProcessAs(page,rejection.actors.reviewer,rejection.aliases.process,settleActorTransitionEvidence);
       await selectReviewer(page,rejection.actors.reviewer);
       await page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
       expect((await attestSubmittedEvidence(page,'Independent evidence review before rejection.')).length).toBeGreaterThan(0);
@@ -1816,7 +1913,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     test('authenticated Admin, AI and private Studio controls use server authority and measured storage boundaries', async ({ page }) => {
       const deps = {
         page,
-        enterAs: (persona: 'admin' | 'non_admin') => enterAs(page, persona === 'admin' ? setup.actors.author : setup.actors.reviewer),
+        enterAs: (persona: 'admin' | 'non_admin') => enterAs(page,
+          persona === 'admin' ? setup.actors.author : setup.actors.reviewer, settleActorTransitionEvidence),
         clickProduct: (product: 'Assess' | 'Admin' | 'Enterprise Intelligence' | 'Studio') => clickProduct(page, product),
         prepareCase: <T,>(testId: string) => control<T>('/control/authenticated-controls/prepare', { testId }),
         readServerFrame: (testId: string) => control<Record<string, unknown>>('/control/authenticated-controls/frame', { testId }),

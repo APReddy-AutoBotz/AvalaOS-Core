@@ -8,9 +8,72 @@ import {
   authenticatedLifecycleValidateDeniedProcessAuthority,
   authenticatedLifecycleValidateSessionBinding,
   authenticatedLifecycleValidateSetupLabels,
+  authenticatedLifecycleEnterAs,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
 } from './authenticatedLifecycleHarness';
+import { authenticatedLifecycleSettleActorNavigationBoundary } from './authenticatedHostedNetwork';
+
+const actorEntryFixture = {
+  token: 'fixture-actor-token',
+  user: { id: '10000000-0000-4000-8000-000000000001', email: 'actor@example.invalid' },
+};
+
+const actorEntryPage = (events: string[]) => ({
+  goto: async (target: string) => { events.push(`goto:${target}`); },
+  evaluate: async () => { events.push('session-write'); },
+}) as unknown as import('@playwright/test').Page;
+
+test('local actor entry joins owned evidence before each intentional navigation disposal', async () => {
+  const events: string[] = [];
+  let boundary = 0;
+  await authenticatedLifecycleEnterAs(actorEntryPage(events), actorEntryFixture, async () => {
+    events.push(`boundary:${++boundary}`);
+  });
+  assert.deepEqual(events, [
+    'boundary:1', 'goto:/', 'boundary:2', 'session-write', 'goto:/'
+  ]);
+});
+
+test('actor-entry boundary failure prevents the following session mutation and navigation', async () => {
+  const firstEvents: string[] = [];
+  await assert.rejects(authenticatedLifecycleEnterAs(actorEntryPage(firstEvents), actorEntryFixture, async () => {
+    throw new Error('OWNED_EVIDENCE_REJECTED');
+  }), /OWNED_EVIDENCE_REJECTED/u);
+  assert.deepEqual(firstEvents, []);
+
+  const secondEvents: string[] = [];
+  let boundary = 0;
+  await assert.rejects(authenticatedLifecycleEnterAs(actorEntryPage(secondEvents), actorEntryFixture, async () => {
+    boundary += 1;
+    if (boundary === 2) throw new Error('OWNED_EVIDENCE_REJECTED');
+    secondEvents.push('boundary:1');
+  }), /OWNED_EVIDENCE_REJECTED/u);
+  assert.deepEqual(secondEvents, ['boundary:1', 'goto:/']);
+});
+
+test('actor-entry boundary retains a started request until its headers and owned finish settle', async () => {
+  let active = 1;
+  let responseOwned = false;
+  let bodySettles = 0;
+  let networkDrains = 0;
+  let observations = 0;
+  await authenticatedLifecycleSettleActorNavigationBoundary({
+    settleResponseBodies: async () => { bodySettles += 1; },
+    drainNetworkActions: async () => { networkDrains += 1; },
+    activeActionCount: () => active,
+    waitForNextObservation: async () => {
+      observations += 1;
+      if (observations === 1) responseOwned = true;
+      else if (responseOwned) active = 0;
+    },
+  });
+  assert.equal(active, 0);
+  assert.equal(responseOwned, true);
+  assert.equal(observations, 3);
+  assert.equal(networkDrains, 4);
+  assert.equal(bodySettles, 8);
+});
 
 const deniedAuthorityInput = () => ({
   selected: {
@@ -251,7 +314,9 @@ test('control transport bounds the complete request and reports only the closed 
     },
     fetchImpl: ((_target, init) => {
       requestSignal = init?.signal ?? null;
-      return new Promise<Response>(() => undefined);
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener('abort', () => reject(new Error('private abort detail')), { once: true });
+      });
     }) as typeof fetch,
   });
   const startedAt = Date.now();
@@ -266,17 +331,33 @@ test('control transport bounds the complete request and reports only the closed 
 });
 
 test('control transport applies the same deadline while consuming the complete response body', async () => {
+  let requestSignal: AbortSignal | null = null;
   const control = createAuthenticatedLifecycleControl({
     baseUrl: 'http://localhost:48123',
     token: 'fixture-control-token',
     timeoutMs: 20,
-    fetchImpl: (async () => ({
+    fetchImpl: (async (_target, init) => {
+      requestSignal = init?.signal ?? null;
+      return ({
       ok: true,
-      json: () => new Promise<unknown>(() => undefined),
-    }) as Response) as typeof fetch,
+      json: () => new Promise<unknown>((_resolve, reject) => {
+        requestSignal?.addEventListener('abort', () => reject(new Error('private body abort detail')), { once: true });
+      }),
+    }) as Response;
+    }) as typeof fetch,
   });
   await assert.rejects(control('/control/process-frame'), error => (
     error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT'
+  ));
+});
+
+test('control transport reports cleanup-incomplete when cancellation cannot settle owned work', async () => {
+  const control = createAuthenticatedLifecycleControl({
+    baseUrl: 'http://localhost:48123', token: 'fixture-control-token', timeoutMs: 5,
+    fetchImpl: (() => new Promise<Response>(() => undefined)) as typeof fetch,
+  });
+  await assert.rejects(control('/control/setup'), error => (
+    error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_CLEANUP_INCOMPLETE'
   ));
 });
 
@@ -331,6 +412,26 @@ test('work queue attaches an immediate rejection handler and retains its first f
   } finally {
     process.off('unhandledRejection', onUnhandled);
   }
+});
+
+test('work queue joins eager owned work after an earlier failure without running its controller commit', async () => {
+  const queue = createAuthenticatedLifecycleWorkQueue();
+  const first = new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_ACTION_REJECTED');
+  let releaseOwned: (() => void) | undefined;
+  const owned = new Promise<void>(resolve => { releaseOwned = resolve; });
+  let laterOperationRan = false;
+  queue.enqueue(async () => { throw first; });
+  queue.enqueue(async () => { laterOperationRan = true; }, owned);
+  let drainSettled = false;
+  const drain = queue.drain().then(
+    () => { drainSettled = true; },
+    error => { drainSettled = true; throw error; },
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(drainSettled, false);
+  releaseOwned?.();
+  await assert.rejects(drain, error => error === first);
+  assert.equal(laterOperationRan, false);
 });
 
 test('work queue drains work appended by an owning operation exactly once', async () => {

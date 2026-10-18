@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import test from 'node:test';
 
 import {
@@ -69,9 +70,14 @@ const createFinalizeProofHarness = async ({ commandType='assessment.finalize', r
     beforeCapturedAt:frames[0].capturedAt,afterCapturedAt:frames[1].capturedAt};
   let capture=0;
   const adapter={bindSession:async()=>{},observe:async()=>frames[capture++],
-    ...(provideProof?{verifyAssessmentFinalizeCase:async()=>mutateProof(structuredClone(proof))}:{})};
+    ...(provideProof?{verifyAssessmentFinalizeCase:async input=>{
+      assert.deepEqual(input.before,frames[0],'finalize proof needs the original before-frame');
+      assert.deepEqual(input.after,frames[1],'finalize proof needs the freshly captured after-frame');
+      return mutateProof(structuredClone(proof));
+    }}:{})};
   const controller=new AuthenticatedHostedController({config,adapter,
     identity:{verifySession:async()=>({actorId,sessionId})}});
+  controller.active = true;
   controller.exerciseId=id();
   controller.projects.set('desktop-chromium',{processId:id(),identities:{author:{id:actorId}},
     lastBoundaryAt:'2026-10-09T23:59:59.000Z'});
@@ -115,6 +121,141 @@ test('real loopback controller streams bounded JSON before dispatch', async () =
     assert.deepEqual(await oversized.json(), { error: 'AUTHENTICATED_HOSTED_CONTROLLER_REQUEST_TOO_LARGE' });
     assert.equal(calls.length, 1);
   } finally { await server.close(); }
+});
+
+test('server stop cancels and joins a held request body before controller cleanup can begin', async () => {
+  let controlCalls = 0;
+  const server = await startAuthenticatedHostedControllerServer({
+    controlToken: 'fixture-loopback-token',
+    control: async () => { controlCalls += 1; return { accepted: true }; },
+  }, { settlementTimeoutMs: 500 });
+  const clientError = new Promise(resolve => {
+    const request = httpRequest(`${server.baseUrl}/control/setup`, { method: 'POST', headers: {
+      'content-type': 'application/json', 'content-length': '100',
+      'x-enterprise-lifecycle-control': server.controlToken,
+    } });
+    request.on('error', resolve);
+    request.write('{"projectName":"desktop');
+  });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(await server.stopAndDrain(), { settled: true });
+  await clientError;
+  assert.equal(controlCalls, 0);
+});
+
+test('server and controller join an accepted handler before cleanup verification', async () => {
+  let releaseOperation;
+  let startedOperation;
+  const operationStarted = new Promise(resolve => { startedOperation = resolve; });
+  const operationGate = new Promise(resolve => { releaseOperation = resolve; });
+  const events = [];
+  const cleanupResult = { activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+    activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false, immutableHistoryPreserved: true };
+  const controller = new AuthenticatedHostedController({
+    config: validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity: { revokeAll: async () => events.push('revoke') },
+    adapter: {
+      control: async (_pathname, input) => {
+        events.push('operation-start');
+        input.signal.addEventListener('abort', () => events.push('operation-abort'), { once: true });
+        startedOperation();
+        await operationGate;
+        events.push('operation-end');
+        return { accepted: true };
+      },
+      quiesce: async () => events.push('quiesce'),
+      cleanup: async () => events.push('cleanup'),
+      verifyCleanup: async () => { events.push('verify'); return cleanupResult; },
+    },
+  });
+  controller.active = true;
+  const server = await startAuthenticatedHostedControllerServer(controller, { settlementTimeoutMs: 1_000 });
+  const request = fetch(`${server.baseUrl}/control/custom`, { method: 'POST', headers: {
+    'content-type': 'application/json', 'x-enterprise-lifecycle-control': server.controlToken,
+  }, body: '{}' }).catch(() => null);
+  await operationStarted;
+  let lifecycleSettled = false;
+  const lifecycle = (async () => {
+    await server.stopAndDrain();
+    await controller.abortAndQuiesce();
+    lifecycleSettled = true;
+  })();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(lifecycleSettled, false);
+  assert.equal(events.includes('verify'), false);
+  releaseOperation();
+  await lifecycle;
+  await request;
+  assert.deepEqual(events, ['operation-start', 'operation-abort', 'operation-end', 'quiesce', 'revoke', 'cleanup', 'verify']);
+});
+
+test('late session binding cannot commit after intake stops', async () => {
+  const actorId = id(); const sessionId = id();
+  let releaseBinding; let bindingStarted;
+  const bindingGate = new Promise(resolve => { releaseBinding = resolve; });
+  const started = new Promise(resolve => { bindingStarted = resolve; });
+  const events = [];
+  const controller = new AuthenticatedHostedController({
+    config: validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity: { verifySession: async () => ({ actorId, sessionId }), revokeAll: async () => events.push('revoke') },
+    adapter: {
+      bindSession: async () => { bindingStarted(); await bindingGate; events.push('bind-returned'); },
+      quiesce: async () => events.push('quiesce'), cleanup: async () => events.push('cleanup'),
+      verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+        activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false, immutableHistoryPreserved: true }),
+    },
+  });
+  controller.active = true;
+  controller.projects.set('desktop-chromium', { identities: { author: { id: actorId } } });
+  const operation = controller.control('/control/bind-browser-session', {
+    projectName: 'desktop-chromium', persona: 'author', accessToken: tokenFor(actorId, sessionId),
+  });
+  await started;
+  const cleanup = controller.abortAndQuiesce();
+  releaseBinding();
+  await assert.rejects(operation, /INTAKE_CLOSED/u);
+  await cleanup;
+  assert.equal(controller.boundSessions.size, 0);
+  assert.deepEqual(events, ['bind-returned', 'quiesce', 'revoke', 'cleanup']);
+});
+
+test('a project committed while intake stops remains owned for revocation and cleanup', async () => {
+  const identities = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider']
+    .map(persona => [persona, { id: id(), email: `${persona}@example.invalid`, password: `fixture-${persona}` }]));
+  let releaseSetup; let setupStarted;
+  const setupGate = new Promise(resolve => { releaseSetup = resolve; });
+  const started = new Promise(resolve => { setupStarted = resolve; });
+  const cleanupProjects = [];
+  const revokedProjects = [];
+  const controller = new AuthenticatedHostedController({
+    config: validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity: {
+      provisionProject: async () => identities,
+      revokeAll: async input => revokedProjects.push(...input.projects),
+    },
+    adapter: {
+      setupProject: async ({ projectName }) => {
+        setupStarted();
+        await setupGate;
+        return { projectName, processId: id(), projectId: id(), deliveryProject: { id: id(), name: 'fixture' }, aliases: {} };
+      },
+      quiesce: async () => undefined,
+      cleanup: async input => cleanupProjects.push(...input.projects),
+      verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+        activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false, immutableHistoryPreserved: true }),
+    },
+  });
+  controller.active = true;
+  const operation = controller.control('/control/setup', { projectName: 'desktop-chromium' });
+  await started;
+  const cleanup = controller.abortAndQuiesce();
+  releaseSetup();
+  await assert.rejects(operation, /INTAKE_CLOSED/u);
+  await cleanup;
+  assert.equal(controller.projects.size, 0);
+  assert.equal(cleanupProjects.length, 1);
+  assert.equal(revokedProjects.length, 1);
+  assert.equal(cleanupProjects[0].projectName, 'desktop-chromium');
 });
 const baseEnvironment = () => ({
   GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
@@ -327,6 +468,7 @@ test('a failed browser assertion remains actual false instead of becoming proof'
   let tick = 0;
   const controller = new AuthenticatedHostedController({ config, adapter: {}, identity: {},
     now: () => new Date(Date.UTC(2026, 9, 10, 0, 0, tick++)) });
+  controller.active = true;
   const projectName = 'desktop-chromium';
   controller.projects.set(projectName, { lastBoundaryAt: '2026-10-09T23:59:59.000Z' });
   const actionId = digest('action');
@@ -363,6 +505,7 @@ test('real session binding is idempotent and namespaces the browser project pers
   const actorId=id();const sessionId=id();const calls=[];
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
     identity:{verifySession:async()=>({actorId,sessionId})},adapter:{bindSession:async input=>calls.push(input)}});
+  controller.active = true;
   controller.projects.set('desktop-chromium',{identities:{author:{id:actorId}}});
   const accessToken=tokenFor(actorId,sessionId);
   await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken});
@@ -378,6 +521,7 @@ test('cached browser actions reverify the exact presented token before observati
     identity:{verifySession:async({accessToken})=>{verifyCalls+=1;if(accessToken!==validToken)throw new Error('SESSION_REJECTED');
       return {actorId,sessionId};}},adapter:{bindSession:async()=>{},observe:async()=>{observeCalls+=1;
       return {capturedAt:'2026-10-10T00:00:00.000Z',records:[]};}}});
+  controller.active = true;
   controller.projects.set('desktop-chromium',{processId:'process',identities:{author:{id:actorId}}});
   await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken:validToken});
   await assert.rejects(controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:forgedToken,
@@ -390,6 +534,7 @@ test('cached browser actions reject a stale session before observation', async (
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
     identity:{verifySession:async()=>{if(!active)throw new Error('SESSION_STALE');return {actorId,sessionId};}},
     adapter:{bindSession:async()=>{},observe:async()=>{observeCalls+=1;return {capturedAt:'2026-10-10T00:00:00.000Z',records:[]};}}});
+  controller.active = true;
   controller.projects.set('desktop-chromium',{processId:'process',identities:{author:{id:actorId}}});
   await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken});
   active=false;
@@ -433,6 +578,29 @@ test('browser action binding rejects an unknown project with a bounded controlle
     /^Error: AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND$/u);
 });
 
+test('snapshot controls require an explicit registered project and preserve its observation scope', async () => {
+  const config=validateAuthenticatedHostedControllerEnvironment(baseEnvironment());
+  const calls=[];
+  const snapshot={reviewAssignments:2,governResolutions:1,commandReceipts:4,privilegedAudits:4};
+  const controller=new AuthenticatedHostedController({config,identity:{},adapter:{
+    frame:async (pathname,input)=>{calls.push({pathname,input});return snapshot;},
+  }});
+  const desktop={processId:id()};const pixel={processId:id()};
+  controller.active=true;
+  controller.projects.set('desktop-chromium',desktop);
+  controller.projects.set('pixel-7',pixel);
+  for (const input of [{},{projectName:'unregistered-project'}]) {
+    await assert.rejects(controller.control('/control/snapshot',input),
+      /^Error: AUTHENTICATED_HOSTED_CONTROLLER_PROJECT_NOT_FOUND$/u);
+  }
+  assert.equal(calls.length,0,'missing scope must never default to another project');
+  assert.deepEqual(await controller.control('/control/snapshot',{projectName:'desktop-chromium'}),snapshot);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].pathname,'/control/snapshot');
+  assert.equal(calls[0].input.project,desktop);
+  assert.equal(calls[0].input.scope,config.scope);
+});
+
 test('Studio fault arming uses the production expectedAggregateVersion envelope', async () => {
   const actorId=id();const sessionId=id();let permit;
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
@@ -454,6 +622,7 @@ test('browser action captures a pre-request frame and requires its explicit case
       bindSession:async()=>{},observe:async input=>{assert.equal(input.project.processId,'process');
         assert.equal(Object.hasOwn(input,'to'),false);return frames[captures++];},
     }});
+  controller.active = true;
   controller.startedAt='2026-10-09T23:59:59.000Z';controller.projects.set('desktop-chromium',{processId:'process',
     identities:{author:{id:actorId}},lastBoundaryAt:controller.startedAt});
   const accessToken=tokenFor(actorId,sessionId);
@@ -540,6 +709,32 @@ test('identity adapter maps 400 to input rejection and keeps only allowlisted up
     assert.equal(JSON.stringify(error.authenticatedHostedIdentityDiagnostic).includes('fixture-sensitive-value'),false);
     return true;
   });
+});
+
+test('cancelled identity creation records an unknown mutation outcome instead of certifying cleanup', async () => {
+  const config = validateAuthenticatedHostedControllerEnvironment(baseEnvironment());
+  let observedSignal;
+  const adapter = createAuthenticatedHostedIdentityAdapter({ config, db: {}, fetchImpl: async (_url, init) => {
+    observedSignal = init.signal;
+    return new Promise((_resolve, reject) => observedSignal.addEventListener('abort',
+      () => reject(new Error('private cancelled creation')), { once: true }));
+  } });
+  const abort = new AbortController();
+  const provisioning = adapter.provisionProject({ projectName: 'desktop-chromium', exerciseDigest: digest('exercise'),
+    personas: ['author'], signal: abort.signal });
+  abort.abort();
+  await assert.rejects(provisioning, /IDENTITY_TRANSPORT_FAILURE/u);
+  assert.equal(adapter.created.size, 0);
+  assert.deepEqual([...adapter.unknownMutationOutcomes], ['PROVISION']);
+
+  const controller = new AuthenticatedHostedController({ config, identity: adapter, adapter: {
+    quiesce: async () => undefined, cleanup: async () => undefined,
+    verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+      activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false, immutableHistoryPreserved: true }),
+  } });
+  controller.active = true;
+  await assert.rejects(controller.abortAndQuiesce(), /ABORT_CLEANUP_REJECTED/u);
+  assert.equal(controller.quiesced, false);
 });
 
 test('abort cannot certify cleanup if unrelated state changed or retained history was lost', async () => {
