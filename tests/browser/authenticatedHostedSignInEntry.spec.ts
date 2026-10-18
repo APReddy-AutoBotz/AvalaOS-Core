@@ -10,7 +10,11 @@ import {
   createAuthenticatedLifecycleControl,
   type AuthenticatedLifecycleActor,
 } from './authenticatedLifecycleHarness';
-import { installAuthenticatedHostedNetwork } from './authenticatedHostedNetwork';
+import {
+  authenticatedHostedConfigureChromiumDurableResponseBodies,
+  authenticatedLifecycleSettleActorNavigationBoundary,
+  installAuthenticatedHostedNetwork,
+} from './authenticatedHostedNetwork';
 import {
   runV1AssessmentCompletion,
   V1_ASSESSMENT_COMPLETION_TIMEOUT,
@@ -57,7 +61,8 @@ const actor = (
   };
 };
 
-test.beforeEach(async ({ context }) => {
+test.beforeEach(async ({ context, page }) => {
+  await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
   await context.route('**/*', route => route.abort('blockedbyclient'));
 });
 
@@ -67,20 +72,7 @@ const dispatchToLocalProxy = async (route: Route) => {
   const targetOrigin = requested.origin === appOrigin ? localAppOrigin
     : requested.origin === apiOrigin ? localApiOrigin : null;
   if (!targetOrigin) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_ORIGIN_REJECTED');
-  const headers = await request.allHeaders();
-  for (const name of ['host', 'content-length', 'accept-encoding']) delete headers[name];
-  const response = await fetch(`${targetOrigin}${requested.pathname}${requested.search}`, {
-    method: request.method(),
-    headers,
-    body: ['GET', 'HEAD'].includes(request.method()) ? undefined : request.postDataBuffer(),
-    redirect: 'manual',
-  });
-  if (response.status >= 300 && response.status < 400) {
-    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_REDIRECT_REJECTED');
-  }
-  const responseHeaders = Object.fromEntries(response.headers);
-  for (const name of ['content-encoding', 'content-length', 'transfer-encoding']) delete responseHeaders[name];
-  await route.fulfill({ status: response.status, headers: responseHeaders, body: Buffer.from(await response.arrayBuffer()) });
+  await route.continue();
 };
 
 test('actual application uses the shared real-auth helper for rejected, cold and cached sign-in', async ({ context, page }, testInfo) => {
@@ -103,6 +95,8 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   let observedHttpRequests = 0;
   let networkActionError: unknown = null;
   let networkActionTail: Promise<unknown> = Promise.resolve();
+  const activeActions = new Set<string>();
+  let pendingActionStarts = 0;
   const queueNetworkAction = (operation: () => Promise<unknown>) => {
     networkActionTail = networkActionTail.then(operation).catch(error => {
       if (!networkActionError) networkActionError = error;
@@ -111,13 +105,23 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   const tracker = new AuthenticatedHostedBrowserActionTracker({
     backendOrigin: apiOrigin,
     appOrigin,
-    startAction: input => authenticatedLifecycleControl<{ actionId: string }>('/control/browser-action-start', {
-      projectName,
-      ...input,
-    }),
-    finishAction: input => authenticatedLifecycleControl('/control/browser-action', { projectName, ...input }),
+    startAction: async input => {
+      pendingActionStarts += 1;
+      try {
+        const result = await authenticatedLifecycleControl<{ actionId: string }>('/control/browser-action-start', {
+          projectName, ...input,
+        });
+        activeActions.add(result.actionId);
+        return result;
+      } finally { pendingActionStarts -= 1; }
+    },
+    finishAction: async input => {
+      const result = await authenticatedLifecycleControl('/control/browser-action', { projectName, ...input });
+      activeActions.delete(input.actionId);
+      return result;
+    },
   });
-  await installAuthenticatedHostedNetwork({
+  const networkLifecycle = await installAuthenticatedHostedNetwork({
     context: page.context(),
     hosted: true,
     allowedOrigins: new Set([appOrigin, apiOrigin]),
@@ -130,6 +134,18 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       proxiedOrigins.push(new URL(route.request().url()).origin);
       await dispatchToLocalProxy(route);
     },
+  });
+  const settleActorTransitionEvidence = () => authenticatedLifecycleSettleActorNavigationBoundary({
+    settleResponseBodies: networkLifecycle.settleResponseBodies,
+    drainNetworkActions: async () => {
+      for (;;) {
+        const current = networkActionTail;
+        await current;
+        if (current === networkActionTail) break;
+      }
+      if (networkActionError) throw networkActionError;
+    },
+    activeActionCount: () => activeActions.size + pendingActionStarts,
   });
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
@@ -200,7 +216,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   networkActionError = null;
   unexpectedOrigins.length = 0;
 
-  await expect(authenticatedLifecycleEnterAs(page, actor(projectName, 'rejected')))
+  await expect(authenticatedLifecycleEnterAs(page, actor(projectName, 'rejected'), settleActorTransitionEvidence))
     .rejects.toThrow('ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_CREDENTIAL_REJECTED');
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('sb-')))).toEqual([]);
   const rejectedObservation = await authenticatedLifecycleControl<{
@@ -218,8 +234,8 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   });
   expect(rejectedObservation.attestationRequests).toBeGreaterThan(0);
 
-  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
-  await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'));
+  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
+  await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'), settleActorTransitionEvidence);
   const reviewerColdObservation = await authenticatedLifecycleControl<{
     passwordRequests: unknown[]; bindings: unknown[]; verifySessionCalls: unknown[];
   }>('/control/sign-in-entry-observation', { projectName });
@@ -424,7 +440,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
         await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
         await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('process_catalog');
         expect(new URL(page.url()).searchParams.has('processId')).toBe(false);
-        await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'));
+        await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'), settleActorTransitionEvidence);
         await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
       } else {
         await expect(page.getByRole('alert').filter({ hasText: 'Process data could not be loaded for this workspace.' })).toBeVisible();
@@ -512,8 +528,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       hasText: 'Delivery data could not be loaded:',
     })).toHaveCount(0);
     expect(await authenticatedLifecycleControl('/control/process-frame', { projectName })).toEqual(beforeFrame);
-    await networkActionTail;
-    if (networkActionError) throw networkActionError;
+    await settleActorTransitionEvidence();
     expect(pageErrors).toEqual([]);
     if (!scopedNavigationEvidencePath) throw new Error('SCOPED_NAVIGATION_EVIDENCE_PATH_REQUIRED');
     await appendFile(scopedNavigationEvidencePath, `${JSON.stringify({
@@ -553,7 +568,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       processCommandRequests: number;
     }>('/control/sign-in-entry-observation', { projectName });
     for (const outcome of ['empty', 'denied'] as const) {
-      await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'));
+      await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'), settleActorTransitionEvidence);
       await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
       const beforeFault = await authenticatedLifecycleControl<{
         outcome: string | null; skip: number; remaining: number; consumed: number; completed: number;
@@ -601,8 +616,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       expect(readObservation.processCommandRequests).toBe(beforeProcessReadObservation.processCommandRequests);
       expect(readObservation.anonymousProcessCommandRequests).toBe(0);
     }
-    await networkActionTail;
-    if (networkActionError) throw networkActionError;
+    await settleActorTransitionEvidence();
     expect(observedHttpRequests).toBeGreaterThan(0);
     expect(proxiedOrigins.length).toBeGreaterThan(0);
     expect(proxiedOrigins.every(origin => origin === appOrigin || origin === apiOrigin)).toBe(true);
@@ -610,7 +624,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     expect(pageErrors).toEqual([]);
     return;
   }
-  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
+  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
   await networkActionTail;
   if (networkActionError) throw networkActionError;
   await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
@@ -643,7 +657,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
     }
     if (!(await page.getByRole('heading', { name: setup.aliases.process, exact: true }).isVisible().catch(() => false))) {
-      await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
+      await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
       await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
     }
     await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
@@ -938,7 +952,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(observation.browserCases).toBe(0);
   expect(observation.serverCases).toBe(0);
 
-  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'));
+  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
   await networkActionTail;
   if (networkActionError) throw networkActionError;
   await authenticatedLifecycleControl('/control/sign-in-entry-process-duplicate', { projectName, enabled: true });
@@ -951,8 +965,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   } finally {
     await authenticatedLifecycleControl('/control/sign-in-entry-process-duplicate', { projectName, enabled: false });
   }
-  await networkActionTail;
-  if (networkActionError) throw networkActionError;
+  await settleActorTransitionEvidence();
   expect(observedHttpRequests).toBeGreaterThan(0);
   expect(proxiedOrigins.length).toBeGreaterThan(0);
   expect(proxiedOrigins.every(origin => origin === appOrigin || origin === apiOrigin)).toBe(true);

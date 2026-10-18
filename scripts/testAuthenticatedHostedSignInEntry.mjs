@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { createServer } from 'node:http';
-import { createServer as createNetServer } from 'node:net';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { createServer as createHttpsServer } from 'node:https';
+import { createServer as createNetServer, connect } from 'node:net';
+import { chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -1115,6 +1116,113 @@ const checkoutState = async () => (await execFileAsync('git', ['status', '--porc
   maxBuffer: 1024 * 1024,
 })).stdout;
 
+// Continue Chromium requests over a real, loopback-only TLS connection. CDP
+// response fulfillment bypasses durable network-body storage across reloads.
+// The browser trusts only this run's ephemeral public-key fingerprint.
+export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, appBaseUrl, apiBaseUrl }) => {
+  const targets = {
+    [new URL(PREVIEW_ORIGIN).hostname]: assertAuthenticatedHostedSignInEntryLoopbackUrl(appBaseUrl),
+    [new URL(BACKEND_ORIGIN).hostname]: assertAuthenticatedHostedSignInEntryLoopbackUrl(apiBaseUrl),
+  };
+  const keyPath = path.join(directory, 'loopback-key.pem');
+  const certPath = path.join(directory, 'loopback-cert.pem');
+  const openssl = process.platform === 'win32'
+    ? path.join(process.env.ProgramFiles || 'C:/Program Files', 'Git', 'usr', 'bin', 'openssl.exe') : 'openssl';
+  try {
+    await execFileAsync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+      '-keyout', keyPath, '-out', certPath, '-days', '1', '-subj', '/CN=localhost',
+      '-addext', 'subjectAltName=IP:127.0.0.1,DNS:localhost'], { timeout: 15_000 });
+    await chmod(keyPath, 0o600);
+  } catch { throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_TLS_SETUP_FAILED'); }
+  const cert = await readFile(certPath);
+  const certificateSpki = createHash('sha256')
+    .update(new X509Certificate(cert).publicKey.export({ type: 'spki', format: 'der' })).digest('base64');
+  const pending = new Set();
+  let closing = false;
+  const server = createHttpsServer({ cert, key: await readFile(keyPath) }, (incoming, outgoing) => {
+    const operation = (async () => {
+      const host = (incoming.headers.host || '').replace(/:443$/u, '');
+      const upstream = Object.hasOwn(targets, host) ? targets[host] : undefined;
+      if (closing || !upstream || !incoming.url?.startsWith('/')) { outgoing.writeHead(404); outgoing.end(); return; }
+      // A fixed origin plus a preserved path cannot select another upstream.
+      const target = new URL(upstream + incoming.url);
+      if (target.origin !== upstream) throw new Error('LOCAL_TLS_TARGET_REJECTED');
+      const abort = new AbortController();
+      const disconnected = () => { if (!outgoing.writableFinished) abort.abort(); };
+      outgoing.once('close', disconnected);
+      try {
+        const headers = { ...incoming.headers };
+        for (const name of ['host', 'connection', 'content-length', 'transfer-encoding', 'accept-encoding']) delete headers[name];
+        const response = await fetch(target, { method: incoming.method, headers,
+          body: ['GET', 'HEAD'].includes(incoming.method) ? undefined : await readBody(incoming),
+          redirect: 'manual', signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30_000)]) });
+        if (response.status >= 300 && response.status < 400) throw new Error('LOCAL_TLS_REDIRECT_REJECTED');
+        const responseHeaders = Object.fromEntries(response.headers);
+        for (const name of ['connection', 'content-encoding', 'content-length', 'transfer-encoding']) delete responseHeaders[name];
+        const body = Buffer.from(await response.arrayBuffer());
+        outgoing.writeHead(response.status, responseHeaders);
+        outgoing.end(body);
+      } finally { outgoing.off('close', disconnected); }
+    })().catch(() => {
+      if (!outgoing.destroyed && !outgoing.headersSent) outgoing.writeHead(502);
+      outgoing.end();
+    });
+    pending.add(operation);
+    void operation.finally(() => pending.delete(operation));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, LOOPBACK_HOST, resolve);
+  });
+  // CONNECT preserves the browser's original URL/origin, including response
+  // observers. Every tunnel terminates at our TLS listener, never remote DNS.
+  const tunnels = new Set();
+  const proxy = createServer((_incoming, outgoing) => { outgoing.writeHead(403); outgoing.end(); });
+  proxy.on('connect', (incoming, client, head) => {
+    if (closing || !Object.keys(targets).some(host => incoming.url === `${host}:443`)) {
+      client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    const tunnel = connect({ host: LOOPBACK_HOST, port: server.address().port }, () => {
+      client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      if (head.length) tunnel.write(head);
+      client.pipe(tunnel);
+      tunnel.pipe(client);
+    });
+    for (const socket of [client, tunnel]) {
+      tunnels.add(socket);
+      socket.once('close', () => { tunnels.delete(socket); client.destroy(); tunnel.destroy(); });
+      socket.once('error', () => { client.destroy(); tunnel.destroy(); });
+    }
+  });
+  try {
+    await new Promise((resolve, reject) => {
+      proxy.once('error', reject);
+      proxy.listen(0, LOOPBACK_HOST, resolve);
+    });
+  } catch (error) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); throw error; }
+  let closed;
+  return {
+    origin: `http://${LOOPBACK_HOST}:${proxy.address().port}`,
+    certificateSpki,
+    close() {
+      if (closed) return closed;
+      closing = true;
+      closed = (async () => {
+        const proxyStopped = new Promise((resolve, reject) => proxy.close(error => error ? reject(error) : resolve()));
+        for (const socket of tunnels) socket.destroy();
+        proxy.closeAllConnections();
+        const stopped = new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        server.closeAllConnections();
+        await Promise.all([proxyStopped, stopped]);
+        await Promise.all([...pending]);
+        return true;
+      })();
+      return closed;
+    },
+  };
+};
+
 export const runAuthenticatedHostedSignInEntry = async ({
   processSeedMode = 'valid', processReadStateOnly = false, scopedNavigationOnly = false,
 } = {}) => {
@@ -1129,6 +1237,7 @@ export const runAuthenticatedHostedSignInEntry = async ({
   let temporaryRoot;
   let fixture;
   let preview;
+  let tlsBridge;
   let cleanupSucceeded = false;
   try {
     temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'avalaos-sign-in-entry-'));
@@ -1162,6 +1271,9 @@ export const runAuthenticatedHostedSignInEntry = async ({
       stdio: 'inherit',
     });
     await waitForHttp(`${appBaseUrl}/`);
+    tlsBridge = await startAuthenticatedHostedSignInEntryTlsBridge({
+      directory: temporaryRoot, appBaseUrl, apiBaseUrl: fixture.baseUrl,
+    });
     await run(process.execPath, [path.resolve('node_modules/@playwright/test/cli.js'), 'test',
       '--config=playwright.authenticated-hosted-sign-in-entry.config.ts', '--workers=1'], {
       ...baseEnvironment,
@@ -1169,6 +1281,8 @@ export const runAuthenticatedHostedSignInEntry = async ({
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_APP_URL: appBaseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_BACKEND_URL: fixture.backendOrigin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL: fixture.baseUrl,
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TLS_BRIDGE: tlsBridge.origin,
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TLS_SPKI: tlsBridge.certificateSpki,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OUTPUT_DIR: playwrightOutputDirectory,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE: processSeedMode,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY: String(processReadStateOnly),
@@ -1184,10 +1298,11 @@ export const runAuthenticatedHostedSignInEntry = async ({
   } finally {
     const previewStopped = await stop(preview).catch(() => false);
     const fixtureClosed = fixture ? await fixture.close().catch(() => false) : true;
+    const tlsClosed = tlsBridge ? await tlsBridge.close().catch(() => false) : true;
     const temporaryRemoved = temporaryRoot
       ? await rm(temporaryRoot, { recursive: true, force: true }).then(() => true, () => false)
       : true;
-    cleanupSucceeded = previewStopped && fixtureClosed && temporaryRemoved;
+    cleanupSucceeded = previewStopped && fixtureClosed && tlsClosed && temporaryRemoved;
     if (!cleanupSucceeded) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
   }
   if (await checkoutState() !== stateBefore) {

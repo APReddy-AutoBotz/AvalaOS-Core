@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { connect } from 'node:net';
+import { connect as connectTls } from 'node:tls';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
@@ -9,7 +14,86 @@ import {
   assertAuthenticatedHostedSignInEntryLoopbackUrl,
   authenticatedHostedSignInEntryChildEnvironment,
   startAuthenticatedHostedSignInEntryFixture,
+  startAuthenticatedHostedSignInEntryTlsBridge,
 } from './testAuthenticatedHostedSignInEntry.mjs';
+
+test('local TLS bridge preserves requests, rejects other targets/redirects and closes owned tunnels', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'avalaos-bridge-test-'));
+  let requests = 0;
+  const upstream = createServer(async (incoming, outgoing) => {
+    requests += 1;
+    if (incoming.url === '/redirect') {
+      outgoing.writeHead(302, { location: '/must-not-follow' }); outgoing.end(); return;
+    }
+    const chunks = [];
+    for await (const chunk of incoming) chunks.push(chunk);
+    outgoing.writeHead(200, { 'content-type': 'application/json' });
+    outgoing.end(JSON.stringify({ method: incoming.method, path: incoming.url,
+      body: Buffer.concat(chunks).toString(), authorization: incoming.headers.authorization }));
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const target = `http://127.0.0.1:${upstream.address().port}`;
+  let bridge;
+  const sockets = new Set();
+  const openTunnel = authority => new Promise((resolve, reject) => {
+    const socket = connect({ host: '127.0.0.1', port: Number(new URL(bridge.origin).port) }, () => {
+      socket.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n\r\n`);
+    });
+    sockets.add(socket);
+    socket.once('error', reject);
+    socket.once('data', data => resolve({ socket, status: data.toString().split('\r\n')[0] }));
+  });
+  try {
+    await assert.rejects(startAuthenticatedHostedSignInEntryTlsBridge({ directory,
+      appBaseUrl: 'https://external.invalid', apiBaseUrl: target }), /NON_LOOPBACK_URL_REJECTED/u);
+    bridge = await startAuthenticatedHostedSignInEntryTlsBridge({ directory, appBaseUrl: target, apiBaseUrl: target });
+    assert.equal((await fetch(bridge.origin)).status, 403);
+    for (const authority of ['external.invalid:443', '127.0.0.1:443', 'constructor:443']) {
+      const denied = await openTunnel(authority);
+      assert.match(denied.status, /403 Forbidden/u);
+      denied.socket.destroy();
+    }
+    assert.equal(requests, 0);
+    const ca = await readFile(path.join(directory, 'loopback-cert.pem'));
+    const exchange = async (requestPath, body = '') => {
+      const { socket, status } = await openTunnel('abcdefghijklmnopqrst.supabase.co:443');
+      assert.match(status, /200 Connection Established/u);
+      return new Promise((resolve, reject) => {
+        const tls = connectTls({ socket, ca, servername: 'localhost' }, () => {
+          tls.write(`POST ${requestPath} HTTP/1.1\r\nHost: abcdefghijklmnopqrst.supabase.co\r\nAuthorization: Bearer synthetic\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`);
+        });
+        sockets.add(tls);
+        const chunks = [];
+        tls.on('data', data => chunks.push(data));
+        tls.once('error', reject);
+        tls.once('end', () => resolve(Buffer.concat(chunks).toString()));
+      });
+    };
+    const response = await exchange('/request?limit=1', '{"synthetic":true}');
+    assert.match(response, /HTTP\/1.1 200/u);
+    assert(response.includes('"method":"POST"'));
+    assert(response.includes('"path":"/request?limit=1"'));
+    assert(response.includes('"authorization":"Bearer synthetic"'));
+    assert(response.includes('"body":"{\\"synthetic\\":true}"'));
+    assert.match(await exchange('/redirect'), /HTTP\/1.1 502/u);
+    assert.equal(requests, 2, 'redirect must not be followed');
+    const held = await openTunnel('deploy-preview-264--avalaos-pilot.netlify.app:443');
+    const disconnected = new Promise(resolve => held.socket.once('close', resolve));
+    const firstClose = bridge.close();
+    assert.equal(bridge.close(), firstClose);
+    assert.equal(await firstClose, true);
+    await disconnected;
+    await assert.rejects(fetch(bridge.origin));
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await bridge?.close();
+    upstream.closeAllConnections();
+    await new Promise(resolve => upstream.close(resolve));
+    assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+    assert(path.basename(directory).startsWith('avalaos-bridge-test-'));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('child environment admits only operational keys plus explicit synthetic overrides', () => {
   assert.deepEqual(authenticatedHostedSignInEntryChildEnvironment({

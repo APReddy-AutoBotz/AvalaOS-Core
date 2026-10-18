@@ -515,10 +515,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        205,
-        282,
-        283,
-        897
+        221,
+        298,
+        299,
+        911
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
@@ -540,10 +540,10 @@
         368,
         472,
         473,
-        633,
-        636,
-        787,
-        788
+        639,
+        642,
+        793,
+        794
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."

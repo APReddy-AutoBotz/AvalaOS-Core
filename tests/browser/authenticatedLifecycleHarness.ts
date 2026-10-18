@@ -550,6 +550,12 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
   const exactProcessButton = page.getByRole('button', { name: processLabel, exact: true });
   const row = page.getByRole('row').filter({ has: exactProcessButton });
   try {
+    // Absence can be loading; multiple exact matches are already ambiguous.
+    // Never wait for an ambiguous catalog to become a unique selection.
+    await expect.poll(() => exactProcessButton.count()).toBeGreaterThan(0);
+    if (await exactProcessButton.count() > 1 || await row.count() > 1) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS');
+    }
     await expect(row).toHaveCount(1);
     await expect(row.getByRole('button', { name: processLabel, exact: true })).toHaveCount(1);
   } catch {
