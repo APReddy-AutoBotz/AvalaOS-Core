@@ -30,6 +30,7 @@ import {
   observeAuthenticatedStudioDownloadDenial,
 } from '../authenticatedControlsAcceptance';
 import {
+  authenticatedHostedClosePageAfterOwnedNetwork,
   authenticatedHostedConfigureChromiumDurableResponseBodies,
   authenticatedLifecycleSettleActorNavigationBoundary as settleActorNavigationBoundary,
   installAuthenticatedHostedNetwork,
@@ -523,11 +524,6 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (!activeTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     activeTestWorkQueues.network.enqueue(operation);
   };
-  const closePageAfterResponseBodies = async (ownedPage: Page) => {
-    if (!activeNetworkLifecycle) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
-    await activeNetworkLifecycle.settleResponseBodies();
-    await ownedPage.close();
-  };
   const settleActorTransitionEvidence = async () => {
     if (!activeNetworkLifecycle || !activeTestWorkQueues) {
       throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
@@ -541,6 +537,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,
     });
   };
+  const closePageAfterOwnedNetwork = (ownedPage: Page) => authenticatedHostedClosePageAfterOwnedNetwork({
+    settleOwnedNetwork: settleActorTransitionEvidence,
+    closePage: () => ownedPage.close(),
+  });
   const explicitCaseActions = new Map<string, HostedActionReference[]>();
   const bindObservedCase = (testId: string,...actions: HostedActionReference[]) => {
     if(actions.length===0)throw new Error(`AUTHENTICATED_BROWSER_ACTION_CONTRACT_MISSING:${testId}`);
@@ -845,7 +845,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           cleanup: { verified: true },
         });
       }
-      await closePageAfterResponseBodies(deniedEditPage);
+      await closePageAfterOwnedNetwork(deniedEditPage);
     });
 
     if (authenticatedProductAcceptance) {
@@ -1377,8 +1377,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           ] }, measurements, cleanup: { verified: true },
         });
       }
-      await closePageAfterResponseBodies(replayPage);
-      await closePageAfterResponseBodies(stalePage);
+      await closePageAfterOwnedNetwork(replayPage);
+      await closePageAfterOwnedNetwork(stalePage);
 
       const beforeAttestation = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
