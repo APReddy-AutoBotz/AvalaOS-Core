@@ -12,7 +12,10 @@ import {
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
 } from './authenticatedLifecycleHarness';
-import { authenticatedLifecycleSettleActorNavigationBoundary } from './authenticatedHostedNetwork';
+import {
+  authenticatedHostedClosePageAfterOwnedNetwork,
+  authenticatedLifecycleSettleActorNavigationBoundary,
+} from './authenticatedHostedNetwork';
 
 const actorEntryFixture = {
   token: 'fixture-actor-token',
@@ -73,6 +76,24 @@ test('actor-entry boundary retains a started request until its headers and owned
   assert.equal(observations, 3);
   assert.equal(networkDrains, 4);
   assert.equal(bodySettles, 8);
+});
+
+test('auxiliary-page disposal joins context-wide owned network work before closing the page', async () => {
+  const events: string[] = [];
+  await authenticatedHostedClosePageAfterOwnedNetwork({
+    settleOwnedNetwork: async () => { events.push('owned-network-settled'); },
+    closePage: async () => { events.push('page-closed'); },
+  });
+  assert.deepEqual(events, ['owned-network-settled', 'page-closed']);
+});
+
+test('auxiliary-page disposal leaves the page open when owned network settlement fails', async () => {
+  let pageClosed = false;
+  await assert.rejects(authenticatedHostedClosePageAfterOwnedNetwork({
+    settleOwnedNetwork: async () => { throw new Error('OWNED_NETWORK_REJECTED'); },
+    closePage: async () => { pageClosed = true; },
+  }), /OWNED_NETWORK_REJECTED/u);
+  assert.equal(pageClosed, false);
 });
 
 const deniedAuthorityInput = () => ({

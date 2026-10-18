@@ -1,5 +1,15 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Actor-transition completion after PR #312 (2026-10-18)
+
+Merged PR #312 `252d85f6` passed its 52 candidate checks, three release workflows and independent browser/EI/complete-native verification. Its approved run `39105934648` attempt 1 independently retains 61 PASS / 47 BLOCKED with verified cleanup and providers OFF; the hosted allowance is consumed. The primary failure now has an actor-transition source location, but that guard can fail after a slow drain reaches zero and before its second empty sample, so the error alone does not identify an unfinished request or historical cause.
+
+Continue one coherent repository workstream under `docs/planning/hosted-acceptance-completion.md`. All three read-only reviews are complete. First reproduce the actual browser/controller/auxiliary-page phases, then correct only demonstrated lifecycle defects with focused verification and safe attribution. Preserve the 108-case scope, context-wide authority, independent frames, existing time limits and exact-head release gates. No speculative product change, diagnostic-only closure PR, new hosted attempt, backend deployment, migration, production or paid action is authorized.
+
+The actual Chromium/controller comparison now demonstrates auxiliary disposal losing terminal evidence for a pending action start; the existing 15-second actor guard rejects with that action incomplete. The paired control completes cleanly. Proceed with the bounded correction: reuse existing context-wide settlement before all three auxiliary closes, retain failure-before-close behavior, and verify normal Desktop/Pixel real-auth entry plus feature-owned exact-candidate gates. Keep prechange evidence and the 61/47 hosted boundary; no further hosted authority is implied.
+
+Local correction verification passed: 22 harness checks, 25 classifier/fixture checks, typecheck/diff, and both normal actual-app Desktop/Pixel real-auth journeys with cleanup and unchanged checkout. Root reviewed the final four source files and matched executed hashes. Continue source-binding refresh, one implementation PR, required exact-candidate CI/independent native and browser evidence, then identical-tree verified merge. No additional local broad regression campaign or hosted attempt is part of this boundary.
+
 ## Owned acceptance-controller lifecycle (2026-10-17)
 
 PR #311's full run retains 61 PASS / 47 BLOCKED with a generic Desktop primary timeout and independently verified cleanup. Its allowance is consumed. All three read-only reviewers completed before writes. Root synthesized the accepted-handler/cleanup race, unbounded body/queue waits, timeout-attribution gap and incomplete native-primary preparation. Per-request observation volume is confirmed; its performance impact and the historical failure cause remain unproven.

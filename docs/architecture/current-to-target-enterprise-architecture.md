@@ -1,5 +1,15 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Context-wide actor-transition evidence (2026-10-18)
+
+Actor replacement must account for accepted work across the entire browser context because primary and auxiliary pages share session storage. Pending action starts, acquired response bodies and terminal controller observations are distinct owned phases. Original actor/session binding and independent per-request frames must survive completion; neither an empty page-local queue nor a client abort proves context/server quiescence.
+
+PR #312's exact hosted failure locates the existing 15-second boundary but does not identify its phase. The guard checks its deadline after awaited body/network drainage and can fail after the first empty sample, so `NOT_QUIESCENT` alone does not establish an outstanding request at failure. A faithful local reproduction must separate begin/finish observation latency, requests awaiting terminal events, and the two-empty-sample rule before changing behavior. Preserve existing budgets, global accounting and fail-closed session mutation. No backend or product authorization change is justified by current evidence.
+
+Auxiliary disposal must use that same owned-work boundary before closing a page. The actual Chromium/controller comparison demonstrates that body-only settlement can return while action start is held, after which page closure supplies neither a response nor a request-failure event for the accepted action. The action remains incomplete through the existing 15-second guard. A page-close exception or absence of a response is not permission to synthesize terminal server evidence. Reuse context-wide pending/active/body/queue settlement at all three explicit auxiliary close sites; preserve the original actor binding, all independent frames and the failure that prevents closure when settlement cannot complete.
+
+The shared close helper and three callers now implement this ordering. Desktop and Pixel actual-app regression checks pass with real action completion before close and subsequent actor entry; rejected settlement prevents close in the focused negative test. The correction does not alter the network tracker, server authority, time limits or ordinary reload timing. Broader exact-candidate and hosted proof remain separate requirements.
+
 ## Acceptance work ownership and shutdown (2026-10-17)
 
 The authenticated acceptance controller must own every accepted control operation through completion. Shutdown stops intake, bounds or cancels pending body/authority work, joins accepted operations, and only then quiesces, revokes, cleans and independently verifies. A client timeout is not proof that server work stopped. If owned work cannot settle, cleanup is incomplete; late continuations cannot record actions after verification. Successful finalization needs the same ownership boundary as failure cleanup.

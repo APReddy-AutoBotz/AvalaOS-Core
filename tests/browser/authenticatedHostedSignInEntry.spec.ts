@@ -11,6 +11,7 @@ import {
   type AuthenticatedLifecycleActor,
 } from './authenticatedLifecycleHarness';
 import {
+  authenticatedHostedClosePageAfterOwnedNetwork,
   authenticatedHostedConfigureChromiumDurableResponseBodies,
   authenticatedLifecycleSettleActorNavigationBoundary,
   installAuthenticatedHostedNetwork,
@@ -250,6 +251,72 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   ]);
   expect(reviewerColdObservation.verifySessionCalls).toContainEqual({ actor: 'B', outcome: 'verified' });
   await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+  {
+    type ObserverGate = Readonly<{ mode: string; waiting: number }>;
+    const observerGate = (mode: 'hold-next' | 'release') => authenticatedLifecycleControl<ObserverGate>(
+      '/control/sign-in-entry-observe-gate', { projectName, mode },
+    );
+    const actionObservation = () => authenticatedLifecycleControl<{
+      actions: Array<{ complete: boolean }>;
+    }>('/control/sign-in-entry-observation', { projectName });
+    const auxiliaryPage = await context.newPage();
+    await authenticatedHostedConfigureChromiumDurableResponseBodies(context, auxiliaryPage);
+    await auxiliaryPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await settleActorTransitionEvidence();
+    const before = await actionObservation();
+    await observerGate('hold-next');
+    const request = auxiliaryPage.evaluate(async backendOrigin => {
+      const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
+      const stored = key ? JSON.parse(localStorage.getItem(key) || '{}') : {};
+      const accessToken = stored.access_token ?? stored.currentSession?.access_token ?? '';
+      const response = await fetch(`${backendOrigin}/functions/v1/tenant-session`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+        body: '{}',
+      });
+      await response.json();
+      return response.status;
+    }, apiOrigin).then(
+      status => Object.freeze({ state: 'fulfilled' as const, status }),
+      error => Object.freeze({ state: 'rejected' as const, error }),
+    );
+    await expect.poll(() => pendingActionStarts).toBeGreaterThan(0);
+    let closeOutcome: Readonly<{ state: 'closed' }> | Readonly<{ state: 'rejected'; error: unknown }> | null = null;
+    const close = authenticatedHostedClosePageAfterOwnedNetwork({
+      settleOwnedNetwork: settleActorTransitionEvidence,
+      closePage: () => auxiliaryPage.close(),
+    }).then(
+      () => { closeOutcome = Object.freeze({ state: 'closed' as const }); },
+      error => { closeOutcome = Object.freeze({ state: 'rejected' as const, error }); },
+    );
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(closeOutcome).toBeNull();
+      expect(auxiliaryPage.isClosed()).toBe(false);
+      expect(pendingActionStarts).toBeGreaterThan(0);
+      await observerGate('release');
+      const requestOutcome = await request;
+      if (requestOutcome.state === 'rejected') throw requestOutcome.error;
+      expect(requestOutcome.status).toBe(200);
+      await close;
+      if (closeOutcome?.state === 'rejected') throw closeOutcome.error;
+      expect(closeOutcome).toEqual({ state: 'closed' });
+      expect(auxiliaryPage.isClosed()).toBe(true);
+      const after = await actionObservation();
+      expect(after.actions.length).toBe(before.actions.length + 1);
+      expect(after.actions.at(-1)?.complete).toBe(true);
+      expect(pendingActionStarts).toBe(0);
+      expect(activeActions.size).toBe(0);
+      await authenticatedLifecycleEnterAs(page, actor(projectName, 'B'), settleActorTransitionEvidence);
+      await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+      await settleActorTransitionEvidence();
+    } finally {
+      await observerGate('release').catch(() => undefined);
+      await request.catch(() => undefined);
+      await close;
+      await auxiliaryPage.close().catch(() => undefined);
+    }
+  }
   await page.evaluate(() => {
     const gatedWindow = window as unknown as Record<string, unknown>;
     const originalPushState = window.history.pushState;
@@ -810,7 +877,8 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   const safetySave = page.getByRole('button', { name: 'Save process details', exact: true }).click();
   await expect.poll(async () => (await authenticatedLifecycleControl<{
     controlSequence: string[];
-  }>('/control/sign-in-entry-observation', { projectName })).controlSequence.includes('observe-held')).toBe(true);
+  }>('/control/sign-in-entry-observation', { projectName })).controlSequence
+    .slice(beforeSafetyObservation.controlSequence.length).includes('observe-held')).toBe(true);
   const heldSafetyObservation = await authenticatedLifecycleControl<{
     processCommandRequests: number; permits: unknown[];
   }>('/control/sign-in-entry-observation', { projectName });

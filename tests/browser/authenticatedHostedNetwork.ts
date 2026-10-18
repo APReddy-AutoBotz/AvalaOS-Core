@@ -44,6 +44,17 @@ export const authenticatedHostedConfigureChromiumDurableResponseBodies = async (
   }
 };
 
+export const authenticatedHostedClosePageAfterOwnedNetwork = async ({
+  settleOwnedNetwork,
+  closePage,
+}: Readonly<{
+  settleOwnedNetwork: () => Promise<void>;
+  closePage: () => Promise<void>;
+}>) => {
+  await settleOwnedNetwork();
+  await closePage();
+};
+
 export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
   settleResponseBodies,
   drainNetworkActions,
