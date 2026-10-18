@@ -532,6 +532,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     // and only the network action queue at each boundary; case work and normal
     // V2 reloads retain their existing independent lifecycle.
     await settleActorNavigationBoundary({
+      settleActionAdmissions: activeNetworkLifecycle.settleActionAdmissions,
       settleResponseBodies: activeNetworkLifecycle.settleResponseBodies,
       drainNetworkActions: activeTestWorkQueues.network.drain,
       activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,

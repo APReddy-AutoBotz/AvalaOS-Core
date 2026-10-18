@@ -56,11 +56,13 @@ export const authenticatedHostedClosePageAfterOwnedNetwork = async ({
 };
 
 export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
+  settleActionAdmissions,
   settleResponseBodies,
   drainNetworkActions,
   activeActionCount,
   waitForNextObservation = () => new Promise<void>(resolve => setTimeout(resolve, 50)),
 }: Readonly<{
+  settleActionAdmissions: () => Promise<void>;
   settleResponseBodies: () => Promise<void>;
   drainNetworkActions: () => Promise<void>;
   activeActionCount: () => number;
@@ -69,16 +71,25 @@ export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
   const deadline = Date.now() + 15_000;
   let stableEmptyObservations = 0;
   for (;;) {
+    await settleActionAdmissions();
     await settleResponseBodies();
     await drainNetworkActions();
+    await settleActionAdmissions();
     await settleResponseBodies();
-    if (activeActionCount() === 0) {
+    const activeActions = activeActionCount();
+    const expired = Date.now() >= deadline;
+    if (activeActions === 0) {
+      if (expired) {
+        throw new Error(stableEmptyObservations === 0
+          ? 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE'
+          : 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_STABILITY_AFTER_DEADLINE');
+      }
       stableEmptyObservations += 1;
       if (stableEmptyObservations >= 2) return;
     } else {
       stableEmptyObservations = 0;
+      if (expired) throw new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT');
     }
-    if (Date.now() >= deadline) throw new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT');
     await waitForNextObservation();
   }
 };
@@ -154,6 +165,7 @@ export const installAuthenticatedHostedNetwork = async ({
   responseBodyTimeoutMs = authenticatedHostedResponseBodyTimeoutMs,
 }: InstallAuthenticatedHostedNetworkInput) => {
   const responseBodies = new Set<Promise<unknown>>();
+  const actionAdmissions = new Set<Promise<unknown>>();
   const responseBodyFailures = new Set<Readonly<{ request: Request; error: unknown }>>();
   const ownResponseBody = <T>(operation: Promise<T>) => {
     responseBodies.add(operation);
@@ -180,9 +192,34 @@ export const installAuthenticatedHostedNetwork = async ({
       }
     }
   };
+  const ownActionAdmission = <T>(operation: Promise<T>) => {
+    actionAdmissions.add(operation);
+    void operation.then(
+      () => { actionAdmissions.delete(operation); },
+      () => { actionAdmissions.delete(operation); },
+    );
+    return operation;
+  };
+  const settleActionAdmissions = async () => {
+    let firstFailure: unknown;
+    let failed = false;
+    for (;;) {
+      const snapshot = [...actionAdmissions];
+      if (snapshot.length === 0) {
+        if (failed) throw firstFailure;
+        return;
+      }
+      for (const outcome of await Promise.allSettled(snapshot)) {
+        if (outcome.status === 'rejected' && !failed) {
+          firstFailure = outcome.reason;
+          failed = true;
+        }
+      }
+    }
+  };
   const startProductAction = (request: Request) => {
     if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
-    return tracker.begin(request);
+    return ownActionAdmission(tracker.begin(request));
   };
   const finishProductAction = (request: Request, status: number, responseBody: unknown) => {
     if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
@@ -281,5 +318,5 @@ export const installAuthenticatedHostedNetwork = async ({
     });
   }
 
-  return Object.freeze({ startProductAction, finishProductAction, settleResponseBodies });
+  return Object.freeze({ startProductAction, finishProductAction, settleActionAdmissions, settleResponseBodies });
 };

@@ -15,6 +15,9 @@ const TEST_CATEGORIES = new Map([
 ]);
 
 const OPERATION_TITLES = new Map([
+  ['hosted:actor:entry-initial', 'ACTOR_ENTRY_INITIAL'],
+  ['hosted:actor:entry-canonical', 'ACTOR_ENTRY_CANONICAL'],
+  ['hosted:actor:entry-cached', 'ACTOR_ENTRY_CACHED'],
   ['hosted:control:action-start', 'ACTION_START'],
   ['hosted:control:permit-arm', 'PERMIT_ARM'],
   ['hosted:control:action-finish', 'ACTION_FINISH'],
@@ -113,6 +116,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       this.failureLocation = primary?.location ? boundedLocation(primary.location) : null;
       if ((this.failureDescriptor?.phase === 'CONTROL_CHANNEL'
         && this.failureDescriptor.code === 'CONTROL_REQUEST_TIMEOUT')
+        || this.failureDescriptor?.phase === 'ACTOR_TRANSITION'
         || (result.status === 'timedOut' && !this.failureDescriptor)) {
         const correlated = correlatedFailedOperation(this.failedOperations, primary);
         this.failureOperation = correlated?.operation;

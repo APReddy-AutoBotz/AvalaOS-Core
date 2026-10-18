@@ -293,9 +293,9 @@ export const authenticatedLifecycleEnterAs = async (
     if (actor.authKind !== 'supabase_auth' || !actor.persona || !actor.projectName || !actor.password) {
       throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_ACTOR_REQUIRED');
     }
-    await beforeIntentionalNavigation();
+    await test.step('hosted:actor:entry-initial', beforeIntentionalNavigation);
     await page.goto('/');
-    await beforeIntentionalNavigation();
+    await test.step('hosted:actor:entry-canonical', beforeIntentionalNavigation);
     await page.evaluate(() => {
       for (const key of Object.keys(localStorage)) if (key.startsWith('sb-')) localStorage.removeItem(key);
       localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
@@ -305,7 +305,7 @@ export const authenticatedLifecycleEnterAs = async (
     const cacheKey = `${actor.user.id}:${actor.persona}`;
     const cached = hostedSessionCache.get(cacheKey);
     if (cached) {
-      await beforeIntentionalNavigation();
+      await test.step('hosted:actor:entry-cached', beforeIntentionalNavigation);
       await page.evaluate(({ key, value }) => localStorage.setItem(key, value), cached);
       await page.reload({ waitUntil: 'domcontentloaded' });
     } else {

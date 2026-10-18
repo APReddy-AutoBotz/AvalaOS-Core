@@ -21,6 +21,48 @@ const titles = new Map([
 ]);
 const fixture = title => ({ title, expectedStatus: 'passed', parent: { project: () => ({ name: 'desktop-chromium' }) } });
 
+test('actor transition attribution uses only the canonical failure and fixed entry stage', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-actor-reporter-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(() => {
+    if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior;
+  });
+  for (const [stage, operation, code] of [
+    ['initial', 'ACTOR_ENTRY_INITIAL', 'NOT_QUIESCENT'],
+    ['canonical', 'ACTOR_ENTRY_CANONICAL', 'EMPTY_AFTER_DEADLINE'],
+    ['cached', 'ACTOR_ENTRY_CACHED', 'STABILITY_AFTER_DEADLINE'],
+  ]) {
+    const destination = path.join(root, `${stage}.json`);
+    process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = destination;
+    const reporter = new AuthenticatedHostedPlaywrightReporter();
+    const current = fixture([...titles.keys()][0]);
+    const primary = { message: `Error: AUTHENTICATED_BROWSER_ACTOR_TRANSITION_${code}`,
+      location: { file: path.resolve('tests/browser/authenticatedHostedNetwork.ts'), line: 1 } };
+    const caught = { message: 'fixture-sensitive-caught' };
+    const caughtStep = { title: 'hosted:actor:entry-cached', error: caught };
+    const primaryStep = { title: `hosted:actor:entry-${stage}`, error: primary };
+    reporter.onTestBegin(current);
+    reporter.onStepBegin(current, {}, caughtStep);
+    reporter.onStepEnd(current, {}, caughtStep);
+    reporter.onStepBegin(current, {}, primaryStep);
+    reporter.onStepEnd(current, {}, primaryStep);
+    reporter.onTestEnd(current, { status: 'failed', error: primary });
+    await reporter.onEnd({ status: 'failed' });
+    const serialized = await readFile(destination, 'utf8');
+    const value = JSON.parse(serialized);
+    assert.deepEqual(value, { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1',
+      project: 'desktop-chromium', testCategory: 'primary-lifecycle', category: 'unexpected-failure',
+      operation, phase: 'ACTOR_TRANSITION', code,
+      location: { source: 'tests/browser/authenticatedHostedNetwork.ts', line: 1 } });
+    assert.equal(serialized.includes('fixture-sensitive'), false);
+    assert.equal(serialized.includes('hosted:actor:'), false);
+    assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...value, operation: 'RAW_ACTOR' }), null);
+    assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...value, actorId: 'private' }), null);
+  }
+});
+
 test('static reporter maps every hosted test title without retaining raw errors', async t => {
   const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-test-'));
   t.after(()=>rm(root,{recursive:true,force:true}));

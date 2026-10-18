@@ -62,6 +62,7 @@ test('actor-entry boundary retains a started request until its headers and owned
   let networkDrains = 0;
   let observations = 0;
   await authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: async () => undefined,
     settleResponseBodies: async () => { bodySettles += 1; },
     drainNetworkActions: async () => { networkDrains += 1; },
     activeActionCount: () => active,
@@ -76,6 +77,57 @@ test('actor-entry boundary retains a started request until its headers and owned
   assert.equal(observations, 3);
   assert.equal(networkDrains, 4);
   assert.equal(bodySettles, 8);
+});
+
+test('actor boundary rejects a first empty observation sampled after its deadline', async () => {
+  const originalNow = Date.now;
+  let now = 0;
+  Date.now = () => now;
+  try {
+    await assert.rejects(authenticatedLifecycleSettleActorNavigationBoundary({
+      settleActionAdmissions: async () => { now = 15_001; },
+      settleResponseBodies: async () => undefined,
+      drainNetworkActions: async () => undefined,
+      activeActionCount: () => 0,
+      waitForNextObservation: async () => undefined,
+    }), /AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE/u);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('actor boundary rejects its stability sample when the deadline expires between empty observations', async () => {
+  const originalNow = Date.now;
+  let now = 0;
+  Date.now = () => now;
+  try {
+    await assert.rejects(authenticatedLifecycleSettleActorNavigationBoundary({
+      settleActionAdmissions: async () => undefined,
+      settleResponseBodies: async () => undefined,
+      drainNetworkActions: async () => undefined,
+      activeActionCount: () => 0,
+      waitForNextObservation: async () => { now = 15_001; },
+    }), /AUTHENTICATED_BROWSER_ACTOR_TRANSITION_STABILITY_AFTER_DEADLINE/u);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('actor boundary retains the existing not-quiescent failure for active work at deadline', async () => {
+  const originalNow = Date.now;
+  let now = 0;
+  Date.now = () => now;
+  try {
+    await assert.rejects(authenticatedLifecycleSettleActorNavigationBoundary({
+      settleActionAdmissions: async () => { now = 15_001; },
+      settleResponseBodies: async () => undefined,
+      drainNetworkActions: async () => undefined,
+      activeActionCount: () => 1,
+      waitForNextObservation: async () => undefined,
+    }), /AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT/u);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('auxiliary-page disposal joins context-wide owned network work before closing the page', async () => {

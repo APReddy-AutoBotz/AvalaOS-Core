@@ -1,5 +1,15 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Primary actor-entry ownership (2026-10-18)
+
+Request classification precedes the existing controller-start counter. A request's asynchronous classification/begin promise therefore needs explicit ownership before the boundary can infer absence of work; a pending controller count alone does not cover that phase. Actor entry also navigates to the root under the old session before clearing storage, even from an existing app-origin document. An actual-app comparison must establish whether that navigation is redundant and whether removing it avoids fresh old-actor work without losing canonical-origin entry or subsequent session verification. Neither source observation proves PR #313's hosted cause.
+
+Preserve context-wide accounting, original action/session identity and truthful terminal evidence. Two empty observations must both satisfy the existing actor deadline; the success return must not bypass the deadline check. A full admission fence or new lifecycle state machine is not selected without a demonstrated need and review of sign-in/hydration compatibility. Root owns the resulting integration; no product authorization or backend contract change is planned.
+
+The actual-browser held-classification probe demonstrates early boundary success with both counters zero. The selected correction owns and deduplicates begin promises at invocation and joins them before sampling body/finish quiescence. Controller start and finish continue to verify and retain their original authority independently. The canonical root navigation stays unchanged because the comparison did not establish an old-author business wave. This correction does not claim an atomic fence against every future request or a resolved hosted cause.
+
+Admission settlement joins all accepted promises even when one rejects, then reports the retained failure. It cannot turn rejection into actor-transition success or clear pending work to satisfy the count. The deadline is checked after settlement and before either empty-state success; this does not claim cancellation at precisely 15 seconds or replace the existing component cleanup bounds.
+
 ## Context-wide actor-transition evidence (2026-10-18)
 
 Actor replacement must account for accepted work across the entire browser context because primary and auxiliary pages share session storage. Pending action starts, acquired response bodies and terminal controller observations are distinct owned phases. Original actor/session binding and independent per-request frames must survive completion; neither an empty page-local queue nor a client abort proves context/server quiescence.
