@@ -77,6 +77,13 @@ const main = async () => {
     if (result.status !== 200) throw new Error(result.body.error ?? 'PREAUTH_CONTROLLER_REJECTED');
     return result.body;
   };
+  assert.deepEqual(await postControlRaw('/control/browser-action-start', { projectName }), {
+    status: 409, body: { error: 'AUTHENTICATED_HOSTED_CONTROLLER_INTAKE_CLOSED' },
+  });
+  assert.equal(observations.length, 0);
+  // This loopback-only fixture manually seeds the project and identity adapters;
+  // activate that local setup just as the controller unit fixtures do.
+  controller.active = true;
 
   let appOrigin = '';
   let serverClassifier = null;

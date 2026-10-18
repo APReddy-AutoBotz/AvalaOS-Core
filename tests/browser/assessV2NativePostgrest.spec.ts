@@ -388,9 +388,12 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
         expect(row).toMatchObject({
           status: 'failed', httpStatus: 200, rowCount: null,
           lifecycle: { requested: 1, responseStarted: 1, completed: 0, transportFailed: 1, pending: 0,
-            bodyCompleted: 0, bodyFailed: 1, bodyPending: 0,
+            bodyCompleted: 0,
             transportFailures: { aborted: 1, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 } },
         });
+        // Transport cancellation and protocol body rejection settle independently.
+        // Either snapshot must retain exactly one failed-or-pending body, never success.
+        expect([[1, 0], [0, 1]]).toContainEqual([row!.lifecycle.bodyFailed, row!.lifecycle.bodyPending]);
         await release();
         armed = false;
       } finally {

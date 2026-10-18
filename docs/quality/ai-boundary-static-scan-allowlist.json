@@ -578,7 +578,7 @@
       "path": "tests/browser/assessV2NativePostgrest.spec.ts",
       "lines": [
         62,
-        476
+        479
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep local fixture-token reads and missing-session storage removal confined to disposable native browser checks. They are not server revocation or hosted authorization; retain no credentials."
