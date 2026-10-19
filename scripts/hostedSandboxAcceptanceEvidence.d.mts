@@ -44,7 +44,7 @@ export function verifyHostedSandboxAttachments(input: {
   executions: unknown[];
 }): Readonly<{
   scope: Readonly<{
-    evidenceScope: 'executed-hosted-sandbox-local';
+    evidenceScope: 'executed-hosted-sandbox-local' | 'executed-local-real-backend-sandbox';
     fixtureId: 'synthetic-default';
   }>;
   actual: Readonly<{

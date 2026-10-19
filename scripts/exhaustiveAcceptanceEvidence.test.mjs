@@ -17,6 +17,8 @@ import {
 } from './exhaustiveAcceptanceEvidence.mjs';
 import {
   createHostedAcceptanceWorkflowRuntime,
+  deriveExpectedHostedAcceptanceMetadata,
+  AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW,
   EXHAUSTIVE_ACCEPTANCE_DISPATCH_BRIDGE_WORKFLOW,
   EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
   PREVIEW_EXHAUSTIVE_BROWSER_WORKFLOW,
@@ -113,6 +115,76 @@ for (const [name, mutation] of [
     environment: { ...dispatchEnvironmentValue, ...mutation },
     allowedWorkflowPaths: hostedWorkflowAllowlist,
   }), /HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED/u, name);
+}
+
+const localRealBackendReleaseSha = '9'.repeat(40);
+const localRealBackendBuildDigest = `sha256:${'8'.repeat(64)}`;
+const localRealBackendEnvironment = {
+  GITHUB_ACTIONS: 'true',
+  GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+  GITHUB_WORKFLOW_REF: `APReddy-AutoBotz/AvalaOS-Core/${AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW}@refs/heads/main`,
+  GITHUB_EVENT_NAME: 'workflow_dispatch',
+  GITHUB_JOB: 'hosted-authenticated',
+  GITHUB_RUN_ID: '39000000001',
+  GITHUB_RUN_ATTEMPT: '1',
+  GITHUB_SHA: localRealBackendReleaseSha,
+  RELEASE_SHA: localRealBackendReleaseSha,
+  EXPECTED_RELEASE_SHA: localRealBackendReleaseSha,
+  ACCEPTANCE_RELEASE_SHA: localRealBackendReleaseSha,
+  ACCEPTANCE_WORKFLOW_PATH: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  ACCEPTANCE_EXECUTION_KIND: 'local_real_backend',
+  AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'local_real_backend_authenticated',
+  HOSTED_PILOT_URL: 'http://127.0.0.1:4173',
+  NETLIFY_DEPLOY_ID: '',
+  AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: localRealBackendBuildDigest,
+};
+assert.equal(resolveHostedAcceptanceWorkflowPath({
+  environment: localRealBackendEnvironment,
+  allowedWorkflowPaths: hostedWorkflowAllowlist,
+}), EXHAUSTIVE_ACCEPTANCE_WORKFLOW);
+const localRealBackendRuntime = createHostedAcceptanceWorkflowRuntime({
+  environment: localRealBackendEnvironment,
+  workflowPath: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  releaseSha: localRealBackendReleaseSha,
+});
+assert.equal(localRealBackendRuntime.callerWorkflowPath, AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW);
+const localRealBackendMetadata = deriveExpectedHostedAcceptanceMetadata({
+  environment: localRealBackendEnvironment,
+  exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
+  configPath: 'playwright.exhaustive-acceptance.config.ts',
+  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  workflowPath: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+});
+assert.deepEqual(localRealBackendMetadata, {
+  schemaVersion: 'acceptance-report-profile-v1',
+  ci: {},
+  evidenceKind: 'local-real-backend-acceptance',
+  executionKind: 'local_real_backend',
+  exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
+  configPath: 'playwright.exhaustive-acceptance.config.ts',
+  sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  exactHead: localRealBackendReleaseSha,
+  targetOrigin: 'http://127.0.0.1:4173',
+  deployId: null,
+  buildDigest: localRealBackendBuildDigest,
+  sourceIdentity: 'committed_exact_head',
+  workflowRuntime: localRealBackendRuntime,
+});
+for (const [name, mutation] of [
+  ['hosted public mode under local authenticated mode', { ACCEPTANCE_EXECUTION_KIND: 'hosted_preview' }],
+  ['hosted authenticated mode under local public mode', { AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'hosted_authenticated_synthetic' }],
+  ['trailing slash origin', { HOSTED_PILOT_URL: 'http://127.0.0.1:4173/' }],
+  ['invalid build', { AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: `sha256:${'7'.repeat(63)}` }],
+  ['deployment identity', { NETLIFY_DEPLOY_ID: 'b'.repeat(24) }],
+]) {
+  const substituted = { ...localRealBackendEnvironment, ...mutation };
+  assert.throws(() => deriveExpectedHostedAcceptanceMetadata({
+    environment: substituted,
+    exactCommand: localRealBackendMetadata.exactCommand,
+    configPath: localRealBackendMetadata.configPath,
+    sourcePaths: localRealBackendMetadata.sourcePaths,
+    workflowPath: EXHAUSTIVE_ACCEPTANCE_WORKFLOW,
+  }), /REJECTED/u, name);
 }
 
 const declarationEnvironment = dispatchEnvironment({ declarationOnly: true });
@@ -389,6 +461,40 @@ assert.equal(evaluateHostedTest({
   title: passedExecution.title,
   requiredProjects: ['desktop-chromium'],
 }).status, 'BLOCKED', 'a raw hosted-labelled execution without a validator-owned binding must remain blocked');
+
+const localRealBackendReport = {
+  ...fullHostedReport,
+  config: { metadata: { ...localRealBackendMetadata, actualWorkers: 1 }, workers: 1 },
+};
+const validLocalRealBackendValidation = validateHostedPlaywrightReport({
+  report: localRealBackendReport,
+  expectedMetadata: localRealBackendMetadata,
+});
+assert.deepEqual(validLocalRealBackendValidation.errors, []);
+assert.equal(evaluateHostedTest({
+  title: passedExecution.title,
+  requiredProjects: ['desktop-chromium'],
+  requiredExecutionKind: 'local_real_backend',
+  reportValidation: validLocalRealBackendValidation,
+}).status, 'PASS');
+for (const [label, metadataMutation] of [
+  ['substituted build digest', { buildDigest: `sha256:${'7'.repeat(64)}` }],
+  ['substituted local origin', { targetOrigin: 'http://127.0.0.1:4174' }],
+  ['removed committed source identity', { sourceIdentity: undefined }],
+  ['substituted local execution kind', { executionKind: 'hosted_preview' }],
+]) {
+  const report = {
+    ...localRealBackendReport,
+    config: {
+      ...localRealBackendReport.config,
+      metadata: { ...localRealBackendReport.config.metadata, ...metadataMutation },
+    },
+  };
+  assert.ok(validateHostedPlaywrightReport({
+    report,
+    expectedMetadata: localRealBackendMetadata,
+  }).errors.length > 0, label);
+}
 
 const duplicateReport = {
   ...fullHostedReport,

@@ -14,8 +14,10 @@ const xmlEscape = value => String(value ?? '').replace(/[<>&"']/g, char => ({
 
 const writeFailClosedArtifacts = () => {
   fs.mkdirSync(out, { recursive: true });
+  const localRealBackendExecution = process.env.ACCEPTANCE_EXECUTION_KIND === 'local_real_backend';
   const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
-  const netlifyDeployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
+  const netlifyDeployId = localRealBackendExecution ? null : process.env.NETLIFY_DEPLOY_ID || 'not-available';
+  const buildDigest = localRealBackendExecution ? process.env.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST || null : null;
   const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
   const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
   const executionTimestamp = new Date().toISOString();
@@ -24,6 +26,11 @@ const writeFailClosedArtifacts = () => {
     executionDisposition: 'NOT_EXECUTED',
     releaseSha,
     netlifyDeployId,
+    ...(localRealBackendExecution ? {
+      buildDigest,
+      acceptanceScope: 'local-real-backend-functional',
+      readiness: { production: 'NOT_RUN', cdn: 'NOT_RUN', netlify: 'NOT_RUN' },
+    } : {}),
     target: 'not-executed-declaration-preflight-failed',
     workflowRunId,
     workflowAttempt,
@@ -42,6 +49,7 @@ const writeFailClosedArtifacts = () => {
     executionKind: 'preflight',
     releaseSha,
     netlifyDeployId,
+    ...(localRealBackendExecution ? { buildDigest } : {}),
     workflowRunId,
     workflowAttempt,
     executionTimestamp,
@@ -72,9 +80,16 @@ const writeFailClosedArtifacts = () => {
     path.join(out, 'acceptance-junit.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="Exhaustive AvalaOS Acceptance" tests="1" failures="1" skipped="0"><testsuite name="acceptance"><testcase classname="acceptance" name="${xmlEscape(FAILURE_CODE)}"><failure message="${xmlEscape(FAILURE_CODE)}"/></testcase></testsuite></testsuites>\n`,
   );
+  const reportTitle = localRealBackendExecution
+    ? 'Exhaustive AvalaOS Local Real-Backend Functional Acceptance'
+    : 'Exhaustive AvalaOS Hosted Product Acceptance';
+  const deploymentLine = localRealBackendExecution ? '' : `- Netlify deploy: \`${netlifyDeployId}\`\n`;
+  const localReadiness = localRealBackendExecution
+    ? `- Build digest: \`${buildDigest}\`\n- Production readiness: **NOT RUN**\n- CDN readiness: **NOT RUN**\n- Netlify readiness: **NOT RUN**\n`
+    : '';
   fs.writeFileSync(
     path.join(out, 'acceptance-report.md'),
-    `# Exhaustive AvalaOS Hosted Product Acceptance\n\n## Executive Summary\n\n- Overall: **FAILED**\n- Declaration preflight: **${FAILURE_CODE}**\n- Release SHA: \`${releaseSha}\`\n- Netlify deploy: \`${netlifyDeployId}\`\n- Workflow: \`${workflowRunId}\` attempt \`${workflowAttempt}\`\n\nDetailed parser, declaration, endpoint, and credential content is intentionally excluded from this evidence artifact.\n`,
+    `# ${reportTitle}\n\n## Executive Summary\n\n- Overall: **FAILED**\n- Declaration preflight: **${FAILURE_CODE}**\n- Release SHA: \`${releaseSha}\`\n${deploymentLine}${localReadiness}- Workflow: \`${workflowRunId}\` attempt \`${workflowAttempt}\`\n\nDetailed parser, declaration, endpoint, and credential content is intentionally excluded from this evidence artifact.\n`,
   );
 };
 

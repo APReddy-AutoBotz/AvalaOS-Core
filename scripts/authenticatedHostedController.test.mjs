@@ -2,14 +2,18 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { request as httpRequest } from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
   AuthenticatedHostedController,
   authenticatedHostedDigest,
+  controllerProfile,
   startAuthenticatedHostedControllerServer,
   validateAuthenticatedHostedControllerEnvironment,
 } from './authenticatedHostedController.mjs';
+import { deriveLocalAcceptanceExerciseDigest } from './localAcceptanceBuild.mjs';
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
@@ -276,6 +280,54 @@ const baseEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: 'supabase_vault', AVALA_PROVIDER_SECRET_BACKEND: 'supabase_vault',
   AUTHENTICATED_ACCEPTANCE_SCOPE: JSON.stringify({ organizationId: id(), workspaceId: id(),
     roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id() } }),
+});
+
+test('local real-backend controller binds build bytes, null deployment and derived exercise identity', async () => {
+  const approvedExerciseDigest = digest('approved-local-exercise');
+  const buildDigest = digest('local-build');
+  const environment = {
+    ...baseEnvironment(),
+    ACCEPTANCE_EXECUTION_KIND: 'local_real_backend',
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'local_real_backend_authenticated',
+    HOSTED_PILOT_URL: 'http://127.0.0.1:4173',
+    NETLIFY_DEPLOY_ID: '',
+    AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: buildDigest,
+    AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST: approvedExerciseDigest,
+    LOCAL_ACCEPTANCE_BUILD_ROOT: path.join(os.tmpdir(), 'avalaos-local-acceptance-fixture'),
+  };
+  environment.AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST = deriveLocalAcceptanceExerciseDigest({
+    approvedExerciseDigest, buildDigest, releaseSha: environment.RELEASE_SHA,
+  });
+  const config = validateAuthenticatedHostedControllerEnvironment(environment);
+  assert.equal(config.executionKind, 'local_real_backend_authenticated');
+  assert.equal(config.deploymentId, null);
+  assert.equal(config.buildDigest, buildDigest);
+  const profile = controllerProfile(config, { startedAt: '2026-10-19T00:00:00.000Z',
+    completedAt: '2026-10-19T00:00:01.000Z' }, [{ persona: 'author', project: 'desktop-chromium',
+    actorHash: digest('actor'), sessionHash: digest('session') }]);
+  assert.equal(profile.schemaVersion, 'local-real-backend-authenticated-profile-v1');
+  assert.equal(profile.executionKind, 'local_real_backend_authenticated');
+  assert.equal(profile.deploymentId, null);
+  assert.equal(profile.buildDigest, buildDigest);
+  await assert.rejects(async () => validateAuthenticatedHostedControllerEnvironment({ ...environment,
+    AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: digest('different-build') }), /DIGEST_REJECTED/u);
+
+  let activation;
+  const controller = new AuthenticatedHostedController({ config, identity: {}, adapter: {
+    preflight: async () => ({ syntheticTarget: true, production: false, releaseSha: config.releaseSha,
+      deploymentId: null, executionKind: config.executionKind, buildDigest, migrationVersion: config.migrationVersion,
+      backendDigest: config.backendDigest, providersEnabled: false, runtimeReady: true,
+      secretBackendKind: config.secretBackendKind, secretBackendWritable: true,
+      publicTargetDigest: config.targetPublicDigest, baselineDigest: config.baselineDigest,
+      customerRows: 0, unapprovedActiveResidue: 0, scopeReady: true,
+      observationStartedAt: '2026-10-19T00:00:00.000Z' }),
+    activate: async input => { activation = input; },
+  } });
+  await controller.preflightAndActivate();
+  assert.equal(activation.deploymentId, null);
+  assert.equal(activation.executionKind, 'local_real_backend_authenticated');
+  assert.equal(activation.buildDigest, buildDigest);
+  assert.equal(activation.profileVersion, 'local-real-backend-authenticated-profile-v1');
 });
 
 test('focused V2 diagnostic binds exact checkpoint order, original author session and safe frame deltas', async () => {

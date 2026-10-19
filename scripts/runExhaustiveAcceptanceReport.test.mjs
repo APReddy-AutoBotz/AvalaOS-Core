@@ -19,6 +19,7 @@ const workflowPath = '.github/workflows/exhaustive-acceptance.yml';
 const workflowRef = `owner/repository/${workflowPath}@refs/pull/264/merge`;
 const hostedCommand = ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'];
 const passedControlScriptScenarios = new Set();
+const buildDigest = `sha256:${'d'.repeat(64)}`;
 
 const hostedEnvironment = () => ({
   ACCEPTANCE_EXECUTION_KIND: 'hosted_preview',
@@ -62,6 +63,57 @@ const hostedMetadata = () => ({
     runAttempt: '2',
     workflowSha,
     releaseSha,
+  },
+  actualWorkers: 1,
+});
+
+const localRealBackendEnvironment = () => ({
+  ACCEPTANCE_EXECUTION_KIND: 'local_real_backend',
+  AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'local_real_backend_authenticated',
+  AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: buildDigest,
+  RELEASE_SHA: releaseSha,
+  HOSTED_PILOT_URL: 'http://127.0.0.1:4173',
+  GITHUB_ACTIONS: 'true',
+  GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+  GITHUB_WORKFLOW_REF: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/heads/main',
+  GITHUB_EVENT_NAME: 'workflow_dispatch',
+  GITHUB_JOB: 'hosted-authenticated',
+  GITHUB_RUN_ID: '123456',
+  GITHUB_RUN_ATTEMPT: '2',
+  GITHUB_SHA: releaseSha,
+  ACCEPTANCE_WORKFLOW_PATH: workflowPath,
+  ACCEPTANCE_EVIDENCE_ENVIRONMENT: 'stable-release',
+  ACCEPTANCE_EXECUTION_DISPOSITION: 'EXECUTED',
+});
+
+const localRealBackendMetadata = () => ({
+  schemaVersion: 'acceptance-report-profile-v1',
+  ci: {},
+  evidenceKind: 'local-real-backend-acceptance',
+  executionKind: 'local_real_backend',
+  exactCommand: hostedCommand,
+  configPath: 'playwright.exhaustive-acceptance.config.ts',
+  sourcePaths: [
+    'tests/browser/exhaustiveHostedAcceptance.spec.ts',
+    'tests/browser/productNavigationReadiness.ts',
+    'scripts/hostedSandboxAcceptanceEvidence.mjs',
+  ],
+  exactHead: releaseSha,
+  targetOrigin: 'http://127.0.0.1:4173',
+  deployId: null,
+  buildDigest,
+  sourceIdentity: 'committed_exact_head',
+  workflowRuntime: {
+    authority: 'github-actions',
+    workflowPath,
+    workflowRef: 'APReddy-AutoBotz/AvalaOS-Core/.github/workflows/authenticated-product-acceptance.yml@refs/heads/main',
+    repository: 'APReddy-AutoBotz/AvalaOS-Core',
+    eventName: 'workflow_dispatch',
+    runId: '123456',
+    runAttempt: '2',
+    workflowSha: releaseSha,
+    releaseSha,
+    callerWorkflowPath: '.github/workflows/authenticated-product-acceptance.yml',
   },
   actualWorkers: 1,
 });
@@ -291,6 +343,51 @@ test('same-run measured Sandbox evidence promotes only the 18 supported browser 
         assert.equal(item.actualResult.logicalMutationCount, item.expectedMutationCount);
       }
     } finally { rmSync(temp, { recursive: true, force: true }); }
+  }
+});
+
+test('local real-backend report promotes measured functional cases without claiming deployment readiness', () => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'avalaos-local-real-backend-report-'));
+  try {
+    const report = measuredHostedReport(localRealBackendMetadata());
+    const playwrightPath = path.join(temp, 'playwright.json');
+    writeFileSync(playwrightPath, JSON.stringify(report));
+    const resultsDir = path.join(temp, 'results');
+    const run = spawnSync(process.execPath, ['scripts/runExhaustiveAcceptanceReport.mjs'], {
+      cwd: process.cwd(), encoding: 'utf8',
+      env: {
+        ...process.env,
+        ...localRealBackendEnvironment(),
+        ACCEPTANCE_RESULTS_DIR: resultsDir,
+        PLAYWRIGHT_JSON: playwrightPath,
+        RETAINED_RESULTS_MANIFEST: path.join(temp, 'absent-retained.json'),
+        ORACLE_RESULTS_MANIFEST: path.join(temp, 'absent-oracle.json'),
+        SERVER_RESULTS_MANIFEST: path.join(temp, 'absent-server.json'),
+      },
+    });
+    assert.notEqual(run.status, 0, 'the public-only fixture remains incomplete without retained and authenticated evidence');
+    const output = JSON.parse(readFileSync(path.join(resultsDir, 'acceptance-results.json'), 'utf8'));
+    assert.deepEqual(output.summary.browserEvidenceErrors, []);
+    assert.equal(output.summary.browserExecutionKind, 'local_real_backend');
+    assert.equal(output.summary.netlifyDeployId, null);
+    assert.equal(output.summary.buildDigest, buildDigest);
+    assert.equal(output.summary.acceptanceScope, 'local-real-backend-functional');
+    assert.deepEqual(output.summary.readiness, { production: 'NOT_RUN', cdn: 'NOT_RUN', netlify: 'NOT_RUN' });
+    assert.equal(output.summary.PASS, 18);
+    assert.equal(output.summary.BLOCKED, 90);
+    for (const item of output.results.filter(item => item.status === 'PASS')) {
+      assert.deepEqual(item.executedScope, {
+        evidenceScope: 'executed-local-real-backend-sandbox', fixtureId: 'synthetic-default',
+      });
+      assert.equal(item.buildDigest, buildDigest);
+      assert.equal(item.netlifyDeployId, null);
+    }
+    const markdown = readFileSync(path.join(resultsDir, 'acceptance-report.md'), 'utf8');
+    assert.match(markdown, /Local Real-Backend Functional Acceptance/u);
+    assert.match(markdown, /Production readiness: \*\*NOT RUN\*\*/u);
+    assert.doesNotMatch(markdown, /Netlify deploy:/u);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
   }
 });
 

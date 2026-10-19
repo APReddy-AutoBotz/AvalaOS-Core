@@ -35,7 +35,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const json=value=>JSON.stringify(value);
 const uuid=()=>crypto.randomUUID();
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(approvedFullChainTip(migrations), '20261011053000');
+assert.equal(approvedFullChainTip(migrations), '20261019161723');
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const EXPECTED_ASSERTIONS=[
  'MAP-PG-BUDGET-001-legacy-domain-preserved',

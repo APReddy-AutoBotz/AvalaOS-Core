@@ -47,8 +47,10 @@ const inventory = deriveInventory(catalog, loadInventoryDocument(), provenanceDo
 const provenanceByTestId = new Map(provenanceDocument.contracts.map(item => [item.testId, item]));
 const hostedMap = hostedBindingMap(bindings);
 const authenticatedMap = authenticatedBindingMap(bindings);
+const localRealBackendExecution = process.env.ACCEPTANCE_EXECUTION_KIND === 'local_real_backend';
 const releaseSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || 'not-bound';
-const deployId = process.env.NETLIFY_DEPLOY_ID || 'not-available';
+const deployId = localRealBackendExecution ? null : process.env.NETLIFY_DEPLOY_ID || 'not-available';
+const buildDigest = localRealBackendExecution ? process.env.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST || null : null;
 const workflowRunId = String(process.env.GITHUB_RUN_ID || 'local');
 const workflowAttempt = String(process.env.GITHUB_RUN_ATTEMPT || 'local');
 const executionDisposition = process.env.ACCEPTANCE_EXECUTION_DISPOSITION || 'EXECUTED';
@@ -77,9 +79,7 @@ if (authenticatedManifest && authenticatedControllerBinding) {
 const authenticatedErrors = authenticatedExpected
   ? validateAuthenticatedAcceptanceManifest(authenticatedManifest, authenticatedExpected, catalog)
   : ['authenticated-execution-not-bound'];
-const browserExecutionKind = typeof playwright?.config?.metadata?.executionKind === 'string'
-  ? playwright.config.metadata.executionKind
-  : 'unbound';
+const browserExecutionKind = localRealBackendExecution ? 'local_real_backend' : 'hosted_preview';
 const hostedCommand = ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'];
 const hostedConfigPath = 'playwright.exhaustive-acceptance.config.ts';
 const hostedSourcePaths = [
@@ -164,6 +164,7 @@ const evaluateBrowserCase = (testCase, binding) => {
   const evaluation = evaluateHostedTest({
     title: canonicalHostedTitle(testCase),
     requiredProjects: binding.projects,
+    requiredExecutionKind: browserExecutionKind,
     reportValidation: browserReportValidation,
   });
   if (evaluation.status !== 'PASS') return evaluation;
@@ -266,7 +267,9 @@ const results = (catalog.cases ?? []).map(testCase => {
     evaluation = { status: 'BLOCKED', reason: 'Hosted scope requires same-run browser execution; retained authority evidence alone is insufficient.' };
   }
   if (testCase.environment === 'hosted_authenticated_synthetic' && evaluation.status === 'PASS'
-    && executedScope?.evidenceScope !== 'executed-hosted-authenticated-synthetic') {
+    && executedScope?.evidenceScope !== (localRealBackendExecution
+      ? 'executed-local-real-backend-synthetic'
+      : 'executed-hosted-authenticated-synthetic')) {
     evaluation = { status: 'BLOCKED', reason: 'Authenticated hosted scope requires exact same-run real-auth browser and server evidence.' };
   }
 
@@ -275,6 +278,7 @@ const results = (catalog.cases ?? []).map(testCase => {
     executionKind,
     releaseSha,
     netlifyDeployId: deployId,
+    ...(localRealBackendExecution ? { buildDigest } : {}),
     workflowRunId,
     workflowAttempt,
     executionTimestamp: timestamp,
@@ -329,6 +333,11 @@ const summary = {
   browserEvidenceErrors,
   releaseSha,
   netlifyDeployId: deployId,
+  ...(localRealBackendExecution ? {
+    buildDigest,
+    acceptanceScope: 'local-real-backend-functional',
+    readiness: { production: 'NOT_RUN', cdn: 'NOT_RUN', netlify: 'NOT_RUN' },
+  } : {}),
   target,
   workflowRunId,
   workflowAttempt,
@@ -379,15 +388,22 @@ const blocked = results.filter(item => item.status === 'BLOCKED').map(item => `-
 const declaredMd = declared.map(item => `- **${item.branchId}** — ${item.rule}: source proof not yet registered.`).join('\n') || 'None.';
 const uncoveredMd = uncovered.map(item => `- **${item.branchId}** — ${item.rule} (${item.sourceReferences.join(', ')}): ${item.uncoveredReason}`).join('\n') || 'None.';
 
-const markdown = `# Exhaustive AvalaOS Hosted Product Acceptance
+const reportTitle = localRealBackendExecution
+  ? 'Exhaustive AvalaOS Local Real-Backend Functional Acceptance'
+  : 'Exhaustive AvalaOS Hosted Product Acceptance';
+const executionLabel = localRealBackendExecution ? 'Local real-backend execution' : 'Hosted execution';
+const deploymentLine = localRealBackendExecution ? '' : `- Netlify deploy: \`${deployId}\`\n`;
+const localReadiness = localRealBackendExecution
+  ? `- Build digest: \`${buildDigest}\`\n- Production readiness: **NOT RUN**\n- CDN readiness: **NOT RUN**\n- Netlify readiness: **NOT RUN**\n`
+  : '';
+const markdown = `# ${reportTitle}
 
 ## Executive Summary
 
 - Overall: **${overall}**
-- Hosted execution: **${executionDisposition}**
+- ${executionLabel}: **${executionDisposition}**
 - Release SHA: \`${releaseSha}\`
-- Netlify deploy: \`${deployId}\`
-- Target: ${target}
+${deploymentLine}${localReadiness}- Target: ${target}
 - Workflow: \`${workflowRunId}\` attempt \`${workflowAttempt}\`
 - Tests: ${results.length}; PASS ${counts.PASS}; FAIL ${counts.FAIL}; BLOCKED ${counts.BLOCKED}; UNCOVERED ${counts.UNCOVERED}
 - Executed-case pass rate: ${summary.passPercentage}%

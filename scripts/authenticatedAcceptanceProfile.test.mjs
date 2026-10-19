@@ -1,9 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { requireAuthenticatedHostedBinding, validateAuthenticatedHostedProfile } from './authenticatedAcceptanceProfile.mjs';
+import {
+  authenticatedProfileFromEnvironment,
+  requireAuthenticatedHostedBinding,
+  validateAuthenticatedHostedProfile,
+} from './authenticatedAcceptanceProfile.mjs';
 import { createHostedAcceptanceWorkflowRuntime, resolveHostedAcceptanceWorkflowPath } from './hostedAcceptanceReportProvenance.mjs';
 
 import { profileFixture } from './authenticatedAcceptanceTestFixtures.mjs';
+
+const localProfileFixture = () => {
+  const profile = profileFixture();
+  profile.schemaVersion = 'local-real-backend-authenticated-profile-v1';
+  profile.executionKind = 'local_real_backend_authenticated';
+  profile.origin = 'http://127.0.0.1:4173';
+  profile.deploymentId = null;
+  profile.buildDigest = `sha256:${'c'.repeat(64)}`;
+  return profile;
+};
 
 test('separate authenticated profile accepts only the exact controller binding', () => {
   const p = profileFixture();
@@ -58,6 +72,60 @@ test('valid-looking retry and release substitutions cannot reuse an earlier bind
   }
 });
 
+test('local real-backend profile binds the exact loopback build without a deployment identity', () => {
+  const profile = localProfileFixture();
+  assert.equal(validateAuthenticatedHostedProfile(profile), profile);
+  assert.equal(requireAuthenticatedHostedBinding(profile, structuredClone(profile)), profile);
+
+  const environment = {
+    GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: profile.workflow.repository,
+    GITHUB_WORKFLOW_REF: profile.workflow.caller.ref, GITHUB_EVENT_NAME: profile.workflow.caller.event,
+    GITHUB_RUN_ID: profile.workflow.runId, GITHUB_RUN_ATTEMPT: profile.workflow.attempt,
+    GITHUB_SHA: profile.releaseSha, RELEASE_SHA: profile.releaseSha, GITHUB_JOB: profile.workflow.caller.job,
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: profile.executionKind,
+    AUTHENTICATED_ACCEPTANCE_AUTH_KIND: profile.authKind,
+    HOSTED_PILOT_URL: profile.origin,
+    AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: profile.buildDigest,
+    AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: profile.backendDigest,
+    AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: profile.migrationVersion,
+    AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: profile.migrationDigest,
+    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: profile.exerciseDigest,
+    AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST: profile.catalogDigest,
+    AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST: profile.sourceDigest,
+    AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST: profile.baselineDigest,
+    AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: profile.secretBackendKind,
+    AVALA_PROVIDER_SECRET_BACKEND: profile.secretBackendKind,
+    AUTHENTICATED_ACCEPTANCE_SYNTHETIC_ONLY: 'true',
+    AUTHENTICATED_ACCEPTANCE_PRODUCTION: 'false',
+    AUTHENTICATED_ACCEPTANCE_CUSTOMER_DATA: 'false',
+    AUTHENTICATED_ACCEPTANCE_PROVIDERS_ENABLED: 'false',
+    AUTHENTICATED_ACCEPTANCE_PAID_CALLS: 'false',
+    AUTHENTICATED_ACCEPTANCE_ACTOR_BINDINGS: JSON.stringify(profile.actors),
+  };
+  assert.deepEqual(authenticatedProfileFromEnvironment(environment, profile.window), profile);
+});
+
+test('local real-backend profile rejects substituted build, origin, deployment, and fixture identities', () => {
+  for (const change of [
+    profile => { profile.buildDigest = `sha256:${'9'.repeat(63)}`; },
+    profile => { delete profile.buildDigest; },
+    profile => { profile.origin = 'http://localhost:4173'; },
+    profile => { profile.origin = 'http://127.0.0.1:4174'; },
+    profile => { profile.origin = 'http://127.0.0.1:4173/path'; },
+    profile => { profile.deploymentId = 'b'.repeat(24); },
+    profile => { profile.authKind = 'fixture_transport'; },
+    profile => { profile.schemaVersion = 'hosted-authenticated-synthetic-profile-v3'; },
+  ]) {
+    const profile = localProfileFixture();
+    change(profile);
+    assert.throws(() => validateAuthenticatedHostedProfile(profile), /AUTHENTICATED_ACCEPTANCE_/u);
+  }
+  const expected = localProfileFixture();
+  const substituted = structuredClone(expected);
+  substituted.buildDigest = `sha256:${'9'.repeat(64)}`;
+  assert.throws(() => requireAuthenticatedHostedBinding(substituted, expected), /BINDING_MISMATCH/u);
+});
+
 test('canonical exhaustive producer preserves only the exact authenticated dispatch caller', () => {
   const p = profileFixture();
   const environment = {
@@ -66,6 +134,7 @@ test('canonical exhaustive producer preserves only the exact authenticated dispa
     GITHUB_RUN_ID: p.workflow.runId, GITHUB_RUN_ATTEMPT: p.workflow.attempt,
     GITHUB_SHA: p.releaseSha, RELEASE_SHA: p.releaseSha, GITHUB_JOB: p.workflow.caller.job,
     AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: p.executionKind,
+    ACCEPTANCE_EXECUTION_KIND: 'hosted_preview',
     ACCEPTANCE_WORKFLOW_PATH: p.workflow.producer.path,
   };
   const runtime = createHostedAcceptanceWorkflowRuntime({ environment,

@@ -8,7 +8,7 @@ import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTe
 
 const { Client } = pg;
 const AUTHORITY_MIGRATION = '20261010025331_legacy_delivery_authority.sql';
-const CURRENT_CHAIN_TIP = '20261011053000_supabase_provider_secret_backend.sql';
+const CURRENT_CHAIN_TIP = '20261019161723_local_real_backend_authenticated_acceptance.sql';
 const DUPLICATE_SAFE_MIGRATIONS = new Set([
   '20260923133000_pr1e_evidence_claim_operator_binding.sql',
   '20260923142120_pr1e_govern_control_alias_binding.sql',

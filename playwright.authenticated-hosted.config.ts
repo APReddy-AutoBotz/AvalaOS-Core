@@ -7,8 +7,12 @@ const baseURL = process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL;
 if (!baseURL) throw new Error('AUTHENTICATED_HOSTED_BASE_URL_REQUIRED');
 const target = new URL(baseURL);
 const acceptanceMode = authenticatedAcceptanceMode(process.env);
-if (target.protocol !== 'https:' || target.origin !== baseURL
-  || target.hostname !== 'avalaos-pilot.netlify.app') {
+const executionKind = process.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND;
+const localBuild = executionKind === 'local_real_backend_authenticated';
+if (target.origin !== baseURL || target.username || target.password
+  || (localBuild ? baseURL !== 'http://127.0.0.1:4173'
+    : executionKind !== 'hosted_authenticated_synthetic'
+      || target.protocol !== 'https:' || target.hostname !== 'avalaos-pilot.netlify.app')) {
   throw new Error('AUTHENTICATED_HOSTED_BASE_URL_REJECTED');
 }
 if (process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH !== 'true'

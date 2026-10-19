@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { deriveLocalAcceptanceExerciseDigest, LOCAL_AUTHENTICATED_EXECUTION_KIND } from './localAcceptanceBuild.mjs';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const required = (environment, name, pattern) => {
@@ -14,13 +15,19 @@ export function authenticatedHostedEnvironmentLines(environment, {
   catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalog.json', 'utf8')),
   provenance = JSON.parse(fs.readFileSync('tests/acceptance/source-provenance.json', 'utf8')),
 } = {}) {
+  const frontendKind = environment.AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND ?? 'netlify';
+  if (!['local_build', 'netlify'].includes(frontendKind)) {
+    throw new Error('AUTHENTICATED_HOSTED_ENVIRONMENT_REJECTED');
+  }
+  const localBuild = frontendKind === 'local_build';
   const secretBackendKind = required(environment, 'AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND',
     /^(?:hashicorp_vault|supabase_vault)$/u);
   if (environment.AVALA_PROVIDER_SECRET_BACKEND !== secretBackendKind) {
     throw new Error('AUTHENTICATED_HOSTED_ENVIRONMENT_REJECTED');
   }
   const values = {
-    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'hosted_authenticated_synthetic',
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: localBuild
+      ? LOCAL_AUTHENTICATED_EXECUTION_KIND : 'hosted_authenticated_synthetic',
     AUTHENTICATED_ACCEPTANCE_AUTH_KIND: 'supabase_auth',
     AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: secretBackendKind,
     AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF: required(environment,
@@ -31,7 +38,13 @@ export function authenticatedHostedEnvironmentLines(environment, {
     AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: required(environment,
       'AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION', /^20[0-9]{12}$/u),
     AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: required(environment, 'AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST', DIGEST),
-    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: required(environment, 'AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST', DIGEST),
+    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: localBuild
+      ? deriveLocalAcceptanceExerciseDigest({
+        approvedExerciseDigest: required(environment, 'AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST', DIGEST),
+        buildDigest: required(environment, 'AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST', DIGEST),
+        releaseSha: required(environment, 'RELEASE_SHA', /^[0-9a-f]{40}$/u),
+      })
+      : required(environment, 'AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST', DIGEST),
     AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST: canonicalDigest(catalog),
     AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST: canonicalDigest(provenance.sourceDigests),
     AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST: required(environment, 'AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST', DIGEST),
@@ -41,6 +54,10 @@ export function authenticatedHostedEnvironmentLines(environment, {
     AUTHENTICATED_ACCEPTANCE_PROVIDERS_ENABLED: 'false',
     AUTHENTICATED_ACCEPTANCE_PAID_CALLS: 'false',
   };
+  if (localBuild) {
+    values.AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST = environment.AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST;
+    values.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST = environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST;
+  }
   return Object.entries(values).map(([name, value]) => `${name}=${value}`);
 }
 

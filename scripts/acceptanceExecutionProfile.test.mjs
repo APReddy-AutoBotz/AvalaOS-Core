@@ -104,6 +104,62 @@ test('hosted preview requires non-loopback HTTPS and an exact deploy ID', () => 
   assert.throws(() => decodeAcceptanceExecutionProfile({ ...hosted, ACCEPTANCE_INVOCATION_ID: invocationId }), /LOCAL_BINDING_REJECTED/u);
 });
 
+test('local real backend binds the committed build digest and exact loopback origin without a deploy ID', () => {
+  const buildDigest = `sha256:${'c'.repeat(64)}`;
+  const localRealBackend = {
+    ACCEPTANCE_EXECUTION_KIND: 'local_real_backend',
+    ACCEPTANCE_RELEASE_SHA: head,
+    HOSTED_PILOT_URL: 'http://127.0.0.1:4173',
+    AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: buildDigest,
+  };
+  const profile = decodeAcceptanceExecutionProfile(localRealBackend);
+  assert.deepEqual(profile, {
+    schemaVersion: 'acceptance-execution-profile-v1',
+    evidenceKind: 'local-real-backend-acceptance',
+    executionKind: 'local_real_backend',
+    releaseSha: head,
+    checkoutSha: null,
+    sourceIdentity: 'committed_exact_head',
+    invocationId: null,
+    targetOrigin: 'http://127.0.0.1:4173',
+    deployId: null,
+    buildDigest,
+  });
+  assert.deepEqual(createAcceptanceReportMetadata({
+    profile,
+    exactCommand: ['npx', 'playwright', 'test'],
+    configPath: 'playwright.exhaustive-acceptance.config.ts',
+    sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+  }), {
+    schemaVersion: 'acceptance-report-profile-v1',
+    ci: {},
+    evidenceKind: 'local-real-backend-acceptance',
+    executionKind: 'local_real_backend',
+    exactCommand: ['npx', 'playwright', 'test'],
+    configPath: 'playwright.exhaustive-acceptance.config.ts',
+    sourcePaths: ['tests/browser/exhaustiveHostedAcceptance.spec.ts'],
+    exactHead: head,
+    targetOrigin: 'http://127.0.0.1:4173',
+    deployId: null,
+    buildDigest,
+    sourceIdentity: 'committed_exact_head',
+  });
+  for (const substitution of [
+    { HOSTED_PILOT_URL: 'http://localhost:4173' },
+    { HOSTED_PILOT_URL: 'http://127.0.0.1:4174' },
+    { HOSTED_PILOT_URL: 'http://127.0.0.1:4173/' },
+    { HOSTED_PILOT_URL: 'http://127.0.0.1:4173/path' },
+    { NETLIFY_DEPLOY_ID: 'b'.repeat(24) },
+    { AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: `sha256:${'c'.repeat(63)}` },
+    { AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: undefined },
+    { ACCEPTANCE_CHECKOUT_SHA: head },
+    { LOCAL_ACCEPTANCE_BASE_URL: 'http://127.0.0.1:4173' },
+  ]) {
+    assert.throws(() => decodeAcceptanceExecutionProfile({ ...localRealBackend, ...substitution }),
+      /LOCAL_REAL_BACKEND_/u);
+  }
+});
+
 test('local output root binds the head, report area, and invocation without implying a clean tree', () => {
   const profile = decodeAcceptanceExecutionProfile(localEnvironment, { expectedCheckoutSha: head });
   assert.equal(

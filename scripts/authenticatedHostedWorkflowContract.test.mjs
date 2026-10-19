@@ -42,7 +42,9 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
   const normalize = value => JSON.parse(JSON.stringify(value).replaceAll('${{ inputs.release_sha }}', '${{ env.RELEASE_SHA }}'));
   const check = 'node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }';
   for (const [name, value] of Object.entries(hosted.env)) {
-    if (['RELEASE_SHA', 'NETLIFY_DEPLOY_ID', 'HOSTED_PILOT_URL', 'AUTHENTICATED_ACCEPTANCE_MODE'].includes(name)) continue;
+    if (['RELEASE_SHA', 'NETLIFY_DEPLOY_ID', 'HOSTED_PILOT_URL', 'AUTHENTICATED_ACCEPTANCE_MODE',
+      'ACCEPTANCE_EXECUTION_KIND', 'AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND',
+      'AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND'].includes(name)) continue;
     assert.equal(replay.env[name], value, `${name} must match protected preactivation output/environment binding`);
   }
   assert.equal(replay.env.AUTHENTICATED_ACCEPTANCE_MODE, 'full_acceptance');
@@ -62,6 +64,9 @@ test('ordinary Linux CI replays the actual local preactivation commands without 
     assert.equal(actual.run.trim(), [check, ...original.run.trim().split('\n').flatMap(line => [line, check])].join('\n'), `${name}: command and checkout-check parity`);
   }
   assert.equal(replay.steps.some(step => String(step.uses ?? '').startsWith('supabase/setup-cli@')), false);
+  const localBuildSmoke = replay.steps.find(step => step.name === 'Verify exact local build in secure loopback browser');
+  assert.match(localBuildSmoke.run, /localAcceptanceBuild[.]mjs smoke/u);
+  assert.match(localBuildSmoke.run, /authenticatedHostedCheckout[.]mjs/u);
   const decoderProbe = replay.steps.find(step => step.name === 'Verify original source attestation against loopback multipart');
   assert.equal(decoderProbe.run.trim(), `node scripts/testAuthenticatedSupabaseMultipart.mjs\n${check}`);
   assert.equal(decoderProbe.env, undefined);
@@ -102,10 +107,17 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.deepEqual(Object.keys(workflow.on).sort(), ['pull_request', 'push', 'workflow_dispatch']);
   const inputs = workflow.on.workflow_dispatch.inputs;
   assert.deepEqual(Object.keys(inputs).sort(), [
-    'acceptance_mode', 'backend_digest', 'baseline_digest', 'exercise_digest', 'expected_project_ref', 'hosted_url',
-    'migration_digest', 'migration_version', 'netlify_deploy_id', 'release_sha', 'target_public_digest',
+    'acceptance_mode', 'backend_digest', 'baseline_digest', 'exercise_digest', 'expected_project_ref', 'frontend_kind',
+    'hosted_url', 'migration_digest', 'migration_version', 'netlify_deploy_id', 'release_sha', 'target_public_digest',
   ]);
-  assert.ok(Object.values(inputs).every(input => input.required === true));
+  assert.equal(inputs.hosted_url.required, false);
+  assert.equal(inputs.hosted_url.default, '');
+  assert.equal(inputs.netlify_deploy_id.required, false);
+  assert.equal(inputs.netlify_deploy_id.default, '');
+  assert.ok(Object.entries(inputs).filter(([name]) => !['hosted_url', 'netlify_deploy_id'].includes(name))
+    .every(([, input]) => input.required === true));
+  assert.deepEqual(inputs.frontend_kind, { description: 'Exact acceptance frontend source', required: true,
+    default: 'local_build', type: 'choice', options: ['local_build', 'netlify'] });
   assert.deepEqual(inputs.acceptance_mode, { description: 'Protected hosted execution mode', required: true,
     default: 'full_acceptance', type: 'choice', options: ['full_acceptance', 'v2_primary_prefix_diagnostic'] });
   assert.equal(workflow.jobs['source-and-authority'].if, "github.event_name != 'workflow_dispatch'");
@@ -135,12 +147,43 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.equal(hosted.uses, undefined);
   assert.equal(hosted.secrets, undefined);
   assert.equal(hosted.env.ACCEPTANCE_WORKFLOW_PATH, '.github/workflows/exhaustive-acceptance.yml');
-  assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND, 'hosted_authenticated_synthetic');
+  assert.equal(hosted.env.ACCEPTANCE_EXECUTION_KIND,
+    "${{ inputs.frontend_kind == 'local_build' && 'local_real_backend' || 'hosted_preview' }}");
+  assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND,
+    "${{ inputs.frontend_kind == 'local_build' && 'local_real_backend_authenticated' || 'hosted_authenticated_synthetic' }}");
+  assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND, '${{ inputs.frontend_kind }}');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_AUTH_KIND, 'supabase_auth');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_MODE, '${{ inputs.acceptance_mode }}');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AVALA_PROVIDER_SECRET_BACKEND, 'supabase_vault');
   assert.equal(hosted.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN, undefined);
+  const build = hosted.steps.find(step => step.name === 'Build exact local acceptance frontend');
+  assert.equal(build.if, "inputs.frontend_kind == 'local_build'");
+  assert.equal(build.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,
+    '${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL }}');
+  assert.equal(build.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY,
+    '${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY }}');
+  assert.equal(build.run, 'node scripts/localAcceptanceBuild.mjs build >> "$GITHUB_ENV"');
+  const frontend = hosted.steps.find(step => step.name === 'Verify exact frontend identity');
+  assert.match(frontend.run, /localAcceptanceBuild[.]mjs serve/u);
+  assert.match(frontend.run, /localAcceptanceBuild[.]mjs verify/u);
+  assert.match(frontend.run, /local-acceptance-build-proof[.]json --phase before/u);
+  assert.doesNotMatch(frontend.run, /server[.]pid/u);
+  assert.match(frontend.run, /verify-hosted-deployment[.]mjs/u);
+  const finalFrontend = hosted.steps.find(step => step.id === 'frontend_final');
+  assert.equal(finalFrontend['continue-on-error'], true);
+  assert.match(finalFrontend.run, /localAcceptanceBuild[.]mjs verify/u);
+  assert.match(finalFrontend.run, /local-acceptance-build-proof[.]json --phase after/u);
+  const cleanupFrontend = hosted.steps.find(step => step.id === 'frontend_cleanup');
+  assert.equal(cleanupFrontend.if, "always() && inputs.frontend_kind == 'local_build'");
+  assert.match(cleanupFrontend.run, /localAcceptanceBuild[.]mjs stop/u);
+  assert.doesNotMatch(cleanupFrontend.run, /kill -TERM|server[.]pid/u);
+  assert.match(cleanupFrontend.run, /localAcceptanceBuild[.]mjs cleanup/u);
+  const validation = hosted.steps.find(step => step.name === 'Validate catalogs, evidence and hosted contracts');
+  assert.match(validation.run, /localAcceptanceBuild[.]test[.]mjs/u);
+  assert.match(validation.run, /localRealBackendAcceptanceMigration[.]test[.]mjs/u);
+  const staged = hosted.steps.find(step => step.name === 'Stage sanitized same-run manifests');
+  assert.match(staged.run, /local-acceptance-build-proof[.]json/u);
   for (const [name, expected] of Object.entries({
     RETAINED_RESULTS_MANIFEST: '/tmp/avalaos-retained-results.json',
     ORACLE_RESULTS_MANIFEST: '/tmp/avalaos-oracle-results.json',
@@ -235,7 +278,7 @@ test('authenticated environment derives source identities and rejects malformed 
     AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF: 'a'.repeat(20),
     AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST: digest('1'),
     AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: digest('2'),
-    AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: '20261011053000',
+    AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: '20261019161723',
     AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: digest('3'),
     AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: digest('4'),
     AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST: digest('5'),
@@ -254,4 +297,18 @@ test('authenticated environment derives source identities and rejects malformed 
   assert.throws(() => authenticatedHostedEnvironmentLines({ ...environment,
     AVALA_PROVIDER_SECRET_BACKEND: 'hashicorp_vault' }, { catalog: {}, provenance: { sourceDigests: {} } }),
   /AUTHENTICATED_HOSTED_ENVIRONMENT_REJECTED/u);
+
+  const local = authenticatedHostedEnvironmentLines({ ...environment,
+    AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: 'local_build',
+    RELEASE_SHA: 'a'.repeat(40),
+    AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: digest('6'),
+    AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST: digest('4'),
+    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: undefined,
+  }, { catalog: { cases: [] }, provenance: { sourceDigests: {} } });
+  assert.ok(local.includes('AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND=local_real_backend_authenticated'));
+  assert.ok(local.includes(`AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST=${digest('6')}`));
+  assert.ok(local.includes(`AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST=${digest('4')}`));
+  const finalExercise = local.find(line => line.startsWith('AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST='));
+  assert.match(finalExercise, /^AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST=sha256:[0-9a-f]{64}$/u);
+  assert.notEqual(finalExercise, `AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST=${digest('4')}`);
 });

@@ -1,8 +1,8 @@
-export type AcceptanceExecutionKind = 'hosted_preview' | 'local_source_fixture' | 'declaration_only';
+export type AcceptanceExecutionKind = 'hosted_preview' | 'local_real_backend' | 'local_source_fixture' | 'declaration_only';
 
 export interface AcceptanceExecutionProfile {
   schemaVersion: 'acceptance-execution-profile-v1';
-  evidenceKind: 'hosted-preview-acceptance' | 'exact-head-synthetic-regression' | 'acceptance-catalog-declaration';
+  evidenceKind: 'hosted-preview-acceptance' | 'local-real-backend-acceptance' | 'exact-head-synthetic-regression' | 'acceptance-catalog-declaration';
   executionKind: AcceptanceExecutionKind;
   releaseSha: string;
   checkoutSha: string | null;
@@ -10,6 +10,7 @@ export interface AcceptanceExecutionProfile {
   invocationId: string | null;
   targetOrigin: string | null;
   deployId: string | null;
+  buildDigest?: string;
 }
 
 export interface AcceptanceReportMetadata {
@@ -23,7 +24,8 @@ export interface AcceptanceReportMetadata {
   exactHead: string;
   targetOrigin: string | null;
   deployId: string | null;
-  sourceIdentity?: 'governed_working_tree_candidate';
+  buildDigest?: string;
+  sourceIdentity?: 'committed_exact_head' | 'governed_working_tree_candidate';
   invocationId?: string;
 }
 

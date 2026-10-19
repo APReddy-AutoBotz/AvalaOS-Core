@@ -687,7 +687,7 @@ try {
   `);
   const sizeIndex = migrations.indexOf(sizeLimitMigration);
   assert.ok(sizeIndex > 0);
-  assert.equal(migrations.at(-1), '20261011053000_supabase_provider_secret_backend.sql');
+  assert.equal(migrations.at(-1), '20261019161723_local_real_backend_authenticated_acceptance.sql');
   for (const migration of migrations.slice(0, sizeIndex)) {
     const sql = await readFile(join('supabase/migrations', migration), 'utf8');
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
@@ -773,7 +773,7 @@ try {
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
       () => migrationTransaction(db, migration, sql));
   }
-  assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261011053000');
+  assert.equal((await row(db, 'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).migration_tip, '20261019161723');
   console.log('FOUNDATION PASS full current chain; empty, compatible and incompatible size upgrades; SQL-only fixture');
 
   await runCase('EI-003', async () => {

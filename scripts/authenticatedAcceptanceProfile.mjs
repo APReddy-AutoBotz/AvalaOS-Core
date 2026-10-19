@@ -12,27 +12,42 @@ const keys = (value, expected, code) => {
 const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value))
   && new Date(value).toISOString() === value;
 export const AUTHENTICATED_HOSTED_PROFILE_SCHEMA = 'hosted-authenticated-synthetic-profile-v3';
+export const AUTHENTICATED_LOCAL_REAL_BACKEND_PROFILE_SCHEMA = 'local-real-backend-authenticated-profile-v1';
 export const AUTHENTICATED_HOSTED_BINDING_KEYS = Object.freeze([
   'schemaVersion', 'executionKind', 'authKind', 'releaseSha', 'checkoutSha',
   'origin', 'deploymentId', 'backendDigest', 'migrationVersion', 'migrationDigest',
   'exerciseDigest', 'catalogDigest', 'sourceDigest', 'baselineDigest', 'secretBackendKind',
   'policy', 'workflow', 'window', 'actors',
 ]);
+export const AUTHENTICATED_LOCAL_REAL_BACKEND_BINDING_KEYS = Object.freeze([
+  ...AUTHENTICATED_HOSTED_BINDING_KEYS,
+  'buildDigest',
+]);
 
 // This profile is deliberately separate from acceptanceExecutionProfile's
 // public Sandbox profile. Its expected binding comes from the controller,
 // never from a browser attachment or a local fixture's claimed origin.
 export function validateAuthenticatedHostedProfile(value) {
-  keys(value, AUTHENTICATED_HOSTED_BINDING_KEYS, 'PROFILE_SHAPE');
-  if (value.schemaVersion !== AUTHENTICATED_HOSTED_PROFILE_SCHEMA
-    || value.executionKind !== 'hosted_authenticated_synthetic'
-    || value.authKind !== 'supabase_auth') fail('REAL_AUTH_PROFILE_REQUIRED');
+  const localRealBackend = value?.schemaVersion === AUTHENTICATED_LOCAL_REAL_BACKEND_PROFILE_SCHEMA
+    && value?.executionKind === 'local_real_backend_authenticated';
+  const hosted = value?.schemaVersion === AUTHENTICATED_HOSTED_PROFILE_SCHEMA
+    && value?.executionKind === 'hosted_authenticated_synthetic';
+  keys(value, localRealBackend
+    ? AUTHENTICATED_LOCAL_REAL_BACKEND_BINDING_KEYS
+    : AUTHENTICATED_HOSTED_BINDING_KEYS, 'PROFILE_SHAPE');
+  if ((!hosted && !localRealBackend) || value.authKind !== 'supabase_auth') fail('REAL_AUTH_PROFILE_REQUIRED');
   if (!SHA.test(value.releaseSha) || value.checkoutSha !== value.releaseSha) fail('EXACT_HEAD_REQUIRED');
   let origin;
   try { origin = new URL(value.origin); } catch { fail('ORIGIN_INVALID'); }
-  if (origin.protocol !== 'https:' || origin.origin !== value.origin || origin.username || origin.password
-    || origin.hostname !== 'avalaos-pilot.netlify.app') fail('ORIGIN_INVALID');
-  if (!/^[0-9a-f]{24}$/u.test(value.deploymentId)) fail('DEPLOYMENT_INVALID');
+  if (origin.origin !== value.origin || origin.username || origin.password
+    || (origin.pathname !== '/' && origin.pathname !== '')) fail('ORIGIN_INVALID');
+  if (hosted) {
+    if (origin.protocol !== 'https:' || origin.hostname !== 'avalaos-pilot.netlify.app') fail('ORIGIN_INVALID');
+    if (!/^[0-9a-f]{24}$/u.test(value.deploymentId)) fail('DEPLOYMENT_INVALID');
+  } else {
+    if (value.origin !== 'http://127.0.0.1:4173' || value.deploymentId !== null) fail('ORIGIN_INVALID');
+    if (!DIGEST.test(value.buildDigest)) fail('BUILD_DIGEST_INVALID');
+  }
   for (const key of ['backendDigest', 'migrationDigest', 'exerciseDigest', 'catalogDigest', 'sourceDigest', 'baselineDigest']) {
     if (!DIGEST.test(value[key])) fail('DIGEST_INVALID');
   }
@@ -94,14 +109,20 @@ export function authenticatedProfileFromEnvironment(environment, executionWindow
   let actors;
   try { actors = JSON.parse(environment.AUTHENTICATED_ACCEPTANCE_ACTOR_BINDINGS ?? 'null'); }
   catch { fail('ACTORS_INVALID'); }
+  const localRealBackend = environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND === 'local_real_backend_authenticated';
+  if (localRealBackend && environment.NETLIFY_DEPLOY_ID) fail('DEPLOYMENT_INVALID');
+  if (!localRealBackend && environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST) fail('BUILD_DIGEST_INVALID');
   const p = {
-    schemaVersion: AUTHENTICATED_HOSTED_PROFILE_SCHEMA,
+    schemaVersion: localRealBackend
+      ? AUTHENTICATED_LOCAL_REAL_BACKEND_PROFILE_SCHEMA
+      : AUTHENTICATED_HOSTED_PROFILE_SCHEMA,
     executionKind: environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND,
     authKind: environment.AUTHENTICATED_ACCEPTANCE_AUTH_KIND,
     releaseSha: environment.RELEASE_SHA,
     checkoutSha: environment.GITHUB_SHA,
     origin: environment.HOSTED_PILOT_URL,
-    deploymentId: environment.NETLIFY_DEPLOY_ID,
+    deploymentId: localRealBackend ? null : environment.NETLIFY_DEPLOY_ID,
+    ...(localRealBackend ? { buildDigest: environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST } : {}),
     backendDigest: environment.AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST,
     migrationVersion: environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION,
     migrationDigest: environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST,

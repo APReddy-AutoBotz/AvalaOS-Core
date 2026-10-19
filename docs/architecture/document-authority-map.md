@@ -1,5 +1,9 @@
 # AvalaOS Core Document Authority Map
 
+## Netlify-free real-backend functional acceptance (2026-10-19)
+
+AP's approved replacement is governed by `docs/planning/hosted-acceptance-completion.md`: exact loopback build, existing real synthetic Supabase sessions/server authority, additive synthetic exercise identity, one protected full run and cleanup. `docs/quality/exhaustive-hosted-product-acceptance.md` owns the distinct local-real-backend evidence profile and unchanged 108 business requirements. This supersedes prior Netlify-only execution restrictions only for that explicitly labelled functional profile; historical hosted evidence and production/deployment proof boundaries remain unchanged. No Netlify operation or paid/production action is included.
+
 ## Synthetic secret-storage completion (2026-10-11)
 
 `docs/planning/hosted-acceptance-completion.md` also owns AP's approved Supabase Vault adapter, additive migration, focused verification, verified merge and inclusion in the existing synthetic rollout and same single 108-requirement run. This supersedes its earlier HashiCorp-only/configuration and hosted-write exclusions only within that explicit boundary. Enterprise Intelligence command/receipt authority remains in `docs/architecture/enterprise-intelligence-authority.md`; the original acceptance criteria remain in `docs/quality/exhaustive-hosted-product-acceptance.md`. No production or paid effects are included.

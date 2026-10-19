@@ -7,18 +7,27 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      frontend_kind:
+        description: Exact acceptance frontend source
+        required: true
+        default: local_build
+        type: choice
+        options:
+          - local_build
+          - netlify
       release_sha:
         description: Exact merged 40-character release SHA
         required: true
         type: string
       netlify_deploy_id:
         description: Exact 24-character non-production deploy ID
-        required: true
+        required: false
+        default: ''
         type: string
       hosted_url:
         description: Canonical non-production hosted origin
-        required: true
-        default: https://avalaos-pilot.netlify.app
+        required: false
+        default: ''
         type: string
       expected_project_ref:
         description: Approved non-production Supabase project reference
@@ -303,6 +312,8 @@ jobs:
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           node scripts/authenticatedHostedWorkflowContract.test.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node --test scripts/localAcceptanceBuild.test.mjs scripts/localRealBackendAcceptanceMigration.test.mjs
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           node --test scripts/runPr1gBridgeTempCleanup.test.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           npm run test:hosted-evidence-family-attestations
@@ -359,6 +370,12 @@ jobs:
         run: |-
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           npx playwright install --with-deps chromium
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+        shell: bash
+      - name: Verify exact local build in secure loopback browser
+        run: |-
+          node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
+          node scripts/localAcceptanceBuild.mjs smoke
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
       - name: Verify original source attestation against loopback multipart
@@ -425,16 +442,17 @@ jobs:
           --health-retries 5
     env:
       ACCEPTANCE_WORKFLOW_PATH: .github/workflows/exhaustive-acceptance.yml
-      ACCEPTANCE_EXECUTION_KIND: hosted_preview
+      ACCEPTANCE_EXECUTION_KIND: ${{ inputs.frontend_kind == 'local_build' && 'local_real_backend' || 'hosted_preview' }}
       ACCEPTANCE_EVIDENCE_ENVIRONMENT: stable-release
-      AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
+      AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: ${{ inputs.frontend_kind == 'local_build' && 'local_real_backend_authenticated' || 'hosted_authenticated_synthetic' }}
+      AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: ${{ inputs.frontend_kind }}
       AUTHENTICATED_ACCEPTANCE_AUTH_KIND: supabase_auth
       AUTHENTICATED_ACCEPTANCE_MODE: ${{ inputs.acceptance_mode }}
       AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: supabase_vault
       AVALA_PROVIDER_SECRET_BACKEND: supabase_vault
       RELEASE_SHA: ${{ inputs.release_sha }}
       NETLIFY_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
-      HOSTED_PILOT_URL: ${{ inputs.hosted_url }}
+      HOSTED_PILOT_URL: ${{ inputs.frontend_kind == 'local_build' && 'http://127.0.0.1:4173' || inputs.hosted_url }}
       PLAYWRIGHT_JSON: artifacts/exhaustive-acceptance/playwright-results.json
       ACCEPTANCE_RESULTS_DIR: acceptance-results
       RETAINED_RESULTS_MANIFEST: /tmp/avalaos-retained-results.json
@@ -462,8 +480,13 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$NETLIFY_DEPLOY_ID" =~ ^[0-9a-f]{24}$ ]]
-          test "$HOSTED_PILOT_URL" = "https://avalaos-pilot.netlify.app"
+          if test "${{ inputs.frontend_kind }}" = local_build; then
+            test -z "$NETLIFY_DEPLOY_ID"
+            test "$HOSTED_PILOT_URL" = "http://127.0.0.1:4173"
+          else
+            [[ "$NETLIFY_DEPLOY_ID" =~ ^[0-9a-f]{24}$ ]]
+            test "$HOSTED_PILOT_URL" = "https://avalaos-pilot.netlify.app"
+          fi
           [[ "$EXPECTED_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]
           [[ "$TARGET_PUBLIC_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$BACKEND_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
@@ -477,6 +500,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Build exact local acceptance frontend
+        if: inputs.frontend_kind == 'local_build'
+        shell: bash
+        env:
+          AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: ${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL }}
+          AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY }}
+        run: node scripts/localAcceptanceBuild.mjs build >> "$GITHUB_ENV"
       - name: Validate catalogs, evidence and hosted contracts
         run: |
           npm run test:acceptance:catalog
@@ -486,6 +516,7 @@ jobs:
           node scripts/hostedSandboxAcceptanceEvidence.test.mjs
           node scripts/produceExhaustiveServerEvidence.test.mjs
           node scripts/authenticatedHostedWorkflowContract.test.mjs
+          node --test scripts/localAcceptanceBuild.test.mjs scripts/localRealBackendAcceptanceMigration.test.mjs
           node --test scripts/runPr1gBridgeTempCleanup.test.mjs
           npm run test:hosted-evidence-family-attestations
           npm run test:acceptance:network-observer
@@ -520,12 +551,14 @@ jobs:
           node scripts/produceExhaustiveServerEvidence.mjs
       - name: Prepare authenticated exact source bindings
         env:
+          AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: ${{ inputs.frontend_kind }}
           AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF: ${{ inputs.expected_project_ref }}
           AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST: ${{ inputs.target_public_digest }}
           AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST: ${{ inputs.backend_digest }}
           AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION: ${{ inputs.migration_version }}
           AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST: ${{ inputs.migration_digest }}
-          AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: ${{ inputs.exercise_digest }}
+          AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: ${{ inputs.frontend_kind == 'netlify' && inputs.exercise_digest || '' }}
+          AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST: ${{ inputs.frontend_kind == 'local_build' && inputs.exercise_digest || '' }}
           AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST: ${{ inputs.baseline_digest }}
         run: node scripts/prepareAuthenticatedHostedEnvironment.mjs >> "$GITHUB_ENV"
       - name: Validate deterministic public hosted declarations
@@ -538,13 +571,27 @@ jobs:
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --list --reporter=list
       - name: Install official Chromium
         run: npx playwright install --with-deps chromium
-      - name: Verify exact hosted deployment identity
+      - name: Verify exact frontend identity
         id: deployment
         continue-on-error: true
         env:
           EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}
           EXPECTED_NETLIFY_DEPLOY_ID: ${{ inputs.netlify_deploy_id }}
-        run: node scripts/verify-hosted-deployment.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test "${{ inputs.frontend_kind }}" = local_build; then
+            RUNNER_TRACKING_ID= node scripts/localAcceptanceBuild.mjs serve --workspace "$LOCAL_ACCEPTANCE_BUILD_ROOT" >/dev/null 2>&1 &
+            for attempt in $(seq 1 30); do
+              curl --fail --silent --show-error "$HOSTED_PILOT_URL/" >/dev/null && break
+              test "$attempt" -lt 30
+              sleep 1
+            done
+            node scripts/localAcceptanceBuild.mjs verify --workspace "$LOCAL_ACCEPTANCE_BUILD_ROOT" \
+              --evidence /tmp/local-acceptance-build-proof.json --phase before
+          else
+            node scripts/verify-hosted-deployment.mjs
+          fi
       - name: Run real-auth hosted journeys and independently observed server frames
         id: authenticated
         if: steps.deployment.outcome == 'success'
@@ -569,6 +616,21 @@ jobs:
           EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}
           ACCEPTANCE_RELEASE_SHA: ${{ inputs.release_sha }}
         run: npx playwright test --config=playwright.exhaustive-acceptance.config.ts --workers=1
+      - name: Verify local frontend bytes after all browser journeys
+        id: frontend_final
+        if: always() && inputs.frontend_kind == 'local_build' && steps.deployment.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          node scripts/localAcceptanceBuild.mjs verify --workspace "$LOCAL_ACCEPTANCE_BUILD_ROOT"
+          --evidence /tmp/local-acceptance-build-proof.json --phase after
+      - name: Stop and remove owned local frontend
+        id: frontend_cleanup
+        if: always() && inputs.frontend_kind == 'local_build'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/localAcceptanceBuild.mjs stop --workspace "$LOCAL_ACCEPTANCE_BUILD_ROOT"
+          node scripts/localAcceptanceBuild.mjs cleanup --workspace "$LOCAL_ACCEPTANCE_BUILD_ROOT"
       - name: Stage sanitized same-run manifests
         if: always() && inputs.acceptance_mode == 'full_acceptance'
         shell: bash
@@ -582,6 +644,7 @@ jobs:
           test -f "$AUTHENTICATED_RESULTS_MANIFEST" && cp "$AUTHENTICATED_RESULTS_MANIFEST" acceptance-results/authenticated-results.json || true
           test -f "$AUTHENTICATED_CONTROLLER_BINDING" && cp "$AUTHENTICATED_CONTROLLER_BINDING" acceptance-results/authenticated-controller-binding.json || true
           test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json acceptance-results/authenticated-hosted-diagnostic.json || true
+          test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json acceptance-results/local-acceptance-build-proof.json || true
       - name: Stage sanitized V2 primary-prefix diagnostic
         if: always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'
         shell: bash
@@ -590,6 +653,7 @@ jobs:
           mkdir -p diagnostic-results
           test -f /tmp/authenticated-v2-primary-prefix-diagnostic.json && cp /tmp/authenticated-v2-primary-prefix-diagnostic.json diagnostic-results/authenticated-v2-primary-prefix-diagnostic.json || true
           test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json diagnostic-results/authenticated-hosted-diagnostic.json || true
+          test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json diagnostic-results/local-acceptance-build-proof.json || true
       - name: Generate unified 108-case report
         id: report
         if: always() && inputs.acceptance_mode == 'full_acceptance'
@@ -635,6 +699,10 @@ jobs:
           test "${{ steps.oracle.outcome }}" = success
           test "${{ steps.server.outcome }}" = success
           test "${{ steps.deployment.outcome }}" = success
+          if test "${{ inputs.frontend_kind }}" = local_build; then
+            test "${{ steps.frontend_final.outcome }}" = success
+            test "${{ steps.frontend_cleanup.outcome }}" = success
+          fi
           test "${{ steps.authenticated.outcome }}" = success
           test "${{ steps.authenticated_evidence.outcome }}" = success
           test "${{ steps.hosted.outcome }}" = success
@@ -650,6 +718,10 @@ jobs:
             'Authenticated diagnostic outcome: ${{ steps.authenticated.outcome }}' \
             'Deployment outcome: ${{ steps.deployment.outcome }}' | tee -a "$GITHUB_STEP_SUMMARY"
           test "${{ steps.deployment.outcome }}" = success
+          if test "${{ inputs.frontend_kind }}" = local_build; then
+            test "${{ steps.frontend_final.outcome }}" = success
+            test "${{ steps.frontend_cleanup.outcome }}" = success
+          fi
           test "${{ steps.authenticated.outcome }}" = success
           test -f /tmp/authenticated-v2-primary-prefix-diagnostic.json
           node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync("/tmp/authenticated-v2-primary-prefix-diagnostic.json","utf8"));if(value.schemaVersion!=="authenticated-v2-primary-prefix-diagnostic-v2"||value.mode!=="v2_primary_prefix_diagnostic"||value.diagnosticCompleted!==true||value.acceptancePromoted!==false||value.cleanup?.status!=="verified")process.exit(1)'

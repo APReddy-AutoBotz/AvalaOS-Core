@@ -1,11 +1,13 @@
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
+const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const DEPLOY_PATTERN = /^[0-9a-f]{24}$/u;
 const POSITIVE_DECIMAL_PATTERN = /^[1-9][0-9]*$/u;
 const PROJECTS = Object.freeze(['desktop-chromium', 'pixel-7-chromium']);
 const ATTACHMENT_NAME = 'hosted-sandbox-acceptance-v1';
 const SCHEMA_VERSION = 'hosted-sandbox-acceptance-v1';
 const SOURCE_IDENTITY = 'committed_exact_head';
-const EVIDENCE_SCOPE = 'executed-hosted-sandbox-local';
+const HOSTED_EVIDENCE_SCOPE = 'executed-hosted-sandbox-local';
+const LOCAL_REAL_BACKEND_EVIDENCE_SCOPE = 'executed-local-real-backend-sandbox';
 const FIXTURE_ID = 'synthetic-default';
 const ATTEMPT_WINDOW_NAME = 'hosted-sandbox-attempt-window-v1';
 const REQUIRED_SOURCE_PATHS = Object.freeze([
@@ -88,12 +90,21 @@ const canonicalTimestamp = (value, code) => {
 };
 const reportMetadataBinding = metadata => {
   assert(isPlainObject(metadata), 'HOSTED_SANDBOX_METADATA_INVALID');
-  assert(metadata.executionKind === 'hosted_preview', 'HOSTED_SANDBOX_HOSTED_PROFILE_REQUIRED');
+  assert(['hosted_preview', 'local_real_backend'].includes(metadata.executionKind),
+    'HOSTED_SANDBOX_HOSTED_PROFILE_REQUIRED');
   assert(SHA_PATTERN.test(metadata.exactHead ?? ''), 'HOSTED_SANDBOX_HEAD_INVALID');
-  assert(DEPLOY_PATTERN.test(metadata.deployId ?? ''), 'HOSTED_SANDBOX_DEPLOY_INVALID');
   const origin = new URL(requiredString(metadata.targetOrigin, 'HOSTED_SANDBOX_ORIGIN_INVALID'));
-  assert(origin.protocol === 'https:' && origin.origin === metadata.targetOrigin,
+  const localRealBackend = metadata.executionKind === 'local_real_backend';
+  if (localRealBackend) {
+    assert(origin.origin === 'http://127.0.0.1:4173' && metadata.targetOrigin === origin.origin
+      && metadata.deployId === null && DIGEST_PATTERN.test(metadata.buildDigest ?? ''),
     'HOSTED_SANDBOX_ORIGIN_INVALID');
+  } else {
+    assert(origin.protocol === 'https:' && origin.origin === metadata.targetOrigin,
+      'HOSTED_SANDBOX_ORIGIN_INVALID');
+    assert(DEPLOY_PATTERN.test(metadata.deployId ?? ''), 'HOSTED_SANDBOX_DEPLOY_INVALID');
+    assert(!Object.hasOwn(metadata, 'buildDigest'), 'HOSTED_SANDBOX_DEPLOY_INVALID');
+  }
   assert(Array.isArray(metadata.sourcePaths) && metadata.sourcePaths.length > 0
     && metadata.sourcePaths.every(path => typeof path === 'string' && path.length > 0 && path === path.trim())
     && REQUIRED_SOURCE_PATHS.every(path => metadata.sourcePaths.includes(path)),
@@ -111,12 +122,15 @@ const reportMetadataBinding = metadata => {
       targetOrigin: metadata.targetOrigin,
       sourceIdentity: SOURCE_IDENTITY,
       sourcePaths: Object.freeze([...metadata.sourcePaths]),
+      ...(localRealBackend ? { buildDigest: metadata.buildDigest } : {}),
     }),
     workflow: Object.freeze({
       runId: String(runtime.runId),
       runAttempt: String(runtime.runAttempt),
       workflowPath,
     }),
+    executionKind: metadata.executionKind,
+    evidenceScope: localRealBackend ? LOCAL_REAL_BACKEND_EVIDENCE_SCOPE : HOSTED_EVIDENCE_SCOPE,
   });
 };
 
@@ -157,7 +171,7 @@ export const createHostedSandboxAcceptanceAttachment = ({
   canonicalTimestamp(observedAt, 'HOSTED_SANDBOX_OBSERVED_AT_INVALID');
   const body = {
     schemaVersion: SCHEMA_VERSION,
-    scope: Object.freeze({ evidenceScope: EVIDENCE_SCOPE, fixtureId: FIXTURE_ID }),
+    scope: Object.freeze({ evidenceScope: reportBinding.evidenceScope, fixtureId: FIXTURE_ID }),
     profile: reportBinding.profile,
     workflow: reportBinding.workflow,
     project,
@@ -199,8 +213,6 @@ const validateAttachmentBody = ({ body, testCase, binding, execution, attempt })
   ], 'HOSTED_SANDBOX_BODY_INVALID');
   assert(body.schemaVersion === SCHEMA_VERSION, 'HOSTED_SANDBOX_SCHEMA_INVALID');
   exactKeys(body.scope, ['evidenceScope', 'fixtureId'], 'HOSTED_SANDBOX_SCOPE_INVALID');
-  assert(body.scope.evidenceScope === EVIDENCE_SCOPE && body.scope.fixtureId === FIXTURE_ID,
-    'HOSTED_SANDBOX_SCOPE_INVALID');
   exactKeys(body.fixture, ['id', 'authority'], 'HOSTED_SANDBOX_FIXTURE_INVALID');
   assert(body.fixture.id === FIXTURE_ID && body.fixture.authority === 'browser-local-synthetic-state',
     'HOSTED_SANDBOX_FIXTURE_INVALID');
@@ -208,6 +220,8 @@ const validateAttachmentBody = ({ body, testCase, binding, execution, attempt })
   assert(body.testId === testCase.testId && body.scenario === definition.scenario
     && body.project === execution.project, 'HOSTED_SANDBOX_EXECUTION_BINDING_INVALID');
   const expectedBinding = reportMetadataBinding(execution.reportMetadata);
+  assert(body.scope.evidenceScope === expectedBinding.evidenceScope && body.scope.fixtureId === FIXTURE_ID,
+    'HOSTED_SANDBOX_SCOPE_INVALID');
   assert(canonicalJson(body.profile) === canonicalJson(expectedBinding.profile)
     && canonicalJson(body.workflow) === canonicalJson(expectedBinding.workflow),
   'HOSTED_SANDBOX_PROFILE_BINDING_INVALID');
@@ -234,11 +248,13 @@ export const verifyHostedSandboxAttachments = ({ testCase, binding, executions }
   const seenProjects = new Set();
   let firstBinding = null;
   let firstMeasurement = null;
+  let evidenceScope = null;
   for (const execution of matches) {
     assert(PROJECTS.includes(execution.project) && !seenProjects.has(execution.project),
       'HOSTED_SANDBOX_EXECUTION_PROJECT_INVALID');
     seenProjects.add(execution.project);
-    assert(execution.executionKind === 'hosted_preview'
+    const expectedBinding = reportMetadataBinding(execution.reportMetadata);
+    assert(execution.executionKind === expectedBinding.executionKind
       && execution.expectedStatus === 'passed'
       && execution.status === 'expected'
       && Array.isArray(execution.annotations) && execution.annotations.length === 0
@@ -253,6 +269,8 @@ export const verifyHostedSandboxAttachments = ({ testCase, binding, executions }
     const body = validateAttachmentBody({
       body: decodeAttachmentBody(attachments[0]), testCase, binding, execution, attempt,
     });
+    if (evidenceScope === null) evidenceScope = body.scope.evidenceScope;
+    else assert(evidenceScope === body.scope.evidenceScope, 'HOSTED_SANDBOX_SCOPE_INVALID');
     const executionBinding = canonicalJson({ profile: body.profile, workflow: body.workflow });
     if (firstBinding === null) firstBinding = executionBinding;
     else assert(executionBinding === firstBinding, 'HOSTED_SANDBOX_CROSS_EXECUTION_BINDING_INVALID');
@@ -271,7 +289,7 @@ export const verifyHostedSandboxAttachments = ({ testCase, binding, executions }
     'HOSTED_SANDBOX_TARGET_COUNT_INVALID');
   const orderedActualByProject = Object.fromEntries(PROJECTS.map(project => [project, actualByProject[project]]));
   return Object.freeze({
-    scope: Object.freeze({ evidenceScope: EVIDENCE_SCOPE, fixtureId: FIXTURE_ID }),
+    scope: Object.freeze({ evidenceScope, fixtureId: FIXTURE_ID }),
     actual: Object.freeze({
       logicalMutationCount: targetCounts[0],
       byProject: Object.freeze(orderedActualByProject),

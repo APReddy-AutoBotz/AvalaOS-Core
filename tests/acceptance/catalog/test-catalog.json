@@ -9,7 +9,8 @@
       "feature": "access",
       "ruleRequirement": "access",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-ACCESS"
@@ -59,7 +60,8 @@
       "feature": "persona",
       "ruleRequirement": "persona selection",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-PERSONA_SELECTION"
@@ -109,7 +111,8 @@
       "feature": "local",
       "ruleRequirement": "local synthetic authority",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-LOCAL_SYNTHETIC_AUTHORITY"
@@ -159,7 +162,8 @@
       "feature": "no",
       "ruleRequirement": "no provider call",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-NO_PROVIDER_CALL"
@@ -209,7 +213,8 @@
       "feature": "refresh",
       "ruleRequirement": "refresh persistence",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-REFRESH_PERSISTENCE"
@@ -259,7 +264,8 @@
       "feature": "accepted descendant routing",
       "ruleRequirement": "sandbox descendants remain inside the synthetic sandbox boundary",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-ACCEPTED_DESCENDANT_ROUTE"
@@ -309,7 +315,8 @@
       "feature": "desktop",
       "ruleRequirement": "desktop layout",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-DESKTOP_LAYOUT"
@@ -359,7 +366,8 @@
       "feature": "mobile",
       "ruleRequirement": "mobile layout",
       "sourceReference": [
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-MOBILE_LAYOUT"
@@ -412,7 +420,8 @@
         "App.tsx",
         "components/shared/CustomDashboardView.tsx",
         "index.css",
-        "services/hostedSandboxRoute.ts"
+        "services/hostedSandboxRoute.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SANDBOX-KEYBOARD_ACCESSIBILITY"
@@ -466,7 +475,8 @@
       "feature": "landing",
       "ruleRequirement": "landing",
       "sourceReference": [
-        "App.tsx"
+        "App.tsx",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "PUBLIC-LANDING"
@@ -516,7 +526,8 @@
       "feature": "sign",
       "ruleRequirement": "sign in separation",
       "sourceReference": [
-        "App.tsx"
+        "App.tsx",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "PUBLIC-SIGN_IN_SEPARATION"
@@ -566,7 +577,8 @@
       "feature": "sandbox",
       "ruleRequirement": "sandbox route isolation",
       "sourceReference": [
-        "App.tsx"
+        "App.tsx",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "PUBLIC-SANDBOX_ROUTE_ISOLATION"
@@ -616,7 +628,8 @@
       "feature": "release",
       "ruleRequirement": "release identity",
       "sourceReference": [
-        "App.tsx"
+        "App.tsx",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "PUBLIC-RELEASE_IDENTITY"
@@ -666,7 +679,8 @@
       "feature": "process",
       "ruleRequirement": "process create",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "ASSESS-PROCESS_CREATE"
@@ -744,7 +758,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ASSESS-PROCESS_EDIT_DENIAL"
@@ -822,7 +838,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ASSESS-DISCOVERY_COMPLETE"
@@ -872,7 +890,8 @@
       "feature": "discovery",
       "ruleRequirement": "discovery incomplete",
       "sourceReference": [
-        "services/scoringEngine.ts"
+        "services/scoringEngine.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "ASSESS-DISCOVERY_INCOMPLETE"
@@ -1574,7 +1593,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ASSESS-V2_CREATE"
@@ -1652,7 +1673,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ASSESS-V2_FINALIZE"
@@ -1730,7 +1753,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ASSESS-V2_FEATURE_DISABLED"
@@ -2203,7 +2228,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-REVIEW_ASSIGNMENT"
@@ -2278,7 +2305,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-INDEPENDENT_ATTESTATION"
@@ -2353,7 +2382,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-CHANGES_REQUESTED"
@@ -2428,7 +2459,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-REWORK_RESUBMIT"
@@ -2503,7 +2536,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-APPROVAL"
@@ -2578,7 +2613,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-REJECTION"
@@ -2653,7 +2690,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "GOVERN-SEPARATION_OF_DUTY"
@@ -2903,7 +2942,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "STUDIO-HANDOFF_LINEAGE"
@@ -2978,7 +3019,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "STUDIO-GOVERNED_GENERATION"
@@ -3053,7 +3096,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "STUDIO-GENERATION_FAILURE"
@@ -3309,7 +3354,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "STUDIO-DOWNLOAD_DENIAL"
@@ -3624,7 +3671,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-HANDOFF_IMPORT"
@@ -3703,7 +3752,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-TASK_CREATE"
@@ -3782,7 +3833,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-TASK_UPDATE_OWN"
@@ -3861,7 +3914,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-TASK_DELETE_DENIAL"
@@ -3940,7 +3995,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-STATUS_TRANSITION"
@@ -4019,7 +4076,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-INVALID_TRANSITION"
@@ -4222,7 +4281,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "DELIVERY-DELIVERY_PACK"
@@ -4301,7 +4362,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "MONITOR-LINEAGE_VISIBILITY"
@@ -4380,7 +4443,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "MONITOR-VALUE_SIGNAL"
@@ -4459,7 +4524,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "MONITOR-BLOCKER_VISIBILITY"
@@ -4538,7 +4605,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "MONITOR-UNAVAILABLE_PROJECTION"
@@ -4617,7 +4686,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ADMIN-ADMIN_NAVIGATION"
@@ -4696,7 +4767,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ADMIN-NON_ADMIN_DENIAL"
@@ -4775,7 +4848,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ADMIN-ROLE_CAPABILITY_VIEW"
@@ -4855,7 +4930,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "ADMIN-PILOT_OPERATIONS_READ_ONLY"
@@ -5199,7 +5276,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "AI-NO_BYOK"
@@ -5278,7 +5357,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "AI-PROVIDER_DISABLED"
@@ -5357,7 +5438,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "AI-PROVIDER_CAPABILITY_DENIAL"
@@ -5439,7 +5522,9 @@
         "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
         "supabase/functions/_shared/providerSecretAdapter.ts",
         "supabase/functions/_shared/providerLifecycle.ts",
-        "supabase/functions/_shared/providerCleanup.ts"
+        "supabase/functions/_shared/providerCleanup.ts",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "AI-PROVIDER_SECRET_BOUNDARY"
@@ -5518,7 +5603,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "AI-PROVIDER_UNAVAILABLE"
@@ -5598,7 +5685,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "AI-NO_BROWSER_SECRET"
@@ -6038,7 +6127,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-CANONICAL_HAPPY"
@@ -6117,7 +6208,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-REQUESTED_CHANGES_LOOP"
@@ -6196,7 +6289,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-AUTHORITY_DENIAL"
@@ -6275,7 +6370,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-STALE_REPLAY_RECOVERY"
@@ -6354,7 +6451,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-LOW_SUITABILITY"
@@ -6433,7 +6532,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-STRONG_AUTOMATION"
@@ -6512,7 +6613,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "E2E-HITL_COMPLIANCE"
@@ -6590,7 +6693,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "SAFETY-OFFLINE_NO_FALSE_SUCCESS"
@@ -6668,7 +6773,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "SAFETY-SERVER_ERROR_NO_FALSE_SUCCESS"
@@ -6746,7 +6853,9 @@
         "supabase/functions/_shared/studioArtifactDb.ts",
         "docs/planning/hosted-acceptance-completion.md",
         "scripts/authenticatedHostedObservationAdapter.mjs",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "scripts/localAcceptanceBuild.mjs",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "branchIds": [
         "SAFETY-TIMEOUT_NO_FALSE_SUCCESS"
@@ -6796,7 +6905,8 @@
       "feature": "reload",
       "ruleRequirement": "reload reconstruction",
       "sourceReference": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SAFETY-RELOAD_RECONSTRUCTION"
@@ -6897,7 +7007,8 @@
       "feature": "horizontal",
       "ruleRequirement": "horizontal overflow",
       "sourceReference": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SAFETY-HORIZONTAL_OVERFLOW"
@@ -6947,7 +7058,8 @@
       "feature": "serious",
       "ruleRequirement": "serious critical a11y",
       "sourceReference": [
-        "services/persistenceTransition.ts"
+        "services/persistenceTransition.ts",
+        "scripts/localAcceptanceBuild.mjs"
       ],
       "branchIds": [
         "SAFETY-SERIOUS_CRITICAL_A11Y"
