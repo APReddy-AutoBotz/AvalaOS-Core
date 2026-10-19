@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
-import { lstat, mkdtemp, open, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -28,9 +28,10 @@ import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { authenticatedAcceptanceMode } from './authenticatedV2ReloadDiagnostic.mjs';
 import { createControlledHumanPostgresClientConfig,
   validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
+import { LOCAL_AUTHENTICATED_EXECUTION_KIND, verifyLocalAcceptanceServer } from './localAcceptanceBuild.mjs';
 
 const execFileAsync = promisify(execFile);
-const MIGRATION_PATH = 'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql';
+const AUTHENTICATED_MIGRATION_VERSION = '20261019161723';
 const AUTHENTICATED_EDGE_FUNCTIONS=Object.freeze(['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command','legacy-delivery-command',
   'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-query','synthetic-admin',
@@ -55,10 +56,16 @@ export function validateAuthenticatedDatabaseTarget(config){
 
 export async function verifyAuthenticatedHostedCheckout(config, { root = process.cwd(), git = execFileAsync } = {}) {
   await verifyAuthenticatedHostedCheckoutState(config.releaseSha, { root, git });
+  const expectedMigrationVersion = AUTHENTICATED_MIGRATION_VERSION;
+  if (config.migrationVersion !== expectedMigrationVersion) fail('MIGRATION_BINDING_MISMATCH');
+  const migrationNames = (await readdir(path.join(root, 'supabase', 'migrations')))
+    .filter(name => name.startsWith(`${expectedMigrationVersion}_`) && name.endsWith('.sql'));
+  if (migrationNames.length !== 1) fail('MIGRATION_BINDING_MISMATCH');
+  const migrationPath = path.join('supabase', 'migrations', migrationNames[0]);
   const [catalogText, provenanceText, migrationText] = await Promise.all([
     readFile(path.join(root, 'tests/acceptance/catalog/test-catalog.json'), 'utf8'),
     readFile(path.join(root, 'tests/acceptance/source-provenance.json'), 'utf8'),
-    readFile(path.join(root, MIGRATION_PATH), 'utf8'),
+    readFile(path.join(root, migrationPath), 'utf8'),
   ]);
   const catalog = JSON.parse(catalogText);
   const provenance = JSON.parse(provenanceText);
@@ -68,8 +75,7 @@ export async function verifyAuthenticatedHostedCheckout(config, { root = process
     if (canonicalFileDigest(path.join(root, relative)) !== expected) fail('SOURCE_FILE_MISMATCH');
   }
   const migrationDigest = sha(migrationText.replace(/\r\n/gu, '\n'));
-  if (config.migrationVersion !== path.basename(MIGRATION_PATH).slice(0, 14)
-    || migrationDigest !== config.migrationDigest) fail('MIGRATION_BINDING_MISMATCH');
+  if (migrationDigest !== config.migrationDigest) fail('MIGRATION_BINDING_MISMATCH');
   return { catalogDigest: config.catalogDigest, sourceDigest: config.sourceDigest, migrationDigest };
 }
 
@@ -296,16 +302,24 @@ const authenticatedDeployments=rows=>{
 };
 
 export async function verifyAuthenticatedHostedDeployment(config, { fetchImpl = fetch, managementToken,
-  verifyDownloadedSources = downloadAndVerifyAuthenticatedEdgeSources } = {}) {
+  verifyDownloadedSources = downloadAndVerifyAuthenticatedEdgeSources,
+  verifyLocalFrontend = verifyLocalAcceptanceServer } = {}) {
   if(!/^[a-z0-9]{20}$/u.test(config?.projectRef??''))fail('BACKEND_INVENTORY_REJECTED');
-  const identity = await verifyHostedDeployment({ hostedUrl: config.origin, expectedHead: config.releaseSha,
-    expectedDeployId: config.deploymentId, fetchImpl });
-  const response = await fetchImpl(config.origin, { redirect: 'error', headers: { Accept: 'text/html',
-    'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15_000) });
-  if (!response.ok || response.headers.get('x-avalaos-release') !== config.releaseSha
-    || response.headers.get('x-avalaos-environment') !== 'hosted_nonproduction_pilot'
-    || response.headers.get('x-avalaos-netlify-deploy-id') !== config.deploymentId) fail('DEPLOYMENT_MARKER_MISMATCH');
-  await response.body?.cancel();
+  let identity;
+  if (config.executionKind === LOCAL_AUTHENTICATED_EXECUTION_KIND) {
+    await verifyLocalFrontend({ workspace: config.localBuildWorkspace, releaseSha: config.releaseSha,
+      buildDigest: config.buildDigest, fetchImpl });
+    identity = { release: config.releaseSha, deployId: null, buildDigest: config.buildDigest };
+  } else {
+    identity = await verifyHostedDeployment({ hostedUrl: config.origin, expectedHead: config.releaseSha,
+      expectedDeployId: config.deploymentId, fetchImpl });
+    const response = await fetchImpl(config.origin, { redirect: 'error', headers: { Accept: 'text/html',
+      'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15_000) });
+    if (!response.ok || response.headers.get('x-avalaos-release') !== config.releaseSha
+      || response.headers.get('x-avalaos-environment') !== 'hosted_nonproduction_pilot'
+      || response.headers.get('x-avalaos-netlify-deploy-id') !== config.deploymentId) fail('DEPLOYMENT_MARKER_MISMATCH');
+    await response.body?.cancel();
+  }
   if(typeof managementToken!=='string'||managementToken.length<16)fail('BACKEND_INVENTORY_CREDENTIAL_REQUIRED');
   const inventoryResponse=await fetchImpl(`https://api.supabase.com/v1/projects/${config.projectRef}/functions`,{
     redirect:'error',signal:AbortSignal.timeout(15_000),headers:{authorization:`Bearer ${managementToken}`,'user-agent':'avalaos-authenticated-acceptance'} });
@@ -327,7 +341,8 @@ export async function verifyAuthenticatedHostedDeployment(config, { fetchImpl = 
   for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){const before=deployments.get(slug);const after=finalDeployments.get(slug);
     if(before.id!==after.id||before.version!==after.version||before.status!==after.status)fail('BACKEND_INVENTORY_DRIFT');}
   return { syntheticTarget: true, production: false, releaseSha: identity.release,
-    deploymentId: identity.deployId, backendDigest: config.backendDigest, publicTargetDigest: config.targetPublicDigest };
+    deploymentId: identity.deployId, executionKind: config.executionKind, buildDigest: config.buildDigest,
+    backendDigest: config.backendDigest, publicTargetDigest: config.targetPublicDigest };
 }
 
 const normalizedRemoteDigest=value=>typeof value==='string'&&/^(?:sha256:)?[0-9a-f]{64}$/u.test(value)
@@ -571,6 +586,9 @@ export function buildAuthenticatedHostedChildEnvironment(environment, config, se
   return Object.freeze({
     ...child,
     CI: 'true',
+    ACCEPTANCE_EXECUTION_KIND: config.executionKind === LOCAL_AUTHENTICATED_EXECUTION_KIND
+      ? 'local_real_backend' : 'hosted_preview',
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: config.executionKind,
     ENTERPRISE_LIFECYCLE_APP_BASE_URL: config.origin,
     ENTERPRISE_LIFECYCLE_API_BASE_URL: config.supabaseUrl,
     ENTERPRISE_LIFECYCLE_CONTROL_URL: server.baseUrl,

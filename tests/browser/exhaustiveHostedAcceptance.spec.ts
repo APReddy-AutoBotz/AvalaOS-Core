@@ -171,6 +171,12 @@ test.beforeAll(() => {
   if (executionProfile.executionKind === 'hosted_preview') {
     expect(deployId, 'hosted execution must bind to an exact Netlify deployment ID').toMatch(/^[0-9a-f]{24}$/u);
     expect(hostedOrigin, 'hosted execution must bind to an exact hosted origin').toMatch(/^https:\/\//u);
+  } else if (executionProfile.executionKind === 'local_real_backend') {
+    expect(deployId, 'local real-backend execution must not synthesize a Netlify deployment ID').toBeNull();
+    expect(hostedOrigin, 'local real-backend execution must bind the exact owned loopback origin')
+      .toBe('http://127.0.0.1:4173');
+    expect(executionProfile.buildDigest, 'local real-backend execution must bind the exact built artifact')
+      .toMatch(/^sha256:[0-9a-f]{64}$/u);
   } else if (executionProfile.executionKind === 'local_source_fixture') {
     expect(deployId, 'local source fixture must not synthesize a Netlify deployment ID').toBeNull();
     expect(hostedOrigin, 'local source fixture must bind the owned loopback origin').toMatch(/^http:\/\/127\.0\.0\.1:/u);
@@ -188,6 +194,11 @@ const assertHostedResponseIdentity = (response: Awaited<ReturnType<Page['goto']>
     expect(headers['x-avalaos-release'], 'exact hosted release').toBe(releaseSha);
     expect(headers['x-avalaos-environment'], 'hosted nonproduction environment').toBe('hosted_nonproduction_pilot');
     expect(headers['x-avalaos-netlify-deploy-id'], 'exact hosted Netlify deployment').toBe(deployId);
+  } else if (executionProfile.executionKind === 'local_real_backend') {
+    expect(new URL(response!.url()).origin, 'local real-backend response origin').toBe(hostedOrigin);
+    expect(headers['x-avalaos-release'], 'local real-backend must not synthesize hosted release headers').toBeUndefined();
+    expect(headers['x-avalaos-environment'], 'local real-backend must not synthesize hosted environment headers').toBeUndefined();
+    expect(headers['x-avalaos-netlify-deploy-id'], 'local real-backend must not synthesize a Netlify identity').toBeUndefined();
   } else if (executionProfile.executionKind === 'local_source_fixture') {
     expect(new URL(response!.url()).origin, 'local source fixture response origin').toBe(hostedOrigin);
     expect(headers['x-avalaos-release'], 'local source fixture must not synthesize hosted release headers').toBeUndefined();
@@ -1115,7 +1126,7 @@ for (const binding of bindings.hostedTests as Array<{ testId: string; scenario: 
     if (binding.scenario === 'admin-navigation') testInfo.setTimeout(180_000);
     const measurement = createHostedSandboxMeasurement(binding.testId);
     await runScenario(binding.scenario!, page, testInfo, measurement);
-    if (executionProfile.executionKind === 'hosted_preview') {
+    if (['hosted_preview', 'local_real_backend'].includes(executionProfile.executionKind)) {
       const attachment = createHostedSandboxAcceptanceAttachment({
         testCase,
         binding,

@@ -11,6 +11,7 @@ import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
+const digest = value => typeof value === 'string' && /^sha256:[0-9a-f]{64}$/u.test(value);
 const iso = value => {
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
@@ -406,6 +407,8 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         &&row.studio_delivery_control_ready===true&&row.system_templates>0&&row.enabled_provider_routes===0;
       return { syntheticTarget: deployment.syntheticTarget, production: deployment.production,
         releaseSha: deployment.releaseSha, deploymentId: deployment.deploymentId,
+        ...(deployment.executionKind === 'local_real_backend_authenticated'
+          ? { executionKind: deployment.executionKind, buildDigest: deployment.buildDigest } : {}),
         backendDigest: deployment.backendDigest,
         migrationVersion: row.migration_version,
         providersEnabled: row.studio_provider || row.ei_provider,runtimeReady,
@@ -417,11 +420,28 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         observationStartedAt };
       });
     },
-    activate: input => withAuthenticatedHostedDiagnostic('ACTIVATION', () =>
-      authority('authenticated_synthetic_exercise_activate', [input.exerciseId,input.releaseSha,
+    activate: input => withAuthenticatedHostedDiagnostic('ACTIVATION', () => {
+      if (config.executionKind === 'local_real_backend_authenticated') {
+        if (!digest(config.buildDigest)
+          || input.deploymentId !== null
+          || input.origin !== 'http://127.0.0.1:4173'
+          || input.profileVersion !== 'local-real-backend-authenticated-profile-v1') {
+          throw new Error('AUTHENTICATED_HOSTED_LOCAL_REAL_BACKEND_ACTIVATION_IDENTITY_REJECTED');
+        }
+        return authority('authenticated_synthetic_local_exercise_activate', [input.exerciseId,input.releaseSha,
+          config.buildDigest,input.origin,input.backendDigest,input.migrationVersion,input.migrationDigest,input.exerciseDigest,
+          input.profileVersion,input.catalogDigest,input.sourceDigest,
+          input.organizationId,input.workspaceId,input.expiresAt]);
+      }
+      if ((config.executionKind !== undefined && config.executionKind !== 'hosted_authenticated_synthetic')
+        || (config.buildDigest !== undefined && config.buildDigest !== null)) {
+        throw new Error('AUTHENTICATED_HOSTED_ACTIVATION_IDENTITY_REJECTED');
+      }
+      return authority('authenticated_synthetic_exercise_activate', [input.exerciseId,input.releaseSha,
         input.deploymentId,input.origin,input.backendDigest,input.migrationVersion,input.migrationDigest,input.exerciseDigest,
         input.profileVersion,input.catalogDigest,input.sourceDigest,
-        input.organizationId,input.workspaceId,input.expiresAt])),
+        input.organizationId,input.workspaceId,input.expiresAt]);
+    }),
     bindSession: input => authority('authenticated_synthetic_bind_session',
       [input.exerciseId,input.actorId,input.sessionId,input.persona]),
     armPermit: input => authority('authenticated_synthetic_arm_permit', [input.exerciseId,input.permitId,input.kind,

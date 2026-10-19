@@ -22,6 +22,11 @@ import {
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { validateAuthenticatedHostedIdentityDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import {
+  deriveLocalAcceptanceExerciseDigest,
+  LOCAL_ACCEPTANCE_ORIGIN,
+  LOCAL_AUTHENTICATED_EXECUTION_KIND,
+} from './localAcceptanceBuild.mjs';
+import {
   authenticatedAcceptanceMode,
   authenticatedV2ReloadProjectionCounts,
   buildAuthenticatedV2ReloadDiagnostic,
@@ -147,11 +152,13 @@ const decodeJwtClaims = token => {
   }
 };
 
-const safeOrigin = value => {
+const safeOrigin = (value, executionKind) => {
   let parsed;
   try { parsed = new URL(value); } catch { fail('ORIGIN_REJECTED'); }
-  if (parsed.protocol !== 'https:' || parsed.origin !== value || parsed.username || parsed.password
-    || parsed.hostname !== 'avalaos-pilot.netlify.app') fail('ORIGIN_REJECTED');
+  const local = executionKind === LOCAL_AUTHENTICATED_EXECUTION_KIND;
+  if (parsed.origin !== value || parsed.username || parsed.password
+    || (local ? value !== LOCAL_ACCEPTANCE_ORIGIN
+      : parsed.protocol !== 'https:' || parsed.hostname !== 'avalaos-pilot.netlify.app')) fail('ORIGIN_REJECTED');
   return parsed.origin;
 };
 
@@ -173,16 +180,37 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
   if (!SHA.test(environment.RELEASE_SHA ?? '') || environment.GITHUB_SHA !== environment.RELEASE_SHA) {
     fail('EXACT_RELEASE_REQUIRED');
   }
-  if (environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND !== 'hosted_authenticated_synthetic'
-    || environment.AUTHENTICATED_ACCEPTANCE_AUTH_KIND !== 'supabase_auth') fail('EXECUTION_PROFILE_REJECTED');
+  const executionKind = environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND;
+  const localBuild = executionKind === LOCAL_AUTHENTICATED_EXECUTION_KIND;
+  if (!['hosted_authenticated_synthetic', LOCAL_AUTHENTICATED_EXECUTION_KIND].includes(executionKind)
+    || environment.AUTHENTICATED_ACCEPTANCE_AUTH_KIND !== 'supabase_auth'
+    || (localBuild && environment.ACCEPTANCE_EXECUTION_KIND !== 'local_real_backend')) {
+    fail('EXECUTION_PROFILE_REJECTED');
+  }
   const secretBackendKind = environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND;
   if (!['hashicorp_vault', 'supabase_vault'].includes(secretBackendKind)
     || environment.AVALA_PROVIDER_SECRET_BACKEND !== secretBackendKind) fail('SECRET_BACKEND_SELECTOR_REJECTED');
-  const origin = safeOrigin(environment.HOSTED_PILOT_URL);
+  const origin = safeOrigin(environment.HOSTED_PILOT_URL, executionKind);
   const target = supabaseTarget(environment.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL);
   if (environment.AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF !== target.projectRef
     || !DIGEST.test(environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST ?? '')) fail('SUPABASE_TARGET_REJECTED');
-  if (!/^[0-9a-f]{24}$/u.test(environment.NETLIFY_DEPLOY_ID ?? '')) fail('DEPLOYMENT_REJECTED');
+  let deploymentId = environment.NETLIFY_DEPLOY_ID;
+  let buildDigest = null;
+  let approvedExerciseDigest = null;
+  let localBuildWorkspace = null;
+  if (localBuild) {
+    if (deploymentId !== '' || !DIGEST.test(environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST ?? '')
+      || !DIGEST.test(environment.AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST ?? '')) fail('DEPLOYMENT_REJECTED');
+    deploymentId = null;
+    buildDigest = environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST;
+    approvedExerciseDigest = environment.AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST;
+    localBuildWorkspace = path.resolve(environment.LOCAL_ACCEPTANCE_BUILD_ROOT ?? '');
+    if (path.dirname(localBuildWorkspace) !== path.resolve(os.tmpdir())
+      || !path.basename(localBuildWorkspace).startsWith('avalaos-local-acceptance-')) fail('DEPLOYMENT_REJECTED');
+    const expectedExerciseDigest = deriveLocalAcceptanceExerciseDigest({ approvedExerciseDigest, buildDigest,
+      releaseSha: environment.RELEASE_SHA });
+    if (environment.AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST !== expectedExerciseDigest) fail('DIGEST_REJECTED');
+  } else if (!/^[0-9a-f]{24}$/u.test(deploymentId ?? '')) fail('DEPLOYMENT_REJECTED');
   if (!/^20[0-9]{12}$/u.test(environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION ?? '')) fail('MIGRATION_REJECTED');
   for (const key of [
     'AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST', 'AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST',
@@ -211,8 +239,12 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
   if (roleIds.some(roleId => !UUID.test(roleId))||new Set(roleIds).size!==roleIds.length) fail('SCOPE_REJECTED');
   return Object.freeze({
     releaseSha: environment.RELEASE_SHA,
+    executionKind,
     origin,
-    deploymentId: environment.NETLIFY_DEPLOY_ID,
+    deploymentId,
+    buildDigest,
+    approvedExerciseDigest,
+    localBuildWorkspace,
     supabaseUrl: target.origin,
     projectRef: target.projectRef,
     targetPublicDigest: environment.AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST,
@@ -257,14 +289,17 @@ export function controllerProfile(config, window, actors) {
     || [actor.actorHash, actor.sessionHash, actor.organizationHash, actor.workspaceHash].some(value => !DIGEST.test(value)))) {
     fail('ACTOR_BINDING_REJECTED');
   }
+  const localBuild = config.executionKind === LOCAL_AUTHENTICATED_EXECUTION_KIND;
   return {
-    schemaVersion: 'hosted-authenticated-synthetic-profile-v3',
-    executionKind: 'hosted_authenticated_synthetic',
+    schemaVersion: localBuild ? 'local-real-backend-authenticated-profile-v1'
+      : 'hosted-authenticated-synthetic-profile-v3',
+    executionKind: config.executionKind,
     authKind: 'supabase_auth',
     releaseSha: config.releaseSha,
     checkoutSha: config.releaseSha,
     origin: config.origin,
     deploymentId: config.deploymentId,
+    ...(localBuild ? { buildDigest: config.buildDigest } : {}),
     backendDigest: config.backendDigest,
     migrationVersion: config.migrationVersion,
     migrationDigest: config.migrationDigest,
@@ -417,8 +452,11 @@ export class AuthenticatedHostedController {
 
   async preflightAndActivate() {
     const preflight = await this.adapter.preflight({ config: this.config, exerciseId: this.exerciseId });
+    const localBuild = this.config.executionKind === LOCAL_AUTHENTICATED_EXECUTION_KIND;
     if (!record(preflight) || preflight.syntheticTarget !== true || preflight.production === true
       || preflight.releaseSha !== this.config.releaseSha || preflight.deploymentId !== this.config.deploymentId
+      || (localBuild && (preflight.executionKind !== this.config.executionKind
+        || preflight.buildDigest !== this.config.buildDigest))
       || preflight.migrationVersion !== this.config.migrationVersion || preflight.backendDigest !== this.config.backendDigest
       || preflight.providersEnabled !== false || preflight.runtimeReady!==true
       || preflight.secretBackendKind !== this.config.secretBackendKind || preflight.secretBackendWritable !== true
@@ -436,12 +474,15 @@ export class AuthenticatedHostedController {
       exerciseId: this.exerciseId,
       releaseSha: this.config.releaseSha,
       deploymentId: this.config.deploymentId,
+      executionKind: this.config.executionKind,
+      buildDigest: this.config.buildDigest,
       origin: this.config.origin,
       backendDigest: this.config.backendDigest,
       migrationVersion: this.config.migrationVersion,
       migrationDigest: this.config.migrationDigest,
       exerciseDigest: this.config.exerciseDigest,
-      profileVersion: 'hosted-authenticated-synthetic-profile-v3',
+      profileVersion: localBuild ? 'local-real-backend-authenticated-profile-v1'
+        : 'hosted-authenticated-synthetic-profile-v3',
       catalogDigest: this.config.catalogDigest,
       sourceDigest: this.config.sourceDigest,
       organizationId: this.config.scope.organizationId,

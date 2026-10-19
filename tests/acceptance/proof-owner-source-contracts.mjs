@@ -559,6 +559,16 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "authenticated-native-secret-cleanup",
     "sourceReference": "supabase/functions/_shared/providerCleanup.ts",
     "selector": "export const processNextProviderSecretCleanup ="
+  },
+  {
+    "anchorId": "local-real-backend-build",
+    "sourceReference": "scripts/localAcceptanceBuild.mjs",
+    "selector": "export async function buildLocalAcceptanceFrontend("
+  },
+  {
+    "anchorId": "local-real-backend-authority",
+    "sourceReference": "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.authenticated_synthetic_local_exercise_activate("
   }
 ]);
 
@@ -709,7 +719,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -751,7 +763,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -794,7 +808,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -836,7 +852,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -879,7 +897,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -921,7 +941,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -963,7 +985,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1005,7 +1029,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1050,7 +1076,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "authenticated-native-secret-adapter",
       "authenticated-native-secret-lifecycle",
-      "authenticated-native-secret-cleanup"
+      "authenticated-native-secret-cleanup",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1092,7 +1120,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1238,7 +1268,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1251,7 +1283,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-DISCOVERY_INCOMPLETE",
     "testId": "ASSESS-004",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -1264,7 +1297,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "ASSESS-PROCESS_CREATE",
     "testId": "ASSESS-001",
     "sourceAnchorIds": [
-      "assess-v1-scoring"
+      "assess-v1-scoring",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -1305,7 +1339,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1593,7 +1629,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1634,7 +1672,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1675,7 +1715,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1765,7 +1807,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1790,7 +1834,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1834,7 +1879,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1876,7 +1923,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1901,7 +1950,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1945,7 +1995,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1987,7 +2039,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2029,7 +2083,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2071,7 +2127,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2113,7 +2171,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2156,7 +2216,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2198,7 +2260,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2240,7 +2304,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2282,7 +2348,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2324,7 +2392,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2366,7 +2436,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2401,7 +2473,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2438,7 +2511,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2475,7 +2549,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2512,7 +2587,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2549,7 +2625,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2589,7 +2666,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2627,7 +2706,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2687,7 +2768,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2725,7 +2808,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2763,7 +2848,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2823,7 +2910,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2861,7 +2950,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2925,7 +3016,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2967,7 +3060,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3009,7 +3104,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3051,7 +3148,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3064,7 +3163,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "PUBLIC-LANDING",
     "testId": "PUBLIC-001",
     "sourceAnchorIds": [
-      "application-shell"
+      "application-shell",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3077,7 +3177,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "PUBLIC-RELEASE_IDENTITY",
     "testId": "PUBLIC-004",
     "sourceAnchorIds": [
-      "application-shell"
+      "application-shell",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3090,7 +3191,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "PUBLIC-SANDBOX_ROUTE_ISOLATION",
     "testId": "PUBLIC-003",
     "sourceAnchorIds": [
-      "application-shell"
+      "application-shell",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3103,7 +3205,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "PUBLIC-SIGN_IN_SEPARATION",
     "testId": "PUBLIC-002",
     "sourceAnchorIds": [
-      "application-shell"
+      "application-shell",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3116,7 +3219,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SAFETY-HORIZONTAL_OVERFLOW",
     "testId": "SAFETY-006",
     "sourceAnchorIds": [
-      "persistence-transition"
+      "persistence-transition",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3157,7 +3261,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3170,7 +3276,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SAFETY-RELOAD_RECONSTRUCTION",
     "testId": "SAFETY-004",
     "sourceAnchorIds": [
-      "persistence-transition"
+      "persistence-transition",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3206,7 +3313,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SAFETY-SERIOUS_CRITICAL_A11Y",
     "testId": "SAFETY-007",
     "sourceAnchorIds": [
-      "persistence-transition"
+      "persistence-transition",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3247,7 +3355,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3288,7 +3398,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3301,7 +3413,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-ACCEPTED_DESCENDANT_ROUTE",
     "testId": "SANDBOX-006",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3314,7 +3427,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-ACCESS",
     "testId": "SANDBOX-001",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3327,7 +3441,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-DESKTOP_LAYOUT",
     "testId": "SANDBOX-007",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3345,7 +3460,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sandbox-readable-screen-motion",
       "sandbox-home-contrast-target",
       "sandbox-opaque-contrast-surface",
-      "sandbox-contrast-foreground-token"
+      "sandbox-contrast-foreground-token",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3358,7 +3474,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-LOCAL_SYNTHETIC_AUTHORITY",
     "testId": "SANDBOX-003",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3371,7 +3488,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-MOBILE_LAYOUT",
     "testId": "SANDBOX-008",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3384,7 +3502,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-NO_PROVIDER_CALL",
     "testId": "SANDBOX-004",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3397,7 +3516,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-PERSONA_SELECTION",
     "testId": "SANDBOX-002",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3410,7 +3530,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "SANDBOX-REFRESH_PERSISTENCE",
     "testId": "SANDBOX-005",
     "sourceAnchorIds": [
-      "hosted-sandbox-route"
+      "hosted-sandbox-route",
+      "local-real-backend-build"
     ],
     "ownership": [
       {
@@ -3500,7 +3621,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3538,7 +3661,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3576,7 +3701,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -3618,7 +3745,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-studio-database",
       "authenticated-hosted-approved-plan",
       "authenticated-hosted-observation-adapter",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-build",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {

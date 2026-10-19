@@ -1,5 +1,13 @@
 # Exhaustive hosted product acceptance
 
+## Approved local real-backend functional profile (2026-10-19)
+
+AP approved completing functional acceptance without Netlify. Add `local_real_backend` frontend execution and `local_real_backend_authenticated` real-auth evidence, labelled `executed-local-real-backend-synthetic`. These use the same 108 IDs, assertions, thresholds, read-only rules and proof owners: 43 retained/oracle/server requirements, 47 authenticated requirements on both Desktop Chrome and Pixel 7, and 18 Sandbox requirements on both projects. Require one exact release/run/attempt and actual business execution, independent server frames and verified cleanup. A local source fixture, mocked authentication or a supplied success counter remains ineligible.
+
+The new profile binds `http://127.0.0.1:4173`, null deployment ID, exact release SHA and canonical SHA-256 build manifest, plus the existing backend/migration/exercise/catalog/source/workflow/actor/session identity. Preserve protected GitHub dispatch and the human reviewer. Public Sandbox attachments must bind the same local build and retain their action/network/accessibility evidence. The independent report must reject mixed hosted/local identities, altered build/source bytes, stale runs, missing evidence and incomplete cleanup.
+
+Only this explicitly approved functional profile supersedes the Netlify-only eligibility statements below. Existing hosted v3 and local-source-fixture contracts remain intact. Report functional local totals separately; mark Netlify, public hosting, CDN, DNS, external-origin and production readiness **NOT RUN**. Preserve old hosted reports and do not promote their blocked rows using evidence from a different run.
+
 ## Complete hosted producer approval (2026-10-10)
 
 PR #283 preparation is verified after merge: 94 local UI records and five EI cases, with cleanup and zero real-provider effects. Its same-tree candidate report is 43 PASS / 65 BLOCKED; the historical stable 58 PASS / 50 BLOCKED report is unchanged. AP approved the complete hosted runner under `docs/planning/hosted-acceptance-completion.md`, including real role-separated sessions, independent before/after server frames and causal browser-command correlation. Supplied counters or authority booleans alone cannot establish PASS. Require all 47 authenticated cases on both projects alongside the 18 public-Sandbox and 43 retained/oracle/server cases in one release/run/attempt. Distinguish cleanup of transient access/resources from explicitly retained immutable synthetic history. No criteria are relaxed; local preparation cannot satisfy hosted cases. Hosted execution remains not run and is not authorized by repository implementation or read-only inspection.

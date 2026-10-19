@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Netlify-free functional acceptance boundary (2026-10-19)
+
+- **Executed evidence:** PR #315 `e0d419c8` passed all 52 candidate checks, three release workflows and independent browser/EI/native/scoped verification. Its approved preflight verified 16 deployed source closures (216 entries), 106 migration sources, native secret boundary and providers OFF. Netlify skipped the pilot build for account credit usage exceeded; no acceptance attempt or temporary main policy was created. Historical hosted totals remain 61 PASS / 47 BLOCKED.
+- **Confirmed source defect:** test infrastructure requires a Netlify origin/deployment ID in workflow, profiles, controller and synthetic exercise activation, preventing the newly approved locally served real-backend path. This is an execution/evidence coupling defect, not proof of a product authorization defect or historical failure cause.
+- **Planned verification:** fixed-loopback exact-build manifest and byte checks; local/hosted/fixture substitution negatives; service-role-only additive activation and legacy-row compatibility; exact backend/session/source bindings; original 108 business assertions; independent report reconstruction and cleanup. Local Docker is unavailable; use existing CI PostgreSQL rather than repairing it.
+- **Residual risk:** loopback real-auth timing and the full business journey remain unexecuted. A local pass cannot prove Netlify, CDN, DNS, external-origin or production readiness. No fabricated PASS, replacement business assertion, timeout increase or historical evidence rewrite is permitted.
+- **Approved scope:** one coherent implementation and bounded synthetic migration/configuration/full run, preserving GitHub review, providers OFF and zero paid effects. No Netlify operation, generic CORS weakening, Edge redeployment, production or customer data. Rollback disables local dispatch, quiesces/revokes owned synthetic state, closes local processes and retains immutable history and failure evidence.
+
 ## Terminal acceptance evidence integrity (2026-10-18)
 
 - **Executed evidence:** PR #314 candidate passed all 52 applicable checks and independent browser/EI/native validation; merged `943c0721` has the identical tree. Release Core CI and Legacy Delivery passed. Acceptance Preparation `39128128853`, attempt 1, failed: immediate native 13 cases with 130/131 actions complete; barrier 13 cases with 160/160 complete; both cleanups passed. Desktop scoped navigation retained only `settled=false`; Pixel passed. The 94-case browser release gate was not run.

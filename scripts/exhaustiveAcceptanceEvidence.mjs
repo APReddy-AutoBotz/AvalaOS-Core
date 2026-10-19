@@ -361,7 +361,9 @@ export const validateHostedPlaywrightReport = ({ report, expectedMetadata, allow
     const key = `${execution.title}\0${execution.project}`;
     if (seen.has(key)) errors.push(`hosted-report-duplicate:${execution.project}:${execution.title}`);
     seen.add(key);
-    if (execution.executionKind !== 'hosted_preview') errors.push(`hosted-report-kind:${execution.project}:${execution.title}`);
+    if (execution.executionKind !== expectedMetadata?.executionKind) {
+      errors.push(`hosted-report-kind:${execution.project}:${execution.title}`);
+    }
     if (!Array.isArray(execution.results) || execution.results.length !== 1) {
       errors.push(`hosted-report-attempt-count:${execution.project}:${execution.title}`);
       continue;

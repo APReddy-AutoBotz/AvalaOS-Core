@@ -31,7 +31,9 @@ export function evaluateAuthenticatedAcceptanceCase({ testCase, manifest, expect
       participants: participants.map(({ persona, actorHash, sessionHash }) => ({ persona, actorHash, sessionHash })),
     })),
     scope: status === 'PASS' ? {
-      evidenceScope: 'executed-hosted-authenticated-synthetic',
+      evidenceScope: expected.executionKind === 'local_real_backend_authenticated'
+        ? 'executed-local-real-backend-synthetic'
+        : 'executed-hosted-authenticated-synthetic',
       exerciseDigest: expected.exerciseDigest,
       backendDigest: expected.backendDigest,
       sourceDigest: expected.sourceDigest,

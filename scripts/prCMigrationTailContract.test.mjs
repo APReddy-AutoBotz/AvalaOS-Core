@@ -73,10 +73,10 @@ test('domain-budget RPC identifiers fit PostgreSQL without silent API-name trunc
   assert.throws(() => assertNames(`${source}\nCREATE FUNCTION public.${'x'.repeat(64)}()`), /truncate RPC identifier/u);
 });
 
-test('only the exact approved successor tail, including the native secret backend, is accepted', () => {
+test('only the exact approved successor tail, including local real-backend authority, is accepted', () => {
   assert.doesNotThrow(() => assertPrCMigrationTail([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]));
-  assert.equal(PR_C_APPROVED_SUCCESSOR_TAIL.at(-1), '20261011053000_supabase_provider_secret_backend.sql');
-  const nativeBackendIndex = PR_C_APPROVED_SUCCESSOR_TAIL.length - 1;
+  assert.equal(PR_C_APPROVED_SUCCESSOR_TAIL.at(-1), '20261019161723_local_real_backend_authenticated_acceptance.sql');
+  const nativeBackendIndex = PR_C_APPROVED_SUCCESSOR_TAIL.length - 2;
   const reorderedNativeBackend = [...PR_C_APPROVED_SUCCESSOR_TAIL];
   [reorderedNativeBackend[nativeBackendIndex - 1], reorderedNativeBackend[nativeBackendIndex]] =
     [reorderedNativeBackend[nativeBackendIndex], reorderedNativeBackend[nativeBackendIndex - 1]];
@@ -101,7 +101,7 @@ test('only the exact approved successor tail, including the native secret backen
 });
 
 test('fresh-chain identity derives only from the validated approved successor tail', () => {
-  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261011053000');
+  assert.equal(approvedFullChainTip([...frozenPrefix, ...PR_C_APPROVED_SUCCESSOR_TAIL]), '20261019161723');
   for (const tail of [[], PR_C_APPROVED_SUCCESSOR_TAIL.slice(0, 2),
     ...PR_C_APPROVED_SUCCESSOR_TAIL.map((_, omitted) => PR_C_APPROVED_SUCCESSOR_TAIL.filter((__, index) => index !== omitted)),
     [...PR_C_APPROVED_SUCCESSOR_TAIL].reverse(),
@@ -115,11 +115,11 @@ test('fresh-chain identity derives only from the validated approved successor ta
   assert.match(readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8'),
     /child\('scripts\/testTranscriptFlowPrCPostgres\.mjs',\s*\{\s*TRANSCRIPT_FLOW_PR_C_MIGRATION_DATABASE_URL:/u);
   const creationRunner = readFileSync('scripts/runCreationAccessPostgres.mjs', 'utf8');
-  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261011053000')"));
-  assert.ok(creationRunner.includes('assert.equal(migrations.length, 106)'));
+  assert.ok(creationRunner.includes("assert.equal(approvedFullChainTip(migrations), '20261019161723')"));
+  assert.ok(creationRunner.includes('assert.equal(migrations.length, 107)'));
   const mappingRunner = readFileSync('scripts/testAssessSupportingDocumentMappingPostgres.mjs', 'utf8');
   assert.match(mappingRunner, /expectedFullChainTip=approvedFullChainTip\(migrations\)/u);
-  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261011053000'/u);
+  assert.match(mappingRunner, /assert\.equal\(expectedFullChainTip,'20261019161723'/u);
   assert.doesNotMatch(mappingRunner, /assert\.equal\(migrations\.at\(-1\),PROJECTION_RPC_CORRECTION/u);
 });
 

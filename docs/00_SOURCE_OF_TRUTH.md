@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Local frontend with real synthetic backend (2026-10-19)
+
+AP approved removing Netlify from functional acceptance: serve a verifiable local build, use the existing synthetic Supabase backend with real authentication and server operations, preserve all 108 business requirements, and independently verify cleanup. PR #315 is merged as `e0d419c849cdb8b9ca5fc1bbac4c85c65ce05d8f`; its 52 candidate checks, three release workflows and independent browser/EI/native/scoped evidence passed. Its subsequent read-only backend preflight passed, but Netlify skipped the pilot build because account credit usage was exceeded. No PR #315 acceptance run was dispatched; that allowance is unused and is superseded by the approved local execution path.
+
+The new `local_real_backend_authenticated` profile must distinguish an exact loopback build from a hosted deployment. Qualifying functional evidence retains real role-separated sessions, independent server frames, source/build/run bindings, unchanged business assertions and zero provider/paid effects. Local fixtures cannot qualify. A complete functional result does not prove production hosting, Netlify, CDN, DNS or external-origin readiness. Historical hosted evidence remains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** until new separately labelled evidence is executed; do not relabel old records.
+
+Follow `docs/planning/hosted-acceptance-completion.md` for this single coherent implementation, the bounded synthetic-only migration, one protected full run and cleanup. No Netlify build or operation, production/customer-data action or paid AI call is authorized. Preserve GitHub's human reviewer gate. Historical hosted failure causation remains unproven.
+
 ## Terminal acceptance evidence after PR #314 (2026-10-18)
 
 PR #314 merged as `943c0721fb60a32a8a045d39900c864b3a08b0f4`, identical to the tested candidate tree. All 52 candidate checks and independent candidate browser/EI/native proof passed. Release Core CI and Legacy Delivery Authority passed, but Acceptance Preparation `39128128853`, attempt 1, failed. Immediate native execution retained all 13 cases but only 130 of 131 completed controller actions; barrier completed 160/160. Both native cleanups passed. Desktop scoped navigation failed its unchanged settlement assertion; Pixel passed. The 94-case connected-browser release gate did not run. The release is not verified for another hosted attempt.

@@ -12,6 +12,17 @@ const catalog = JSON.parse(fs.readFileSync('tests/acceptance/catalog/test-catalo
 const evaluate = (manifest, testId, expected = profileFixture()) => evaluateAuthenticatedAcceptanceCase({
   testCase: catalog.cases.find(item => item.testId === testId), manifest, expected, catalog,
 });
+const localRawFixtures = () => {
+  const raw = rawHostedFixtures();
+  raw.binding.schemaVersion = 'local-real-backend-authenticated-profile-v1';
+  raw.binding.executionKind = 'local_real_backend_authenticated';
+  raw.binding.origin = 'http://127.0.0.1:4173';
+  raw.binding.deploymentId = null;
+  raw.binding.buildDigest = `sha256:${'c'.repeat(64)}`;
+  raw.browserCorrelations.identity = authenticatedRawIdentity(raw.binding);
+  raw.serverObservations.identity = authenticatedRawIdentity(raw.binding);
+  return raw;
+};
 
 test('approved catalog changes remain bounded and all 47 cases require both projects', () => {
   assert.deepEqual(validateAuthenticatedCatalogRevision(catalog), []);
@@ -23,6 +34,26 @@ test('approved catalog changes remain bounded and all 47 cases require both proj
   partial.browserCorrelations.cases = partial.browserCorrelations.cases
     .filter(row => !(row.testId === 'E2E-001' && row.project === 'pixel-7-chromium'));
   assert.equal(evaluate(partial, 'E2E-001').status, 'BLOCKED');
+});
+
+test('local real-backend evidence reconstructs all 47 cases with an explicit non-hosted scope', () => {
+  const raw = localRawFixtures();
+  const manifest = produceAuthenticatedHostedEvidence({ ...raw, catalog });
+  assert.deepEqual(manifest.scope, { evidenceScope: 'executed-local-real-backend-synthetic' });
+  assert.deepEqual(validateAuthenticatedAcceptanceManifest(manifest, raw.binding, catalog), []);
+  for (const id of AUTHENTICATED_ACCEPTANCE_TEST_IDS) {
+    const result = evaluate(manifest, id, raw.binding);
+    assert.equal(result.status, 'PASS');
+    assert.equal(result.scope.evidenceScope, 'executed-local-real-backend-synthetic');
+  }
+
+  const wrongScope = structuredClone(manifest);
+  wrongScope.scope.evidenceScope = 'executed-hosted-authenticated-synthetic';
+  assert.deepEqual(validateAuthenticatedAcceptanceManifest(wrongScope, raw.binding, catalog),
+    ['authenticated-manifest-scope']);
+  const wrongBuild = structuredClone(raw.binding);
+  wrongBuild.buildDigest = `sha256:${'9'.repeat(64)}`;
+  assert.notDeepEqual(validateAuthenticatedAcceptanceManifest(manifest, wrongBuild, catalog), []);
 });
 
 test('raw frames, rather than supplied counts or authority booleans, determine mutation evidence', () => {

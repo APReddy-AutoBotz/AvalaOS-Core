@@ -2,10 +2,13 @@ import { readHostedSandboxAttemptWindow } from './hostedSandboxAcceptanceEvidenc
 import { createHash } from 'node:crypto';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
+const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const NETLIFY_DEPLOY_ID_PATTERN = /^[0-9a-f]{24}$/u;
 const INVOCATION_ID_PATTERN = /^[0-9a-f]{32}$/u;
 const REPORT_AREA_PATTERN = /^[a-z][a-z0-9-]*$/u;
-const ALLOWED_EXECUTION_KINDS = new Set(['hosted_preview', 'local_source_fixture', 'declaration_only']);
+const ALLOWED_EXECUTION_KINDS = new Set([
+  'hosted_preview', 'local_real_backend', 'local_source_fixture', 'declaration_only',
+]);
 const FULL_PAGE_CONTRAST_SCHEMA_VERSION = 'acceptance-full-page-contrast-v1';
 const FULL_PAGE_CONTRAST_CONTENT_TYPE = 'application/json';
 const FULL_PAGE_CONTRAST_MAX_BYTES = 64 * 1024;
@@ -129,6 +132,7 @@ export const decodeAcceptanceExecutionProfile = (environment, { expectedCheckout
       || environment.LOCAL_ACCEPTANCE_BASE_URL
       || environment.ACCEPTANCE_CHECKOUT_SHA
       || environment.ACCEPTANCE_INVOCATION_ID
+      || environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST
     ) {
       throw new Error('ACCEPTANCE_DECLARATION_RUNTIME_BINDING_REJECTED');
     }
@@ -148,6 +152,7 @@ export const decodeAcceptanceExecutionProfile = (environment, { expectedCheckout
   if (kind === 'local_source_fixture') {
     if (environment.HOSTED_PILOT_URL) throw new Error('LOCAL_SOURCE_FIXTURE_HOSTED_URL_REJECTED');
     if (environment.NETLIFY_DEPLOY_ID) throw new Error('LOCAL_SOURCE_FIXTURE_DEPLOY_ID_REJECTED');
+    if (environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST) throw new Error('LOCAL_SOURCE_FIXTURE_BUILD_DIGEST_REJECTED');
     const checkoutSha = requiredString(environment.ACCEPTANCE_CHECKOUT_SHA, 'LOCAL_SOURCE_FIXTURE_CHECKOUT_SHA_REQUIRED');
     if (!SHA_PATTERN.test(checkoutSha)) throw new Error('LOCAL_SOURCE_FIXTURE_CHECKOUT_SHA_INVALID');
     if (expectedCheckoutSha && checkoutSha !== expectedCheckoutSha) throw new Error('LOCAL_SOURCE_FIXTURE_REAL_CHECKOUT_SHA_MISMATCH');
@@ -176,12 +181,47 @@ export const decodeAcceptanceExecutionProfile = (environment, { expectedCheckout
     });
   }
 
+  if (kind === 'local_real_backend') {
+    if (environment.NETLIFY_DEPLOY_ID) throw new Error('LOCAL_REAL_BACKEND_DEPLOY_ID_REJECTED');
+    if (
+      environment.LOCAL_ACCEPTANCE_BASE_URL
+      || environment.ACCEPTANCE_CHECKOUT_SHA
+      || environment.ACCEPTANCE_INVOCATION_ID
+    ) {
+      throw new Error('LOCAL_REAL_BACKEND_FIXTURE_BINDING_REJECTED');
+    }
+    if (environment.HOSTED_PILOT_URL !== 'http://127.0.0.1:4173') {
+      throw new Error('LOCAL_REAL_BACKEND_ORIGIN_INVALID');
+    }
+    const target = parseOrigin(environment.HOSTED_PILOT_URL, 'LOCAL_REAL_BACKEND_ORIGIN_INVALID');
+    const buildDigest = requiredString(
+      environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST,
+      'LOCAL_REAL_BACKEND_BUILD_DIGEST_REQUIRED',
+    );
+    if (!DIGEST_PATTERN.test(buildDigest)) throw new Error('LOCAL_REAL_BACKEND_BUILD_DIGEST_INVALID');
+    return Object.freeze({
+      schemaVersion: 'acceptance-execution-profile-v1',
+      evidenceKind: 'local-real-backend-acceptance',
+      executionKind: kind,
+      releaseSha,
+      checkoutSha: null,
+      sourceIdentity: 'committed_exact_head',
+      invocationId: null,
+      targetOrigin: target.origin,
+      deployId: null,
+      buildDigest,
+    });
+  }
+
   if (
     environment.LOCAL_ACCEPTANCE_BASE_URL
     || environment.ACCEPTANCE_CHECKOUT_SHA
     || environment.ACCEPTANCE_INVOCATION_ID
   ) {
     throw new Error('HOSTED_PREVIEW_LOCAL_BINDING_REJECTED');
+  }
+  if (environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST) {
+    throw new Error('HOSTED_PREVIEW_BUILD_DIGEST_REJECTED');
   }
   const deployId = requiredString(environment.NETLIFY_DEPLOY_ID, 'HOSTED_PREVIEW_DEPLOY_ID_REQUIRED');
   if (!NETLIFY_DEPLOY_ID_PATTERN.test(deployId)) throw new Error('HOSTED_PREVIEW_DEPLOY_ID_INVALID');
@@ -224,6 +264,10 @@ export const createAcceptanceReportMetadata = ({ profile, exactCommand, configPa
     exactHead: profile.releaseSha,
     targetOrigin: profile.targetOrigin,
     deployId: profile.deployId,
+    ...(profile.executionKind === 'local_real_backend' ? {
+      buildDigest: profile.buildDigest,
+      sourceIdentity: profile.sourceIdentity,
+    } : {}),
     ...(profile.executionKind === 'local_source_fixture' ? {
       sourceIdentity: profile.sourceIdentity,
       invocationId: profile.invocationId,
@@ -324,7 +368,7 @@ export const summarizeFullPageColorContrast = results => {
 const validateBindingMetadata = metadata => {
   if (!isPlainObject(metadata)) throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
   const allowedKeys = new Set([
-    'actualWorkers', 'ci', 'configPath', 'deployId', 'evidenceKind', 'exactCommand', 'exactHead', 'executionKind',
+    'actualWorkers', 'buildDigest', 'ci', 'configPath', 'deployId', 'evidenceKind', 'exactCommand', 'exactHead', 'executionKind',
     'invocationId', 'schemaVersion', 'sourceIdentity', 'sourcePaths', 'targetOrigin', 'workflowRuntime',
   ]);
   if (Object.keys(metadata).some(key => !allowedKeys.has(key))) throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
@@ -332,7 +376,7 @@ const validateBindingMetadata = metadata => {
     metadata.schemaVersion !== 'acceptance-report-profile-v1'
     || !isPlainObject(metadata.ci)
     || Object.keys(metadata.ci).length !== 0
-    || !['hosted_preview', 'local_source_fixture'].includes(metadata.executionKind)
+    || !['hosted_preview', 'local_real_backend', 'local_source_fixture'].includes(metadata.executionKind)
     || !Array.isArray(metadata.exactCommand)
     || metadata.exactCommand.length < 2
     || metadata.exactCommand.some(value => typeof value !== 'string' || value.length === 0 || value !== value.trim())
@@ -353,6 +397,7 @@ const validateBindingMetadata = metadata => {
       || metadata.sourceIdentity !== 'governed_working_tree_candidate'
       || !INVOCATION_ID_PATTERN.test(metadata.invocationId ?? '')
       || metadata.deployId !== null
+      || Object.hasOwn(metadata, 'buildDigest')
       || Object.hasOwn(metadata, 'workflowRuntime')
     ) {
       throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
@@ -361,12 +406,35 @@ const validateBindingMetadata = metadata => {
     if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1') {
       throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
     }
+  } else if (metadata.executionKind === 'local_real_backend') {
+    if (
+      metadata.evidenceKind !== 'local-real-backend-acceptance'
+      || metadata.sourceIdentity !== 'committed_exact_head'
+      || Object.hasOwn(metadata, 'invocationId')
+      || metadata.deployId !== null
+      || !DIGEST_PATTERN.test(metadata.buildDigest ?? '')
+      || !isPlainObject(metadata.workflowRuntime)
+      || metadata.workflowRuntime.authority !== 'github-actions'
+      || metadata.workflowRuntime.releaseSha !== metadata.exactHead
+    ) {
+      throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
+    }
+    const target = parseOrigin(metadata.targetOrigin, 'FULL_PAGE_CONTRAST_METADATA_INVALID');
+    if (metadata.targetOrigin !== 'http://127.0.0.1:4173'
+      || target.origin !== 'http://127.0.0.1:4173') throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
+    for (const field of ['workflowPath', 'workflowRef', 'repository', 'eventName', 'runId', 'runAttempt', 'workflowSha']) {
+      if (typeof metadata.workflowRuntime[field] !== 'string' || metadata.workflowRuntime[field].length === 0) {
+        throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
+      }
+    }
+    if (!SHA_PATTERN.test(metadata.workflowRuntime.workflowSha)) throw new Error('FULL_PAGE_CONTRAST_METADATA_INVALID');
   } else {
     if (
       metadata.evidenceKind !== 'hosted-preview-acceptance'
       || !NETLIFY_DEPLOY_ID_PATTERN.test(metadata.deployId ?? '')
       || Object.hasOwn(metadata, 'sourceIdentity')
       || Object.hasOwn(metadata, 'invocationId')
+      || Object.hasOwn(metadata, 'buildDigest')
       || !isPlainObject(metadata.workflowRuntime)
       || metadata.workflowRuntime.authority !== 'github-actions'
       || metadata.workflowRuntime.releaseSha !== metadata.exactHead
@@ -513,7 +581,8 @@ export const verifyFullPageContrastAttachments = ({ testId, title, project, atte
   // The separate Sandbox validator owns the measured fixture attachment. It
   // cannot replace a persona's contrast proof or admit arbitrary extra files.
   const fixtureAttachments = attempt.attachments.filter(item => item?.name === 'hosted-sandbox-acceptance-v1');
-  if (fixtureAttachments.length > 1 || (fixtureAttachments.length && metadata?.executionKind !== 'hosted_preview')) {
+  if (fixtureAttachments.length > 1 || (fixtureAttachments.length
+    && !['hosted_preview', 'local_real_backend'].includes(metadata?.executionKind))) {
     throw new Error('FULL_PAGE_CONTRAST_ATTACHMENT_COUNT_INVALID');
   }
   const windowAttachments = attempt.attachments.filter(item => item?.name === 'hosted-sandbox-attempt-window-v1');

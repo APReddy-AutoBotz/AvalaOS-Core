@@ -42,6 +42,7 @@ const ids = {
   ordinaryRoute: '81000000-0000-4000-8000-000000000021',
   ordinaryRequest: '81000000-0000-4000-8000-000000000022',
   ordinaryToken: '81000000-0000-4000-8000-000000000023',
+  localExercise: '81000000-0000-4000-8000-000000000024',
 };
 const hash = character => character.repeat(64);
 const authority = async (client, sql, parameters = []) => {
@@ -82,6 +83,21 @@ try {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;`);
   for (const name of migrations) {
+    if (name === '20261019161723_local_real_backend_authenticated_acceptance.sql') {
+      assert.equal(name, migrations.at(-1), 'local acceptance authority must be the final migration');
+      assert.equal((await db.query(
+        'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
+      '20261011053000');
+      assert.equal((await db.query(`SELECT
+        to_regprocedure('public.authenticated_synthetic_local_exercise_activate(uuid,text,text,text,text,text,text,text,text,text,text,uuid,uuid,timestamptz)') value`)).rows[0].value,
+      null);
+      assert.deepEqual((await db.query(`SELECT
+        EXISTS(SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='authenticated_synthetic_exercises' AND column_name='execution_kind') execution_kind,
+        EXISTS(SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='authenticated_synthetic_exercises' AND column_name='build_digest') build_digest`)).rows[0],
+      { execution_kind: false, build_digest: false });
+    }
     if (name === '20260916083814_assess_supporting_document_mapping.sql') {
       fixture = await createEnterpriseIntelligenceFixture(db, 'brd');
     }
@@ -150,13 +166,24 @@ try {
         prompt_version: 'studio-pr-b-3', permit_is_null: true,
       });
     }
+    if (name === '20261019161723_local_real_backend_authenticated_acceptance.sql') {
+      assert.equal((await db.query(
+        'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
+      '20261019161723');
+      assert.deepEqual((await db.query(`SELECT
+        EXISTS(SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='authenticated_synthetic_exercises' AND column_name='execution_kind') execution_kind,
+        EXISTS(SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='authenticated_synthetic_exercises' AND column_name='build_digest') build_digest`)).rows[0],
+      { execution_kind: true, build_digest: true });
+    }
   }
 
   assert.equal((await db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
-    '20261011053000');
+    '20261019161723');
   assert.deepEqual((await authority(db,
     'SELECT public.enterprise_provider_secret_backend_capability() value')).rows[0].value, {
-    backendKind: 'supabase_vault', available: false, migrationTip: '20261011053000',
+    backendKind: 'supabase_vault', available: false, migrationTip: '20261019161723',
     exerciseActive: false, providerCallsAuthorized: false,
   });
 
@@ -194,12 +221,12 @@ try {
   await assert.rejects(() => authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://foreign.invalid', `sha256:${hash('b')}`,
-      '20261011053000', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
+      '20261019161723', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]));
   const activated = await authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://avalaos-pilot.netlify.app', `sha256:${hash('b')}`,
-      '20261011053000', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
+      '20261019161723', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]);
   assert.equal(activated.rows[0].value.lifecycle, 'active');
   await authority(db, 'SELECT public.authenticated_synthetic_bind_session($1,$2,$3,$4)',
@@ -374,6 +401,63 @@ try {
   await authority(db, 'SELECT public.authenticated_synthetic_quiesce($1)', [ids.exercise]);
   assert.equal(await activeResidue(), 0, 'quiescence with terminal attempts permits cleanup certification');
   assert.equal((await db.query("SELECT count(*)::int count FROM public.authenticated_synthetic_permits WHERE state='armed'")).rows[0].count, 0);
+
+  const localActivationSql =
+    'SELECT public.authenticated_synthetic_local_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value';
+  const localActivation = [ids.localExercise, hash('2').slice(0, 40), `sha256:${hash('3')}`,
+    'http://127.0.0.1:4173', `sha256:${hash('4')}`, '20261019161723', `sha256:${hash('5')}`,
+    `sha256:${hash('6')}`, 'local-real-backend-authenticated-profile-v1', `sha256:${hash('7')}`,
+    `sha256:${hash('8')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)];
+  assert.deepEqual((await db.query(`SELECT
+    has_function_privilege('service_role','public.authenticated_synthetic_local_exercise_activate(uuid,text,text,text,text,text,text,text,text,text,text,uuid,uuid,timestamptz)','EXECUTE') service_activate,
+    has_function_privilege('authenticated','public.authenticated_synthetic_local_exercise_activate(uuid,text,text,text,text,text,text,text,text,text,text,uuid,uuid,timestamptz)','EXECUTE') authenticated_activate,
+    has_function_privilege('anon','public.authenticated_synthetic_local_exercise_activate(uuid,text,text,text,text,text,text,text,text,text,text,uuid,uuid,timestamptz)','EXECUTE') anon_activate`)).rows[0],
+  { service_activate: true, authenticated_activate: false, anon_activate: false });
+  await assert.rejects(() => authority(db, localActivationSql,
+    localActivation.with(3, 'https://avalaos-pilot.netlify.app')), /LOCAL_REAL_BACKEND_ACCEPTANCE_ACTIVATION_REJECTED/);
+  await assert.rejects(() => authority(db, localActivationSql,
+    localActivation.with(2, 'f'.repeat(24))), /LOCAL_REAL_BACKEND_ACCEPTANCE_ACTIVATION_REJECTED/);
+  await assert.rejects(() => authority(db, localActivationSql,
+    localActivation.with(2, null)), /LOCAL_REAL_BACKEND_ACCEPTANCE_ACTIVATION_REJECTED/);
+  await assert.rejects(() => authority(db, localActivationSql,
+    localActivation.with(13, new Date(Date.now() - 1_000))), /LOCAL_REAL_BACKEND_ACCEPTANCE_ACTIVATION_REJECTED/);
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
+  await assert.rejects(() => authority(db, localActivationSql, localActivation),
+    /LOCAL_REAL_BACKEND_ACCEPTANCE_ACTIVATION_REJECTED/);
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+  const localActivated = (await authority(db, localActivationSql, localActivation)).rows[0].value;
+  assert.equal(localActivated.executionKind, 'local_real_backend_authenticated');
+  assert.equal(localActivated.buildDigest, `sha256:${hash('3')}`);
+  assert.deepEqual((await db.query(`SELECT execution_kind,deployment_id,origin,build_digest,profile_version
+    FROM public.authenticated_synthetic_exercises WHERE id=$1`, [ids.localExercise])).rows[0], {
+    execution_kind: 'local_real_backend_authenticated', deployment_id: null, origin: 'http://127.0.0.1:4173',
+    build_digest: `sha256:${hash('3')}`, profile_version: 'local-real-backend-authenticated-profile-v1',
+  });
+  const hostedIdentity = (await db.query(`SELECT execution_kind,deployment_id,build_digest
+    FROM public.authenticated_synthetic_exercises WHERE id=$1`, [ids.exercise])).rows[0];
+  assert.deepEqual(hostedIdentity, {
+    execution_kind: 'hosted_authenticated_synthetic', deployment_id: 'f'.repeat(24), build_digest: null,
+  });
+  await assert.rejects(() => db.query(
+    'UPDATE public.authenticated_synthetic_exercises SET deployment_id=NULL WHERE id=$1', [ids.exercise]),
+  /authenticated_synthetic_exercises_execution_identity_check/);
+  const localObserved = (await authority(db,
+    "SELECT public.authenticated_synthetic_observe($1,statement_timestamp()-interval '1 hour',statement_timestamp()) value",
+    [ids.localExercise])).rows[0].value.exercise;
+  assert.equal(localObserved.executionKind, 'local_real_backend_authenticated');
+  assert.equal(localObserved.buildDigest, `sha256:${hash('3')}`);
+  assert.equal(Object.hasOwn(localObserved, 'deploymentIdHash'), false);
+  await assert.rejects(() => db.query(
+    'UPDATE public.authenticated_synthetic_exercises SET build_digest=NULL WHERE id=$1', [ids.localExercise]),
+  /authenticated_synthetic_exercises_execution_identity_check/);
+  await authority(db, 'SELECT public.authenticated_synthetic_bind_session($1,$2,$3,$4)',
+    [ids.localExercise, ids.actor, ids.session, 'author']);
+  await authority(db, 'SELECT public.authenticated_synthetic_quiesce($1)', [ids.localExercise]);
+  assert.deepEqual((await db.query(`SELECT exercise.lifecycle,binding.state
+    FROM public.authenticated_synthetic_exercises exercise
+    JOIN public.authenticated_synthetic_actor_sessions binding ON binding.exercise_id=exercise.id
+    WHERE exercise.id=$1`, [ids.localExercise])).rows[0], { lifecycle: 'quiesced', state: 'revoked' });
+  assert.equal(await activeResidue(), 0);
   console.log('authenticated synthetic PostgreSQL: install, default-off, session/tenant/request/expiry, fenced Studio consume/replay and zero-effect guards passed');
 } finally {
   if (db) await db.end().catch(() => {});

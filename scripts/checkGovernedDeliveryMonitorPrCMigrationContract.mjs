@@ -29,7 +29,7 @@ assert.equal(migrations.filter(name=>name===syntheticAcceptanceMigrationName).le
 assert.equal(migrations.filter(name=>name===syntheticStudioFixtureMigrationName).length,1);
 assert.ok(migrations.indexOf(controlledHumanMigrationName)>migrations.indexOf(migrationName));
 assertPrCMigrationTail(migrations);
-assert.equal(approvedFullChainTip(migrations),'20261011053000');
+assert.equal(approvedFullChainTip(migrations),'20261019161723');
 assert.match(deferredAuthoritySql,/marker\.migration_tip='20260923151115'/u);
 assert.match(deferredAuthoritySql,/SET migration_tip='20260923190853'/u);
 assert.match(deferredAuthoritySql,/SET CONSTRAINTS public\.enterprise_pr_c_package_binding, public\.enterprise_pr_c_item_current_binding, public\.enterprise_pr_c_baseline_item_binding, public\.enterprise_pr_c_baseline_manifest_binding IMMEDIATE;/u);

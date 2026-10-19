@@ -14,6 +14,9 @@ env:
 
 jobs:
   select-pr264-controlled-preview:
+    # An explicitly skipped Netlify build has no preview to inspect. Its
+    # hosting proof remains NOT RUN; local functional acceptance is separate.
+    if: ${{ !contains(github.event.pull_request.title, '[skip netlify]') }}
     runs-on: ubuntu-latest
     outputs:
       profile: ${{ steps.selection.outputs.profile }}

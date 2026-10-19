@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Netlify-free functional acceptance (2026-10-19)
+
+AP approved the local-build/real-synthetic-backend replacement after PR #315 passed repository/release verification and its unused hosted attempt was blocked by Netlify account credits. All three read-only architecture/security/quality reviewers completed before writes. Root synthesized their findings and entered the fixed managed workspace-write phase on `codex/local-real-backend-acceptance`, based on merged `e0d419c8`. Three exclusive implementation tracks own runner/build/workflow, profiles/evidence/reporting, and additive synthetic database authority. Root owns integration, canonical documents, provenance, verification and the single PR. No nested delegation or reviewer/write overlap.
+
+Reuse the protected acceptance workflow and its existing PostgreSQL service, original 108-case business catalog and real Supabase controller. Serve the exact build only at `http://127.0.0.1:4173`, bind its canonical SHA-256 manifest, and report `executed-local-real-backend-synthetic` separately from hosted readiness. Add only the required synthetic exercise identity/activation contract; retain all real sessions, request frames, permits, cleanup, provider-OFF and zero-write criteria. No generic CORS change or Edge function redeployment is planned. Use focused changed-boundary checks and the full original acceptance execution; no unrelated regression campaign or Docker repair.
+
+All implementation commits, the PR title and merge subject must include `[skip netlify]`; do not trigger Netlify builds or use its services. The approved scope includes the bounded migration on the existing synthetic project, exact-build/profile configuration, one protected full run and cleanup. Preserve the user's exact-run reviewer click. No production, customer data or paid call. Stop and report the substantial result boundary honestly, including any incomplete cleanup or unresolved case.
+
 ## Terminal acceptance settlement (2026-10-18)
 
 PR #314 is merged with an identical candidate/release tree and all candidate gates passed, but its release preparation failed: immediate native actions 130/131 complete, barrier 160/160, both cleanups passed; Desktop scoped response settlement failed while Pixel passed. The connected-browser release gate did not run. Hosted acceptance remains 61 PASS / 47 BLOCKED and its allowance is consumed.

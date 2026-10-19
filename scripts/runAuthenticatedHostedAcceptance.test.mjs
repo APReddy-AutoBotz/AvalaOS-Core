@@ -63,7 +63,7 @@ const hostedEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_EXPECTED_PROJECT_REF:'abcdefghijklmnopqrst',AUTHENTICATED_ACCEPTANCE_TARGET_PUBLIC_DIGEST:sha('target'),
   AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY:'service-role-key-value-longer-than-thirty-two-characters',
   AUTHENTICATED_ACCEPTANCE_DATABASE_URL:'postgresql://postgres:synthetic-password@db.abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=verify-full',
-  AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST:sha('backend'),AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION:'20261011053000',
+  AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST:sha('backend'),AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION:'20261019161723',
   AUTHENTICATED_ACCEPTANCE_MIGRATION_DIGEST:sha('migration'),AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST:sha('exercise'),
   AUTHENTICATED_ACCEPTANCE_CATALOG_DIGEST:sha('catalog'),AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST:sha('source'),
   AUTHENTICATED_ACCEPTANCE_BASELINE_DIGEST:sha('baseline'),AUTHENTICATED_ACCEPTANCE_SYNTHETIC_ONLY:'true',
@@ -449,6 +449,26 @@ test('deployment verification passes stable inventory bindings to source verific
     verifyDownloadedSources:async(_config,options)=>{supplied=options.deployments;return {}}});
   assert.equal(inventoryCalls,2);assert.equal(supplied.get(functions[0]).version,1);
   assert.equal(result.backendDigest,setup.config.backendDigest);
+});
+
+test('local deployment verification uses exact build identity and preserves backend source checks',async t=>{
+  const sample=await fixture(t);const setup=deploymentVerificationFixture(sample);
+  const config={...setup.config,origin:'http://127.0.0.1:4173',deploymentId:null,
+    executionKind:'local_real_backend_authenticated',buildDigest:sha('local-build'),
+    localBuildWorkspace:path.join(os.tmpdir(),'avalaos-local-acceptance-fixture')};
+  let frontendInput;let inventoryCalls=0;let sourceCalled=false;
+  const fetchImpl=async()=>new Response(JSON.stringify(setup.rows),{
+    status:200,headers:{'content-type':'application/json','x-call':String(++inventoryCalls)}});
+  const result=await verifyAuthenticatedHostedDeployment(config,{fetchImpl,
+    managementToken:'fake-management-token-only',
+    verifyLocalFrontend:async input=>{frontendInput=input;return {verified:true};},
+    verifyDownloadedSources:async()=>{sourceCalled=true;return {};}});
+  assert.deepEqual(frontendInput,{workspace:config.localBuildWorkspace,releaseSha:config.releaseSha,
+    buildDigest:config.buildDigest,fetchImpl});
+  assert.equal(inventoryCalls,2);assert.equal(sourceCalled,true);
+  assert.equal(result.deploymentId,null);
+  assert.equal(result.executionKind,'local_real_backend_authenticated');
+  assert.equal(result.buildDigest,config.buildDigest);
 });
 
 for(const [label,change,code] of [

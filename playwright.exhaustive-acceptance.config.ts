@@ -14,7 +14,9 @@ import {
 const executionProfile = decodeAcceptanceExecutionProfile(process.env);
 const hostedOrigin = executionProfile.executionKind === 'hosted_preview'
   ? await validateResolvedHostedUrl(executionProfile.targetOrigin!)
-  : undefined;
+  : executionProfile.executionKind === 'local_real_backend'
+    ? executionProfile.targetOrigin!
+    : undefined;
 const reportMetadata = createAcceptanceReportMetadata({
   profile: executionProfile,
   exactCommand: ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'],
@@ -25,7 +27,7 @@ const reportMetadata = createAcceptanceReportMetadata({
     'scripts/hostedSandboxAcceptanceEvidence.mjs',
   ],
 });
-const metadata = executionProfile.executionKind === 'hosted_preview'
+const metadata = ['hosted_preview', 'local_real_backend'].includes(executionProfile.executionKind)
   ? {
       ...reportMetadata,
       workflowRuntime: createHostedAcceptanceWorkflowRuntime({

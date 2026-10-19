@@ -263,8 +263,10 @@ export function produceAuthenticatedHostedEvidence({ binding, browserCorrelation
     nonExerciseStateHash: serverObservations.cleanup.nonExerciseStateAfterHash,
     digest: authenticatedEvidenceDigest(serverObservations.cleanup),
   };
+  const localRealBackend = binding.executionKind === 'local_real_backend_authenticated';
   return {
     schemaVersion: AUTHENTICATED_HOSTED_EVIDENCE_SCHEMA,
+    ...(localRealBackend ? { scope: { evidenceScope: 'executed-local-real-backend-synthetic' } } : {}),
     binding: structuredClone(binding),
     browserCorrelations: structuredClone(browserCorrelations),
     serverObservations: structuredClone(serverObservations),
@@ -274,8 +276,14 @@ export function produceAuthenticatedHostedEvidence({ binding, browserCorrelation
 }
 
 export function validateAuthenticatedHostedEvidence(manifest, expected, catalog) {
-  if (!exact(manifest, ['schemaVersion', 'binding', 'browserCorrelations', 'serverObservations', 'cases', 'cleanup'])
+  const expectedKeys = expected?.executionKind === 'local_real_backend_authenticated'
+    ? ['schemaVersion', 'scope', 'binding', 'browserCorrelations', 'serverObservations', 'cases', 'cleanup']
+    : ['schemaVersion', 'binding', 'browserCorrelations', 'serverObservations', 'cases', 'cleanup'];
+  if (!exact(manifest, expectedKeys)
     || manifest.schemaVersion !== AUTHENTICATED_HOSTED_EVIDENCE_SCHEMA) return ['authenticated-manifest-shape'];
+  if (expected?.executionKind === 'local_real_backend_authenticated'
+    && (!exact(manifest.scope, ['evidenceScope'])
+      || manifest.scope.evidenceScope !== 'executed-local-real-backend-synthetic')) return ['authenticated-manifest-scope'];
   try {
     requireAuthenticatedHostedBinding(manifest.binding, expected);
     const reconstructed = produceAuthenticatedHostedEvidence({

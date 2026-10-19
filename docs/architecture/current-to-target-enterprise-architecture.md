@@ -1,5 +1,13 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Local real-backend acceptance identity (2026-10-19)
+
+Functional acceptance may execute an exact locally served frontend against the existing real synthetic Supabase backend. Its trust boundary is the protected runner and immutable build manifest, not a claimed hostname or HTTP header. Bind the exact checkout, canonical file-path/size/content manifest digest, fixed `http://127.0.0.1:4173` origin, actual run/attempt, backend/migration/source/catalog digests and real actor sessions. Reject altered bytes before or after execution. The local profile has a null deployment ID and a required build digest; existing hosted profiles retain their Netlify deployment identity. Never spoof hosted headers, DNS, deployment IDs or workflow identity.
+
+The frontend receives only pilot build settings and the exact backend's browser-safe public key. Service-role, database, management, control, password and provider credentials remain outside the build/browser environment. The server binds only loopback with a strict port and owned lifetime. Preserve the exact browser network allowlist and secure-context/crypto requirements; no TLS bypass, arbitrary origins or service-worker escape. Remote backend TLS verification remains unchanged.
+
+An additive synthetic-only identity discriminator and service-role-only local activation RPC couple local origin, build digest and profile. Existing immutable hosted rows remain unchanged. Preserve real session lookup/revocation, capabilities, tenancy, narrow permit payload/version binding, expiry, independent before/after frames and quiescence. No Edge CORS change is needed. Functional local success does not establish public deployment or production readiness.
+
 ## Terminal browser and controller ownership (2026-10-18)
 
 A completed browser assertion or empty serialized callback queue is not a terminal evidence boundary. Request admission, response-body acquisition and controller action completion are separately owned phases. Final test teardown must join them while the owning browser context is alive, preserve the first failure and establish zero accepted outstanding work before disposal. An admission rejection remains a failure even if it settled before the next ownership snapshot.

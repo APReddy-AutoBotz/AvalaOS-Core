@@ -36,6 +36,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20261010051413_authenticated_process_update_authority.sql',
   '20261010144356_authenticated_hosted_exercise_authority.sql',
   '20261011053000_supabase_provider_secret_backend.sql',
+  '20261019161723_local_real_backend_authenticated_acceptance.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -44,7 +45,7 @@ export const assertPrCMigrationTail = migrationNames => {
   assert.equal(migrationNames.lastIndexOf(PR_C_CONTROLLED_HUMAN_FROZEN_TIP), tipIndex,
     'PR C controlled-human frozen tip is duplicated');
   assert.deepEqual(migrationNames.slice(tipIndex + 1), PR_C_APPROVED_SUCCESSOR_TAIL,
-    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, canonical source-size correction, immutable Govern action-authority, legacy Delivery authority, authenticated Studio/Delivery outcome, process update, authenticated hosted exercise, and native Supabase secret-backend successors may follow the PR C controlled-human frozen tip');
+    'Only the exact approved creation-access, document-mapping, identity-convergence, XLSX-ingestion, projection-volatility, synthetic-AI, domain-budget, renewal, Studio FRD section-ID, PR 1E corrections, Studio command-authority/receipt, PR C deferred-binding, Studio independent-source, solo-owner synthetic-acceptance, synthetic Studio provider-free, Studio BRD prompt-v2, one-use BRD-v2 quality-validation, BRD-v3 source-fact-retention, one-use BRD-v3 quality-validation, canonical source-size correction, immutable Govern action-authority, legacy Delivery authority, authenticated Studio/Delivery outcome, process update, authenticated hosted exercise, native Supabase secret-backend, and local real-backend authenticated acceptance successors may follow the PR C controlled-human frozen tip');
 };
 
 // Full fresh-chain runners validate every approved migration before reading the
@@ -54,5 +55,5 @@ export const assertPrCMigrationTail = migrationNames => {
 // spending allowance.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return '20261011053000';
+  return '20261019161723';
 };

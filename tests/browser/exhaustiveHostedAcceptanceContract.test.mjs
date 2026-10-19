@@ -584,8 +584,8 @@ assert.doesNotMatch(
 
 assert.match(hostedSpec, /HOSTED_SANDBOX_ACCEPTANCE_CASES,[\s\S]*createHostedSandboxAcceptanceAttachment/u,
   'the browser runner must use the shared reviewed Hosted Sandbox attachment contract');
-assert.match(hostedSpec, /const measurement = createHostedSandboxMeasurement\(binding\.testId\);[\s\S]*await runScenario\(binding\.scenario!, page, testInfo, measurement\);[\s\S]*executionProfile\.executionKind === 'hosted_preview'[\s\S]*createHostedSandboxAcceptanceAttachment\([\s\S]*testInfo\.attach/u,
-  'same-run measured attachments must be emitted only after the hosted scenario succeeds and only for hosted preview');
+assert.match(hostedSpec, /const measurement = createHostedSandboxMeasurement\(binding\.testId\);[\s\S]*await runScenario\(binding\.scenario!, page, testInfo, measurement\);[\s\S]*\['hosted_preview', 'local_real_backend'\]\.includes\(executionProfile\.executionKind\)[\s\S]*createHostedSandboxAcceptanceAttachment\([\s\S]*testInfo\.attach/u,
+  'same-run measured attachments must be emitted only after the scenario succeeds for hosted preview or local real-backend execution');
 assert.doesNotMatch(hostedSpec, /createHostedSandboxAcceptanceAttachment\([\s\S]*expectedMutationCount/u,
   'the browser producer must not derive actuals from expected catalog counts');
 assert.match(hostedSpec, /case 'persona-matrix':[\s\S]*measurement\.target\(personaActionToken\('persona-entry', label\)\)/u,
@@ -600,8 +600,8 @@ assert.match(hostedSandboxEvidenceSource, /export const HOSTED_SANDBOX_ACCEPTANC
   'the evidence validator must expose the fixed reviewed case allowlist');
 assert.equal((hostedSandboxEvidenceSource.match(/caseDefinition\('/gu) ?? []).length, 18,
   'the source must contain exactly 18 reviewed case definitions');
-assert.match(hostedSandboxEvidenceSource, /evidenceScope: EVIDENCE_SCOPE, fixtureId: FIXTURE_ID/u,
-  'executed Hosted Sandbox scope must use the browser-local fixture identity without tenant identifiers');
+assert.match(hostedSandboxEvidenceSource, /evidenceScope: localRealBackend \? LOCAL_REAL_BACKEND_EVIDENCE_SCOPE : HOSTED_EVIDENCE_SCOPE,[\s\S]*fixtureId: FIXTURE_ID/u,
+  'executed Hosted Sandbox scope must distinguish local real-backend evidence while retaining the browser-local fixture identity');
 assert.doesNotMatch(hostedSandboxEvidenceSource, /organizationId|workspaceId|tenantId/u,
   'Hosted Sandbox local evidence must not invent a server tenant identity');
 assert.match(hostedSandboxEvidenceSource, /attempt\.retry[\s\S]*attachments\.length === 1[\s\S]*HOSTED_SANDBOX_CROSS_EXECUTION_BINDING_INVALID/u,

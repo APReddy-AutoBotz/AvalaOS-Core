@@ -1,4 +1,5 @@
 const SHA = /^[0-9a-f]{40}$/u;
+const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const DEPLOY_ID = /^[0-9a-f]{24}$/u;
 const RUN_ID = /^[1-9][0-9]*$/u;
 const RUN_ATTEMPT = /^[1-9][0-9]*$/u;
@@ -34,6 +35,21 @@ const exactOrigin = value => {
     || (parsed.pathname !== '' && parsed.pathname !== '/')
     || ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
   ) {
+    throw new Error('HOSTED_ACCEPTANCE_ORIGIN_REJECTED');
+  }
+  return parsed.origin;
+};
+
+const exactLocalRealBackendOrigin = value => {
+  if (value !== 'http://127.0.0.1:4173') throw new Error('HOSTED_ACCEPTANCE_ORIGIN_REJECTED');
+  let parsed;
+  try {
+    parsed = new URL(requiredString(value, 'HOSTED_ACCEPTANCE_ORIGIN_REJECTED'));
+  } catch {
+    throw new Error('HOSTED_ACCEPTANCE_ORIGIN_REJECTED');
+  }
+  if (parsed.origin !== 'http://127.0.0.1:4173' || parsed.username || parsed.password
+    || parsed.search || parsed.hash || (parsed.pathname !== '' && parsed.pathname !== '/')) {
     throw new Error('HOSTED_ACCEPTANCE_ORIGIN_REJECTED');
   }
   return parsed.origin;
@@ -90,13 +106,16 @@ const validateDispatchBridgeRuntime = ({ environment, repository, workflowRef, r
 };
 
 const validateAuthenticatedCallerRuntime = ({ environment, repository, workflowRef, releaseSha, workflowPath }) => {
+  const authenticatedKind = environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND;
+  const localRealBackend = authenticatedKind === 'local_real_backend_authenticated';
   if (repository !== STABLE_REPOSITORY
     || workflowPath !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW
     || environment.ACCEPTANCE_WORKFLOW_PATH !== EXHAUSTIVE_ACCEPTANCE_WORKFLOW
     || workflowRef !== `${repository}/${AUTHENTICATED_ACCEPTANCE_CALLER_WORKFLOW}@refs/heads/main`
     || environment.GITHUB_EVENT_NAME !== 'workflow_dispatch'
     || environment.GITHUB_JOB !== 'hosted-authenticated'
-    || environment.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND !== 'hosted_authenticated_synthetic'
+    || !['hosted_authenticated_synthetic', 'local_real_backend_authenticated'].includes(authenticatedKind)
+    || environment.ACCEPTANCE_EXECUTION_KIND !== (localRealBackend ? 'local_real_backend' : 'hosted_preview')
     || environment.GITHUB_SHA !== releaseSha || releaseShaFromEnvironment(environment) !== releaseSha) {
     throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REJECTED');
   }
@@ -187,13 +206,12 @@ export const deriveExpectedHostedAcceptanceMetadata = ({
   sourcePaths,
   workflowPath,
 }) => {
-  if (environment.ACCEPTANCE_EXECUTION_KIND !== 'hosted_preview') {
+  const executionKind = environment.ACCEPTANCE_EXECUTION_KIND;
+  if (!['hosted_preview', 'local_real_backend'].includes(executionKind)) {
     throw new Error('HOSTED_ACCEPTANCE_EXECUTION_KIND_REJECTED');
   }
   const releaseSha = requiredString(environment.RELEASE_SHA, 'HOSTED_ACCEPTANCE_RELEASE_SHA_REJECTED');
-  const deployId = requiredString(environment.NETLIFY_DEPLOY_ID, 'HOSTED_ACCEPTANCE_DEPLOY_ID_REJECTED');
   if (!SHA.test(releaseSha)) throw new Error('HOSTED_ACCEPTANCE_RELEASE_SHA_REJECTED');
-  if (!DEPLOY_ID.test(deployId)) throw new Error('HOSTED_ACCEPTANCE_DEPLOY_ID_REJECTED');
   if (!Array.isArray(exactCommand) || exactCommand.length < 2 || exactCommand.some(value => typeof value !== 'string' || !value)) {
     throw new Error('HOSTED_ACCEPTANCE_COMMAND_REJECTED');
   }
@@ -202,11 +220,35 @@ export const deriveExpectedHostedAcceptanceMetadata = ({
   }
   const runtime = createHostedAcceptanceWorkflowRuntime({ environment, workflowPath, releaseSha });
   if (!runtime) throw new Error('HOSTED_ACCEPTANCE_GITHUB_RUNTIME_REQUIRED');
+  if (executionKind === 'local_real_backend') {
+    if (environment.NETLIFY_DEPLOY_ID) throw new Error('HOSTED_ACCEPTANCE_DEPLOY_ID_REJECTED');
+    const buildDigest = requiredString(environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST,
+      'HOSTED_ACCEPTANCE_BUILD_DIGEST_REJECTED');
+    if (!DIGEST.test(buildDigest)) throw new Error('HOSTED_ACCEPTANCE_BUILD_DIGEST_REJECTED');
+    return Object.freeze({
+      schemaVersion: 'acceptance-report-profile-v1',
+      ci: {},
+      evidenceKind: 'local-real-backend-acceptance',
+      executionKind,
+      exactCommand: [...exactCommand],
+      configPath: requiredString(configPath, 'HOSTED_ACCEPTANCE_CONFIG_REJECTED'),
+      sourcePaths: [...sourcePaths],
+      exactHead: releaseSha,
+      targetOrigin: exactLocalRealBackendOrigin(environment.HOSTED_PILOT_URL),
+      deployId: null,
+      buildDigest,
+      sourceIdentity: 'committed_exact_head',
+      workflowRuntime: runtime,
+    });
+  }
+  if (environment.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST) throw new Error('HOSTED_ACCEPTANCE_BUILD_DIGEST_REJECTED');
+  const deployId = requiredString(environment.NETLIFY_DEPLOY_ID, 'HOSTED_ACCEPTANCE_DEPLOY_ID_REJECTED');
+  if (!DEPLOY_ID.test(deployId)) throw new Error('HOSTED_ACCEPTANCE_DEPLOY_ID_REJECTED');
   return Object.freeze({
     schemaVersion: 'acceptance-report-profile-v1',
     ci: {},
     evidenceKind: 'hosted-preview-acceptance',
-    executionKind: 'hosted_preview',
+    executionKind,
     exactCommand: [...exactCommand],
     configPath: requiredString(configPath, 'HOSTED_ACCEPTANCE_CONFIG_REJECTED'),
     sourcePaths: [...sourcePaths],

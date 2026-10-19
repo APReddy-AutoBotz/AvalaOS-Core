@@ -130,8 +130,8 @@ assert.match(fakeSourceResult.stderr, /source-provenance-digest/u, 'a declared p
 
 const keyboardCase = catalog.cases.find(item => item.testId === 'SANDBOX-009');
 const keyboardOwnership = proofOwners.contracts.find(item => item.testId === 'SANDBOX-009');
-assert.deepEqual(keyboardCase.sourceReference, ['App.tsx', 'components/shared/CustomDashboardView.tsx', 'index.css', 'services/hostedSandboxRoute.ts'], 'keyboard evidence must bind the actual focus, Home contrast target, shared motion and entry routing');
-assert.deepEqual(keyboardOwnership.sourceAnchorIds, ['hosted-sandbox-route', 'sandbox-main-focus-target', 'sandbox-readable-screen-motion', 'sandbox-home-contrast-target', 'sandbox-opaque-contrast-surface', 'sandbox-contrast-foreground-token']);
+assert.deepEqual(keyboardCase.sourceReference, ['App.tsx', 'components/shared/CustomDashboardView.tsx', 'index.css', 'services/hostedSandboxRoute.ts', 'scripts/localAcceptanceBuild.mjs'], 'keyboard evidence must bind the actual focus, Home contrast target, shared motion, entry routing and exact local build');
+assert.deepEqual(keyboardOwnership.sourceAnchorIds, ['hosted-sandbox-route', 'sandbox-main-focus-target', 'sandbox-readable-screen-motion', 'sandbox-home-contrast-target', 'sandbox-opaque-contrast-surface', 'sandbox-contrast-foreground-token', 'local-real-backend-build']);
 assert.equal(provenance.sourceDigests['index.css'], canonicalSourceSha256(readFileSync(path.join(root, 'index.css'), 'utf8')), 'motion proof must bind the actual canonical CSS bytes');
 assert.equal(provenance.sourceDigests['components/shared/CustomDashboardView.tsx'], canonicalSourceSha256(readFileSync(path.join(root, 'components/shared/CustomDashboardView.tsx'), 'utf8')), 'the real contrast paragraph must bind its actual component bytes');
 assert.equal(

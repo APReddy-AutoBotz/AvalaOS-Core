@@ -42,6 +42,15 @@ const metadata = {
     releaseSha: exactHead,
   },
 };
+const localMetadata = {
+  ...metadata,
+  evidenceKind: 'local-real-backend-acceptance',
+  executionKind: 'local_real_backend',
+  targetOrigin: 'http://127.0.0.1:4173',
+  deployId: null,
+  buildDigest: `sha256:${'c'.repeat(64)}`,
+  sourceIdentity: 'committed_exact_head',
+};
 const startTime = '2026-10-08T12:00:00.000Z';
 const observedAt = '2026-10-08T12:00:00.500Z';
 
@@ -60,11 +69,11 @@ const reportAttachment = value => ({
   body: Buffer.from(value.body, 'utf8').toString('base64'),
 });
 
-const executionFor = (testId, project, overrides = {}) => {
+const executionFor = (testId, project, overrides = {}, reportMetadata = metadata) => {
   const testCase = catalogById.get(testId);
   const binding = bindingById.get(testId);
   const attachment = createHostedSandboxAcceptanceAttachment({
-    testCase, binding, metadata, project, measurement: measurementFor(testId), observedAt,
+    testCase, binding, metadata: reportMetadata, project, measurement: measurementFor(testId), observedAt,
   });
   return {
     title: `[${testId}] ${testCase.title}`,
@@ -72,8 +81,8 @@ const executionFor = (testId, project, overrides = {}) => {
     status: 'expected',
     expectedStatus: 'passed',
     annotations: [],
-    executionKind: 'hosted_preview',
-    reportMetadata: structuredClone(metadata),
+    executionKind: reportMetadata.executionKind,
+    reportMetadata: structuredClone(reportMetadata),
     results: [{
       status: 'passed', retry: 0, startTime, duration: 1_000,
       attachments: [reportAttachment(attachment), {
@@ -90,6 +99,12 @@ const validInput = testId => ({
   testCase: catalogById.get(testId),
   binding: bindingById.get(testId),
   executions: projects.map(project => executionFor(testId, project)),
+});
+
+const validLocalInput = testId => ({
+  testCase: catalogById.get(testId),
+  binding: bindingById.get(testId),
+  executions: projects.map(project => executionFor(testId, project, {}, localMetadata)),
 });
 
 test('reviewed Hosted Sandbox cases match the canonical catalog and produce measured per-project actuals', () => {
@@ -112,6 +127,29 @@ test('reviewed Hosted Sandbox cases match the canonical catalog and produce meas
         definition.targetActions.length);
       assert.ok(Number.isSafeInteger(verified.actual.byProject[project].supportingActionCount));
     }
+  }
+});
+
+test('local real-backend Sandbox evidence binds the same build digest without claiming hosted scope', () => {
+  const verified = verifyHostedSandboxAttachments(validLocalInput('SANDBOX-001'));
+  assert.deepEqual(verified.scope, {
+    evidenceScope: 'executed-local-real-backend-sandbox', fixtureId: 'synthetic-default',
+  });
+  const input = validLocalInput('SANDBOX-001');
+  mutateAttachmentBody(input, 0, body => { body.profile.buildDigest = `sha256:${'9'.repeat(64)}`; });
+  assert.throws(() => verifyHostedSandboxAttachments(input), /PROFILE_BINDING|CROSS_EXECUTION_BINDING/u);
+  for (const mutation of [
+    value => { value.targetOrigin = 'http://127.0.0.1:4174'; },
+    value => { value.targetOrigin = 'http://localhost:4173'; },
+    value => { value.deployId = 'b'.repeat(24); },
+    value => { value.buildDigest = `sha256:${'c'.repeat(63)}`; },
+  ]) {
+    const changed = structuredClone(localMetadata);
+    mutation(changed);
+    assert.throws(() => createHostedSandboxAcceptanceAttachment({
+      testCase: catalogById.get('SANDBOX-001'), binding: bindingById.get('SANDBOX-001'),
+      metadata: changed, project: projects[0], measurement: measurementFor('SANDBOX-001'), observedAt,
+    }), /HOSTED_SANDBOX_/u);
   }
 });
 
