@@ -82,7 +82,7 @@
     "scripts/authenticatedHostedObserver.mjs": "sha256:c2e38ae028bb4bcd77d4e20e727f44bbfa3b134c3f85021865c0f660bfdae9d5",
     "scripts/authenticatedHostedPlaywrightReporter.mjs": "sha256:a8c0550395175af880c1b09442b750786aca286ab07e1bad81ce67422c968eba",
     "scripts/authenticatedHostedPlaywrightReporter.test.mjs": "sha256:f2a7a70c25ae78e8e7772376ff5108a7595a2de32772e0beb4c92be805d86d4f",
-    "scripts/authenticatedHostedWorkflowContract.test.mjs": "sha256:6115fd5ffc31a07740895727b45bfee73236633c230fc08f337a86954cf86252",
+    "scripts/authenticatedHostedWorkflowContract.test.mjs": "sha256:df7cfcb84f6a93e0a4938a1e55f410201c6bc750765bee387c6692f9a995a90b",
     "scripts/authenticatedV2ReloadDiagnostic.d.mts": "sha256:eea8afd9d1e16ba2a8f0538224ff7cea99ac3094eb6211f4224b7ddfea4f47e5",
     "scripts/authenticatedV2ReloadDiagnostic.mjs": "sha256:ab6de575afd7896289b65bc9d9af1887647ccf7b06c85a7cb952388b199ca293",
     "scripts/authenticatedV2ReloadDiagnostic.test.mjs": "sha256:5179eb12ab9bb7d1c5ed50278ae7fedef0bf1cf2664f9f6091483e42eb2136c1",

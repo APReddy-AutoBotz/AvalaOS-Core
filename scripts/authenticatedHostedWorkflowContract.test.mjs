@@ -8,6 +8,18 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('explicit Netlify skip prevents preview inspection without suppressing local acceptance checks', async () => {
+  const preview = parseWorkflowYaml(await readFile('.github/workflows/preview-exhaustive-browser-qa.yml', 'utf8'),
+    'preview-exhaustive-browser-qa.yml');
+  assert.equal(preview.jobs['select-pr264-controlled-preview'].if,
+    "${{ !contains(github.event.pull_request.title, '[skip netlify]') }}");
+  assert.equal(preview.jobs['preview-exhaustive-browser-qa'].needs, 'select-pr264-controlled-preview');
+  assert.equal(preview.jobs['preview-exhaustive-browser-qa'].if, undefined,
+    'preview inspection must retain the dependency success gate rather than run after a skipped selector');
+  const acceptance = await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8');
+  assert.doesNotMatch(acceptance, /contains\(github\.event\.pull_request\.title/u);
+});
+
 test('real declaration listing needs no protected hosted caller identity', () => {
   const release = 'a'.repeat(40);
   const result = spawnSync(process.execPath, [
