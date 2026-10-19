@@ -193,6 +193,11 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.match(cleanupFrontend.run, /localAcceptanceBuild[.]mjs cleanup/u);
   const validation = hosted.steps.find(step => step.name === 'Validate catalogs, evidence and hosted contracts');
   assert.match(validation.run, /localAcceptanceBuild[.]test[.]mjs/u);
+  assert.deepEqual(validation.env, { ACCEPTANCE_EXECUTION_KIND: 'hosted_preview',
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'hosted_authenticated_synthetic',
+    AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: 'netlify', AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: '' });
+  assert.ok(hosted.steps.indexOf(build) > hosted.steps.indexOf(validation));
+  assert.ok(hosted.steps.indexOf(build) < hosted.steps.findIndex(step => step.name === 'Prepare authenticated exact source bindings'));
   assert.match(validation.run, /localRealBackendAcceptanceMigration[.]test[.]mjs/u);
   const staged = hosted.steps.find(step => step.name === 'Stage sanitized same-run manifests');
   assert.match(staged.run, /local-acceptance-build-proof[.]json/u);

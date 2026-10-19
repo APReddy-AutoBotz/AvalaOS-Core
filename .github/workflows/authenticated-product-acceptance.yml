@@ -296,6 +296,11 @@ jobs:
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
       - name: Validate catalogs, evidence and hosted contracts
+        env:
+          ACCEPTANCE_EXECUTION_KIND: hosted_preview
+          AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
+          AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: netlify
+          AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: ''
         run: |-
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
           npm run test:acceptance:catalog
@@ -500,14 +505,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build exact local acceptance frontend
-        if: inputs.frontend_kind == 'local_build'
-        shell: bash
-        env:
-          AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: ${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL }}
-          AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY }}
-        run: node scripts/localAcceptanceBuild.mjs build >> "$GITHUB_ENV"
       - name: Validate catalogs, evidence and hosted contracts
+        # Fixture contracts own their identity; the real local binding is built below.
+        env:
+          ACCEPTANCE_EXECUTION_KIND: hosted_preview
+          AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: hosted_authenticated_synthetic
+          AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: netlify
+          AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: ''
         run: |
           npm run test:acceptance:catalog
           npm run test:authenticated-product:source
@@ -549,6 +553,13 @@ jobs:
         run: |
           npm run test:migrations:pilot-operations:postgres
           node scripts/produceExhaustiveServerEvidence.mjs
+      - name: Build exact local acceptance frontend
+        if: inputs.frontend_kind == 'local_build'
+        shell: bash
+        env:
+          AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: ${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL }}
+          AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.AUTHENTICATED_ACCEPTANCE_SUPABASE_PUBLISHABLE_KEY }}
+        run: node scripts/localAcceptanceBuild.mjs build >> "$GITHUB_ENV"
       - name: Prepare authenticated exact source bindings
         env:
           AUTHENTICATED_ACCEPTANCE_FRONTEND_KIND: ${{ inputs.frontend_kind }}
