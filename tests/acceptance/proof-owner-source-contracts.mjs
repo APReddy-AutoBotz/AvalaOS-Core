@@ -1834,7 +1834,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -1949,7 +1950,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2471,7 +2473,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2508,7 +2511,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2545,7 +2549,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2582,7 +2587,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {
@@ -2619,7 +2625,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051100-authenticated-studio-delivery-outcome-monitor-sql",
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
-      "authenticated-hosted-native-secret-migration"
+      "authenticated-hosted-native-secret-migration",
+      "local-real-backend-authority"
     ],
     "ownership": [
       {

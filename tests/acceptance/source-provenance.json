@@ -369,7 +369,7 @@
     "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/acceptance/catalog/schema.json": "sha256:96cf00e298b79ca4a8c4bdc36e2d970dfb6b6537cea46755e178ae93fc8d981f",
-    "tests/acceptance/catalog/test-catalog.json": "sha256:83762c4b88f7c77950d65109b36bd489ec996e84efdaca93ec64950b8fcfd37d",
+    "tests/acceptance/catalog/test-catalog.json": "sha256:683df2405209868e15b081790c296cab1c2da45ce02516f15d1783766b7e2284",
     "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:3040116f256682376befef77025b6993bd23233ec8f9d72bc1d09fd7f8a63e43",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:1b652b7e3208b1f032a184a8a7788265060f02ca77763bf08a3a0d3c8698934e",
@@ -1761,7 +1761,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
@@ -1894,7 +1895,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
@@ -2488,7 +2490,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
@@ -2531,7 +2534,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
@@ -2574,7 +2578,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
@@ -2617,7 +2622,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
@@ -2660,7 +2666,8 @@
         "supabase/migrations/20261010051100_authenticated_studio_delivery_outcome_monitor.sql",
         "supabase/migrations/20261010051413_authenticated_process_update_authority.sql",
         "supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql",
-        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql"
+        "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
       ],
       "ownership": [
         {
