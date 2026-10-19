@@ -79,7 +79,10 @@ if (authenticatedManifest && authenticatedControllerBinding) {
 const authenticatedErrors = authenticatedExpected
   ? validateAuthenticatedAcceptanceManifest(authenticatedManifest, authenticatedExpected, catalog)
   : ['authenticated-execution-not-bound'];
-const browserExecutionKind = localRealBackendExecution ? 'local_real_backend' : 'hosted_preview';
+const browserExecutionKind = typeof playwright?.config?.metadata?.executionKind === 'string'
+  ? playwright.config.metadata.executionKind
+  : 'unbound';
+const requiredBrowserExecutionKind = localRealBackendExecution ? 'local_real_backend' : 'hosted_preview';
 const hostedCommand = ['npx', 'playwright', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--workers=1'];
 const hostedConfigPath = 'playwright.exhaustive-acceptance.config.ts';
 const hostedSourcePaths = [
@@ -164,7 +167,7 @@ const evaluateBrowserCase = (testCase, binding) => {
   const evaluation = evaluateHostedTest({
     title: canonicalHostedTitle(testCase),
     requiredProjects: binding.projects,
-    requiredExecutionKind: browserExecutionKind,
+    requiredExecutionKind: requiredBrowserExecutionKind,
     reportValidation: browserReportValidation,
   });
   if (evaluation.status !== 'PASS') return evaluation;

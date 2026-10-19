@@ -407,8 +407,8 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         &&row.studio_delivery_control_ready===true&&row.system_templates>0&&row.enabled_provider_routes===0;
       return { syntheticTarget: deployment.syntheticTarget, production: deployment.production,
         releaseSha: deployment.releaseSha, deploymentId: deployment.deploymentId,
-        executionKind: deployment.executionKind ?? 'hosted_authenticated_synthetic',
-        buildDigest: deployment.buildDigest ?? null,
+        ...(deployment.executionKind === 'local_real_backend_authenticated'
+          ? { executionKind: deployment.executionKind, buildDigest: deployment.buildDigest } : {}),
         backendDigest: deployment.backendDigest,
         migrationVersion: row.migration_version,
         providersEnabled: row.studio_provider || row.ei_provider,runtimeReady,

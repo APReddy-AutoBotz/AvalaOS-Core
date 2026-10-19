@@ -69,6 +69,7 @@ const hostedMetadata = () => ({
 
 const localRealBackendEnvironment = () => ({
   ACCEPTANCE_EXECUTION_KIND: 'local_real_backend',
+  NETLIFY_DEPLOY_ID: '',
   AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'local_real_backend_authenticated',
   AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: buildDigest,
   RELEASE_SHA: releaseSha,
