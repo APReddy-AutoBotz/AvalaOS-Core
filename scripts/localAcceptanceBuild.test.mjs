@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { request as httpRequest } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -63,7 +64,15 @@ test('loopback server verifies every response byte, SPA fallback and secure-cont
   const browser = {
     newPage: async () => ({
       goto: async url => assert.equal(url, `${LOCAL_ACCEPTANCE_ORIGIN}/sign-in`),
-      evaluate: async () => ({ secureContext: true, subtleCrypto: true, randomUuid: true }),
+      evaluate: async (_callback, url) => url === undefined
+        ? { secureContext: true, subtleCrypto: true, randomUuid: true }
+        : assert.equal(url, `${LOCAL_ACCEPTANCE_ORIGIN}/sign-in?view=process_catalog&scope=my_work`),
+      reload: async () => {
+        const url = `${LOCAL_ACCEPTANCE_ORIGIN}/sign-in?view=process_catalog&scope=my_work`;
+        const response = await fetch(url);
+        return { status: () => response.status, url: () => response.url,
+          body: async () => Buffer.from(await response.arrayBuffer()) };
+      },
       close: async () => undefined,
     }),
   };
@@ -86,6 +95,40 @@ test('loopback server verifies every response byte, SPA fallback and secure-cont
   assert.equal(await response.text(), await readFile(path.join(fixture.site, 'index.html'), 'utf8'));
   assert.equal(response.headers.get('x-avalaos-release'), null);
   assert.equal(response.headers.get('x-avalaos-netlify-deploy-id'), null);
+});
+
+test('query-bearing reloads serve manifest bytes without changing request authority', async t => {
+  const fixture = await siteFixture(t);
+  const server = await startLocalAcceptanceServer({ workspace: fixture.root, releaseSha: release,
+    buildDigest: fixture.manifest.buildDigest });
+  t.after(() => server.close());
+  for (const [route, file] of [
+    ['/sign-in?view=process_catalog&scope=my_work', 'index.html'],
+    ['/sandbox?view=boards&scope=project&scopeId=fixture&scopeName=Example', 'index.html'],
+    ['/assets/app.js?v=fixture&path=../../outside', 'assets/app.js'],
+  ]) {
+    const expected = await readFile(path.join(fixture.site, file));
+    const response = await fetch(`${LOCAL_ACCEPTANCE_ORIGIN}${route}`);
+    assert.equal(response.status, 200, route);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const head = await fetch(`${LOCAL_ACCEPTANCE_ORIGIN}${route}`, { method: 'HEAD' });
+    assert.equal(head.status, 200);
+    assert.equal(Number(head.headers.get('content-length')), expected.length);
+    assert.equal((await head.arrayBuffer()).byteLength, 0);
+  }
+  assert.equal((await fetch(`${LOCAL_ACCEPTANCE_ORIGIN}/?view=boards`, { method: 'POST' })).status, 404);
+  const foreignHostStatus = await new Promise((resolve, reject) => {
+    const request = httpRequest(`${LOCAL_ACCEPTANCE_ORIGIN}/?view=boards`, {
+      headers: { host: 'localhost:4173' },
+    }, response => { response.resume(); resolve(response.statusCode); });
+    request.on('error', reject);
+    request.end();
+  });
+  assert.equal(foreignHostStatus, 404);
+  assert.equal((await fetch(`${LOCAL_ACCEPTANCE_ORIGIN}/%ZZ?view=boards`)).status, 404);
+  await writeFile(path.join(fixture.site, 'index.html'), 'changed');
+  assert.equal((await fetch(`${LOCAL_ACCEPTANCE_ORIGIN}/?view=boards`)).status, 404);
 });
 
 test('ordinary pilot build receives only allowlisted public Vite inputs and cleans rejected output', async t => {

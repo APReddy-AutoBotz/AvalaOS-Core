@@ -206,7 +206,8 @@ export async function startLocalAcceptanceServer({ workspace, releaseSha, buildD
       if (!['GET', 'HEAD'].includes(request.method ?? '')) fail('METHOD_REJECTED');
       if (request.headers.host !== '127.0.0.1:4173') fail('HOST_REJECTED');
       const url = new URL(request.url ?? '/', LOCAL_ACCEPTANCE_ORIGIN);
-      if (url.origin !== LOCAL_ACCEPTANCE_ORIGIN || url.search || url.hash) fail('REQUEST_REJECTED');
+      if (url.origin !== LOCAL_ACCEPTANCE_ORIGIN || url.hash) fail('REQUEST_REJECTED');
+      // Navigation state lives in the query; only the pathname selects manifest bytes.
       let requested = decodeURIComponent(url.pathname).replace(/^\/+/, '');
       if (!requested || !entries.has(requested)) requested = 'index.html';
       const expected = entries.get(requested);
@@ -280,6 +281,11 @@ export async function verifyLocalAcceptanceServer({ workspace, releaseSha, build
     const secure = await page.evaluate(() => ({ secureContext: globalThis.isSecureContext,
       subtleCrypto: typeof globalThis.crypto?.subtle?.digest === 'function',
       randomUuid: typeof globalThis.crypto?.randomUUID === 'function' }));
+    const reloadUrl = `${LOCAL_ACCEPTANCE_ORIGIN}/sign-in?view=process_catalog&scope=my_work`;
+    await page.evaluate(url => globalThis.history.replaceState(null, '', url), reloadUrl);
+    const reloaded = await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
+    if (!reloaded || reloaded.status() !== 200 || reloaded.url() !== reloadUrl
+      || sha(await reloaded.body()) !== index.sha256) fail('SPA_QUERY_RELOAD_REJECTED');
     await page.close();
     if (secure.secureContext !== true || secure.subtleCrypto !== true || secure.randomUuid !== true) {
       fail('SECURE_CONTEXT_REJECTED');

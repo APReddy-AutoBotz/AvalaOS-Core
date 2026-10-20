@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Local query-route reload evidence (2026-10-20)
+
+- **Confirmed source defect:** the local acceptance server rejects url.search and returns HTTP 404 despite the app's query-based durable navigation. A real-server prechange regression reproduces this rejection. Corrected pathname-only manifest lookup passes query-route/asset and security-negative checks; no origin/profile/authentication guard changes.
+- **Executed evidence:** PR #317 run 39354543618 independently verifies 59 PASS / 2 FAIL / 47 BLOCKED. Public refresh/reconstruction failed on both browser projects; authenticated execution stopped at the tenant-session response wait after reload. Cleanup and provider-OFF state verified, local frontend stopped/removed and owned temporary main policy removed.
+- **Suspected defect requiring deeper validation:** the document rejection plausibly prevents authenticated bootstrap and its tenant-session request, but the retained diagnostic does not establish the historical document status. Do not claim all remaining cases fixed.
+- **Executed focused verification:** prechange query reload failed 404/200; corrected local build checks 8/8 and workflow contracts 8/8 passed. **Planned verification:** actual optimized-build Chromium query reload, existing candidate/release evidence, then separately approved real-backend execution.
+- **Scope/rollback:** repository-only narrow server correction; retain all 108 criteria, timeouts, real authority and byte proofs. No schema, backend deployment, Netlify, production or paid action. Revert correction or leave dispatch disabled; prior full-run allowance consumed.
+
 ## Local declaration environment carryover (2026-10-20)
 
 **Confirmed source defect:** PR #316 run `39300044725` passed local build but failed declaration-only validation because the build digest remained inherited. A real Playwright-listing regression reproduces the same error; clearing the step-local digest fixes both declaration contexts while preserving the parent runtime binding. Focused workflow/build checks passed 15/15. Actual build-sequence CI and release verification are pending. No business criteria or authorization guards are relaxed.
