@@ -19,6 +19,7 @@ import {
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
 import { loadEnterpriseLifecycleProductionModule } from './enterpriseLifecyclePostgresFixture.mjs';
 import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
+import { verifyAuthenticatedObservationQueryEquivalence } from './authenticatedObservationQueryProof.mjs';
 
 const { Client } = pg;
 const root = process.cwd();
@@ -347,6 +348,20 @@ try {
     exerciseDigest: config.exerciseDigest, scope: config.scope, identities,
   });
   const project = { ...setup, identities };
+  await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
+  if (process.env.AUTHENTICATED_OBSERVATION_BROWSER_PROOF === 'true') {
+    // Focused local-only comparison: current actor requests must not serialize
+    // retained document bodies owned by a different actor/project.
+    await db.query(`INSERT INTO document_generations(org_id,workspace_id,project_id,created_by,template_id,artifacts)
+      SELECT $1,$2,$3,$4,'brd',jsonb_build_object('synthetic',true,'text',repeat('x',12000000))
+      FROM generate_series(1,24)`, [ids.org, ids.workspace, retainedIds.project, bootstrapFixture.requester]);
+    await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
+      [Object.values(ids.sessions), Object.values(ids.actors)]);
+    const { runObserverBrowserProof } = await import('./authenticatedObservationBrowserProof.mjs');
+    const proof = await runObserverBrowserProof({ db: adapterDb, config, adapter, project, ids });
+    writeFileSync(path.join(privateDirectory, 'observer-browser-proof.json'), JSON.stringify(proof, null, 2));
+    console.log(JSON.stringify(proof));
+  } else {
   const rejectionProject = { ...await adapter.setupProject({
     projectName: 'desktop-chromium-rejection', exerciseId: ids.exercise,
     exerciseDigest: config.exerciseDigest, scope: config.scope, identities,
@@ -963,6 +978,7 @@ try {
   zeroEffectsBefore);
 
   console.log('authenticated hosted controller PostgreSQL: DB clock, setup, session binding, production mutation, denied-action correlation, CAS restore and cleanup passed');
+  }
 } finally {
   if (db) await db.end().catch(() => {});
   let cleaned = !created;

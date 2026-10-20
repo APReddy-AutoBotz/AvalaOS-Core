@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Actor-transition observer cost (2026-10-20)
+
+**Confirmed source defect:** repeated whole-row JSON conversion in the 33-source observer's ownership filters incurs payload cost even for excluded retained documents. A current-schema disposable PostgreSQL/Chromium/controller comparison reproduces PR #318's `EMPTY_AFTER_DEADLINE` without injected latency: 24.35 seconds before and 0.23 seconds after native-column filtering. Fresh session checks, both complete actions, all independent frames, zero outstanding work and the 15-second deadline remain unchanged.
+
+**Residual uncertainty:** the historical run has no phase timings or measured row volume, so this sufficient local mechanism does not establish its exclusive cause. Full acceptance remains 61 PASS / 47 BLOCKED with verified cleanup. Map drift is guarded by all-33-source migration-schema and row-set equivalence checks. No authority fields, sources or acceptance criteria are added or removed. A separate two-statement snapshot-consistency concern identified during review is outside this performance correction and must not be represented as fixed.
+
+After local proof, AP authorized required checks and verified merge, then one full local-frontend/real-synthetic-backend run with bounded preflight, existing bindings, owned temporary main access and cleanup. The exact-run human reviewer remains required. No Netlify, backend deployment/migration, production or paid calls. See the active completion plan for focused checks and rollback.
+
 ## Local query-route reload evidence (2026-10-20)
 
 - **Confirmed source defect:** the local acceptance server rejects url.search and returns HTTP 404 despite the app's query-based durable navigation. A real-server prechange regression reproduces this rejection. Corrected pathname-only manifest lookup passes query-route/asset and security-negative checks; no origin/profile/authentication guard changes.
