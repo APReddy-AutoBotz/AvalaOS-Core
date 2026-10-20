@@ -128,12 +128,18 @@ Object.values(AUTHENTICATED_OBSERVATION_FILTER_COLUMNS).forEach(Object.freeze);
 const sourceQuery = source => {
   const columns = AUTHENTICATED_OBSERVATION_FILTER_COLUMNS[source.table];
   if (!columns) fail('SOURCE_FILTER_REJECTED');
-  const field = name => columns.includes(name) ? `x.${name}::text` : 'NULL::text';
+  // Compare UUID columns directly so their existing indexes remain usable.
+  // Keep parameters as text and retain the original text predicate: UUID casts
+  // normalize case, whereas the prior selector intentionally did not.
+  const field = name => columns.includes(name) ? `x.${name}` : 'NULL::uuid';
+  const equal = (name, parameter) =>
+    `(${field(name)}=${parameter}::text::uuid AND ${field(name)}::text=${parameter})`;
   const actor = source.actorFields.length
-    ? `(${source.actorFields.map(name => `${field(name)}=ANY($3::text[])`).join(' OR ')})`
+    ? `(${source.actorFields.map(name =>
+      `(${field(name)}=ANY($3::text[]::uuid[]) AND ${field(name)}::text=ANY($3::text[]))`).join(' OR ')})`
     : 'false';
-  const ancestry = `(${field('project_id')}=$4 OR ${field('process_id')}=$5
-    OR ${field('source_process_id')}=$5)`;
+  const ancestry = `(${equal('project_id', '$4')} OR ${equal('process_id', '$5')}
+    OR ${equal('source_process_id', '$5')})`;
   const indirect = source.table === 'studio_renditions'
     ? ` OR EXISTS(SELECT 1 FROM public.studio_rendition_attempts linked
         WHERE linked.id=x.attempt_id AND linked.requested_by=ANY($3::uuid[]))`
@@ -141,8 +147,8 @@ const sourceQuery = source => {
       ? ` OR EXISTS(SELECT 1 FROM public.delivery_work_items linked
           WHERE linked.id=x.task_id AND linked.project_id=$4::uuid)` : '';
   return `SELECT '${source.table}'::text source,to_jsonb(x) value FROM public.${source.table} x
-    WHERE x.org_id::text=$1
-      AND ${columns.includes('workspace_id') ? 'x.workspace_id::text=$2' : 'true'}
+    WHERE x.org_id=$1::text::uuid AND x.org_id::text=$1
+      AND ${columns.includes('workspace_id') ? equal('workspace_id', '$2') : 'true'}
       AND (${actor} OR ${ancestry}${indirect})`;
 };
 

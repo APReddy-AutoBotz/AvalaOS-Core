@@ -51,18 +51,25 @@ export async function verifyAuthenticatedObservationQueryEquivalence({ db, confi
   assert.equal((selectedSql.match(/to_jsonb\(x\)/gu) ?? []).length, sources.length);
   const normalize = rows => rows.map(row => JSON.stringify(row)).sort();
   let comparisons = 0;
+  const caseSensitiveFields = [];
+  const uppercaseScopes = parameters.map((parameter, index) => {
+    const upper = Array.isArray(parameter) ? parameter.map(value => value.toUpperCase()) : parameter.toUpperCase();
+    if (JSON.stringify(upper) !== JSON.stringify(parameter)) caseSensitiveFields.push(index);
+    return parameters.map((value, position) => position === index ? upper : value);
+  });
   for (const values of [
     parameters,
     [parameters[0], null, ...parameters.slice(2)],
     ['00000000-0000-4000-8000-000000000000', ...parameters.slice(1)],
     [parameters[0], '00000000-0000-4000-8000-000000000000', ...parameters.slice(2)],
+    ...uppercaseScopes,
   ]) {
     const before = await db.query(legacyAuthenticatedObservationQuery, values);
     const after = await db.query(selectedSql, values);
     assert.deepEqual(normalize(after.rows), normalize(before.rows));
     comparisons++;
   }
-  return { sources: sources.length, schemaMatched: true, equivalentScopes: comparisons };
+  return { sources: sources.length, schemaMatched: true, equivalentScopes: comparisons, caseSensitiveFields };
 }
 
 export async function verifyAuthenticatedObservationSnapshot({ connectionString, db, config, project, exerciseId }) {
