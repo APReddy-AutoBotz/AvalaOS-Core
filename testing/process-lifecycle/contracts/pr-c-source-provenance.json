@@ -750,7 +750,7 @@
     "tests/acceptance/pr255ControlledHumanTestingCharter.test.mjs": "sha256:3c10fef84b5fa53756b9db7456e86666b2e35b60ef7c600240e4d86128f18d6f",
     "tests/acceptance/proof-owner-registry.json": "sha256:e394010a3f2570dd4ce18dbd4ef035c1fcb2faea9c88d2f5ef6bca969145e510",
     "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:c092f2859a2a09687dc20408ddc6cccc60f401854b3ed77b9594443920f45fdb",
-    "tests/acceptance/source-provenance.json": "sha256:a2e5bddfcff5120baf7901d4b687ca4a15e4671f4715b5deb71c79d6f7f82d9a",
+    "tests/acceptance/source-provenance.json": "sha256:0c0765a49b4e020239fae651ee31c7864c939e56e8323a61c65606adf9b9c136",
     "tests/acceptance/validators/inventory-provenance.test.mjs": "sha256:426cd5d58e43ee3a9711b4592277837d0a6032d2c157148f52d48d2962cbd8b0",
     "tests/acceptance/validators/validate-traceability.mjs": "sha256:00957d930b6d381a91b60e15ff5db769781a544e1cd115b9a1427abc0d564d08",
     "tests/browser/assessImport.spec.ts": "sha256:bd0a87efc6654f80f6dbbec375c6171fb8211dc11681b4345ae179475cbfec48",
