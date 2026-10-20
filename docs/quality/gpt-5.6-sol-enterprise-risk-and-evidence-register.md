@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Actor-transition transport and snapshot correction (2026-10-20)
+
+**Confirmed source defects:** PR #319 retained five serial PostgreSQL round trips per business action and a two-statement observation snapshot gap. One statement now materializes the STABLE authority function and selects the same 33 product sources, retaining all authorization and evidence invariants while reducing trips to three per action.
+
+**Executed evidence:** controlled loopback PostgreSQL wire latency plus real Chromium/controller reproduces `EMPTY_AFTER_DEADLINE` at 21.778 seconds for 33 requests at 100 ms RTT; the correction passes at 13.955 seconds under the unchanged 15-second limit. Both retain 33 fresh identity/session checks, 66 frames and zero outstanding work. All 33 source schemas/four ownership scopes are equivalent. A two-connection lock barrier proves a commit after the snapshot cannot enter that frame and a prior commit can. Session revocation is rejected before any observation. Five bounded phase aggregates add diagnostics without tokens, identifiers, routes, payloads or raw errors.
+
+**Residual risk:** higher real latency/fanout can still exceed a fixed budget. The historical hosted timing/fanout is unknown; the local sufficient mechanism is not exclusive-cause or full-acceptance proof. PR #319's full result remains 61 PASS / 47 BLOCKED with cleanup verified and providers OFF. Current authorization covers local investigation/correction only; no new full run, Netlify, backend deployment/migration, production or paid action. Roll back the coherent source change while retaining failure evidence if focused checks fail. The earlier snapshot concern below is addressed by this correction's executed local barrier proof.
+
 ## Actor-transition observer cost (2026-10-20)
 
 **Confirmed source defect:** repeated whole-row JSON conversion in the 33-source observer's ownership filters incurs payload cost even for excluded retained documents. A current-schema disposable PostgreSQL/Chromium/controller comparison reproduces PR #318's `EMPTY_AFTER_DEADLINE` without injected latency: 24.35 seconds before and 0.23 seconds after native-column filtering. Fresh session checks, both complete actions, all independent frames, zero outstanding work and the 15-second deadline remain unchanged.

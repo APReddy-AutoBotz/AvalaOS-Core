@@ -6,6 +6,7 @@ import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.m
 import {
   AUTHENTICATED_HOSTED_OBSERVATION_SOURCES,
   AUTHENTICATED_OBSERVATION_FILTER_COLUMNS,
+  AUTHENTICATED_HOSTED_CAPTURE_QUERY,
   authenticatedHostedRequestBinding,
   createAuthenticatedHostedObservationReader,
 } from './authenticatedHostedObservationAdapter.mjs';
@@ -45,10 +46,6 @@ const authorityFrame = () => ({
 const tableFromSql = sql => /FROM public[.]([a-z0-9_]+) x/u.exec(sql)?.[1] ?? null;
 const fakeDb = ({ digestOnly = false } = {}) => ({
   async query(sql, parameters) {
-    if (sql === 'SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value') {
-      assert.deepEqual(parameters, [ids.exercise, from]);
-      return { rows: [{ value: authorityFrame() }] };
-    }
     const table = tableFromSql(sql);
     assert.ok(table && AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.some(source => source.table === table));
     if (sql.includes("'sha256:'||encode")) {
@@ -64,8 +61,11 @@ const fakeDb = ({ digestOnly = false } = {}) => ({
     assert.deepEqual(parameters[2], Object.values(identities).map(value => value.id));
     assert.equal(parameters[3], ids.project);
     assert.equal(parameters[4], ids.process);
+    assert.deepEqual(parameters.slice(5), [ids.exercise, from]);
+    assert.equal(sql, AUTHENTICATED_HOSTED_CAPTURE_QUERY);
     assert.match(sql, /UNION ALL/u);
     return { rows: [
+      { source: '__authority__', value: authorityFrame() },
       { source: 'assess_processes', value: {
         id: ids.process, org_id: ids.org, workspace_id: ids.workspace, updated_by: ids.author,
         status: 'Ready for Review', created_at: '2026-10-09T05:10:30.000Z',
@@ -160,12 +160,10 @@ test('V1 assessment receipt correlation anchors create, upsert and finalize thro
   for (const commandType of ['assessment.create','assessment.response.upsert','assessment.finalize']) {
     const assessmentId=randomUUID();const requestId=randomUUID();const receiptId=randomUUID();
     const db={async query(sql,parameters){
-      if(sql==='SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value'){
-        assert.deepEqual(parameters,[ids.exercise,from]);
-        return {rows:[{value:authorityFrame()}]};
-      }
+      assert.deepEqual(parameters.slice(5),[ids.exercise,from]);
       assert.match(sql,/UNION ALL/u);
       return {rows:[
+        {source:'__authority__',value:authorityFrame()},
         {source:'assessments',value:{id:assessmentId,process_id:ids.process,org_id:ids.org,
           workspace_id:ids.workspace,updated_by:ids.author,status:commandType==='assessment.finalize'
             ?'Ready for Review':'Draft',created_at:to,updated_at:to}},
@@ -201,6 +199,27 @@ test('reader rejects a persisted row with no legitimate event or modification ti
     config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } } });
   await assert.rejects(reader.capture({ exerciseId: ids.exercise, from, project }),
     /SOURCE_TIME_REJECTED:assess_processes/u);
+});
+
+test('one statement requires exactly one authority row, including empty source results', async () => {
+  let calls = 0;
+  const authority = { source: '__authority__', value: authorityFrame() };
+  const config = { scope: { organizationId: ids.org, workspaceId: ids.workspace } };
+  const capture = rows => createAuthenticatedHostedObservationReader({ config, db: { async query(sql) {
+    calls++;
+    assert.equal(sql, AUTHENTICATED_HOSTED_CAPTURE_QUERY);
+    assert.match(sql, /WITH authority AS MATERIALIZED/u);
+    assert.equal((sql.match(/authenticated_synthetic_observe/gu) ?? []).length, 1);
+    return { rows };
+  } } }).capture({ exerciseId: ids.exercise, from, project });
+  const frame = await capture([authority]);
+  assert.equal(calls, 1);
+  assert.equal(frame.capturedAt, capturedAt);
+  assert.equal(frame.records.length, 4);
+  for (const rows of [[], [authority, authority], [{ source: '__authority__', value: null }]]) {
+    await assert.rejects(capture(rows), /AUTHORITY_FRAME_REJECTED/u);
+  }
+  await assert.rejects(capture([authority, { source: 'untrusted', value: {} }]), /SOURCE_SUBSTITUTION_REJECTED/u);
 });
 
 test('receipt attribution uses the exact inclusive database-owned capture interval', async () => {

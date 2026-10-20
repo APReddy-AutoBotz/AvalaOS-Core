@@ -61,12 +61,15 @@ export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
   drainNetworkActions,
   activeActionCount,
   waitForNextObservation = () => new Promise<void>(resolve => setTimeout(resolve, 50)),
+  runPhase = (_phase, operation) => operation(),
 }: Readonly<{
   settleActionAdmissions: () => Promise<void>;
   settleResponseBodies: () => Promise<void>;
   drainNetworkActions: () => Promise<void>;
   activeActionCount: () => number;
   waitForNextObservation?: () => Promise<void>;
+  runPhase?: (phase: 'admissions-first' | 'bodies-first' | 'drain' | 'admissions-last' | 'bodies-last',
+    operation: () => Promise<void>) => Promise<void>;
 }>) => {
   const deadline = Date.now() + 15_000;
   let stableEmptyObservations = 0;
@@ -82,11 +85,11 @@ export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
     }
   };
   for (;;) {
-    await retainFailure(settleActionAdmissions);
-    await retainFailure(settleResponseBodies);
-    await retainFailure(drainNetworkActions);
-    await retainFailure(settleActionAdmissions);
-    await retainFailure(settleResponseBodies);
+    await retainFailure(() => runPhase('admissions-first', settleActionAdmissions));
+    await retainFailure(() => runPhase('bodies-first', settleResponseBodies));
+    await retainFailure(() => runPhase('drain', drainNetworkActions));
+    await retainFailure(() => runPhase('admissions-last', settleActionAdmissions));
+    await retainFailure(() => runPhase('bodies-last', settleResponseBodies));
     const activeActions = activeActionCount();
     const expired = Date.now() >= deadline;
     if (activeActions === 0) {

@@ -21,6 +21,48 @@ const titles = new Map([
 ]);
 const fixture = title => ({ title, expectedStatus: 'passed', parent: { project: () => ({ name: 'desktop-chromium' }) } });
 
+test('actor timing keeps only bounded fixed phases from the failed boundary, preserving the failure', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-phase-reporter-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(() => {
+    if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior;
+  });
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = path.join(root, 'diagnostic.json');
+  const reporter = new AuthenticatedHostedPlaywrightReporter(), current = fixture([...titles.keys()][0]);
+  const primary = { message: 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE' };
+  reporter.onTestBegin(current);
+  reporter.onStepBegin(current, {}, { title: 'hosted:actor-boundary' });
+  reporter.onStepEnd(current, {}, { title: 'hosted:actor-phase:drain', duration: 999 });
+  reporter.onStepEnd(current, {}, { title: 'hosted:actor-boundary', error: { message: 'caught-earlier' } });
+  reporter.onStepBegin(current, {}, { title: 'hosted:actor-boundary' });
+  for (const [phase, duration] of [['admissions-first', 30.2], ['drain', 15000], ['drain', 10],
+    ['secret-canary', 1], ['bodies-first', Infinity]]) {
+    reporter.onStepEnd(current, {}, { title: `hosted:actor-phase:${phase}`, duration });
+  }
+  reporter.onStepEnd(current, {}, { title: 'hosted:actor-boundary', error: primary });
+  // A cleanup boundary must not overwrite the timing of the original failure.
+  reporter.onStepBegin(current, {}, { title: 'hosted:actor-boundary' });
+  reporter.onTestEnd(current, { status: 'failed', error: primary });
+  await reporter.onEnd({ status: 'failed' });
+  const value = JSON.parse(await readFile(process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH, 'utf8'));
+  assert.equal(value.code, 'EMPTY_AFTER_DEADLINE');
+  assert.deepEqual(value.phaseTimings, [
+    { phase: 'admissions-first', count: 1, totalMs: 30, maxMs: 30 },
+    { phase: 'drain', count: 2, totalMs: 15010, maxMs: 15000 },
+  ]);
+  for (const bad of [
+    [{ phase: 'secret-canary', count: 1, totalMs: 1, maxMs: 1 }],
+    [{ ...value.phaseTimings[0], token: 'secret-canary' }],
+    [{ ...value.phaseTimings[0], totalMs: -1 }],
+    [{ ...value.phaseTimings[0], maxMs: 600001 }],
+    [{ ...value.phaseTimings[0], count: 10001 }],
+    [value.phaseTimings[0], value.phaseTimings[0]],
+  ]) assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...value, phaseTimings: bad }), null);
+  assert.equal(JSON.stringify(value).includes('secret-canary'), false);
+});
+
 test('actor transition attribution uses only the canonical failure and fixed entry stage', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-actor-reporter-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -530,6 +572,39 @@ test('a real Playwright failure crosses the reporter boundary as a closed descri
   assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value),value);
   assert.equal(value.phase,'NETWORK_TRACKER');assert.equal(value.code,'ACTION_START_REJECTED');
   assert.equal(JSON.stringify(value).includes('bounded failure'),false);
+});
+
+test('real Playwright serializes actor phase timings with its primary timeout', async t => {
+  const root = await mkdtemp(path.join(process.cwd(), 'authenticated-phase-integration-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const destination = path.join(root, 'diagnostic.json'), config = path.join(root, 'playwright.config.mjs');
+  await writeFile(path.join(root, 'phase.spec.mjs'), `import { test } from '@playwright/test';
+test('local phase transport', async () => {
+  await test.step('hosted:actor-boundary', async () => {
+    await test.step('hosted:actor-phase:admissions-first', async () => {});
+    await test.step('hosted:actor-phase:drain', async () => {
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    throw new Error('AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE');
+  });
+});
+`);
+  await writeFile(config, `export default { testDir: ${JSON.stringify(root.replaceAll('\\', '/'))},
+    projects: [{ name: 'desktop-chromium' }],
+    reporter: [[${JSON.stringify(path.resolve('scripts/authenticatedHostedPlaywrightReporter.mjs'))}]] };`);
+  let exitCode = 0;
+  try {
+    await execFileAsync(process.execPath, [path.resolve('node_modules/@playwright/test/cli.js'), 'test', '--config', config], {
+      cwd: process.cwd(), env: { ...process.env, AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH: destination },
+      maxBuffer: 2_000_000, timeout: 30_000,
+    });
+  } catch (error) { exitCode = error?.code; }
+  assert.equal(exitCode, 1);
+  const value = JSON.parse(await readFile(destination, 'utf8'));
+  assert.equal(value.code, 'EMPTY_AFTER_DEADLINE');
+  assert.deepEqual(value.phaseTimings.map(item => item.phase), ['admissions-first', 'drain']);
+  assert.ok(value.phaseTimings.find(item => item.phase === 'drain').totalMs >= 20);
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value), value);
 });
 
 for (const [stepTitle, expectedOperation] of [
