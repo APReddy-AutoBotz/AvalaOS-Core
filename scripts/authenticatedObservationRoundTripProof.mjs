@@ -44,7 +44,10 @@ async function latencyProxy(connectionString, roundTripMs) {
   } };
 }
 
-export async function runObservationRoundTripProof({ connectionString, config, adapter, project, ids, expectedStatements }) {
+export async function runObservationRoundTripProof({ connectionString, config, adapter, project, ids, expectedStatements,
+  captureQuery = AUTHENTICATED_HOSTED_CAPTURE_QUERY, scenarios = [[33, 0], [1, 100], [33, 100]],
+  expectedTimeout = (requests, roundTripMs) => expectedStatements === 5 && requests === 33 && roundTripMs === 100,
+}) {
   assert.ok([3, 5].includes(expectedStatements));
   const results = [], phase = new AsyncLocalStorage();
   let browser;
@@ -52,7 +55,7 @@ export async function runObservationRoundTripProof({ connectionString, config, a
     browser = await chromium.launch({ headless: true });
     // 33 is an explicit fanout stress case, not a claim about the failed hosted
     // request count. 100 ms is a controlled RTT, not a measured hosted latency.
-    for (const [requests, roundTripMs] of [[33, 0], [1, 100], [33, 100]]) {
+    for (const [requests, roundTripMs] of scenarios) {
       const proxy = await latencyProxy(connectionString, roundTripMs);
       const client = new pg.Client({ connectionString: proxy.url });
       let clientFailure;
@@ -85,7 +88,7 @@ export async function runObservationRoundTripProof({ connectionString, config, a
           const sources = await execute(AUTHENTICATED_HOSTED_SOURCE_QUERY, values.slice(0, 5));
           return { rows: [{ source: '__authority__', value: authority.rows[0].value }, ...sources.rows] };
         }
-        return execute(sql, values);
+        return execute(sql === AUTHENTICATED_HOSTED_CAPTURE_QUERY ? captureQuery : sql, values);
       } };
       const server = createHttpServer(async (req, res) => {
         res.setHeader('access-control-allow-origin', '*');
@@ -176,12 +179,12 @@ export async function runObservationRoundTripProof({ connectionString, config, a
           assert.ok(Date.parse(action.after.capturedAt) > Date.parse(action.before.capturedAt));
           assert.deepEqual(recordHashes(action.before), recordHashes(action.after));
         }
-        const shouldTimeout = expectedStatements === 5 && requests === 33 && roundTripMs === 100;
+        const shouldTimeout = expectedTimeout(requests, roundTripMs);
         assert.equal(failure, shouldTimeout ? 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE' : null);
         results.push({ requests, roundTripMs, maximumPending, elapsedMs, queries, verifiedSessions, authRequests,
           completeActions: actions.length, frames: actions.length * 2, outstanding: pending + active.size,
           recordsPerFrame: actions[0].before.records.length, failure, metrics: structuredClone(metrics) });
-        if (requests === 1) {
+        if (requests === 1 || scenarios.length === 1) {
           await client.query("UPDATE auth.sessions SET not_after=statement_timestamp()-interval '1 second' WHERE id=$1",
             [ids.sessions.author]);
           const priorQueries = queries, priorAuthRequests = authRequests;

@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Observation-drain index correction (2026-10-20)
+
+PR #320 is merged as `3ca4a63315c937b32654dbf9b8ae01d5291ed453`. Its completed full run retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, verified cleanup and providers OFF. The actor boundary took 17.199 seconds, including 11.293 seconds draining observations. Those timings do not identify the database's internal cause.
+
+**Confirmed source defect and executed local evidence:** casting indexed UUID columns to text forces unrelated retained history through sequential filtering. On a disposable migrated database containing 250,000 small synthetic history rows, the old query scans all 250,000 rows (621.978 ms); the corrected query uses existing indexes (3.808 ms), without changing selected rows. Native UUID guards retain the original text predicates and text parameter types to preserve case-sensitive selection. Real Chromium/controller execution with the same 33 requests, 99 statements, 33 fresh identity/session checks and 66 frames reproduces `EMPTY_AFTER_DEADLINE` at **54.145 seconds before / 4.089 seconds after**; drainage is **23.230 / 1.663 seconds**. No network latency was injected and the deadline remains 15 seconds.
+
+All 33 source schemas and nine row-set comparisons pass, including non-vacuous uppercase organization/workspace/actor/project/process inputs. Snapshot consistency and revoked-session rejection pass. This is local mechanism proof, **not proof of historical hosted row volume or full acceptance**. AP subsequently authorized required CI and verified merge, then exactly one full synthetic run without Netlify. Follow the active completion plan for read-only preflight, existing release bindings, owned temporary main access, the user's exact-run GitHub reviewer click and cleanup. No backend deployment/migration, production or paid call. Acceptance criteria and the 61/47 hosted result remain unchanged until independently verified execution.
+
 ## Actor-transition database round trips (2026-10-20)
 
 PR #319 merged as `02b732b4eff5fbe1e298ded1067f0bc311b15337`. Its completed full run `39405864553` still independently retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, with verified cleanup, providers OFF and no Netlify use. The failure remains `ACTOR_TRANSITION / EMPTY_AFTER_DEADLINE`. The earlier payload-filter correction was real but did not complete acceptance.

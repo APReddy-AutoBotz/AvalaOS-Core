@@ -100,6 +100,16 @@ const ids = {
   request: '82000000-0000-4000-8000-000000000042',
 };
 const digest = character => `sha256:${character.repeat(64)}`;
+if (process.env.AUTHENTICATED_OBSERVATION_DRAIN_PROOF === 'true') {
+  // Alphabetic UUIDs make the mixed-case equivalence checks non-vacuous.
+  const alphabetic = object => {
+    for (const [key, value] of Object.entries(object)) {
+      if (typeof value === 'string') object[key] = value.replace('82000000', '82abcdef');
+      else alphabetic(value);
+    }
+  };
+  alphabetic(ids);
+}
 const identities = Object.fromEntries(AUTHENTICATED_HOSTED_PERSONAS.map(persona => [persona, {
   id: ids.actors[persona],
   email: `hosted.controller.${persona}@example.invalid`,
@@ -351,7 +361,18 @@ try {
   const observationEquivalence = await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
   const observationSnapshot = await verifyAuthenticatedObservationSnapshot({
     connectionString: urlFor(database), db, config, project, exerciseId: ids.exercise });
-  if (process.env.AUTHENTICATED_OBSERVATION_ROUNDTRIP_PROOF === 'true') {
+  if (process.env.AUTHENTICATED_OBSERVATION_DRAIN_PROOF === 'true') {
+    assert.deepEqual(observationEquivalence.caseSensitiveFields, [0, 1, 2, 3, 4]);
+    await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
+      [Object.values(ids.sessions), Object.values(ids.actors)]);
+    const { runObservationDrainProof } = await import('./authenticatedObservationDrainProof.mjs');
+    const proof = await runObservationDrainProof({ db, connectionString: urlFor(database), config, adapter, project, ids,
+      retainedIds, retainedActor: bootstrapFixture.requester });
+    proof.equivalence = observationEquivalence;
+    proof.snapshot = observationSnapshot;
+    writeFileSync(path.join(privateDirectory, 'observer-drain-index-proof.json'), JSON.stringify(proof, null, 2));
+    console.log(JSON.stringify(proof));
+  } else if (process.env.AUTHENTICATED_OBSERVATION_ROUNDTRIP_PROOF === 'true') {
     await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
       [Object.values(ids.sessions), Object.values(ids.actors)]);
     const { runObservationRoundTripProof } = await import('./authenticatedObservationRoundTripProof.mjs');

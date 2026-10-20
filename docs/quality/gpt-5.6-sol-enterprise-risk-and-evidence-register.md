@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Observation-drain UUID index predicates (2026-10-20)
+
+**Confirmed source defect:** text casts on UUID filter columns prevent ordinary UUID index conditions. In the executed local comparison, 250,000 unrelated synthetic rows are sequentially examined before correction and skipped through existing indexes afterward. The same real Chromium/controller sequence reproduces `EMPTY_AFTER_DEADLINE` at 54.145 seconds and passes at 4.089 seconds after correction, including drain reduction from 23.230 to 1.663 seconds. Both arms preserve 33 actions, 66 frames, 99 SQL statements, fresh session checks and zero outstanding work.
+
+**Controls/residual risk:** native UUID predicates are additional guards; original text predicates and text parameter types remain to avoid broadening mixed-case UUID selection. All 33 schema maps, nine row-set scopes, snapshot barrier and revoked-session rejection pass. Retain serial completion, before/after frames, first failure and the unchanged 15-second deadline. The controlled history volume/fanout is not measured hosted state, so historical causation remains unproven; no full acceptance result is promoted. Rollback reverts the adapter/proof change together, leaves acceptance blocked and preserves prior evidence. No schema/index creation, hosted action, Netlify or paid calls are authorized by this local correction.
+
 ## Actor-transition transport and snapshot correction (2026-10-20)
 
 **Confirmed source defects:** PR #319 retained five serial PostgreSQL round trips per business action and a two-statement observation snapshot gap. One statement now materializes the STABLE authority function and selects the same 33 product sources, retaining all authorization and evidence invariants while reducing trips to three per action.
