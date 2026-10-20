@@ -384,6 +384,25 @@ async function cli() {
     const built = await buildLocalAcceptanceFrontend(fixtureEnvironment);
     let running;
     try {
+      // Exercise the protected declaration step after a real build has exported its identity.
+      const { parseWorkflowYaml } = await import('./checkWorkflowYaml.mjs');
+      const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+      const declaration = workflow.jobs['hosted-authenticated'].steps
+        .find(step => step.name === 'Validate deterministic public hosted declarations');
+      if (declaration?.run !== 'npx playwright test --config=playwright.exhaustive-acceptance.config.ts --list --reporter=list') {
+        fail('DECLARATION_COMMAND_CHANGED');
+      }
+      const declarationEnvironment = Object.fromEntries(Object.entries(declaration.env).map(([key, value]) =>
+        [key, String(value).replace('${{ inputs.release_sha }}', process.env.RELEASE_SHA)]));
+      await runChild(process.execPath, ['node_modules/playwright/cli.js', 'test',
+        '--config=playwright.exhaustive-acceptance.config.ts', '--list', '--reporter=list'], {
+        cwd: process.cwd(), env: { ...fixtureEnvironment,
+          ACCEPTANCE_EXECUTION_KIND: LOCAL_ACCEPTANCE_EXECUTION_KIND,
+          AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: LOCAL_AUTHENTICATED_EXECUTION_KIND,
+          HOSTED_PILOT_URL: LOCAL_ACCEPTANCE_ORIGIN, NETLIFY_DEPLOY_ID: '',
+          AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: built.manifest.buildDigest,
+          ...declarationEnvironment },
+      });
       running = await startLocalAcceptanceServer({ workspace: built.workspace, releaseSha: process.env.RELEASE_SHA,
         buildDigest: built.manifest.buildDigest });
       await verifyLocalAcceptanceServer({ workspace: built.workspace, releaseSha: process.env.RELEASE_SHA,

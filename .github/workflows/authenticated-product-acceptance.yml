@@ -362,6 +362,7 @@ jobs:
       - name: Validate deterministic public hosted declarations
         env:
           ACCEPTANCE_EXECUTION_KIND: declaration_only
+          AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: ''
           HOSTED_PILOT_URL: ""
           NETLIFY_DEPLOY_ID: ""
           EXPECTED_RELEASE_SHA: ${{ env.RELEASE_SHA }}
@@ -575,6 +576,7 @@ jobs:
       - name: Validate deterministic public hosted declarations
         env:
           ACCEPTANCE_EXECUTION_KIND: declaration_only
+          AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: ''
           HOSTED_PILOT_URL: ''
           NETLIFY_DEPLOY_ID: ''
           EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}

@@ -40,6 +40,29 @@ test('real declaration listing needs no protected hosted caller identity', () =>
   assert.match(result.stdout, /Total: 36 tests in 1 file/u);
 });
 
+test('actual declaration command isolates the preceding local build without erasing runtime identity', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const release = 'a'.repeat(40);
+  const inherited = { ...process.env, RELEASE_SHA: release,
+    ACCEPTANCE_EXECUTION_KIND: 'local_real_backend', HOSTED_PILOT_URL: 'http://127.0.0.1:4173',
+    NETLIFY_DEPLOY_ID: '', AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: digest('6'),
+    AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'local_real_backend_authenticated',
+    LOCAL_ACCEPTANCE_BASE_URL: '', ACCEPTANCE_CHECKOUT_SHA: '', ACCEPTANCE_INVOCATION_ID: '',
+  };
+  for (const jobName of ['hosted-authenticated', 'preactivation-checkout']) {
+    const step = workflow.jobs[jobName].steps.find(item => item.name === 'Validate deterministic public hosted declarations');
+    const overrides = Object.fromEntries(Object.entries(step.env).map(([key, value]) => [key,
+      String(value).replace('${{ inputs.release_sha }}', release).replace('${{ env.RELEASE_SHA }}', release)]));
+    const result = spawnSync(process.execPath, [
+      'node_modules/playwright/cli.js', 'test', '--config=playwright.exhaustive-acceptance.config.ts', '--list', '--reporter=list',
+    ], { encoding: 'utf8', windowsHide: true, env: { ...inherited, ...overrides } });
+    assert.equal(result.status, 0, `${jobName}: ${result.stderr}`);
+    assert.match(result.stdout, /Total: 36 tests in 1 file/u);
+    assert.equal(inherited.AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST, digest('6'));
+    assert.equal(inherited.ACCEPTANCE_EXECUTION_KIND, 'local_real_backend');
+  }
+});
+
 test('ordinary Linux CI replays the actual local preactivation commands without hosted authority', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   const replay = workflow.jobs['preactivation-checkout'];

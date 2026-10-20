@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Local declaration-step correction (2026-10-20)
+
+PR #316 merged as `85c5fca0c4d63562036af8245654aaf5077a3d78` with identical-tree candidate and release verification. Approved local-real-backend run `39300044725`, attempt 1, stopped before browser execution: the declaration-only step inherited the preceding build digest and rejected it. Independent reconstruction verifies **43 PASS / 0 FAIL / 65 BLOCKED / 0 UNCOVERED**; no browser/build-serving proof or product journey ran. Read-only cleanup verified no exercise or identities created, zero active access/permits/residue/secret cleanup, providers OFF and owned temporary main access removed. Netlify was not used.
+
+AP requested “Fix it and continue.” Continue the same functional path with the narrow workflow environment correction and an actual post-build declaration check, then verified merge/release and one corrected protected attempt with the user's reviewer click. No new migration, backend deployment, business-criterion change, Netlify, production or paid action is included. This confirmed preparation defect does not establish the cause of historical hosted journey failures.
+
 ## Local frontend with real synthetic backend (2026-10-19)
 
 AP approved removing Netlify from functional acceptance: serve a verifiable local build, use the existing synthetic Supabase backend with real authentication and server operations, preserve all 108 business requirements, and independently verify cleanup. PR #315 is merged as `e0d419c849cdb8b9ca5fc1bbac4c85c65ce05d8f`; its 52 candidate checks, three release workflows and independent browser/EI/native/scoped evidence passed. Its subsequent read-only backend preflight passed, but Netlify skipped the pilot build because account credit usage was exceeded. No PR #315 acceptance run was dispatched; that allowance is unused and is superseded by the approved local execution path.
