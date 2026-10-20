@@ -85,12 +85,55 @@ const projectActors = project => {
   return values;
 };
 
+// Match the migrated schema, including absent optional ownership fields. Reading
+// an ownership UUID must not deserialize the entire (potentially 12 MB) row.
+// Text comparison intentionally retains the old JSON ->> comparison semantics.
+export const AUTHENTICATED_OBSERVATION_FILTER_COLUMNS = Object.freeze({
+  assess_processes: ['workspace_id', 'updated_by', 'created_by', 'owner_id'],
+  assessments: ['workspace_id', 'updated_by', 'created_by', 'process_id'],
+  assess_v2_cases: ['workspace_id', 'process_id'],
+  assess_v2_case_versions: ['workspace_id', 'created_by'],
+  assess_v2_decision_versions: ['workspace_id', 'created_by'],
+  assess_v2_review_assignments: ['workspace_id', 'assigned_by', 'reviewer_id'],
+  assess_v2_evidence_attestations: ['workspace_id', 'reviewer_id'],
+  assess_v2_review_resolutions: ['workspace_id', 'reviewer_id'],
+  assess_v2_govern_resolutions: ['workspace_id'],
+  assess_v2_studio_handoffs: ['workspace_id'],
+  studio_artifact_source_packages: ['workspace_id', 'created_by'],
+  studio_artifact_aggregates: ['workspace_id', 'created_by'],
+  studio_artifact_versions: ['workspace_id'],
+  studio_artifact_generation_attempts: ['workspace_id', 'requested_by'],
+  document_generations: ['workspace_id', 'created_by', 'project_id', 'source_process_id'],
+  delivery_work_items: ['workspace_id', 'updated_by', 'created_by', 'owner_id', 'project_id', 'source_process_id'],
+  legacy_delivery_imports: ['workspace_id', 'imported_by', 'project_id', 'source_process_id'],
+  legacy_delivery_outcome_versions: ['workspace_id', 'recorded_by', 'project_id'],
+  legacy_delivery_pack_snapshots: ['workspace_id', 'created_by', 'project_id'],
+  studio_delivery_publications: ['workspace_id', 'published_by', 'project_id', 'source_process_id'],
+  legacy_delivery_outcome_aggregates: ['workspace_id', 'project_id'],
+  ai_provider_configs: ['updated_by', 'created_by'],
+  ai_provider_key_refs: ['updated_by', 'created_by'],
+  ai_provider_audit_events: ['workspace_id', 'actor_id'],
+  enterprise_ai_budget_reservations: ['workspace_id', 'actor_id'],
+  studio_renditions: ['workspace_id'],
+  studio_rendition_attempts: ['workspace_id', 'requested_by'],
+  assess_command_receipts: ['workspace_id', 'actor_id'],
+  studio_artifact_command_receipts: ['workspace_id', 'actor_id'],
+  legacy_delivery_command_receipts: ['workspace_id', 'actor_id'],
+  studio_delivery_command_receipts: ['workspace_id', 'actor_id'],
+  enterprise_ai_command_receipts: ['workspace_id', 'actor_id'],
+  privileged_audit_events: ['workspace_id', 'actor_id'],
+});
+Object.values(AUTHENTICATED_OBSERVATION_FILTER_COLUMNS).forEach(Object.freeze);
+
 const sourceQuery = source => {
+  const columns = AUTHENTICATED_OBSERVATION_FILTER_COLUMNS[source.table];
+  if (!columns) fail('SOURCE_FILTER_REJECTED');
+  const field = name => columns.includes(name) ? `x.${name}::text` : 'NULL::text';
   const actor = source.actorFields.length
-    ? `(${source.actorFields.map(field => `to_jsonb(x)->>'${field}'=ANY($3::text[])`).join(' OR ')})`
+    ? `(${source.actorFields.map(name => `${field(name)}=ANY($3::text[])`).join(' OR ')})`
     : 'false';
-  const ancestry = `(to_jsonb(x)->>'project_id'=$4 OR to_jsonb(x)->>'process_id'=$5
-    OR to_jsonb(x)->>'source_process_id'=$5)`;
+  const ancestry = `(${field('project_id')}=$4 OR ${field('process_id')}=$5
+    OR ${field('source_process_id')}=$5)`;
   const indirect = source.table === 'studio_renditions'
     ? ` OR EXISTS(SELECT 1 FROM public.studio_rendition_attempts linked
         WHERE linked.id=x.attempt_id AND linked.requested_by=ANY($3::uuid[]))`
@@ -98,8 +141,8 @@ const sourceQuery = source => {
       ? ` OR EXISTS(SELECT 1 FROM public.delivery_work_items linked
           WHERE linked.id=x.task_id AND linked.project_id=$4::uuid)` : '';
   return `SELECT '${source.table}'::text source,to_jsonb(x) value FROM public.${source.table} x
-    WHERE to_jsonb(x)->>'org_id'=$1
-      AND (NOT(to_jsonb(x)?'workspace_id') OR to_jsonb(x)->>'workspace_id'=$2)
+    WHERE x.org_id::text=$1
+      AND ${columns.includes('workspace_id') ? 'x.workspace_id::text=$2' : 'true'}
       AND (${actor} OR ${ancestry}${indirect})`;
 };
 

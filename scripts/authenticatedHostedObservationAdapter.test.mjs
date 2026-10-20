@@ -5,6 +5,7 @@ import test from 'node:test';
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
 import {
   AUTHENTICATED_HOSTED_OBSERVATION_SOURCES,
+  AUTHENTICATED_OBSERVATION_FILTER_COLUMNS,
   authenticatedHostedRequestBinding,
   createAuthenticatedHostedObservationReader,
 } from './authenticatedHostedObservationAdapter.mjs';
@@ -100,6 +101,26 @@ test('request binding separates raw browser payload from command identity', () =
   assert.notEqual(binding.browserPayloadHash, binding.commandBindingHash);
   assert.throws(() => authenticatedHostedRequestBinding({ requestId: 'POST /read', actorHash,
     commandType: 'post:/read', requireUuid: true }), /COMMAND_BINDING_REJECTED/u);
+});
+
+test('observation ownership filters never deserialize excluded payloads and retain all sources', async () => {
+  let query;
+  const base = fakeDb();
+  const reader = createAuthenticatedHostedObservationReader({
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } },
+    db: { query: async (sql, parameters) => {
+      if (sql.includes('UNION ALL')) query = sql;
+      return base.query(sql, parameters);
+    } },
+  });
+  await reader.capture({ exerciseId: ids.exercise, from, project });
+  assert.equal((query.match(/to_jsonb\(x\)/gu) ?? []).length, 33,
+    'serialize matched rows once; do not inspect payloads to filter ownership');
+  assert.deepEqual(Object.keys(AUTHENTICATED_OBSERVATION_FILTER_COLUMNS).sort(),
+    AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.map(source => source.table).sort());
+  assert.match(query, /linked\.id=x\.attempt_id AND linked\.requested_by=ANY\(\$3::uuid\[\]\)/u);
+  assert.match(query, /linked\.id=x\.task_id AND linked\.project_id=\$4::uuid/u);
+  assert.doesNotMatch(query, /WHERE to_jsonb|to_jsonb\(x\)->>/u);
 });
 
 test('reader captures its upper bound from the database and joins receipt, audit and permit causality', async () => {

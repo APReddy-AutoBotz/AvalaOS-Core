@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Actor-transition observation cost (2026-10-20)
+
+PR #318's completed local-real-backend run `39372856385` independently retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, with verified cleanup and no Netlify use. All 36 public/Sandbox executions passed. The authenticated journey stopped at `ACTOR_TRANSITION / EMPTY_AFTER_DEADLINE`; the retained diagnostic does not identify its slow operation.
+
+AP authorized finding and correcting the cause locally before requesting another full run. A disposable PostgreSQL instance using the current migrations, real Chromium, production request tracker/controller and unchanged actor boundary reproduces that exact error without injected latency: two requests over retained synthetic document history settle in 24.35 seconds. The source query repeatedly serializes whole rows just to inspect ownership fields. Native column filters reduce the same comparison to 0.23 seconds, retaining fresh session checks, both requests, all before/after frames and zero outstanding work.
+
+This is a **confirmed source defect** and **executed local evidence** of a sufficient timeout mechanism, not proof of the historical backend's row volume or exclusive cause. Preserve all 108 criteria, 15-second actor budget, per-action frames and source coverage. Follow `docs/planning/hosted-acceptance-completion.md` for schema/equivalence verification and rollback. AP subsequently authorized required checks and verified merge, followed by one full synthetic run with the local frontend and existing real synthetic backend. Preserve the exact-run human reviewer click, bounded preflight/bindings/temporary main access and cleanup. No Netlify, backend deployment, migration, production or paid action.
+
 ## Local query-route reload correction (2026-10-20)
 
 PR #317 merged as dffca9cfdcaf27863449919fc89a00b8dc896716 with verified candidate/release evidence. Its local-real-backend run 39354543618 independently reconstructs **59 PASS / 2 FAIL / 47 BLOCKED / 0 UNCOVERED**. Both public reload requirements failed on Desktop and Pixel; the authenticated primary journey stopped at the post-reload tenant-session response wait. Cleanup verified quiescence, four revoked identities, zero active access/permits/residue/secret cleanup, providers OFF, owned local frontend cleanup and temporary main removal. Netlify was not used.
