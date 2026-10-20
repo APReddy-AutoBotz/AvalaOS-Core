@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Local declaration environment carryover (2026-10-20)
+
+**Confirmed source defect:** PR #316 run `39300044725` passed local build but failed declaration-only validation because the build digest remained inherited. A real Playwright-listing regression reproduces the same error; clearing the step-local digest fixes both declaration contexts while preserving the parent runtime binding. Focused workflow/build checks passed 15/15. Actual build-sequence CI and release verification are pending. No business criteria or authorization guards are relaxed.
+
+**Executed evidence:** the failed run independently reconstructs 43 PASS / 65 BLOCKED across 108 requirements; all browser journeys were not run. No exercise or identities were created. Read-only cleanup verified zero active access/permits/residue/secret cleanup and providers OFF; temporary main access was removed. No Netlify use. AP authorized the focused correction and continuation; one corrected protected run retains the human reviewer. No new migration, backend deployment, production or paid action. Historical hosted failure causation remains unproven.
+
 ## Netlify-free functional acceptance boundary (2026-10-19)
 
 - **Executed evidence:** PR #315 `e0d419c8` passed all 52 candidate checks, three release workflows and independent browser/EI/native/scoped verification. Its approved preflight verified 16 deployed source closures (216 entries), 106 migration sources, native secret boundary and providers OFF. Netlify skipped the pilot build for account credit usage exceeded; no acceptance attempt or temporary main policy was created. Historical hosted totals remain 61 PASS / 47 BLOCKED.
