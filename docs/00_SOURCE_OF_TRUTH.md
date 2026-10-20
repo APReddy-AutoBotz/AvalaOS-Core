@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Local query-route reload correction (2026-10-20)
+
+PR #317 merged as dffca9cfdcaf27863449919fc89a00b8dc896716 with verified candidate/release evidence. Its local-real-backend run 39354543618 independently reconstructs **59 PASS / 2 FAIL / 47 BLOCKED / 0 UNCOVERED**. Both public reload requirements failed on Desktop and Pixel; the authenticated primary journey stopped at the post-reload tenant-session response wait. Cleanup verified quiescence, four revoked identities, zero active access/permits/residue/secret cleanup, providers OFF, owned local frontend cleanup and temporary main removal. Netlify was not used.
+
+AP authorized proceeding with the next repository correction. The local server rejects every query string even though the app persists routes in query parameters. A real-server regression reproduces HTTP 404 before correction; ignore only the query for manifest-file selection and retain all authority/byte checks. Preserve all 108 criteria and timeout budgets. The authenticated failure is consistent with this defect but its historical causation is not proven by the retained diagnostic. The consumed run is not authority for another hosted attempt; no deployment, migration, production or paid action is included.
+
 ## Local declaration-step correction (2026-10-20)
 
 PR #316 merged as `85c5fca0c4d63562036af8245654aaf5077a3d78` with identical-tree candidate and release verification. Approved local-real-backend run `39300044725`, attempt 1, stopped before browser execution: the declaration-only step inherited the preceding build digest and rejected it. Independent reconstruction verifies **43 PASS / 0 FAIL / 65 BLOCKED / 0 UNCOVERED**; no browser/build-serving proof or product journey ran. Read-only cleanup verified no exercise or identities created, zero active access/permits/residue/secret cleanup, providers OFF and owned temporary main access removed. Netlify was not used.

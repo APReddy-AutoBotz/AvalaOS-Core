@@ -1,5 +1,19 @@
 # Hosted authenticated acceptance completion
 
+## Query-route reload correction after PR #317 (2026-10-20)
+
+Objective: serve the application's existing durable query routes correctly from the exact local build. Baseline is merged dffca9cfdcaf27863449919fc89a00b8dc896716. Run 39354543618 verified 59 PASS / 2 FAIL / 47 BLOCKED, with complete cleanup and no Netlify use. SANDBOX-005 and SAFETY-004 share query-route reload reconstruction; authenticated execution failed at the tenant-session response wait following a process-detail reload. Do not claim the diagnostic proves that request's status or historical causation.
+
+All three read-only architecture/security/quality reviewers completed before root began writes on codex/local-acceptance-query-reload under the fixed workspace-write profile. Root owns this two-file correction plus canonical evidence/provenance and the single implementation PR. No nested delegation, reviewer/write overlap, unrelated cleanup or stash mutation.
+
+Remove only request url.search rejection; select manifest bytes solely from pathname. Keep exact host/origin/port, GET/HEAD, hash rejection, manifest membership, regular-file/symlink, size/digest and no-store/nosniff checks. Configured origin/profile validation, browser network allowlists, real session authority and backend behavior remain unchanged. Queries are client navigation data, never filesystem selectors or server authorization. No schema or deployment change.
+
+Focused acceptance: demonstrate the query-route HTTP 404 before correction; then verify exact index/asset bytes for query-bearing requests, HEAD semantics, wrong-host/POST/malformed-path/modified-byte rejection. Extend the existing optimized-build Chromium smoke with History API query navigation, a real reload, HTTP 200, exact response URL and manifest-bound index bytes. Retain real declaration checks and existing candidate/release CI. No unrelated regression campaign. Actual full authenticated acceptance remains pending separate authorization after verified merge.
+
+Executed: the new real-server regression failed before the fix (404 versus 200); corrected local build checks passed 8/8 and workflow contracts passed 8/8. The initial wrong-host test used fetch, which did not transmit its Host override; using Node HTTP sends the exact malformed-host request and verifies rejection. Actual optimized-build browser verification remains required in CI.
+
+Rollback: disable local dispatch or revert the server/smoke/test correction coherently; preserve failed artifacts and the existing inert migration. No Netlify, backend deployment, migration, production or paid calls. Stop at verified repository boundary and prepare any next real-backend run for explicit approval.
+
 ## Declaration environment correction after PR #316 (2026-10-20)
 
 **Confirmed source defect:** run `39300044725` on merged `85c5fca0` built the local frontend, then failed `Validate deterministic public hosted declarations` with `ACCEPTANCE_DECLARATION_RUNTIME_BINDING_REJECTED`. The step inherited `AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST`; the strict declaration-only decoder correctly rejects runtime identity. Independent reconstruction verifies 43 PASS / 65 BLOCKED, with no browser journeys, exercise or identities created. Cleanup and removal of owned temporary main access passed. Retain this failed evidence and the distinction from the older 61 PASS / 47 BLOCKED hosted evidence.
