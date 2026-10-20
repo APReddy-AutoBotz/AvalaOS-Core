@@ -19,7 +19,7 @@ import {
 import { createEnterpriseIntelligenceFixture } from './enterpriseIntelligencePostgresFixture.mjs';
 import { loadEnterpriseLifecycleProductionModule } from './enterpriseLifecyclePostgresFixture.mjs';
 import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTerminalJournalMigrationTestGuard.mjs';
-import { verifyAuthenticatedObservationQueryEquivalence } from './authenticatedObservationQueryProof.mjs';
+import { verifyAuthenticatedObservationQueryEquivalence, verifyAuthenticatedObservationSnapshot } from './authenticatedObservationQueryProof.mjs';
 
 const { Client } = pg;
 const root = process.cwd();
@@ -348,8 +348,21 @@ try {
     exerciseDigest: config.exerciseDigest, scope: config.scope, identities,
   });
   const project = { ...setup, identities };
-  await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
-  if (process.env.AUTHENTICATED_OBSERVATION_BROWSER_PROOF === 'true') {
+  const observationEquivalence = await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
+  const observationSnapshot = await verifyAuthenticatedObservationSnapshot({
+    connectionString: urlFor(database), db, config, project, exerciseId: ids.exercise });
+  if (process.env.AUTHENTICATED_OBSERVATION_ROUNDTRIP_PROOF === 'true') {
+    await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
+      [Object.values(ids.sessions), Object.values(ids.actors)]);
+    const { runObservationRoundTripProof } = await import('./authenticatedObservationRoundTripProof.mjs');
+    const proof = await runObservationRoundTripProof({ connectionString: urlFor(database), config, adapter, project, ids,
+      expectedStatements: Number(process.env.OBSERVATION_PROOF_STATEMENTS ?? '3') });
+    proof.equivalence = observationEquivalence;
+    proof.snapshot = observationSnapshot;
+    writeFileSync(path.join(privateDirectory, `observer-roundtrip-${process.env.OBSERVATION_PROOF_STATEMENTS ?? '3'}-proof.json`),
+      JSON.stringify(proof, null, 2));
+    console.log(JSON.stringify(proof));
+  } else if (process.env.AUTHENTICATED_OBSERVATION_BROWSER_PROOF === 'true') {
     // Focused local-only comparison: current actor requests must not serialize
     // retained document bodies owned by a different actor/project.
     await db.query(`INSERT INTO document_generations(org_id,workspace_id,project_id,created_by,template_id,artifacts)

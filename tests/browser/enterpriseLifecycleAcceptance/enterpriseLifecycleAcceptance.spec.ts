@@ -531,12 +531,13 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     // Actor entry intentionally disposes two documents. Join body ownership
     // and only the network action queue at each boundary; case work and normal
     // V2 reloads retain their existing independent lifecycle.
-    await settleActorNavigationBoundary({
+    await test.step('hosted:actor-boundary', () => settleActorNavigationBoundary({
       settleActionAdmissions: activeNetworkLifecycle.settleActionAdmissions,
       settleResponseBodies: activeNetworkLifecycle.settleResponseBodies,
       drainNetworkActions: activeTestWorkQueues.network.drain,
       activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,
-    });
+      runPhase: (phase, operation) => test.step(`hosted:actor-phase:${phase}`, operation),
+    }));
   };
   const closePageAfterOwnedNetwork = (ownedPage: Page) => authenticatedHostedClosePageAfterOwnedNetwork({
     settleOwnedNetwork: settleActorTransitionEvidence,

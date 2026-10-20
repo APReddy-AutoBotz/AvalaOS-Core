@@ -165,6 +165,20 @@ const exactKeys = (value, expected) => record(value)
   && Object.keys(value).length === expected.length
   && expected.every(key => Object.hasOwn(value, key));
 
+const ACTOR_PHASES = new Set(['admissions-first', 'bodies-first', 'drain', 'admissions-last', 'bodies-last']);
+export function validateAuthenticatedActorPhaseTimings(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > ACTOR_PHASES.size) return null;
+  const seen = new Set();
+  for (const item of value) {
+    if (!exactKeys(item, ['phase', 'count', 'totalMs', 'maxMs']) || !ACTOR_PHASES.has(item.phase)
+      || seen.has(item.phase) || !Number.isSafeInteger(item.count) || item.count < 1 || item.count > 10000
+      || ![item.totalMs, item.maxMs].every(ms => Number.isSafeInteger(ms) && ms >= 0 && ms <= 600000)
+      || item.maxMs > item.totalMs) return null;
+    seen.add(item.phase);
+  }
+  return Object.freeze(value.map(item => Object.freeze({ ...item })));
+}
+
 export function validateAuthenticatedHostedIdentityDiagnostic(value) {
   if (!record(value) || !exactKeys(value, value.upstreamCode === undefined
     ? ['operation', 'category'] : ['operation', 'category', 'upstreamCode'])
@@ -187,18 +201,21 @@ export function validateAuthenticatedHostedPlaywrightDiagnostic(value) {
   const keys = ['schemaVersion', 'project', 'testCategory', 'category',
     ...(value?.operation === undefined ? [] : ['operation']),
     ...(hasPhase ? ['phase', 'code'] : []),
+    ...(value?.phaseTimings === undefined ? [] : ['phaseTimings']),
     ...(value?.location === undefined ? [] : ['location'])];
   if (!exactKeys(value, keys)
     || value.schemaVersion !== AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA
     || !PLAYWRIGHT_PROJECTS.has(value.project) || !PLAYWRIGHT_TEST_CATEGORIES.has(value.testCategory)
     || !PLAYWRIGHT_CATEGORIES.has(value.category)
     || (value.operation !== undefined && !PLAYWRIGHT_OPERATIONS.has(value.operation))
-    || (hasPhase && !PLAYWRIGHT_FAILURE_PAIRS.has(`${value.phase}:${value.code}`))) return null;
+    || (hasPhase && !PLAYWRIGHT_FAILURE_PAIRS.has(`${value.phase}:${value.code}`))
+    || (value.phaseTimings !== undefined && !validateAuthenticatedActorPhaseTimings(value.phaseTimings))) return null;
   const location = value.location === undefined ? null : validateAuthenticatedHostedPlaywrightFailureLocation(value.location);
   return Object.freeze({ schemaVersion: value.schemaVersion, project: value.project,
     testCategory: value.testCategory, category: value.category,
     ...(value.operation === undefined ? {} : { operation: value.operation }),
     ...(hasPhase ? { phase: value.phase, code: value.code } : {}),
+    ...(value.phaseTimings === undefined ? {} : { phaseTimings: validateAuthenticatedActorPhaseTimings(value.phaseTimings) }),
     ...(location ? { location } : {}) });
 }
 

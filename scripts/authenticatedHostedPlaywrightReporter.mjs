@@ -3,6 +3,7 @@ import { rename, writeFile } from 'node:fs/promises';
 import { AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA,
   authenticatedHostedPlaywrightFailureDescriptor,
   validateAuthenticatedHostedPlaywrightDiagnostic,
+  validateAuthenticatedActorPhaseTimings,
   validateAuthenticatedHostedPlaywrightFailureLocation } from './authenticatedHostedDiagnostics.mjs';
 
 const TEST_CATEGORIES = new Map([
@@ -73,6 +74,8 @@ export default class AuthenticatedHostedPlaywrightReporter {
     this.currentOperations = [];
     this.failedOperations = [];
     this.timedOutOperation = null;
+    this.actorPhaseTimings = new Map();
+    this.failedActorBoundaries = [];
   }
 
   onTestBegin(test) {
@@ -82,11 +85,14 @@ export default class AuthenticatedHostedPlaywrightReporter {
       this.currentOperations = [];
       this.failedOperations = [];
       this.timedOutOperation = null;
+      this.actorPhaseTimings = new Map();
+      this.failedActorBoundaries = [];
     }
   }
 
   onStepBegin(_test, _result, step) {
     if (this.failure) return;
+    if (step?.title === 'hosted:actor-boundary') this.actorPhaseTimings = new Map();
     const operation = OPERATION_TITLES.get(step?.title);
     if (!operation) return;
     this.currentOperations.push({ step, operation, location: boundedLocation(step.location) });
@@ -94,6 +100,18 @@ export default class AuthenticatedHostedPlaywrightReporter {
 
   onStepEnd(test, result, step) {
     if (this.failure) return;
+    const phase = typeof step?.title === 'string' ? step.title.slice('hosted:actor-phase:'.length) : '';
+    const ms = Math.round(step?.duration);
+    if (step?.title?.startsWith('hosted:actor-phase:')
+      && validateAuthenticatedActorPhaseTimings([{ phase, count: 1, totalMs: ms, maxMs: ms }])) {
+      const prior = this.actorPhaseTimings?.get(phase) ?? { phase, count: 0, totalMs: 0, maxMs: 0 };
+      this.actorPhaseTimings?.set(phase, { phase, count: prior.count + 1,
+        totalMs: prior.totalMs + ms, maxMs: Math.max(prior.maxMs, ms) });
+    }
+    if (step?.title === 'hosted:actor-boundary' && step.error) {
+      this.failedActorBoundaries.push({ error: step.error,
+        phaseTimings: validateAuthenticatedActorPhaseTimings([...this.actorPhaseTimings.values()]) });
+    }
     const index = this.currentOperations.findLastIndex(item => item.step === step);
     if (index >= 0) {
       const [completed] = this.currentOperations.splice(index, 1);
@@ -113,6 +131,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       const primary = result.error ?? result.errors?.[0] ?? null;
       const primaryHook = this.currentHookFailures?.find(item => sameFailure(item.error, primary));
       this.failureDescriptor = authenticatedHostedPlaywrightFailureDescriptor(primary);
+      this.failurePhaseTimings = correlatedFailedOperation(this.failedActorBoundaries, primary)?.phaseTimings;
       this.failureLocation = primary?.location ? boundedLocation(primary.location) : null;
       if ((this.failureDescriptor?.phase === 'CONTROL_CHANNEL'
         && this.failureDescriptor.code === 'CONTROL_REQUEST_TIMEOUT')
@@ -152,6 +171,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       category: this.failure?.category ?? category,
       ...(this.failureOperation ? { operation: this.failureOperation } : {}),
       ...(this.failureDescriptor ?? {}),
+      ...(this.failurePhaseTimings ? { phaseTimings: this.failurePhaseTimings } : {}),
       ...(this.failureLocation ? { location: this.failureLocation } : {}),
     });
     if (!value) return;

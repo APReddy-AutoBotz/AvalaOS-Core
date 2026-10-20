@@ -146,6 +146,17 @@ const sourceQuery = source => {
       AND (${actor} OR ${ancestry}${indirect})`;
 };
 
+export const AUTHENTICATED_HOSTED_SOURCE_QUERY =
+  AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.map(sourceQuery).join('\nUNION ALL\n');
+// STABLE authority and product rows share one PostgreSQL statement snapshot.
+// Keep one tagged authority row even when no product rows match; do not repeat
+// its JSON per product row or aggregate potentially large source payloads.
+export const AUTHENTICATED_HOSTED_CAPTURE_QUERY = `WITH authority AS MATERIALIZED (
+  SELECT public.authenticated_synthetic_observe($6,$7,statement_timestamp()) value
+) SELECT '__authority__'::text source,value FROM authority
+UNION ALL
+${AUTHENTICATED_HOSTED_SOURCE_QUERY}`;
+
 const nonExerciseQuery = source => {
   const ordering = source.identityFields.map(field => `coalesce(to_jsonb(kept)->>'${field}','')`).join(',');
   const actorOwned = source.actorFields.length
@@ -290,19 +301,19 @@ export function createAuthenticatedHostedObservationReader({ db, config }) {
       if (!UUID.test(exerciseId ?? '') || !timestamp(from)
         || !UUID.test(project?.projectId ?? '') || !UUID.test(project?.processId ?? '')) fail('CAPTURE_REJECTED');
       const actors = projectActors(project);
-      const authorityFrame = (await db.query(
-        'SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value',
-        [exerciseId, from],
-      )).rows?.[0]?.value;
+      const result = await db.query(AUTHENTICATED_HOSTED_CAPTURE_QUERY,
+        [scope.organizationId, scope.workspaceId, actors, project.projectId, project.processId, exerciseId, from]);
+      const authorityRows = (result.rows ?? []).filter(row => row.source === '__authority__');
+      if (authorityRows.length !== 1) fail('AUTHORITY_FRAME_REJECTED');
+      const authorityFrame = authorityRows[0].value;
       const capturedAt = iso(authorityFrame?.capturedAt);
       if (!capturedAt || Date.parse(capturedAt) < Date.parse(from)
         || !Array.isArray(authorityFrame?.actorSessions)) fail('AUTHORITY_FRAME_REJECTED');
       const sessionByActor = new Map(authorityFrame.actorSessions.map(item => [item.actorHash, item.sessionHash]));
       const entries = [];
-      const result = await db.query(AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.map(sourceQuery).join('\nUNION ALL\n'),
-        [scope.organizationId, scope.workspaceId, actors, project.projectId, project.processId]);
       const sourceByTable = new Map(AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.map(source => [source.table, source]));
       for (const resultRow of result.rows ?? []) {
+        if (resultRow.source === '__authority__') continue;
         const source = sourceByTable.get(resultRow.source);
         if (!source) fail('SOURCE_SUBSTITUTION_REJECTED');
         const row = resultRow.value;

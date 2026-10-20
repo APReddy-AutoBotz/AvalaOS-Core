@@ -1,5 +1,15 @@
 # AvalaOS Core Source Of Truth
 
+## Actor-transition database round trips (2026-10-20)
+
+PR #319 merged as `02b732b4eff5fbe1e298ded1067f0bc311b15337`. Its completed full run `39405864553` still independently retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, with verified cleanup, providers OFF and no Netlify use. The failure remains `ACTOR_TRANSITION / EMPTY_AFTER_DEADLINE`. The earlier payload-filter correction was real but did not complete acceptance.
+
+AP authorized a focused phase-timing investigation and local proof before another full run. **Confirmed source defects:** each action makes five serial database round trips, and each observation reads control authority and product rows in separate statement snapshots. A single materialized authority CTE with the unchanged 33 source selectors reduces each action to three trips and makes each frame use one snapshot. Fresh GoTrue/session checks, distinct before/after frames, hashes, scope filters, queue ordering and the 15-second budget remain intact.
+
+**Executed local evidence:** Chromium, the production tracker/controller and migrated PostgreSQL over a loopback wire-latency proxy reproduce the exact timeout with a 33-request burst at controlled 100 ms RTT: **21.778 s / 165 statements before; 13.955 s / 99 statements after**. Both complete all 33 actions and 66 frames with zero outstanding work. Source equivalence covers all 33 schemas and four ownership scopes; a two-connection barrier proves late commits are excluded and earlier commits included; a revoked session fails before observation. Bounded actor-phase timings are retained separately from canonical evidence.
+
+The controlled fanout/latency is a sufficient local mechanism, **not proof of historical hosted causation** or full acceptance. The earlier run allowance is consumed. Current authority is local repository correction/proof only; no new full run, hosted inspection, Netlify, backend deployment/migration, production or paid action. Follow the active hosted-completion plan for remaining checks and rollback.
+
 ## Actor-transition observation cost (2026-10-20)
 
 PR #318's completed local-real-backend run `39372856385` independently retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, with verified cleanup and no Netlify use. All 36 public/Sandbox executions passed. The authenticated journey stopped at `ACTOR_TRANSITION / EMPTY_AFTER_DEADLINE`; the retained diagnostic does not identify its slow operation.

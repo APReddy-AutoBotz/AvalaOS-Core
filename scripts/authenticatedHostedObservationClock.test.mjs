@@ -25,10 +25,10 @@ const runClockCase = async ({ runnerStartedAt }) => {
   ];
   const captureParameters = [];
   const db = { async query(sql, parameters) {
-    if (sql === 'SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value') {
-      captureParameters.push(parameters);
+    if (sql.startsWith('WITH authority AS MATERIALIZED')) {
+      captureParameters.push(parameters.slice(5));
       const capturedAt = databaseFrames.shift();
-      return { rows: [{ value: {
+      return { rows: [{ source: '__authority__', value: {
         capturedAt,
         exercise: null,
         actorSessions: [{

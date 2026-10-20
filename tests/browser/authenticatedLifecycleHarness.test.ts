@@ -22,6 +22,22 @@ const actorEntryFixture = {
   user: { id: '10000000-0000-4000-8000-000000000001', email: 'actor@example.invalid' },
 };
 
+test('phase timing wrappers preserve join order, two empty samples and first failure', async () => {
+  const phases: string[] = [];
+  const expected = ['admissions-first', 'bodies-first', 'drain', 'admissions-last', 'bodies-last'];
+  const first = new Error('first owned failure');
+  let calls = 0;
+  await assert.rejects(authenticatedLifecycleSettleActorNavigationBoundary({
+    settleActionAdmissions: async () => { if (++calls === 1) throw first; },
+    settleResponseBodies: async () => undefined,
+    drainNetworkActions: async () => undefined,
+    activeActionCount: () => 0,
+    waitForNextObservation: async () => undefined,
+    runPhase: async (phase, operation) => { phases.push(phase); await operation(); },
+  }), error => error === first);
+  assert.deepEqual(phases, [...expected, ...expected]);
+});
+
 const actorEntryPage = (events: string[]) => ({
   goto: async (target: string) => { events.push(`goto:${target}`); },
   evaluate: async () => { events.push('session-write'); },

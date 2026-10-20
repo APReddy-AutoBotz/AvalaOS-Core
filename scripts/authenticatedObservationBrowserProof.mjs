@@ -22,6 +22,8 @@ const network=compile(readFileSync('tests/browser/authenticatedHostedNetwork.ts'
 const harness=readFileSync('tests/browser/authenticatedLifecycleHarness.ts','utf8');
 const queueFactory=compile(harness.slice(harness.indexOf('export const createAuthenticatedLifecycleWorkQueue'),
   harness.indexOf('const reportIdentityDiagnostic')),()=>assert.fail()).createAuthenticatedLifecycleWorkQueue;
+export const observationProofNetwork = network;
+export const observationProofQueueFactory = queueFactory;
 import { legacyAuthenticatedObservationQuery as baselineSql } from './authenticatedObservationQueryProof.mjs';
 export async function runObserverBrowserProof({db,config,adapter,project,ids}){
   const server=createServer((req,res)=>{
@@ -41,8 +43,15 @@ export async function runObserverBrowserProof({db,config,adapter,project,ids}){
       const active=new Set();
       const reader=createAuthenticatedHostedObservationReader({config,db:{query:async(sql,params)=>{
         const start=performance.now();
-        try{return await db.query(variant==='baseline'&&sql.includes('UNION ALL')?baselineSql:sql,params);}
-        finally{queryMs+=performance.now()-start;queryCount++;}
+        try{
+          if(variant==='baseline'&&sql.includes('UNION ALL')){
+            queryCount+=2;
+            const authority=await db.query('SELECT public.authenticated_synthetic_observe($1,$2,statement_timestamp()) value',params.slice(5));
+            const sources=await db.query(baselineSql,params.slice(0,5));
+            return {rows:[{source:'__authority__',value:authority.rows[0].value},...sources.rows]};
+          }
+          queryCount++;return await db.query(sql,params);
+        }finally{queryMs+=performance.now()-start;}
       }}});
       const controller=new AuthenticatedHostedController({config,adapter:{...adapter,observe:input=>reader.capture(input)},
         identity:{verifySession:async({actorId,sessionId})=>{
