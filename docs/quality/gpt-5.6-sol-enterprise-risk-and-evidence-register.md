@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## Residual observation timeout and evidence gap (2026-10-21)
+
+**Executed evidence:** merged PR #321 retains 61 PASS / 47 BLOCKED with verified cleanup, but admission 6271 ms plus drain 13416 ms exceeds the unchanged 15000 ms actor boundary. AP's separately approved read-only quiesced-backend diagnostic measured the complete capture at 3.482 ms planning / 1.543 ms execution / 30.64 ms client wall time, with JIT off. Reader wall time was 30.36 ms from the developer machine. Initial source-only client time was 469.74 ms; warm source execution was 0.864 ms. No application data changed; rollback and connection close completed.
+
+**Suspected defect requiring deeper validation:** runner-to-backend latency, serial backlog or other observation cost. The developer-machine probe cannot establish the completed runner's cause, and no actual action count survives in that run's artifacts. Do not claim another query optimization fixes it. Closed numeric timing counters now separate action, identity, observation and query wall time in failure evidence; no SQL, parameters, raw rows, tokens or errors are retained. Existing query serialization, fresh authorization, frame counts and deadline remain unchanged. Local timing/persistence tests are instrumentation proof only. Full synthetic acceptance remains blocked, and no further full run or Netlify action is authorized.
+
 ## Observation-drain UUID index predicates (2026-10-20)
 
 **Confirmed source defect:** text casts on UUID filter columns prevent ordinary UUID index conditions. In the executed local comparison, 250,000 unrelated synthetic rows are sequentially examined before correction and skipped through existing indexes afterward. The same real Chromium/controller sequence reproduces `EMPTY_AFTER_DEADLINE` at 54.145 seconds and passes at 4.089 seconds after correction, including drain reduction from 23.230 to 1.663 seconds. Both arms preserve 33 actions, 66 frames, 99 SQL statements, fresh session checks and zero outstanding work.

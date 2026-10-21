@@ -7,6 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { AUTHENTICATED_HOSTED_CAPTURE_QUERY } from './authenticatedHostedObservationAdapter.mjs';
 import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
   buildAuthenticatedHostedChildEnvironment, createAuthenticatedHostedDatabaseClientConfig,
   downloadAndVerifyAuthenticatedEdgeSources,
@@ -722,6 +723,57 @@ test('focused V2 diagnostic browser failure still writes a partial sanitized art
   assert.deepEqual(diagnostic.failure, { phase: 'BROWSER_EXECUTION', category: 'RUNNER_REJECTED' });
   assert.equal(diagnostic.cleanup.status, 'verified');
   assert.deepEqual(calls, ['activate', 'close', 'quiesce', 'revoke', 'cleanup']);
+});
+
+test('runner retains real controller action counters through failure and cleanup', async t => {
+  const environment = hostedEnvironment();
+  const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'observation-timing-runner-'));
+  t.after(() => rm(outputRoot, { recursive: true, force: true }));
+  const outputPaths = Object.fromEntries(['browser','server','binding','diagnostic'].map(key => [key,path.join(outputRoot, key+'.json')]));
+  let controller, captureCount = 0, queryCount = 0;
+  const calls = [];
+  const adapter = {
+    preflight: async () => validPreflight(environment), activate: async () => {},
+    quiesce: async () => calls.push('quiesce'), cleanup: async () => calls.push('cleanup'),
+    verifyCleanup: async () => ({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
+      activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true}),
+  };
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment, {
+    outputPaths, database: { query: async () => { queryCount++; return {rows:[]}; } },
+    verifyCheckout: async () => {},
+    createPostgresAdapter: ({db}) => ({...adapter, observe: async () => {
+      await db.query(AUTHENTICATED_HOSTED_CAPTURE_QUERY, ['private-param']);
+      return {capturedAt:new Date(Date.UTC(2026,0,1,0,0,++captureCount)).toISOString(),records:[]};
+    }}),
+    createIdentityAdapter: () => ({ revokeAll: async () => calls.push('revoke') }),
+    createBrowserWorkspace: () => mkdtemp(path.join(os.tmpdir(), 'authenticated-hosted-browser-')),
+    startServer: async value => {
+      controller = value;
+      return {baseUrl:'http://127.0.0.1:1234',controlToken:'token',close:async()=>calls.push('close')};
+    },
+    runPlaywright: async () => {
+      controller.projects.set('desktop-chromium', {lastBoundaryAt:'2026-01-01T00:00:00.000Z'});
+      controller.resolveBrowserActionBinding = async () => ({actorHash:'sha256:'+'a'.repeat(64),sessionHash:'sha256:'+'b'.repeat(64)});
+      const action = await controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:'private-token',
+        requestBody:{method:'GET'},route:'/functions/v1/tenant-session'});
+      await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:action.actionId,status:200,responseBody:{}});
+      throw new Error('private browser failure');
+    },
+  }), error => {
+    assert.match(error.message, /private browser failure/u);
+    assert.equal(error.authenticatedHostedDiagnosticWriteFailed, undefined,
+      error.authenticatedHostedDiagnosticWriteCategory);
+    return true;
+  });
+  const diagnostic = JSON.parse(await readFile(outputPaths.diagnostic,'utf8'));
+  assert.equal(queryCount, 2);
+  for (const key of ['admission','finish','beforeObservation','afterObservation','beforeCaptureQuery','afterCaptureQuery']) {
+    assert.equal(diagnostic.observationTimings[key].count, 1);
+    assert.equal(diagnostic.observationTimings[key].inFlight, 0);
+  }
+  assert.equal(diagnostic.cleanup.status, 'verified');
+  assert.ok(!JSON.stringify(diagnostic).includes('private'));
+  assert.deepEqual(calls, ['close','quiesce','revoke','cleanup']);
 });
 
 test('browser child wrapper preserves only validated nonzero diagnostics', async t => {
