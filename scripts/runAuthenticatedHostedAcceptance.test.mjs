@@ -7,6 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { AUTHENTICATED_HOSTED_SESSION_QUERY } from './authenticatedHostedControllerAdapters.mjs';
 import { AUTHENTICATED_HOSTED_CAPTURE_QUERY } from './authenticatedHostedObservationAdapter.mjs';
 import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
   buildAuthenticatedHostedChildEnvironment, createAuthenticatedHostedDatabaseClientConfig,
@@ -52,6 +53,83 @@ test('runtime settlement joins both owners and retains every settlement failure'
     return true;
   });
   assert.deepEqual(calls, ['server', 'controller']);
+});
+
+test('runner routes only exact observation reads to the bounded pool and preserves transaction affinity', async () => {
+  const environment = hostedEnvironment();
+  const mainQueries = []; const readQueries = []; const calls = [];
+  const database = { query: async (sql, values) => { mainQueries.push([sql, values]); return { rows: [] }; } };
+  const observationReadPool = {
+    start: async () => calls.push('pool-start'),
+    query: async (sql, values) => { readQueries.push([sql, values]); return { rows: [] }; },
+    end: async () => calls.push('pool-end'),
+  };
+  const adapter = {
+    activate: async () => { throw new Error('stop-after-routing-proof'); },
+    quiesce: async () => calls.push('quiesce'),
+    cleanup: async () => calls.push('cleanup'),
+    verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+      activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false,
+      immutableHistoryPreserved: true }),
+  };
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment, {
+    database,
+    verifyCheckout: async () => undefined,
+    createObservationReadPool: () => observationReadPool,
+    createPostgresAdapter: ({ db }) => ({ ...adapter, preflight: async () => {
+      await db.query('BEGIN');
+      await db.query(AUTHENTICATED_HOSTED_SESSION_QUERY, ['session', 'actor']);
+      await db.query(AUTHENTICATED_HOSTED_CAPTURE_QUERY, ['capture']);
+      await db.query('SELECT transaction-owned-state');
+      await db.query('COMMIT');
+      return validPreflight(environment);
+    } }),
+    createIdentityAdapter: () => ({ revokeAll: async () => calls.push('revoke') }),
+  }), /AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_ACTIVATION_UNCLASSIFIED/u);
+  assert.deepEqual(mainQueries.map(([sql]) => sql), ['BEGIN', 'SELECT transaction-owned-state', 'COMMIT']);
+  assert.deepEqual(readQueries.map(([sql]) => sql),
+    [AUTHENTICATED_HOSTED_SESSION_QUERY, AUTHENTICATED_HOSTED_CAPTURE_QUERY]);
+  assert.deepEqual(calls, ['pool-start', 'quiesce', 'revoke', 'cleanup', 'pool-end']);
+});
+
+test('runner closes the primary client and partial read pool when read-pool startup fails', async () => {
+  const environment = hostedEnvironment(); const calls = []; let adapterCreated = false;
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment, {
+    verifyCheckout: async () => undefined,
+    createDatabase: () => ({ connect: async () => calls.push('database-connect'),
+      end: async () => calls.push('database-end') }),
+    createObservationReadPool: () => ({
+      start: async () => { calls.push('pool-start'); throw new Error('read-pool-start-failed'); },
+      end: async () => calls.push('pool-end'),
+    }),
+    createPostgresAdapter: () => { adapterCreated = true; return {}; },
+  }), /read-pool-start-failed/u);
+  assert.equal(adapterCreated, false);
+  assert.deepEqual(calls, ['database-connect', 'pool-start', 'pool-end', 'database-end']);
+});
+
+test('read-pool close failure is retained after quiescence and primary cleanup continue', async () => {
+  const environment = hostedEnvironment(); const calls = [];
+  const adapter = {
+    preflight: async () => validPreflight(environment),
+    activate: async () => { throw new Error('activation-failed'); },
+    quiesce: async () => calls.push('quiesce'), cleanup: async () => calls.push('cleanup'),
+    verifyCleanup: async () => ({ activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+      activeSecretMaterial: 0, unapprovedActiveResidue: 0, nonExerciseChanged: false,
+      immutableHistoryPreserved: true }),
+  };
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment, {
+    database: {}, verifyCheckout: async () => undefined,
+    createObservationReadPool: () => ({ start: async () => calls.push('pool-start'),
+      query: async () => ({ rows: [] }), end: async () => { calls.push('pool-end'); throw new Error('pool-close-failed'); } }),
+    createPostgresAdapter: () => adapter,
+    createIdentityAdapter: () => ({ revokeAll: async () => calls.push('revoke') }),
+  }), error => {
+    assert.equal(error.message, 'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+    assert.match(String(error.errors?.at(-1)?.message), /pool-close-failed/u);
+    return true;
+  });
+  assert.deepEqual(calls, ['pool-start', 'quiesce', 'revoke', 'cleanup', 'pool-end']);
 });
 
 const hostedEnvironment = () => ({

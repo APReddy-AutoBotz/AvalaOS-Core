@@ -19,6 +19,9 @@ const iso = value => {
 const value = result => result.rows[0]?.value;
 const PROVIDER_NAMES=Object.freeze(['openai','azure_openai','anthropic','gemini','groq','openai_compatible']);
 
+export const AUTHENTICATED_HOSTED_SESSION_QUERY = `SELECT id,user_id,not_after,refreshed_at
+        FROM auth.sessions WHERE id=$1 AND user_id=$2 AND (not_after IS NULL OR not_after>statement_timestamp())`;
+
 export async function readAuthenticatedHostedCleanupControls(query, scope) {
   const legacyControl=await query('SELECT writes_enabled FROM public.legacy_delivery_workspace_controls WHERE org_id=$1 AND workspace_id=$2',scope);
   const studioControl=await query(`SELECT publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled FROM public.studio_delivery_workspace_controls
@@ -138,8 +141,7 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
       const user = await response.json().catch(() => ({}));
       if (!response.ok) throw identityError('VERIFY_SESSION', authenticatedHostedIdentityCategoryForStatus(response.status), user);
       if (user.id !== actorId) return null;
-      const session = (await db.query(`SELECT id,user_id,not_after,refreshed_at
-        FROM auth.sessions WHERE id=$1 AND user_id=$2 AND (not_after IS NULL OR not_after>statement_timestamp())`,
+      const session = (await db.query(AUTHENTICATED_HOSTED_SESSION_QUERY,
       [sessionId, actorId])).rows[0];
       return session ? { actorId: session.user_id, sessionId: session.id } : null;
     },

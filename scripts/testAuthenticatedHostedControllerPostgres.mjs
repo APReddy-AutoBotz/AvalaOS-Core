@@ -361,7 +361,16 @@ try {
   const observationEquivalence = await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
   const observationSnapshot = await verifyAuthenticatedObservationSnapshot({
     connectionString: urlFor(database), db, config, project, exerciseId: ids.exercise });
-  if (process.env.AUTHENTICATED_OBSERVATION_DRAIN_PROOF === 'true') {
+  if (process.env.AUTHENTICATED_OBSERVATION_QUEUE_PROOF === 'true') {
+    await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
+      [Object.values(ids.sessions), Object.values(ids.actors)]);
+    const { runObservationQueueProof } = await import('./authenticatedObservationQueueProof.mjs');
+    const proof = await runObservationQueueProof({db,connectionString:urlFor(database),config,adapter,project,ids,
+      mode:process.env.OBSERVATION_QUEUE_MODE ?? 'baseline'});
+    proof.equivalence=observationEquivalence;proof.snapshot=observationSnapshot;
+    writeFileSync(path.join(privateDirectory,`observation-queue-${proof.mode}-proof.json`),JSON.stringify(proof,null,2)+'\n');
+    console.log(JSON.stringify(proof));
+  } else if (process.env.AUTHENTICATED_OBSERVATION_DRAIN_PROOF === 'true') {
     assert.deepEqual(observationEquivalence.caseSensitiveFields, [0, 1, 2, 3, 4]);
     await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
       [Object.values(ids.sessions), Object.values(ids.actors)]);

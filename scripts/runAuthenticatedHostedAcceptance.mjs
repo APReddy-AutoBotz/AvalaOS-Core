@@ -18,15 +18,18 @@ import {
   validateAuthenticatedHostedControllerEnvironment,
 } from './authenticatedHostedController.mjs';
 import {
+  AUTHENTICATED_HOSTED_SESSION_QUERY,
   createAuthenticatedHostedIdentityAdapter,
   createAuthenticatedHostedPostgresAdapter,
 } from './authenticatedHostedControllerAdapters.mjs';
+import { AUTHENTICATED_HOSTED_CAPTURE_QUERY } from './authenticatedHostedObservationAdapter.mjs';
 import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
   validateAuthenticatedHostedPlaywrightDiagnostic, withAuthenticatedHostedDiagnostic } from './authenticatedHostedDiagnostics.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { authenticatedAcceptanceMode } from './authenticatedV2ReloadDiagnostic.mjs';
 import { createObservationTimings } from './authenticatedObservationTimings.mjs';
+import { createAuthenticatedObservationReadPool } from './authenticatedObservationReadPool.mjs';
 import { createControlledHumanPostgresClientConfig,
   validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
 import { LOCAL_AUTHENTICATED_EXECUTION_KIND, verifyLocalAcceptanceServer } from './localAcceptanceBuild.mjs';
@@ -661,10 +664,11 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
   const config = validateAuthenticatedHostedControllerEnvironment(environment);
   validateAuthenticatedDatabaseTarget(config);
   await (dependencies.verifyCheckout ?? verifyAuthenticatedHostedCheckout)(config);
+  const databaseClientConfig = createAuthenticatedHostedDatabaseClientConfig(config.databaseUrl);
   const ownsDatabase = !dependencies.database;
   const database = dependencies.database ?? await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', async () =>
     (dependencies.createDatabase ?? (clientConfig => new pg.Client(clientConfig)))(
-      createAuthenticatedHostedDatabaseClientConfig(config.databaseUrl)));
+      databaseClientConfig));
   if (ownsDatabase) {
     try {
       await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.connect());
@@ -676,8 +680,37 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       throw primaryError;
     }
   }
+  const usesObservationReadPool = (!dependencies.database && !dependencies.createDatabase)
+    || Boolean(dependencies.createObservationReadPool);
+  let observationReadPool = null;
+  if (usesObservationReadPool) {
+    try {
+      observationReadPool = (dependencies.createObservationReadPool ?? createAuthenticatedObservationReadPool)({
+        clientConfig: databaseClientConfig,
+      });
+      await observationReadPool.start();
+    } catch (primaryError) {
+      const cleanupErrors = [];
+      if (observationReadPool) {
+        try { await observationReadPool.end(); } catch (error) { cleanupErrors.push(error); }
+      }
+      if (ownsDatabase) {
+        try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
+        catch (error) { cleanupErrors.push(error); }
+      }
+      if (cleanupErrors.length) {
+        throw new AggregateError([primaryError, ...cleanupErrors], 'AUTHENTICATED_HOSTED_RUNNER_CLEANUP_INCOMPLETE');
+      }
+      throw primaryError;
+    }
+  }
   const observationTimings = createObservationTimings();
-  const observedDatabase = { query: (sql, values) => observationTimings.query(database, sql, values) };
+  const observedDatabase = { query: (sql, values) => observationTimings.query(
+    observationReadPool && [AUTHENTICATED_HOSTED_SESSION_QUERY, AUTHENTICATED_HOSTED_CAPTURE_QUERY].includes(sql)
+      ? observationReadPool : database,
+    sql,
+    values,
+  ) };
   diagnosticState.observationTimings = observationTimings;
   const rawAdapter = (dependencies.createPostgresAdapter ?? createAuthenticatedHostedPostgresAdapter)({
     config, db: observedDatabase,
@@ -774,6 +807,9 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
     }
     if (!finalized && runtimeSettled) {
       try { await controller.abortAndQuiesce(); } catch (error) { cleanupErrors.push(error); }
+    }
+    if (observationReadPool) {
+      try { await observationReadPool.end(); } catch (error) { cleanupErrors.push(error); }
     }
     if (ownsDatabase && runtimeSettled) {
       try { await withAuthenticatedHostedDiagnostic('DATABASE_CONNECT', () => database.end()); }
