@@ -34,8 +34,12 @@ const networkFixture = async (startAction, options = {}) => {
   let routeHandler;
   context.route = async (_pattern, callback) => { routeHandler = callback; };
   let tail = Promise.resolve();
-  const errors = []; const finishes = []; const dispatches = [];
+  const errors = []; const finishes = []; const preparations = []; const dispatches = [];
   const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin, startAction,
+    ...(options.prepareAction ? { prepareAction: async value => {
+      preparations.push(value);
+      return options.prepareAction(value);
+    } } : {}),
     finishAction: async value => { finishes.push(value); },
   });
   const lifecycle = await loadNetworkInstaller().installAuthenticatedHostedNetwork({ context, hosted: true,
@@ -58,7 +62,7 @@ const networkFixture = async (startAction, options = {}) => {
       if (snapshot === tail) return;
     }
   };
-  return { context, errors, finishes, dispatches, lifecycle, route: value => routeHandler(value), drain };
+  return { context, errors, finishes, preparations, dispatches, lifecycle, route: value => routeHandler(value), drain };
 };
 
 test('response body ownership fails closed and joins context cancellation before returning', async () => {
@@ -162,6 +166,36 @@ test('installed network acquires a business response body before serialized fini
   assert.deepEqual(network.errors, []);
   assert.deepEqual(network.finishes, [{ actionId: 'eager-action', status: 200,
     responseBody: { outcome: 'committed' } }]);
+});
+
+test('prepared network work starts only after the terminal body and commits with the exact ack', async () => {
+  let releasePreparation;
+  const preparationGate = new Promise(resolve => { releasePreparation = resolve; });
+  const preparationId = `sha256:${'a'.repeat(64)}`;
+  const responseDigest = `sha256:${'b'.repeat(64)}`;
+  const network = await networkFixture(async () => ({ actionId: 'prepared-action' }), {
+    prepareAction: async () => { await preparationGate; return { preparationId, responseDigest }; },
+  });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  let releaseBody;
+  const body = new Promise(resolve => { releaseBody = resolve; });
+  network.context.emit('request', request);
+  await new Promise(resolve => setImmediate(resolve));
+  network.context.emit('response', { request: () => request, status: () => 202, json: () => body });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(network.preparations.length, 0, 'preparation cannot start before body completion');
+  releaseBody({ outcome: 'accepted' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(network.preparations, [{ actionId: 'prepared-action', status: 202,
+    responseBody: { outcome: 'accepted' } }]);
+  assert.deepEqual(network.finishes, []);
+  releasePreparation();
+  await network.lifecycle.settleResponseBodies();
+  await network.drain();
+  assert.deepEqual(network.errors, []);
+  assert.deepEqual(network.finishes, [{ actionId: 'prepared-action', status: 202,
+    preparationMode: 'server-owned', preparationId, responseDigest }]);
 });
 
 test('actor boundary owns a tracker admission before action-start accounting begins', async () => {
@@ -461,6 +495,57 @@ test('the tracker creates and finishes actions only for authenticated business t
   assert.deepEqual(finishes, [{ actionId: 'action-1', responseBody: { error: { code: 'PERMISSION_DENIED' } }, status: 403 }]);
 });
 
+test('prepared tracker is idempotent per request and rejects missing, failed, or mismatched preparation', async () => {
+  const preparationId = `sha256:${'c'.repeat(64)}`;
+  const responseDigest = `sha256:${'d'.repeat(64)}`;
+  let prepares = 0; const finishes = [];
+  const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
+    startAction: async () => ({ actionId: 'prepared-action' }),
+    prepareAction: async () => { prepares++; return { preparationId, responseDigest }; },
+    finishAction: async input => finishes.push(input),
+  });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  await tracker.begin(request);
+  assert.deepEqual(await Promise.all([tracker.prepare(request, 200, { ok: true }),
+    tracker.prepare(request, 200, { ignored: true })]), [
+    { status: 200, preparationId, responseDigest }, { status: 200, preparationId, responseDigest },
+  ]);
+  assert.equal(prepares, 1);
+  assert.equal(await tracker.finish(request, 200, { changedAfterPreparation: true }), 'prepared-action');
+  assert.deepEqual(finishes, [{ actionId: 'prepared-action', status: 200,
+    preparationMode: 'server-owned', preparationId, responseDigest }],
+  'prepared finish uses the server-owned digest instead of a later caller body');
+
+  const mismatchRequest = { ...request };
+  const mismatch = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
+    startAction: async () => ({ actionId: 'mismatch-action' }),
+    prepareAction: async () => ({ preparationId, responseDigest }),
+    finishAction: async () => assert.fail('status mismatch cannot finish'),
+  });
+  await mismatch.begin(mismatchRequest);
+  await mismatch.prepare(mismatchRequest, 200, {});
+  await assert.rejects(mismatch.finish(mismatchRequest, 201, {}), /ACTION_PREPARATION_MISMATCH/u);
+
+  const missingRequest = { ...request };
+  const missing = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
+    startAction: async () => ({ actionId: 'missing-action' }), prepareAction: async () => assert.fail('not called'),
+    finishAction: async () => assert.fail('missing preparation cannot finish'),
+  });
+  await missing.begin(missingRequest);
+  await assert.rejects(missing.finish(missingRequest, 200, {}), /ACTION_PREPARATION_MISSING/u);
+
+  const failedRequest = { ...request };
+  const failure = new Error('PREPARATION_FAILED');
+  const failed = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
+    startAction: async () => ({ actionId: 'failed-action' }), prepareAction: async () => { throw failure; },
+    finishAction: async () => assert.fail('failed preparation cannot finish'),
+  });
+  await failed.begin(failedRequest);
+  await assert.rejects(failed.prepare(failedRequest, 500, {}), error => error === failure);
+  await assert.rejects(failed.finish(failedRequest, 500, {}), error => error === failure);
+});
+
 test('response and explicit observers cannot create a missing business-action start', async () => {
   const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
     startAction: async () => ({ actionId: 'unexpected' }), finishAction: async () => undefined,
@@ -488,6 +573,25 @@ test('installed network records a cancelled request before completion when no ro
   assert.equal(starts, 1);
   assert.deepEqual(network.finishes,[{ actionId: 'primed-action', status: 0,
     responseBody: { error: { code: 'BROWSER_TRANSPORT_FAILURE' } } }]);
+  assert.deepEqual(network.dispatches, []);
+});
+
+test('request failure uses server-owned preparation for the exact synthetic transport terminal', async () => {
+  const preparationId = `sha256:${'e'.repeat(64)}`;
+  const responseDigest = `sha256:${'f'.repeat(64)}`;
+  const network = await networkFixture(async () => ({ actionId: 'prepared-transport-action' }), {
+    prepareAction: async () => ({ preparationId, responseDigest }),
+  });
+  const request = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  network.context.emit('request', request);
+  network.context.emit('requestfailed', request);
+  await network.drain();
+  assert.deepEqual(network.preparations, [{ actionId: 'prepared-transport-action', status: 0,
+    responseBody: { error: { code: 'BROWSER_TRANSPORT_FAILURE' } } }]);
+  assert.deepEqual(network.finishes, [{ actionId: 'prepared-transport-action', status: 0,
+    preparationMode: 'server-owned', preparationId, responseDigest }]);
+  assert.deepEqual(network.errors, []);
   assert.deepEqual(network.dispatches, []);
 });
 

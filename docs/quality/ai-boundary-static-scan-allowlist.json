@@ -515,14 +515,14 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        307,
-        348,
+        308,
         349,
-        434,
+        350,
         435,
-        530,
+        436,
         531,
-        1185
+        532,
+        1186
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."

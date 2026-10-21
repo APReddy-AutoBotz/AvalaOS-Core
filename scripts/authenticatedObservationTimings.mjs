@@ -6,18 +6,24 @@ import { AUTHENTICATED_HOSTED_CAPTURE_QUERY } from './authenticatedHostedObserva
 // tokens, routes, actor identifiers or request identifiers. Query wall time
 // includes pg.Client queue wait; it is deliberately not labelled server time.
 export const OBSERVATION_TIMING_KEYS = Object.freeze([
-  'admission', 'finish', 'identity', 'beforeObservation', 'afterObservation',
+  'admission', 'prepare', 'finish', 'identity', 'beforeObservation', 'afterObservation',
   'sessionQuery', 'beforeCaptureQuery', 'afterCaptureQuery',
 ]);
+const LEGACY_OBSERVATION_TIMING_KEYS = Object.freeze(
+  OBSERVATION_TIMING_KEYS.filter(key => key !== 'prepare'),
+);
 const FIELDS = ['count', 'failed', 'totalMs', 'maxMs', 'inFlight', 'maxInFlight'];
 const LIMIT = 2_147_483_647;
 const bounded = n => Number.isFinite(n) ? Math.min(LIMIT, Math.max(0, Math.round(n))) : 0;
 
 export function validateObservationTimings(value) {
-  if (!value || Object.keys(value).length !== OBSERVATION_TIMING_KEYS.length
-    || Object.keys(value).some(key => !OBSERVATION_TIMING_KEYS.includes(key))) return null;
+  if (!value) return null;
+  const keys = Object.keys(value);
+  const vocabulary = [OBSERVATION_TIMING_KEYS, LEGACY_OBSERVATION_TIMING_KEYS]
+    .find(candidate => keys.length === candidate.length && keys.every(key => candidate.includes(key)));
+  if (!vocabulary) return null;
   const result = {};
-  for (const key of OBSERVATION_TIMING_KEYS) {
+  for (const key of vocabulary) {
     const item = value[key];
     if (!item || Object.keys(item).length !== FIELDS.length
       || Object.keys(item).some(field => !FIELDS.includes(field))
@@ -50,14 +56,16 @@ export function createObservationTimings({ now = () => performance.now() } = {})
   const current = () => context.getStore();
   return Object.freeze({
     admission: operation => inAction('admission', operation),
+    prepare: operation => inAction('prepare', operation),
     finish: operation => inAction('finish', operation),
     identity: operation => current() === 'admission' ? measure('identity', operation) : operation(),
     observe: operation => current() === 'admission' ? measure('beforeObservation', operation)
-      : current() === 'finish' ? measure('afterObservation', operation) : operation(),
+      : ['prepare', 'finish'].includes(current()) ? measure('afterObservation', operation) : operation(),
     query(database, sql, values) {
       const phase = current();
       const key = phase && sql === AUTHENTICATED_HOSTED_CAPTURE_QUERY
-        ? (phase === 'admission' ? 'beforeCaptureQuery' : 'afterCaptureQuery')
+        ? (phase === 'admission' ? 'beforeCaptureQuery'
+          : ['prepare', 'finish'].includes(phase) ? 'afterCaptureQuery' : null)
         : phase === 'admission' && typeof sql === 'string' && sql.includes('FROM auth.sessions')
           ? 'sessionQuery' : null;
       return key ? measure(key, () => database.query(sql, values)) : database.query(sql, values);

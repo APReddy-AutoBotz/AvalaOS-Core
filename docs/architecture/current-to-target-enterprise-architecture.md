@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Server-owned after-frame preparation (2026-10-21)
+
+The acceptance controller may prepare at most four after frames concurrently after terminal response-body acquisition. The authenticated loopback control boundary accepts only a bound incomplete action and exact terminal response; exercise, project, scope and original before cutoff remain server-owned. Atomically claim each preparation, retain its frame on the controller and return only an opaque one-shot acknowledgement. A browser-supplied frame or cutoff cannot become evidence. Every capture remains the same single-statement authority/product snapshot through the existing exact-query read pool.
+
+The original browser queue remains serial and fail-stop. It consumes the exact response-bound preparation once, then alone executes assessment-finalize verification, secret observation, recording, completion and monotonic cutoff updates. Read preparation cannot publish completion or advance the cutoff. Later prepared reads must settle after an earlier failure, but their commits must not run. Intake stop aborts accepted preparation work, prevents late publication, discards unused frames and joins work before quiescence, revocation and pool closure. No transaction or write moves to the reader pool, and every admission still performs fresh identity/session checks. This changes observation scheduling, not business authorization or the 15-second actor limit.
+
 ## Local real-backend acceptance identity (2026-10-19)
 
 Functional acceptance may execute an exact locally served frontend against the existing real synthetic Supabase backend. Its trust boundary is the protected runner and immutable build manifest, not a claimed hostname or HTTP header. Bind the exact checkout, canonical file-path/size/content manifest digest, fixed `http://127.0.0.1:4173` origin, actual run/attempt, backend/migration/source/catalog digests and real actor sessions. Reject altered bytes before or after execution. The local profile has a null deployment ID and a required build digest; existing hosted profiles retain their Netlify deployment identity. Never spoof hosted headers, DNS, deployment IDs or workflow identity.

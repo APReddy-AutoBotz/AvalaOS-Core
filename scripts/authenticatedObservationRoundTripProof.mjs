@@ -47,7 +47,7 @@ async function latencyProxy(connectionString, roundTripMs) {
 export async function runObservationRoundTripProof({ connectionString, config, adapter, project, ids, expectedStatements,
   captureQuery = AUTHENTICATED_HOSTED_CAPTURE_QUERY, scenarios = [[33, 0], [1, 100], [33, 100]],
   expectedTimeout = (requests, roundTripMs) => expectedStatements === 5 && requests === 33 && roundTripMs === 100,
-  createQueryClient,
+  createQueryClient, prepareAfterCapture = false,
 }) {
   assert.ok([3, 5].includes(expectedStatements));
   const results = [], phase = new AsyncLocalStorage();
@@ -65,15 +65,17 @@ export async function runObservationRoundTripProof({ connectionString, config, a
       const metrics = {};
       const measure = async (name, operation) => {
         const start = performance.now();
+        const entry = metrics[name] ??= { count: 0, totalMs: 0, maxMs: 0, inFlight: 0, maxInFlight: 0 };
+        entry.inFlight++; entry.maxInFlight = Math.max(entry.maxInFlight, entry.inFlight);
         try { return await operation(); }
         finally {
-          const entry = metrics[name] ??= { count: 0, totalMs: 0, maxMs: 0 };
           const ms = Math.round(performance.now() - start);
-          entry.count++; entry.totalMs += ms; entry.maxMs = Math.max(entry.maxMs, ms);
+          entry.count++; entry.totalMs += ms; entry.maxMs = Math.max(entry.maxMs, ms); entry.inFlight--;
         }
       };
       let pending = 0, maximumPending = 0, queries = 0, verifiedSessions = 0, authRequests = 0;
       const active = new Set();
+      const admitted = [], preparedOrder = [], committedOrder = [], responseOrder = [];
       const execute = async (sql, values) => {
         queries++;
         const kind = sql.includes('auth.sessions') ? 'session-sql'
@@ -112,7 +114,8 @@ export async function runObservationRoundTripProof({ connectionString, config, a
         });
         const reader = createAuthenticatedHostedObservationReader({ db, config });
         controller = new AuthenticatedHostedController({ config,
-          adapter: { ...adapter, observe: input => measure(`${phase.getStore()}:capture`, () => reader.capture(input)) },
+          adapter: { ...adapter, observe: input => measure(`${phase.getStore()}:capture`, () => reader.capture(input)),
+            recordBrowserAction: input => measure('commit:record', () => adapter.recordBrowserAction(input)) },
           identity: { verifySession: input => {
             verifiedSessions++;
             return measure('identity:verify', () => identity.verifySession(input));
@@ -125,15 +128,25 @@ export async function runObservationRoundTripProof({ connectionString, config, a
             pending++; maximumPending = Math.max(maximumPending, pending);
             try {
               const action = await phase.run('before', () => controller.beginBrowserAction({ projectName: 'desktop-chromium', ...input }));
-              active.add(action.actionId); return action;
+              active.add(action.actionId); admitted.push(action.actionId); return action;
             } finally { pending--; }
           },
+          ...(prepareAfterCapture ? { prepareAction: async input => {
+            preparedOrder.push(input.actionId);
+            return phase.run('after', () => controller.prepareBrowserAction({ projectName: 'desktop-chromium', ...input }));
+          } } : {}),
           finishAction: async input => {
-            await phase.run('after', () => controller.finishBrowserAction({ projectName: 'desktop-chromium', ...input }));
+            await measure('commit:finish', () => phase.run('after', () => controller.finishBrowserAction({ projectName: 'desktop-chromium', ...input })));
+            committedOrder.push(input.actionId);
             active.delete(input.actionId);
           },
         });
         context = await browser.newContext();
+        context.on('response', response => {
+          const reference = tracker.reference(response.request());
+          void reference.catch(() => {});
+          responseOrder.push(reference);
+        });
         const page = await context.newPage(), queue = queueFactory();
         const lifecycle = await network.installAuthenticatedHostedNetwork({ context, hosted: true,
           allowedOrigins: new Set([origin]), tracker, queueNetworkAction: queue.enqueue,
@@ -173,6 +186,17 @@ export async function runObservationRoundTripProof({ connectionString, config, a
         await lifecycle.settleActionAdmissions(); await lifecycle.settleResponseBodies(); await queue.drain();
         const actions = controller.browserActions.get('desktop-chromium');
         assert.equal(actions.length, requests);
+        assert.deepEqual(actions.map(action => action.actionId), admitted, 'admission array order preserved');
+        assert.equal(metrics['commit:finish'].maxInFlight, 1, 'finish application stays serial');
+        assert.equal(metrics['commit:record'].maxInFlight, 1, 'record side effects stay serial');
+        if (prepareAfterCapture) {
+          assert.deepEqual(committedOrder, (await Promise.all(responseOrder)).filter(Boolean), 'response event order is serial commit order');
+          assert.deepEqual([...preparedOrder].sort(), [...committedOrder].sort(), 'each preparation consumed exactly once');
+          const preparation = controller.browserActionPreparationSnapshot();
+          assert.equal(preparation.inFlight, 0); assert.equal(preparation.queued, 0); assert.equal(preparation.ready, 0);
+          assert.ok(preparation.maxInFlight > 1 && preparation.maxInFlight <= 4);
+          assert.ok(metrics['after:capture'].maxInFlight > 1 && metrics['after:capture'].maxInFlight <= 4);
+        } else assert.equal(metrics['after:capture'].maxInFlight, 1);
         assert.equal(actions.filter(action => action.complete).length, requests);
         assert.equal(verifiedSessions, requests); assert.equal(authRequests, requests);
         assert.equal(pending + active.size, 0);
@@ -182,11 +206,15 @@ export async function runObservationRoundTripProof({ connectionString, config, a
           assert.ok(Date.parse(action.after.capturedAt) > Date.parse(action.before.capturedAt));
           assert.deepEqual(recordHashes(action.before), recordHashes(action.after));
         }
+        assert.equal(Date.parse(controller.projects.get('desktop-chromium').lastBoundaryAt),
+          Math.max(...actions.flatMap(action => [Date.parse(action.before.capturedAt), Date.parse(action.after.capturedAt)])));
         const shouldTimeout = expectedTimeout(requests, roundTripMs);
         assert.equal(failure, shouldTimeout ? 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE' : null);
         results.push({ requests, roundTripMs, maximumPending, elapsedMs, queries, verifiedSessions, authRequests,
           completeActions: actions.length, frames: actions.length * 2, outstanding: pending + active.size,
           recordsPerFrame: actions[0].before.records.length, failure, metrics: structuredClone(metrics),
+          serialCommitOrderVerified: true, admissionOrderVerified: true,
+          ...(prepareAfterCapture ? { preparation: controller.browserActionPreparationSnapshot() } : {}),
           ...(client.snapshot ? { queryTiming: client.snapshot() } : {}) });
         if (requests === 1 || scenarios.length === 1) {
           await client.query("UPDATE auth.sessions SET not_after=statement_timestamp()-interval '1 second' WHERE id=$1",
@@ -205,12 +233,15 @@ export async function runObservationRoundTripProof({ connectionString, config, a
           queries, verifiedSessions, authRequests, message: error.message, metrics });
         throw error;
       } finally {
-        await context?.close().catch(() => {});
-        await controller?.stopControlIntakeAndJoin().catch(() => {});
-        await client.end().catch(() => {});
-        await proxy.close();
+        const cleanupFailures = [];
+        const cleanup = async operation => { try { await operation(); } catch { cleanupFailures.push('LOCAL_PROOF_CLEANUP_FAILED'); } };
+        await cleanup(() => context?.close());
+        await cleanup(() => controller?.stopControlIntakeAndJoin());
+        await cleanup(() => client.end());
+        await cleanup(() => proxy.close());
         server.closeAllConnections();
-        await new Promise(resolve => server.close(resolve));
+        await cleanup(() => new Promise(resolve => server.close(resolve)));
+        assert.deepEqual(cleanupFailures, [], 'all owned local proof resources must close');
       }
       assert.equal(clientFailure, undefined);
     }

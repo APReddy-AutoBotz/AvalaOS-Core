@@ -18,7 +18,8 @@ test('observation timings attribute nested work without retaining arguments or c
       clock += 3;
     });
   });
-  await timings.finish(() => timings.observe(() => timings.query(database, AUTHENTICATED_HOSTED_CAPTURE_QUERY, [secret])));
+  await timings.prepare(() => timings.observe(() => timings.query(database, AUTHENTICATED_HOSTED_CAPTURE_QUERY, [secret])));
+  await timings.finish(async () => { clock += 4; });
   // Setup and cleanup are outside an action and do not inflate its cost.
   await timings.query(database, sessionSql, [secret]);
   const snapshot = timings.snapshot();
@@ -27,6 +28,7 @@ test('observation timings attribute nested work without retaining arguments or c
   assert.equal(snapshot.sessionQuery.totalMs, 4);
   assert.equal(snapshot.beforeObservation.totalMs, 7);
   assert.equal(snapshot.beforeCaptureQuery.totalMs, 4);
+  assert.equal(snapshot.prepare.totalMs, 4);
   assert.equal(snapshot.finish.totalMs, 4);
   assert.equal(snapshot.afterCaptureQuery.count, 1);
   assert.equal(calls.length, 4);
@@ -59,6 +61,12 @@ test('failure identity and single execution survive timing; envelope rejects ope
   assert.equal(calls, 1);
   const observationTimings = timings.snapshot();
   assert.equal(observationTimings.finish.failed, 1);
+  const { prepare: _prepare, ...legacyObservationTimings } = observationTimings;
+  assert.deepEqual(validateObservationTimings(legacyObservationTimings), legacyObservationTimings,
+    'the exact retained eight-key timing vocabulary remains readable');
+  const { finish: _finish, ...arbitrarilyIncomplete } = observationTimings;
+  assert.equal(validateObservationTimings(arbitrarilyIncomplete), null,
+    'the nine-key vocabulary cannot omit an arbitrary metric');
   const value = createAuthenticatedHostedRunDiagnostic({
     failure: { phase: 'BROWSER_EXECUTION', category: 'EXIT_NONZERO' },
     primary: { phase: 'BROWSER_EXECUTION', category: 'EXIT_NONZERO' },

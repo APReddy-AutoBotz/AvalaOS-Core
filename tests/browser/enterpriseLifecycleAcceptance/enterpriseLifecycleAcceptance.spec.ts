@@ -644,6 +644,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             pendingTrackedActionStarts -= 1;
           }
         },
+        ...(hostedAuthenticatedAcceptance ? { prepareAction: async input =>
+          control<{ preparationId: string; responseDigest: string }>('/control/browser-action-prepare', {
+            projectName, ...input,
+          }) } : {}),
         finishAction: async input => {
           if (!activeTrackedActionIds.has(input.actionId)) {
             throw new Error('AUTHENTICATED_BROWSER_ACTION_START_MISSING');

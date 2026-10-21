@@ -1,6 +1,7 @@
 const PUBLIC_ATTESTATION_PATH = '/rest/v1/rpc/pr_c_controlled_human_public_attestation';
 const BUSINESS_METHODS = new Set(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']);
 const PRODUCT_PATH = /^\/(?:functions\/v1\/[a-z0-9-]+|rest\/v1\/rpc\/[a-z0-9_]+)$/u;
+const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
 const exactOrigin = (value, name) => {
   let parsed;
@@ -55,15 +56,20 @@ const requestDescription = async request => {
 };
 
 export class AuthenticatedHostedBrowserActionTracker {
-  constructor({ backendOrigin, appOrigin, startAction, finishAction }) {
+  constructor({ backendOrigin, appOrigin, startAction, prepareAction = undefined, finishAction }) {
     if (typeof startAction !== 'function' || typeof finishAction !== 'function') {
+      throw new Error('AUTHENTICATED_BROWSER_TRACKER_CALLBACK_REJECTED');
+    }
+    if (prepareAction !== undefined && typeof prepareAction !== 'function') {
       throw new Error('AUTHENTICATED_BROWSER_TRACKER_CALLBACK_REJECTED');
     }
     this.classifyRequest = createAuthenticatedHostedRequestClassifier({ backendOrigin, appOrigin });
     this.startAction = startAction;
+    this.prepareAction = prepareAction ?? null;
     this.finishAction = finishAction;
     this.classifications = new WeakMap();
     this.actionReferences = new WeakMap();
+    this.preparations = new WeakMap();
     this.finishes = new WeakMap();
   }
 
@@ -114,6 +120,34 @@ export class AuthenticatedHostedBrowserActionTracker {
     })();
   }
 
+  prepare(request, status, responseBody) {
+    if (!this.prepareAction) return Promise.resolve(null);
+    const existing = this.preparations.get(request);
+    if (existing) return existing;
+    const pending = (async () => {
+      const classification = await this.classify(request);
+      if (classification.kind === 'rejected-product-origin') {
+        throw new Error('AUTHENTICATED_BROWSER_PRODUCT_ORIGIN_REJECTED');
+      }
+      if (classification.kind !== 'business-action') return null;
+      if (!Number.isInteger(status) || status < 0 || status > 599) {
+        throw new Error('AUTHENTICATED_BROWSER_ACTION_PREPARATION_REJECTED');
+      }
+      const actionReference = this.actionReferences.get(request);
+      if (!actionReference) throw new Error('AUTHENTICATED_BROWSER_ACTION_START_MISSING');
+      const actionId = await actionReference;
+      if (!actionId) return null;
+      const ack = await this.prepareAction({ actionId, status, responseBody });
+      if (!ack || !DIGEST.test(ack.preparationId ?? '') || !DIGEST.test(ack.responseDigest ?? '')
+        || Object.keys(ack).length !== 2) {
+        throw new Error('AUTHENTICATED_BROWSER_ACTION_PREPARATION_REJECTED');
+      }
+      return Object.freeze({ status, preparationId: ack.preparationId, responseDigest: ack.responseDigest });
+    })();
+    this.preparations.set(request, pending);
+    return pending;
+  }
+
   finish(request, status, responseBody) {
     const existing = this.finishes.get(request);
     if (existing) return existing;
@@ -127,7 +161,18 @@ export class AuthenticatedHostedBrowserActionTracker {
       if (!actionReference) throw new Error('AUTHENTICATED_BROWSER_ACTION_START_MISSING');
       const actionId = await actionReference;
       if (!actionId) return null;
-      await this.finishAction({ actionId, responseBody, status });
+      if (this.prepareAction) {
+        const preparation = this.preparations.get(request);
+        if (!preparation) throw new Error('AUTHENTICATED_BROWSER_ACTION_PREPARATION_MISSING');
+        const prepared = await preparation;
+        if (!prepared || prepared.status !== status) {
+          throw new Error('AUTHENTICATED_BROWSER_ACTION_PREPARATION_MISMATCH');
+        }
+        await this.finishAction({ actionId, status, preparationMode: 'server-owned',
+          preparationId: prepared.preparationId, responseDigest: prepared.responseDigest });
+      } else {
+        await this.finishAction({ actionId, responseBody, status });
+      }
       return actionId;
     })();
     this.finishes.set(request, pending);

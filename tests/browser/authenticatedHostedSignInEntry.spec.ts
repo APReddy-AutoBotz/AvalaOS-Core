@@ -227,6 +227,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     classify: (request: Request) => tracker.classify(gatedRequestFor(request)),
     begin: (request: Request) => tracker.begin(gatedRequestFor(request)),
     reference: (request: Request) => tracker.reference(gatedRequestFor(request)),
+    prepare: (request: Request, status: number, body: unknown) => tracker.prepare(gatedRequestFor(request), status, body),
     finish: (request: Request, status: number, body: unknown) => tracker.finish(gatedRequestFor(request), status, body),
   } as AuthenticatedHostedBrowserActionTracker;
   const networkLifecycle = await installAuthenticatedHostedNetwork({
@@ -686,19 +687,6 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     }
 
     const beforeAuthoritySwitch = await deliveryTaskGate('inspect');
-    const latePriorAuthorityResponseResult = page.waitForResponse(response => {
-      const url = new URL(response.url());
-      if (url.origin !== apiOrigin || url.pathname !== '/functions/v1/legacy-delivery-query'
-        || response.request().method() !== 'POST' || response.status() !== 503) return false;
-      try {
-        return response.request().postDataJSON()?.expectedAuthorizationVersion === 1;
-      } catch {
-        return false;
-      }
-    }).then(
-      response => ({ response, error: null }),
-      error => ({ response: null, error }),
-    );
     await deliveryTaskGate('hold-next');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(async () => {
@@ -742,6 +730,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
         exactlyOnePending: true, actorsAreReviewer: true, versionsAreScoped: true,
         currentAuthorityObserved: true,
       });
+      const latePriorAuthorityResponseResult = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        if (url.origin !== apiOrigin || url.pathname !== '/functions/v1/legacy-delivery-query'
+          || response.request().method() !== 'POST' || response.status() !== 503) return false;
+        try {
+          return response.request().postDataJSON()?.expectedAuthorizationVersion === 1;
+        } catch {
+          return false;
+        }
+      }).then(
+        response => ({ response, error: null }),
+        error => ({ response: null, error }),
+      );
       await deliveryTaskGate('reject');
       priorAuthorityReleased = true;
       const latePriorAuthorityResult = await latePriorAuthorityResponseResult;

@@ -739,8 +739,10 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
   };
   const controller = new AuthenticatedHostedController({ config, adapter, identity });
   const beginBrowserAction = controller.beginBrowserAction.bind(controller);
+  const prepareBrowserAction = controller.prepareBrowserAction.bind(controller);
   const finishBrowserAction = controller.finishBrowserAction.bind(controller);
   controller.beginBrowserAction = (...args) => observationTimings.admission(() => beginBrowserAction(...args));
+  controller.prepareBrowserAction = (...args) => observationTimings.prepare(() => prepareBrowserAction(...args));
   controller.finishBrowserAction = (...args) => observationTimings.finish(() => finishBrowserAction(...args));
   diagnosticState.controller = controller;
   const cancellation=new AbortController();const signalSource=dependencies.signalSource??process;
