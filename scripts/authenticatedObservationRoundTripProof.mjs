@@ -47,6 +47,7 @@ async function latencyProxy(connectionString, roundTripMs) {
 export async function runObservationRoundTripProof({ connectionString, config, adapter, project, ids, expectedStatements,
   captureQuery = AUTHENTICATED_HOSTED_CAPTURE_QUERY, scenarios = [[33, 0], [1, 100], [33, 100]],
   expectedTimeout = (requests, roundTripMs) => expectedStatements === 5 && requests === 33 && roundTripMs === 100,
+  createQueryClient,
 }) {
   assert.ok([3, 5].includes(expectedStatements));
   const results = [], phase = new AsyncLocalStorage();
@@ -57,9 +58,10 @@ export async function runObservationRoundTripProof({ connectionString, config, a
     // request count. 100 ms is a controlled RTT, not a measured hosted latency.
     for (const [requests, roundTripMs] of scenarios) {
       const proxy = await latencyProxy(connectionString, roundTripMs);
-      const client = new pg.Client({ connectionString: proxy.url });
+      const client = createQueryClient ? await createQueryClient({ connectionString: proxy.url, phase })
+        : new pg.Client({ connectionString: proxy.url });
       let clientFailure;
-      client.on('error', error => { clientFailure = error; });
+      client.on?.('error', error => { clientFailure = error; });
       const metrics = {};
       const measure = async (name, operation) => {
         const start = performance.now();
@@ -146,6 +148,7 @@ export async function runObservationRoundTripProof({ connectionString, config, a
         // GoTrue and the live database session; those checks are counted below.
         queries = 0; verifiedSessions = 0; authRequests = 0;
         for (const key of Object.keys(metrics)) delete metrics[key];
+        client.resetMetrics?.();
         const fetches = page.evaluate(async ({ token, requests }) => Promise.all(Array.from({ length: requests },
           () => fetch('/functions/v1/tenant-session', { headers: { authorization: 'Bearer ' + token } })
             .then(async r => ({ status: r.status, body: await r.json() })))), { token, requests });
@@ -183,7 +186,8 @@ export async function runObservationRoundTripProof({ connectionString, config, a
         assert.equal(failure, shouldTimeout ? 'AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE' : null);
         results.push({ requests, roundTripMs, maximumPending, elapsedMs, queries, verifiedSessions, authRequests,
           completeActions: actions.length, frames: actions.length * 2, outstanding: pending + active.size,
-          recordsPerFrame: actions[0].before.records.length, failure, metrics: structuredClone(metrics) });
+          recordsPerFrame: actions[0].before.records.length, failure, metrics: structuredClone(metrics),
+          ...(client.snapshot ? { queryTiming: client.snapshot() } : {}) });
         if (requests === 1 || scenarios.length === 1) {
           await client.query("UPDATE auth.sessions SET not_after=statement_timestamp()-interval '1 second' WHERE id=$1",
             [ids.sessions.author]);
