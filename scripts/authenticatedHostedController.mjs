@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { isDeepStrictEqual } from 'node:util';
 
 import {
@@ -36,6 +37,7 @@ import {
 export const AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA = 'authenticated-hosted-controller-v1';
 export const AUTHENTICATED_HOSTED_AUTHORITY_SCHEMA = 'authenticated-synthetic-authority-observation-v1';
 export const AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS = 30_000;
+export const AUTHENTICATED_HOSTED_PREPARATION_MAX = 4;
 const HOSTED_TEMP_ROOT = process.platform === 'win32' ? os.tmpdir() : '/tmp';
 export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
   browser: path.join(HOSTED_TEMP_ROOT, 'authenticated-browser-correlations.json'),
@@ -386,6 +388,12 @@ export class AuthenticatedHostedController {
     this.projectIdentitySets = new Map();
     this.boundSessions = new Map();
     this.browserActions = new Map();
+    this.browserActionPreparations = new Map();
+    this.browserActionPreparationWaiters = [];
+    this.browserActionPreparationMetrics = {
+      count: 0, failed: 0, inFlight: 0, maxInFlight: 0, queued: 0, maxQueued: 0,
+      queueTotalMs: 0, queueMaxMs: 0, serviceTotalMs: 0, serviceMaxMs: 0,
+    };
     this.browserCases = [];
     this.serverCases = [];
     this.parentIdentityDiagnostic = null;
@@ -815,80 +823,229 @@ export class AuthenticatedHostedController {
     const action = { actionId, occurredAt: before.capturedAt, actorHash: binding.actorHash,
       sessionHash: binding.sessionHash, ...hashes, response: null, persona: binding.persona,
       actorId: binding.actorId, sessionId: binding.sessionId, commandType,
-      before, after: null, complete: false, route, rawRequestBody: requestBody, assessmentFinalizeProof: null };
+      before, after: null, complete: false, finishClaimed: false, route,
+      rawRequestBody: requestBody, assessmentFinalizeProof: null };
     const actions = this.browserActions.get(projectName) ?? [];
     actions.push(action);
     this.browserActions.set(projectName, actions);
     return { actionId };
   }
 
-  async finishBrowserAction({ projectName, actionId, responseBody, status }, signal) {
+  async acquireBrowserActionPreparation(signal) {
+    const metrics = this.browserActionPreparationMetrics;
+    const startedAt = performance.now();
+    const signals = [...new Set([signal, this.controlAbort.signal].filter(Boolean))];
+    const recordQueue = () => {
+      const elapsed = performance.now() - startedAt;
+      metrics.queueTotalMs += elapsed;
+      metrics.queueMaxMs = Math.max(metrics.queueMaxMs, elapsed);
+      return elapsed;
+    };
+    if (signals.some(item => item.aborted)) fail('INTAKE_CLOSED');
+    if (metrics.inFlight < AUTHENTICATED_HOSTED_PREPARATION_MAX) {
+      metrics.inFlight += 1;
+      metrics.maxInFlight = Math.max(metrics.maxInFlight, metrics.inFlight);
+      recordQueue();
+      return { release: () => this.releaseBrowserActionPreparation() };
+    }
+    metrics.queued += 1;
+    metrics.maxQueued = Math.max(metrics.maxQueued, metrics.queued);
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject, signals, startedAt, aborted: false, onAbort: null };
+      waiter.onAbort = () => {
+        if (waiter.aborted) return;
+        waiter.aborted = true;
+        const index = this.browserActionPreparationWaiters.indexOf(waiter);
+        if (index >= 0) {
+          this.browserActionPreparationWaiters.splice(index, 1);
+          metrics.queued = Math.max(0, metrics.queued - 1);
+        }
+        for (const item of signals) item.removeEventListener('abort', waiter.onAbort);
+        recordQueue();
+        reject(new Error('AUTHENTICATED_HOSTED_CONTROLLER_INTAKE_CLOSED'));
+      };
+      for (const item of signals) item.addEventListener('abort', waiter.onAbort, { once: true });
+      this.browserActionPreparationWaiters.push(waiter);
+    });
+  }
+
+  releaseBrowserActionPreparation() {
+    const metrics = this.browserActionPreparationMetrics;
+    metrics.inFlight = Math.max(0, metrics.inFlight - 1);
+    for (;;) {
+      const waiter = this.browserActionPreparationWaiters.shift();
+      if (!waiter) return;
+      metrics.queued = Math.max(0, metrics.queued - 1);
+      for (const item of waiter.signals) item.removeEventListener('abort', waiter.onAbort);
+      if (waiter.aborted || waiter.signals.some(item => item.aborted)) continue;
+      metrics.inFlight += 1;
+      metrics.maxInFlight = Math.max(metrics.maxInFlight, metrics.inFlight);
+      const elapsed = performance.now() - waiter.startedAt;
+      metrics.queueTotalMs += elapsed;
+      metrics.queueMaxMs = Math.max(metrics.queueMaxMs, elapsed);
+      waiter.resolve({ release: () => this.releaseBrowserActionPreparation() });
+      return;
+    }
+  }
+
+  browserActionPreparationSnapshot() {
+    const bounded = value => Number.isFinite(value)
+      ? Math.min(2_147_483_647, Math.max(0, Math.round(value))) : 0;
+    const metrics = this.browserActionPreparationMetrics;
+    return Object.freeze({
+      count: bounded(metrics.count), failed: bounded(metrics.failed),
+      inFlight: bounded(metrics.inFlight), maxInFlight: bounded(metrics.maxInFlight),
+      queued: bounded(metrics.queued), maxQueued: bounded(metrics.maxQueued),
+      ready: bounded([...this.browserActionPreparations.values()].filter(item => item.state === 'ready').length),
+      queueTotalMs: bounded(metrics.queueTotalMs), queueMaxMs: bounded(metrics.queueMaxMs),
+      serviceTotalMs: bounded(metrics.serviceTotalMs), serviceMaxMs: bounded(metrics.serviceMaxMs),
+    });
+  }
+
+  async prepareBrowserAction({ projectName, actionId, responseBody, status }, signal) {
+    exactKeys(arguments[0], ['projectName', 'actionId', 'responseBody', 'status'],
+      'BROWSER_ACTION_PREPARATION_REJECTED');
+    this.assertControlCommitAllowed(signal);
+    if (!this.projects.has(projectName) || !DIGEST.test(actionId ?? '') || !Number.isInteger(status)
+      || status < 0 || status > 599) fail('BROWSER_ACTION_PREPARATION_REJECTED');
+    const action = (this.browserActions.get(projectName) ?? []).find(item => item.actionId === actionId);
+    if (!action || action.complete || action.finishClaimed || this.browserActionPreparations.has(actionId)) {
+      fail('BROWSER_ACTION_PREPARATION_BINDING_REJECTED');
+    }
+    const response = record(responseBody) ? responseBody : {};
+    const responseDigest = authenticatedHostedDigest(response);
+    const preparationId = authenticatedHostedDigest(this.randomId());
+    const preparation = { state: 'claimed', projectName, actionId, status, responseDigest, preparationId };
+    this.browserActionPreparations.set(actionId, preparation);
+    const metrics = this.browserActionPreparationMetrics;
+    metrics.count += 1;
+    let lease;
+    try {
+      lease = await this.acquireBrowserActionPreparation(signal);
+      this.assertControlCommitAllowed(signal);
+      const serviceStartedAt = performance.now();
+      const project = this.projects.get(projectName);
+      let after;
+      try {
+        after = await this.adapter.observe({
+          exerciseId: this.exerciseId, from: action.before.capturedAt, project, signal,
+        });
+      } finally {
+        const serviceMs = performance.now() - serviceStartedAt;
+        metrics.serviceTotalMs += serviceMs;
+        metrics.serviceMaxMs = Math.max(metrics.serviceMaxMs, serviceMs);
+      }
+      if (!record(after) || !timestamp(after.capturedAt) || !Array.isArray(after.records)
+        || Date.parse(after.capturedAt) <= Date.parse(action.before.capturedAt)) fail('AUTHORITY_FRAME_REJECTED');
+      this.assertControlCommitAllowed(signal);
+      Object.assign(preparation, { state: 'ready', response, after });
+      return Object.freeze({ preparationId, responseDigest });
+    } catch (error) {
+      metrics.failed += 1;
+      preparation.state = 'failed';
+      delete preparation.response;
+      delete preparation.after;
+      throw error;
+    } finally {
+      lease?.release();
+    }
+  }
+
+  async finishBrowserAction({ projectName, actionId, responseBody, status, preparationMode,
+    preparationId, responseDigest }, signal) {
+    exactKeys(arguments[0], preparationMode === 'server-owned'
+      ? ['projectName', 'actionId', 'status', 'preparationMode', 'preparationId', 'responseDigest']
+      : ['projectName', 'actionId', 'responseBody', 'status'], 'BROWSER_ACTION_REJECTED');
+    this.assertControlCommitAllowed(signal);
     if (!this.projects.has(projectName) || !DIGEST.test(actionId ?? '') || !Number.isInteger(status)
       || status < 0 || status > 599) fail('BROWSER_ACTION_REJECTED');
     const action = (this.browserActions.get(projectName) ?? []).find(item => item.actionId === actionId);
-    if (!action || action.complete) fail('BROWSER_ACTION_BINDING_REJECTED');
-    const response = record(responseBody) ? responseBody : {};
-    const first = (...values) => values.find(value => typeof value === 'string' && value.length > 0) ?? null;
-    const resource = record(response.resource) ? response.resource : {};
-    const commandId = first(response.commandId, response.resourceId, response.result?.commandId, response.data?.commandId,
-      resource.id, resource.resourceId, resource.artifactId, resource.caseId, resource.taskId, resource.publicationId,
-      resource.outcomeId, resource.assessmentId);
-    const receiptId = first(response.receiptId, response.result?.receiptId, response.data?.receiptId, resource.receiptId);
-    const classification = String(response.error?.code ?? response.errorCode ?? response.outcome
-      ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
-      .toUpperCase().replace(/[^A-Z0-9_]/gu, '_').slice(0, 80);
-    const project = this.projects.get(projectName);
-    const after = await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt, project, signal });
-    if (!record(after) || !timestamp(after.capturedAt) || !Array.isArray(after.records)
-      || Date.parse(after.capturedAt) <= Date.parse(action.before.capturedAt)) fail('AUTHORITY_FRAME_REJECTED');
-    const responseObservation = {
+    if (!action || action.complete || action.finishClaimed) fail('BROWSER_ACTION_BINDING_REJECTED');
+    const prepared = preparationMode === 'server-owned';
+    if (preparationMode !== undefined && !prepared) fail('BROWSER_ACTION_PREPARATION_REJECTED');
+    const preparation = prepared ? this.browserActionPreparations.get(actionId) : null;
+    if (prepared && (responseBody !== undefined || !DIGEST.test(preparationId ?? '') || !DIGEST.test(responseDigest ?? '')
+      || !preparation || preparation.state !== 'ready' || preparation.projectName !== projectName
+      || preparation.status !== status || preparation.preparationId !== preparationId
+      || preparation.responseDigest !== responseDigest)) fail('BROWSER_ACTION_PREPARATION_BINDING_REJECTED');
+    if (!prepared && (preparationId !== undefined || responseDigest !== undefined
+      || this.browserActionPreparations.has(actionId))) {
+      fail('BROWSER_ACTION_PREPARATION_REJECTED');
+    }
+    action.finishClaimed = true;
+    if (preparation) preparation.state = 'consuming';
+    try {
+      const response = prepared ? preparation.response : record(responseBody) ? responseBody : {};
+      const first = (...values) => values.find(value => typeof value === 'string' && value.length > 0) ?? null;
+      const resource = record(response.resource) ? response.resource : {};
+      const commandId = first(response.commandId, response.resourceId, response.result?.commandId, response.data?.commandId,
+        resource.id, resource.resourceId, resource.artifactId, resource.caseId, resource.taskId, resource.publicationId,
+        resource.outcomeId, resource.assessmentId);
+      const receiptId = first(response.receiptId, response.result?.receiptId, response.data?.receiptId, resource.receiptId);
+      const classification = String(response.error?.code ?? response.errorCode ?? response.outcome
+        ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
+        .toUpperCase().replace(/[^A-Z0-9_]/gu, '_').slice(0, 80);
+      const project = this.projects.get(projectName);
+      const after = prepared ? preparation.after
+        : await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt, project, signal });
+      if (!record(after) || !timestamp(after.capturedAt) || !Array.isArray(after.records)
+        || Date.parse(after.capturedAt) <= Date.parse(action.before.capturedAt)) fail('AUTHORITY_FRAME_REJECTED');
+      const responseObservation = {
         status,
         classification: /^[A-Z][A-Z0-9_]{1,80}$/u.test(classification) ? classification : 'COMMAND_OBSERVED',
         commandIdHash: commandId ? authenticatedHostedDigest(commandId) : null,
         receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
-    };
-    let assessmentFinalizeProof = null;
-    if (action.route === ASSESS_FINALIZE_ROUTE && action.commandType === ASSESS_FINALIZE_COMMAND) {
-      assessmentFinalizeProof = typeof this.adapter.verifyAssessmentFinalizeCase === 'function'
-        ? await this.adapter.verifyAssessmentFinalizeCase({
-          exerciseId: this.exerciseId,
-          projectName,
-          project,
-          scope: this.config.scope,
-          persona: action.persona,
-          actorId: action.actorId,
-          sessionId: action.sessionId,
-          actorHash: action.actorHash,
-          sessionHash: action.sessionHash,
-          route: action.route,
-          status,
-          requestBody: action.rawRequestBody,
-          responseBody: response,
-          before: action.before,
-          after,
-          requestIdHash: action.requestIdHash,
-          commandBindingHash: action.commandBindingHash,
-          commandIdHash: responseObservation.commandIdHash,
-          signal,
-        }) : null;
-      if (record(assessmentFinalizeProof) && DIGEST.test(assessmentFinalizeProof.receiptIdHash ?? '')) {
-        responseObservation.receiptIdHash = assessmentFinalizeProof.receiptIdHash;
+      };
+      this.assertControlCommitAllowed(signal);
+      let assessmentFinalizeProof = null;
+      if (action.route === ASSESS_FINALIZE_ROUTE && action.commandType === ASSESS_FINALIZE_COMMAND) {
+        assessmentFinalizeProof = typeof this.adapter.verifyAssessmentFinalizeCase === 'function'
+          ? await this.adapter.verifyAssessmentFinalizeCase({
+            exerciseId: this.exerciseId,
+            projectName,
+            project,
+            scope: this.config.scope,
+            persona: action.persona,
+            actorId: action.actorId,
+            sessionId: action.sessionId,
+            actorHash: action.actorHash,
+            sessionHash: action.sessionHash,
+            route: action.route,
+            status,
+            requestBody: action.rawRequestBody,
+            responseBody: response,
+            before: action.before,
+            after,
+            requestIdHash: action.requestIdHash,
+            commandBindingHash: action.commandBindingHash,
+            commandIdHash: responseObservation.commandIdHash,
+            signal,
+          }) : null;
+        if (record(assessmentFinalizeProof) && DIGEST.test(assessmentFinalizeProof.receiptIdHash ?? '')) {
+          responseObservation.receiptIdHash = assessmentFinalizeProof.receiptIdHash;
+        }
       }
-    }
-    try{
+      this.assertControlCommitAllowed(signal);
       await this.adapter.recordBrowserAction?.({ exerciseId: this.exerciseId, projectName, persona: action.persona,
         route: action.route, status, requestBody: action.rawRequestBody, responseBody: response, signal });
-    }finally{delete action.rawRequestBody;}
-    this.assertControlCommitAllowed(signal);
-    action.response = responseObservation;
-    action.after = after;
-    action.assessmentFinalizeProof = assessmentFinalizeProof;
-    action.complete = true;
-    action.status = status;
-    if (Date.parse(after.capturedAt) > Date.parse(project.lastBoundaryAt)) {
-      project.lastBoundaryAt = after.capturedAt;
+      this.assertControlCommitAllowed(signal);
+      action.response = responseObservation;
+      action.after = after;
+      action.assessmentFinalizeProof = assessmentFinalizeProof;
+      action.complete = true;
+      action.status = status;
+      if (Date.parse(after.capturedAt) > Date.parse(project.lastBoundaryAt)) {
+        project.lastBoundaryAt = after.capturedAt;
+      }
+      return { recorded: true, actionId: action.actionId };
+    } finally {
+      delete action.rawRequestBody;
+      if (prepared) {
+        delete preparation.response;
+        delete preparation.after;
+        this.browserActionPreparations.delete(actionId);
+      }
     }
-    return { recorded: true, actionId: action.actionId };
   }
 
   async armPermit(input, signal) {
@@ -949,7 +1106,7 @@ export class AuthenticatedHostedController {
     this.assertControlCommitAllowed(signal);
     if (this.config.acceptanceMode === 'v2_primary_prefix_diagnostic' && this.v2ReloadCheckpoints.length === 3) {
       const terminalAllowed = new Set([
-        '/control/browser-action', '/control/browser-case',
+        '/control/browser-action-prepare', '/control/browser-action', '/control/browser-case',
         '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
         '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',
         '/control/authenticated-controls/frame', '/control/snapshot',
@@ -960,6 +1117,7 @@ export class AuthenticatedHostedController {
     if (pathname === '/control/bind-browser-session') return this.bindBrowserSession(input, signal);
     if (pathname === '/control/browser-case') return this.recordBrowserCase(input, signal);
     if (pathname === '/control/browser-action-start') return this.beginBrowserAction(input, signal);
+    if (pathname === '/control/browser-action-prepare') return this.prepareBrowserAction(input, signal);
     if (pathname === '/control/browser-action') return this.finishBrowserAction(input, signal);
     if (pathname === '/control/arm-permit') return this.armPermit(input, signal);
     if (pathname === '/control/arm-browser-fault') return this.armBrowserFault(input, signal);
@@ -1000,6 +1158,7 @@ export class AuthenticatedHostedController {
   async finalize() {
     if (this.quiesced) fail('ALREADY_QUIESCED');
     await this.stopControlIntakeAndJoin();
+    if (this.browserActionPreparations.size !== 0) fail('BROWSER_ACTION_PREPARATION_INCOMPLETE');
     const expected = AUTHENTICATED_ACCEPTANCE_TEST_IDS.length * AUTHENTICATED_ACCEPTANCE_PROJECTS.length;
     if (this.browserCases.length !== expected || this.serverCases.length !== expected) fail('CASE_INVENTORY_INCOMPLETE');
     for (const testId of AUTHENTICATED_ACCEPTANCE_TEST_IDS) for (const project of AUTHENTICATED_ACCEPTANCE_PROJECTS) {
@@ -1055,6 +1214,7 @@ export class AuthenticatedHostedController {
       throw new AggregateError(errors.length ? errors : [new Error('AUTHENTICATED_HOSTED_CONTROLLER_CONTROL_WORK_INCOMPLETE')],
         'AUTHENTICATED_HOSTED_CONTROLLER_ABORT_CLEANUP_REJECTED');
     }
+    this.browserActionPreparations.clear();
     const ownedProjects=this.cleanupProjects();
     await attempt(()=>this.adapter.quiesce({ exerciseId: this.exerciseId }));
     await attempt(()=>this.identity.revokeAll({ sessions: [...this.boundSessions.values()], projects: ownedProjects }));

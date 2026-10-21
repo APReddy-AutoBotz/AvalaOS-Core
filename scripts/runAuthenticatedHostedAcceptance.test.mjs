@@ -834,7 +834,10 @@ test('runner retains real controller action counters through failure and cleanup
       controller.resolveBrowserActionBinding = async () => ({actorHash:'sha256:'+'a'.repeat(64),sessionHash:'sha256:'+'b'.repeat(64)});
       const action = await controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:'private-token',
         requestBody:{method:'GET'},route:'/functions/v1/tenant-session'});
-      await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:action.actionId,status:200,responseBody:{}});
+      const prepared = await controller.prepareBrowserAction({projectName:'desktop-chromium',actionId:action.actionId,
+        status:200,responseBody:{}});
+      await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:action.actionId,status:200,
+        preparationMode:'server-owned',...prepared});
       throw new Error('private browser failure');
     },
   }), error => {
@@ -845,7 +848,7 @@ test('runner retains real controller action counters through failure and cleanup
   });
   const diagnostic = JSON.parse(await readFile(outputPaths.diagnostic,'utf8'));
   assert.equal(queryCount, 2);
-  for (const key of ['admission','finish','beforeObservation','afterObservation','beforeCaptureQuery','afterCaptureQuery']) {
+  for (const key of ['admission','prepare','finish','beforeObservation','afterObservation','beforeCaptureQuery','afterCaptureQuery']) {
     assert.equal(diagnostic.observationTimings[key].count, 1);
     assert.equal(diagnostic.observationTimings[key].inFlight, 0);
   }

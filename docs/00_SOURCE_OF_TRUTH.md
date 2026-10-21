@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Remaining observation drain: local correction (2026-10-21)
+
+Merged PR #323's single focused diagnostic retained a **12.744-second drain** and **15.549-second actor boundary** under the unchanged 15-second limit. Cleanup passed, but no prefix checkpoints completed. Full acceptance remains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**. That run allowance is consumed.
+
+AP approved local reproduction and correction only. Three read-only reviewers completed before writes. The current four-reader baseline reproduces the serial-finish mechanism at **19.142 seconds**, including **12.097 seconds draining**, with real Chromium/controller/PostgreSQL, 29 fresh authorizations, 87 queries and 58 frames. The final candidate passes at **11.092 seconds**, including **3.137 seconds draining**, with the same actions, queries, frames, fresh sessions, row hashes and unchanged 15-second limit. It overlaps at most four server-owned after captures while keeping evidence commits serial and in response-event order. All 33 schemas/nine equivalence scopes, snapshot barrier and revoked-session rejection pass. Controlled 400 ms wire RTT and 29-request fanout are reproduction inputs, not hosted measurements. Historical exclusive hosted cause and hosted effectiveness remain unproven. Follow the [active completion plan](planning/hosted-acceptance-completion.md) for focused gates and rollback. AP approved required CI, verified merge and exactly one focused local_build/v2_primary_prefix_diagnostic on 2026-10-21. Preserve the exact-run human reviewer click; full allowance is zero. Reuse bounded read-only source preflight, existing public settings/exact release bindings, owned temporary main access and cleanup. No Netlify, backend deployment/migration, production/customer data or paid call. Stop after the single diagnostic and independently verified cleanup.
+
 ## Bounded observation reads: local queue proof (2026-10-21)
 
 PR #322 merged as `fe307a520751ecec930a73dbb82878d47816df8e`. Its one focused diagnostic again timed out at the actor boundary (21.444 seconds; 14.560 seconds draining) and retained whole-run counts of 86 actions with 27 concurrent session/capture calls. Exact-run cleanup passed. The diagnostic promoted no cases; full acceptance remains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**.

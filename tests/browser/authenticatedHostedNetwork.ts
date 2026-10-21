@@ -251,7 +251,11 @@ export const installAuthenticatedHostedNetwork = async ({
   };
   const finishProductAction = (request: Request, status: number, responseBody: unknown) => {
     if (!tracker) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
-    queueNetworkAction(() => tracker.finish(request, status, responseBody));
+    const prepared = tracker.prepare(request, status, responseBody);
+    queueNetworkAction(async () => {
+      await prepared;
+      return tracker.finish(request, status, responseBody);
+    }, prepared);
   };
   const transportFailed = new WeakSet<Request>();
   const responseObserved = new WeakSet<Request>();
@@ -301,7 +305,8 @@ export const installAuthenticatedHostedNetwork = async ({
       // request route already awaited tracker.begin(), so classification is
       // settled before dispatch and this continuation starts the body read
       // before a test can close its page. Controller writes remain serialized
-      // in queue order; only body acquisition runs eagerly.
+      // in queue order; body acquisition and subsequent read-only preparation
+      // run eagerly, with every accepted preparation owned by that queue.
       const acquired = ownResponseBody((async () => {
         try {
           const classification = await tracker.classify(request);
@@ -315,9 +320,8 @@ export const installAuthenticatedHostedNetwork = async ({
           return Object.freeze({ state: 'rejected' as const, error });
         }
       })());
-      queueNetworkAction(async () => {
-        const body = await acquired;
-        if (body.state === 'ignored') return;
+      const terminal = acquired.then(async body => {
+        if (body.state === 'ignored') return Object.freeze({ state: 'ignored' as const });
         if (body.state === 'rejected') {
           // Chromium emits requestfailed immediately after a response-body
           // transport failure. Give that paired event one turn to be observed;
@@ -326,13 +330,23 @@ export const installAuthenticatedHostedNetwork = async ({
           if (body.error instanceof Error
             && body.error.message === 'AUTHENTICATED_BROWSER_RESPONSE_BODY_READ_FAILED'
             && transportFailed.has(request)) {
-            await tracker.finish(request, 0, { error: { code: 'BROWSER_TRANSPORT_FAILURE' } });
-            return;
+            return Object.freeze({ state: 'terminal' as const, status: 0,
+              responseBody: { error: { code: 'BROWSER_TRANSPORT_FAILURE' } } });
           }
           throw body.error;
         }
-        await tracker.finish(request, response.status(), body.value);
-      }, acquired);
+        return Object.freeze({ state: 'terminal' as const, status: response.status(), responseBody: body.value });
+      });
+      const prepared = terminal.then(value => value.state === 'terminal'
+        ? tracker.prepare(request, value.status, value.responseBody) : null);
+      queueNetworkAction(async () => {
+        const body = await acquired;
+        if (body.state === 'ignored') return;
+        const value = await terminal;
+        if (value.state !== 'terminal') return;
+        await prepared;
+        await tracker.finish(request, value.status, value.responseBody);
+      }, prepared);
     });
     context.on('requestfailed', request => {
       transportFailed.add(request);
