@@ -26,6 +26,7 @@ import { authenticatedHostedFailureCode, createAuthenticatedHostedRunDiagnostic,
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { verifyHostedDeployment } from './verify-hosted-deployment.mjs';
 import { authenticatedAcceptanceMode } from './authenticatedV2ReloadDiagnostic.mjs';
+import { createObservationTimings } from './authenticatedObservationTimings.mjs';
 import { createControlledHumanPostgresClientConfig,
   validatePrivilegedPostgresConnectionString } from './prCControlledHumanPostgresTls.mjs';
 import { LOCAL_AUTHENTICATED_EXECUTION_KIND, verifyLocalAcceptanceServer } from './localAcceptanceBuild.mjs';
@@ -675,8 +676,11 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       throw primaryError;
     }
   }
+  const observationTimings = createObservationTimings();
+  const observedDatabase = { query: (sql, values) => observationTimings.query(database, sql, values) };
+  diagnosticState.observationTimings = observationTimings;
   const rawAdapter = (dependencies.createPostgresAdapter ?? createAuthenticatedHostedPostgresAdapter)({
-    config, db: database,
+    config, db: observedDatabase,
     verifyDeployment: () => (dependencies.verifyDeployment ?? verifyAuthenticatedHostedDeployment)(config,
       {managementToken:environment.AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN}),
     verifySecretBackend: () => (dependencies.verifySecretBackend ?? verifyAuthenticatedSecretBackend)(environment,
@@ -690,13 +694,21 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
   });
   const adapter = {
     ...rawAdapter,
+    observe: input => observationTimings.observe(() => rawAdapter.observe(input)),
     preflight: input => { diagnosticState.phase='PREFLIGHT';
       return withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', () => rawAdapter.preflight(input)); },
     activate: input => { diagnosticState.phase='ACTIVATION';
       return withAuthenticatedHostedDiagnostic('ACTIVATION', () => rawAdapter.activate(input)); },
   };
-  const identity = (dependencies.createIdentityAdapter ?? createAuthenticatedHostedIdentityAdapter)({ config, db: database });
+  const rawIdentity = (dependencies.createIdentityAdapter ?? createAuthenticatedHostedIdentityAdapter)({ config, db: observedDatabase });
+  const identity = { ...rawIdentity,
+    verifySession: input => observationTimings.identity(() => rawIdentity.verifySession(input)),
+  };
   const controller = new AuthenticatedHostedController({ config, adapter, identity });
+  const beginBrowserAction = controller.beginBrowserAction.bind(controller);
+  const finishBrowserAction = controller.finishBrowserAction.bind(controller);
+  controller.beginBrowserAction = (...args) => observationTimings.admission(() => beginBrowserAction(...args));
+  controller.finishBrowserAction = (...args) => observationTimings.finish(() => finishBrowserAction(...args));
   diagnosticState.controller = controller;
   const cancellation=new AbortController();const signalSource=dependencies.signalSource??process;
   const cancelSigterm=()=>cancellation.abort('SIGNAL_SIGTERM');const cancelSigint=()=>cancellation.abort('SIGNAL_SIGINT');
@@ -818,6 +830,7 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
       primary,
       child: diagnosticState.child,
       identity,
+      observationTimings: diagnosticState.observationTimings?.snapshot() ?? null,
       cleanup: diagnosticState.cleanup,
     });
     try { await atomicJson(outputPaths.diagnostic, envelope); }

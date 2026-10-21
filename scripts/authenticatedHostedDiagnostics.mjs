@@ -1,5 +1,6 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { validateObservationTimings } from './authenticatedObservationTimings.mjs';
 
 const STAGES = new Set([
   'DATABASE_CONNECT',
@@ -249,12 +250,15 @@ const runFailure = value => exactKeys(value, ['phase', 'category'])
   && RUN_PHASES.has(value.phase) && RUN_CATEGORIES.has(value.category)
   ? Object.freeze({ phase: value.phase, category: value.category }) : null;
 
-export function createAuthenticatedHostedRunDiagnostic({ failure, primary, child = null, identity = null, cleanup }) {
+export function createAuthenticatedHostedRunDiagnostic({ failure, primary, child = null, identity = null,
+  observationTimings = null, cleanup }) {
   const safeFailure = runFailure(failure);
   const safePrimary = runFailure(primary);
   const safeChild = child === null ? null : validateAuthenticatedHostedPlaywrightDiagnostic(child);
   const safeIdentity = identity === null ? null : validateRunIdentityDiagnostic(identity);
+  const safeTimings = observationTimings === null ? null : validateObservationTimings(observationTimings);
   if (!safeFailure || !safePrimary || (child !== null && !safeChild) || (identity !== null && !safeIdentity)
+    || (observationTimings !== null && !safeTimings)
     || !['verified', 'failed', 'not-required'].includes(cleanup)) {
     throw new Error('AUTHENTICATED_HOSTED_RUNNER_DIAGNOSTIC_ENVELOPE_REJECTED');
   }
@@ -265,17 +269,20 @@ export function createAuthenticatedHostedRunDiagnostic({ failure, primary, child
     primary: safePrimary,
     child: safeChild,
     identity: safeIdentity,
+    ...(safeTimings ? { observationTimings: safeTimings } : {}),
     cleanup: Object.freeze({ status: cleanup }),
   });
 }
 
 export function validateAuthenticatedHostedRunDiagnostic(value) {
-  if (!exactKeys(value, ['schemaVersion', 'status', 'failure', 'primary', 'child', 'identity', 'cleanup'])
+  if (!exactKeys(value, ['schemaVersion', 'status', 'failure', 'primary', 'child', 'identity', 'cleanup',
+    ...(Object.hasOwn(value ?? {}, 'observationTimings') ? ['observationTimings'] : [])])
     || value.schemaVersion !== AUTHENTICATED_HOSTED_DIAGNOSTIC_SCHEMA || value.status !== 'failed'
     || !exactKeys(value.cleanup, ['status'])) return null;
   try {
     return createAuthenticatedHostedRunDiagnostic({ failure: value.failure, primary: value.primary,
-      child: value.child, identity: value.identity, cleanup: value.cleanup.status });
+      child: value.child, identity: value.identity, observationTimings: value.observationTimings,
+      cleanup: value.cleanup.status });
   } catch { return null; }
 }
 

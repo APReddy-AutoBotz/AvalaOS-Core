@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Observation cost investigation (2026-10-21)
+
+PR #321 is merged as `32297e2cf10125dd21a9cc956779ea255a628254`. Its completed synthetic run retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** and verified cleanup. The actor boundary still exceeded 15 seconds: admission 6.271 seconds and drain 13.416 seconds. The prior local index proof did not resolve the hosted timeout.
+
+AP separately approved a bounded read-only diagnostic of that quiesced synthetic scope. The exact installed SELECT-only authority function matched source. Executed measurements from the developer machine found 3.482 ms planning, 1.543 ms execution, no JIT, five returned capture rows, 30.64 ms capture client time and 30.36 ms reader time. Baseline round trips were 18.09–19.47 ms. The first source-only query took 469.74 ms; later source EXPLAIN execution took 0.864 ms. These distinguish the measured warm query from a possible cold cost; they do not reproduce the GitHub runner's network path or establish historical causation. The transaction rolled back and the connection closed without application writes.
+
+Focused action/identity/observation/query counters now accompany failure diagnostics, retaining only bounded numeric aggregates. Query wall time includes the existing client's queue wait; it is not server execution time. Local verification covers attribution, concurrency, error preservation, privacy and runner persistence through cleanup. **The timeout remains unresolved; no performance fix or full acceptance is claimed.** Another full run is not authorized. Next: measure the instrumented runner path in a separately approved focused diagnostic, then reproduce and correct the demonstrated bottleneck locally. See [active completion plan](planning/hosted-acceptance-completion.md).
+
 ## Observation-drain index correction (2026-10-20)
 
 PR #320 is merged as `3ca4a63315c937b32654dbf9b8ae01d5291ed453`. Its completed full run retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, verified cleanup and providers OFF. The actor boundary took 17.199 seconds, including 11.293 seconds draining observations. Those timings do not identify the database's internal cause.
