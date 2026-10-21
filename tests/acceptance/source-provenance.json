@@ -383,7 +383,7 @@
     "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:3040116f256682376befef77025b6993bd23233ec8f9d72bc1d09fd7f8a63e43",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:9957afcbbe54f65cbaab2edf335d14c9af0491cc1bc629bb2932f336217a68c9",
-    "tests/browser/authenticatedHostedSignInEntry.spec.ts": "sha256:57ae0a6ab34e6f9dfc94d410f8fa74dcd4225f4689a77134082f25b550d1f31c",
+    "tests/browser/authenticatedHostedSignInEntry.spec.ts": "sha256:3c4daab864a273153c08a5baeee98765d56fe6d532c284d0dc13b73f69821524",
     "tests/browser/authenticatedLifecycleHarness.test.ts": "sha256:a0847d14038570931f9905e1b10143f67e9d730760ad6d816172a934829ad509",
     "tests/browser/authenticatedLifecycleHarness.ts": "sha256:8a15705488916c5c0f912c89f88761ebfea306b73e44c7fdf5882bdfee3187c1",
     "tests/browser/enterpriseIntelligence.spec.ts": "sha256:b5c27bb51d9eb0d529e1427d108bddf4853ee810634a28473ff9d95cb353bb3a",
