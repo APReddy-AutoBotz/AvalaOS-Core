@@ -116,7 +116,7 @@
     "docs/planning/solo-developer-synthetic-acceptance-plan.md": "sha256:505af7cecb40829985436ad43b8250964d5a5410fe12625ebbac01c9edbe7fd1",
     "docs/planning/studio-lifecycle-acceptance.md": "sha256:d9fa55efbc2a922bd9f3a710f3d208f44837afa6dc123136cd498dc4d845d4cf",
     "docs/planning/trust-acceptance-evidence.md": "sha256:e4693bbd6960cf69a1ee9914fe7c2072588e3137d1d6e3c219da9768087ebf95",
-    "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:dd54064b9ceb703609a5cfd44e16ae091306c2bd694f790849c04d6ffa4e3468",
+    "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:78cb691a8f411127fb420844857ad54c5e9abb7cd21d66ad677dbcb3e4599323",
     "docs/quality/assess-document-mapping-projection-correction-evidence.md": "sha256:211f84b1c1e6b99ca88153a56e2cda246e3ca0d750475b276e064280e328b565",
     "docs/quality/assess-document-mapping-release-evidence.md": "sha256:0a6f9c43b74a56a6e26ffaf139dbdbdc7b86f8e779d09a61bc33ddfef2705ddd",
     "docs/quality/assess-document-xlsx-ingestion-correction-evidence.md": "sha256:30d4cb58c592131e54adcbcab178873c75b18546c05de15ca7ca1c8cec8962ed",
