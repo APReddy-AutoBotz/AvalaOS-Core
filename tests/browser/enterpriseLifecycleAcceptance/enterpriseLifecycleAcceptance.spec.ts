@@ -158,6 +158,7 @@ const authenticatedProductAcceptance = process.env.ENTERPRISE_LIFECYCLE_AUTHENTI
 const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
 const authenticatedAcceptanceMode = resolveAuthenticatedAcceptanceMode(process.env.AUTHENTICATED_ACCEPTANCE_MODE);
 const v2PrimaryPrefixDiagnostic = authenticatedAcceptanceMode === 'v2_primary_prefix_diagnostic';
+const reviewerSelectionDiagnostic = authenticatedAcceptanceMode === 'reviewer_selection_diagnostic';
 const v2FullPrefixReproductionVariant = resolveV2FullPrefixLocalSelection({
   variant: process.env.ENTERPRISE_LIFECYCLE_V2_FULL_PREFIX_REPRODUCTION,
   authenticated: authenticatedProductAcceptance,
@@ -166,8 +167,9 @@ const v2FullPrefixReproductionVariant = resolveV2FullPrefixLocalSelection({
 });
 const v2FullPrefixReproduction = v2FullPrefixReproductionVariant !== null;
 const controllerBackedAcceptance = hostedAuthenticatedAcceptance || v2FullPrefixReproduction;
-if (v2PrimaryPrefixDiagnostic && (!authenticatedProductAcceptance || !hostedAuthenticatedAcceptance)) {
-  throw new Error('AUTHENTICATED_V2_RELOAD_HOSTED_AUTH_REQUIRED');
+if ((v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic)
+  && (!authenticatedProductAcceptance || !hostedAuthenticatedAcceptance)) {
+  throw new Error('AUTHENTICATED_FOCUSED_DIAGNOSTIC_HOSTED_AUTH_REQUIRED');
 }
 const hostedAllowedOrigins = new Set([
   process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL,
@@ -663,6 +665,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     test.skip((v2PrimaryPrefixDiagnostic || v2FullPrefixReproduction)
       && !testInfo.tags.includes('@v2-primary-prefix-diagnostic'),
     'focused V2 execution runs only the original Desktop primary prefix');
+    test.skip(reviewerSelectionDiagnostic && !testInfo.tags.includes('@reviewer-selection-diagnostic'),
+    'focused reviewer selection execution runs only the standalone Desktop diagnostic');
+    test.skip(!reviewerSelectionDiagnostic && testInfo.tags.includes('@reviewer-selection-diagnostic'),
+    'standalone reviewer selection diagnostic is excluded from ordinary acceptance');
     if (controllerBackedAcceptance) {
       await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
     }
@@ -753,7 +759,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       v2FullPrefixQueues = Object.freeze({ network: reproductionNetworkQueue, cases: reproductionCaseQueue });
     }
     if (hasBoundaryFailure) failed = true;
-    if (v2PrimaryPrefixDiagnostic) {
+    if (v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic) {
       if (hasBoundaryFailure) throw boundaryFailure;
       return;
     }
@@ -791,6 +797,105 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(path.join(outputDirectory, `browser-${projectName}.json`), `${JSON.stringify(fragment, null, 2)}\n`, 'utf8');
     if (hasBoundaryFailure) throw boundaryFailure;
+  });
+
+  test('selects the exact eligible reviewer, commits, replays and rejects a stale review command',
+    { tag: '@reviewer-selection-diagnostic' }, async ({ page, context }) => {
+    await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
+    const created = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+      page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
+    expect(created.status).toBe(200);
+    await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
+    await completeRequiredAssessmentFacts(page);
+    await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    await expect(page.getByText('Draft saved as a new immutable authoring version.', { exact: true })).toBeVisible();
+    const finalized = await observeApiResponse(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page));
+    expect(finalized.status).toBe(200);
+    await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
+
+    let candidateProofRecorded = false;
+    await page.route('**/rest/v1/rpc/assess_v2_eligible_reviewers', async route => {
+      if (!candidateProofRecorded) {
+        const headers = await route.request().allHeaders();
+        const result = await control<{ recorded: true; candidateCount: 1 }>('/control/reviewer-selection-candidates', {
+          projectName,
+          accessToken: (headers.authorization ?? '').replace(/^Bearer\s+/iu, ''),
+        });
+        expect(result).toEqual({ recorded: true, candidateCount: 1 });
+        candidateProofRecorded = true;
+      }
+      await route.fallback();
+    });
+    const replayPage = await context.newPage();
+    const stalePage = await context.newPage();
+    await authenticatedHostedConfigureChromiumDurableResponseBodies(context, replayPage);
+    await authenticatedHostedConfigureChromiumDurableResponseBodies(context, stalePage);
+    for (const reviewPage of [page, replayPage, stalePage]) {
+      await enterProcessAs(reviewPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
+      await expect(reviewPage.getByTestId('assess-v2-review-workspace')).toContainText('Reviewer-ready');
+      const select = reviewPage.getByLabel('Eligible reviewer', { exact: true });
+      await expect(select.locator(`option[value="${setup.actors.reviewer.user.id}"]`)).toHaveCount(1, { timeout: 15_000 });
+      const eligibleValues = await select.locator('option').evaluateAll(options => options
+        .map(option => (option as HTMLOptionElement).value).filter(Boolean));
+      expect(eligibleValues).toEqual([setup.actors.reviewer.user.id]);
+      expect(eligibleValues).not.toContain(setup.actors.author.user.id);
+      expect(eligibleValues).not.toContain(setup.actors.approver.user.id);
+      expect(eligibleValues).not.toContain(setup.actors.outsider.user.id);
+    }
+    expect(candidateProofRecorded).toBe(true);
+    await page.unroute('**/rest/v1/rpc/assess_v2_eligible_reviewers');
+    await selectReviewer(page, setup.actors.reviewer);
+    await selectReviewer(replayPage, setup.actors.reviewer);
+
+    const before = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+    const assignment = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+      page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
+    expect(assignment.status).toBe(200);
+    await expect(page.getByText(/Reviewer assignment committed\./u)).toBeVisible();
+    const replay = await observeApiResponse(replayPage, '/functions/v1/assess-v2-command', () =>
+      replayPage.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
+    expect(replay.status).toBe(200);
+    await expect(replayPage.getByText(/Reviewer assignment committed\./u)).toBeVisible();
+    const staleWorkspace = stalePage.getByTestId('assess-v2-review-workspace');
+    await staleWorkspace.getByLabel('Review rationale', { exact: true })
+      .fill('Reject the stale reviewer-ready snapshot.');
+    const stale = await observeApiResponse(stalePage, '/functions/v1/assess-v2-command', () =>
+      staleWorkspace.getByRole('button', { name: 'Request changes', exact: true }).click(), true);
+    expect(stale.status).toBe(409);
+    expect(stale.errorCode).toBe('VERSION_CONFLICT');
+    await expect(stalePage.getByText(
+      'This assessment changed on the server. Reload it before retrying the action.', { exact: true },
+    )).toBeVisible();
+    await expect(stalePage.getByText(/Review resolution committed:/u)).toHaveCount(0);
+    const after = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
+    expect(after.assignments).toBe(before.assignments + 1);
+    expect(after.changesRequested).toBe(before.changesRequested);
+    expect(after.receipts).toBe(before.receipts + 1);
+    expect(after.audits).toBe(before.audits + 1);
+    const measurements = lifecycleMeasurements(before, after, before.assignments, after.assignments);
+    bindObservedCase('E2E-004', assignment.actionId, replay.actionId, stale.actionId);
+    authenticatedCases.push({
+      testId: 'E2E-004', status: 'passed', proofMode: 'actual-ui',
+      observations: {
+        browser: { actions: [
+          { action: 'click', target: 'Commit reviewer assignment' },
+          { action: 'retry', target: 'Same reviewer assignment command' },
+          { action: 'click', target: 'Stale review resolution' },
+        ], result: { staleDenied: true, exactReplayReconciled: true, singleEffectVisible: true } },
+        api: { productionRoutes: ['/functions/v1/assess-v2-command'], responses: [
+          { classification: 'REVIEW_ASSIGNMENT_COMMITTED', status: assignment.status },
+          { classification: 'REPLAYED', status: replay.status },
+          { classification: 'VERSION_CONFLICT', status: stale.status },
+        ] },
+      },
+      controls: { assertions: [
+        { id: 'stale-command-denied', status: 'passed' },
+        { id: 'same-command-reconciled-with-one-effect', status: 'passed' },
+      ] },
+      measurements, cleanup: { verified: true },
+    });
+    await closePageAfterOwnedNetwork(replayPage);
+    await closePageAfterOwnedNetwork(stalePage);
   });
 
   test('authors, replays, rejects stale work, requests changes and resubmits through the production UI',
@@ -1316,7 +1421,6 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       }
       await selectReviewer(page, setup.actors.reviewer);
       await selectReviewer(replayPage, setup.actors.reviewer);
-      await selectReviewer(stalePage, setup.actors.approver);
 
       const beforeAssignmentLifecycle = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
@@ -1343,11 +1447,15 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
       observe('command-replay', 'ui.replay-no-new-effect');
 
+      const staleWorkspace = stalePage.getByTestId('assess-v2-review-workspace');
+      await staleWorkspace.getByLabel('Review rationale', { exact: true })
+        .fill('Reject the stale reviewer-ready snapshot.');
       const staleApi = await observeApiResponse(stalePage, '/functions/v1/assess-v2-command', () =>
-        stalePage.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click());
+        staleWorkspace.getByRole('button', { name: 'Request changes', exact: true }).click(), true);
       expect(staleApi.status).toBe(409);
+      expect(staleApi.errorCode).toBe('VERSION_CONFLICT');
       await expect(stalePage.getByText('This assessment changed on the server. Reload it before retrying the action.', { exact: true })).toBeVisible();
-      await expect(stalePage.getByText(/Reviewer assignment committed\./u)).toHaveCount(0);
+      await expect(stalePage.getByText(/Review resolution committed:/u)).toHaveCount(0);
       expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
       observe('command-stale-denial', 'ui.stale-no-false-success');
       if (authenticatedProductAcceptance && beforeAssignmentLifecycle && afterAssignmentLifecycle) {
@@ -1375,7 +1483,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             browser: { actions: [
               { action: 'click', target: 'Commit reviewer assignment' },
               { action: 'retry', target: 'Same reviewer assignment command' },
-              { action: 'click', target: 'Stale reviewer assignment' },
+              { action: 'click', target: 'Stale review resolution' },
             ], result: { staleDenied: true, exactReplayReconciled: true, singleEffectVisible: true } },
             api: { productionRoutes: ['/functions/v1/assess-v2-command'], responses: [
               { classification: 'REVIEW_ASSIGNMENT_COMMITTED', status: replayApi.status },

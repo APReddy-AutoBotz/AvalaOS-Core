@@ -53,7 +53,7 @@ export default defineConfig({
     video: 'off',
     serviceWorkers: 'block',
   },
-  projects: acceptanceMode === 'v2_primary_prefix_diagnostic'
+  projects: acceptanceMode !== 'full_acceptance'
     ? [{ name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } }]
     : [
       { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },

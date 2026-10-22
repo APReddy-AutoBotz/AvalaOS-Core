@@ -91,10 +91,11 @@ const beginAndRecord = (
   accumulator.record(passed(stage, rowCount));
 };
 
-test('mode remains full by default and accepts only the two exact values', () => {
+test('mode remains full by default and accepts only the three exact values', () => {
   assert.equal(resolveAuthenticatedAcceptanceMode(undefined), 'full_acceptance');
   assert.equal(resolveAuthenticatedAcceptanceMode('full_acceptance'), 'full_acceptance');
   assert.equal(resolveAuthenticatedAcceptanceMode('v2_primary_prefix_diagnostic'), 'v2_primary_prefix_diagnostic');
+  assert.equal(resolveAuthenticatedAcceptanceMode('reviewer_selection_diagnostic'), 'reviewer_selection_diagnostic');
   for (const candidate of ['', ' full_acceptance', 'V2_PRIMARY_PREFIX_DIAGNOSTIC', 'diagnostic']) {
     assert.throws(() => resolveAuthenticatedAcceptanceMode(candidate), /AUTHENTICATED_V2_RELOAD_MODE_REJECTED/u);
   }
@@ -349,6 +350,9 @@ test('the diagnostic tag reuses the original primary prefix and exits before lat
     && beforeReload < observer && observer < reload && reload < afterReload
     && afterReload < diagnosticExit && diagnosticExit < laterAuthoring);
   assert.match(source, /if \(diagnosticPrefixComplete\) return;/u);
-  assert.match(source, /if \(v2PrimaryPrefixDiagnostic\) \{[\s\S]*?return;[\s\S]*?Add minimum working structure/u);
-  assert.match(source, /if \(v2PrimaryPrefixDiagnostic\) \{[\s\S]*?if \(hasBoundaryFailure\) throw boundaryFailure;[\s\S]*?return;[\s\S]*?finalize-project/u);
+  const primarySource = source.slice(source.indexOf("test('authors, replays"),
+    source.indexOf("test('independent approval"));
+  assert.match(primarySource,
+    /if \(diagnosticCheckpoint\) \{[\s\S]*?diagnosticPrefixComplete = true;[\s\S]*?return;[\s\S]*?\} else \{[\s\S]*?Add minimum working structure/u);
+  assert.match(source, /if \(v2PrimaryPrefixDiagnostic \|\| reviewerSelectionDiagnostic\) \{[\s\S]*?if \(hasBoundaryFailure\) throw boundaryFailure;[\s\S]*?return;[\s\S]*?finalize-project/u);
 });

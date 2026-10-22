@@ -216,7 +216,9 @@ const receiptAnchor = (entry, actorHash, sessionHash) => {
     receiptId,
     receiptIdHash: scalarDigest(receiptId),
     persistedRequestHash: asDigest(row.request_hash),
-    commandId: row.resource_id ?? row.response?.commandId ?? row.response?.resourceId
+    commandId: row.resource_id
+      ?? (commandType === 'assessment_v2.review.assign' ? row.response?.caseId : null)
+      ?? row.response?.commandId ?? row.response?.resourceId
       ?? row.response?.resource?.assessmentId ?? null,
     occurredAt: entry.occurredAt,
   };

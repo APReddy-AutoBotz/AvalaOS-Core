@@ -282,6 +282,53 @@ const baseEnvironment = () => ({
     roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id() } }),
 });
 
+const reviewerDiagnosticEnvironment = () => ({
+  ...baseEnvironment(),
+  AUTHENTICATED_ACCEPTANCE_MODE: 'reviewer_selection_diagnostic',
+  ACCEPTANCE_EXECUTION_KIND: 'local_real_backend',
+  AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND: 'local_real_backend_authenticated',
+  HOSTED_PILOT_URL: 'http://127.0.0.1:4173',
+  NETLIFY_DEPLOY_ID: '',
+  AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST: digest('reviewer-diagnostic-build'),
+  AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST: digest('reviewer-diagnostic-exercise'),
+  LOCAL_ACCEPTANCE_BUILD_ROOT: path.join(os.tmpdir(), 'avalaos-local-acceptance-reviewer-fixture'),
+  AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST: deriveLocalAcceptanceExerciseDigest({
+    approvedExerciseDigest: digest('reviewer-diagnostic-exercise'),
+    buildDigest: digest('reviewer-diagnostic-build'),
+    releaseSha: 'a'.repeat(40),
+  }),
+});
+
+test('reviewer diagnostic leaves author setup reads untouched and verifies only reviewer mutations', async () => {
+  const config = validateAuthenticatedHostedControllerEnvironment(reviewerDiagnosticEnvironment());
+  const authorId=id(); const reviewerId=id(); const authorSession=id(); const reviewerSession=id();
+  let frame=0; const verified=[];
+  const controller=new AuthenticatedHostedController({config,
+    identity:{verifySession:async({accessToken})=>accessToken===tokenFor(authorId,authorSession)
+      ? {actorId:authorId,sessionId:authorSession}:{actorId:reviewerId,sessionId:reviewerSession}},
+    adapter:{bindSession:async()=>{},observe:async()=>({capturedAt:`2026-10-22T00:00:0${++frame}.000Z`,records:[]}),
+      verifyReviewerSelectionAction:async input=>{verified.push(input);return {commandIdHash:digest('case'),receiptIdHash:digest('receipt')};}},
+  });
+  controller.active=true;controller.exerciseId=id();
+  controller.projects.set('desktop-chromium',{identities:{author:{id:authorId},reviewer:{id:reviewerId}},
+    lastBoundaryAt:'2026-10-21T23:59:59.000Z'});
+  const read=await controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:tokenFor(authorId,authorSession),
+    route:'/rest/v1/rpc/diagnostic_read',requestBody:{method:'GET'}});
+  await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:read.actionId,status:200,responseBody:{}});
+  assert.equal(verified.length,0);
+  const requestId=id(); const caseId=id();
+  const mutation=await controller.beginBrowserAction({projectName:'desktop-chromium',
+    accessToken:tokenFor(reviewerId,reviewerSession),route:'/functions/v1/assess-v2-command',requestBody:{
+      requestId,idempotencyKey:`reviewer:${requestId}`,commandType:'assessment_v2.review.assign',
+      organizationId:config.scope.organizationId,workspaceId:config.scope.workspaceId,authorizationVersion:1,
+      expectedVersion:3,payload:{caseId,decisionId:id(),reviewSequence:1,reviewerId},
+    }});
+  await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:mutation.actionId,status:200,
+    responseBody:{outcome:'committed',resource:{id:caseId}}});
+  assert.equal(verified.length,1);assert.equal(verified[0].actorId,reviewerId);
+  assert.equal(verified[0].requestBody.commandType,'assessment_v2.review.assign');
+});
+
 test('local real-backend controller binds build bytes, null deployment and derived exercise identity', async () => {
   const approvedExerciseDigest = digest('approved-local-exercise');
   const buildDigest = digest('local-build');
@@ -401,7 +448,7 @@ test('post-reload missing session is evidence, while pre-reload loss and full-mo
   controller.active = true;
   controller.projects.set('desktop-chromium', { identities: { author: { id: actorId } } });
   controller.boundSessions.set('desktop-chromium:author', { actorId, sessionId });
-  await assert.rejects(controller.setupProject('pixel-7-chromium'), /V2_RELOAD_DIAGNOSTIC_PROJECT_REJECTED/u);
+  await assert.rejects(controller.setupProject('pixel-7-chromium'), /FOCUSED_DIAGNOSTIC_PROJECT_REJECTED/u);
   const input = phase => ({ schemaVersion: AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, phase,
     projectName: 'desktop-chromium', persona: 'author', accessToken: tokenFor(actorId, sessionId),
     browser: v2DiagnosticBrowser() });
@@ -720,6 +767,33 @@ test('cleanup before any committed setup leaves existing workspace controls unto
   }}});
   await adapter.cleanup({exerciseId:id(),projects:[]});
   assert.equal(commands.some(sql=>/\b(?:UPDATE|DELETE FROM) public\.(?:legacy_delivery_workspace_controls|studio_delivery_workspace_controls|enterprise_transcript_workspace_flags)\b/u.test(sql)),false);
+});
+
+test('reviewer diagnostic adapter binds the real receipt projection and eligible-reviewer RPC', async () => {
+  const config=validateAuthenticatedHostedControllerEnvironment(reviewerDiagnosticEnvironment());
+  const identities={author:{id:id()},reviewer:{id:id()},approver:{id:id()},outsider:{id:id()}};
+  const caseId=id();const decisionId=id();const receiptId=id();const requestId=id();const sql=[];
+  const adapter=createAuthenticatedHostedPostgresAdapter({config,db:{query:async(statement)=>{
+    sql.push(statement);
+    if(/FROM public\.assess_v2_cases c/u.test(statement))return {rows:[{case_id:caseId,decision_id:decisionId}]};
+    if(/FROM public\.assess_command_receipts/u.test(statement))return {rows:[{id:receiptId,status:'succeeded',
+      case_resource_matches:true}]};
+    throw new Error('UNEXPECTED_QUERY');
+  }},fetchImpl:async(_url,init)=>{
+    assert.equal(JSON.parse(init.body).p_case_id,caseId);
+    return new Response(JSON.stringify([{actorId:identities.reviewer.id}]),{status:200});
+  }});
+  const project={processId:id(),identities};
+  assert.deepEqual(await adapter.verifyReviewerSelectionCandidates({project,
+    reviewerAccessToken:'x'.repeat(40),reviewerActorId:identities.reviewer.id}),{
+    count:1,reviewerIncluded:true,ownerExcluded:true,approverExcluded:true,outsiderExcluded:true,
+  });
+  const trusted=await adapter.verifyReviewerSelectionAction({project,actorId:identities.reviewer.id,
+    requestBody:{commandType:'assessment_v2.review.assign',requestId,payload:{caseId}},
+    responseBody:{outcome:'committed',resource:{caseId}},status:200});
+  assert.deepEqual(trusted,{commandIdHash:authenticatedHostedDigest(caseId),receiptIdHash:authenticatedHostedDigest(receiptId)});
+  assert.match(sql.find(statement=>/assess_command_receipts/u.test(statement)),/response->>'caseId'=\$6 case_resource_matches/u);
+  assert.doesNotMatch(sql.find(statement=>/assess_command_receipts/u.test(statement)),/resource_id/u);
 });
 
 test('cleanup control reads serialize on the single PostgreSQL client', async () => {

@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { isAbsolute, relative, resolve } from 'node:path';
 import {
   authenticatedLifecycleAttestEverySubmittedEvidence as attestEvidence,
   authenticatedLifecycleClickProduct as clickProduct,
@@ -28,6 +30,7 @@ import {
 const appOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL ?? 'http://127.0.0.1:4431').origin;
 const apiOrigin = new URL(process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? 'http://127.0.0.1:4432').origin;
 const authStorageKey = process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token';
+const eligibleReviewerReproduction = process.env.ASSESS_V2_ELIGIBLE_REVIEWER_REPRODUCTION === '1';
 if (appOrigin === apiOrigin) throw new Error('ASSESS_V2_NATIVE_ORIGINS_NOT_DISTINCT');
 
 type NativeStreamStats = Readonly<{
@@ -56,6 +59,21 @@ type ProcessFrame = Readonly<{
   receipts: number;
   audits: number;
   targetHash: string;
+}>;
+type MutationSnapshot = Readonly<{
+  reviewAssignments: number;
+  governResolutions: number;
+  commandReceipts: number;
+  privilegedAudits: number;
+}>;
+type ReviewResolutionFrame = Readonly<{
+  changesRequested: number;
+  rejectedReviews: number;
+}>;
+type CandidateAuthorityDenial = Readonly<{
+  denied: true;
+  candidateAuthorityDenied: true;
+  denialClass: 'candidate-authority';
 }>;
 
 const startDirectRead = async (page: Page, key: string, processId: string) => page.evaluate((input) => {
@@ -286,6 +304,170 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Primitive 1 name', { exact: true })).toHaveValue('Native persisted capture');
   });
+
+  (eligibleReviewerReproduction ? test : test.skip)(
+    '@eligible-reviewer-authority excludes the approver and preserves replay plus stale denial',
+    async ({ context, page }, testInfo) => {
+    await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
+    const createResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
+        && response.request().postDataJSON()?.commandType === 'assessment_v2.create');
+    await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
+    expect((await createResponse).status()).toBe(200);
+    await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
+    await page.getByLabel('Primitive 1 name', { exact: true }).fill('Eligible reviewer authority proof');
+    await completeFacts(page, 'strong-automation');
+    const saveResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
+        && response.request().postDataJSON()?.commandType === 'assessment_v2.draft.upsert');
+    await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    expect((await saveResponse).status()).toBe(200);
+    const finalizeResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
+        && response.request().postDataJSON()?.commandType === 'assessment_v2.finalize');
+    await finalizeDecision(page);
+    expect((await finalizeResponse).status()).toBe(200);
+    await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
+
+    const replayPage = await context.newPage();
+    const stalePage = await context.newPage();
+    await authenticatedHostedConfigureChromiumDurableResponseBodies(context, replayPage);
+    await authenticatedHostedConfigureChromiumDurableResponseBodies(context, stalePage);
+    try {
+      for (const reviewPage of [page, replayPage, stalePage]) {
+        await enterProcess(reviewPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
+        await expect(reviewPage.getByTestId('assess-v2-review-workspace')).toContainText('Reviewer-ready');
+      }
+      const select = page.getByLabel('Eligible reviewer', { exact: true });
+      const optionValues = await select.locator('option').evaluateAll(options =>
+        options.map(option => (option as HTMLOptionElement).value).filter(Boolean));
+      expect(optionValues).toEqual([setup.actors.reviewer.user.id]);
+      expect(optionValues).not.toContain(setup.actors.author.user.id);
+      expect(optionValues).not.toContain(setup.actors.approver.user.id);
+      expect(optionValues).not.toContain(setup.actors.outsider.user.id);
+
+      const before = await control<MutationSnapshot>('/control/snapshot', { projectName });
+      const directDenial = await control<CandidateAuthorityDenial>(
+        '/control/eligible-reviewer-direct-denial', { projectName },
+      );
+      expect(directDenial.denied).toBe(true);
+      expect(directDenial.candidateAuthorityDenied).toBe(true);
+      expect(directDenial.denialClass).toBe('candidate-authority');
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(before);
+
+      let oldSelectionRejected = false;
+      let oldSelectionElapsedMs = 0;
+      const oldSelectionStartedAt = Date.now();
+      try {
+        await select.selectOption(setup.actors.approver.user.id, { timeout: 15_000 });
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).name).toBe('TimeoutError');
+        oldSelectionRejected = true;
+      } finally {
+        oldSelectionElapsedMs = Date.now() - oldSelectionStartedAt;
+      }
+      expect(oldSelectionRejected).toBe(true);
+      expect(oldSelectionElapsedMs).toBeGreaterThanOrEqual(14_500);
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(before);
+
+      await selectReviewer(page, setup.actors.reviewer);
+      await selectReviewer(replayPage, setup.actors.reviewer);
+      const assignmentResponse = page.waitForResponse(response =>
+        new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
+          && response.request().postDataJSON()?.commandType === 'assessment_v2.review.assign');
+      await page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
+      const assignmentStatus = (await assignmentResponse).status();
+      expect(assignmentStatus).toBe(200);
+      await expect(page.getByText(/Reviewer assignment committed\./u)).toBeVisible();
+      const afterAssignment = await control<MutationSnapshot>('/control/snapshot', { projectName });
+      expect(afterAssignment).toEqual({
+        reviewAssignments: before.reviewAssignments + 1,
+        governResolutions: before.governResolutions,
+        commandReceipts: before.commandReceipts + 1,
+        privilegedAudits: before.privilegedAudits + 1,
+      });
+
+      const replayResponse = replayPage.waitForResponse(response =>
+        new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
+          && response.request().postDataJSON()?.commandType === 'assessment_v2.review.assign');
+      await replayPage.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
+      const replayHttpResponse = await replayResponse;
+      const replayStatus = replayHttpResponse.status();
+      const replayPayload = await replayHttpResponse.json();
+      expect(replayStatus).toBe(200);
+      expect(replayPayload.outcome).toBe('replayed');
+      await expect(replayPage.getByText(/Reviewer assignment committed\./u)).toBeVisible();
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
+
+      const staleWorkspace = stalePage.getByTestId('assess-v2-review-workspace');
+      await staleWorkspace.getByLabel('Review rationale', { exact: true })
+        .fill('Reject the stale reviewer-ready snapshot.');
+      const beforeStaleFrame = await control<ReviewResolutionFrame>('/control/lifecycle-frame', { projectName });
+      const staleResponse = stalePage.waitForResponse(response =>
+        new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
+          && response.request().postDataJSON()?.commandType === 'assessment_v2.review.resolve');
+      await staleWorkspace.getByRole('button', { name: 'Request changes', exact: true }).click();
+      const staleHttpResponse = await staleResponse;
+      const staleStatus = staleHttpResponse.status();
+      const stalePayload = await staleHttpResponse.json();
+      expect(staleStatus).toBe(409);
+      expect(stalePayload.error?.code).toBe('VERSION_CONFLICT');
+      await expect(stalePage.getByText(
+        'This assessment changed on the server. Reload it before retrying the action.', { exact: true },
+      )).toBeVisible();
+      await expect(stalePage.getByText(/Review resolution committed:/u)).toHaveCount(0);
+      expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(afterAssignment);
+      const afterStaleFrame = await control<ReviewResolutionFrame>('/control/lifecycle-frame', { projectName });
+      expect(afterStaleFrame.changesRequested).toBe(beforeStaleFrame.changesRequested);
+      expect(afterStaleFrame.rejectedReviews).toBe(beforeStaleFrame.rejectedReviews);
+
+      const proof = {
+        schemaVersion: 'eligible-reviewer-authority-local-proof-v1',
+        localOnly: true,
+        project: testInfo.project.name,
+        actorLimitMs: 15_000,
+        roleParity: 'hosted-reviewer-and-approver',
+        sharedHostedRoleContractVerified: true,
+        historicalHostedCauseProven: false,
+        before: {
+          eligibleReviewerCount: optionValues.length,
+          oldApproverSelectionRejected: oldSelectionRejected,
+          oldApproverSelectionTimeoutMs: 15_000,
+          oldApproverSelectionElapsedMs: oldSelectionElapsedMs,
+          directIneligibleAssignmentDenied: directDenial.candidateAuthorityDenied,
+          excluded: { owner: true, approver: true, outsider: true },
+          mutationDelta: 0,
+        },
+        after: {
+          assignmentStatus,
+          replayStatus,
+          staleStatus,
+          staleErrorCode: stalePayload.error?.code,
+          replayOutcome: replayPayload.outcome,
+          assignmentDelta: afterAssignment.reviewAssignments - before.reviewAssignments,
+          receiptDelta: afterAssignment.commandReceipts - before.commandReceipts,
+          auditDelta: afterAssignment.privilegedAudits - before.privilegedAudits,
+          resolutionDelta: (afterStaleFrame.changesRequested + afterStaleFrame.rejectedReviews)
+            - (beforeStaleFrame.changesRequested + beforeStaleFrame.rejectedReviews),
+          staleFalseSuccessAbsent: true,
+        },
+      };
+      const privateRoot = resolve('output/local-private/authenticated-product-acceptance/eligible-reviewer-authority');
+      const proofDirectory = process.env.ELIGIBLE_REVIEWER_AUTHORITY_OUTPUT_DIR ?? '';
+      const relativeProofDirectory = relative(privateRoot, proofDirectory);
+      if (!isAbsolute(proofDirectory) || relativeProofDirectory.startsWith('..')
+        || isAbsolute(relativeProofDirectory) || relativeProofDirectory === '') {
+        throw new Error('ELIGIBLE_REVIEWER_AUTHORITY_OUTPUT_DIRECTORY_REJECTED');
+      }
+      await mkdir(proofDirectory, { recursive: true });
+      await writeFile(`${proofDirectory}/${testInfo.project.name}.json`, `${JSON.stringify(proof, null, 2)}\n`, 'utf8');
+    } finally {
+      await replayPage.close();
+      await stalePage.close();
+    }
+    },
+  );
 
   test('read observer retains pending headers, held bodies, cancellation and mixed duplicate lifecycle', async ({ page }) => {
     await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);

@@ -185,6 +185,37 @@ test('V1 assessment receipt correlation anchors create, upsert and finalize thro
   }
 });
 
+test('V2 reviewer assignment correlation anchors the source-confirmed review projection caseId', async () => {
+  const caseId=randomUUID();const requestId=randomUUID();const receiptId=randomUUID();const auditId=randomUUID();
+  const reviewerActorHash=scalar(ids.reviewer);const reviewerSessionHash=scalar('reviewer-session');
+  const db={async query(sql,parameters){
+    assert.deepEqual(parameters.slice(5),[ids.exercise,from]);
+    return {rows:[
+      {source:'__authority__',value:{...authorityFrame(),actorSessions:[{persona:'reviewer',
+        actorHash:reviewerActorHash,sessionHash:reviewerSessionHash,state:'active',boundAt:from}]}},
+      {source:'assess_v2_cases',value:{id:caseId,org_id:ids.org,workspace_id:ids.workspace,
+        process_id:ids.process,owner_id:ids.author,status:'in_review',version:4,created_at:from,updated_at:to}},
+      {source:'assess_command_receipts',value:{id:receiptId,org_id:ids.org,workspace_id:ids.workspace,
+        actor_id:ids.reviewer,command_type:'assessment_v2.review.assign',request_id:requestId,
+        request_hash:scalar('review-assign-request'),status:'succeeded',response:{caseId},created_at:to}},
+      {source:'privileged_audit_events',value:{id:auditId,org_id:ids.org,workspace_id:ids.workspace,
+        actor_id:ids.reviewer,request_id:requestId,resource_id:caseId,metadata:{receiptId},created_at:to}},
+    ]};
+  }};
+  const frame=await createAuthenticatedHostedObservationReader({db,
+    config:{scope:{organizationId:ids.org,workspaceId:ids.workspace}}})
+    .capture({exerciseId:ids.exercise,from,project});
+  const expected={commandIdHash:scalar(caseId),requestIdHash:scalar(requestId),
+    commandBindingHash:authenticatedHostedRequestBinding({requestId,actorHash:reviewerActorHash,
+      commandType:'assessment_v2.review.assign',requireUuid:true}).commandBindingHash,
+    receiptIdHash:scalar(receiptId)};
+  for(const source of ['assess_v2_cases','assess_command_receipts','privileged_audit_events']){
+    const row=frame.records.find(item=>item.source===source);
+    assert.deepEqual({commandIdHash:row.commandIdHash,requestIdHash:row.requestIdHash,
+      commandBindingHash:row.commandBindingHash,receiptIdHash:row.receiptIdHash},expected);
+  }
+});
+
 test('reader rejects a persisted row with no legitimate event or modification timestamp', async () => {
   const base = fakeDb();
   const db = { async query(sql, parameters) {

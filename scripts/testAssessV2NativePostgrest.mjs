@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { inspectV2ReadCatalog, runV2RowFreeProbes } from './assessV2ReadDiagnostic.mjs';
 import { createServer } from 'node:net';
 import { test } from 'node:test';
@@ -108,6 +109,11 @@ test('native PostgREST target rejects scheme-relative escape before dispatch', (
   );
 });
 
+const eligibleReviewerReproduction = process.env.ASSESS_V2_ELIGIBLE_REVIEWER_REPRODUCTION === '1';
+if (eligibleReviewerReproduction && (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1'
+  || process.env.ASSESS_V2_NATIVE_DIAGNOSTIC_ONLY === '1')) {
+  throw new Error('ASSESS_V2_ELIGIBLE_REVIEWER_REPRODUCTION_SCOPE_REJECTED');
+}
 const nativeTestTimeoutMs = process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1' ? 780_000 : 300_000;
 test('native PostgREST resumes a freshly created Assess V2 version 1 under real RLS', { timeout: nativeTestTimeoutMs }, async () => {
   const createTransport = await loadProductionTransport();
@@ -153,7 +159,9 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     await admin.end(); admin = null;
 
     fixture = await createEnterpriseLifecycleFixture({ databaseUrl, postgrestJwtSecret: jwtSecret,
-      runId: `native-${runId}`, runAttempt: '1', headSha: 'local-native-postgrest' });
+      runId: `native-${runId}`, runAttempt: '1', headSha: 'local-native-postgrest',
+      hostedPersonaRoleParity: eligibleReviewerReproduction,
+      providersEnabled: !eligibleReviewerReproduction });
     const postgrestId = docker('run', '-d', ...limits, '--memory=256m', '--memory-swap=256m',
       '-e', `PGRST_DB_URI=postgresql://authenticator@${postgresName}:5432/${fixture.databaseName}`,
       '-e', 'PGRST_DB_SCHEMAS=public', '-e', 'PGRST_DB_ANON_ROLE=anon',
@@ -275,6 +283,119 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
       'node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(appPort),
     ], { cwd: process.cwd(), stdio: 'inherit', env: appEnvironment });
     await waitForHttp(appBaseUrl);
+    if (eligibleReviewerReproduction) {
+      const readProviderState = async () => (await fixture.db.query(`SELECT
+        (SELECT provider_enabled FROM public.studio_artifact_runtime_control WHERE singleton) runtime_enabled,
+        (SELECT provider_enabled FROM public.enterprise_intelligence_runtime_control WHERE singleton) ei_runtime_enabled,
+        (SELECT count(*)::int FROM public.ai_provider_configs WHERE org_id=$1 AND status='active' AND deleted_at IS NULL) active_configs,
+        (SELECT count(*)::int FROM public.enterprise_ai_capability_routes
+          WHERE org_id=$1 AND workspace_id=$2 AND enabled AND deleted_at IS NULL) enabled_routes`,
+      [fixture.ids.organization, fixture.ids.workspace])).rows[0];
+      const providerState = await readProviderState();
+      assert.equal(providerState.runtime_enabled, false);
+      assert.equal(providerState.ei_runtime_enabled, false);
+      assert.equal(providerState.active_configs, 0);
+      assert.equal(providerState.enabled_routes, 0);
+      const proofRoot = path.resolve('output/local-private/authenticated-product-acceptance/eligible-reviewer-authority');
+      const proofDirectory = path.resolve(proofRoot, `run-${runId}`);
+      assert.equal(proofDirectory.startsWith(`${proofRoot}${path.sep}`), true);
+      await mkdir(proofRoot, { recursive: true });
+      await mkdir(proofDirectory, { recursive: false });
+      await run([
+        'node_modules/@playwright/test/cli.js', 'test',
+        '--config=playwright.assess-v2-native-postgrest.config.ts',
+        '--grep=@eligible-reviewer-authority',
+        '--max-failures=1',
+        `--output=.agent/eligible-reviewer-authority-playwright/run-${runId}`,
+      ], {
+        env: {
+          ...process.env,
+          ENTERPRISE_LIFECYCLE_APP_BASE_URL: appBaseUrl,
+          ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.baseUrl,
+          ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: fixture.controlToken,
+          ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY: fixture.authStorageKey,
+          ASSESS_V2_ELIGIBLE_REVIEWER_REPRODUCTION: '1',
+          ELIGIBLE_REVIEWER_AUTHORITY_OUTPUT_DIR: proofDirectory,
+        },
+      }).catch(async error => {
+        await writeFile(`${proofDirectory}/failure.json`, `${JSON.stringify({
+          schemaVersion: 'eligible-reviewer-authority-local-failure-v1',
+          status: 'failed',
+          localOnly: true,
+          ownedRunId: runId,
+          stage: 'focused-browser-proof',
+          failureClass: 'focused-test-failed',
+        }, null, 2)}\n`, 'utf8');
+        throw error;
+      });
+      const projects = ['chromium-desktop', 'chromium-mobile'];
+      const proofs = await Promise.all(projects.map(async project =>
+        JSON.parse(await readFile(`${proofDirectory}/${project}.json`, 'utf8'))));
+      for (const [index, proof] of proofs.entries()) {
+        assert.equal(proof.schemaVersion, 'eligible-reviewer-authority-local-proof-v1');
+        assert.equal(proof.localOnly, true);
+        assert.equal(proof.project, projects[index]);
+        assert.equal(proof.actorLimitMs, 15_000);
+        assert.equal(proof.roleParity, 'hosted-reviewer-and-approver');
+        assert.equal(proof.sharedHostedRoleContractVerified, true);
+        assert.equal(proof.historicalHostedCauseProven, false);
+        assert.deepEqual(proof.before, {
+          eligibleReviewerCount: 1,
+          oldApproverSelectionRejected: true,
+          oldApproverSelectionTimeoutMs: 15_000,
+          oldApproverSelectionElapsedMs: proof.before.oldApproverSelectionElapsedMs,
+          directIneligibleAssignmentDenied: true,
+          excluded: { owner: true, approver: true, outsider: true },
+          mutationDelta: 0,
+        });
+        assert.ok(proof.before.oldApproverSelectionElapsedMs >= 14_500);
+        assert.deepEqual(proof.after, {
+          assignmentStatus: 200,
+          replayStatus: 200,
+          staleStatus: 409,
+          staleErrorCode: 'VERSION_CONFLICT',
+          replayOutcome: 'replayed',
+          assignmentDelta: 1,
+          receiptDelta: 1,
+          auditDelta: 1,
+          resolutionDelta: 0,
+          staleFalseSuccessAbsent: true,
+        });
+      }
+      const result = {
+        schemaVersion: 'eligible-reviewer-authority-local-result-v1',
+        status: 'passed',
+        localOnly: true,
+        ownedRunId: runId,
+        projects,
+        actorLimitMs: 15_000,
+        providersEnabled: false,
+        historicalHostedCauseProven: false,
+        reproduced: { ineligibleApproverSelectionRejected: true, mutationDelta: 0 },
+        corrected: { assignment: 200, exactReplay: 200, staleDifferentCommand: 409, logicalMutations: 1 },
+      };
+      assert.deepEqual(await readProviderState(), providerState);
+      assert.equal(fixture.evidence.providerEffects.calls, 0);
+      assert.equal(fixture.evidence.providerEffects.paidCalls, 0);
+      assert.equal(fixture.evidence.providerEffects.egressAttempts, 0);
+      assert.equal(fixture.evidence.providerEffects.egress, 0);
+      assert.equal(fixture.evidence.providerEffects.syntheticProviderCalls, 0);
+      await stop(preview);
+      assert.ok(
+        preview.exitCode !== null || preview.signalCode !== null,
+        'ASSESS_V2_ELIGIBLE_REVIEWER_PREVIEW_DID_NOT_EXIT',
+      );
+      preview = null;
+      await writeFile(`${proofDirectory}/result.json`, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+      await writeFile(`${proofRoot}/latest.json`, `${JSON.stringify({
+        schemaVersion: 'eligible-reviewer-authority-local-latest-v1',
+        ownedRunId: runId,
+        result: path.relative(proofRoot, `${proofDirectory}/result.json`).split(path.sep).join('/'),
+      }, null, 2)}\n`, 'utf8');
+      assert.equal(fixture.nativePostgrestStats().active, 0);
+      process.stdout.write(`# ELIGIBLE_REVIEWER_AUTHORITY_LOCAL_RESULT ${JSON.stringify(result)}\n`);
+      return;
+    }
     if (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1') {
       const reproductionDirectory = 'output/local-private/authenticated-product-acceptance/authenticated-native-primary-reproduction';
       await mkdir(reproductionDirectory, { recursive: true });

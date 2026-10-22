@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -413,6 +413,236 @@ try {
     const proof = await runObserverBrowserProof({ db: adapterDb, config, adapter, project, ids });
     writeFileSync(path.join(privateDirectory, 'observer-browser-proof.json'), JSON.stringify(proof, null, 2));
     console.log(JSON.stringify(proof));
+  } else if (process.env.AUTHENTICATED_REVIEWER_SELECTION_DIAGNOSTIC_PROOF === 'true') {
+    const actorTransaction=async(actorId,operation)=>{
+      await db.query('BEGIN');
+      try{
+        await db.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[actorId]);
+        await db.query('SET LOCAL ROLE authenticated');
+        const result=await operation();
+        await db.query('ROLLBACK');
+        return result;
+      }catch(error){await db.query('ROLLBACK');throw error;}
+    };
+    await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])',
+      [Object.values(ids.sessions),Object.values(ids.actors)]);
+    const reviewerRpcFetch=async(url,init)=>{
+      const parsedUrl=new URL(url);
+      assert.equal(parsedUrl.pathname,'/rest/v1/rpc/assess_v2_eligible_reviewers');
+      assert.equal(init.method,'POST');
+      assert.equal(init.headers.authorization,`Bearer ${tokenFor(ids.actors.reviewer,ids.sessions.reviewer)}`);
+      const body=JSON.parse(init.body);
+      const rows=await actorTransaction(ids.actors.reviewer,async()=>
+        (await db.query('SELECT public.assess_v2_eligible_reviewers($1,$2,$3,$4) value',
+          [body.p_org_id,body.p_workspace_id,body.p_case_id,body.p_decision_id])).rows.map(row=>row.value));
+      return new Response(JSON.stringify(rows),{status:200,headers:{'content-type':'application/json'}});
+    };
+    const proofConfig={...config,acceptanceMode:'reviewer_selection_diagnostic',
+      supabaseUrl:'http://127.0.0.1:61677',serviceRoleKey:'local-proof-service-role-key-more-than-thirty-two-characters'};
+    const proofBindingAdapter=createAuthenticatedHostedPostgresAdapter({config:proofConfig,db:adapterDb,
+      fetchImpl:reviewerRpcFetch,verifyDeployment:async()=>{throw new Error('REVIEWER_PROOF_DEPLOYMENT_UNEXPECTED');},
+      verifySecretBackend:async()=>{throw new Error('REVIEWER_PROOF_SECRET_UNEXPECTED');}});
+    const proofAdapter={...adapter,
+      verifyReviewerSelectionCandidates:proofBindingAdapter.verifyReviewerSelectionCandidates,
+      verifyReviewerSelectionAction:proofBindingAdapter.verifyReviewerSelectionAction};
+    const authorVersion=Number((await db.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [ids.org,ids.actors.author])).rows[0].version);
+    const reviewerVersion=Number((await db.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2',
+      [ids.org,ids.actors.reviewer])).rows[0].version);
+    const caseId=randomUUID();
+    const createRequest=randomUUID();
+    const created=(await serviceQuery('SELECT public.pr1d_create_assess_v2_case($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value',
+      [ids.actors.author,ids.org,ids.workspace,caseId,project.processId,'Reviewer selection proof','',createRequest,
+        `reviewer-proof-create:${caseId}`,authorVersion])).rows[0].value;
+    assert.equal(created.outcome,'committed');
+    const fixtureModule=loadEnterpriseLifecycleProductionModule(path.join(root,'services','assessV2','fixture.ts'));
+    const fixture=structuredClone(fixtureModule.AP_INVOICE_EXCEPTION_V2_FIXTURE);
+    const authoring={name:'Reviewer selection proof',description:'Local synthetic reviewer binding.',
+      primitives:fixture.primitives,edges:fixture.edges,decisionPoints:fixture.decisionPoints,
+      exceptionPaths:fixture.exceptionPaths,assets:fixture.assets,interactions:fixture.interactions,
+      evidence:fixture.evidence,agentNecessity:fixture.agentNecessity};
+    const draftRequest=randomUUID();
+    const saved=(await serviceQuery('SELECT public.pr1d_upsert_assess_v2_draft($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9) value',
+      [ids.actors.author,ids.org,ids.workspace,caseId,1,JSON.stringify(authoring),draftRequest,
+        `reviewer-proof-draft:${caseId}`,authorVersion])).rows[0].value;
+    assert.equal(saved.outcome,'committed');
+    const tenantAuthority=loadEnterpriseLifecycleProductionModule(
+      path.join(root,'supabase','functions','_shared','tenantAuthority.ts'));
+    const authorityFor=async(actorId)=>{
+      const authority=await tenantAuthority.resolveTenantAuthority(actorId,{organizationId:ids.org,workspaceId:ids.workspace},{
+        loadFreshProjection:()=>visibleTenantContext(actorId,ids.org,ids.workspace),
+      });
+      return {actorId:authority.userId,organizationId:authority.organizationId,workspaceId:authority.workspaceId,
+        authorizationVersion:authority.authorizationVersion,capabilities:authority.capabilities};
+    };
+    const assessCommand=loadEnterpriseLifecycleProductionModule(
+      path.join(root,'supabase','functions','_shared','assessV2Command.ts'));
+    const assessHandlers=loadEnterpriseLifecycleProductionModule(
+      path.join(root,'supabase','functions','_shared','assessV2Handlers.ts'));
+    const finalRequest=randomUUID();
+    const finalizeEnvelope={requestId:finalRequest,idempotencyKey:`reviewer-proof-finalize:${caseId}`,
+      commandType:'assessment_v2.finalize',organizationId:ids.org,workspaceId:ids.workspace,
+      authorizationVersion:authorVersion,expectedVersion:2,payload:{caseId}};
+    const finalized=await assessHandlers.executeAssessV2Command(
+      new Request('http://127.0.0.1/functions/v1/assess-v2-command',{method:'POST'}),finalizeEnvelope,{
+        authenticate:async()=>({id:ids.actors.author}),
+        loadFreshAuthority:async()=>authorityFor(ids.actors.author),
+        loadFrozenV1AssessmentForClone:async()=>null,
+        loadLockedCaseForFinalize:async input=>{
+          const result=await serviceQuery('SELECT public.pr1d_load_assess_v2_case($1,$2,$3,$4) value',
+            [input.caseId,input.organizationId,input.workspaceId,input.expectedVersion]);
+          return result.rows[0]?.value??null;
+        },
+        executeAtomicCommand:async command=>{
+          if(!command.serverDecision)throw new assessCommand.AssessV2Error('RESOURCE_NOT_AVAILABLE');
+          const d=command.serverDecision;
+          const result=await serviceQuery(`SELECT public.pr1d_finalize_assess_v2_case(
+            $1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10::jsonb,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) value`,
+          [command.actorId,command.organizationId,command.workspaceId,command.payload.caseId,command.expectedVersion,
+            JSON.stringify(d.inputSnapshot),d.inputCanonical,JSON.stringify(d.evidenceSnapshot),d.evidenceCanonical,
+            JSON.stringify(d.outputSnapshot),d.outputCanonical,d.inputHash,d.evidenceHash,d.outputHash,d.ruleSetVersion,
+            d.decisionVersion,d.createdAt,command.requestId,command.idempotencyKey,command.authorizationVersion]);
+          const value=result.rows[0]?.value;
+          if(value?.errorCode)throw new assessCommand.AssessV2Error(value.errorCode);
+          return value;
+        },
+      });
+    assert.equal(finalized.outcome,'committed');
+    const target=(await db.query(`SELECT c.version,d.id decision_id FROM public.assess_v2_cases c
+      JOIN public.assess_v2_decision_versions d ON d.case_id=c.id AND d.source_version_id=c.head_version_id
+      WHERE c.id=$1`,[caseId])).rows[0];
+    assert.equal(Number(target.version),3);
+    const seededAt=(await db.query('SELECT statement_timestamp() value')).rows[0].value.toISOString();
+    const reviewCommand=loadEnterpriseLifecycleProductionModule(
+      path.join(root,'supabase','functions','_shared','assessV2ReviewCommand.ts'));
+    const reviewHandlers=loadEnterpriseLifecycleProductionModule(
+      path.join(root,'supabase','functions','_shared','assessV2ReviewHandlers.ts'));
+    const functions={
+      'assessment_v2.review.assign':'pr1e_assign_assess_v2_review',
+      'assessment_v2.review.resolve':'pr1e_resolve_assess_v2_review',
+    };
+    const reviewDependencies={
+      authenticate:async()=>({id:ids.actors.reviewer}),
+      loadFreshAuthority:async()=>authorityFor(ids.actors.reviewer),
+      executeAtomicReviewCommand:async command=>{
+        const fn=functions[command.commandType];
+        const value=(await serviceQuery(`SELECT public.${fn}($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) value`,
+          [command.actorId,command.organizationId,command.workspaceId,command.payload.caseId,
+            command.payload.decisionId,command.expectedVersion,command.requestId,command.idempotencyKey,
+            command.authorizationVersion,JSON.stringify(command.payload)])).rows[0].value;
+        if(value?.errorCode)throw new reviewCommand.AssessV2ReviewError({NOT_FOUND:'RESOURCE_NOT_AVAILABLE',
+          AUTHORIZATION_STALE:'AUTHORITY_STALE'}[value.errorCode]??value.errorCode);
+        assert.ok(value&&['committed','replayed'].includes(value.outcome)&&value.resource);
+        return value;
+      },
+    };
+    const invokeReview=async envelope=>{
+      const request=new Request('http://127.0.0.1/functions/v1/assess-v2-command',{method:'POST',
+        headers:{authorization:`Bearer ${tokenFor(ids.actors.reviewer,ids.sessions.reviewer)}`,'content-type':'application/json'},
+        body:JSON.stringify(envelope)});
+      try{
+        const result=await reviewHandlers.executeAssessV2ReviewCommand(request,
+          reviewCommand.parseAssessV2ReviewEnvelope(envelope),reviewDependencies);
+        return {status:200,body:{ok:true,...result}};
+      }catch(error){
+        const code=error?.code??'COMMAND_UNAVAILABLE';
+        const status=['VERSION_CONFLICT','IDEMPOTENCY_CONFLICT','AUTHORITY_STALE'].includes(code)?409
+          :code==='PERMISSION_DENIED'?403:code==='RESOURCE_NOT_AVAILABLE'?404:400;
+        return {status,body:{ok:false,error:{code,message:'The command could not be completed.'}}};
+      }
+    };
+    const controller=new AuthenticatedHostedController({config:proofConfig,adapter:proofAdapter,
+      identity:{verifySession:async()=>({actorId:ids.actors.reviewer,sessionId:ids.sessions.reviewer})}});
+    controller.exerciseId=ids.exercise;controller.startedAt=seededAt;controller.observationStartedAt=seededAt;
+    controller.active=true;controller.projects.set('desktop-chromium',{...project,identities,lastBoundaryAt:seededAt});
+    const reviewerToken=tokenFor(ids.actors.reviewer,ids.sessions.reviewer);
+    assert.deepEqual(await controller.recordReviewerSelectionCandidates({projectName:'desktop-chromium',accessToken:reviewerToken}),
+      {recorded:true,candidateCount:1});
+    const assignRequest=randomUUID();
+    const assignEnvelope={requestId:assignRequest,idempotencyKey:`reviewer-proof-assign:${caseId}`,
+      commandType:'assessment_v2.review.assign',organizationId:ids.org,workspaceId:ids.workspace,
+      authorizationVersion:reviewerVersion,expectedVersion:3,
+      payload:{caseId,decisionId:target.decision_id,reviewSequence:1,reviewerId:ids.actors.reviewer}};
+    const observeAction=async envelope=>{
+      const started=await controller.beginBrowserAction({projectName:'desktop-chromium',accessToken:reviewerToken,
+        route:'/functions/v1/assess-v2-command',requestBody:envelope});
+      const response=await invokeReview(envelope);
+      try{
+        await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:started.actionId,
+          status:response.status,responseBody:response.body});
+      }catch(error){
+        const shape=(await serviceQuery(`SELECT count(*)::int receipt_count,
+            COALESCE(bool_and(status='succeeded'),false) status_succeeded,
+            COALESCE(bool_and(jsonb_typeof(response)='object'),false) response_object,
+            COALESCE(bool_and(response->>'id'=$6),false) direct_id_matches,
+            COALESCE(bool_and(response->'resource'->>'id'=$6),false) nested_id_matches,
+            COALESCE(jsonb_agg((SELECT jsonb_agg(key ORDER BY key) FROM jsonb_object_keys(response) key)),'[]'::jsonb) response_keys
+          FROM public.assess_command_receipts
+          WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND request_id=$4 AND command_type=$5`,
+        [ids.org,ids.workspace,ids.actors.reviewer,envelope.requestId,envelope.commandType,envelope.payload.caseId])).rows[0];
+        writeFileSync(path.join(privateDirectory,'reviewer-selection-receipt-shape-failure.json'),`${JSON.stringify({
+          schemaVersion:'authenticated-reviewer-selection-receipt-shape-failure-v1',status:'FAIL',
+          category:error instanceof Error?error.message:'UNKNOWN',shape,databaseDroppedByHarness:false},null,2)}\n`);
+        throw error;
+      }
+      return {actionId:started.actionId,response};
+    };
+    const assignment=await observeAction(assignEnvelope);
+    assert.equal(assignment.response.body.outcome,'committed');
+    const replay=await observeAction(assignEnvelope);
+    assert.equal(replay.response.body.outcome,'replayed');
+    const staleEnvelope={requestId:randomUUID(),idempotencyKey:`reviewer-proof-stale:${caseId}`,
+      commandType:'assessment_v2.review.resolve',organizationId:ids.org,workspaceId:ids.workspace,
+      authorizationVersion:reviewerVersion,expectedVersion:3,
+      payload:{caseId,decisionId:target.decision_id,reviewSequence:1,resolution:'changes_requested',
+        rationale:'Reject stale reviewer-ready state.',conditions:[]}};
+    const stale=await observeAction(staleEnvelope);
+    assert.equal(stale.response.status,409);assert.equal(stale.response.body.error.code,'VERSION_CONFLICT');
+    await controller.recordBrowserCase({projectName:'desktop-chromium',actionIds:[assignment.actionId,replay.actionId,stale.actionId],
+      row:{testId:'E2E-004',controls:{assertions:AUTHENTICATED_CASE_ASSERTIONS['E2E-004'].map(id=>({id,status:'passed'}))}}});
+    await proofAdapter.quiesce({exerciseId:ids.exercise});
+    await proofAdapter.cleanup({exerciseId:ids.exercise,projects:[project],sessions:Object.values(ids.sessions)});
+    await db.query('DELETE FROM auth.sessions WHERE id=ANY($1::uuid[])',[Object.values(ids.sessions)]);
+    await db.query("UPDATE auth.users SET banned_until='infinity'::timestamptz WHERE id=ANY($1::uuid[])",
+      [Object.values(ids.actors)]);
+    const cleanup=await proofAdapter.verifyCleanup({exerciseId:ids.exercise,actorIds:Object.values(ids.actors),projects:[project]});
+    assert.equal(cleanup.activeSessions,0);assert.equal(cleanup.activeIdentities,0);assert.equal(cleanup.activeMemberships,0);
+    assert.equal(cleanup.armedPermits,0);assert.equal(cleanup.activeSecretMaterial,0);assert.equal(cleanup.unapprovedActiveResidue,0);
+    assert.equal(cleanup.nonExerciseChanged,false);assert.equal(cleanup.immutableHistoryPreserved,true);
+    controller.quiesced=true;
+    const diagnostic=controller.reviewerSelectionDiagnosticResult();
+    const actions=controller.browserCases[0].actions;
+    const rawFinalRecords=controller.serverCases[0].after.records;
+    const assignmentFrameRecords=controller.reviewerSelectionServerActionFrames[0].after.records;
+    const sources=['scripts/authenticatedReviewerSelectionDiagnostic.mjs','scripts/authenticatedHostedController.mjs',
+      'scripts/authenticatedHostedControllerAdapters.mjs','scripts/authenticatedHostedEvidence.mjs',
+      'scripts/authenticatedHostedObservationAdapter.mjs',
+      'scripts/testAuthenticatedHostedControllerPostgres.mjs','scripts/testAuthenticatedReviewerSelectionPostgres.mjs'];
+    const sourceDigests=Object.fromEntries(sources.map(relative=>[relative,
+      `sha256:${createHash('sha256').update(readFileSync(path.join(root,relative),'utf8').replaceAll('\r\n','\n')).digest('hex')}`]));
+    const proof={schemaVersion:'authenticated-reviewer-selection-server-binding-proof-v1',status:'PENDING_DATABASE_TEARDOWN',
+      sourceDigests,diagnostic,serverBinding:{
+        evidenceSource:'trusted-assignment-action-frame',
+        assignmentFrameCaseResourceAnchored:assignmentFrameRecords.some(row=>row.source==='assess_v2_cases'&&row.recordHash
+          &&row.commandBindingHash===actions[0].commandBindingHash),
+        assignmentFrameAssignmentResourceAnchored:assignmentFrameRecords.some(row=>row.source==='assess_v2_review_assignments'&&row.recordHash
+          &&row.commandBindingHash===actions[0].commandBindingHash),
+        rawFinalFrameAnchored:rawFinalRecords.some(row=>row.commandBindingHash===actions[0].commandBindingHash),
+        composedFinalEvidence:diagnostic.evidenceComposition.kind==='trusted-server-action-frame-carry-forward'
+          &&diagnostic.evidenceComposition.carriedRecords===4,
+        replayCommandReceiptEqual:actions[0].response.receiptIdHash===actions[1].response.receiptIdHash,
+        staleHasNoReceipt:actions[2].response.receiptIdHash===null,
+      },providers:{enabled:false,providerCalls:0,paidCalls:0},cleanup:{scopedCleanupVerified:true,databaseDroppedByHarness:false}};
+    assert.equal(proof.serverBinding.evidenceSource,'trusted-assignment-action-frame');
+    assert.equal(proof.serverBinding.assignmentFrameCaseResourceAnchored,true);
+    assert.equal(proof.serverBinding.assignmentFrameAssignmentResourceAnchored,true);
+    assert.equal(proof.serverBinding.rawFinalFrameAnchored,false);
+    assert.equal(proof.serverBinding.composedFinalEvidence,true);
+    assert.equal(proof.serverBinding.replayCommandReceiptEqual,true);
+    assert.equal(proof.serverBinding.staleHasNoReceipt,true);
+    writeFileSync(path.join(privateDirectory,'reviewer-selection-server-binding-proof.json'),`${JSON.stringify(proof,null,2)}\n`);
+    console.log(JSON.stringify({schemaVersion:proof.schemaVersion,status:proof.status,
+      serverBinding:proof.serverBinding,providers:proof.providers,cleanup:proof.cleanup}));
   } else {
   const rejectionProject = { ...await adapter.setupProject({
     projectName: 'desktop-chromium-rejection', exerciseId: ids.exercise,

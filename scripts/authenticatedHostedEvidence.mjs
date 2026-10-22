@@ -101,11 +101,13 @@ export const reconstructAuthenticatedHostedCaseEvidence = ({ browser, server, de
     values.push(action);
     actionsByBinding.set(action.commandBindingHash, values);
   }
-  const matchingAction = row => (actionsByBinding.get(row.commandBindingHash) ?? []).find(action =>
-    action.requestIdHash === row.requestIdHash && action.actorHash === row.actorHash
+  const actionMatchesRow = (action, row) => action.commandBindingHash === row.commandBindingHash
+    && action.requestIdHash === row.requestIdHash && action.actorHash === row.actorHash
     && action.sessionHash === row.sessionHash
     && (!row.commandIdHash || action.response.commandIdHash === row.commandIdHash)
-    && (!row.receiptIdHash || action.response.receiptIdHash === row.receiptIdHash)) ?? null;
+    && (!row.receiptIdHash || action.response.receiptIdHash === row.receiptIdHash);
+  const matchingAction = row => (actionsByBinding.get(row.commandBindingHash) ?? [])
+    .find(action => actionMatchesRow(action, row)) ?? null;
   const changes = changedRows(server);
   const measurements = Object.fromEntries(AUTHENTICATED_MEASUREMENT_KEYS.map(name => [name, 0]));
   const logicalRequests = new Set();
@@ -154,11 +156,11 @@ export const reconstructAuthenticatedHostedCaseEvidence = ({ browser, server, de
   measurements.logicalMutations = logicalRequests.size;
   for (const action of browser.actions) {
     if (action.response.commandIdHash && !server.after.records.some(row => row.commandIdHash === action.response.commandIdHash
-      && matchingAction(row) === action)) {
+      && actionMatchesRow(action, row))) {
       errors.push(`authenticated-command-frame-missing:${key}`);
     }
     if (action.response.receiptIdHash && !server.after.records.some(row => row.effectKind === 'receipt'
-      && row.receiptIdHash === action.response.receiptIdHash && matchingAction(row) === action)) {
+      && row.receiptIdHash === action.response.receiptIdHash && actionMatchesRow(action, row))) {
       errors.push(`authenticated-receipt-frame-missing:${key}`);
     }
   }

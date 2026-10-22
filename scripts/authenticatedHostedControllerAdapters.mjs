@@ -48,7 +48,7 @@ const authHeaders = config => ({
   'content-type': 'application/json',
 });
 
-const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
+export const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
   author:Object.freeze(['org.admin','operations.read','assess.read','assess.create','assess.response.write','assess.finalize',
     'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
     'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve',
@@ -62,7 +62,7 @@ const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
     'project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import']),
   outsider:Object.freeze([]),
 });
-const FORBIDDEN_PERSONA_CAPABILITIES=Object.freeze({
+export const FORBIDDEN_PERSONA_CAPABILITIES=Object.freeze({
   author:Object.freeze([]),
   reviewer:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.govern.resolve']),
   approver:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.approve']),
@@ -166,6 +166,7 @@ export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl
 }
 
 export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDeployment, verifySecretBackend,
+  fetchImpl = fetch,
   observeSecretBackend = async () => { throw new Error('AUTHENTICATED_HOSTED_SECRET_OBSERVATION_REQUIRED'); },
   cleanupSecretBackend = async () => { throw new Error('AUTHENTICATED_HOSTED_SECRET_CLEANUP_REQUIRED'); } }) {
   let sequence = 0;
@@ -360,6 +361,76 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
   };
 
   return {
+    async verifyReviewerSelectionAction({ project, actorId, requestBody, responseBody, status }) {
+      const commandType=requestBody?.commandType;
+      const requestId=requestBody?.requestId;
+      const caseId=requestBody?.payload?.caseId;
+      if(actorId!==project?.identities?.reviewer?.id
+        || !['assessment_v2.review.assign','assessment_v2.review.resolve'].includes(commandType)
+        || !uuid(requestId)||!uuid(caseId)){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_BINDING_REJECTED');
+      }
+      const receipts=(await query(`SELECT id,status,
+          response->>'caseId'=$6 case_resource_matches
+        FROM public.assess_command_receipts
+        WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND request_id=$4 AND command_type=$5
+        ORDER BY created_at,id LIMIT 2`,[...scopeParams(),actorId,requestId,commandType,caseId])).rows;
+      if(status===409&&responseBody?.error?.code==='VERSION_CONFLICT'){
+        if(receipts.length!==0)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_STALE_WRITE_REJECTED');
+        return Object.freeze({commandIdHash:null,receiptIdHash:null});
+      }
+      const receipt=receipts[0];
+      if(status!==200)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_STATUS_REJECTED');
+      if(receipts.length!==1)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_COUNT_REJECTED');
+      if(receipt.status!=='succeeded')throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_STATUS_REJECTED');
+      if(receipt.case_resource_matches!==true){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_RESOURCE_REJECTED');
+      }
+      if(!['committed','replayed'].includes(responseBody?.outcome)){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_OUTCOME_REJECTED');
+      }
+      if(responseBody?.resource?.caseId!==caseId){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RESPONSE_RESOURCE_REJECTED');
+      }
+      return Object.freeze({commandIdHash:authenticatedHostedDigest(caseId),receiptIdHash:authenticatedHostedDigest(receipt.id)});
+    },
+    async verifyReviewerSelectionCandidates({ project, reviewerAccessToken, reviewerActorId, signal }) {
+      if (typeof reviewerAccessToken !== 'string' || reviewerAccessToken.length < 32
+        || reviewerActorId !== project?.identities?.reviewer?.id) {
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_CANDIDATE_SESSION_REJECTED');
+      }
+      const targets=(await query(`SELECT c.id case_id,d.id decision_id
+        FROM public.assess_v2_cases c
+        JOIN public.assess_v2_decision_versions d ON d.case_id=c.id AND d.org_id=c.org_id AND d.workspace_id=c.workspace_id
+          AND d.source_version_id=c.head_version_id
+        WHERE c.org_id=$1 AND c.workspace_id=$2 AND c.process_id=$3
+          AND c.owner_id=$4 AND c.status='reviewer_ready' AND c.deleted_at IS NULL
+          AND d.validation_status='reviewer-ready'
+        ORDER BY c.updated_at DESC,c.id DESC,d.id DESC LIMIT 2`,
+      [...scopeParams(),project.processId,project.identities.author.id])).rows;
+      const target=targets[0];
+      if (targets.length !== 1 || !target || !uuid(target.case_id) || !uuid(target.decision_id)) {
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_CANDIDATE_TARGET_REJECTED');
+      }
+      const response=await fetchImpl(`${config.supabaseUrl}/rest/v1/rpc/assess_v2_eligible_reviewers`,{
+        method:'POST',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS)])
+          :AbortSignal.timeout(AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS),
+        headers:{apikey:config.serviceRoleKey,authorization:`Bearer ${reviewerAccessToken}`,'content-type':'application/json'},
+        body:JSON.stringify({p_org_id:config.scope.organizationId,p_workspace_id:config.scope.workspaceId,
+          p_case_id:target.case_id,p_decision_id:target.decision_id}),
+      });
+      const body=await response.json().catch(()=>null);
+      if(!response.ok||!Array.isArray(body)||body.some(item=>!item||typeof item!=='object'||Array.isArray(item)
+        ||typeof item.actorId!=='string')){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_CANDIDATE_RPC_REJECTED');
+      }
+      const candidateIds=body.map(item=>item.actorId);
+      return Object.freeze({count:candidateIds.length,
+        reviewerIncluded:candidateIds.includes(project.identities.reviewer.id),
+        ownerExcluded:!candidateIds.includes(project.identities.author.id),
+        approverExcluded:!candidateIds.includes(project.identities.approver.id),
+        outsiderExcluded:!candidateIds.includes(project.identities.outsider.id)});
+    },
     async preflight() {
       return withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', async () => {
       observationStartedAt=iso((await query('SELECT statement_timestamp() value')).rows[0].value);
