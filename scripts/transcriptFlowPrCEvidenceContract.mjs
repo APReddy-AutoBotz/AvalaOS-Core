@@ -75,6 +75,12 @@ const PR_C_FOCUSED_COMMANDS = [
 export const expectedPrCCommandRegistry = root => {
   const retainedPath = path.join(root, 'testing/process-lifecycle/contracts/pr-b-assertion-registry.json');
   const retained = JSON.parse(readFileSync(retainedPath, 'utf8')).commands.map(command => {
+    if (command.id === 'audit') {
+      // npm's quick-audit fallback needs the legacy dependency tree omitted by
+      // v3 serialization. Audit reads this representation without rewriting the
+      // committed v3 lockfile; the threshold and complete dependency scope stay.
+      return { ...command, command: 'npm audit --audit-level=moderate --lockfile-version=2' };
+    }
     if (command.id === 'scoring-drift') {
       return { ...command, command: 'node scripts/checkPrCScoringLawDrift.mjs' };
     }

@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## PR #325 audit endpoint failure (2026-10-22)
+
+**Confirmed source defect:** npm 10.9.9's quick-audit fallback omits the dependency tree when serializing the v3 lockfile. Exact-toolchain Linux proof with an explicitly injected bulk failure reproduced the real quick endpoint's HTTP 400; `--lockfile-version=2` preserved package bytes and returned a complete zero-vulnerability report. This narrows the correction to PR C audit serialization while retaining all dependencies, the moderate threshold and nonzero failure handling. **Suspected defect requiring deeper validation:** the exclusive historical CI bulk-request failure cause remains unproven. Attempts 1 and 2 of run `39731377637` remain failed evidence; corrected exact-head CI is still required before merge. See the [active completion plan](../planning/hosted-acceptance-completion.md). No readiness promotion, full run, provider activation or Netlify action is authorized by this correction.
+
 ## Reviewer selection scenario mismatch (2026-10-22)
 
 **Confirmed source defect:** the primary journey attempts to select its Govern approver from reviewer candidates, although the hosted role contract forbids that actor from `assess.v2.approve`. The production RPC and assignment handler correctly require that capability alongside review and evidence attestation. A broad shared local fixture role masks this mismatch. Do not grant the approver more authority, weaken the candidate filter or inject an unlisted option.
