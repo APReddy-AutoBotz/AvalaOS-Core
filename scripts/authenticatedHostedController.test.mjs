@@ -1023,3 +1023,20 @@ test('native Vault preflight requires the explicit deployed selector, wrapper AC
   await assert.rejects(verifyAuthenticatedSecretBackend(environment,{fetchImpl,database:residueDatabase,
     projectRef:'abcdefghijklmnopqrst'}),/RESIDUE_REJECTED/u);
 });
+
+test('desktop-only project guard applies only to explicit focused diagnostic modes', async () => {
+  for (const acceptanceMode of [undefined, 'full_acceptance', 'v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic']) {
+    const controller = new AuthenticatedHostedController({
+      config: { ...validateAuthenticatedHostedControllerEnvironment(baseEnvironment()), acceptanceMode },
+      adapter: {}, identity: {},
+    });
+    controller.active = true;
+    const setup = { projectName: 'pixel-7-chromium' };
+    controller.projects.set('pixel-7-chromium', { browserSetup: setup });
+    if (['v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic'].includes(acceptanceMode)) {
+      await assert.rejects(controller.setupProject('pixel-7-chromium'), /FOCUSED_DIAGNOSTIC_PROJECT_REJECTED/u);
+    } else {
+      assert.deepEqual(await controller.setupProject('pixel-7-chromium'), setup);
+    }
+  }
+});

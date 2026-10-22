@@ -512,7 +512,7 @@ export class AuthenticatedHostedController {
 
   async setupProject(projectName, signal) {
     this.assertControlCommitAllowed(signal);
-    if (this.config.acceptanceMode !== 'full_acceptance' && projectName !== 'desktop-chromium') {
+    if (['v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic'].includes(this.config.acceptanceMode) && projectName !== 'desktop-chromium') {
       fail('FOCUSED_DIAGNOSTIC_PROJECT_REJECTED');
     }
     if (!SAFE_NAME.test(projectName) && !/^(desktop-chromium|pixel-7-chromium)(?:-[a-z0-9-]{1,63})?$/u.test(projectName)) {
