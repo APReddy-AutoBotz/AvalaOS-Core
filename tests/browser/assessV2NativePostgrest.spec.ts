@@ -464,13 +464,12 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
       await mkdir(proofDirectory, { recursive: true });
       await writeFile(`${proofDirectory}/${testInfo.project.name}.json`, `${JSON.stringify(proof, null, 2)}\n`, 'utf8');
     } finally {
-      await authenticatedHostedClosePageAfterOwnedNetwork({
-        settleOwnedNetwork: settleActorTransitionEvidence,
-        closePage: async () => {
-          await replayPage.close();
-          await stalePage.close();
-        },
-      });
+      for (const auxiliaryPage of [replayPage, stalePage]) {
+        await authenticatedHostedClosePageAfterOwnedNetwork({
+          settleOwnedNetwork: settleActorTransitionEvidence,
+          closePage: () => auxiliaryPage.close(),
+        });
+      }
     }
     },
   );

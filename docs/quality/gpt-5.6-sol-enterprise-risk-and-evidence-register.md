@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## PR #325 DOMPurify audit and Pixel disposal (2026-10-23)
+
+**Confirmed source defects:** the resolved DOMPurify 3.4.16 fails the moderate audit gate; grouped auxiliary closure leaves a second page exposed to newly admitted work after the shared empty observation. **Executed evidence:** unchanged local audit exits 1; real Pixel Chromium with the production tracker/network reproduces an orphaned admitted request and the exact 15-second NOT_QUIESCENT failure. Settling separately before each close produces one start/finish and zero active work. The patch raises the dependency floor/shared resolution to 3.4.17 and serializes per-page settlement; no audit exception, timeout increase, fabricated completion or authorization change.
+
+**Suspected defect requiring deeper validation:** the exclusive historical Pixel request/timing and an exploitable application path for the dependency advisories are unproven. Application Markdown/SVG configuration does not enable the affected optional DOMPurify modes. **Blocked:** native local Desktop/Pixel fixture verification cannot start while Docker's WSL engine is unavailable. New exact-head required CI and independent artifacts remain mandatory; prior failures are retained. The [active completion plan](../planning/hosted-acceptance-completion.md) owns focused verification and source-only rollback. One focused diagnostic remains approved after verified release, full allowance zero, providers OFF, 15-second limit unchanged, no Netlify or deployment.
+
 ## PR #325 auxiliary-page request lifecycle (2026-10-23)
 
 **Confirmed source defect:** the eligible-reviewer fixture closes replay/stale pages before joining owned header admissions and terminal network work. **Executed evidence:** real Chromium plus the existing tracker/network installer reproduces the exact `request.allHeaders` closed-page error under a controlled scheduling barrier; the existing settle-before-close helper passes with one start/finish and zero active work. The correction changes only fixture disposal and adds the browser regression to its focused preparation path. Header/authentication failures, first-error retention, request priming and the 15-second limit remain unchanged. **Suspected defect requiring deeper validation:** the exclusive historical request/timing is unproven.
