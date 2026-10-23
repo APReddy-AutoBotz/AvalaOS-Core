@@ -51,7 +51,7 @@ test('scoped navigation drains prior-document Delivery work before arming its re
     let primaryFailure;
     try {
         for (const drainBeforeArm of [false, true]) {
-            let fixture, bridge, browser, releaseDispatch;
+            let fixture, bridge, browser, releaseDispatch, releaseFresh;
             let armFailure;
             try {
                 fixture = await startAuthenticatedHostedSignInEntryFixture();
@@ -88,9 +88,11 @@ test('scoped navigation drains prior-document Delivery work before arming its re
                 page.setDefaultTimeout(10_000);
                 page.setDefaultNavigationTimeout(20_000);
                 const active = new Set(), errors = [];
-                let starts = 0, finishes = 0, tail = Promise.resolve(), notifyDispatch, first = true;
+                let starts = 0, finishes = 0, tail = Promise.resolve(), notifyDispatch, notifyFresh, dispatchCount = 0;
                 const dispatched = new Promise(resolve => { notifyDispatch = resolve; });
                 const dispatch = new Promise(resolve => { releaseDispatch = resolve; });
+                const freshDispatched = new Promise(resolve => { notifyFresh = resolve; });
+                const freshDispatch = new Promise(resolve => { releaseFresh = resolve; });
                 const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin: fixture.backendOrigin,
                     appOrigin: fixture.previewOrigin,
                     startAction: ({ accessToken: token }) => {
@@ -108,8 +110,10 @@ test('scoped navigation drains prior-document Delivery work before arming its re
                     onExternalRequest: () => assert.fail('external request'), onHttpRequest: () => {},
                     onTrackerError: error => errors.push(error),
                     dispatchAllowedRequest: async route => {
-                        if (first && route.request().url().endsWith('/functions/v1/legacy-delivery-query')) {
-                            first = false; notifyDispatch(); await dispatch;
+                        if (route.request().method() === 'POST' && route.request().url().endsWith('/functions/v1/legacy-delivery-query')) {
+                            dispatchCount += 1;
+                            if (dispatchCount === 1) { notifyDispatch(); await dispatch; }
+                            if (dispatchCount === 2) { notifyFresh(); await freshDispatch; }
                         }
                         await route.continue();
                     },
@@ -123,14 +127,21 @@ test('scoped navigation drains prior-document Delivery work before arming its re
                     }, activeActionCount: () => active.size,
                 });
                 await page.goto(fixture.previewOrigin);
-                const query = version => page.evaluate(({ url, accessToken: token, publicAnonKey, body }) => {
+                const query = async version => {
+                    const observed = page.waitForRequest(request => request.method() === 'POST'
+                        && request.url() === `${fixture.backendOrigin}/functions/v1/legacy-delivery-query`
+                        && request.postDataJSON()?.expectedAuthorizationVersion === version);
+                    void observed.catch(() => {});
+                    await page.evaluate(({ url, accessToken: token, publicAnonKey, body }) => {
                     void fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}`,
                         apikey: publicAnonKey, 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(response => response.json()).catch(() => {});
                 }, { url: `${fixture.backendOrigin}/functions/v1/legacy-delivery-query`, accessToken,
                     publicAnonKey: fixture.publicAnonKey, body: { schemaVersion: 'legacy-delivery-query.v1',
                         ...AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE, expectedAuthorizationVersion: version,
                         projectId: setup.deliveryProject.id, limit: 100, cursor: null, sourceGenerationId: null, includeRetained: true } });
-                await query(1);
+                    return observed;
+                };
+                const oldRequest = await query(1);
                 await dispatched;
                 assert.equal(active.size, 1);
                 // Delay dispatch only: the old document's real request has already
@@ -148,16 +159,56 @@ test('scoped navigation drains prior-document Delivery work before arming its re
                 await gate('hold-next');
                 releaseDispatch();
                 if (!drainBeforeArm) await poll(value => value.waiting === 1);
+                const oldFailure = !drainBeforeArm ? page.waitForEvent('requestfailed', {
+                    predicate: request => request === oldRequest,
+                }) : null;
                 await page.reload({ waitUntil: 'domcontentloaded' });
-                if (!drainBeforeArm) await poll(value => value.aborted === 1);
-                await query(1);
-                await poll(value => value.waiting === 1 && value.requests === value.completed + 1);
+                if (!drainBeforeArm) {
+                    await oldFailure;
+                    assert(oldRequest.failure());
+                    await poll(value => value.aborted === 1);
+                }
+                const beforeFresh = await gate('inspect');
+                const freshRequest = await query(1);
+                await freshDispatched;
+                // The old predicate already passes for the aborted waiter before
+                // this fresh request reaches the fixture. Require its own admission.
+                assert.equal(beforeFresh.waiting === 1 && beforeFresh.requests === beforeFresh.completed + 1, !drainBeforeArm);
+                let freshObserved = false;
+                const admittedFresh = poll(value => {
+                    const versions = value.authorityVersions.slice(beforeFresh.authorityVersions.length);
+                    const completed = drainBeforeArm ? 0 : 1;
+                    return versions.length === 1 && versions[0] === 1 && value.requests === beforeFresh.requests + 1
+                        && value.completed === beforeFresh.completed + completed && value.terminal === beforeFresh.terminal + completed
+                        && value.committed === beforeFresh.committed + completed && value.aborted === beforeFresh.aborted
+                        && value.waiting === 1;
+                }).then(value => { freshObserved = true; return value; });
+                await new Promise(resolve => setImmediate(resolve));
+                assert.equal(freshObserved, false);
+                releaseFresh();
+                await admittedFresh;
+                if (!drainBeforeArm) {
+                    const response = await freshRequest.response();
+                    assert.equal(response.status(), 200);
+                    assert.equal(await response.finished(), null);
+                }
                 assert.deepEqual(await control('/control/sign-in-entry-authority-version', { action: 'advance' }), { current: 2, priorRead: 1 });
-                await query(2);
-                const pending = await poll(value => value.authorityVersions.includes(2) && value.requests === value.completed + 1);
+                const beforeCurrent = await gate('inspect');
+                const currentRequest = await query(2);
+                const pending = await poll(value => {
+                    const versions = value.authorityVersions.slice(beforeCurrent.authorityVersions.length);
+                    return versions.length === 1 && versions[0] === 2 && value.requests === beforeCurrent.requests + 1
+                        && value.completed === beforeCurrent.completed + 1 && value.terminal === beforeCurrent.terminal + 1
+                        && value.committed === beforeCurrent.committed + 1 && value.aborted === beforeCurrent.aborted
+                        && value.waiting === 1;
+                });
+                const currentResponse = await currentRequest.response();
+                assert.equal(currentResponse.status(), 200);
+                assert.equal(await currentResponse.finished(), null);
                 assert.equal(pending.requests === pending.terminal + 1, drainBeforeArm);
                 assert.equal(pending.aborted - before.aborted, drainBeforeArm ? 0 : 1);
-                const late = page.waitForResponse(response => response.url().endsWith('/functions/v1/legacy-delivery-query')
+                const heldRequest = drainBeforeArm ? freshRequest : oldRequest;
+                const late = page.waitForResponse(response => response.request() === heldRequest
                     && response.status() === 503 && response.request().postDataJSON()?.expectedAuthorizationVersion === 1)
                     .then(response => ({ response }), error => ({ error }));
                 await gate('reject');
@@ -176,6 +227,9 @@ test('scoped navigation drains prior-document Delivery work before arming its re
                 assert.equal(active.size, 0);
                 assert.equal(finishes, starts);
                 assert.equal(errors.length, 0);
+                assert.equal(final.requests, 3);
+                assert.equal(starts, 3);
+                assert.equal(final.committed, drainBeforeArm ? 3 : 2);
                 assert.equal(final.aborted, drainBeforeArm ? 0 : 1);
                 outcomes.push({ drainBeforeArm, requests: final.requests, committed: final.committed,
                     aborted: final.aborted, starts, finishes, active: active.size, late503: Boolean(result.response) });
@@ -183,7 +237,7 @@ test('scoped navigation drains prior-document Delivery work before arming its re
                 armFailure = error;
             } finally {
                 await closeScopedAdmissionResources([
-                    () => releaseDispatch?.(), () => browser?.close(),
+                    () => releaseDispatch?.(), () => releaseFresh?.(), () => browser?.close(),
                     () => bridge?.close(), () => fixture?.close(),
                 ], armFailure);
             }
