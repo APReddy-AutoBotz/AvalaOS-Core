@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
+import { authenticatedHostedBindResponseObservation } from './authenticatedHostedController.mjs';
 import {
   AUTHENTICATED_HOSTED_OBSERVATION_SOURCES,
   AUTHENTICATED_OBSERVATION_FILTER_COLUMNS,
@@ -141,6 +142,13 @@ test('reader captures its upper bound from the database and joins receipt, audit
   }, { actorHash, sessionHash, requestIdHash: binding.requestIdHash,
     commandBindingHash: binding.commandBindingHash, receiptIdHash: scalar(ids.receipt) });
   assert.equal(receipt.persistedRequestHash, requestHash);
+  assert.deepEqual(authenticatedHostedBindResponseObservation({
+    observation: { status: 200, classification: 'COMMITTED', commandIdHash: null, receiptIdHash: null },
+    action: { actorHash, requestIdHash: binding.requestIdHash,
+      commandBindingHash: binding.commandBindingHash },
+    after: frame,
+  }), { status: 200, classification: 'COMMITTED', commandIdHash: scalar(ids.process),
+    receiptIdHash: scalar(ids.receipt) });
   assert.equal(audit.auditIdHash, scalar(ids.audit));
   assert.equal(process.occurredAt, '2026-10-10T05:10:30.000Z');
   const caseBinding = authenticatedHostedRequestBinding({ requestId: ids.caseRequest, actorHash,

@@ -21,6 +21,41 @@ const titles = new Map([
 ]);
 const fixture = title => ({ title, expectedStatus: 'passed', parent: { project: () => ({ name: 'desktop-chromium' }) } });
 
+test('Govern and Studio diagnostic step labels map to fixed allowlisted operations', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-govern-studio-reporter-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(() => { if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior; });
+  for (const [label, operation] of [
+    ['reviewer-approval', 'GOVERN_STUDIO_REVIEWER_APPROVAL'],
+    ['reviewer-denial', 'GOVERN_STUDIO_REVIEWER_DENIAL'],
+    ['approver-resolution', 'GOVERN_STUDIO_APPROVER_RESOLUTION'],
+    ['assess-handoff', 'GOVERN_STUDIO_ASSESS_HANDOFF'],
+    ['studio-request', 'GOVERN_STUDIO_STUDIO_REQUEST'],
+    ['studio-review', 'GOVERN_STUDIO_STUDIO_REVIEW'],
+    ['studio-final-accept', 'GOVERN_STUDIO_STUDIO_FINAL_ACCEPT'],
+    ['source-consume', 'GOVERN_STUDIO_SOURCE_CONSUME'],
+    ['checkpoint', 'GOVERN_STUDIO_CHECKPOINT'],
+  ]) {
+    const destination = path.join(root, `${label}.json`);
+    process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = destination;
+    const reporter = new AuthenticatedHostedPlaywrightReporter();
+    const current = fixture('independent approval, Govern separation and synthetic Studio generation retain exact lineage');
+    const error = new Error('ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_TIMEOUT');
+    const step = { title: `hosted:govern-studio:${label}`, error };
+    reporter.onTestBegin(current); reporter.onStepBegin(current, {}, step);
+    reporter.onStepEnd(current, { status: 'failed' }, step);
+    reporter.onTestEnd(current, { status: 'failed', error });
+    await reporter.onEnd({ status: 'failed' });
+    const value = JSON.parse(await readFile(destination, 'utf8'));
+    assert.equal(value.operation, operation);
+    assert.equal(value.testCategory, 'govern-studio-lifecycle');
+    assert.ok(validateAuthenticatedHostedPlaywrightDiagnostic(value));
+    assert.equal(JSON.stringify(value).includes(label), false);
+  }
+});
+
 test('actor timing keeps only bounded fixed phases from the failed boundary, preserving the failure', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-phase-reporter-'));
   t.after(() => rm(root, { recursive: true, force: true }));

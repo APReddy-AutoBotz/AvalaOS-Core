@@ -772,7 +772,9 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       ...(config.acceptanceMode === 'v2_primary_prefix_diagnostic'
         ? ['--project=desktop-chromium', '--grep=@v2-primary-prefix-diagnostic']
         : config.acceptanceMode === 'reviewer_selection_diagnostic'
-          ? ['--project=desktop-chromium', '--grep=@reviewer-selection-diagnostic'] : [])];
+          ? ['--project=desktop-chromium', '--grep=@reviewer-selection-diagnostic']
+          : config.acceptanceMode === 'govern_studio_diagnostic'
+            ? ['--project=desktop-chromium', '--grep=@govern-studio-diagnostic'] : [])];
     const playwrightOptions={
         cwd: process.cwd(), env: buildAuthenticatedHostedChildEnvironment(environment, config, server, browserPaths),
       };
@@ -847,8 +849,17 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       diagnosticState.primaryError = error;
     }
   }
+  if (config.acceptanceMode === 'govern_studio_diagnostic' && controller.quiesced && !primaryError) {
+    try {
+      await atomicJson(outputPaths.governStudioDiagnostic, controller.governStudioDiagnosticResult());
+    } catch (error) {
+      primaryError = error;
+      diagnosticState.primaryError = error;
+    }
+  }
   if (!primaryError && config.acceptanceMode === 'v2_primary_prefix_diagnostic') return { outputPaths };
   if (!primaryError && config.acceptanceMode === 'reviewer_selection_diagnostic') return { outputPaths };
+  if (!primaryError && config.acceptanceMode === 'govern_studio_diagnostic') return { outputPaths };
   throw primaryError;
 }
 
@@ -859,6 +870,8 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
     ? [outputPaths.diagnostic, outputPaths.v2ReloadDiagnostic]
     : mode === 'reviewer_selection_diagnostic'
       ? [outputPaths.diagnostic, outputPaths.reviewerSelectionDiagnostic]
+      : mode === 'govern_studio_diagnostic'
+        ? [outputPaths.diagnostic, outputPaths.governStudioDiagnostic]
     : [outputPaths.diagnostic];
   await Promise.all(stalePaths.map(removeIfPresent));
   const diagnosticState = { phase: 'PREFLIGHT', cleanup: 'not-required', controller: null,

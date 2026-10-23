@@ -7,6 +7,7 @@ const baseURL = process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL;
 if (!baseURL) throw new Error('AUTHENTICATED_HOSTED_BASE_URL_REQUIRED');
 const target = new URL(baseURL);
 const acceptanceMode = authenticatedAcceptanceMode(process.env);
+const governStudioDiagnostic = acceptanceMode === 'govern_studio_diagnostic';
 const executionKind = process.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND;
 const localBuild = executionKind === 'local_real_backend_authenticated';
 if (target.origin !== baseURL || target.username || target.password
@@ -43,11 +44,11 @@ export default defineConfig({
   reporter: [['./scripts/authenticatedHostedPlaywrightReporter.mjs']],
   outputDir: playwrightOutputDir,
   timeout: 300_000,
-  expect: { timeout: 20_000 },
+  expect: { timeout: governStudioDiagnostic ? 15_000 : 20_000 },
   use: {
     baseURL,
-    actionTimeout: 20_000,
-    navigationTimeout: 45_000,
+    actionTimeout: governStudioDiagnostic ? 15_000 : 20_000,
+    navigationTimeout: governStudioDiagnostic ? 15_000 : 45_000,
     trace: 'off',
     screenshot: 'off',
     video: 'off',

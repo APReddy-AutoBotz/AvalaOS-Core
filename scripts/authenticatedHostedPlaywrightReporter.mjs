@@ -39,6 +39,15 @@ const OPERATION_TITLES = new Map([
   ['hosted:primary:safety-and-runtime', 'PRIMARY_SAFETY_AND_RUNTIME'],
   ['hosted:primary:v2-authoring-and-review', 'PRIMARY_V2_AUTHORING_AND_REVIEW'],
   ['hosted:primary:v2-finalization-and-review', 'PRIMARY_V2_FINALIZATION_AND_REVIEW'],
+  ['hosted:govern-studio:reviewer-approval', 'GOVERN_STUDIO_REVIEWER_APPROVAL'],
+  ['hosted:govern-studio:reviewer-denial', 'GOVERN_STUDIO_REVIEWER_DENIAL'],
+  ['hosted:govern-studio:approver-resolution', 'GOVERN_STUDIO_APPROVER_RESOLUTION'],
+  ['hosted:govern-studio:assess-handoff', 'GOVERN_STUDIO_ASSESS_HANDOFF'],
+  ['hosted:govern-studio:studio-request', 'GOVERN_STUDIO_STUDIO_REQUEST'],
+  ['hosted:govern-studio:studio-review', 'GOVERN_STUDIO_STUDIO_REVIEW'],
+  ['hosted:govern-studio:studio-final-accept', 'GOVERN_STUDIO_STUDIO_FINAL_ACCEPT'],
+  ['hosted:govern-studio:source-consume', 'GOVERN_STUDIO_SOURCE_CONSUME'],
+  ['hosted:govern-studio:checkpoint', 'GOVERN_STUDIO_CHECKPOINT'],
 ]);
 
 const projectCategory = test => {

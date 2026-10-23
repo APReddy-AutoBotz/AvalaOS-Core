@@ -66,6 +66,7 @@ on:
           - full_acceptance
           - v2_primary_prefix_diagnostic
           - reviewer_selection_diagnostic
+          - govern_studio_diagnostic
 
 permissions:
   contents: read
@@ -256,6 +257,23 @@ jobs:
         with:
           name: eligible-reviewer-authority-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: output/local-private/authenticated-product-acceptance/eligible-reviewer-authority
+          if-no-files-found: error
+          retention-days: 14
+      - name: Verify restricted reviewer Govern denial on Desktop and Pixel
+        env:
+          GOVERN_REVIEWER_DENIAL_PROOF_PATH: output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-reviewer-denial-proof.json
+        run: node scripts/reproduceGovernDisabledControl.mjs
+      - name: Verify Govern and Studio lineage against PostgreSQL
+        env:
+          RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_PATH: output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-studio-lineage-proof.json
+        run: node scripts/testAuthenticatedGovernStudioLineagePostgres.mjs
+      - name: Retain sanitized Govern reviewer denial proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: govern-reviewer-denial-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/local-private/authenticated-product-acceptance/govern-reviewer-denial/
           if-no-files-found: error
           retention-days: 14
       - name: Actual product cases on desktop and Pixel 7
@@ -526,8 +544,9 @@ jobs:
           [[ "$MIGRATION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$EXERCISE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$BASELINE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          [[ "$AUTHENTICATED_ACCEPTANCE_MODE" =~ ^(full_acceptance|v2_primary_prefix_diagnostic|reviewer_selection_diagnostic)$ ]]
-          if test "$AUTHENTICATED_ACCEPTANCE_MODE" = reviewer_selection_diagnostic; then
+          [[ "$AUTHENTICATED_ACCEPTANCE_MODE" =~ ^(full_acceptance|v2_primary_prefix_diagnostic|reviewer_selection_diagnostic|govern_studio_diagnostic)$ ]]
+          if test "$AUTHENTICATED_ACCEPTANCE_MODE" = reviewer_selection_diagnostic \
+            || test "$AUTHENTICATED_ACCEPTANCE_MODE" = govern_studio_diagnostic; then
             test "${{ inputs.frontend_kind }}" = local_build
           fi
       - uses: actions/setup-node@v4
@@ -705,6 +724,15 @@ jobs:
           test -f /tmp/authenticated-reviewer-selection-diagnostic.json && cp /tmp/authenticated-reviewer-selection-diagnostic.json reviewer-diagnostic-results/authenticated-reviewer-selection-diagnostic.json || true
           test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json reviewer-diagnostic-results/authenticated-hosted-diagnostic.json || true
           test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json reviewer-diagnostic-results/local-acceptance-build-proof.json || true
+      - name: Stage sanitized Govern and Studio diagnostic
+        if: always() && inputs.acceptance_mode == 'govern_studio_diagnostic'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p govern-studio-diagnostic-results
+          test -f /tmp/authenticated-govern-studio-diagnostic.json && cp /tmp/authenticated-govern-studio-diagnostic.json govern-studio-diagnostic-results/authenticated-govern-studio-diagnostic.json || true
+          test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json govern-studio-diagnostic-results/authenticated-hosted-diagnostic.json || true
+          test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json govern-studio-diagnostic-results/local-acceptance-build-proof.json || true
       - name: Generate unified 108-case report
         id: report
         if: always() && inputs.acceptance_mode == 'full_acceptance'
@@ -744,6 +772,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: reviewer-diagnostic-results/
+      - name: Upload sanitized Govern and Studio diagnostic
+        if: always() && inputs.acceptance_mode == 'govern_studio_diagnostic'
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-govern-studio-diagnostic-${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: govern-studio-diagnostic-results/
       - name: Enforce one-run complete acceptance gates
         if: always() && inputs.acceptance_mode == 'full_acceptance'
         shell: bash
@@ -804,3 +840,23 @@ jobs:
           test "${{ steps.authenticated.outcome }}" = success
           test -f /tmp/authenticated-reviewer-selection-diagnostic.json
           node --input-type=module -e 'import fs from "node:fs";import assert from "node:assert/strict";import {canonicalDigest} from "./scripts/assessV1OracleEvidence.mjs";import {validateAuthenticatedReviewerSelectionDiagnostic} from "./scripts/authenticatedReviewerSelectionDiagnostic.mjs";const value=validateAuthenticatedReviewerSelectionDiagnostic(JSON.parse(fs.readFileSync("/tmp/authenticated-reviewer-selection-diagnostic.json","utf8")));const provenance=JSON.parse(fs.readFileSync("./tests/acceptance/source-provenance.json","utf8"));const canonicalSourceDigest=canonicalDigest(provenance.sourceDigests);assert.deepEqual(value.source,{releaseSha:process.env.EXPECTED_RELEASE_SHA,runId:process.env.EXPECTED_RUN_ID,attempt:process.env.EXPECTED_RUN_ATTEMPT,sourceDigest:process.env.EXPECTED_SOURCE_DIGEST});assert.equal(value.source.sourceDigest,canonicalSourceDigest)'
+      - name: Enforce Govern and Studio diagnostic gate
+        if: always() && inputs.acceptance_mode == 'govern_studio_diagnostic'
+        shell: bash
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}
+          EXPECTED_RUN_ID: ${{ github.run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_SOURCE_DIGEST: ${{ env.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            'Authenticated Govern and Studio diagnostic outcome: ${{ steps.authenticated.outcome }}' \
+            'Deployment outcome: ${{ steps.deployment.outcome }}' | tee -a "$GITHUB_STEP_SUMMARY"
+          test "${{ inputs.frontend_kind }}" = local_build
+          test "${{ steps.deployment.outcome }}" = success
+          test "${{ steps.frontend_final.outcome }}" = success
+          test "${{ steps.frontend_cleanup.outcome }}" = success
+          test "${{ steps.authenticated.outcome }}" = success
+          test -f /tmp/authenticated-govern-studio-diagnostic.json
+          node --input-type=module -e 'import fs from "node:fs";import assert from "node:assert/strict";import {canonicalDigest} from "./scripts/assessV1OracleEvidence.mjs";import {validateAuthenticatedGovernStudioDiagnostic} from "./scripts/authenticatedGovernStudioDiagnostic.mjs";const value=validateAuthenticatedGovernStudioDiagnostic(JSON.parse(fs.readFileSync("/tmp/authenticated-govern-studio-diagnostic.json","utf8")));const provenance=JSON.parse(fs.readFileSync("./tests/acceptance/source-provenance.json","utf8"));const canonicalSourceDigest=canonicalDigest(provenance.sourceDigests);assert.deepEqual(value.source,{releaseSha:process.env.EXPECTED_RELEASE_SHA,runId:process.env.EXPECTED_RUN_ID,attempt:process.env.EXPECTED_RUN_ATTEMPT,sourceDigest:process.env.EXPECTED_SOURCE_DIGEST});assert.equal(value.source.sourceDigest,canonicalSourceDigest);assert.equal(value.acceptancePromoted,false);assert.equal(value.fullAcceptanceExecuted,false);assert.equal(value.providerGenerationExecuted,false);assert.equal(value.cleanup.status,"verified")'

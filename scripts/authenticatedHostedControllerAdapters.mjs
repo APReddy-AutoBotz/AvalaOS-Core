@@ -487,6 +487,155 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         approverExcluded:!candidateIds.includes(project.identities.approver.id),
         outsiderExcluded:!candidateIds.includes(project.identities.outsider.id)});
     },
+    async verifyGovernStudioDiagnosticLineage({ project, actions, signal }) {
+      if (signal?.aborted || !project?.processId || !project?.identities?.reviewer?.id
+        || !project?.identities?.approver?.id || !Array.isArray(actions) || actions.length!==8) {
+        throw new Error('AUTHENTICATED_HOSTED_GOVERN_STUDIO_LINEAGE_INPUT_REJECTED');
+      }
+      const capability=(await query(`WITH active_roles AS(
+          SELECT m.user_id,m.role_id FROM public.organization_members m
+          WHERE m.org_id=$1 AND m.user_id=ANY($3::uuid[]) AND m.status='active'
+            AND m.disabled_at IS NULL AND m.deleted_at IS NULL
+          UNION ALL
+          SELECT m.user_id,m.role_id FROM public.workspace_memberships m
+          WHERE m.org_id=$1 AND m.workspace_id=$2 AND m.user_id=ANY($3::uuid[]) AND m.status='active'
+            AND m.disabled_at IS NULL AND m.deleted_at IS NULL
+        ) SELECT
+          (SELECT count(*)::int FROM public.organization_members m WHERE m.org_id=$1 AND m.user_id=$4
+            AND m.status='active' AND m.disabled_at IS NULL AND m.deleted_at IS NULL) reviewer_org_memberships,
+          (SELECT count(*)::int FROM public.workspace_memberships m WHERE m.org_id=$1 AND m.workspace_id=$2
+            AND m.user_id=$4 AND m.status='active' AND m.disabled_at IS NULL AND m.deleted_at IS NULL) reviewer_workspace_memberships,
+          (SELECT count(*)::int FROM public.organization_members m WHERE m.org_id=$1 AND m.user_id=$5
+            AND m.status='active' AND m.disabled_at IS NULL AND m.deleted_at IS NULL) approver_org_memberships,
+          (SELECT count(*)::int FROM public.workspace_memberships m WHERE m.org_id=$1 AND m.workspace_id=$2
+            AND m.user_id=$5 AND m.status='active' AND m.disabled_at IS NULL AND m.deleted_at IS NULL) approver_workspace_memberships,
+          EXISTS(SELECT 1 FROM active_roles r JOIN public.role_capabilities rc ON rc.role_id=r.role_id
+            WHERE r.user_id=$4 AND rc.capability_key='assess.v2.govern.resolve') reviewer_govern,
+          EXISTS(SELECT 1 FROM active_roles r JOIN public.role_capabilities rc ON rc.role_id=r.role_id
+            WHERE r.user_id=$5 AND rc.capability_key='assess.v2.govern.resolve') approver_govern`,
+      [...scopeParams(),[project.identities.reviewer.id,project.identities.approver.id],
+        project.identities.reviewer.id,project.identities.approver.id])).rows[0];
+      const lineage=(await query(`WITH project_cases AS(
+          SELECT * FROM public.assess_v2_cases
+          WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL
+        ), exact_lineage AS(
+          SELECT c.id case_id,c.version case_version,decision.id decision_id,
+            review.id review_id,review.request_id review_request_id,review.receipt_id review_receipt_id,
+            review.reviewer_id,
+            govern.id govern_id,govern.source_case_version,upstream.id assess_handoff_id,
+            govern.request_id govern_request_id,govern.receipt_id govern_receipt_id,govern.resolver_id,
+            upstream.request_id handoff_request_id,upstream.receipt_id handoff_receipt_id,upstream.handed_off_by,
+            module.id module_handoff_id,package.id source_package_id,package.artifact_id,
+            consumption.id consumption_id
+          FROM project_cases c
+          JOIN public.assess_v2_decision_versions decision ON decision.case_id=c.id
+            AND decision.source_version_id=c.head_version_id
+          JOIN public.assess_v2_review_resolutions review ON review.case_id=c.id AND review.decision_id=decision.id
+            AND review.source_version_id=decision.source_version_id AND review.resolution='approved'
+          JOIN public.assess_v2_govern_resolutions govern ON govern.case_id=c.id AND govern.decision_id=decision.id
+            AND govern.review_resolution_id=review.id AND govern.source_version_id=decision.source_version_id
+          JOIN public.assess_v2_studio_handoffs upstream ON upstream.case_id=c.id AND upstream.decision_id=decision.id
+            AND upstream.review_resolution_id=review.id AND upstream.govern_resolution_id=govern.id
+          JOIN public.enterprise_module_handoffs module ON module.org_id=c.org_id AND module.workspace_id=c.workspace_id
+            AND module.upstream_handoff_id=upstream.id AND module.upstream_package_hash=upstream.package_hash
+            AND module.status='consumed'
+          JOIN public.enterprise_module_handoff_consumptions consumption ON consumption.handoff_id=module.id
+            AND consumption.org_id=module.org_id AND consumption.workspace_id=module.workspace_id
+          JOIN public.studio_artifact_source_packages package ON package.id=consumption.source_package_id
+            AND package.artifact_id=consumption.artifact_id AND package.org_id=module.org_id
+            AND package.workspace_id=module.workspace_id AND package.assess_handoff_id=upstream.id
+            AND package.assess_package_hash=upstream.package_hash AND package.source_mode='assess_handoff'
+        ) SELECT
+          (SELECT count(*)::int FROM project_cases) case_count,
+          (SELECT count(*)::int FROM exact_lineage) lineage_count,
+          (SELECT count(*)::int FROM public.assess_v2_review_resolutions r JOIN project_cases c ON c.id=r.case_id
+            WHERE r.resolution='approved') approved_reviews,
+          (SELECT count(*)::int FROM public.assess_v2_govern_resolutions g JOIN project_cases c ON c.id=g.case_id) govern_resolutions,
+          (SELECT count(*)::int FROM public.assess_v2_studio_handoffs h JOIN project_cases c ON c.id=h.case_id) assess_handoffs,
+          (SELECT count(*)::int FROM public.enterprise_module_handoffs h JOIN exact_lineage x ON x.module_handoff_id=h.id) module_handoffs,
+          (SELECT count(*)::int FROM public.studio_artifact_source_packages p JOIN exact_lineage x ON x.source_package_id=p.id) source_packages,
+          (SELECT count(*)::int FROM public.studio_artifact_generation_attempts a JOIN exact_lineage x ON x.artifact_id=a.artifact_id) generation_attempts,
+          (SELECT coalesce(jsonb_agg(jsonb_build_object('commandType',r.command_type,'requestId',r.request_id,
+              'receiptId',r.id,'actorId',r.actor_id,'resourceId',r.resource_id)
+            ORDER BY array_position(ARRAY['studio.handoff.request','studio.handoff.review.resolve',
+              'studio.handoff.approval.resolve','studio.handoff.consume'],'studio.'||r.command_type)),'[]'::jsonb)
+            FROM public.enterprise_module_handoff_command_receipts r CROSS JOIN exact_lineage x
+            WHERE r.org_id=$1 AND r.workspace_id=$2 AND r.status='committed'
+              AND r.command_type=ANY(ARRAY['handoff.request','handoff.review.resolve',
+                'handoff.approval.resolve','handoff.consume'])
+              AND r.response->>'handoffId'=x.module_handoff_id::text) module_receipts,
+          (SELECT jsonb_build_object('case',case_id,'decision',decision_id,'review',review_id,'govern',govern_id,
+            'assessHandoff',assess_handoff_id,'moduleHandoff',module_handoff_id,'sourcePackage',source_package_id,
+            'artifact',artifact_id,'consumption',consumption_id,
+            'reviewRequest',review_request_id,'reviewReceipt',review_receipt_id,'reviewer',reviewer_id,
+            'governRequest',govern_request_id,'governReceipt',govern_receipt_id,'resolver',resolver_id,
+            'handoffRequest',handoff_request_id,'handoffReceipt',handoff_receipt_id,'handoffActor',handed_off_by)
+            FROM exact_lineage LIMIT 1) binding,
+          (SELECT case_version>source_case_version FROM exact_lineage LIMIT 1) case_version_advanced
+        `,[...scopeParams(),project.processId])).rows[0];
+      const activeMemberships=capability?.reviewer_org_memberships===1&&capability?.reviewer_workspace_memberships===1
+        &&capability?.approver_org_memberships===1&&capability?.approver_workspace_memberships===1;
+      const binding=lineage?.binding;
+      const moduleReceipts=Array.isArray(lineage?.module_receipts)?lineage.module_receipts:[];
+      const actionBound=(action,row)=>row&&authenticatedHostedDigest(row.actorId)===action?.actorHash
+        &&authenticatedHostedDigest(row.requestId)===action?.requestIdHash
+        &&authenticatedHostedDigest(row.receiptId)===action?.response?.receiptIdHash;
+      const durableBindings=[
+        [actions[0],binding&&{actorId:binding.reviewer,requestId:binding.reviewRequest,receiptId:binding.reviewReceipt}],
+        [actions[2],binding&&{actorId:binding.resolver,requestId:binding.governRequest,receiptId:binding.governReceipt}],
+        [actions[3],binding&&{actorId:binding.handoffActor,requestId:binding.handoffRequest,receiptId:binding.handoffReceipt}],
+        ...moduleReceipts.map((row,index)=>[actions[index+4],row]),
+      ];
+      const changedSources=action=>{
+        const before=new Map((action?.before?.records??[]).map(row=>[row.recordHash,row]));
+        const after=new Map((action?.after?.records??[]).map(row=>[row.recordHash,row]));
+        return [...new Set([...before.keys(),...after.keys()])].filter(key=>{
+          const left=before.get(key);const right=after.get(key);
+          return !left||!right||left.rowHash!==right.rowHash||left.active!==right.active;
+        }).map(key=>(after.get(key)??before.get(key))?.source).sort();
+      };
+      const denialChanges=changedSources(actions[1]);
+      const governChanges=changedSources(actions[2]);
+      const denialActorBound=authenticatedHostedDigest(project.identities.reviewer.id)===actions[1]?.actorHash;
+      const requestResources=[binding?.case,binding?.case,binding?.case,binding?.case,
+        binding?.assessHandoff,binding?.moduleHandoff,binding?.moduleHandoff,binding?.moduleHandoff];
+      const requestResourcesBound=requestResources.every((resourceId,index)=>uuid(resourceId??'')
+        &&authenticatedHostedDigest(resourceId)===actions[index]?.requestResourceIdHash);
+      const responseResourcesBound=uuid(binding?.case??'')&&uuid(binding?.artifact??'')
+        &&[0,2,3].every(index=>authenticatedHostedDigest(binding.case)===actions[index]?.response?.commandIdHash)
+        &&[4,5,6].every(index=>authenticatedHostedDigest(binding.moduleHandoff)===actions[index]?.response?.commandIdHash)
+        &&authenticatedHostedDigest(binding.artifact)===actions[7]?.response?.commandIdHash;
+      const receiptResourcesBound=moduleReceipts.every((row,index)=>{
+        const expected=index===3?binding?.artifact:binding?.moduleHandoff;
+        return uuid(row.resourceId??'')&&row.resourceId===expected;
+      });
+      if (!activeMemberships || capability?.reviewer_govern !== false || capability?.approver_govern !== true
+        || lineage?.case_count !== 1 || lineage?.lineage_count !== 1 || lineage?.approved_reviews !== 1
+        || lineage?.govern_resolutions !== 1 || lineage?.assess_handoffs !== 1
+        || lineage?.module_handoffs !== 1 || lineage?.source_packages !== 1
+        || lineage?.generation_attempts !== 0 || lineage?.case_version_advanced !== true
+        || !binding || Object.values(binding).some(item => !uuid(item))
+        || moduleReceipts.length!==4
+        || !moduleReceipts.every((row,index)=>`studio.${row.commandType}`===actions[index+4]?.commandType)
+        || durableBindings.length!==7 || !durableBindings.every(([action,row])=>actionBound(action,row))
+        || !denialActorBound || !requestResourcesBound || !responseResourcesBound || !receiptResourcesBound
+        || denialChanges.length!==0
+        || JSON.stringify(governChanges)!==JSON.stringify([
+          'assess_command_receipts','assess_v2_cases','assess_v2_govern_resolutions','privileged_audit_events'])) {
+        throw new Error('AUTHENTICATED_HOSTED_GOVERN_STUDIO_LINEAGE_REJECTED');
+      }
+      return Object.freeze({
+        schemaVersion:'authenticated-govern-studio-lineage-v1',verified:true,
+        reviewerGovernCapabilityAbsent:true,approverGovernCapabilityPresent:true,
+        approvedReviewCount:1,governResolutionCount:1,studioHandoffCount:1,
+        moduleHandoffCount:1,studioSourcePackageCount:1,
+        sameScope:true,sameCase:true,sameDecision:true,sameReviewResolution:true,
+        sameGovernResolution:true,sameAssessHandoff:true,sameModuleHandoff:true,sameSourcePackage:true,
+        expectedCaseVersionAdvanced:true,
+        governCaseWrites:1,governResolutionWrites:1,governReceiptWrites:1,governAuditWrites:1,governOtherWrites:0,
+        providerCalls:0,paidCalls:0,lineageDigest:authenticatedHostedDigest({binding,moduleReceipts}),
+      });
+    },
     async preflight() {
       return withAuthenticatedHostedDiagnostic('DATABASE_SCOPE_BASELINE', async () => {
       observationStartedAt=iso((await query('SELECT statement_timestamp() value')).rows[0].value);

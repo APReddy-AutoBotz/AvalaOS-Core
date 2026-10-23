@@ -19,6 +19,7 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
+import { exerciseReviewerGovernDenial } from './governReviewerDenial';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   primeV2FullPrefixFixtureSession,
@@ -159,6 +160,7 @@ const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_RE
 const authenticatedAcceptanceMode = resolveAuthenticatedAcceptanceMode(process.env.AUTHENTICATED_ACCEPTANCE_MODE);
 const v2PrimaryPrefixDiagnostic = authenticatedAcceptanceMode === 'v2_primary_prefix_diagnostic';
 const reviewerSelectionDiagnostic = authenticatedAcceptanceMode === 'reviewer_selection_diagnostic';
+const governStudioDiagnostic = authenticatedAcceptanceMode === 'govern_studio_diagnostic';
 const v2FullPrefixReproductionVariant = resolveV2FullPrefixLocalSelection({
   variant: process.env.ENTERPRISE_LIFECYCLE_V2_FULL_PREFIX_REPRODUCTION,
   authenticated: authenticatedProductAcceptance,
@@ -166,8 +168,8 @@ const v2FullPrefixReproductionVariant = resolveV2FullPrefixLocalSelection({
   mode: authenticatedAcceptanceMode,
 });
 const v2FullPrefixReproduction = v2FullPrefixReproductionVariant !== null;
-const controllerBackedAcceptance = hostedAuthenticatedAcceptance || v2FullPrefixReproduction;
-if ((v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic)
+const controllerBackedAcceptance = hostedAuthenticatedAcceptance || v2FullPrefixReproduction || governStudioDiagnostic;
+if ((v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic || governStudioDiagnostic)
   && (!authenticatedProductAcceptance || !hostedAuthenticatedAcceptance)) {
   throw new Error('AUTHENTICATED_FOCUSED_DIAGNOSTIC_HOSTED_AUTH_REQUIRED');
 }
@@ -669,6 +671,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     'focused reviewer selection execution runs only the standalone Desktop diagnostic');
     test.skip(!reviewerSelectionDiagnostic && testInfo.tags.includes('@reviewer-selection-diagnostic'),
     'standalone reviewer selection diagnostic is excluded from ordinary acceptance');
+    test.skip(governStudioDiagnostic && !testInfo.tags.includes('@govern-studio-diagnostic'),
+    'focused Govern and Studio execution runs only the two bounded Desktop lifecycle tests');
     if (controllerBackedAcceptance) {
       await authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
     }
@@ -759,7 +763,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       v2FullPrefixQueues = Object.freeze({ network: reproductionNetworkQueue, cases: reproductionCaseQueue });
     }
     if (hasBoundaryFailure) failed = true;
-    if (v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic) {
+    if (v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic || governStudioDiagnostic) {
       if (hasBoundaryFailure) throw boundaryFailure;
       return;
     }
@@ -899,7 +903,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   });
 
   test('authors, replays, rejects stale work, requests changes and resubmits through the production UI',
-    { tag: '@v2-primary-prefix-diagnostic' }, async ({ page, context }) => test.step('hosted:primary:journey', async () => {
+    { tag: ['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'] }, async ({ page, context }) => test.step('hosted:primary:journey', async () => {
     let diagnosticPrefixComplete = false;
     await test.step('hosted:primary:process-denial', async () => {
       const deniedEditPage = await context.newPage();
@@ -1622,10 +1626,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         }),
       });
     }
-    if (diagnosticPrefixComplete) return;
+    if (diagnosticPrefixComplete || governStudioDiagnostic) return;
   }));
 
-  test('independent approval, Govern separation and synthetic Studio generation retain exact lineage', async ({ page }) => {
+  test('independent approval, Govern separation and synthetic Studio generation retain exact lineage',
+    { tag: '@govern-studio-diagnostic' }, async ({ page }) => {
     await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
     let reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
     await selectReviewer(page, setup.actors.reviewer);
@@ -1634,8 +1639,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     expect((await attestSubmittedEvidence(page, 'Revised evidence independently verified.')).length).toBeGreaterThan(0);
     const beforeApproval = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
     await reviewWorkspace.getByLabel('Review rationale', { exact: true }).fill('Revised decision and exact evidence are independently approved.');
-    const approvalApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-      reviewWorkspace.getByRole('button', { name: 'Approve reviewed decision', exact: true }).click());
+    const approvalApi = await test.step('hosted:govern-studio:reviewer-approval', () =>
+      observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+        reviewWorkspace.getByRole('button', { name: 'Approve reviewed decision', exact: true }).click()));
     expect(approvalApi.status).toBe(200);
     approvedDecisionApi = approvalApi;
     await expect(page.getByText('Review resolution committed: Approved.', { exact: true })).toBeVisible();
@@ -1662,16 +1668,40 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
     await assertHighImpactFinancialGovernActions(page);
     await assertNoHorizontalViewportOverflow(page);
-    expect(await resolveEveryGovernControl(page)).toBeGreaterThan(0);
-    await reviewWorkspace.getByLabel('Govern rationale', { exact: true }).fill('The final reviewer must not resolve this financial high-impact decision.');
     const beforeGovernBoundary = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
     const beforeFinalReviewerDenial = await control<MutationSnapshot>('/control/snapshot', { projectName });
-    const governDenialApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-      reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click());
-    expect(governDenialApi.status).toBe(400);
-    await expect(page.getByRole('heading', { name: 'Workspace unavailable', exact: true })).toBeVisible();
-    await expect(page.getByText('The command could not be completed. No success was recorded.', { exact: true })).toBeVisible();
+    const strictReviewerGovernDenial = hostedAuthenticatedAcceptance
+      || process.env.ENTERPRISE_LIFECYCLE_HOSTED_PERSONA_ROLE_PARITY === 'true';
+    const reviewerGovernDenial = strictReviewerGovernDenial
+      ? await test.step('hosted:govern-studio:reviewer-denial', () => exerciseReviewerGovernDenial({
+        page,
+        workspace: reviewWorkspace,
+        apiBaseUrl: process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL
+          ?? process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '',
+        rationale: 'The final reviewer must not resolve this financial high-impact decision.',
+      }))
+      : null;
+    let governDenialApi: ApiResponseObservation;
+    if (reviewerGovernDenial) {
+      governDenialApi = {
+        route: '/functions/v1/assess-v2-command',
+        status: reviewerGovernDenial.status,
+        ...(reviewerGovernDenial.errorCode ? { errorCode: reviewerGovernDenial.errorCode } : {}),
+        actionId: actionReference(reviewerGovernDenial.response.request()),
+      };
+      expect(governDenialApi.status).toBe(403);
+      expect(governDenialApi.errorCode).toBe('PERMISSION_DENIED');
+    } else {
+      expect(await resolveEveryGovernControl(page)).toBeGreaterThan(0);
+      await reviewWorkspace.getByLabel('Govern rationale', { exact: true })
+        .fill('The final reviewer must not resolve this financial high-impact decision.');
+      governDenialApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+        reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click());
+      expect(governDenialApi.status).toBe(400);
+      await expect(page.getByRole('heading', { name: 'Workspace unavailable', exact: true })).toBeVisible();
+      await expect(page.getByText('The command could not be completed. No success was recorded.', { exact: true })).toBeVisible();
+    }
     await expect(page.getByText('Govern resolution committed.', { exact: true })).toHaveCount(0);
     expect(await control<MutationSnapshot>('/control/snapshot', { projectName })).toEqual(beforeFinalReviewerDenial);
     observe('govern-separation-denial', 'ui.separation-denied');
@@ -1681,8 +1711,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
     expect(await resolveEveryGovernControl(page)).toBeGreaterThan(0);
     await reviewWorkspace.getByLabel('Govern rationale', { exact: true }).fill('Independent resolver confirmed every required control.');
-    const governResolutionApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-      reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click());
+    const governResolutionApi = await test.step('hosted:govern-studio:approver-resolution', () =>
+      observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+        reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click()));
     expect(governResolutionApi.status).toBe(200);
     await expect(page.getByText('Govern resolution committed.', { exact: true })).toBeVisible();
     observe('govern-resolve', 'ui.govern-resolved');
@@ -1693,12 +1724,23 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       authenticatedCases.push({
         testId: 'GOVERN-007', status: 'passed', proofMode: 'actual-ui',
         observations: {
-          browser: { actions: [
+          browser: { actions: reviewerGovernDenial ? [
+            { action: 'inspect', target: 'disabled Resolve Govern controls as final reviewer' },
+            { action: 'request', target: 'authenticated Govern resolution as final reviewer' },
+            { action: 'click', target: 'Resolve Govern controls as independent approver' },
+          ] : [
             { action: 'click', target: 'Resolve Govern controls as final reviewer' },
             { action: 'click', target: 'Resolve Govern controls as independent approver' },
-          ], result: { separationDenialZeroEffects: true, independentResolutionCommitted: true } },
+          ], result: reviewerGovernDenial ? {
+            reviewerControlDisabled: reviewerGovernDenial.uiDisabled,
+            exactCurrentScope: reviewerGovernDenial.exactCurrentScope,
+            exactCurrentVersion: reviewerGovernDenial.exactCurrentVersion,
+            requestBindingDigest: reviewerGovernDenial.requestDigest,
+            separationDenialZeroEffects: true,
+            independentResolutionCommitted: true,
+          } : { separationDenialZeroEffects: true, independentResolutionCommitted: true } },
           api: { productionRoutes: ['/functions/v1/assess-v2-command'], responses: [
-            { classification: 'INVALID_COMMAND', status: governDenialApi.status },
+            { classification: reviewerGovernDenial ? 'PERMISSION_DENIED' : 'INVALID_COMMAND', status: governDenialApi.status },
             { classification: 'GOVERN_RESOLUTION_COMMITTED', status: governResolutionApi.status },
           ] },
         },
@@ -1712,33 +1754,40 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
     const beforeStudioConsume = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-    const studioHandoffApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-      reviewWorkspace.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click());
+    const studioHandoffApi = await test.step('hosted:govern-studio:assess-handoff', () =>
+      observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
+        reviewWorkspace.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click()));
     expect(studioHandoffApi.status).toBe(200);
     await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Handed off to Studio');
 
     await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
-    await commitStudioHandoffAction(page, 'Request handoff');
+    const studioRequestApi = await test.step('hosted:govern-studio:studio-request', () =>
+      commitStudioHandoffAction(page, 'Request handoff'));
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
-    await commitStudioHandoffAction(page, 'Approve review', 'Independent Studio handoff review approved.');
+    const studioReviewApi = await test.step('hosted:govern-studio:studio-review', () =>
+      commitStudioHandoffAction(page, 'Approve review', 'Independent Studio handoff review approved.'));
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
-    await commitStudioHandoffAction(page, 'Final accept', 'Final Studio handoff acceptance by an independent actor.');
+    const studioFinalAcceptApi = await test.step('hosted:govern-studio:studio-final-accept', () =>
+      commitStudioHandoffAction(page, 'Final accept', 'Final Studio handoff acceptance by an independent actor.'));
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
-    const sourcePackageApi = await commitStudioHandoffAction(page, 'Start Studio draft', undefined, 'Outbox');
+    const sourcePackageApi = await test.step('hosted:govern-studio:source-consume', () =>
+      commitStudioHandoffAction(page, 'Start Studio draft', undefined, 'Outbox'));
     expect(sourcePackageApi.status).toBe(201);
     await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\./u)).toBeVisible();
     observe('studio-consume', 'ui.studio-lineage-consumed');
     if (authenticatedProductAcceptance && beforeStudioConsume) {
       const afterStudioConsume = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterStudioConsume.sourcePackages).toBe(beforeStudioConsume.sourcePackages + 1);
-      bindObservedCase('STUDIO-001',sourcePackageApi.actionId);
+      if (governStudioDiagnostic) bindObservedCase('STUDIO-001', studioHandoffApi.actionId,
+        studioRequestApi.actionId, studioReviewApi.actionId, studioFinalAcceptApi.actionId, sourcePackageApi.actionId);
+      else bindObservedCase('STUDIO-001',sourcePackageApi.actionId);
       authenticatedCases.push({
         testId: 'STUDIO-001', status: 'passed', proofMode: 'actual-ui',
         observations: {
@@ -1757,6 +1806,20 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         ] }, measurements: lifecycleMeasurements(beforeStudioConsume,afterStudioConsume,
           beforeStudioConsume.sourcePackages,afterStudioConsume.sourcePackages), cleanup: { verified: true },
       });
+    }
+
+    if (governStudioDiagnostic) {
+      const actionIds = await Promise.all([
+        approvalApi.actionId, governDenialApi.actionId, governResolutionApi.actionId, studioHandoffApi.actionId,
+        studioRequestApi.actionId, studioReviewApi.actionId, studioFinalAcceptApi.actionId, sourcePackageApi.actionId,
+      ]);
+      if (actionIds.some((actionId): actionId is null => actionId === null)) {
+        throw new Error('AUTHENTICATED_GOVERN_STUDIO_ACTION_REFERENCE_MISSING');
+      }
+      await test.step('hosted:govern-studio:checkpoint', () => control('/control/govern-studio-diagnostic', {
+        projectName, actionIds,
+      }));
+      return;
     }
 
     const studioWorkspace = page.getByTestId('studio-artifact-workspace');

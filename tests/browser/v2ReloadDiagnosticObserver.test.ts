@@ -96,6 +96,7 @@ test('mode remains full by default and accepts only the three exact values', () 
   assert.equal(resolveAuthenticatedAcceptanceMode('full_acceptance'), 'full_acceptance');
   assert.equal(resolveAuthenticatedAcceptanceMode('v2_primary_prefix_diagnostic'), 'v2_primary_prefix_diagnostic');
   assert.equal(resolveAuthenticatedAcceptanceMode('reviewer_selection_diagnostic'), 'reviewer_selection_diagnostic');
+  assert.equal(resolveAuthenticatedAcceptanceMode('govern_studio_diagnostic'), 'govern_studio_diagnostic');
   for (const candidate of ['', ' full_acceptance', 'V2_PRIMARY_PREFIX_DIAGNOSTIC', 'diagnostic']) {
     assert.throws(() => resolveAuthenticatedAcceptanceMode(candidate), /AUTHENTICATED_V2_RELOAD_MODE_REJECTED/u);
   }
@@ -332,8 +333,8 @@ test('checkpoint response accepts only the exact safe response contract', () => 
 
 test('the diagnostic tag reuses the original primary prefix and exits before later authoring', () => {
   const source = readFileSync('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts', 'utf8');
-  assert.equal(source.match(/\{ tag: '@v2-primary-prefix-diagnostic' \}/gu)?.length, 1);
-  assert.match(source, /test\('authors, replays, rejects stale work, requests changes and resubmits through the production UI',\s*\{ tag: '@v2-primary-prefix-diagnostic' \}/u);
+  assert.equal(source.match(/\{ tag: \['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'\] \}/gu)?.length, 1);
+  assert.match(source, /test\('authors, replays, rejects stale work, requests changes and resubmits through the production UI',\s*\{ tag: \['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'\] \}/u);
   const v1 = source.indexOf('runV1AssessmentCompletion');
   const beforeCreate = source.indexOf("checkpoint('before-create'", v1);
   const create = source.indexOf("name: 'New assessment (V2)'", beforeCreate);
@@ -349,10 +350,10 @@ test('the diagnostic tag reuses the original primary prefix and exits before lat
   assert.ok(v1 >= 0 && v1 < beforeCreate && beforeCreate < create && create < beforeReload
     && beforeReload < observer && observer < reload && reload < afterReload
     && afterReload < diagnosticExit && diagnosticExit < laterAuthoring);
-  assert.match(source, /if \(diagnosticPrefixComplete\) return;/u);
+  assert.match(source, /if \(diagnosticPrefixComplete \|\| governStudioDiagnostic\) return;/u);
   const primarySource = source.slice(source.indexOf("test('authors, replays"),
     source.indexOf("test('independent approval"));
   assert.match(primarySource,
     /if \(diagnosticCheckpoint\) \{[\s\S]*?diagnosticPrefixComplete = true;[\s\S]*?return;[\s\S]*?\} else \{[\s\S]*?Add minimum working structure/u);
-  assert.match(source, /if \(v2PrimaryPrefixDiagnostic \|\| reviewerSelectionDiagnostic\) \{[\s\S]*?if \(hasBoundaryFailure\) throw boundaryFailure;[\s\S]*?return;[\s\S]*?finalize-project/u);
+  assert.match(source, /if \(v2PrimaryPrefixDiagnostic \|\| reviewerSelectionDiagnostic \|\| governStudioDiagnostic\) \{[\s\S]*?if \(hasBoundaryFailure\) throw boundaryFailure;[\s\S]*?return;[\s\S]*?finalize-project/u);
 });

@@ -569,6 +569,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "local-real-backend-authority",
     "sourceReference": "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
     "selector": "CREATE OR REPLACE FUNCTION public.authenticated_synthetic_local_exercise_activate("
+  },
+  {
+    "anchorId": "authenticated-govern-reviewer-denial",
+    "sourceReference": "tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts",
+    "selector": "export const exerciseReviewerGovernDenial = async"
   }
 ]);
 
@@ -2952,7 +2957,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-observation-adapter",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-build",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "authenticated-govern-reviewer-denial"
     ],
     "ownership": [
       {

@@ -34,6 +34,12 @@ import {
   validateAuthenticatedV2ReloadCheckpoint,
 } from './authenticatedV2ReloadDiagnostic.mjs';
 import { buildAuthenticatedReviewerSelectionDiagnostic } from './authenticatedReviewerSelectionDiagnostic.mjs';
+import {
+  AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT,
+  AUTHENTICATED_GOVERN_STUDIO_CASE_IDS,
+  AUTHENTICATED_GOVERN_STUDIO_TARGET_CASE_IDS,
+  buildAuthenticatedGovernStudioDiagnostic,
+} from './authenticatedGovernStudioDiagnostic.mjs';
 
 export const AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA = 'authenticated-hosted-controller-v1';
 export const AUTHENTICATED_HOSTED_AUTHORITY_SCHEMA = 'authenticated-synthetic-authority-observation-v1';
@@ -47,6 +53,7 @@ export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
   diagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-hosted-diagnostic.json'),
   v2ReloadDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-v2-primary-prefix-diagnostic.json'),
   reviewerSelectionDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-reviewer-selection-diagnostic.json'),
+  governStudioDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-govern-studio-diagnostic.json'),
 });
 export const AUTHENTICATED_HOSTED_PERSONAS = Object.freeze(['author', 'reviewer', 'approver', 'outsider']);
 export const AUTHENTICATED_HOSTED_FAULT_KINDS = Object.freeze([
@@ -145,6 +152,47 @@ export const authenticatedHostedDigest = value => `sha256:${createHash('sha256')
   typeof value === 'string' ? value : canonicalJson(value),
 ).digest('hex')}`;
 
+export const authenticatedHostedResponseObservation = ({ responseBody, status }) => {
+  const response = record(responseBody) ? responseBody : {};
+  const first = (...values) => values.find(value => typeof value === 'string' && value.length > 0) ?? null;
+  const resource = record(response.resource) ? response.resource : {};
+  const commandId = first(response.commandId, response.resourceId, response.result?.commandId,
+    response.data?.commandId, resource.id, resource.resourceId, resource.artifactId, resource.caseId,
+    resource.taskId, resource.publicationId, resource.outcomeId, resource.assessmentId);
+  const receiptId = first(response.receiptId, response.result?.receiptId,
+    response.data?.receiptId, resource.receiptId);
+  const classification = String(response.error?.code ?? response.errorCode ?? response.outcome
+    ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
+    .toUpperCase().replace(/[^A-Z0-9_]/gu, '_').slice(0, 80);
+  return Object.freeze({
+    status,
+    classification: /^[A-Z][A-Z0-9_]{1,80}$/u.test(classification) ? classification : 'COMMAND_OBSERVED',
+    commandIdHash: commandId ? authenticatedHostedDigest(commandId) : null,
+    receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
+  });
+};
+
+export const authenticatedHostedBindResponseObservation = ({ observation, action, after }) => {
+  if (!record(observation) || !record(action) || !record(after) || !Array.isArray(after.records)) {
+    fail('RESPONSE_OBSERVATION_BINDING_REJECTED');
+  }
+  const receiptRows = after.records.filter(row => row?.effectKind === 'receipt'
+    && row.actorHash === action.actorHash && row.requestIdHash === action.requestIdHash
+    && row.commandBindingHash === action.commandBindingHash && DIGEST.test(row.receiptIdHash ?? ''));
+  if (receiptRows.length > 1) fail('RESPONSE_OBSERVATION_BINDING_REJECTED');
+  const receipt = receiptRows[0] ?? null;
+  if (observation.receiptIdHash !== null
+    && receipt && observation.receiptIdHash !== receipt.receiptIdHash) fail('RESPONSE_OBSERVATION_BINDING_REJECTED');
+  if (observation.commandIdHash !== null
+    && receipt?.commandIdHash && observation.commandIdHash !== receipt.commandIdHash) {
+    fail('RESPONSE_OBSERVATION_BINDING_REJECTED');
+  }
+  return Object.freeze({ ...observation,
+    receiptIdHash: observation.receiptIdHash ?? receipt?.receiptIdHash ?? null,
+    commandIdHash: observation.commandIdHash ?? receipt?.commandIdHash ?? null,
+  });
+};
+
 const decodeJwtClaims = token => {
   if (typeof token !== 'string' || token.length < 32 || token.length > 16_384) fail('SESSION_TOKEN_REJECTED');
   const parts = token.split('.');
@@ -194,8 +242,8 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
     || (localBuild && environment.ACCEPTANCE_EXECUTION_KIND !== 'local_real_backend')) {
     fail('EXECUTION_PROFILE_REJECTED');
   }
-  if (acceptanceMode === 'reviewer_selection_diagnostic' && !localBuild) {
-    fail('REVIEWER_SELECTION_DIAGNOSTIC_EXECUTION_REJECTED');
+  if (['reviewer_selection_diagnostic', 'govern_studio_diagnostic'].includes(acceptanceMode) && !localBuild) {
+    fail('FOCUSED_DIAGNOSTIC_EXECUTION_REJECTED');
   }
   const secretBackendKind = environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND;
   if (!['hashicorp_vault', 'supabase_vault'].includes(secretBackendKind)
@@ -412,6 +460,8 @@ export class AuthenticatedHostedController {
     this.reviewerSelectionCommands = null;
     this.reviewerSelectionServerActionFrames = null;
     this.reviewerSelectionTrustedActionProofs = null;
+    this.governStudioCheckpoint = null;
+    this.governStudioTargetRows = [];
     this.active = false;
     this.activationAttempted = false;
     this.quiesced = false;
@@ -516,7 +566,8 @@ export class AuthenticatedHostedController {
 
   async setupProject(projectName, signal) {
     this.assertControlCommitAllowed(signal);
-    if (['v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic'].includes(this.config.acceptanceMode) && projectName !== 'desktop-chromium') {
+    if (['v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic', 'govern_studio_diagnostic']
+      .includes(this.config.acceptanceMode) && projectName !== 'desktop-chromium') {
       fail('FOCUSED_DIAGNOSTIC_PROJECT_REJECTED');
     }
     if (!SAFE_NAME.test(projectName) && !/^(desktop-chromium|pixel-7-chromium)(?:-[a-z0-9-]{1,63})?$/u.test(projectName)) {
@@ -728,6 +779,71 @@ export class AuthenticatedHostedController {
     });
   }
 
+  governStudioDiagnosticResult() {
+    if (this.config.acceptanceMode !== 'govern_studio_diagnostic' || !this.quiesced
+      || !this.governStudioCheckpoint
+      || this.browserCases.length !== AUTHENTICATED_GOVERN_STUDIO_CASE_IDS.length
+      || this.serverCases.length !== AUTHENTICATED_GOVERN_STUDIO_CASE_IDS.length
+      || this.governStudioTargetRows.length !== AUTHENTICATED_GOVERN_STUDIO_TARGET_CASE_IDS.length) {
+      fail('GOVERN_STUDIO_DIAGNOSTIC_RESULT_REJECTED');
+    }
+    return buildAuthenticatedGovernStudioDiagnostic({
+      source: { releaseSha: this.config.releaseSha, runId: this.config.workflow.runId,
+        attempt: this.config.workflow.attempt, sourceDigest: this.config.sourceDigest },
+      browserCases: this.browserCases,
+      serverCases: this.serverCases,
+      targetProofRows: this.governStudioTargetRows,
+      trustedActions: this.governStudioCheckpoint.actions,
+      trustedLineage: this.governStudioCheckpoint.lineage,
+      cleanup: { status: 'verified' },
+    });
+  }
+
+  async recordGovernStudioDiagnosticCheckpoint({ projectName, actionIds }, signal) {
+    if (this.config.acceptanceMode !== 'govern_studio_diagnostic' || projectName !== 'desktop-chromium'
+      || this.governStudioCheckpoint !== null || !Array.isArray(actionIds)
+      || actionIds.length !== AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT.length
+      || new Set(actionIds).size !== actionIds.length || actionIds.some(item => !DIGEST.test(item ?? ''))) {
+      fail('GOVERN_STUDIO_DIAGNOSTIC_CHECKPOINT_REJECTED');
+    }
+    const available = this.browserActions.get(projectName) ?? [];
+    const actions = actionIds.map(actionId => available.find(item => item.actionId === actionId));
+    if (actions.some(action => !action?.complete)) fail('GOVERN_STUDIO_DIAGNOSTIC_ACTION_REJECTED');
+    if (actions.some(action => !DIGEST.test(action.requestIdHash ?? '')
+      || !DIGEST.test(action.requestResourceIdHash ?? ''))
+      || new Set(actions.map(action => action.requestIdHash)).size !== actions.length) {
+      fail('GOVERN_STUDIO_DIAGNOSTIC_ACTION_REJECTED');
+    }
+    for (let index = 0; index < AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT.length; index += 1) {
+      const contract = AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT[index];
+      const action = actions[index];
+      if (action.commandType !== contract.commandType || action.persona !== contract.persona
+        || action.status !== contract.status || action.response?.status !== contract.status
+        || (contract.key === 'reviewerGovernDenial'
+          && action.response?.classification !== 'PERMISSION_DENIED')) {
+        fail('GOVERN_STUDIO_DIAGNOSTIC_ACTION_REJECTED');
+      }
+      if (index > 0 && Date.parse(action.before.capturedAt) < Date.parse(actions[index - 1].before.capturedAt)) {
+        fail('GOVERN_STUDIO_DIAGNOSTIC_ACTION_ORDER_REJECTED');
+      }
+    }
+    const project = this.projects.get(projectName);
+    const lineage = await this.adapter.verifyGovernStudioDiagnosticLineage?.({ project, actions, signal });
+    this.assertControlCommitAllowed(signal);
+    if (!record(lineage) || lineage.verified !== true) fail('GOVERN_STUDIO_DIAGNOSTIC_LINEAGE_REJECTED');
+    const safeActions = actions.map(action => Object.freeze({
+      actionId: action.actionId, occurredAt: action.occurredAt, actorHash: action.actorHash,
+      sessionHash: action.sessionHash, requestIdHash: action.requestIdHash,
+      commandBindingHash: action.commandBindingHash, response: structuredClone(action.response),
+      persona: action.persona, commandType: action.commandType,
+      before: structuredClone(action.before), after: structuredClone(action.after),
+      complete: true, status: action.status,
+    }));
+    this.governStudioCheckpoint = Object.freeze({ actions: Object.freeze(safeActions),
+      lineage: Object.freeze(structuredClone(lineage)) });
+    return Object.freeze({ recorded: true, actionCount: safeActions.length, terminal: true });
+  }
+
   async recordReviewerSelectionCandidates({ projectName, accessToken }, signal) {
     if (this.config.acceptanceMode !== 'reviewer_selection_diagnostic' || projectName !== 'desktop-chromium'
       || this.reviewerSelectionCandidates !== null) fail('REVIEWER_SELECTION_CANDIDATES_REJECTED');
@@ -760,6 +876,15 @@ export class AuthenticatedHostedController {
     const boundActions = actionIds.map(actionId => available.find(item => item.actionId === actionId));
     if (boundActions.some(item => !item || !item.complete)) fail('BROWSER_ACTION_BINDING_REJECTED');
     const ordered = boundActions.toSorted((a, b) => Date.parse(a.before.capturedAt) - Date.parse(b.before.capturedAt));
+    if (this.config.acceptanceMode === 'govern_studio_diagnostic') {
+      if (projectName !== 'desktop-chromium' || !AUTHENTICATED_GOVERN_STUDIO_CASE_IDS.includes(row.testId)) {
+        fail('GOVERN_STUDIO_DIAGNOSTIC_CASE_REJECTED');
+      }
+      const expectedTargetActions = { 'GOVERN-005': 1, 'GOVERN-007': 2, 'STUDIO-001': 5 }[row.testId];
+      if (expectedTargetActions !== undefined && ordered.length !== expectedTargetActions) {
+        fail('GOVERN_STUDIO_DIAGNOSTIC_CASE_REJECTED');
+      }
+    }
     if (this.config.acceptanceMode === 'reviewer_selection_diagnostic') {
       if (projectName !== 'desktop-chromium' || row.testId !== 'E2E-004' || ordered.length !== 3
         || this.browserCases.length !== 0 || !this.reviewerSelectionCandidates
@@ -814,6 +939,13 @@ export class AuthenticatedHostedController {
       this.reviewerSelectionTrustedActionProofs = Object.freeze(ordered.map(action =>
         action.reviewerSelectionProof===null?null:Object.freeze(structuredClone(action.reviewerSelectionProof))));
     }
+    if (this.config.acceptanceMode === 'govern_studio_diagnostic'
+      && AUTHENTICATED_GOVERN_STUDIO_TARGET_CASE_IDS.includes(row.testId)) {
+      if (this.governStudioTargetRows.some(item => item.testId === row.testId)) {
+        fail('GOVERN_STUDIO_DIAGNOSTIC_CASE_REJECTED');
+      }
+      this.governStudioTargetRows.push(Object.freeze(structuredClone(row)));
+    }
     this.browserCases.push({
       testId: row.testId,
       project,
@@ -864,7 +996,6 @@ export class AuthenticatedHostedController {
   async beginBrowserAction({ projectName, accessToken, requestBody, route }, signal) {
     if (!this.projects.has(projectName) || !record(requestBody) || typeof route !== 'string'
       || !/^\/(?:functions\/v1\/[a-z0-9-]+|rest\/v1\/rpc\/[a-z0-9_]+)$/u.test(route)) fail('BROWSER_ACTION_REJECTED');
-    const binding = await this.resolveBrowserActionBinding({ projectName, accessToken }, signal);
     const project = this.projects.get(projectName);
     const method = typeof requestBody.method === 'string' && /^(?:GET|POST|PATCH|PUT|DELETE)$/u.test(requestBody.method)
       ? requestBody.method : 'POST';
@@ -873,12 +1004,21 @@ export class AuthenticatedHostedController {
       .find(value=>typeof value==='string');
     const commandType = typeof suppliedCommandType === 'string' ? suppliedCommandType
       : `http.${method.toLowerCase()}.${route.slice(1).replaceAll('/', '.').replaceAll('_', '-')}`;
+    if (this.config.acceptanceMode === 'govern_studio_diagnostic'
+      && (/^(?:studio\.(?:generation|artifact\.generation)|delivery\.|task\.|monitor\.|outcome\.|publication\.)/u.test(commandType)
+        || route.includes('provider'))) fail('GOVERN_STUDIO_DIAGNOSTIC_DOWNSTREAM_REJECTED');
+    const binding = await this.resolveBrowserActionBinding({ projectName, accessToken }, signal);
     const mutationBinding = Object.hasOwn(requestBody, 'requestId') || suppliedCommandType!==undefined;
     if (mutationBinding && (!UUID.test(requestBody.requestId ?? '') || typeof suppliedCommandType !== 'string')) {
       fail('BROWSER_ACTION_COMMAND_REJECTED');
     }
     const hashes = authenticatedHostedRequestBinding({ requestId, actorHash: binding.actorHash,
       commandType, payload: requestBody, requireUuid: mutationBinding });
+    const requestPayload = record(requestBody.payload) ? requestBody.payload : {};
+    const requestResourceId = [
+      requestPayload.caseId, requestPayload.handoffId, requestPayload.upstreamHandoffId,
+      requestBody.caseId, requestBody.handoffId, requestBody.upstreamHandoffId,
+    ].find(value => typeof value === 'string' && UUID.test(value));
     if (!timestamp(project.lastBoundaryAt)) fail('OBSERVATION_CUTOFF_REJECTED');
     const before = await this.adapter.observe({ exerciseId: this.exerciseId, from: project.lastBoundaryAt, project, signal });
     if (!record(before) || !timestamp(before.capturedAt) || !Array.isArray(before.records)) fail('AUTHORITY_FRAME_REJECTED');
@@ -888,7 +1028,9 @@ export class AuthenticatedHostedController {
     }
     const actionId = authenticatedHostedDigest(this.randomId());
     const action = { actionId, occurredAt: before.capturedAt, actorHash: binding.actorHash,
-      sessionHash: binding.sessionHash, ...hashes, response: null, persona: binding.persona,
+      sessionHash: binding.sessionHash, ...hashes,
+      requestResourceIdHash: requestResourceId ? authenticatedHostedDigest(requestResourceId) : null,
+      response: null, persona: binding.persona,
       actorId: binding.actorId, sessionId: binding.sessionId, commandType,
       before, after: null, complete: false, finishClaimed: false, route,
       rawRequestBody: requestBody, assessmentFinalizeProof: null, reviewerSelectionProof: null };
@@ -1043,26 +1185,17 @@ export class AuthenticatedHostedController {
     if (preparation) preparation.state = 'consuming';
     try {
       const response = prepared ? preparation.response : record(responseBody) ? responseBody : {};
-      const first = (...values) => values.find(value => typeof value === 'string' && value.length > 0) ?? null;
-      const resource = record(response.resource) ? response.resource : {};
-      const commandId = first(response.commandId, response.resourceId, response.result?.commandId, response.data?.commandId,
-        resource.id, resource.resourceId, resource.artifactId, resource.caseId, resource.taskId, resource.publicationId,
-        resource.outcomeId, resource.assessmentId);
-      const receiptId = first(response.receiptId, response.result?.receiptId, response.data?.receiptId, resource.receiptId);
-      const classification = String(response.error?.code ?? response.errorCode ?? response.outcome
-        ?? response.status ?? (status >= 200 && status < 300 ? 'COMMAND_ACCEPTED' : 'COMMAND_REJECTED'))
-        .toUpperCase().replace(/[^A-Z0-9_]/gu, '_').slice(0, 80);
       const project = this.projects.get(projectName);
       const after = prepared ? preparation.after
         : await this.adapter.observe({ exerciseId: this.exerciseId, from: action.before.capturedAt, project, signal });
       if (!record(after) || !timestamp(after.capturedAt) || !Array.isArray(after.records)
         || Date.parse(after.capturedAt) <= Date.parse(action.before.capturedAt)) fail('AUTHORITY_FRAME_REJECTED');
-      const responseObservation = {
-        status,
-        classification: /^[A-Z][A-Z0-9_]{1,80}$/u.test(classification) ? classification : 'COMMAND_OBSERVED',
-        commandIdHash: commandId ? authenticatedHostedDigest(commandId) : null,
-        receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
-      };
+      let responseObservation = { ...authenticatedHostedResponseObservation({ responseBody: response, status }) };
+      if (this.config.acceptanceMode === 'govern_studio_diagnostic') {
+        responseObservation = { ...authenticatedHostedBindResponseObservation({
+          observation: responseObservation, action, after,
+        }) };
+      }
       let reviewerSelectionProof=null;
       if (this.config.acceptanceMode === 'reviewer_selection_diagnostic'
         && ['assessment_v2.review.assign', 'assessment_v2.review.resolve'].includes(action.commandType)) {
@@ -1146,6 +1279,8 @@ export class AuthenticatedHostedController {
   }
 
   async armPermit(input, signal) {
+    if (this.config.acceptanceMode === 'govern_studio_diagnostic'
+      && input.kind !== 'process_server_error_precommit') fail('GOVERN_STUDIO_DIAGNOSTIC_PERMIT_REJECTED');
     if (!this.active || this.quiesced || !AUTHENTICATED_HOSTED_FAULT_KINDS.includes(input.kind)
       || !UUID.test(input.actorId) || !UUID.test(input.sessionId) || !UUID.test(input.requestId)
       || !HEX_DIGEST.test(input.payloadHash) || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
@@ -1219,6 +1354,15 @@ export class AuthenticatedHostedController {
       ]);
       if (!drainAllowed.has(pathname)) fail('REVIEWER_SELECTION_DIAGNOSTIC_TERMINAL');
     }
+    if (this.config.acceptanceMode === 'govern_studio_diagnostic' && this.governStudioCheckpoint) {
+      const drainAllowed = new Set([
+        '/control/browser-action-prepare', '/control/browser-action', '/control/browser-case',
+        '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
+        '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',
+        '/control/authenticated-controls/frame', '/control/snapshot',
+      ]);
+      if (!drainAllowed.has(pathname)) fail('GOVERN_STUDIO_DIAGNOSTIC_TERMINAL');
+    }
     if (pathname === '/control/setup') return this.setupProject(input.projectName, signal);
     if (pathname === '/control/bind-browser-session') return this.bindBrowserSession(input, signal);
     if (pathname === '/control/browser-case') return this.recordBrowserCase(input, signal);
@@ -1230,6 +1374,9 @@ export class AuthenticatedHostedController {
     if (pathname === '/control/browser-diagnostic') return this.recordIdentityDiagnostic(input, 'browser');
     if (pathname === '/control/v2-reload-diagnostic') return this.recordV2ReloadDiagnosticCheckpoint(input, signal);
     if (pathname === '/control/reviewer-selection-candidates') return this.recordReviewerSelectionCandidates(input, signal);
+    if (pathname === '/control/govern-studio-diagnostic') {
+      return this.recordGovernStudioDiagnosticCheckpoint(input, signal);
+    }
     const framePaths = new Set([
       '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
       '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',

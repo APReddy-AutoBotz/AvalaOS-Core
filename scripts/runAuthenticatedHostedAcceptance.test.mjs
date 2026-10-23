@@ -806,6 +806,82 @@ test('reviewer selection runner uses one Desktop case and writes its result only
   for(const key of ['browser','server','binding'])await assert.rejects(readFile(outputPaths[key],'utf8'),/ENOENT/u);
 });
 
+test('Govern and Studio runner selects two serial Desktop tests and writes only its bounded result after cleanup', async t => {
+  const approvedExerciseDigest=sha('govern-studio-runner-approved');const buildDigest=sha('govern-studio-runner-build');
+  const environment={...hostedEnvironment(),AUTHENTICATED_ACCEPTANCE_MODE:'govern_studio_diagnostic',
+    ACCEPTANCE_EXECUTION_KIND:'local_real_backend',AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND:'local_real_backend_authenticated',
+    HOSTED_PILOT_URL:'http://127.0.0.1:4173',NETLIFY_DEPLOY_ID:'',AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST:buildDigest,
+    AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST:approvedExerciseDigest,
+    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST:deriveLocalAcceptanceExerciseDigest({approvedExerciseDigest,buildDigest,
+      releaseSha:'a'.repeat(40)}),
+    LOCAL_ACCEPTANCE_BUILD_ROOT:path.join(os.tmpdir(),'avalaos-local-acceptance-govern-studio-runner-fixture')};
+  const outputBase=path.join(process.cwd(),'output','local-private','authenticated-product-acceptance');
+  await mkdir(outputBase,{recursive:true});
+  const outputRoot=await mkdtemp(path.join(outputBase,'govern-studio-runner-output-'));
+  t.after(()=>rm(outputRoot,{recursive:true,force:true}));
+  const outputPaths={browser:path.join(outputRoot,'browser.json'),server:path.join(outputRoot,'server.json'),
+    binding:path.join(outputRoot,'binding.json'),diagnostic:path.join(outputRoot,'diagnostic.json'),
+    governStudioDiagnostic:path.join(outputRoot,'govern-studio.json')};
+  for(const key of ['browser','server','binding'])await writeFile(outputPaths[key],'preserved-prior-evidence\n');
+  const calls=[];let controller;
+  const adapter={preflight:async()=>({...validPreflight(environment),deploymentId:null,
+    executionKind:'local_real_backend_authenticated',buildDigest}),activate:async()=>calls.push('activate'),
+    quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup'),
+    verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
+      activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true})};
+  await runAuthenticatedHostedAcceptance(environment,{outputPaths,database:{},verifyCheckout:async()=>calls.push('checkout'),
+    createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({revokeAll:async()=>calls.push('revoke')}),
+    createBrowserWorkspace:()=>mkdtemp(path.join(os.tmpdir(),'authenticated-hosted-browser-')),
+    startServer:async value=>{controller=value;controller.governStudioDiagnosticResult=()=>{
+      assert.deepEqual(calls,['checkout','activate','close','quiesce','revoke','cleanup']);
+      return {schemaVersion:'authenticated-govern-studio-diagnostic-v1'};
+    };return {baseUrl:'http://127.0.0.1:1234',controlToken:'token',close:async()=>calls.push('close')};},
+    runPlaywright:async(_command,args,options)=>{
+      assert.deepEqual(args.slice(-2),['--project=desktop-chromium','--grep=@govern-studio-diagnostic']);
+      assert.equal(options.env.AUTHENTICATED_ACCEPTANCE_MODE,'govern_studio_diagnostic');
+    }});
+  assert.deepEqual(JSON.parse(await readFile(outputPaths.governStudioDiagnostic,'utf8')),
+    {schemaVersion:'authenticated-govern-studio-diagnostic-v1'});
+  for(const key of ['browser','server','binding'])assert.equal(await readFile(outputPaths[key],'utf8'),
+    'preserved-prior-evidence\n');
+});
+
+test('Govern and Studio runner removes stale focused evidence and retains only sanitized failure after cleanup', async t => {
+  const approvedExerciseDigest=sha('govern-studio-failure-approved');const buildDigest=sha('govern-studio-failure-build');
+  const environment={...hostedEnvironment(),AUTHENTICATED_ACCEPTANCE_MODE:'govern_studio_diagnostic',
+    ACCEPTANCE_EXECUTION_KIND:'local_real_backend',AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND:'local_real_backend_authenticated',
+    HOSTED_PILOT_URL:'http://127.0.0.1:4173',NETLIFY_DEPLOY_ID:'',AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST:buildDigest,
+    AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST:approvedExerciseDigest,
+    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST:deriveLocalAcceptanceExerciseDigest({approvedExerciseDigest,buildDigest,
+      releaseSha:'a'.repeat(40)}),
+    LOCAL_ACCEPTANCE_BUILD_ROOT:path.join(os.tmpdir(),'avalaos-local-acceptance-govern-studio-failure-fixture')};
+  const outputRoot=await mkdtemp(path.join(os.tmpdir(),'authenticated-govern-studio-failure-output-'));
+  t.after(()=>rm(outputRoot,{recursive:true,force:true}));
+  const outputPaths={browser:path.join(outputRoot,'browser.json'),server:path.join(outputRoot,'server.json'),
+    binding:path.join(outputRoot,'binding.json'),diagnostic:path.join(outputRoot,'diagnostic.json'),
+    governStudioDiagnostic:path.join(outputRoot,'govern-studio.json')};
+  await writeFile(outputPaths.governStudioDiagnostic,'stale-focused-evidence\n');
+  const calls=[];
+  const adapter={preflight:async()=>({...validPreflight(environment),deploymentId:null,
+    executionKind:'local_real_backend_authenticated',buildDigest}),activate:async()=>calls.push('activate'),
+  quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup'),
+  verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
+    activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true})};
+  await assert.rejects(runAuthenticatedHostedAcceptance(environment,{outputPaths,database:{},
+    verifyCheckout:async()=>{},createPostgresAdapter:()=>adapter,
+    createIdentityAdapter:()=>({revokeAll:async()=>calls.push('revoke')}),
+    createBrowserWorkspace:()=>mkdtemp(path.join(os.tmpdir(),'authenticated-hosted-browser-')),
+    startServer:async()=>({baseUrl:'http://127.0.0.1:1234',controlToken:'token',
+      close:async()=>calls.push('close')}),
+    runPlaywright:async()=>{throw new Error('govern studio browser failure');}}),/govern studio browser failure/u);
+  const diagnostic=JSON.parse(await readFile(outputPaths.diagnostic,'utf8'));
+  assert.deepEqual(diagnostic.failure,{phase:'BROWSER_EXECUTION',category:'RUNNER_REJECTED'});
+  assert.equal(diagnostic.cleanup.status,'verified');
+  assert.deepEqual(calls,['activate','close','quiesce','revoke','cleanup']);
+  await assert.rejects(readFile(outputPaths.governStudioDiagnostic,'utf8'),/ENOENT/u);
+  for(const key of ['browser','server','binding'])await assert.rejects(readFile(outputPaths[key],'utf8'),/ENOENT/u);
+});
+
 test('focused V2 diagnostic browser failure still writes a partial sanitized artifact after cleanup', async t => {
   const environment = { ...hostedEnvironment(), AUTHENTICATED_ACCEPTANCE_MODE: 'v2_primary_prefix_diagnostic' };
   const outputRoot = await mkdtemp(path.join(os.tmpdir(), 'authenticated-v2-failure-output-test-'));
