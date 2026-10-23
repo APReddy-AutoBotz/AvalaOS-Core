@@ -18,6 +18,11 @@ const iso = value => {
 };
 const value = result => result.rows[0]?.value;
 const PROVIDER_NAMES=Object.freeze(['openai','azure_openai','anthropic','gemini','groq','openai_compatible']);
+const REVIEWER_IDEMPOTENCY_KEY=/^[A-Za-z0-9._:-]{8,128}$/u;
+const REVIEWER_COMMANDS=Object.freeze(['assessment_v2.review.assign','assessment_v2.review.resolve']);
+const reviewerRecord=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+const reviewerExactKeys=(value,keys)=>reviewerRecord(value)
+  && Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 
 export const AUTHENTICATED_HOSTED_SESSION_QUERY = `SELECT id,user_id,not_after,refreshed_at
         FROM auth.sessions WHERE id=$1 AND user_id=$2 AND (not_after IS NULL OR not_after>statement_timestamp())`;
@@ -364,25 +369,61 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
     async verifyReviewerSelectionAction({ project, actorId, requestBody, responseBody, status }) {
       const commandType=requestBody?.commandType;
       const requestId=requestBody?.requestId;
+      const idempotencyKey=requestBody?.idempotencyKey;
       const caseId=requestBody?.payload?.caseId;
+      const decisionId=requestBody?.payload?.decisionId;
+      const expectedVersion=requestBody?.expectedVersion;
+      const authorizationVersion=requestBody?.authorizationVersion;
+      const payload=requestBody?.payload;
+      const envelopeKeys=['requestId','idempotencyKey','commandType','organizationId','workspaceId',
+        'authorizationVersion','expectedVersion','payload'];
+      const payloadKeys=commandType==='assessment_v2.review.assign'
+        ? ['caseId','decisionId','reviewSequence','reviewerId']
+        : ['caseId','decisionId','reviewSequence','resolution','rationale','conditions'];
+      const payloadShape=commandType==='assessment_v2.review.assign'
+        ? uuid(payload?.reviewerId)&&payload.reviewerId===actorId
+        : ['approved','changes_requested','rejected'].includes(payload?.resolution)
+          &&typeof payload?.rationale==='string'&&payload.rationale.trim().length>0&&payload.rationale.length<=4000
+          &&Array.isArray(payload?.conditions)&&payload.conditions.length<=100
+          &&payload.conditions.every(item=>typeof item==='string'&&item.trim().length>0&&item.length<=500);
       if(actorId!==project?.identities?.reviewer?.id
-        || !['assessment_v2.review.assign','assessment_v2.review.resolve'].includes(commandType)
-        || !uuid(requestId)||!uuid(caseId)){
+        || !REVIEWER_COMMANDS.includes(commandType)
+        || !reviewerExactKeys(requestBody,envelopeKeys)||!reviewerExactKeys(payload,payloadKeys)
+        || !uuid(requestId)||!REVIEWER_IDEMPOTENCY_KEY.test(idempotencyKey??'')
+        || requestBody.organizationId!==config.scope.organizationId
+        || requestBody.workspaceId!==config.scope.workspaceId
+        || !Number.isSafeInteger(authorizationVersion)||authorizationVersion<1
+        || !Number.isSafeInteger(expectedVersion)||expectedVersion<1
+        || !uuid(caseId)||!uuid(decisionId)
+        || !Number.isSafeInteger(payload.reviewSequence)||payload.reviewSequence<1||!payloadShape){
         throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_BINDING_REJECTED');
       }
-      const receipts=(await query(`SELECT id,status,
-          response->>'caseId'=$6 case_resource_matches
+      const stale=status===409&&responseBody?.error?.code==='VERSION_CONFLICT';
+      if(status!==200&&!stale)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_STATUS_REJECTED');
+      const receipts=(await query(`SELECT id,status,request_id,request_hash,idempotency_key,
+          request_id=$5::uuid exact_request_matches,
+          idempotency_key=$6 semantic_key_matches,
+          response->>'caseId'=$7::text case_resource_matches,
+          encode(public.digest(concat_ws('|',$4::text,$1::uuid,$2::uuid,$7::uuid,$8::uuid,$9::bigint,$10::jsonb::text),'sha256'),'hex') expected_request_hash
         FROM public.assess_command_receipts
-        WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND request_id=$4 AND command_type=$5
-        ORDER BY created_at,id LIMIT 2`,[...scopeParams(),actorId,requestId,commandType,caseId])).rows;
-      if(status===409&&responseBody?.error?.code==='VERSION_CONFLICT'){
+        WHERE org_id=$1 AND workspace_id=$2 AND actor_id=$3 AND command_type=$4
+          AND (request_id=$5::uuid OR idempotency_key=$6)
+        ORDER BY created_at,id LIMIT 3`,[...scopeParams(),actorId,commandType,requestId,idempotencyKey,
+        caseId,decisionId,expectedVersion,JSON.stringify(payload)])).rows;
+      if(stale){
         if(receipts.length!==0)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_STALE_WRITE_REJECTED');
-        return Object.freeze({commandIdHash:null,receiptIdHash:null});
+        return Object.freeze({commandIdHash:null,receiptIdHash:null,reviewerSelectionProof:null});
       }
       const receipt=receipts[0];
-      if(status!==200)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_STATUS_REJECTED');
-      if(receipts.length!==1)throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_COUNT_REJECTED');
+      if(receipts.length!==1||!uuid(receipt?.id)||receipt?.semantic_key_matches!==true
+        ||receipt?.idempotency_key!==idempotencyKey){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_COUNT_REJECTED');
+      }
       if(receipt.status!=='succeeded')throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_STATUS_REJECTED');
+      if(typeof receipt.request_hash!=='string'||!/^[0-9a-f]{64}$/u.test(receipt.request_hash)
+        ||receipt.request_hash!==receipt.expected_request_hash){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_SEMANTIC_BINDING_REJECTED');
+      }
       if(receipt.case_resource_matches!==true){
         throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_RESOURCE_REJECTED');
       }
@@ -392,7 +433,22 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       if(responseBody?.resource?.caseId!==caseId){
         throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RESPONSE_RESOURCE_REJECTED');
       }
-      return Object.freeze({commandIdHash:authenticatedHostedDigest(caseId),receiptIdHash:authenticatedHostedDigest(receipt.id)});
+      if(!uuid(receipt.request_id)
+        ||(responseBody.outcome==='committed'&&(receipt.request_id!==requestId||receipt.exact_request_matches!==true))
+        ||(responseBody.outcome==='replayed'&&(receipt.request_id===requestId||receipt.exact_request_matches!==false))){
+        throw new Error('AUTHENTICATED_HOSTED_REVIEWER_ACTION_RECEIPT_ORIGIN_REJECTED');
+      }
+      const { requestId: _requestId, ...semanticEnvelope }=requestBody;
+      return Object.freeze({
+        commandIdHash:authenticatedHostedDigest(caseId),
+        receiptIdHash:authenticatedHostedDigest(receipt.id),
+        reviewerSelectionProof:Object.freeze({
+          receiptOriginRequestIdHash:authenticatedHostedDigest(receipt.request_id),
+          semanticRequestHash:`sha256:${receipt.request_hash}`,
+          idempotencyKeyHash:authenticatedHostedDigest(idempotencyKey),
+          semanticEnvelopeHash:authenticatedHostedDigest(semanticEnvelope),
+        }),
+      });
     },
     async verifyReviewerSelectionCandidates({ project, reviewerAccessToken, reviewerActorId, signal }) {
       if (typeof reviewerAccessToken !== 'string' || reviewerAccessToken.length < 32

@@ -5,7 +5,7 @@ import { buildAuthenticatedReviewerSelectionDiagnostic,
   validateAuthenticatedReviewerSelectionDiagnostic } from './authenticatedReviewerSelectionDiagnostic.mjs';
 
 const valid = () => ({
-  schemaVersion: 'authenticated-reviewer-selection-diagnostic-v1',
+  schemaVersion: 'authenticated-reviewer-selection-diagnostic-v2',
   mode: 'reviewer_selection_diagnostic',
   source: { releaseSha: 'a'.repeat(40), runId: '123', attempt: '1', sourceDigest: `sha256:${'b'.repeat(64)}` },
   scope: { project: 'desktop-chromium', persona: 'reviewer', testId: 'E2E-004' },
@@ -16,9 +16,11 @@ const valid = () => ({
     assignment: { command: 'assessment_v2.review.assign', status: 200, classification: 'COMMITTED' },
     replay: { command: 'assessment_v2.review.assign', status: 200, classification: 'REPLAYED' },
     stale: { command: 'assessment_v2.review.resolve', status: 409, classification: 'VERSION_CONFLICT' },
-    bindings: { sameReviewerSession: true, assignmentReplayRequestEqual: true, assignmentReplayCommandEqual: true,
-      assignmentReplayCommandIdEqual: true, assignmentReplayReceiptEqual: true, staleRequestDistinct: true,
-      staleCommandDistinct: true },
+    bindings: { sameReviewerSession: true, assignmentReplayRequestDistinct: true,
+      assignmentReplayCommandDistinct: true, assignmentReplaySemanticEqual: true,
+      assignmentReplayIdempotencyEqual: true, assignmentReplayEnvelopeEqual: true,
+      receiptOriginMatchesAssignment: true, assignmentReplayCommandIdEqual: true,
+      assignmentReplayReceiptEqual: true, staleRequestDistinct: true, staleCommandDistinct: true },
   },
   effects: { assignmentWrites: 1, receiptWrites: 1, auditWrites: 1, otherWrites: 0 },
   providers: { enabled: false, providerCalls: 0, paidCalls: 0 },
@@ -43,6 +45,8 @@ const buildInput = () => {
     browserPayloadHash: h('5'), response: { status: 200, classification: 'COMMITTED',
       commandIdHash: h('6'), receiptIdHash: h('7') } };
   const replay = structuredClone(assignment);
+  replay.requestIdHash = h('d');
+  replay.commandBindingHash = h('e');
   replay.response.classification = 'REPLAYED';
   const stale = { requestIdHash: h('8'), commandBindingHash: h('9'), actorHash: h('1'), sessionHash: h('2'),
     browserPayloadHash: h('a'), response: { status: 409, classification: 'VERSION_CONFLICT',
@@ -83,23 +87,60 @@ const buildInput = () => {
     {before:clearBindings(trustedAssignmentAfter),after:clearBindings(trustedAssignmentAfter)},
     {before:clearBindings(trustedAssignmentAfter),after:clearBindings(trustedAssignmentAfter)},
   ];
-  return { source: valid().source, browser, server, trustedActionFrames, candidates: valid().candidates,
+  const trustedActionProofs = [
+    { receiptOriginRequestIdHash: assignment.requestIdHash, semanticRequestHash: h('a'),
+      idempotencyKeyHash: h('b'), semanticEnvelopeHash: h('c') },
+    { receiptOriginRequestIdHash: assignment.requestIdHash, semanticRequestHash: h('a'),
+      idempotencyKeyHash: h('b'), semanticEnvelopeHash: h('c') },
+    null,
+  ];
+  return { source: valid().source, browser, server, trustedActionFrames, trustedActionProofs,
+    candidates: valid().candidates,
     commands: ['assessment_v2.review.assign', 'assessment_v2.review.assign', 'assessment_v2.review.resolve'],
     cleanup: { status: 'verified' } };
 };
 
 test('reconstructs exact assignment replay credit without losing strict bindings', () => {
-  assert.deepEqual(buildAuthenticatedReviewerSelectionDiagnostic(buildInput()), valid());
+  const input = buildInput();
+  const retainedBrowser = structuredClone(input.browser);
+  assert.deepEqual(buildAuthenticatedReviewerSelectionDiagnostic(input), valid());
+  assert.deepEqual(input.browser, retainedBrowser);
+  assert.notEqual(input.browser.actions[1].response.commandIdHash, null);
+  assert.notEqual(input.browser.actions[1].response.receiptIdHash, null);
 });
 
 for (const [name, mutate] of [
-  ['replay request', input => { input.browser.actions[1].requestIdHash = h('0'); }],
+  ['replay request', input => { input.browser.actions[1].requestIdHash = input.browser.actions[0].requestIdHash; }],
+  ['replay command', input => {
+    input.browser.actions[1].commandBindingHash = input.browser.actions[0].commandBindingHash;
+  }],
   ['replay session', input => { input.browser.actions[1].sessionHash = h('0'); }],
+  ['stale session', input => { input.browser.actions[2].sessionHash = h('0'); }],
   ['replay receipt', input => { input.browser.actions[1].response.receiptIdHash = h('0'); }],
+  ['missing replay response', input => { delete input.browser.actions[1].response; }],
+  ['assignment proof origin', input => { input.trustedActionProofs[0].receiptOriginRequestIdHash = h('0'); }],
+  ['replay proof origin', input => { input.trustedActionProofs[1].receiptOriginRequestIdHash = h('0'); }],
+  ['semantic request proof', input => { input.trustedActionProofs[1].semanticRequestHash = h('0'); }],
+  ['idempotency proof', input => { input.trustedActionProofs[1].idempotencyKeyHash = h('0'); }],
+  ['semantic envelope proof', input => { input.trustedActionProofs[1].semanticEnvelopeHash = h('0'); }],
+  ['invalid proof hash', input => { input.trustedActionProofs[1].semanticEnvelopeHash = 'sha256:no'; }],
+  ['extra proof field', input => { input.trustedActionProofs[1].extra = h('0'); }],
+  ['stale request matching replay', input => {
+    input.browser.actions[2].requestIdHash = input.browser.actions[1].requestIdHash;
+  }],
+  ['stale command matching replay', input => {
+    input.browser.actions[2].commandBindingHash = input.browser.actions[1].commandBindingHash;
+  }],
   ['stale persisted identifiers', input => { input.browser.actions[2].response.commandIdHash = h('0'); }],
   ['unexpected domain source', input => { input.server.after.records[0].source = 'assess_v2_review_resolutions'; }],
   ['missing final row', input => { input.server.after.records.pop(); }],
   ['changed retained row', input => { input.trustedActionFrames[2].after.records[0].rowHash = h('0'); }],
+  ['replay row deletion', input => { input.trustedActionFrames[1].after.records.pop(); }],
+  ['stale row insertion', input => {
+    input.trustedActionFrames[2].after.records.push({
+      ...input.trustedActionFrames[0].after.records[0], recordHash: h('0'), rowHash: h('1'),
+    });
+  }],
   ['conflicting complete anchor', input => {
     const source=input.trustedActionFrames[0].after.records[0];
     const target=input.trustedActionFrames[2].after.records[0];

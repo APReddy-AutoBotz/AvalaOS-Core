@@ -1,5 +1,5 @@
 export interface AuthenticatedReviewerSelectionDiagnostic {
-  schemaVersion: 'authenticated-reviewer-selection-diagnostic-v1';
+  schemaVersion: 'authenticated-reviewer-selection-diagnostic-v2';
   mode: 'reviewer_selection_diagnostic';
   source: { releaseSha: string; runId: string; attempt: string; sourceDigest: string };
   scope: { project: 'desktop-chromium'; persona: 'reviewer'; testId: 'E2E-004' };
@@ -10,8 +10,12 @@ export interface AuthenticatedReviewerSelectionDiagnostic {
     stale: { command: 'assessment_v2.review.resolve'; status: 409; classification: 'VERSION_CONFLICT' };
     bindings: {
       sameReviewerSession: true;
-      assignmentReplayRequestEqual: true;
-      assignmentReplayCommandEqual: true;
+      assignmentReplayRequestDistinct: true;
+      assignmentReplayCommandDistinct: true;
+      assignmentReplaySemanticEqual: true;
+      assignmentReplayIdempotencyEqual: true;
+      assignmentReplayEnvelopeEqual: true;
+      receiptOriginMatchesAssignment: true;
       assignmentReplayCommandIdEqual: true;
       assignmentReplayReceiptEqual: true;
       staleRequestDistinct: true;
@@ -29,6 +33,6 @@ export interface AuthenticatedReviewerSelectionDiagnostic {
   diagnosticCompleted: true;
   acceptancePromoted: false;
 }
-export const AUTHENTICATED_REVIEWER_SELECTION_DIAGNOSTIC_SCHEMA: 'authenticated-reviewer-selection-diagnostic-v1';
+export const AUTHENTICATED_REVIEWER_SELECTION_DIAGNOSTIC_SCHEMA: 'authenticated-reviewer-selection-diagnostic-v2';
 export function validateAuthenticatedReviewerSelectionDiagnostic(document: unknown): AuthenticatedReviewerSelectionDiagnostic;
 export function buildAuthenticatedReviewerSelectionDiagnostic(input: unknown): AuthenticatedReviewerSelectionDiagnostic;

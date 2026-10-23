@@ -4,7 +4,9 @@ import path from 'node:path';
 
 process.env.AUTHENTICATED_REVIEWER_SELECTION_DIAGNOSTIC_PROOF = 'true';
 await import('./testAuthenticatedHostedControllerPostgres.mjs');
-const directory=path.join(process.cwd(),'output','local-private','authenticated-product-acceptance');
+const directory=process.env.AUTHENTICATED_LOCAL_PROOF_DIRECTORY
+  ? path.resolve(process.env.AUTHENTICATED_LOCAL_PROOF_DIRECTORY)
+  : path.join(process.cwd(),'output','local-private','authenticated-product-acceptance');
 const marker=path.join(directory,'authenticated-hosted-controller-active-db.txt');
 const file=path.join(directory,'reviewer-selection-server-binding-proof.json');
 assert.equal(existsSync(marker),false,'owned proof database must be dropped before final success');

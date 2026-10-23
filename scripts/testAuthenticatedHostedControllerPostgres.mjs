@@ -35,7 +35,9 @@ if (!['postgres:', 'postgresql:'].includes(parsed.protocol)
 
 const database = `authenticated_hosted_controller_${process.pid}_${Date.now()}`.toLowerCase();
 assert.match(database, /^[a-z0-9_]+$/u);
-const privateDirectory = path.join(root, 'output', 'local-private', 'authenticated-product-acceptance');
+const privateDirectory = process.env.AUTHENTICATED_LOCAL_PROOF_DIRECTORY
+  ? path.resolve(process.env.AUTHENTICATED_LOCAL_PROOF_DIRECTORY)
+  : path.join(root, 'output', 'local-private', 'authenticated-product-acceptance');
 const activeDatabaseMarker = path.join(privateDirectory, 'authenticated-hosted-controller-active-db.txt');
 const urlFor = name => { const value = new URL(source); value.pathname = `/${name}`; return value.toString(); };
 const migrations = readdirSync(path.join(root, 'supabase', 'migrations')).filter(name => name.endsWith('.sql')).sort();
@@ -582,15 +584,39 @@ try {
         [ids.org,ids.workspace,ids.actors.reviewer,envelope.requestId,envelope.commandType,envelope.payload.caseId])).rows[0];
         writeFileSync(path.join(privateDirectory,'reviewer-selection-receipt-shape-failure.json'),`${JSON.stringify({
           schemaVersion:'authenticated-reviewer-selection-receipt-shape-failure-v1',status:'FAIL',
-          category:error instanceof Error?error.message:'UNKNOWN',shape,databaseDroppedByHarness:false},null,2)}\n`);
+          category:error instanceof Error?error.message:'UNKNOWN',shape,
+          productStatus:response.status,productOutcome:response.body.outcome,
+          requestDistinct:envelope.requestId!==assignEnvelope.requestId,
+          idempotencyEqual:envelope.idempotencyKey===assignEnvelope.idempotencyKey,
+          databaseDroppedByHarness:false},null,2)}\n`);
         throw error;
       }
       return {actionId:started.actionId,response};
     };
     const assignment=await observeAction(assignEnvelope);
     assert.equal(assignment.response.body.outcome,'committed');
-    const replay=await observeAction(assignEnvelope);
+    const replay=await observeAction({...assignEnvelope,requestId:randomUUID()});
     assert.equal(replay.response.body.outcome,'replayed');
+    const rejectedReceiptBindings=[];
+    const rejectBinding=async(name,overrides)=>{
+      await assert.rejects(()=>proofBindingAdapter.verifyReviewerSelectionAction({project:{...project,identities},
+        actorId:ids.actors.reviewer,requestBody:{...assignEnvelope,requestId:randomUUID()},
+        responseBody:replay.response.body,status:200,...overrides}),
+      /AUTHENTICATED_HOSTED_REVIEWER_(?:ACTION_|STALE_WRITE_)/u,name);
+      rejectedReceiptBindings.push(name);
+    };
+    await rejectBinding('changed-payload-reused-key',{requestBody:{...assignEnvelope,requestId:randomUUID(),
+      payload:{...assignEnvelope.payload,reviewerId:ids.actors.approver}}});
+    await rejectBinding('changed-expected-version',{requestBody:{...assignEnvelope,requestId:randomUUID(),expectedVersion:4}});
+    await rejectBinding('wrong-workspace',{requestBody:{...assignEnvelope,requestId:randomUUID(),workspaceId:randomUUID()}});
+    await rejectBinding('wrong-actor',{actorId:ids.actors.approver});
+    await rejectBinding('wrong-command',{requestBody:{...assignEnvelope,requestId:randomUUID(),commandType:'assessment_v2.review.resolve'}});
+    await rejectBinding('missing-receipt',{requestBody:{...assignEnvelope,requestId:randomUUID(),idempotencyKey:'missing-receipt'}});
+    await rejectBinding('replay-reuses-origin-request',{requestBody:assignEnvelope});
+    await rejectBinding('committed-with-new-request',{responseBody:assignment.response.body});
+    await rejectBinding('response-resource-mismatch',{responseBody:{...replay.response.body,
+      resource:{...replay.response.body.resource,caseId:randomUUID()}}});
+    await rejectBinding('stale-conflict-with-existing-key',{status:409,responseBody:{error:{code:'VERSION_CONFLICT'}}});
     const staleEnvelope={requestId:randomUUID(),idempotencyKey:`reviewer-proof-stale:${caseId}`,
       commandType:'assessment_v2.review.resolve',organizationId:ids.org,workspaceId:ids.workspace,
       authorizationVersion:reviewerVersion,expectedVersion:3,
@@ -631,14 +657,18 @@ try {
         composedFinalEvidence:diagnostic.evidenceComposition.kind==='trusted-server-action-frame-carry-forward'
           &&diagnostic.evidenceComposition.carriedRecords===4,
         replayCommandReceiptEqual:actions[0].response.receiptIdHash===actions[1].response.receiptIdHash,
+        replayRequestDistinct:actions[0].requestIdHash!==actions[1].requestIdHash,
+        replayTransportBindingDistinct:actions[0].commandBindingHash!==actions[1].commandBindingHash,
         staleHasNoReceipt:actions[2].response.receiptIdHash===null,
-      },providers:{enabled:false,providerCalls:0,paidCalls:0},cleanup:{scopedCleanupVerified:true,databaseDroppedByHarness:false}};
+      },rejectedReceiptBindings,providers:{enabled:false,providerCalls:0,paidCalls:0},cleanup:{scopedCleanupVerified:true,databaseDroppedByHarness:false}};
     assert.equal(proof.serverBinding.evidenceSource,'trusted-assignment-action-frame');
     assert.equal(proof.serverBinding.assignmentFrameCaseResourceAnchored,true);
     assert.equal(proof.serverBinding.assignmentFrameAssignmentResourceAnchored,true);
     assert.equal(proof.serverBinding.rawFinalFrameAnchored,false);
     assert.equal(proof.serverBinding.composedFinalEvidence,true);
     assert.equal(proof.serverBinding.replayCommandReceiptEqual,true);
+    assert.equal(proof.serverBinding.replayRequestDistinct,true);
+    assert.equal(proof.serverBinding.replayTransportBindingDistinct,true);
     assert.equal(proof.serverBinding.staleHasNoReceipt,true);
     writeFileSync(path.join(privateDirectory,'reviewer-selection-server-binding-proof.json'),`${JSON.stringify(proof,null,2)}\n`);
     console.log(JSON.stringify({schemaVersion:proof.schemaVersion,status:proof.status,
