@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { readGovernPreparationIdentity } from './governPreparationIdentity.mjs';
 
 import {
   GOVERN_REVIEWER_DENIAL_PREPARATION_JOB,
@@ -95,29 +99,88 @@ const document = () => {
   };
 };
 
-test('CI identity is exact and binds release, checked-out head, workflow and job', () => {
-  assert.deepEqual(governReviewerDenialPreparationIdentity({
-    RELEASE_SHA: releaseSha,
-    GITHUB_SHA: releaseSha,
-    GITHUB_RUN_ID: '123',
-    GITHUB_RUN_ATTEMPT: '1',
-    GITHUB_WORKFLOW: GOVERN_REVIEWER_DENIAL_PREPARATION_WORKFLOW,
-    GITHUB_JOB: GOVERN_REVIEWER_DENIAL_PREPARATION_JOB,
-  }, releaseSha), {
-    releaseSha,
-    runId: '123',
-    attempt: '1',
-    workflow: GOVERN_REVIEWER_DENIAL_PREPARATION_WORKFLOW,
-    job: GOVERN_REVIEWER_DENIAL_PREPARATION_JOB,
-  });
-  assert.throws(() => governReviewerDenialPreparationIdentity({
+const identityFixture = () => ({
+  environment: {
     RELEASE_SHA: releaseSha,
     GITHUB_SHA: 'b'.repeat(40),
     GITHUB_RUN_ID: '123',
     GITHUB_RUN_ATTEMPT: '1',
     GITHUB_WORKFLOW: GOVERN_REVIEWER_DENIAL_PREPARATION_WORKFLOW,
     GITHUB_JOB: GOVERN_REVIEWER_DENIAL_PREPARATION_JOB,
-  }, releaseSha), /IDENTITY_REJECTED/u);
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REF: 'refs/pull/327/merge',
+    GITHUB_REPOSITORY: 'APReddy-AutoBotz/AvalaOS-Core',
+  },
+  event: { number: 327, repository: { full_name: 'APReddy-AutoBotz/AvalaOS-Core' },
+    pull_request: {
+      head: { sha: releaseSha, repo: { full_name: 'APReddy-AutoBotz/AvalaOS-Core' } },
+      base: { ref: 'main', repo: { full_name: 'APReddy-AutoBotz/AvalaOS-Core' } },
+    } },
+  gitHead: releaseSha,
+});
+
+test('PR identity binds the event head and checkout despite a different runner merge SHA', () => {
+  const { environment, event, gitHead } = identityFixture();
+  assert.deepEqual(governReviewerDenialPreparationIdentity(environment, gitHead, event), {
+    releaseSha,
+    runId: '123',
+    attempt: '1',
+    workflow: GOVERN_REVIEWER_DENIAL_PREPARATION_WORKFLOW,
+    job: GOVERN_REVIEWER_DENIAL_PREPARATION_JOB,
+  });
+});
+
+for (const [name, mutate] of [
+  ['checkout substitution', value => { value.gitHead = 'c'.repeat(40); }],
+  ['release substitution', value => { value.environment.RELEASE_SHA = 'c'.repeat(40); }],
+  ['event head substitution', value => { value.event.pull_request.head.sha = 'c'.repeat(40); }],
+  ['missing event', value => { value.event = null; }],
+  ['wrong event', value => { value.environment.GITHUB_EVENT_NAME = 'workflow_dispatch'; }],
+  ['wrong PR reference', value => { value.environment.GITHUB_REF = 'refs/pull/328/merge'; }],
+  ['wrong base', value => { value.event.pull_request.base.ref = 'other'; }],
+  ['wrong head repository', value => { value.event.pull_request.head.repo.full_name = 'other/repo'; }],
+  ['wrong base repository', value => { value.event.pull_request.base.repo.full_name = 'other/repo'; }],
+  ['wrong event repository', value => { value.event.repository.full_name = 'other/repo'; }],
+  ['wrong runner repository', value => { value.environment.GITHUB_REPOSITORY = 'other/repo'; }],
+  ['invalid runner SHA', value => { value.environment.GITHUB_SHA = 'invalid'; }],
+  ['invalid run', value => { value.environment.GITHUB_RUN_ID = '0'; }],
+  ['invalid attempt', value => { value.environment.GITHUB_RUN_ATTEMPT = '0'; }],
+  ['wrong workflow', value => { value.environment.GITHUB_WORKFLOW = 'other'; }],
+  ['wrong job', value => { value.environment.GITHUB_JOB = 'other'; }],
+]) test(`preparation identity rejects ${name}`, () => {
+  const value = identityFixture(); mutate(value);
+  assert.throws(() => governReviewerDenialPreparationIdentity(value.environment, value.gitHead, value.event),
+    /IDENTITY_REJECTED/u);
+});
+
+test('release push identity binds main event, runner SHA and checkout; rejects substitutions', () => {
+  const { environment, gitHead } = identityFixture();
+  Object.assign(environment, { GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: releaseSha });
+  const event = { repository: { full_name: environment.GITHUB_REPOSITORY },
+    ref: 'refs/heads/main', after: releaseSha, deleted: false };
+  assert.equal(governReviewerDenialPreparationIdentity(environment, gitHead, event).releaseSha, releaseSha);
+  for (const changed of [{ ...event, after: 'b'.repeat(40) }, { ...event, deleted: true },
+    { ...event, ref: 'refs/heads/other' }]) {
+    assert.throws(() => governReviewerDenialPreparationIdentity(environment, gitHead, changed), /IDENTITY_REJECTED/u);
+  }
+  assert.throws(() => governReviewerDenialPreparationIdentity({ ...environment, GITHUB_SHA: 'b'.repeat(40) },
+    gitHead, event), /IDENTITY_REJECTED/u);
+});
+
+test('producer reads the supplied event file and fails closed on missing or malformed payloads', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'govern-preparation-identity-'));
+  const { environment, event, gitHead } = identityFixture();
+  try {
+    await assert.rejects(readGovernPreparationIdentity(environment, gitHead), /IDENTITY_REJECTED/u);
+    environment.GITHUB_EVENT_PATH = path.join(directory, 'event.json');
+    await assert.rejects(readGovernPreparationIdentity(environment, gitHead), /IDENTITY_REJECTED/u);
+    await writeFile(environment.GITHUB_EVENT_PATH, '{');
+    await assert.rejects(readGovernPreparationIdentity(environment, gitHead), /IDENTITY_REJECTED/u);
+    await writeFile(environment.GITHUB_EVENT_PATH, JSON.stringify(event));
+    assert.equal((await readGovernPreparationIdentity(environment, gitHead)).releaseSha, releaseSha);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('sanitized proof accepts exact Desktop and Pixel denial/resolution evidence', () => {

@@ -6,6 +6,7 @@ export const AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_SCHEMA =
 export const AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_MAX_BYTES = 12_288;
 export const AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_SOURCE_PATHS = Object.freeze([
   'scripts/authenticatedGovernStudioLineageProof.mjs',
+  'scripts/governPreparationIdentity.mjs',
   'scripts/testAuthenticatedGovernStudioLineagePostgres.mjs',
   'scripts/authenticatedHostedController.mjs',
   'scripts/authenticatedHostedControllerAdapters.mjs',

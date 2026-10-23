@@ -333,8 +333,8 @@ test('checkpoint response accepts only the exact safe response contract', () => 
 
 test('the diagnostic tag reuses the original primary prefix and exits before later authoring', () => {
   const source = readFileSync('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts', 'utf8');
-  assert.equal(source.match(/\{ tag: '@v2-primary-prefix-diagnostic' \}/gu)?.length, 1);
-  assert.match(source, /test\('authors, replays, rejects stale work, requests changes and resubmits through the production UI',\s*\{ tag: '@v2-primary-prefix-diagnostic' \}/u);
+  assert.equal(source.match(/\{ tag: \['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'\] \}/gu)?.length, 1);
+  assert.match(source, /test\('authors, replays, rejects stale work, requests changes and resubmits through the production UI',\s*\{ tag: \['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'\] \}/u);
   const v1 = source.indexOf('runV1AssessmentCompletion');
   const beforeCreate = source.indexOf("checkpoint('before-create'", v1);
   const create = source.indexOf("name: 'New assessment (V2)'", beforeCreate);
@@ -350,10 +350,10 @@ test('the diagnostic tag reuses the original primary prefix and exits before lat
   assert.ok(v1 >= 0 && v1 < beforeCreate && beforeCreate < create && create < beforeReload
     && beforeReload < observer && observer < reload && reload < afterReload
     && afterReload < diagnosticExit && diagnosticExit < laterAuthoring);
-  assert.match(source, /if \(diagnosticPrefixComplete\) return;/u);
+  assert.match(source, /if \(diagnosticPrefixComplete \|\| governStudioDiagnostic\) return;/u);
   const primarySource = source.slice(source.indexOf("test('authors, replays"),
     source.indexOf("test('independent approval"));
   assert.match(primarySource,
     /if \(diagnosticCheckpoint\) \{[\s\S]*?diagnosticPrefixComplete = true;[\s\S]*?return;[\s\S]*?\} else \{[\s\S]*?Add minimum working structure/u);
-  assert.match(source, /if \(v2PrimaryPrefixDiagnostic \|\| reviewerSelectionDiagnostic\) \{[\s\S]*?if \(hasBoundaryFailure\) throw boundaryFailure;[\s\S]*?return;[\s\S]*?finalize-project/u);
+  assert.match(source, /if \(v2PrimaryPrefixDiagnostic \|\| reviewerSelectionDiagnostic \|\| governStudioDiagnostic\) \{[\s\S]*?if \(hasBoundaryFailure\) throw boundaryFailure;[\s\S]*?return;[\s\S]*?finalize-project/u);
 });

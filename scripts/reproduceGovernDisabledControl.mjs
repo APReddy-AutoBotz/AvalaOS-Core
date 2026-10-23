@@ -7,11 +7,11 @@ import { promisify } from 'node:util';
 import { createEnterpriseLifecycleFixture } from './enterpriseLifecyclePostgresFixture.mjs';
 import {
   GOVERN_REVIEWER_DENIAL_SOURCE_PATHS,
-  governReviewerDenialPreparationIdentity,
   governReviewerDenialSource,
   validateGovernReviewerDenialPreparationEvidence,
 } from './governDisabledControlEvidence.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { readGovernPreparationIdentity } from './governPreparationIdentity.mjs';
 
 const root = process.cwd();
 const evidenceRoot = path.resolve('output/local-private/govern-disabled-control-repro');
@@ -43,7 +43,7 @@ const sourceDigests = async () => Promise.all(GOVERN_REVIEWER_DENIAL_SOURCE_PATH
 })));
 const execFileAsync = promisify(execFile);
 const gitHead = (await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' })).stdout.trim();
-const runIdentity = governReviewerDenialPreparationIdentity(process.env, gitHead);
+const runIdentity = await readGovernPreparationIdentity(process.env, gitHead);
 const buildIdentity = async directory => {
   const files = [];
   const visit = async (current, relative = '') => {

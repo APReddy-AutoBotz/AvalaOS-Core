@@ -466,14 +466,12 @@ test('preparation retains exact Desktop and Pixel Govern denial proof with CI id
   const retain = job.steps.find(step => step.name === 'Retain sanitized Govern reviewer denial proof');
   assert.equal(run.run, 'node scripts/reproduceGovernDisabledControl.mjs');
   assert.deepEqual(run.env, {
-    GITHUB_SHA: '${{ env.RELEASE_SHA }}',
     GOVERN_REVIEWER_DENIAL_PROOF_PATH:
       'output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-reviewer-denial-proof.json',
   });
   assert.equal(lineage.run, 'node scripts/testAuthenticatedGovernStudioLineagePostgres.mjs');
   assert.deepEqual(lineage.env, {
     RELEASE_SHA: '${{ env.RELEASE_SHA }}',
-    GITHUB_SHA: '${{ env.RELEASE_SHA }}',
     AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_PATH:
       'output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-studio-lineage-proof.json',
   });

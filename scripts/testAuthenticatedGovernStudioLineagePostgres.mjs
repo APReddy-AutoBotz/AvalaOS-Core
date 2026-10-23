@@ -16,6 +16,7 @@ import { authenticatedHostedBindResponseObservation, authenticatedHostedDigest,
 import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { createEnterpriseLifecycleFixture } from './enterpriseLifecyclePostgresFixture.mjs';
+import { readGovernPreparationIdentity } from './governPreparationIdentity.mjs';
 
 const OUTPUT_NAME = 'govern-studio-lineage-proof.json';
 const execFileAsync = promisify(execFile);
@@ -56,17 +57,8 @@ const outputPath = () => {
 
 const main = async () => {
   const target = outputPath();
-  const releaseSha = process.env.RELEASE_SHA;
-  const runId = process.env.GITHUB_RUN_ID;
-  const attempt = process.env.GITHUB_RUN_ATTEMPT;
   const gitHead = (await execFileAsync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' })).stdout.trim();
-  if (!/^[0-9a-f]{40}$/u.test(releaseSha ?? '') || releaseSha !== process.env.GITHUB_SHA || releaseSha !== gitHead
-    || !/^[1-9][0-9]*$/u.test(runId ?? '')
-    || !/^[1-9][0-9]*$/u.test(attempt ?? '')
-    || process.env.GITHUB_WORKFLOW !== 'Authenticated Product Acceptance Preparation'
-    || process.env.GITHUB_JOB !== 'connected-browser') {
-    throw new Error('GOVERN_STUDIO_LINEAGE_IDENTITY_REJECTED');
-  }
+  const { releaseSha, runId, attempt } = await readGovernPreparationIdentity(process.env, gitHead);
 
   let fixture;
   let proof;

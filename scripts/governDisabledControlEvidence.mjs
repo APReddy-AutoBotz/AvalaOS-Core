@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { governPreparationIdentityMetadata } from './governPreparationIdentity.mjs';
+export { governPreparationIdentity as governReviewerDenialPreparationIdentity } from './governPreparationIdentity.mjs';
 
 export const GOVERN_REVIEWER_DENIAL_PREPARATION_SCHEMA = 'govern-reviewer-denial-preparation-v1';
 export const GOVERN_REVIEWER_DENIAL_PREPARATION_WORKFLOW = 'Authenticated Product Acceptance Preparation';
@@ -8,6 +10,7 @@ export const GOVERN_REVIEWER_DENIAL_PREPARATION_JOB = 'connected-browser';
 export const GOVERN_REVIEWER_DENIAL_SOURCE_PATHS = Object.freeze([
   'scripts/assessV1OracleEvidence.mjs',
   'scripts/governDisabledControlEvidence.mjs',
+  'scripts/governPreparationIdentity.mjs',
   'scripts/governDisabledControlRepro.spec.ts',
   'scripts/playwright.govern-disabled-control-repro.config.ts',
   'scripts/reproduceGovernDisabledControl.mjs',
@@ -24,9 +27,7 @@ export const GOVERN_REVIEWER_DENIAL_SOURCE_PATHS = Object.freeze([
   'vite.enterprise-lifecycle-acceptance.config.ts',
 ].sort());
 
-const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
-const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = code => { throw new Error(`GOVERN_REVIEWER_DENIAL_EVIDENCE_${code}`); };
 const exactKeys = (value, keys, code) => {
@@ -54,21 +55,6 @@ const validateBuild = value => {
   return Object.freeze({ digest: value.digest, fileCount: value.fileCount, bytes: value.bytes,
     manifest: Object.freeze(manifest) });
 };
-
-export function governReviewerDenialPreparationIdentity(environment, gitHead) {
-  const value = {
-    releaseSha: environment.RELEASE_SHA,
-    runId: environment.GITHUB_RUN_ID,
-    attempt: environment.GITHUB_RUN_ATTEMPT,
-    workflow: environment.GITHUB_WORKFLOW,
-    job: environment.GITHUB_JOB,
-  };
-  if (!SHA.test(value.releaseSha ?? '') || value.releaseSha !== environment.GITHUB_SHA || value.releaseSha !== gitHead
-    || !POSITIVE_INTEGER.test(value.runId ?? '') || !POSITIVE_INTEGER.test(value.attempt ?? '')
-    || value.workflow !== GOVERN_REVIEWER_DENIAL_PREPARATION_WORKFLOW
-    || value.job !== GOVERN_REVIEWER_DENIAL_PREPARATION_JOB) fail('IDENTITY_REJECTED');
-  return Object.freeze(value);
-}
 
 export function governReviewerDenialSource(sourceFiles) {
   if (!Array.isArray(sourceFiles) || sourceFiles.length !== GOVERN_REVIEWER_DENIAL_SOURCE_PATHS.length) {
@@ -129,14 +115,7 @@ export function validateGovernReviewerDenialPreparationEvidence(value) {
     || value.acceptancePromoted !== false) fail('DOCUMENT_REJECTED');
   exactKeys(value.source, ['releaseSha', 'runId', 'attempt', 'workflow', 'job', 'sourceDigest', 'files'],
     'SOURCE_REJECTED');
-  const identity = governReviewerDenialPreparationIdentity({
-    RELEASE_SHA: value.source.releaseSha,
-    GITHUB_SHA: value.source.releaseSha,
-    GITHUB_RUN_ID: value.source.runId,
-    GITHUB_RUN_ATTEMPT: value.source.attempt,
-    GITHUB_WORKFLOW: value.source.workflow,
-    GITHUB_JOB: value.source.job,
-  }, value.source.releaseSha);
+  const identity = governPreparationIdentityMetadata(value.source);
   const source = governReviewerDenialSource(value.source.files);
   if (value.source.sourceDigest !== source.sourceDigest) fail('SOURCE_REJECTED');
   const build = validateBuild(value.build);

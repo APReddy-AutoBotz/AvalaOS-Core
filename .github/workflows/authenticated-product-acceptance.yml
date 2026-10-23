@@ -261,13 +261,11 @@ jobs:
           retention-days: 14
       - name: Verify restricted reviewer Govern denial on Desktop and Pixel
         env:
-          GITHUB_SHA: ${{ env.RELEASE_SHA }}
           GOVERN_REVIEWER_DENIAL_PROOF_PATH: output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-reviewer-denial-proof.json
         run: node scripts/reproduceGovernDisabledControl.mjs
       - name: Verify Govern and Studio lineage against PostgreSQL
         env:
           RELEASE_SHA: ${{ env.RELEASE_SHA }}
-          GITHUB_SHA: ${{ env.RELEASE_SHA }}
           AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_PATH: output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-studio-lineage-proof.json
         run: node scripts/testAuthenticatedGovernStudioLineagePostgres.mjs
       - name: Retain sanitized Govern reviewer denial proof
