@@ -307,7 +307,11 @@ test('reviewer diagnostic leaves author setup reads untouched and verifies only 
     identity:{verifySession:async({accessToken})=>accessToken===tokenFor(authorId,authorSession)
       ? {actorId:authorId,sessionId:authorSession}:{actorId:reviewerId,sessionId:reviewerSession}},
     adapter:{bindSession:async()=>{},observe:async()=>({capturedAt:`2026-10-22T00:00:0${++frame}.000Z`,records:[]}),
-      verifyReviewerSelectionAction:async input=>{verified.push(input);return {commandIdHash:digest('case'),receiptIdHash:digest('receipt')};}},
+      verifyReviewerSelectionAction:async input=>{verified.push(input);return {
+        commandIdHash:digest('case'),receiptIdHash:digest('receipt'),reviewerSelectionProof:{
+          receiptOriginRequestIdHash:digest('request'),semanticRequestHash:digest('semantic-request'),
+          idempotencyKeyHash:digest('idempotency-key'),semanticEnvelopeHash:digest('semantic-envelope'),
+        }};}},
   });
   controller.active=true;controller.exerciseId=id();
   controller.projects.set('desktop-chromium',{identities:{author:{id:authorId},reviewer:{id:reviewerId}},
@@ -324,9 +328,12 @@ test('reviewer diagnostic leaves author setup reads untouched and verifies only 
       expectedVersion:3,payload:{caseId,decisionId:id(),reviewSequence:1,reviewerId},
     }});
   await controller.finishBrowserAction({projectName:'desktop-chromium',actionId:mutation.actionId,status:200,
-    responseBody:{outcome:'committed',resource:{id:caseId}}});
+    responseBody:{outcome:'committed',resource:{caseId}}});
   assert.equal(verified.length,1);assert.equal(verified[0].actorId,reviewerId);
   assert.equal(verified[0].requestBody.commandType,'assessment_v2.review.assign');
+  const recorded=controller.browserActions.get('desktop-chromium').find(action=>action.actionId===mutation.actionId);
+  assert.equal(recorded.finishClaimed,true);
+  assert.equal(recorded.reviewerSelectionProof.semanticRequestHash,digest('semantic-request'));
 });
 
 test('local real-backend controller binds build bytes, null deployment and derived exercise identity', async () => {
@@ -773,10 +780,14 @@ test('reviewer diagnostic adapter binds the real receipt projection and eligible
   const config=validateAuthenticatedHostedControllerEnvironment(reviewerDiagnosticEnvironment());
   const identities={author:{id:id()},reviewer:{id:id()},approver:{id:id()},outsider:{id:id()}};
   const caseId=id();const decisionId=id();const receiptId=id();const requestId=id();const sql=[];
+  const requestHash='ab'.repeat(32);
+  const idempotencyKey=`assign:${identities.reviewer.id}:${caseId}:${decisionId}:1`;
   const adapter=createAuthenticatedHostedPostgresAdapter({config,db:{query:async(statement)=>{
     sql.push(statement);
     if(/FROM public\.assess_v2_cases c/u.test(statement))return {rows:[{case_id:caseId,decision_id:decisionId}]};
     if(/FROM public\.assess_command_receipts/u.test(statement))return {rows:[{id:receiptId,status:'succeeded',
+      request_id:requestId,request_hash:requestHash,expected_request_hash:requestHash,
+      idempotency_key:idempotencyKey,exact_request_matches:true,semantic_key_matches:true,
       case_resource_matches:true}]};
     throw new Error('UNEXPECTED_QUERY');
   }},fetchImpl:async(_url,init)=>{
@@ -788,12 +799,66 @@ test('reviewer diagnostic adapter binds the real receipt projection and eligible
     reviewerAccessToken:'x'.repeat(40),reviewerActorId:identities.reviewer.id}),{
     count:1,reviewerIncluded:true,ownerExcluded:true,approverExcluded:true,outsiderExcluded:true,
   });
+  const requestBody={requestId,idempotencyKey,commandType:'assessment_v2.review.assign',
+    organizationId:config.scope.organizationId,workspaceId:config.scope.workspaceId,
+    authorizationVersion:1,expectedVersion:3,
+    payload:{caseId,decisionId,reviewSequence:1,reviewerId:identities.reviewer.id}};
   const trusted=await adapter.verifyReviewerSelectionAction({project,actorId:identities.reviewer.id,
-    requestBody:{commandType:'assessment_v2.review.assign',requestId,payload:{caseId}},
+    requestBody,
     responseBody:{outcome:'committed',resource:{caseId}},status:200});
-  assert.deepEqual(trusted,{commandIdHash:authenticatedHostedDigest(caseId),receiptIdHash:authenticatedHostedDigest(receiptId)});
-  assert.match(sql.find(statement=>/assess_command_receipts/u.test(statement)),/response->>'caseId'=\$6 case_resource_matches/u);
-  assert.doesNotMatch(sql.find(statement=>/assess_command_receipts/u.test(statement)),/resource_id/u);
+  const {requestId:_requestId,...semanticEnvelope}=requestBody;
+  assert.deepEqual(trusted,{commandIdHash:authenticatedHostedDigest(caseId),receiptIdHash:authenticatedHostedDigest(receiptId),
+    reviewerSelectionProof:{receiptOriginRequestIdHash:authenticatedHostedDigest(requestId),
+      semanticRequestHash:`sha256:${requestHash}`,idempotencyKeyHash:authenticatedHostedDigest(idempotencyKey),
+      semanticEnvelopeHash:authenticatedHostedDigest(semanticEnvelope)}});
+  const receiptSql=sql.find(statement=>/assess_command_receipts/u.test(statement));
+  assert.match(receiptSql,/response->>'caseId'=\$7::text case_resource_matches/u);
+  assert.match(receiptSql,/\(request_id=\$5::uuid OR idempotency_key=\$6\)/u);
+  assert.match(receiptSql,/\$10::jsonb::text/u);
+  assert.doesNotMatch(receiptSql,/resource_id/u);
+});
+
+test('reviewer diagnostic adapter rejects unbound envelopes, receipts and stale collisions', async () => {
+  const config=validateAuthenticatedHostedControllerEnvironment(reviewerDiagnosticEnvironment());
+  const identities={author:{id:id()},reviewer:{id:id()},approver:{id:id()},outsider:{id:id()}};
+  const project={processId:id(),identities};
+  const caseId=id();const decisionId=id();const requestId=id();const receiptId=id();
+  const idempotencyKey=`assign:${identities.reviewer.id}:${caseId}:${decisionId}:1`;
+  const requestBody={requestId,idempotencyKey,commandType:'assessment_v2.review.assign',
+    organizationId:config.scope.organizationId,workspaceId:config.scope.workspaceId,
+    authorizationVersion:1,expectedVersion:3,
+    payload:{caseId,decisionId,reviewSequence:1,reviewerId:identities.reviewer.id}};
+  const responseBody={outcome:'committed',resource:{caseId}};
+  const requestHash='cd'.repeat(32);
+  const goodReceipt={id:receiptId,status:'succeeded',request_id:requestId,request_hash:requestHash,
+    expected_request_hash:requestHash,idempotency_key:idempotencyKey,exact_request_matches:true,
+    semantic_key_matches:true,case_resource_matches:true};
+  const adapterFor=rows=>createAuthenticatedHostedPostgresAdapter({config,db:{query:async()=>({rows})}});
+  const verify=(rows,input={})=>adapterFor(rows).verifyReviewerSelectionAction({project,
+    actorId:identities.reviewer.id,requestBody,responseBody,status:200,...input});
+
+  await assert.rejects(verify([],{requestBody:{...requestBody,workspaceId:id()}}),/ACTION_BINDING_REJECTED/u);
+  await assert.rejects(verify([],{actorId:identities.outsider.id}),/ACTION_BINDING_REJECTED/u);
+  await assert.rejects(verify([],{requestBody:{...requestBody,commandType:'assessment_v2.evidence.attest'}}),
+    /ACTION_BINDING_REJECTED/u);
+  await assert.rejects(verify([],{requestBody:{...requestBody,payload:{...requestBody.payload,reviewerId:identities.author.id}}}),
+    /ACTION_BINDING_REJECTED/u);
+  await assert.rejects(verify([],{status:503}),/ACTION_STATUS_REJECTED/u);
+  await assert.rejects(verify([goodReceipt,{...goodReceipt,id:id()}]),/RECEIPT_COUNT_REJECTED/u);
+  await assert.rejects(verify([{...goodReceipt,status:'pending'}]),/RECEIPT_STATUS_REJECTED/u);
+  await assert.rejects(verify([{...goodReceipt,expected_request_hash:'ef'.repeat(32)}]),/SEMANTIC_BINDING_REJECTED/u);
+  await assert.rejects(verify([{...goodReceipt,case_resource_matches:false}]),/RECEIPT_RESOURCE_REJECTED/u);
+  await assert.rejects(verify([goodReceipt],{responseBody:{outcome:'committed',resource:{caseId:id()}}}),
+    /RESPONSE_RESOURCE_REJECTED/u);
+  await assert.rejects(verify([{...goodReceipt,request_id:id(),exact_request_matches:false}]),
+    /RECEIPT_ORIGIN_REJECTED/u);
+  await assert.rejects(verify([goodReceipt],{responseBody:{outcome:'replayed',resource:{caseId}}}),
+    /RECEIPT_ORIGIN_REJECTED/u);
+  await assert.rejects(verify([goodReceipt],{status:409,
+    responseBody:{ok:false,error:{code:'VERSION_CONFLICT'}}}),/STALE_WRITE_REJECTED/u);
+  assert.deepEqual(await verify([],{status:409,responseBody:{ok:false,error:{code:'VERSION_CONFLICT'}}}),{
+    commandIdHash:null,receiptIdHash:null,reviewerSelectionProof:null,
+  });
 });
 
 test('cleanup control reads serialize on the single PostgreSQL client', async () => {

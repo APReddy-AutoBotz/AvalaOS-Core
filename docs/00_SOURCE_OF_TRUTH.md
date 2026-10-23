@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Reviewer replay receipt verification (2026-10-23)
+
+PR #325 merged as `50e0e6d023e71126ca8bd7b1ca674e7e9e866a6c` after verified candidate/release evidence. Its single focused diagnostic `39955181062` stopped at `CONTROL_REJECTED`; cleanup was independently verified. Local reproduction confirms that a fresh replay request ID incorrectly makes the diagnostic verifier miss the original idempotency receipt even though the product returns 200/replayed. The correction binds exact semantic command and receipt origin while preserving distinct transport IDs and zero replay/stale writes. Final-source disposable PostgreSQL proof passes 200/200/409 and ten negative bindings with providers OFF. The hosted artifact did not retain the inner error, so exclusive historical attribution remains unproven.
+
+AP now approves the fix PR and required checks, verified merge/release, then exactly one new focused `local_build/reviewer_selection_diagnostic` with independent cleanup. Keep the 15-second limit, providers OFF, exact-run human GitHub review and full allowance zero. No Netlify, backend deployment/migration, production/customer data or paid calls. Follow the [active completion plan](planning/hosted-acceptance-completion.md); local success does not promote acceptance. Prior full results remain 61 PASS / 47 BLOCKED.
+
 ## Eligible reviewer selection correction (2026-10-22)
 
 PR #324 is merged as `f590ce9a8280411c3b9d519f5fdb9982981218cd`. Its focused diagnostic passed three checkpoints/eleven reload reads; its separately approved full run `39709226378` retains **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED**, with independently verified cleanup and providers OFF. The authenticated journey stopped at `Eligible reviewer` selection; no actor-transition timeout was retained. This does not promote full acceptance or establish a measured hosted drain duration.

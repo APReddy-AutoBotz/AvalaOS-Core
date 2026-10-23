@@ -63,6 +63,9 @@ const SAFE_NAME = /^[a-z][a-z0-9-]{1,63}$/u;
 const ASSESS_FINALIZE_ROUTE = '/functions/v1/assess-command';
 const ASSESS_FINALIZE_COMMAND = 'assessment.finalize';
 const ASSESS_FINALIZE_PROOF_SCHEMA = 'authenticated-assessment-finalize-proof-v1';
+const REVIEWER_SELECTION_PROOF_KEYS=Object.freeze([
+  'receiptOriginRequestIdHash','semanticRequestHash','idempotencyKeyHash','semanticEnvelopeHash',
+]);
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = code => { throw new Error(`AUTHENTICATED_HOSTED_CONTROLLER_${code}`); };
 const timestamp = value => typeof value === 'string'
@@ -408,6 +411,7 @@ export class AuthenticatedHostedController {
     this.reviewerSelectionCandidates = null;
     this.reviewerSelectionCommands = null;
     this.reviewerSelectionServerActionFrames = null;
+    this.reviewerSelectionTrustedActionProofs = null;
     this.active = false;
     this.activationAttempted = false;
     this.quiesced = false;
@@ -717,6 +721,7 @@ export class AuthenticatedHostedController {
       browser: this.browserCases[0],
       server: this.serverCases[0],
       trustedActionFrames: this.reviewerSelectionServerActionFrames,
+      trustedActionProofs: this.reviewerSelectionTrustedActionProofs,
       candidates: this.reviewerSelectionCandidates,
       commands: this.reviewerSelectionCommands,
       cleanup: { status: 'verified' },
@@ -806,6 +811,8 @@ export class AuthenticatedHostedController {
       this.reviewerSelectionServerActionFrames = Object.freeze(ordered.map(action => Object.freeze({
         before: structuredClone(action.before), after: structuredClone(action.after),
       })));
+      this.reviewerSelectionTrustedActionProofs = Object.freeze(ordered.map(action =>
+        action.reviewerSelectionProof===null?null:Object.freeze(structuredClone(action.reviewerSelectionProof))));
     }
     this.browserCases.push({
       testId: row.testId,
@@ -814,7 +821,7 @@ export class AuthenticatedHostedController {
       window: { startedAt, completedAt },
       participants,
       actions: actions.map(({ persona, before, after, complete, route, status, rawRequestBody,
-        commandType, actorId, sessionId, assessmentFinalizeProof, ...action }) => action),
+        commandType, actorId, sessionId, assessmentFinalizeProof, reviewerSelectionProof, ...action }) => action),
       assertions: browserAssertions.map(item => ({
         id: item.id,
         comparator: 'equals',
@@ -884,7 +891,7 @@ export class AuthenticatedHostedController {
       sessionHash: binding.sessionHash, ...hashes, response: null, persona: binding.persona,
       actorId: binding.actorId, sessionId: binding.sessionId, commandType,
       before, after: null, complete: false, finishClaimed: false, route,
-      rawRequestBody: requestBody, assessmentFinalizeProof: null };
+      rawRequestBody: requestBody, assessmentFinalizeProof: null, reviewerSelectionProof: null };
     const actions = this.browserActions.get(projectName) ?? [];
     actions.push(action);
     this.browserActions.set(projectName, actions);
@@ -1056,16 +1063,32 @@ export class AuthenticatedHostedController {
         commandIdHash: commandId ? authenticatedHostedDigest(commandId) : null,
         receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
       };
+      let reviewerSelectionProof=null;
       if (this.config.acceptanceMode === 'reviewer_selection_diagnostic'
         && ['assessment_v2.review.assign', 'assessment_v2.review.resolve'].includes(action.commandType)) {
         const trusted = await this.adapter.verifyReviewerSelectionAction?.({
           project, actorId: action.actorId, requestBody: action.rawRequestBody,
           responseBody: response, status, signal,
         });
-        exactKeys(trusted, ['commandIdHash', 'receiptIdHash'], 'REVIEWER_SELECTION_ACTION_REJECTED');
+        exactKeys(trusted, ['commandIdHash', 'receiptIdHash', 'reviewerSelectionProof'],
+          'REVIEWER_SELECTION_ACTION_REJECTED');
         if (![trusted.commandIdHash, trusted.receiptIdHash].every(value => value === null || DIGEST.test(value))) {
           fail('REVIEWER_SELECTION_ACTION_REJECTED');
         }
+        const stale=trusted.commandIdHash===null&&trusted.receiptIdHash===null;
+        if ((trusted.commandIdHash===null)!==(trusted.receiptIdHash===null)) {
+          fail('REVIEWER_SELECTION_ACTION_REJECTED');
+        }
+        if (stale) {
+          if (trusted.reviewerSelectionProof!==null) fail('REVIEWER_SELECTION_ACTION_REJECTED');
+        } else {
+          exactKeys(trusted.reviewerSelectionProof,REVIEWER_SELECTION_PROOF_KEYS,
+            'REVIEWER_SELECTION_ACTION_REJECTED');
+          if (REVIEWER_SELECTION_PROOF_KEYS.some(key=>!DIGEST.test(trusted.reviewerSelectionProof[key]??''))) {
+            fail('REVIEWER_SELECTION_ACTION_REJECTED');
+          }
+        }
+        reviewerSelectionProof=stale?null:Object.freeze(structuredClone(trusted.reviewerSelectionProof));
         responseObservation.commandIdHash = trusted.commandIdHash;
         responseObservation.receiptIdHash = trusted.receiptIdHash;
       }
@@ -1105,6 +1128,7 @@ export class AuthenticatedHostedController {
       action.response = responseObservation;
       action.after = after;
       action.assessmentFinalizeProof = assessmentFinalizeProof;
+      action.reviewerSelectionProof = reviewerSelectionProof;
       action.complete = true;
       action.status = status;
       if (Date.parse(after.capturedAt) > Date.parse(project.lastBoundaryAt)) {

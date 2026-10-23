@@ -126,6 +126,19 @@ jobs:
           npm run test:authenticated-hosted:postgres
           node scripts/studioDeliveryAuthorityPostgres.mjs
           node scripts/testAuthenticatedConnectedPostgres.mjs
+      - name: Verify fresh-request reviewer replay against PostgreSQL
+        env:
+          AUTHENTICATED_HOSTED_CONTROLLER_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          AUTHENTICATED_LOCAL_PROOF_DIRECTORY: output/local-private/reviewer-semantic-replay
+        run: npm run test:authenticated-reviewer-selection:postgres
+      - name: Retain sanitized reviewer semantic replay proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewer-semantic-replay-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/local-private/reviewer-semantic-replay/reviewer-selection-server-binding-proof.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Enterprise Intelligence query and retained cases
         env:
           RETAINED_TEST_ID_RESULTS: /tmp/authenticated-ei-results.json

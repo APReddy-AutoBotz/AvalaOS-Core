@@ -795,14 +795,14 @@ test('reviewer selection runner uses one Desktop case and writes its result only
     createBrowserWorkspace:()=>mkdtemp(path.join(os.tmpdir(),'authenticated-hosted-browser-')),
     startServer:async value=>{controller=value;controller.reviewerSelectionDiagnosticResult=()=>{
       assert.deepEqual(calls,['checkout','activate','close','quiesce','revoke','cleanup']);
-      return {schemaVersion:'authenticated-reviewer-selection-diagnostic-v1'};
+      return {schemaVersion:'authenticated-reviewer-selection-diagnostic-v2'};
     };return {baseUrl:'http://127.0.0.1:1234',controlToken:'token',close:async()=>calls.push('close')};},
     runPlaywright:async(_command,args,options)=>{
       assert.deepEqual(args.slice(-2),['--project=desktop-chromium','--grep=@reviewer-selection-diagnostic']);
       assert.equal(options.env.AUTHENTICATED_ACCEPTANCE_MODE,'reviewer_selection_diagnostic');
     }});
   assert.deepEqual(JSON.parse(await readFile(outputPaths.reviewerSelectionDiagnostic,'utf8')),
-    {schemaVersion:'authenticated-reviewer-selection-diagnostic-v1'});
+    {schemaVersion:'authenticated-reviewer-selection-diagnostic-v2'});
   for(const key of ['browser','server','binding'])await assert.rejects(readFile(outputPaths[key],'utf8'),/ENOENT/u);
 });
 

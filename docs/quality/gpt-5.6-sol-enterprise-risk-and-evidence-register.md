@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## CONTROL_REJECTED replay verifier (2026-10-23)
+
+**Confirmed source defect / executed evidence:** the product replays by semantic idempotency key while the diagnostic verifier incorrectly queries using the retry's fresh request ID. The unchanged local production-handler/PostgreSQL/controller path reproduces 200/replayed followed by receipt-count rejection. The original local test reused the entire request envelope and masked this mismatch. The corrected final-source proof passes 200/200/409, one assignment/receipt/audit, zero other effects, ten invalid-binding rejections and independent local cleanup. Controller/diagnostic and runner/evidence suites pass 147 tests. A stale intermediate controller proof digest was detected and resolved by a separate final-source proof; earlier results remain retained.
+
+**Suspected defect requiring deeper validation:** the hosted artifact retained generic CONTROL_REJECTED but not its inner verifier code, so exclusive historical attribution remains unproven. Prior hosted diagnostic remains incomplete with verified cleanup; full acceptance remains 61 PASS / 47 BLOCKED. AP approves required CI and verified merge/release, then one focused reviewer-selection diagnostic under the unchanged 15-second limit/providers OFF and human reviewer gate. No full acceptance is authorized. The [active completion plan](../planning/hosted-acceptance-completion.md) defines checks, rollback and cleanup.
+
 ## PR #325 scoped-navigation hold ownership (2026-10-23)
 
 **Confirmed source defect / executed evidence:** an admitted prior-document Delivery request can steal the fixture's next-read hold and then be cancelled by reload. A completed-only pending counter accepts that aborted transport, leaving no real old-version response to observe. Paired Desktop Chromium/TLS/production-tracker execution reproduces the exact 10-second late-response timeout with one abort; draining before arming produces the required real version-1 503, three committed responses, zero aborts and zero active actions. The correction settles before both arms and makes the authority-switch pending predicates terminal-aware with explicit committed/no-abort checks. No product authority or deadline change.

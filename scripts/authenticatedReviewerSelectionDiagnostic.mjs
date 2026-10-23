@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { reconstructAuthenticatedHostedCaseEvidence } from './authenticatedHostedEvidence.mjs';
 
 export const AUTHENTICATED_REVIEWER_SELECTION_DIAGNOSTIC_SCHEMA =
-  'authenticated-reviewer-selection-diagnostic-v1';
+  'authenticated-reviewer-selection-diagnostic-v2';
 
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -42,9 +42,10 @@ const validateActions = actions => {
     || actions.stale.command !== 'assessment_v2.review.resolve' || actions.stale.status !== 409
     || actions.stale.classification !== 'VERSION_CONFLICT') fail('ACTIONS_REJECTED');
   exactKeys(actions.bindings, [
-    'sameReviewerSession', 'assignmentReplayRequestEqual', 'assignmentReplayCommandEqual',
-    'assignmentReplayCommandIdEqual', 'assignmentReplayReceiptEqual', 'staleRequestDistinct',
-    'staleCommandDistinct',
+    'sameReviewerSession', 'assignmentReplayRequestDistinct', 'assignmentReplayCommandDistinct',
+    'assignmentReplaySemanticEqual', 'assignmentReplayIdempotencyEqual', 'assignmentReplayEnvelopeEqual',
+    'receiptOriginMatchesAssignment', 'assignmentReplayCommandIdEqual', 'assignmentReplayReceiptEqual',
+    'staleRequestDistinct', 'staleCommandDistinct',
   ], 'BINDINGS_REJECTED');
   if (Object.values(actions.bindings).some(value => value !== true)) fail('BINDINGS_REJECTED');
 };
@@ -97,9 +98,12 @@ const rowIdentity = row => ({
 });
 const frameChanges = frame => {
   const before = new Map(frame.before.records.map(row => [row.recordHash, row]));
-  return frame.after.records.filter(row => {
-    const prior = before.get(row.recordHash);
-    return !prior || prior.rowHash !== row.rowHash || prior.active !== row.active;
+  const after = new Map(frame.after.records.map(row => [row.recordHash, row]));
+  return [...new Set([...before.keys(), ...after.keys()])].flatMap(recordHash => {
+    const prior = before.get(recordHash) ?? null;
+    const current = after.get(recordHash) ?? null;
+    return !prior || !current || prior.rowHash !== current.rowHash || prior.active !== current.active
+      ? [{ prior, current, row: current ?? prior }] : [];
   });
 };
 const composeTrustedAssignmentEvidence = ({ server, trustedActionFrames, assignment }) => {
@@ -109,10 +113,14 @@ const composeTrustedAssignmentEvidence = ({ server, trustedActionFrames, assignm
     fail('EVIDENCE_COMPOSITION_REJECTED');
   }
   const assignmentChanges = frameChanges(trustedActionFrames[0]);
-  if (!isDeepStrictEqual(assignmentChanges.map(row => row.source).sort(), [
+  if (assignmentChanges.some(change => !change.current)
+    || !isDeepStrictEqual(assignmentChanges.map(change => change.row.source).sort(), [
     'assess_command_receipts', 'assess_v2_cases', 'assess_v2_review_assignments', 'privileged_audit_events',
   ])) fail('EVIDENCE_COMPOSITION_REJECTED');
-  for (const row of assignmentChanges) {
+  if (trustedActionFrames.slice(1).some(frame => frameChanges(frame).length !== 0)) {
+    fail('EVIDENCE_COMPOSITION_REJECTED');
+  }
+  for (const { row } of assignmentChanges) {
     if (!completeAnchor(row) || row.actorHash !== assignment.actorHash || row.sessionHash !== assignment.sessionHash
       || row.requestIdHash !== assignment.requestIdHash || row.commandBindingHash !== assignment.commandBindingHash
       || row.commandIdHash !== assignment.response.commandIdHash
@@ -126,7 +134,7 @@ const composeTrustedAssignmentEvidence = ({ server, trustedActionFrames, assignm
   }
   const composed = structuredClone(server);
   let carriedRecords = 0;
-  for (const row of assignmentChanges) {
+  for (const { row } of assignmentChanges) {
     const matches = composed.after.records.filter(candidate => isDeepStrictEqual(rowIdentity(candidate), rowIdentity(row)));
     if (matches.length !== 1) fail('EVIDENCE_COMPOSITION_REJECTED');
     const target = matches[0];
@@ -144,16 +152,62 @@ const composeTrustedAssignmentEvidence = ({ server, trustedActionFrames, assignm
   } };
 };
 
+const proofFields = Object.freeze([
+  'receiptOriginRequestIdHash', 'semanticRequestHash', 'idempotencyKeyHash', 'semanticEnvelopeHash',
+]);
+const validateTrustedReplayProof = ({ browser, trustedActionProofs }) => {
+  if (!record(browser) || !Array.isArray(browser.actions) || browser.actions.length !== 3
+    || !Array.isArray(trustedActionProofs) || trustedActionProofs.length !== 3
+    || trustedActionProofs[2] !== null) fail('TRUSTED_ACTION_PROOF_REJECTED');
+  const [assignment, replay, stale] = browser.actions;
+  const [assignmentProof, replayProof] = trustedActionProofs;
+  for (const proof of [assignmentProof, replayProof]) {
+    exactKeys(proof, proofFields, 'TRUSTED_ACTION_PROOF_REJECTED');
+    if (proofFields.some(field => !DIGEST.test(proof[field] ?? ''))) fail('TRUSTED_ACTION_PROOF_REJECTED');
+  }
+  if ([assignment, replay, stale].some(action => !record(action) || !record(action.response)
+      || !DIGEST.test(action.actorHash ?? '') || !DIGEST.test(action.sessionHash ?? '')
+      || !DIGEST.test(action.requestIdHash ?? '') || !DIGEST.test(action.commandBindingHash ?? ''))
+    || assignment.response?.status !== 200 || assignment.response?.classification !== 'COMMITTED'
+    || replay.response?.status !== 200 || replay.response?.classification !== 'REPLAYED'
+    || stale.response?.status !== 409 || stale.response?.classification !== 'VERSION_CONFLICT'
+    || [replay, stale].some(action => action.actorHash !== assignment.actorHash
+      || action.sessionHash !== assignment.sessionHash)
+    || assignment.requestIdHash === replay.requestIdHash
+    || assignment.commandBindingHash === replay.commandBindingHash
+    || !DIGEST.test(assignment.response.commandIdHash ?? '')
+    || assignment.response.commandIdHash !== replay.response.commandIdHash
+    || !DIGEST.test(assignment.response.receiptIdHash ?? '')
+    || assignment.response.receiptIdHash !== replay.response.receiptIdHash
+    || stale.response.commandIdHash !== null || stale.response.receiptIdHash !== null
+    || [assignment.requestIdHash, replay.requestIdHash].includes(stale.requestIdHash)
+    || [assignment.commandBindingHash, replay.commandBindingHash].includes(stale.commandBindingHash)
+    || assignmentProof.receiptOriginRequestIdHash !== assignment.requestIdHash
+    || replayProof.receiptOriginRequestIdHash !== assignment.requestIdHash
+    || assignmentProof.semanticRequestHash !== replayProof.semanticRequestHash
+    || assignmentProof.idempotencyKeyHash !== replayProof.idempotencyKeyHash
+    || assignmentProof.semanticEnvelopeHash !== replayProof.semanticEnvelopeHash) {
+    fail('TRUSTED_ACTION_PROOF_REJECTED');
+  }
+  return { assignment, replay, stale, assignmentProof, replayProof };
+};
+
 export function buildAuthenticatedReviewerSelectionDiagnostic({ source, browser, server, trustedActionFrames,
-  candidates, commands, cleanup }) {
+  trustedActionProofs, candidates, commands, cleanup }) {
   validateCandidateProof(candidates);
   if (!Array.isArray(commands) || !isDeepStrictEqual(commands, [
     'assessment_v2.review.assign', 'assessment_v2.review.assign', 'assessment_v2.review.resolve',
   ])) fail('COMMANDS_REJECTED');
-  const [assignment] = browser.actions;
+  const rawBrowser = structuredClone(browser);
+  const { assignment, replay, stale, assignmentProof, replayProof } = validateTrustedReplayProof({
+    browser, trustedActionProofs,
+  });
   const composed = composeTrustedAssignmentEvidence({ server, trustedActionFrames, assignment });
+  const diagnosticBrowser = structuredClone(browser);
+  diagnosticBrowser.actions[1].response.commandIdHash = null;
+  diagnosticBrowser.actions[1].response.receiptIdHash = null;
   const reconstructed = reconstructAuthenticatedHostedCaseEvidence({
-    browser,
+    browser: diagnosticBrowser,
     server: composed.server,
     definition: {
       expectedMutationCount: 1,
@@ -166,7 +220,6 @@ export function buildAuthenticatedReviewerSelectionDiagnostic({ source, browser,
     || reconstructed.status !== 'PASS' || reconstructed.ui.actionCount !== 3
     || browser.actions.length !== 3 || browser.participants.length !== 1
     || browser.participants[0].persona !== 'reviewer') fail('CASE_REJECTED');
-  const [, replay, stale] = browser.actions;
   const beforeByHash = new Map(composed.server.before.records.map(row => [row.recordHash, row]));
   const changedRows = composed.server.after.records.filter(row => {
     const before = beforeByHash.get(row.recordHash);
@@ -181,7 +234,8 @@ export function buildAuthenticatedReviewerSelectionDiagnostic({ source, browser,
     + reconstructed.measurements.concurrencyWrites;
   if (reconstructed.measurements.logicalMutations !== 1 || reconstructed.measurements.domainWrites !== 2
     || !isDeepStrictEqual(changedDomainSources, ['assess_v2_cases', 'assess_v2_review_assignments'])
-    || stale.response.commandIdHash !== null || stale.response.receiptIdHash !== null) fail('EFFECTS_REJECTED');
+    || stale.response.commandIdHash !== null || stale.response.receiptIdHash !== null
+    || !isDeepStrictEqual(browser, rawBrowser)) fail('EFFECTS_REJECTED');
   const document = {
     schemaVersion: AUTHENTICATED_REVIEWER_SELECTION_DIAGNOSTIC_SCHEMA,
     mode: 'reviewer_selection_diagnostic',
@@ -199,14 +253,20 @@ export function buildAuthenticatedReviewerSelectionDiagnostic({ source, browser,
       bindings: {
         sameReviewerSession: [replay, stale].every(action => action.actorHash === assignment.actorHash
           && action.sessionHash === assignment.sessionHash),
-        assignmentReplayRequestEqual: assignment.requestIdHash === replay.requestIdHash,
-        assignmentReplayCommandEqual: assignment.commandBindingHash === replay.commandBindingHash,
+        assignmentReplayRequestDistinct: assignment.requestIdHash !== replay.requestIdHash,
+        assignmentReplayCommandDistinct: assignment.commandBindingHash !== replay.commandBindingHash,
+        assignmentReplaySemanticEqual: assignmentProof.semanticRequestHash === replayProof.semanticRequestHash,
+        assignmentReplayIdempotencyEqual: assignmentProof.idempotencyKeyHash === replayProof.idempotencyKeyHash,
+        assignmentReplayEnvelopeEqual: assignmentProof.semanticEnvelopeHash === replayProof.semanticEnvelopeHash,
+        receiptOriginMatchesAssignment: assignmentProof.receiptOriginRequestIdHash === assignment.requestIdHash
+          && replayProof.receiptOriginRequestIdHash === assignment.requestIdHash,
         assignmentReplayCommandIdEqual: assignment.response.commandIdHash !== null
           && assignment.response.commandIdHash === replay.response.commandIdHash,
         assignmentReplayReceiptEqual: assignment.response.receiptIdHash !== null
           && assignment.response.receiptIdHash === replay.response.receiptIdHash,
-        staleRequestDistinct: stale.requestIdHash !== assignment.requestIdHash,
-        staleCommandDistinct: stale.commandBindingHash !== assignment.commandBindingHash,
+        staleRequestDistinct: ![assignment.requestIdHash, replay.requestIdHash].includes(stale.requestIdHash),
+        staleCommandDistinct: ![assignment.commandBindingHash, replay.commandBindingHash]
+          .includes(stale.commandBindingHash),
       },
     },
     effects: {
