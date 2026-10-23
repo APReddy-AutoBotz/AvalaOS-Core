@@ -5,9 +5,205 @@ import { createServer } from 'node:http';
 import ts from 'typescript';
 import { chromium, devices } from '@playwright/test';
 import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { startAuthenticatedHostedSignInEntryFixture, startAuthenticatedHostedSignInEntryTlsBridge,
+    AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE } from './testAuthenticatedHostedSignInEntry.mjs';
 const exports = {};
 new Function('exports', 'require', ts.transpileModule(fs.readFileSync('tests/browser/authenticatedHostedNetwork.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(exports, () => ({ AuthenticatedHostedBrowserActionTracker }));
 const { installAuthenticatedHostedNetwork, authenticatedLifecycleSettleActorNavigationBoundary, authenticatedHostedClosePageAfterOwnedNetwork } = exports;
+const closeScopedAdmissionResources = async (operations, primaryFailure) => {
+    const failures = [];
+    for (const operation of operations) {
+        try { await operation(); } catch (error) { failures.push(error); }
+    }
+    if (primaryFailure) {
+        if (failures.length) Object.defineProperty(primaryFailure, 'cause', {
+            value: new AggregateError([...(primaryFailure.cause ? [primaryFailure.cause] : []), ...failures],
+                'SCOPED_ADMISSION_CLEANUP_FAILED'), configurable: true,
+        });
+        throw primaryFailure;
+    }
+    if (failures.length) throw new AggregateError(failures, 'SCOPED_ADMISSION_CLEANUP_FAILED');
+};
+test('scoped regression cleanup attempts every close and retains the primary failure', async () => {
+    const primary = new Error('PRIMARY_TEST_FAILURE'), closing = new Error('OWNED_CLOSE_FAILURE');
+    const closed = [];
+    const operations = [
+        async () => { closed.push('browser'); throw closing; },
+        async () => { closed.push('bridge'); },
+        async () => { closed.push('fixture'); },
+    ];
+    await assert.rejects(closeScopedAdmissionResources(operations, primary), error =>
+        error === primary && error.cause instanceof AggregateError && error.cause.errors[0] === closing);
+    assert.deepEqual(closed, ['browser', 'bridge', 'fixture']);
+    closed.length = 0;
+    await assert.rejects(closeScopedAdmissionResources(operations), error =>
+        error instanceof AggregateError && error.errors[0] === closing);
+    assert.deepEqual(closed, ['browser', 'bridge', 'fixture']);
+});
+test('scoped navigation drains prior-document Delivery work before arming its response gate', { timeout: 45_000 }, async () => {
+    const app = createServer((_request, response) => response.end('<title>Scoped navigation lifecycle</title>'));
+    await new Promise(resolve => app.listen(0, '127.0.0.1', resolve));
+    const directory = await mkdtemp(path.join(tmpdir(), 'avalaos-scoped-admission-'));
+    const outcomes = [];
+    let primaryFailure;
+    try {
+        for (const drainBeforeArm of [false, true]) {
+            let fixture, bridge, browser, releaseDispatch;
+            let armFailure;
+            try {
+                fixture = await startAuthenticatedHostedSignInEntryFixture();
+                bridge = await startAuthenticatedHostedSignInEntryTlsBridge({ directory,
+                    appBaseUrl: `http://127.0.0.1:${app.address().port}`, apiBaseUrl: fixture.baseUrl });
+                const control = async (pathname, body) => {
+                    const response = await fetch(`${fixture.controlBaseUrl}${pathname}`, { method: 'POST',
+                        headers: { 'content-type': 'application/json', 'x-enterprise-lifecycle-control': fixture.controlToken },
+                        body: JSON.stringify({ projectName: 'desktop-chromium', ...body }) });
+                    assert.equal(response.status, 200);
+                    return response.json();
+                };
+                const gate = action => control('/control/sign-in-entry-delivery-task-gate', { action });
+                const poll = async predicate => {
+                    const deadline = Date.now() + 10_000;
+                    while (Date.now() < deadline) {
+                        const value = await gate('inspect');
+                        if (predicate(value)) return value;
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                    }
+                    assert.fail('SCOPED_ADMISSION_GATE_STATE_NOT_REACHED');
+                };
+                const setup = await control('/control/setup', {});
+                const login = await fetch(`${fixture.baseUrl}/auth/v1/token?grant_type=password`, {
+                    method: 'POST', headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ email: 'reviewer.desktop-chromium@local.invalid', password: 'synthetic-reviewer-password' }) });
+                assert.equal(login.status, 200);
+                const { access_token: accessToken } = await login.json();
+                browser = await chromium.launch({ headless: true,
+                    args: [`--ignore-certificate-errors-spki-list=${bridge.certificateSpki}`] });
+                const context = await browser.newContext({ serviceWorkers: 'block', proxy: { server: bridge.origin } });
+                const page = await context.newPage();
+                await exports.authenticatedHostedConfigureChromiumDurableResponseBodies(context, page);
+                page.setDefaultTimeout(10_000);
+                page.setDefaultNavigationTimeout(20_000);
+                const active = new Set(), errors = [];
+                let starts = 0, finishes = 0, tail = Promise.resolve(), notifyDispatch, first = true;
+                const dispatched = new Promise(resolve => { notifyDispatch = resolve; });
+                const dispatch = new Promise(resolve => { releaseDispatch = resolve; });
+                const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin: fixture.backendOrigin,
+                    appOrigin: fixture.previewOrigin,
+                    startAction: ({ accessToken: token }) => {
+                        assert.equal(token, accessToken);
+                        const actionId = `scoped-${++starts}`; active.add(actionId); return { actionId };
+                    },
+                    finishAction: ({ actionId }) => { assert(active.delete(actionId)); finishes += 1; },
+                });
+                const lifecycle = await installAuthenticatedHostedNetwork({ context, hosted: true,
+                    allowedOrigins: new Set([fixture.backendOrigin, fixture.previewOrigin]), tracker,
+                    queueNetworkAction: (operation, ownedWork) => {
+                        void ownedWork?.catch(error => errors.push(error));
+                        tail = tail.then(operation).catch(error => errors.push(error));
+                    },
+                    onExternalRequest: () => assert.fail('external request'), onHttpRequest: () => {},
+                    onTrackerError: error => errors.push(error),
+                    dispatchAllowedRequest: async route => {
+                        if (first && route.request().url().endsWith('/functions/v1/legacy-delivery-query')) {
+                            first = false; notifyDispatch(); await dispatch;
+                        }
+                        await route.continue();
+                    },
+                });
+                const settle = () => authenticatedLifecycleSettleActorNavigationBoundary({
+                    settleActionAdmissions: lifecycle.settleActionAdmissions,
+                    settleResponseBodies: lifecycle.settleResponseBodies,
+                    drainNetworkActions: async () => {
+                        for (;;) { const current = tail; await current; if (current === tail) break; }
+                        if (errors.length) throw errors[0];
+                    }, activeActionCount: () => active.size,
+                });
+                await page.goto(fixture.previewOrigin);
+                const query = version => page.evaluate(({ url, accessToken: token, publicAnonKey, body }) => {
+                    void fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}`,
+                        apikey: publicAnonKey, 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(response => response.json()).catch(() => {});
+                }, { url: `${fixture.backendOrigin}/functions/v1/legacy-delivery-query`, accessToken,
+                    publicAnonKey: fixture.publicAnonKey, body: { schemaVersion: 'legacy-delivery-query.v1',
+                        ...AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE, expectedAuthorizationVersion: version,
+                        projectId: setup.deliveryProject.id, limit: 100, cursor: null, sourceGenerationId: null, includeRetained: true } });
+                await query(1);
+                await dispatched;
+                assert.equal(active.size, 1);
+                // Delay dispatch only: the old document's real request has already
+                // entered the production tracker. Reload supplies the real abort.
+                if (drainBeforeArm) {
+                    let drained = false;
+                    const draining = settle().then(() => { drained = true; });
+                    await new Promise(resolve => setImmediate(resolve));
+                    assert.equal(drained, false);
+                    releaseDispatch();
+                    await draining;
+                    assert.equal(active.size, 0);
+                }
+                const before = await gate('inspect');
+                await gate('hold-next');
+                releaseDispatch();
+                if (!drainBeforeArm) await poll(value => value.waiting === 1);
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                if (!drainBeforeArm) await poll(value => value.aborted === 1);
+                await query(1);
+                await poll(value => value.waiting === 1 && value.requests === value.completed + 1);
+                assert.deepEqual(await control('/control/sign-in-entry-authority-version', { action: 'advance' }), { current: 2, priorRead: 1 });
+                await query(2);
+                const pending = await poll(value => value.authorityVersions.includes(2) && value.requests === value.completed + 1);
+                assert.equal(pending.requests === pending.terminal + 1, drainBeforeArm);
+                assert.equal(pending.aborted - before.aborted, drainBeforeArm ? 0 : 1);
+                const late = page.waitForResponse(response => response.url().endsWith('/functions/v1/legacy-delivery-query')
+                    && response.status() === 503 && response.request().postDataJSON()?.expectedAuthorizationVersion === 1)
+                    .then(response => ({ response }), error => ({ error }));
+                await gate('reject');
+                const result = await late;
+                if (drainBeforeArm) {
+                    assert.equal(result.error, undefined);
+                    assert.equal(await result.response.finished(), null);
+                    assert.deepEqual(await result.response.json(), { ok: false, error: {
+                        code: 'QUERY_UNAVAILABLE', message: 'Delivery data could not be loaded.' } });
+                } else {
+                    assert.equal(result.error?.name, 'TimeoutError');
+                    assert.match(result.error.message, /page.waitForResponse: Timeout 10000ms exceeded/u);
+                }
+                await settle();
+                const final = await poll(value => value.terminal === value.requests);
+                assert.equal(active.size, 0);
+                assert.equal(finishes, starts);
+                assert.equal(errors.length, 0);
+                assert.equal(final.aborted, drainBeforeArm ? 0 : 1);
+                outcomes.push({ drainBeforeArm, requests: final.requests, committed: final.committed,
+                    aborted: final.aborted, starts, finishes, active: active.size, late503: Boolean(result.response) });
+            } catch (error) {
+                armFailure = error;
+            } finally {
+                await closeScopedAdmissionResources([
+                    () => releaseDispatch?.(), () => browser?.close(),
+                    () => bridge?.close(), () => fixture?.close(),
+                ], armFailure);
+            }
+        }
+    } catch (error) {
+        primaryFailure = error;
+    } finally {
+        await closeScopedAdmissionResources([
+            () => app.closeAllConnections(),
+            () => new Promise((resolve, reject) => app.close(error => error ? reject(error) : resolve())),
+            async () => {
+                assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+                assert(path.basename(directory).startsWith('avalaos-scoped-admission-'));
+                await rm(directory, { recursive: true, force: true });
+            },
+        ], primaryFailure);
+    }
+    assert.equal(outcomes.length, 2);
+    console.log('SCOPED_ADMISSION_PAIRED_PROOF ' + JSON.stringify(outcomes));
+});
 test('auxiliary page disposal joins real Chromium header admission before close', { timeout: 15000 }, async () => {
     const server = createServer((req, res) => { res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-headers', 'authorization,content-type'); res.setHeader('content-type', req.url === '/' ? 'text/html' : 'application/json'); res.end(req.url === '/' ? '<title>Owned request lifecycle</title>' : '{"ok":true}'); });
     await new Promise(r => server.listen(0, '127.0.0.1', r));

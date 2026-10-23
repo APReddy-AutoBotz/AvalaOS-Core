@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## PR #325 scoped-navigation hold ownership (2026-10-23)
+
+**Confirmed source defect / executed evidence:** an admitted prior-document Delivery request can steal the fixture's next-read hold and then be cancelled by reload. A completed-only pending counter accepts that aborted transport, leaving no real old-version response to observe. Paired Desktop Chromium/TLS/production-tracker execution reproduces the exact 10-second late-response timeout with one abort; draining before arming produces the required real version-1 503, three committed responses, zero aborts and zero active actions. The correction settles before both arms and makes the authority-switch pending predicates terminal-aware with explicit committed/no-abort checks. No product authority or deadline change.
+
+**Suspected defect requiring deeper validation:** exclusive historical CI timing remains unproven. Preserve preparation 39902007191's failure and partial subproofs, the unchanged local runner's separate process-response failure, and intermediate harness setup/body-read failures. Exact-head complete candidate and release evidence is still required. The [active completion plan](../planning/hosted-acceptance-completion.md) owns acceptance, focused checks and source-only rollback. Full acceptance remains 61 PASS / 47 BLOCKED; one focused diagnostic is approved only after verified release, with providers OFF, the 15-second limit and no Netlify.
+
 ## PR #325 DOMPurify audit and Pixel disposal (2026-10-23)
 
 **Confirmed source defects:** the resolved DOMPurify 3.4.16 fails the moderate audit gate; grouped auxiliary closure leaves a second page exposed to newly admitted work after the shared empty observation. **Executed evidence:** unchanged local audit exits 1; real Pixel Chromium with the production tracker/network reproduces an orphaned admitted request and the exact 15-second NOT_QUIESCENT failure. Settling separately before each close produces one start/finish and zero active work. The patch raises the dependency floor/shared resolution to 3.4.17 and serializes per-page settlement; no audit exception, timeout increase, fabricated completion or authorization change.
