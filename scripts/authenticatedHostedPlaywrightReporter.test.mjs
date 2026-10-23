@@ -22,7 +22,7 @@ const titles = new Map([
 const fixture = title => ({ title, expectedStatus: 'passed', parent: { project: () => ({ name: 'desktop-chromium' }) } });
 
 test('Govern and Studio diagnostic step labels map to fixed allowlisted operations', async t => {
-  const root = await mkdtemp(path.join(process.cwd(), 'output', 'local-private', 'authenticated-govern-studio-reporter-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-govern-studio-reporter-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
   t.after(() => { if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
