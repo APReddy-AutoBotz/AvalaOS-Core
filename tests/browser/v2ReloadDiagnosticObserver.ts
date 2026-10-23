@@ -1,7 +1,8 @@
 import { expect, type Page, type Request, type Response } from '@playwright/test';
 import { authenticatedLifecycleValidateProcessNavigation } from './authenticatedLifecycleHarness';
 
-export type AuthenticatedAcceptanceMode = 'full_acceptance' | 'v2_primary_prefix_diagnostic' | 'reviewer_selection_diagnostic';
+export type AuthenticatedAcceptanceMode = 'full_acceptance' | 'v2_primary_prefix_diagnostic'
+  | 'reviewer_selection_diagnostic' | 'govern_studio_diagnostic';
 export type V2ReloadDiagnosticPhase = 'before-create' | 'before-reload' | 'after-reload';
 export type V2ReloadRenderOutcome = 'resumed' | 'workspace_error' | 'public_screen' | 'unresolved';
 export type V2ReloadReadStage = typeof V2_RELOAD_READ_STAGES[number];
@@ -180,7 +181,7 @@ const validateReadStageLifecycle = (input: unknown, status: V2ReloadReadStageSta
 export const resolveAuthenticatedAcceptanceMode = (raw: string | undefined): AuthenticatedAcceptanceMode => {
   if (raw === undefined) return 'full_acceptance';
   if (raw === 'full_acceptance' || raw === 'v2_primary_prefix_diagnostic'
-    || raw === 'reviewer_selection_diagnostic') return raw;
+    || raw === 'reviewer_selection_diagnostic' || raw === 'govern_studio_diagnostic') return raw;
   throw fixedError('MODE_REJECTED');
 };
 

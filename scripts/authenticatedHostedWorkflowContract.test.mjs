@@ -173,7 +173,8 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.deepEqual(inputs.frontend_kind, { description: 'Exact acceptance frontend source', required: true,
     default: 'local_build', type: 'choice', options: ['local_build', 'netlify'] });
   assert.deepEqual(inputs.acceptance_mode, { description: 'Protected hosted execution mode', required: true,
-    default: 'full_acceptance', type: 'choice', options: ['full_acceptance', 'v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic'] });
+    default: 'full_acceptance', type: 'choice', options: ['full_acceptance', 'v2_primary_prefix_diagnostic',
+      'reviewer_selection_diagnostic', 'govern_studio_diagnostic'] });
   assert.equal(workflow.jobs['source-and-authority'].if, "github.event_name != 'workflow_dispatch'");
   assert.equal(workflow.jobs['connected-browser'].if, "github.event_name != 'workflow_dispatch'");
   const sourceAuthority = workflow.jobs['source-and-authority'].steps
@@ -376,7 +377,7 @@ test('authenticated environment derives source identities and rejects malformed 
 test('reviewer selection dispatch isolates its bounded artifact and requires owned local cleanup', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   assert.deepEqual(workflow.on.workflow_dispatch.inputs.acceptance_mode.options,
-    ['full_acceptance', 'v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic']);
+    ['full_acceptance', 'v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic', 'govern_studio_diagnostic']);
   const steps = workflow.jobs['hosted-authenticated'].steps;
   const stage = steps.find(step => step.name === 'Stage sanitized reviewer-selection diagnostic');
   const upload = steps.find(step => step.name === 'Upload sanitized reviewer-selection diagnostic');
@@ -417,4 +418,71 @@ test('reviewer selection dispatch isolates its bounded artifact and requires own
   assert.doesNotMatch(gate.run, /steps[.]report|steps[.]hosted|steps[.]authenticated_evidence/u);
   assert.ok(steps.indexOf(stage) > steps.findIndex(step => step.id === 'frontend_cleanup'));
   assert.ok(steps.indexOf(gate) > steps.indexOf(upload));
+});
+
+test('Govern and Studio diagnostic dispatch isolates exact sanitized evidence and requires local cleanup', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const steps = workflow.jobs['hosted-authenticated'].steps;
+  const stage = steps.find(step => step.name === 'Stage sanitized Govern and Studio diagnostic');
+  const upload = steps.find(step => step.name === 'Upload sanitized Govern and Studio diagnostic');
+  const gate = steps.find(step => step.name === 'Enforce Govern and Studio diagnostic gate');
+  for (const step of [stage, upload, gate]) {
+    assert.equal(step.if, "always() && inputs.acceptance_mode == 'govern_studio_diagnostic'");
+    assert.equal(step['continue-on-error'], undefined);
+  }
+  assert.deepEqual([...stage.run.matchAll(/cp (\/tmp\/[^ ]+[.]json) /gu)].map(match => match[1]), [
+    '/tmp/authenticated-govern-studio-diagnostic.json',
+    '/tmp/authenticated-hosted-diagnostic.json',
+    '/tmp/local-acceptance-build-proof.json',
+  ]);
+  assert.doesNotMatch(stage.run, /RETAINED_RESULTS|ORACLE_RESULTS|SERVER_RESULTS|AUTHENTICATED_RESULTS|[.]log|[.]zip/u);
+  assert.equal(upload.with.name,
+    'authenticated-govern-studio-diagnostic-${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.equal(upload.with.path, 'govern-studio-diagnostic-results/');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  assert.match(gate.run, /validateAuthenticatedGovernStudioDiagnostic/u);
+  for (const id of ['deployment', 'frontend_final', 'frontend_cleanup', 'authenticated']) {
+    assert.ok(gate.run.includes('test "${{ steps.' + id + '.outcome }}" = success'), id);
+  }
+  for (const field of ['acceptancePromoted', 'fullAcceptanceExecuted', 'providerGenerationExecuted']) {
+    assert.match(gate.run, new RegExp(field, 'u'));
+  }
+  assert.deepEqual(gate.env, {
+    EXPECTED_RELEASE_SHA: '${{ inputs.release_sha }}',
+    EXPECTED_RUN_ID: '${{ github.run_id }}',
+    EXPECTED_RUN_ATTEMPT: '${{ github.run_attempt }}',
+    EXPECTED_SOURCE_DIGEST: '${{ env.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST }}',
+  });
+  assert.doesNotMatch(gate.run, /steps[.]report|steps[.]hosted|steps[.]authenticated_evidence/u);
+  assert.ok(steps.indexOf(stage) > steps.findIndex(step => step.id === 'frontend_cleanup'));
+  assert.ok(steps.indexOf(gate) > steps.indexOf(upload));
+});
+
+test('preparation retains exact Desktop and Pixel Govern denial proof with CI identity and no credentials', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const job = workflow.jobs['connected-browser'];
+  const run = job.steps.find(step => step.name === 'Verify restricted reviewer Govern denial on Desktop and Pixel');
+  const lineage = job.steps.find(step => step.name === 'Verify Govern and Studio lineage against PostgreSQL');
+  const retain = job.steps.find(step => step.name === 'Retain sanitized Govern reviewer denial proof');
+  assert.equal(run.run, 'node scripts/reproduceGovernDisabledControl.mjs');
+  assert.deepEqual(run.env, {
+    GITHUB_SHA: '${{ env.RELEASE_SHA }}',
+    GOVERN_REVIEWER_DENIAL_PROOF_PATH:
+      'output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-reviewer-denial-proof.json',
+  });
+  assert.equal(lineage.run, 'node scripts/testAuthenticatedGovernStudioLineagePostgres.mjs');
+  assert.deepEqual(lineage.env, {
+    RELEASE_SHA: '${{ env.RELEASE_SHA }}',
+    GITHUB_SHA: '${{ env.RELEASE_SHA }}',
+    AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_PATH:
+      'output/local-private/authenticated-product-acceptance/govern-reviewer-denial/govern-studio-lineage-proof.json',
+  });
+  assert.equal(retain.if, 'always()');
+  assert.equal(retain.uses, 'actions/upload-artifact@v4');
+  assert.equal(retain.with.name,
+    'govern-reviewer-denial-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.equal(retain.with.path, 'output/local-private/authenticated-product-acceptance/govern-reviewer-denial/');
+  assert.equal(retain.with['if-no-files-found'], 'error');
+  assert.doesNotMatch(JSON.stringify([run, lineage, retain]),
+    /secrets[.]|vars[.]|SERVICE_ROLE|MANAGEMENT_TOKEN|DATABASE_URL/u);
 });

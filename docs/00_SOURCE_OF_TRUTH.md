@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Govern reviewer authority correction (2026-10-24)
+
+PR #326's verified release `00b2bcc760015fa6d243078ca943f01e71cf4ac9` completed its separately approved full run `39988435817` with **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** and independently verified cleanup. The Govern/Studio failure was retained at a shared observer without an exact operation, so exclusive historical attribution remains unproven.
+
+Local production UI/handler/PostgreSQL reproduction confirms that the scenario clicks a correctly disabled Govern control as a reviewer who lacks that capability. The unchanged 15-second wait times out with zero requests or effects. The correction preserves the disabled UI and server authorization: Desktop and Pixel prove one authenticated reviewer command receives 403 `PERMISSION_DENIED` with zero effects, followed by an independent approver's 200 and exactly one Govern resolution/receipt/audit. Providers and paid calls remain zero; local cleanup passed. Product authority and scoring are unchanged.
+
+AP approves the fix PR and required candidate checks, verified merge/release, then exactly one focused `local_build/govern_studio_diagnostic`, stopping after the approved Studio handoff/source package and before generation. Keep the 15-second limit, providers OFF, exact-run human GitHub review and independent cleanup. Full acceptance allowance is zero. No Netlify, backend deployment/migration, production/customer data or paid calls. The [active completion plan](planning/hosted-acceptance-completion.md) owns acceptance, evidence and rollback requirements. Planned diagnostic and release checks do not promote acceptance.
+
 ## Reviewer replay receipt verification (2026-10-23)
 
 PR #325 merged as `50e0e6d023e71126ca8bd7b1ca674e7e9e866a6c` after verified candidate/release evidence. Its single focused diagnostic `39955181062` stopped at `CONTROL_REJECTED`; cleanup was independently verified. Local reproduction confirms that a fresh replay request ID incorrectly makes the diagnostic verifier miss the original idempotency receipt even though the product returns 200/replayed. The correction binds exact semantic command and receipt origin while preserving distinct transport IDs and zero replay/stale writes. Final-source disposable PostgreSQL proof passes 200/200/409 and ten negative bindings with providers OFF. The hosted artifact did not retain the inner error, so exclusive historical attribution remains unproven.

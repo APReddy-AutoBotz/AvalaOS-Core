@@ -2692,7 +2692,8 @@
         "scripts/authenticatedHostedObservationAdapter.mjs",
         "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
         "scripts/localAcceptanceBuild.mjs",
-        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql"
+        "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
+        "tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts"
       ],
       "branchIds": [
         "GOVERN-SEPARATION_OF_DUTY"

@@ -1,4 +1,5 @@
-export type AuthenticatedAcceptanceMode = 'full_acceptance' | 'v2_primary_prefix_diagnostic' | 'reviewer_selection_diagnostic';
+export type AuthenticatedAcceptanceMode = 'full_acceptance' | 'v2_primary_prefix_diagnostic' | 'reviewer_selection_diagnostic'
+  | 'govern_studio_diagnostic';
 export type AuthenticatedV2ReloadPhase = 'before-create' | 'before-reload' | 'after-reload';
 export type AuthenticatedV2ReloadReadStage =
   | 'case-discovery'

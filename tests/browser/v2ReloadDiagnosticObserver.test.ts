@@ -96,6 +96,7 @@ test('mode remains full by default and accepts only the three exact values', () 
   assert.equal(resolveAuthenticatedAcceptanceMode('full_acceptance'), 'full_acceptance');
   assert.equal(resolveAuthenticatedAcceptanceMode('v2_primary_prefix_diagnostic'), 'v2_primary_prefix_diagnostic');
   assert.equal(resolveAuthenticatedAcceptanceMode('reviewer_selection_diagnostic'), 'reviewer_selection_diagnostic');
+  assert.equal(resolveAuthenticatedAcceptanceMode('govern_studio_diagnostic'), 'govern_studio_diagnostic');
   for (const candidate of ['', ' full_acceptance', 'V2_PRIMARY_PREFIX_DIAGNOSTIC', 'diagnostic']) {
     assert.throws(() => resolveAuthenticatedAcceptanceMode(candidate), /AUTHENTICATED_V2_RELOAD_MODE_REJECTED/u);
   }

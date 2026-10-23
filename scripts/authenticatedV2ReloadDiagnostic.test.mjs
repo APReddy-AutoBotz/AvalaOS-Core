@@ -33,6 +33,8 @@ test('full acceptance is the immutable default and the diagnostic mode is explic
     'v2_primary_prefix_diagnostic');
   assert.equal(authenticatedAcceptanceMode({ AUTHENTICATED_ACCEPTANCE_MODE: 'reviewer_selection_diagnostic' }),
     'reviewer_selection_diagnostic');
+  assert.equal(authenticatedAcceptanceMode({ AUTHENTICATED_ACCEPTANCE_MODE: 'govern_studio_diagnostic' }),
+    'govern_studio_diagnostic');
   assert.throws(() => authenticatedAcceptanceMode({ AUTHENTICATED_ACCEPTANCE_MODE: 'diagnostic' }), /MODE_REJECTED/u);
 });
 
