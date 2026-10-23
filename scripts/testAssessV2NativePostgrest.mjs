@@ -284,6 +284,8 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     ], { cwd: process.cwd(), stdio: 'inherit', env: appEnvironment });
     await waitForHttp(appBaseUrl);
     if (eligibleReviewerReproduction) {
+      // Exercise the auxiliary-page disposal race before the two role-parity profiles.
+      await run(['--test', 'scripts/authenticatedHostedPageClose.test.mjs']);
       const readProviderState = async () => (await fixture.db.query(`SELECT
         (SELECT provider_enabled FROM public.studio_artifact_runtime_control WHERE singleton) runtime_enabled,
         (SELECT provider_enabled FROM public.enterprise_intelligence_runtime_control WHERE singleton) ei_runtime_enabled,
