@@ -590,6 +590,8 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       processReadRequests: number; processReadCompleted: number;
       projectIndexRequests: number; projectIndexCompleted: number;
     };
+    // Finish prior-document reads before the next reload owns the held request.
+    await settleActorTransitionEvidence();
     const beforeHold = await deliveryTaskGate('inspect');
     const beforeReadiness = await authenticatedLifecycleControl<ReadinessObservation>(
       '/control/sign-in-entry-observation', { projectName },
@@ -686,6 +688,8 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       }
     }
 
+    // An older admitted read must not consume hold-next and be cancelled by reload.
+    await settleActorTransitionEvidence();
     const beforeAuthoritySwitch = await deliveryTaskGate('inspect');
     await deliveryTaskGate('hold-next');
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -698,13 +702,16 @@ test('actual application uses the shared real-auth helper for rejected, cold and
         waiting: gate.waiting,
         held: gate.held,
         requestStarted: gate.requests > beforeAuthoritySwitch.requests,
-        exactlyOnePending: gate.requests === gate.completed + 1,
+        exactlyOnePending: gate.requests === gate.terminal + 1,
+        allTerminalsCommitted: gate.terminal - beforeAuthoritySwitch.terminal === gate.committed - beforeAuthoritySwitch.committed
+          && gate.completed - beforeAuthoritySwitch.completed === gate.committed - beforeAuthoritySwitch.committed
+          && gate.aborted === beforeAuthoritySwitch.aborted,
         actorsAreReviewer: actors.length > 0 && actors.every(actorName => actorName === 'reviewer'),
         versionsAreOne: versions.length > 0 && versions.every(version => version === 1),
       };
     }).toMatchObject({
       mode: 'held', waiting: 1, held: beforeAuthoritySwitch.held + 1,
-      requestStarted: true, exactlyOnePending: true, actorsAreReviewer: true, versionsAreOne: true,
+      requestStarted: true, exactlyOnePending: true, allTerminalsCommitted: true, actorsAreReviewer: true, versionsAreOne: true,
     });
     let priorAuthorityReleased = false;
     try {
@@ -720,14 +727,17 @@ test('actual application uses the shared real-auth helper for rejected, cold and
           mode: gate.mode,
           waiting: gate.waiting,
           held: gate.held,
-          exactlyOnePending: gate.requests === gate.completed + 1,
+          exactlyOnePending: gate.requests === gate.terminal + 1,
+          allTerminalsCommitted: gate.terminal - beforeAuthoritySwitch.terminal === gate.committed - beforeAuthoritySwitch.committed
+            && gate.completed - beforeAuthoritySwitch.completed === gate.committed - beforeAuthoritySwitch.committed
+            && gate.aborted === beforeAuthoritySwitch.aborted,
           actorsAreReviewer: actors.length > 0 && actors.every(actorName => actorName === 'reviewer'),
           versionsAreScoped: versions.length > 0 && versions.every(version => version === 1 || version === 2),
           currentAuthorityObserved: versions.includes(2),
         };
       }).toMatchObject({
         mode: 'held', waiting: 1, held: beforeAuthoritySwitch.held + 1,
-        exactlyOnePending: true, actorsAreReviewer: true, versionsAreScoped: true,
+        exactlyOnePending: true, allTerminalsCommitted: true, actorsAreReviewer: true, versionsAreScoped: true,
         currentAuthorityObserved: true,
       });
       const latePriorAuthorityResponseResult = page.waitForResponse(response => {

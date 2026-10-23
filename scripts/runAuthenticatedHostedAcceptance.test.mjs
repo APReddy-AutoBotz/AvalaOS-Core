@@ -7,6 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { deriveLocalAcceptanceExerciseDigest } from './localAcceptanceBuild.mjs';
 import { AUTHENTICATED_HOSTED_SESSION_QUERY } from './authenticatedHostedControllerAdapters.mjs';
 import { AUTHENTICATED_HOSTED_CAPTURE_QUERY } from './authenticatedHostedObservationAdapter.mjs';
 import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRuntimeClosure,
@@ -766,6 +767,43 @@ test('focused V2 diagnostic runner selects one Desktop prefix, cleans up, and em
   for (const file of [outputPaths.browser, outputPaths.server, outputPaths.binding]) {
     assert.equal(await readFile(file, 'utf8'), 'preserved-prior-evidence\n');
   }
+});
+
+test('reviewer selection runner uses one Desktop case and writes its result only after verified cleanup', async t => {
+  const approvedExerciseDigest=sha('reviewer-runner-approved');const buildDigest=sha('reviewer-runner-build');
+  const environment={...hostedEnvironment(),AUTHENTICATED_ACCEPTANCE_MODE:'reviewer_selection_diagnostic',
+    ACCEPTANCE_EXECUTION_KIND:'local_real_backend',AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND:'local_real_backend_authenticated',
+    HOSTED_PILOT_URL:'http://127.0.0.1:4173',NETLIFY_DEPLOY_ID:'',AUTHENTICATED_ACCEPTANCE_BUILD_DIGEST:buildDigest,
+    AUTHENTICATED_ACCEPTANCE_APPROVED_EXERCISE_DIGEST:approvedExerciseDigest,
+    AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST:deriveLocalAcceptanceExerciseDigest({approvedExerciseDigest,buildDigest,
+      releaseSha:'a'.repeat(40)}),
+    LOCAL_ACCEPTANCE_BUILD_ROOT:path.join(os.tmpdir(),'avalaos-local-acceptance-reviewer-runner-fixture')};
+  const outputBase=path.join(process.cwd(),'output','local-private','authenticated-product-acceptance');
+  await mkdir(outputBase,{recursive:true});
+  const outputRoot=await mkdtemp(path.join(outputBase,'reviewer-runner-output-'));t.after(()=>rm(outputRoot,{recursive:true,force:true}));
+  const outputPaths={browser:path.join(outputRoot,'browser.json'),server:path.join(outputRoot,'server.json'),
+    binding:path.join(outputRoot,'binding.json'),diagnostic:path.join(outputRoot,'diagnostic.json'),
+    reviewerSelectionDiagnostic:path.join(outputRoot,'reviewer.json')};
+  const calls=[];let controller;
+  const adapter={preflight:async()=>({...validPreflight(environment),deploymentId:null,
+    executionKind:'local_real_backend_authenticated',buildDigest}),activate:async()=>calls.push('activate'),
+    quiesce:async()=>calls.push('quiesce'),cleanup:async()=>calls.push('cleanup'),
+    verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
+      activeSecretMaterial:0,unapprovedActiveResidue:0,nonExerciseChanged:false,immutableHistoryPreserved:true})};
+  await runAuthenticatedHostedAcceptance(environment,{outputPaths,database:{},verifyCheckout:async()=>calls.push('checkout'),
+    createPostgresAdapter:()=>adapter,createIdentityAdapter:()=>({revokeAll:async()=>calls.push('revoke')}),
+    createBrowserWorkspace:()=>mkdtemp(path.join(os.tmpdir(),'authenticated-hosted-browser-')),
+    startServer:async value=>{controller=value;controller.reviewerSelectionDiagnosticResult=()=>{
+      assert.deepEqual(calls,['checkout','activate','close','quiesce','revoke','cleanup']);
+      return {schemaVersion:'authenticated-reviewer-selection-diagnostic-v1'};
+    };return {baseUrl:'http://127.0.0.1:1234',controlToken:'token',close:async()=>calls.push('close')};},
+    runPlaywright:async(_command,args,options)=>{
+      assert.deepEqual(args.slice(-2),['--project=desktop-chromium','--grep=@reviewer-selection-diagnostic']);
+      assert.equal(options.env.AUTHENTICATED_ACCEPTANCE_MODE,'reviewer_selection_diagnostic');
+    }});
+  assert.deepEqual(JSON.parse(await readFile(outputPaths.reviewerSelectionDiagnostic,'utf8')),
+    {schemaVersion:'authenticated-reviewer-selection-diagnostic-v1'});
+  for(const key of ['browser','server','binding'])await assert.rejects(readFile(outputPaths[key],'utf8'),/ENOENT/u);
 });
 
 test('focused V2 diagnostic browser failure still writes a partial sanitized artifact after cleanup', async t => {

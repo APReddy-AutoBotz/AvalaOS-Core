@@ -11,5 +11,5 @@ export function resolveV2FullPrefixLocalSelection(input: Readonly<{
   variant: string | undefined;
   authenticated: boolean;
   hosted: boolean;
-  mode: 'full_acceptance' | 'v2_primary_prefix_diagnostic';
+  mode: 'full_acceptance' | 'v2_primary_prefix_diagnostic' | 'reviewer_selection_diagnostic';
 }>): V2FullPrefixReproductionVariant | null;

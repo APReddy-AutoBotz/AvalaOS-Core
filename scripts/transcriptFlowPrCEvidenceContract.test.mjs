@@ -215,6 +215,18 @@ test('the 85-command registry retains the standalone scoring-law source guard an
   assert.throws(() => validatePrCRegistryStructure(process.cwd(), substituted, provenance), /PR_C_COMMAND_SOURCE_CONTRACT/u);
 });
 
+test('PR C audit requires complete quick-fallback serialization and the unchanged moderate gate', () => {
+  assert.equal(expectedPrCCommandRegistry(process.cwd()).find(item => item.id === 'audit').command,
+    'npm audit --audit-level=moderate --lockfile-version=2');
+  const provenance = JSON.parse(readFileSync('testing/process-lifecycle/contracts/pr-c-source-provenance.json', 'utf8'));
+  for (const command of ['npm audit --audit-level=moderate', 'npm audit --audit-level=high --lockfile-version=2',
+    'npm audit --audit-level=moderate --lockfile-version=2 --omit=dev']) {
+    const substituted = structuredClone(canonicalRegistry);
+    substituted.commands.find(item => item.id === 'audit').command = command;
+    assert.throws(() => validatePrCRegistryStructure(process.cwd(), substituted, provenance), /PR_C_COMMAND_SOURCE_CONTRACT/u);
+  }
+});
+
 test('PR C evidence command capture fails closed instead of retaining unbounded output', async () => {
   const child = new FakeCommandChild();
   const completed = runPrCEvidenceCommand({

@@ -13,6 +13,10 @@ import { createEnterpriseLifecycleStudioGeneration } from './enterpriseLifecycle
 import { createAuthenticatedControlsFixture } from './authenticatedControlsFixture.mjs';
 import { createAuthenticatedControlsPostgresAdapter } from './authenticatedControlsPostgresAdapter.mjs';
 import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA } from './authenticatedHostedFixtureIdentity.mjs';
+import {
+  FORBIDDEN_PERSONA_CAPABILITIES,
+  REQUIRED_PERSONA_CAPABILITIES,
+} from './authenticatedHostedControllerAdapters.mjs';
 
 const { Client } = pg;
 const root = process.cwd();
@@ -274,8 +278,14 @@ export async function createEnterpriseLifecycleFixture({
   runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? '1',
   headSha = process.env.PILOT_ACCEPTANCE_HEAD ?? process.env.GITHUB_SHA ?? 'local-working-tree',
   postgrestJwtSecret = null,
+  hostedPersonaRoleParity = false,
+  providersEnabled = true,
 } = {}) {
   if (!databaseUrl) throw new Error('ENTERPRISE_LIFECYCLE_DATABASE_URL_REQUIRED');
+  if (typeof hostedPersonaRoleParity !== 'boolean') {
+    throw new Error('ENTERPRISE_LIFECYCLE_PERSONA_ROLE_PROFILE_REJECTED');
+  }
+  if (typeof providersEnabled !== 'boolean') throw new Error('ENTERPRISE_LIFECYCLE_PROVIDER_PROFILE_REJECTED');
   databaseUrl = validateEnterpriseLifecycleDatabaseUrl(databaseUrl);
   const startedAt = new Date().toISOString();
   const database = `enterprise_lifecycle_${process.pid}_${Date.now()}`.toLowerCase();
@@ -297,7 +307,7 @@ export async function createEnterpriseLifecycleFixture({
       author: uuid(10), reviewer: uuid(11), approver: uuid(12), outsider: uuid(13),
       role: uuid(20), process: uuid(21), case: uuid(22), rejectCase: uuid(23), deniedCase: uuid(24),
       providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27), deliveryRestrictedRole: uuid(28),
-      primaryRestrictedReviewerRole: uuid(29),
+      primaryRestrictedReviewerRole: uuid(29), hostedReviewerRole: uuid(30), hostedApproverRole: uuid(31),
     };
     // These are inert fixture credentials, accepted only by exact map lookup below.
     // Claims let shared browser observers correlate the same actor/session shape
@@ -326,7 +336,7 @@ export async function createEnterpriseLifecycleFixture({
       execution: { executionId, runId: String(runId), runAttempt: String(runAttempt), headSha, startedAt, completedAt: null },
       scope: { executionHash: executionId, organizationHash: sha256(ids.organization), workspaceHash: sha256(ids.workspace), caseHash: sha256(ids.case) },
       stages: [], assertions: {}, lineage: {}, negativeControls: {},
-      providerEffects: { paidCalls: 0, calls: 0, syntheticProviderCalls: 0, egressAttempts: 0, egress: 0, browserSecrets: false, realProviderAllowed: false, syntheticAdapterEnabled: true, providerMode: 'synthetic-production-pipeline', forbiddenNetworkGuardTriggered: false },
+      providerEffects: { paidCalls: 0, calls: 0, syntheticProviderCalls: 0, egressAttempts: 0, egress: 0, browserSecrets: false, realProviderAllowed: false, syntheticAdapterEnabled: providersEnabled, providerMode: 'synthetic-production-pipeline', forbiddenNetworkGuardTriggered: false },
       cleanup: { attempted: false, succeeded: false, residualRows: null }, sourceDigests: [],
     };
     await loadProductionModule.configureNetworkGuard(evidence.providerEffects);
@@ -342,8 +352,26 @@ export async function createEnterpriseLifecycleFixture({
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('org.admin','assess.read','assess.create','assess.response.write','assess.finalize','assess.process.update','govern.resolve','studio.handoff.create','workitems.import','project.read','project.manage','backlog.read','backlog.manage','monitor.read') OR capability_key LIKE 'assess.v2.%' OR capability_key LIKE 'studio.%' OR capability_key LIKE 'task.%' OR capability_key LIKE 'delivery.%'", [ids.role]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read')", [ids.deliveryRestrictedRole]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM role_capabilities WHERE role_id=$2 AND capability_key<>'assess.process.update'", [ids.primaryRestrictedReviewerRole, ids.role]);
+    if (hostedPersonaRoleParity) {
+      await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Hosted lifecycle reviewer','hosted-lifecycle-reviewer','organization','[]'),($3,$2,'Hosted lifecycle approver','hosted-lifecycle-approver','organization','[]')", [ids.hostedReviewerRole, ids.organization, ids.hostedApproverRole]);
+      await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key=ANY($2::text[])",
+        [ids.hostedReviewerRole, REQUIRED_PERSONA_CAPABILITIES.reviewer]);
+      await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key=ANY($2::text[])",
+        [ids.hostedApproverRole, REQUIRED_PERSONA_CAPABILITIES.approver]);
+      for (const [persona, roleId] of [['reviewer',ids.hostedReviewerRole],['approver',ids.hostedApproverRole]]) {
+        const actual = new Set((await db.query(
+          'SELECT capability_key FROM role_capabilities WHERE role_id=$1', [roleId],
+        )).rows.map(row => row.capability_key));
+        assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].every(capability => actual.has(capability)), true,
+          `ENTERPRISE_LIFECYCLE_${persona.toUpperCase()}_REQUIRED_CAPABILITY_MISSING`);
+        assert.equal(FORBIDDEN_PERSONA_CAPABILITIES[persona].every(capability => !actual.has(capability)), true,
+          `ENTERPRISE_LIFECYCLE_${persona.toUpperCase()}_FORBIDDEN_CAPABILITY_PRESENT`);
+      }
+    }
     for (const actor of [ids.author, ids.reviewer, ids.approver]) {
-      await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [ids.organization, actor, ids.role]);
+      const roleId = hostedPersonaRoleParity && actor === ids.reviewer ? ids.hostedReviewerRole
+        : hostedPersonaRoleParity && actor === ids.approver ? ids.hostedApproverRole : ids.role;
+      await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [ids.organization, actor, roleId]);
       await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [ids.organization, ids.workspace, actor]);
     }
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Outsider tenant','outsider-tenant') ON CONFLICT DO NOTHING", [ids.foreignOrganization]);
@@ -361,7 +389,8 @@ export async function createEnterpriseLifecycleFixture({
       org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,updated_by
     ) VALUES($1,$2,true,true,true,$3) ON CONFLICT(org_id,workspace_id) DO UPDATE SET
       unified_byok_gateway_enabled=true,studio_multisource_enabled=true,module_handoffs_enabled=true,updated_by=$3`, [ids.organization, ids.workspace, ids.author]);
-    await db.query('UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=true WHERE singleton');
+    await db.query('UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=$1 WHERE singleton', [providersEnabled]);
+    await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=$1 WHERE singleton', [providersEnabled]);
     await db.query("INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true) ON CONFLICT(org_id,workspace_id) DO UPDATE SET writes_enabled=true,updated_at=statement_timestamp()", [ids.organization, ids.workspace]);
     await db.query("INSERT INTO public.studio_delivery_workspace_controls(org_id,workspace_id,publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled) VALUES($1,$2,true,true,true) ON CONFLICT(org_id,workspace_id) DO UPDATE SET publication_writes_enabled=true,outcome_writes_enabled=true,pack_writes_enabled=true,updated_at=statement_timestamp()", [ids.organization, ids.workspace]);
     await db.query(`INSERT INTO public.ai_provider_key_refs(
@@ -371,11 +400,11 @@ export async function createEnterpriseLifecycleFixture({
       id,org_id,provider,display_name,key_ref_id,default_model,model_allowlist,endpoint_url,
       allowed_modes,allowed_operations,last_validated_at,status,created_by,updated_by
     ) VALUES($1,$2,'openai','Lifecycle synthetic adapter',$3,'fixture-model',ARRAY['fixture-model'],'https://invalid.example',
-      ARRAY['pilot'],ARRAY['generate_document'],statement_timestamp(),'active',$4,$4)`, [ids.providerConfig, ids.organization, ids.providerKeyRef, ids.author]);
+      ARRAY['pilot'],ARRAY['generate_document'],statement_timestamp(),$5,$4,$4)`, [ids.providerConfig, ids.organization, ids.providerKeyRef, ids.author, providersEnabled ? 'active' : 'disabled']);
     await db.query(`INSERT INTO public.enterprise_ai_capability_routes(
       id,org_id,workspace_id,provider_config_id,capability,model,enabled,allowed_roles,version,created_by,updated_by
-    ) VALUES($1,$2,$3,$4,'studio.document.generate','fixture-model',true,ARRAY[$5::text],1,$6,$6)`,
-    [ids.studioRoute, ids.organization, ids.workspace, ids.providerConfig, ids.role, ids.author]);
+    ) VALUES($1,$2,$3,$4,'studio.document.generate','fixture-model',$7,ARRAY[$5::text],1,$6,$6)`,
+    [ids.studioRoute, ids.organization, ids.workspace, ids.providerConfig, ids.role, ids.author, providersEnabled]);
 
     const commandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessV2Command.ts'));
     const handlerModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'assessV2Handlers.ts'));
@@ -1159,7 +1188,11 @@ export async function createEnterpriseLifecycleFixture({
           const controlsReset = controlsPostgres.resetProjectState();
           if (!controlsReset.secretBackendCleared) throw new Error('AUTHENTICATED_CONTROLS_PROJECT_RESET_FAILED');
           await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
-            [ids.organization,ids.reviewer,ids.role]);
+            [ids.organization,ids.reviewer,hostedPersonaRoleParity ? ids.hostedReviewerRole : ids.role]);
+          if (hostedPersonaRoleParity) {
+            await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
+              [ids.organization,ids.approver,ids.hostedApproverRole]);
+          }
           await db.query("DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key='operations.read'", [ids.role]);
           await db.query(`UPDATE public.ai_provider_key_refs SET
             resolver_type='server_reference',secret_ref='fixture/provider/reference',safe_label='Lifecycle synthetic adapter',status='active'
@@ -1167,13 +1200,13 @@ export async function createEnterpriseLifecycleFixture({
           await db.query(`UPDATE public.ai_provider_configs SET
             provider='openai',display_name='Lifecycle synthetic adapter',key_ref_id=$3,
             default_model='fixture-model',model_allowlist=ARRAY['fixture-model'],endpoint_url='https://invalid.example',
-            allowed_modes=ARRAY['pilot'],allowed_operations=ARRAY['generate_document'],status='active',deleted_at=NULL
-            WHERE id=$1 AND org_id=$2`, [ids.providerConfig,ids.organization,ids.providerKeyRef]);
+            allowed_modes=ARRAY['pilot'],allowed_operations=ARRAY['generate_document'],status=$4,deleted_at=NULL
+            WHERE id=$1 AND org_id=$2`, [ids.providerConfig,ids.organization,ids.providerKeyRef,providersEnabled ? 'active' : 'disabled']);
           await db.query(`UPDATE public.enterprise_ai_capability_routes SET
-            provider_config_id=$4,capability='studio.document.generate',model='fixture-model',enabled=true,
+            provider_config_id=$4,capability='studio.document.generate',model='fixture-model',enabled=$6,
             allowed_roles=ARRAY[$5::text],version=1,deleted_at=NULL
             WHERE id=$1 AND org_id=$2 AND workspace_id=$3`,
-          [ids.studioRoute,ids.organization,ids.workspace,ids.providerConfig,ids.role]);
+          [ids.studioRoute,ids.organization,ids.workspace,ids.providerConfig,ids.role,providersEnabled]);
           await db.query(`DELETE FROM public.pilot_operations_environments
             WHERE org_id=$1 AND workspace_id=$2 AND environment_type='pilot_candidate'`,
           [ids.organization,ids.workspace]);
@@ -1440,6 +1473,44 @@ export async function createEnterpriseLifecycleFixture({
           const input = await request.json().catch(() => ({}));
           if (typeof input.testId !== 'string') return json({ error: 'CONTROL_INVALID' },400,cors);
           return json(await controlsFixture.readFrame(input.testId),200,cors);
+        }
+        if (url.pathname === '/control/eligible-reviewer-direct-denial') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!hostedPersonaRoleParity || !setup) return json({ error: 'CONTROL_REJECTED' },409,cors);
+          const current = (await db.query(`SELECT assessed.id case_id,assessed.version,decision.id decision_id
+            FROM public.assess_v2_cases assessed
+            JOIN public.assess_v2_decision_versions decision
+              ON decision.case_id=assessed.id AND decision.source_version_id=assessed.head_version_id
+            WHERE assessed.process_id=$1 AND assessed.status='reviewer_ready'
+            ORDER BY decision.created_at DESC LIMIT 1`, [setup.processId])).rows[0];
+          if (!current) return json({ error: 'CONTROL_REJECTED' },409,cors);
+          const requestId = randomUUID();
+          const payload = { caseId: current.case_id, decisionId: current.decision_id,
+            reviewSequence: 1, reviewerId: ids.approver };
+          let authoritySentinel = null;
+          try {
+            await serviceQuery(`SELECT public.pr1e_assign_assess_v2_review(
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) value`, [
+              ids.reviewer,ids.organization,ids.workspace,current.case_id,current.decision_id,
+              Number(current.version),requestId,`assign-ineligible:${current.case_id}:${current.decision_id}:1`,
+              await authorizationVersion(ids.reviewer),JSON.stringify(payload),
+            ]);
+          } catch (error) {
+            authoritySentinel = error instanceof Error ? error.message : null;
+          }
+          const targetAuthority = (await db.query(`SELECT
+            public.pr1e_actor_has_workspace_capability($1,$2,$3,'assess.v2.review') reviewer,
+            public.pr1e_actor_has_workspace_capability($1,$2,$3,'assess.v2.evidence.attest') evidence,
+            public.pr1e_actor_has_workspace_capability($1,$2,$3,'assess.v2.approve') approve`,
+          [ids.approver,ids.organization,ids.workspace])).rows[0];
+          if (authoritySentinel !== 'PR1B_NOT_FOUND'
+            || targetAuthority.reviewer !== false || targetAuthority.evidence !== false
+            || targetAuthority.approve !== false) {
+            return json({ error: 'CONTROL_DENIAL_NOT_PROVEN' },409,cors);
+          }
+          return json({ denied: true, candidateAuthorityDenied: true,
+            denialClass: 'candidate-authority' },200,cors);
         }
         if (url.pathname === '/control/snapshot') {
           const snapshot = (await db.query(`SELECT

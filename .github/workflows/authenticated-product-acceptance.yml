@@ -65,6 +65,7 @@ on:
         options:
           - full_acceptance
           - v2_primary_prefix_diagnostic
+          - reviewer_selection_diagnostic
 
 permissions:
   contents: read
@@ -227,11 +228,23 @@ jobs:
         run: npx playwright test --config=playwright.v2-reload-transport.config.ts --workers=1
       - name: Verify native Assess V2 PostgREST lifecycle
         run: node scripts/testAssessV2NativePostgrest.mjs
+      - name: Verify eligible reviewer authority with hosted role parity
+        env:
+          ASSESS_V2_ELIGIBLE_REVIEWER_REPRODUCTION: '1'
+        run: node scripts/testAssessV2NativePostgrest.mjs
       - name: Verify native Assess V2 fixture cleanup
         if: always()
         run: |
           test -z "$(docker ps -aq --filter label=avalaos.assess-v2-native-run)"
           test -z "$(docker network ls -q --filter label=avalaos.assess-v2-native-run)"
+      - name: Retain sanitized eligible reviewer authority proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eligible-reviewer-authority-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/local-private/authenticated-product-acceptance/eligible-reviewer-authority
+          if-no-files-found: error
+          retention-days: 14
       - name: Actual product cases on desktop and Pixel 7
         run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
       - name: Independently verify case observations and cleanup
@@ -500,7 +513,10 @@ jobs:
           [[ "$MIGRATION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$EXERCISE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$BASELINE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          [[ "$AUTHENTICATED_ACCEPTANCE_MODE" =~ ^(full_acceptance|v2_primary_prefix_diagnostic)$ ]]
+          [[ "$AUTHENTICATED_ACCEPTANCE_MODE" =~ ^(full_acceptance|v2_primary_prefix_diagnostic|reviewer_selection_diagnostic)$ ]]
+          if test "$AUTHENTICATED_ACCEPTANCE_MODE" = reviewer_selection_diagnostic; then
+            test "${{ inputs.frontend_kind }}" = local_build
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -667,6 +683,15 @@ jobs:
           test -f /tmp/authenticated-v2-primary-prefix-diagnostic.json && cp /tmp/authenticated-v2-primary-prefix-diagnostic.json diagnostic-results/authenticated-v2-primary-prefix-diagnostic.json || true
           test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json diagnostic-results/authenticated-hosted-diagnostic.json || true
           test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json diagnostic-results/local-acceptance-build-proof.json || true
+      - name: Stage sanitized reviewer-selection diagnostic
+        if: always() && inputs.acceptance_mode == 'reviewer_selection_diagnostic'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reviewer-diagnostic-results
+          test -f /tmp/authenticated-reviewer-selection-diagnostic.json && cp /tmp/authenticated-reviewer-selection-diagnostic.json reviewer-diagnostic-results/authenticated-reviewer-selection-diagnostic.json || true
+          test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json reviewer-diagnostic-results/authenticated-hosted-diagnostic.json || true
+          test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json reviewer-diagnostic-results/local-acceptance-build-proof.json || true
       - name: Generate unified 108-case report
         id: report
         if: always() && inputs.acceptance_mode == 'full_acceptance'
@@ -698,6 +723,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: diagnostic-results/
+      - name: Upload sanitized reviewer-selection diagnostic
+        if: always() && inputs.acceptance_mode == 'reviewer_selection_diagnostic'
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-reviewer-selection-diagnostic-${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: reviewer-diagnostic-results/
       - name: Enforce one-run complete acceptance gates
         if: always() && inputs.acceptance_mode == 'full_acceptance'
         shell: bash
@@ -738,3 +771,23 @@ jobs:
           test "${{ steps.authenticated.outcome }}" = success
           test -f /tmp/authenticated-v2-primary-prefix-diagnostic.json
           node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync("/tmp/authenticated-v2-primary-prefix-diagnostic.json","utf8"));if(value.schemaVersion!=="authenticated-v2-primary-prefix-diagnostic-v2"||value.mode!=="v2_primary_prefix_diagnostic"||value.diagnosticCompleted!==true||value.acceptancePromoted!==false||value.cleanup?.status!=="verified")process.exit(1)'
+      - name: Enforce reviewer-selection diagnostic gate
+        if: always() && inputs.acceptance_mode == 'reviewer_selection_diagnostic'
+        shell: bash
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}
+          EXPECTED_RUN_ID: ${{ github.run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_SOURCE_DIGEST: ${{ env.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            'Authenticated reviewer diagnostic outcome: ${{ steps.authenticated.outcome }}' \
+            'Deployment outcome: ${{ steps.deployment.outcome }}' | tee -a "$GITHUB_STEP_SUMMARY"
+          test "${{ inputs.frontend_kind }}" = local_build
+          test "${{ steps.deployment.outcome }}" = success
+          test "${{ steps.frontend_final.outcome }}" = success
+          test "${{ steps.frontend_cleanup.outcome }}" = success
+          test "${{ steps.authenticated.outcome }}" = success
+          test -f /tmp/authenticated-reviewer-selection-diagnostic.json
+          node --input-type=module -e 'import fs from "node:fs";import assert from "node:assert/strict";import {canonicalDigest} from "./scripts/assessV1OracleEvidence.mjs";import {validateAuthenticatedReviewerSelectionDiagnostic} from "./scripts/authenticatedReviewerSelectionDiagnostic.mjs";const value=validateAuthenticatedReviewerSelectionDiagnostic(JSON.parse(fs.readFileSync("/tmp/authenticated-reviewer-selection-diagnostic.json","utf8")));const provenance=JSON.parse(fs.readFileSync("./tests/acceptance/source-provenance.json","utf8"));const canonicalSourceDigest=canonicalDigest(provenance.sourceDigests);assert.deepEqual(value.source,{releaseSha:process.env.EXPECTED_RELEASE_SHA,runId:process.env.EXPECTED_RUN_ID,attempt:process.env.EXPECTED_RUN_ATTEMPT,sourceDigest:process.env.EXPECTED_SOURCE_DIGEST});assert.equal(value.source.sourceDigest,canonicalSourceDigest)'

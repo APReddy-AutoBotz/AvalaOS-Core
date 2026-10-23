@@ -33,6 +33,7 @@ import {
   buildAuthenticatedV2ReloadDiagnostic,
   validateAuthenticatedV2ReloadCheckpoint,
 } from './authenticatedV2ReloadDiagnostic.mjs';
+import { buildAuthenticatedReviewerSelectionDiagnostic } from './authenticatedReviewerSelectionDiagnostic.mjs';
 
 export const AUTHENTICATED_HOSTED_CONTROLLER_SCHEMA = 'authenticated-hosted-controller-v1';
 export const AUTHENTICATED_HOSTED_AUTHORITY_SCHEMA = 'authenticated-synthetic-authority-observation-v1';
@@ -45,6 +46,7 @@ export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
   binding: path.join(HOSTED_TEMP_ROOT, 'authenticated-controller-binding.json'),
   diagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-hosted-diagnostic.json'),
   v2ReloadDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-v2-primary-prefix-diagnostic.json'),
+  reviewerSelectionDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-reviewer-selection-diagnostic.json'),
 });
 export const AUTHENTICATED_HOSTED_PERSONAS = Object.freeze(['author', 'reviewer', 'approver', 'outsider']);
 export const AUTHENTICATED_HOSTED_FAULT_KINDS = Object.freeze([
@@ -188,6 +190,9 @@ export function validateAuthenticatedHostedControllerEnvironment(environment) {
     || environment.AUTHENTICATED_ACCEPTANCE_AUTH_KIND !== 'supabase_auth'
     || (localBuild && environment.ACCEPTANCE_EXECUTION_KIND !== 'local_real_backend')) {
     fail('EXECUTION_PROFILE_REJECTED');
+  }
+  if (acceptanceMode === 'reviewer_selection_diagnostic' && !localBuild) {
+    fail('REVIEWER_SELECTION_DIAGNOSTIC_EXECUTION_REJECTED');
   }
   const secretBackendKind = environment.AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND;
   if (!['hashicorp_vault', 'supabase_vault'].includes(secretBackendKind)
@@ -400,6 +405,9 @@ export class AuthenticatedHostedController {
     this.browserIdentityDiagnostic = null;
     this.v2ReloadCheckpoints = [];
     this.v2ReloadTargetHashes = [];
+    this.reviewerSelectionCandidates = null;
+    this.reviewerSelectionCommands = null;
+    this.reviewerSelectionServerActionFrames = null;
     this.active = false;
     this.activationAttempted = false;
     this.quiesced = false;
@@ -504,8 +512,8 @@ export class AuthenticatedHostedController {
 
   async setupProject(projectName, signal) {
     this.assertControlCommitAllowed(signal);
-    if (this.config.acceptanceMode === 'v2_primary_prefix_diagnostic' && projectName !== 'desktop-chromium') {
-      fail('V2_RELOAD_DIAGNOSTIC_PROJECT_REJECTED');
+    if (['v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic'].includes(this.config.acceptanceMode) && projectName !== 'desktop-chromium') {
+      fail('FOCUSED_DIAGNOSTIC_PROJECT_REJECTED');
     }
     if (!SAFE_NAME.test(projectName) && !/^(desktop-chromium|pixel-7-chromium)(?:-[a-z0-9-]{1,63})?$/u.test(projectName)) {
       fail('PROJECT_NAME_REJECTED');
@@ -696,6 +704,43 @@ export class AuthenticatedHostedController {
     });
   }
 
+  reviewerSelectionDiagnosticResult() {
+    if (this.config.acceptanceMode !== 'reviewer_selection_diagnostic' || !this.quiesced
+      || this.browserCases.length !== 1 || this.serverCases.length !== 1
+      || this.browserCases[0].testId !== 'E2E-004' || this.serverCases[0].testId !== 'E2E-004'
+      || !this.reviewerSelectionCandidates || !this.reviewerSelectionCommands) {
+      fail('REVIEWER_SELECTION_DIAGNOSTIC_RESULT_REJECTED');
+    }
+    return buildAuthenticatedReviewerSelectionDiagnostic({
+      source: { releaseSha: this.config.releaseSha, runId: this.config.workflow.runId,
+        attempt: this.config.workflow.attempt, sourceDigest: this.config.sourceDigest },
+      browser: this.browserCases[0],
+      server: this.serverCases[0],
+      trustedActionFrames: this.reviewerSelectionServerActionFrames,
+      candidates: this.reviewerSelectionCandidates,
+      commands: this.reviewerSelectionCommands,
+      cleanup: { status: 'verified' },
+    });
+  }
+
+  async recordReviewerSelectionCandidates({ projectName, accessToken }, signal) {
+    if (this.config.acceptanceMode !== 'reviewer_selection_diagnostic' || projectName !== 'desktop-chromium'
+      || this.reviewerSelectionCandidates !== null) fail('REVIEWER_SELECTION_CANDIDATES_REJECTED');
+    const verified = await this.verifyPresentedBrowserSession({ projectName, persona: 'reviewer', accessToken }, { signal });
+    const project = this.projects.get(projectName);
+    const candidates = await this.adapter.verifyReviewerSelectionCandidates?.({ project,
+      reviewerAccessToken: accessToken, reviewerActorId: verified.claims.actorId, signal });
+    exactKeys(candidates, ['count', 'reviewerIncluded', 'ownerExcluded', 'approverExcluded', 'outsiderExcluded'],
+      'REVIEWER_SELECTION_CANDIDATES_REJECTED');
+    if (candidates.count !== 1 || candidates.reviewerIncluded !== true || candidates.ownerExcluded !== true
+      || candidates.approverExcluded !== true || candidates.outsiderExcluded !== true) {
+      fail('REVIEWER_SELECTION_CANDIDATES_REJECTED');
+    }
+    this.assertControlCommitAllowed(signal);
+    this.reviewerSelectionCandidates = Object.freeze({ ...candidates });
+    return { recorded: true, candidateCount: 1 };
+  }
+
   async recordBrowserCase({ projectName, row, actionIds }, signal) {
     if (!this.projects.has(projectName) || !record(row) || !AUTHENTICATED_ACCEPTANCE_TEST_IDS.includes(row.testId)) {
       fail('BROWSER_CASE_REJECTED');
@@ -710,6 +755,15 @@ export class AuthenticatedHostedController {
     const boundActions = actionIds.map(actionId => available.find(item => item.actionId === actionId));
     if (boundActions.some(item => !item || !item.complete)) fail('BROWSER_ACTION_BINDING_REJECTED');
     const ordered = boundActions.toSorted((a, b) => Date.parse(a.before.capturedAt) - Date.parse(b.before.capturedAt));
+    if (this.config.acceptanceMode === 'reviewer_selection_diagnostic') {
+      if (projectName !== 'desktop-chromium' || row.testId !== 'E2E-004' || ordered.length !== 3
+        || this.browserCases.length !== 0 || !this.reviewerSelectionCandidates
+        || !isDeepStrictEqual(ordered.map(action => action.commandType), [
+          'assessment_v2.review.assign', 'assessment_v2.review.assign', 'assessment_v2.review.resolve',
+        ]) || !ordered.every(action => action.persona === 'reviewer')) {
+        fail('REVIEWER_SELECTION_DIAGNOSTIC_CASE_REJECTED');
+      }
+    }
     if (row.testId === 'ASSESS-003') {
       if (ordered.length !== 1) fail('ASSESSMENT_FINALIZE_PROOF_REJECTED');
       assertAssessmentFinalizeProof(ordered[0]);
@@ -746,6 +800,12 @@ export class AuthenticatedHostedController {
     const assertionIds = browserAssertions.map(item => item.id);
     if (!isDeepStrictEqual([...assertionIds].sort(), [...AUTHENTICATED_CASE_ASSERTIONS[row.testId]].sort())) {
       fail('BROWSER_ASSERTIONS_REJECTED');
+    }
+    if (this.config.acceptanceMode === 'reviewer_selection_diagnostic') {
+      this.reviewerSelectionCommands = Object.freeze(ordered.map(action => action.commandType));
+      this.reviewerSelectionServerActionFrames = Object.freeze(ordered.map(action => Object.freeze({
+        before: structuredClone(action.before), after: structuredClone(action.after),
+      })));
     }
     this.browserCases.push({
       testId: row.testId,
@@ -996,6 +1056,19 @@ export class AuthenticatedHostedController {
         commandIdHash: commandId ? authenticatedHostedDigest(commandId) : null,
         receiptIdHash: receiptId ? authenticatedHostedDigest(receiptId) : null,
       };
+      if (this.config.acceptanceMode === 'reviewer_selection_diagnostic'
+        && ['assessment_v2.review.assign', 'assessment_v2.review.resolve'].includes(action.commandType)) {
+        const trusted = await this.adapter.verifyReviewerSelectionAction?.({
+          project, actorId: action.actorId, requestBody: action.rawRequestBody,
+          responseBody: response, status, signal,
+        });
+        exactKeys(trusted, ['commandIdHash', 'receiptIdHash'], 'REVIEWER_SELECTION_ACTION_REJECTED');
+        if (![trusted.commandIdHash, trusted.receiptIdHash].every(value => value === null || DIGEST.test(value))) {
+          fail('REVIEWER_SELECTION_ACTION_REJECTED');
+        }
+        responseObservation.commandIdHash = trusted.commandIdHash;
+        responseObservation.receiptIdHash = trusted.receiptIdHash;
+      }
       this.assertControlCommitAllowed(signal);
       let assessmentFinalizeProof = null;
       if (action.route === ASSESS_FINALIZE_ROUTE && action.commandType === ASSESS_FINALIZE_COMMAND) {
@@ -1113,6 +1186,15 @@ export class AuthenticatedHostedController {
       ]);
       if (!terminalAllowed.has(pathname)) fail('V2_RELOAD_DIAGNOSTIC_TERMINAL');
     }
+    if (this.config.acceptanceMode === 'reviewer_selection_diagnostic' && this.browserCases.length === 1) {
+      const drainAllowed = new Set([
+        '/control/browser-action-prepare', '/control/browser-action',
+        '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
+        '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',
+        '/control/authenticated-controls/frame', '/control/snapshot',
+      ]);
+      if (!drainAllowed.has(pathname)) fail('REVIEWER_SELECTION_DIAGNOSTIC_TERMINAL');
+    }
     if (pathname === '/control/setup') return this.setupProject(input.projectName, signal);
     if (pathname === '/control/bind-browser-session') return this.bindBrowserSession(input, signal);
     if (pathname === '/control/browser-case') return this.recordBrowserCase(input, signal);
@@ -1123,6 +1205,7 @@ export class AuthenticatedHostedController {
     if (pathname === '/control/arm-browser-fault') return this.armBrowserFault(input, signal);
     if (pathname === '/control/browser-diagnostic') return this.recordIdentityDiagnostic(input, 'browser');
     if (pathname === '/control/v2-reload-diagnostic') return this.recordV2ReloadDiagnosticCheckpoint(input, signal);
+    if (pathname === '/control/reviewer-selection-candidates') return this.recordReviewerSelectionCandidates(input, signal);
     const framePaths = new Set([
       '/control/process-frame', '/control/assess-v2-frame', '/control/lifecycle-frame',
       '/control/studio-failure-frame', '/control/downstream-frame', '/control/scenario-decision',

@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 export const AUTHENTICATED_ACCEPTANCE_MODES = Object.freeze([
   'full_acceptance',
   'v2_primary_prefix_diagnostic',
+  'reviewer_selection_diagnostic',
 ]);
 export const AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA = 'authenticated-v2-reload-checkpoint-v2';
 export const AUTHENTICATED_V2_RELOAD_DIAGNOSTIC_SCHEMA = 'authenticated-v2-primary-prefix-diagnostic-v2';

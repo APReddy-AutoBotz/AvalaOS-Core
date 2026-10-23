@@ -455,7 +455,7 @@
     },
     {
       "id": "audit",
-      "command": "npm audit --audit-level=moderate",
+      "command": "npm audit --audit-level=moderate --lockfile-version=2",
       "environment": "controlled-node-22"
     },
     {

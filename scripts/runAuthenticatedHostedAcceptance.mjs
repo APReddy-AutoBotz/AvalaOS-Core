@@ -770,7 +770,9 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
     const playwrightArgs=[path.resolve('node_modules/@playwright/test/cli.js'), 'test',
       '--config=playwright.authenticated-hosted.config.ts', '--workers=1',
       ...(config.acceptanceMode === 'v2_primary_prefix_diagnostic'
-        ? ['--project=desktop-chromium', '--grep=@v2-primary-prefix-diagnostic'] : [])];
+        ? ['--project=desktop-chromium', '--grep=@v2-primary-prefix-diagnostic']
+        : config.acceptanceMode === 'reviewer_selection_diagnostic'
+          ? ['--project=desktop-chromium', '--grep=@reviewer-selection-diagnostic'] : [])];
     const playwrightOptions={
         cwd: process.cwd(), env: buildAuthenticatedHostedChildEnvironment(environment, config, server, browserPaths),
       };
@@ -837,7 +839,16 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       }
     }
   }
+  if (config.acceptanceMode === 'reviewer_selection_diagnostic' && controller.quiesced && !primaryError) {
+    try {
+      await atomicJson(outputPaths.reviewerSelectionDiagnostic, controller.reviewerSelectionDiagnosticResult());
+    } catch (error) {
+      primaryError = error;
+      diagnosticState.primaryError = error;
+    }
+  }
   if (!primaryError && config.acceptanceMode === 'v2_primary_prefix_diagnostic') return { outputPaths };
+  if (!primaryError && config.acceptanceMode === 'reviewer_selection_diagnostic') return { outputPaths };
   throw primaryError;
 }
 
@@ -846,6 +857,8 @@ export async function runAuthenticatedHostedAcceptance(environment = process.env
   const mode = authenticatedAcceptanceMode(environment);
   const stalePaths = mode === 'v2_primary_prefix_diagnostic'
     ? [outputPaths.diagnostic, outputPaths.v2ReloadDiagnostic]
+    : mode === 'reviewer_selection_diagnostic'
+      ? [outputPaths.diagnostic, outputPaths.reviewerSelectionDiagnostic]
     : [outputPaths.diagnostic];
   await Promise.all(stalePaths.map(removeIfPresent));
   const diagnosticState = { phase: 'PREFLIGHT', cleanup: 'not-required', controller: null,

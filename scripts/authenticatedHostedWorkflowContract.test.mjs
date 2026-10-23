@@ -154,7 +154,7 @@ test('authenticated dispatch is protected on the one credential-bearing hosted j
   assert.deepEqual(inputs.frontend_kind, { description: 'Exact acceptance frontend source', required: true,
     default: 'local_build', type: 'choice', options: ['local_build', 'netlify'] });
   assert.deepEqual(inputs.acceptance_mode, { description: 'Protected hosted execution mode', required: true,
-    default: 'full_acceptance', type: 'choice', options: ['full_acceptance', 'v2_primary_prefix_diagnostic'] });
+    default: 'full_acceptance', type: 'choice', options: ['full_acceptance', 'v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic'] });
   assert.equal(workflow.jobs['source-and-authority'].if, "github.event_name != 'workflow_dispatch'");
   assert.equal(workflow.jobs['connected-browser'].if, "github.event_name != 'workflow_dispatch'");
   const sourceAuthority = workflow.jobs['source-and-authority'].steps
@@ -351,4 +351,51 @@ test('authenticated environment derives source identities and rejects malformed 
   const finalExercise = local.find(line => line.startsWith('AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST='));
   assert.match(finalExercise, /^AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST=sha256:[0-9a-f]{64}$/u);
   assert.notEqual(finalExercise, `AUTHENTICATED_ACCEPTANCE_EXERCISE_DIGEST=${digest('4')}`);
+});
+
+
+test('reviewer selection dispatch isolates its bounded artifact and requires owned local cleanup', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.acceptance_mode.options,
+    ['full_acceptance', 'v2_primary_prefix_diagnostic', 'reviewer_selection_diagnostic']);
+  const steps = workflow.jobs['hosted-authenticated'].steps;
+  const stage = steps.find(step => step.name === 'Stage sanitized reviewer-selection diagnostic');
+  const upload = steps.find(step => step.name === 'Upload sanitized reviewer-selection diagnostic');
+  const gate = steps.find(step => step.name === 'Enforce reviewer-selection diagnostic gate');
+  for (const step of [stage, upload, gate]) {
+    assert.equal(step.if, "always() && inputs.acceptance_mode == 'reviewer_selection_diagnostic'");
+    assert.equal(step['continue-on-error'], undefined);
+  }
+  assert.deepEqual([...stage.run.matchAll(/cp (\/tmp\/[^ ]+[.]json) /gu)].map(match => match[1]), [
+    '/tmp/authenticated-reviewer-selection-diagnostic.json',
+    '/tmp/authenticated-hosted-diagnostic.json',
+    '/tmp/local-acceptance-build-proof.json',
+  ]);
+  assert.doesNotMatch(stage.run, /RETAINED_RESULTS|ORACLE_RESULTS|SERVER_RESULTS|AUTHENTICATED_RESULTS|[.]log|[.]zip/u);
+  assert.equal(upload.with.name,
+    'authenticated-reviewer-selection-diagnostic-${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.equal(upload.with.path, 'reviewer-diagnostic-results/');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  assert.match(gate.run, /set -euo pipefail/u);
+  assert.ok(gate.run.includes('test "${{ inputs.frontend_kind }}" = local_build'));
+  for (const id of ['deployment', 'frontend_final', 'frontend_cleanup', 'authenticated']) {
+    assert.ok(gate.run.includes('test "${{ steps.' + id + '.outcome }}" = success'), id);
+  }
+  assert.match(gate.run, /validateAuthenticatedReviewerSelectionDiagnostic/u);
+  assert.deepEqual(gate.env, {
+    EXPECTED_RELEASE_SHA: '${{ inputs.release_sha }}',
+    EXPECTED_RUN_ID: '${{ github.run_id }}',
+    EXPECTED_RUN_ATTEMPT: '${{ github.run_attempt }}',
+    EXPECTED_SOURCE_DIGEST: '${{ env.AUTHENTICATED_ACCEPTANCE_SOURCE_DIGEST }}',
+  });
+  for (const field of ['EXPECTED_RELEASE_SHA', 'EXPECTED_RUN_ID', 'EXPECTED_RUN_ATTEMPT', 'EXPECTED_SOURCE_DIGEST']) {
+    assert.ok(gate.run.includes('process.env.' + field), field);
+  }
+  assert.match(gate.run, /assert[.]deepEqual\(value[.]source/u);
+  assert.match(gate.run, /canonicalDigest\(provenance[.]sourceDigests\)/u);
+  assert.match(gate.run, /assert[.]equal\(value[.]source[.]sourceDigest,canonicalSourceDigest\)/u);
+
+  assert.doesNotMatch(gate.run, /steps[.]report|steps[.]hosted|steps[.]authenticated_evidence/u);
+  assert.ok(steps.indexOf(stage) > steps.findIndex(step => step.id === 'frontend_cleanup'));
+  assert.ok(steps.indexOf(gate) > steps.indexOf(upload));
 });
