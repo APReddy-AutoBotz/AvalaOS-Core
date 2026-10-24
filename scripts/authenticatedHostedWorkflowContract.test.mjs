@@ -8,6 +8,29 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('candidate and release require isolated Reviewer-ready proof with a fresh sanitized archive', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const job = workflow.jobs['connected-browser'];
+  assert.equal(job.if, "github.event_name != 'workflow_dispatch'");
+  assert.equal(job.environment, undefined);
+  const proof = job.steps.find(step => step.name === 'Verify Reviewer-ready projection loading on Desktop and Pixel');
+  assert.deepEqual(proof.env, {
+    REVIEWER_READY_AFTER_ATTEMPT: 'output/local-private/authenticated-product-acceptance/reviewer-ready-projection',
+  });
+  assert.equal(proof.run.trim(), 'test ! -e "$REVIEWER_READY_AFTER_ATTEMPT"\nnpm run test:reviewer-ready:browser');
+  const retain = job.steps.find(step => step.name === 'Retain sanitized Reviewer-ready projection proof');
+  assert.equal(retain.if, 'always()');
+  assert.equal(retain.uses, 'actions/upload-artifact@v4');
+  assert.equal(retain.with.name, 'reviewer-ready-projection-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.equal(retain.with.path, proof.env.REVIEWER_READY_AFTER_ATTEMPT + '/');
+  assert.equal(retain.with['if-no-files-found'], 'error');
+  assert.doesNotMatch(JSON.stringify([proof, retain]), /secrets\.|vars\.|inputs\.|full_acceptance/u);
+  const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
+  assert.match(packageJson.scripts['test:reviewer-ready:browser'], /REVIEWER_READY_MODE='after'/u);
+  const runner = await readFile('scripts/reproduceReviewerReadyCandidateLatency.mjs', 'utf8');
+  assert.match(runner, /mode === 'after' \? process\.env\.REVIEWER_READY_AFTER_ATTEMPT/u);
+});
+
 test('candidate and release preparation require isolated semantic replay proof and sanitized retention', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   const job = workflow.jobs['source-and-authority'];

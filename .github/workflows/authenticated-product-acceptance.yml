@@ -288,6 +288,20 @@ jobs:
           path: output/local-private/authenticated-product-acceptance/studio-handoff-persona/
           if-no-files-found: error
           retention-days: 14
+      - name: Verify Reviewer-ready projection loading on Desktop and Pixel
+        env:
+          REVIEWER_READY_AFTER_ATTEMPT: output/local-private/authenticated-product-acceptance/reviewer-ready-projection
+        run: |
+          test ! -e "$REVIEWER_READY_AFTER_ATTEMPT"
+          npm run test:reviewer-ready:browser
+      - name: Retain sanitized Reviewer-ready projection proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewer-ready-projection-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/local-private/authenticated-product-acceptance/reviewer-ready-projection/
+          if-no-files-found: error
+          retention-days: 14
       - name: Actual product cases on desktop and Pixel 7
         run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
       - name: Independently verify case observations and cleanup

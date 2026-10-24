@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import {
   assignAssessV2Review,
@@ -21,6 +21,8 @@ import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
 interface Props { initialCaseId?: string }
 type LoadState = 'loading' | 'ready' | 'empty' | 'failed';
 type CandidateState = 'idle' | 'loading' | 'ready' | 'empty' | 'failed';
+type RequestBinding = Readonly<{ sequence: number; scopeKey: string; caseId: string; decisionId: string }>;
+type ProjectionBinding = Readonly<{ scopeKey: string; caseId: string; decisionId: string }>;
 const panel = 'rounded-2xl border border-slate-200 p-3 sm:p-4 dark:border-slate-700';
 const input = 'mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-semibold dark:border-slate-700 dark:bg-slate-950';
 const statusCopy: Record<AssessV2ReviewProjection['status'], string> = {
@@ -45,7 +47,22 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
   const [eligibleReviewers, setEligibleReviewers] = useState<EligibleAssessV2Reviewer[]>([]);
   const [selectedReviewerId, setSelectedReviewerId] = useState('');
   const [candidateState, setCandidateState] = useState<CandidateState>('idle');
+  const [reviewScopeKey, setReviewScopeKey] = useState('');
+  const [queueScopeKey, setQueueScopeKey] = useState('');
   const capabilities = tenantContext?.capabilities ?? [];
+  const scopeKey = tenantContext
+    ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}`
+    : 'no-tenant-context';
+  const viewKey = `${scopeKey}:${initialCaseId ?? ''}`;
+  const mountedRef = useRef(false);
+  const scopeKeyRef = useRef(scopeKey);
+  const loadSequenceRef = useRef(0);
+  const actionSequenceRef = useRef(0);
+  const activeLoadRef = useRef<RequestBinding | null>(null);
+  const activeActionRef = useRef<RequestBinding | null>(null);
+  const reviewBindingRef = useRef<ProjectionBinding | null>(null);
+  const candidateBindingRef = useRef<ProjectionBinding | null>(null);
+  scopeKeyRef.current = viewKey;
   const hasReviewAccess = capabilities.includes(ASSESS_V2_CAPABILITIES.read) && (
     capabilities.includes(ASSESS_V2_CAPABILITIES.draftWrite) ||
     capabilities.some(capability => Object.values(ASSESS_V2_REVIEW_CAPABILITIES).includes(capability as never))
@@ -53,46 +70,114 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
   const isReadOnly = sessionState !== 'ready' || assessV2OperationalState === 'read_only';
   const can = (capability: string) => !isReadOnly && capabilities.includes(capability);
 
+  const sameRequest = (left: RequestBinding | null, right: RequestBinding) => Boolean(left
+    && left.sequence === right.sequence && left.scopeKey === right.scopeKey
+    && left.caseId === right.caseId && left.decisionId === right.decisionId);
+  const sameProjection = (left: ProjectionBinding | null, right: ProjectionBinding) => Boolean(left
+    && left.scopeKey === right.scopeKey && left.caseId === right.caseId && left.decisionId === right.decisionId);
+  const isActiveLoad = (request: RequestBinding) => mountedRef.current
+    && scopeKeyRef.current === request.scopeKey && sameRequest(activeLoadRef.current, request);
+  const isActiveAction = (request: RequestBinding) => mountedRef.current
+    && scopeKeyRef.current === request.scopeKey && sameRequest(activeActionRef.current, request)
+    && sameProjection(reviewBindingRef.current, request);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      loadSequenceRef.current += 1; actionSequenceRef.current += 1;
+      activeLoadRef.current = null; activeActionRef.current = null;
+      reviewBindingRef.current = null; candidateBindingRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    loadSequenceRef.current += 1; actionSequenceRef.current += 1;
+    activeLoadRef.current = null; activeActionRef.current = null;
+    reviewBindingRef.current = null; candidateBindingRef.current = null;
+    setQueue([]); setQueueScopeKey('');
+    setSelectedCaseId(initialCaseId ?? ''); setReview(null); setReviewScopeKey('');
+    setEligibleReviewers([]); setSelectedReviewerId(''); setCandidateState('idle');
+    setBusy(false);
+  }, [initialCaseId, viewKey]);
+
   useEffect(() => {
     const refresh = () => setOnline(navigator.onLine);
     window.addEventListener('online', refresh); window.addEventListener('offline', refresh);
     return () => { window.removeEventListener('online', refresh); window.removeEventListener('offline', refresh); };
   }, []);
 
-  const load = useCallback(async (caseId?: string) => {
+  const load = useCallback(async (caseId?: string, committedMessage?: string) => {
+    let request: RequestBinding = { sequence: ++loadSequenceRef.current, scopeKey: viewKey, caseId: caseId ?? '', decisionId: '' };
+    activeLoadRef.current = request;
+    actionSequenceRef.current += 1; activeActionRef.current = null;
+    reviewBindingRef.current = null; candidateBindingRef.current = null;
+    setQueue([]); setQueueScopeKey(''); setReview(null); setReviewScopeKey('');
+    setEligibleReviewers([]); setSelectedReviewerId(''); setCandidateState('idle');
     if (!tenantContext) { setLoadState('empty'); setMessage('A server-issued workspace context is required.'); return; }
     if (!hasReviewAccess) { setLoadState('empty'); setMessage('No governed review capability is assigned.'); return; }
     setLoadState('loading'); setMessage('Loading assigned reviews.');
     try {
       const assigned = await readAssessV2ReviewQueue(tenantContext);
-      setQueue(assigned);
+      if (!isActiveLoad(request)) return;
+      setQueue(assigned); setQueueScopeKey(viewKey);
       const target = caseId || selectedCaseId || initialCaseId || assigned[0]?.caseId;
       if (!target) { setReview(null); setLoadState('empty'); setMessage('No assigned reviews.'); return; }
+      request = { ...request, caseId: target }; activeLoadRef.current = request;
       const current = await readAssessV2ReviewWorkspace(tenantContext, target);
-      let candidateLoadFailed = false;
+      if (!isActiveLoad(request)) return;
+      request = { ...request, caseId: current.caseId, decisionId: current.decisionId };
+      activeLoadRef.current = request;
+      const projectionBinding = { scopeKey: viewKey, caseId: current.caseId, decisionId: current.decisionId };
+      reviewBindingRef.current = projectionBinding;
+      setSelectedCaseId(target); setReview(current); setReviewScopeKey(viewKey); setLoadState('ready');
+      setMessage(committedMessage ?? 'Current committed review loaded.');
       if (current.status === 'reviewer_ready' && can(ASSESS_V2_REVIEW_CAPABILITIES.review)) {
         setCandidateState('loading'); setEligibleReviewers([]); setSelectedReviewerId('');
         try {
           const candidates = await readEligibleAssessV2Reviewers(tenantContext, current.caseId, current.decisionId);
-          setEligibleReviewers(candidates); setSelectedReviewerId(candidates[0]?.actorId ?? ''); setCandidateState(candidates.length ? 'ready' : 'empty');
+          if (!isActiveLoad(request) || !sameProjection(reviewBindingRef.current, projectionBinding)) return;
+          candidateBindingRef.current = candidates.length ? projectionBinding : null;
+          setEligibleReviewers(candidates); setSelectedReviewerId(candidates[0]?.actorId ?? '');
+          setCandidateState(candidates.length ? 'ready' : 'empty');
         } catch (error) {
-          candidateLoadFailed = true; setCandidateState('failed'); setMessage(describeReviewError(error, online));
+          if (!isActiveLoad(request) || !sameProjection(reviewBindingRef.current, projectionBinding)) return;
+          candidateBindingRef.current = null; setEligibleReviewers([]); setSelectedReviewerId('');
+          setCandidateState('failed'); setMessage(describeReviewError(error, online));
         }
       } else { setCandidateState('idle'); setEligibleReviewers([]); setSelectedReviewerId(''); }
-      setSelectedCaseId(target); setReview(current); setLoadState('ready'); if (!candidateLoadFailed) setMessage('Current committed review loaded.');
     } catch (error) {
+      if (!isActiveLoad(request)) return;
+      reviewBindingRef.current = null; candidateBindingRef.current = null;
       setReview(null); setLoadState('failed'); setMessage(describeReviewError(error, online));
     }
-  }, [hasReviewAccess, initialCaseId, online, selectedCaseId, tenantContext]);
+  }, [hasReviewAccess, initialCaseId, online, selectedCaseId, tenantContext, viewKey]);
 
   useEffect(() => { void load(initialCaseId); }, [initialCaseId, tenantContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commit = async (action: () => Promise<AssessV2ReviewProjection>, success: string) => {
     if (!online) { setMessage('Offline. Review changes were not submitted.'); return; }
+    const projection = reviewBindingRef.current;
+    if (!review || !projection || reviewScopeKey !== viewKey || !sameProjection(projection, {
+      scopeKey: viewKey, caseId: review.caseId, decisionId: review.decisionId,
+    })) return;
+    loadSequenceRef.current += 1; activeLoadRef.current = null; candidateBindingRef.current = null;
+    setEligibleReviewers([]); setSelectedReviewerId(''); setCandidateState('idle');
+    const request = { sequence: ++actionSequenceRef.current, ...projection };
+    activeActionRef.current = request;
     setBusy(true); setMessage('Saving. Success will appear only after the server commits.');
-    try { const committed = await action(); setReview(committed); setMessage(success); }
-    catch (error) { handleAssessV2Boundary(error); setMessage(describeReviewError(error, online)); }
-    finally { setBusy(false); }
+    try {
+      const committed = await action();
+      if (!isActiveAction(request)) return;
+      const nextBinding = { scopeKey: viewKey, caseId: committed.caseId, decisionId: committed.decisionId };
+      reviewBindingRef.current = nextBinding; candidateBindingRef.current = null;
+      setReview(committed); setReviewScopeKey(viewKey); setMessage(success);
+    } catch (error) {
+      if (!isActiveAction(request)) return;
+      handleAssessV2Boundary(error); setMessage(describeReviewError(error, online));
+    } finally {
+      if (mountedRef.current && (activeActionRef.current === null || sameRequest(activeActionRef.current, request))) setBusy(false);
+    }
   };
 
   const attest = (evidenceId: string, claimIds: string[], outcome: EvidenceAttestationOutcome) => {
@@ -103,23 +188,39 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
   };
   const assignReviewer = async () => {
     if (!tenantContext || !review || !selectedReviewerId) return;
+    const projection = { scopeKey: viewKey, caseId: review.caseId, decisionId: review.decisionId };
+    if (candidateState !== 'ready' || reviewScopeKey !== viewKey
+      || !sameProjection(reviewBindingRef.current, projection)
+      || !sameProjection(candidateBindingRef.current, projection)) {
+      setMessage('Eligible reviewers are unavailable. Reload committed state.'); return;
+    }
     const reviewer = eligibleReviewers.find(candidate => candidate.actorId === selectedReviewerId);
     if (!reviewer) { setMessage('The selected reviewer is stale or no longer eligible. Reload eligible reviewers.'); return; }
     if (!online) { setMessage('Offline. Review assignment was not submitted.'); return; }
+    loadSequenceRef.current += 1; activeLoadRef.current = null; candidateBindingRef.current = null;
+    const request = { sequence: ++actionSequenceRef.current, ...projection };
+    activeActionRef.current = request;
     setBusy(true); setMessage('Assigning reviewer. Success will appear only after the server commits.');
     try {
       const committed = await assignAssessV2Review(tenantContext, review, reviewer);
-      setReview(committed);
-      await load(committed.caseId);
-      setMessage('Reviewer assignment committed. The case is now in review and available in the assigned-review queue.');
-    } catch (error) { handleAssessV2Boundary(error); setMessage(describeReviewError(error, online)); }
-    finally { setBusy(false); }
+      if (!isActiveAction(request)) return;
+      const nextBinding = { scopeKey: viewKey, caseId: committed.caseId, decisionId: committed.decisionId };
+      reviewBindingRef.current = nextBinding; candidateBindingRef.current = null;
+      setReview(committed); setReviewScopeKey(viewKey);
+      await load(committed.caseId, 'Reviewer assignment committed. The case is now in review and available in the assigned-review queue.');
+    } catch (error) {
+      if (!isActiveAction(request)) return;
+      handleAssessV2Boundary(error); setMessage(describeReviewError(error, online));
+    } finally {
+      if (mountedRef.current && (activeActionRef.current === null || sameRequest(activeActionRef.current, request))) setBusy(false);
+    }
   };
   const resolveReview = (resolution: ReviewResolution) => {
     if (!tenantContext || !review || !reviewRationale.trim()) { setMessage('Reviewer rationale is required for review resolution.'); return; }
     void commit(() => resolveAssessV2Review(tenantContext, review, resolution, reviewRationale.trim(), conditions.split('\n').map(item => item.trim()).filter(Boolean)), `Review resolution committed: ${statusCopy[resolution]}.`);
   };
   const evidenceCoverage = useMemo(() => review ? review.requiredClaimIds.map(claimId => ({ claimId, accepted: review.evidence.some(item => item.status === 'accepted' && item.claimIds.includes(claimId)) })) : [], [review]);
+  const visibleQueue = queueScopeKey === viewKey ? queue : [];
 
   return <section className="mt-6 rounded-3xl border-2 border-[#ffbc03]/50 p-3 sm:p-5" aria-labelledby="v2-review-title" data-testid="assess-v2-review-workspace">
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9a6a00]">Governed enterprise review</p><h3 id="v2-review-title" className="mt-1 text-xl font-black">Review, approval, Govern and Studio handoff</h3><p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">The server authorizes every action. This browser never supplies reviewer identity, approval authority, Govern categories, confidence, or the Studio package.</p></div><button type="button" disabled={busy || !tenantContext} onClick={() => void load()} className="btn-ghost rounded-xl px-3 py-2 text-sm font-black disabled:opacity-50">Reload committed state</button></div>
@@ -131,9 +232,9 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
     {loadState === 'empty' && <div className={`${panel} mt-4`}><h4 className="font-black">Assigned-review queue</h4><p className="mt-2 text-sm text-slate-500">No assigned reviews.</p></div>}
     {loadState === 'failed' && <div className={`${panel} mt-4`} role="alert"><h4 className="font-black">Review unavailable</h4><p className="mt-2 text-sm">Persistence failed, or the review may be stale, revoked, conflicted, offline, or unavailable. Reload to request the current non-disclosing server projection.</p></div>}
 
-    {queue.length > 0 && <nav className={`${panel} mt-4`} aria-label="Assigned-review queue"><h4 className="font-black">Assigned-review queue</h4><ul className="mt-2 grid gap-2 sm:grid-cols-2">{queue.map(item => <li key={item.assignmentId}><button type="button" aria-current={item.caseId === selectedCaseId ? 'page' : undefined} onClick={() => void load(item.caseId)} className="w-full rounded-xl border border-slate-200 p-3 text-left disabled:opacity-50" disabled={busy}><span className="block font-black">{item.caseName}</span><span className="text-xs">{statusCopy[item.status]}{item.dueAt ? ` · due ${item.dueAt}` : ''}</span></button></li>)}</ul></nav>}
+    {visibleQueue.length > 0 && <nav className={`${panel} mt-4`} aria-label="Assigned-review queue"><h4 className="font-black">Assigned-review queue</h4><ul className="mt-2 grid gap-2 sm:grid-cols-2">{visibleQueue.map(item => <li key={item.assignmentId}><button type="button" aria-current={item.caseId === selectedCaseId ? 'page' : undefined} onClick={() => void load(item.caseId)} className="w-full rounded-xl border border-slate-200 p-3 text-left disabled:opacity-50" disabled={busy}><span className="block font-black">{item.caseName}</span><span className="text-xs">{statusCopy[item.status]}{item.dueAt ? ` · due ${item.dueAt}` : ''}</span></button></li>)}</ul></nav>}
 
-    {review && loadState === 'ready' && <div className="mt-4 space-y-4">
+    {review && reviewScopeKey === viewKey && loadState === 'ready' && <div className="mt-4 space-y-4">
       <header className="rounded-2xl bg-[#002C4B] p-4 text-white"><div className="flex flex-wrap gap-2 text-xs font-black uppercase"><span>{statusCopy[review.status]}</span><span>·</span><span>{review.confidence}</span><span>·</span><span>{review.reviewSchemaVersion} sequence {review.reviewSequence}</span></div><h4 className="mt-2 text-xl font-black">{review.caseName}</h4><p className="mt-1 text-sm text-white/75">Case v{review.caseVersion} · Decision {review.decisionVersion} · Author {review.authorLabel} · Reviewer {review.reviewerLabel}</p></header>
 
       {review.status === 'reviewer_ready' && <section className={panel} aria-labelledby="review-assignment-title"><h4 id="review-assignment-title" className="font-black">Assign independent reviewer</h4><p className="mt-1 text-xs text-slate-500">Candidates are loaded from the current tenant and workspace. The server revalidates identity, all required capabilities, authorization version, ancestry, and separation of duty at commit.</p>{candidateState === 'loading' && <p className="mt-3 text-sm font-semibold" role="status">Loading eligible reviewers.</p>}{candidateState === 'empty' && <p className="mt-3 text-sm font-semibold" role="status">No active reviewer has review, evidence-attestation, and approval capabilities.</p>}{candidateState === 'failed' && <p className="mt-3 text-sm font-semibold" role="alert">Eligible reviewers are unavailable. Access may be revoked, stale, conflicted, or unavailable; reload committed state.</p>}{candidateState === 'ready' && <><label className="mt-3 block text-xs font-black">Eligible reviewer<select aria-label="Eligible reviewer" value={selectedReviewerId} onChange={event => setSelectedReviewerId(event.target.value)} className={input}>{eligibleReviewers.map(candidate => <option key={candidate.actorId} value={candidate.actorId}>{candidate.label}</option>)}</select></label><button type="button" disabled={busy || !online || !selectedReviewerId || !can(ASSESS_V2_REVIEW_CAPABILITIES.review)} onClick={() => void assignReviewer()} className="mt-3 rounded-lg bg-[#002C4B] px-3 py-2 text-sm font-black text-white disabled:opacity-50">Commit reviewer assignment</button></>}</section>}
