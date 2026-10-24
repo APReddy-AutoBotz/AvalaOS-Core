@@ -119,7 +119,9 @@ export const exerciseReviewerGovernDenial = async ({
     const timeout = window.setTimeout(() => controller.abort(), 15_000);
     try {
       const response = await fetch(`${input.apiBaseUrl}/functions/v1/tenant-session`, {
-        headers: { authorization: input.authorization, apikey: input.apiKey },
+        method: 'POST',
+        headers: { authorization: input.authorization, apikey: input.apiKey, 'content-type': 'application/json' },
+        body: '{}',
         signal: controller.signal,
       });
       const body = await response.json().catch(() => null) as unknown;

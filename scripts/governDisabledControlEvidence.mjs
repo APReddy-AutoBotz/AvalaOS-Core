@@ -18,6 +18,7 @@ export const GOVERN_REVIEWER_DENIAL_SOURCE_PATHS = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
   'tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts',
   'supabase/functions/_shared/assessV2ReviewCommand.ts',
+  'supabase/functions/_shared/tenantSession.ts',
   'tests/browser/authenticatedLifecycleHarness.ts',
   'tests/browser/authenticatedHostedNetwork.ts',
   'scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs',

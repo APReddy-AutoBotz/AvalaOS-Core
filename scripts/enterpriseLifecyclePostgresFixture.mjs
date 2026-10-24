@@ -419,6 +419,7 @@ export async function createEnterpriseLifecycleFixture({
     const studioProviderModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactProvider.ts'));
     const templateModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactTemplateContract.ts'));
     const tenantAuthorityModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'tenantAuthority.ts'));
+    const tenantSessionModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'tenantSession.ts'));
     const processCommandRouterModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'processCommandRouter.ts'));
     const studioDeliveryCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioDeliveryCommand.ts'));
     const studioDeliveryQueryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioDeliveryOutcomeQuery.ts'));
@@ -1600,6 +1601,19 @@ export async function createEnterpriseLifecycleFixture({
         status: controlsResponse.status, statusText: controlsResponse.statusText,
         headers: { ...Object.fromEntries(controlsResponse.headers.entries()), ...cors },
       });
+      if (url.pathname === '/functions/v1/tenant-session') {
+        const response = await tenantSessionModule.handleTenantSessionRequest(request, {
+          authenticate: assessDependencies.authenticate,
+          loadAvailableContexts: async actorId => {
+            const context = await defaultContext(actorId);
+            return [{ userId: actorId, organizationId: ids.organization, organizationName: 'Enterprise lifecycle',
+              workspaceId: ids.workspace, workspaceName: 'Lifecycle workspace',
+              capabilities: context.capabilities, authorizationVersion: context.authorizationVersion }];
+          },
+        });
+        for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
+        return response;
+      }
       let actor;
       try { actor = actorFromRequest(request); } catch { return json({ message: 'Invalid token' }, 401, cors); }
       if (url.pathname === '/functions/v1/process-command') return processCommandRouterModule.handleProcessCommandRequest(request,processDependencies);
@@ -1648,10 +1662,6 @@ export async function createEnterpriseLifecycleFixture({
       if (url.pathname === '/auth/v1/user') {
         const profile = (await db.query('SELECT email,full_name FROM profiles WHERE id=$1', [actor])).rows[0];
         return json({ id: actor, aud: 'authenticated', role: 'authenticated', email: profile.email, user_metadata: {}, app_metadata: { provider: 'fixture' } }, 200, cors);
-      }
-      if (url.pathname === '/functions/v1/tenant-session') {
-        const context = await defaultContext(actor);
-        return json({ contexts: [{ userId: actor, organizationId: ids.organization, organizationName: 'Enterprise lifecycle', workspaceId: ids.workspace, workspaceName: 'Lifecycle workspace', roleNames: ['Lifecycle authority'], capabilities: context.capabilities, authorizationVersion: context.authorizationVersion }] }, 200, cors);
       }
       if (url.pathname === '/functions/v1/assess-v2-command') {
         const body = await request.json();
