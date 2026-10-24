@@ -678,6 +678,71 @@ for (const [stepTitle, expectedOperation] of [
   assert.equal(serialized.includes('authors, replays'),false);
 });
 
+for (const mode of ['unique', 'ambiguous', 'unrelated', 'outside']) {
+  test(`ordinary Govern failure attribution is bounded: ${mode}`, async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-ordinary-correlation-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    t.after(() => { if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+      else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior; });
+    const destination = path.join(root, 'diagnostic.json');
+    process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = destination;
+    const reporter = new AuthenticatedHostedPlaywrightReporter();
+    const current = fixture([...titles.keys()][1]);
+    const location = { file: path.resolve('tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts'), line: 70 };
+    const error = message => Object.assign(new Error(message), { location });
+    const primary = error('private-synthetic-ordinary-failure');
+    reporter.onTestBegin(current);
+    for (const title of mode === 'outside' ? [] : mode === 'ambiguous'
+      ? ['hosted:govern-studio:reviewer-denial', 'hosted:govern-studio:approver-resolution']
+      : ['hosted:govern-studio:reviewer-denial']) {
+      const step = { title, location, error: error(mode === 'unrelated' ? 'private-caught-error' : primary.message) };
+      reporter.onStepBegin(current, { status: 'running' }, step);
+      reporter.onStepEnd(current, { status: 'failed' }, step);
+    }
+    reporter.onTestEnd(current, { status: 'failed', error: primary, errors: [primary] });
+    await reporter.onEnd({ status: 'failed' });
+    const serialized = await readFile(destination, 'utf8');
+    const value = JSON.parse(serialized);
+    assert.equal(value.operation, mode === 'unique' ? 'GOVERN_STUDIO_REVIEWER_DENIAL' : undefined);
+    assert.deepEqual(value.location, { source: 'tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts', line: 70 });
+    assert.equal(serialized.includes('private-'), false);
+    assert.equal(serialized.includes('hosted:'), false);
+  });
+}
+
+test('a real ordinary Govern Studio assertion retains its fixed operation without private text', async t => {
+  const root = await mkdtemp(path.join(process.cwd(), 'authenticated-reporter-ordinary-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const destination = path.join(root, 'diagnostic.json');
+  const config = path.join(root, 'playwright.config.mjs');
+  await writeFile(path.join(root, 'ordinary.spec.mjs'), `import { test, expect } from '@playwright/test';
+test('independent approval, Govern separation and synthetic Studio generation retain exact lineage', async () => {
+  await test.step('hosted:govern-studio:studio-request', async () => {
+    expect('private-synthetic-value').toBe('private-other-value');
+  });
+});`);
+  await writeFile(config, `export default { testDir: ${JSON.stringify(root.replaceAll('\\', '/'))},
+    projects: [{ name: 'desktop-chromium' }],
+    reporter: [[${JSON.stringify(path.resolve('scripts/authenticatedHostedPlaywrightReporter.mjs'))}]] };`);
+  let exitCode = 0;
+  try {
+    await execFileAsync(process.execPath, [path.resolve('node_modules/@playwright/test/cli.js'), 'test', '--config', config], {
+      cwd: process.cwd(), env: { ...process.env, AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH: destination },
+      maxBuffer: 2_000_000, timeout: 15000,
+    });
+  } catch (error) { exitCode = error?.code; }
+  assert.equal(exitCode, 1);
+  const serialized = await readFile(destination, 'utf8');
+  const value = JSON.parse(serialized);
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value), value);
+  assert.equal(value.category, 'unexpected-failure');
+  assert.equal(value.operation, 'GOVERN_STUDIO_STUDIO_REQUEST');
+  for (const forbidden of ['private-synthetic', 'private-other', 'hosted:govern-studio', 'ordinary.spec']) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+});
+
 test('a real Playwright control timeout failure retains its correlated fixed operation', async t => {
   const root=await mkdtemp(path.join(process.cwd(),'authenticated-reporter-control-timeout-'));
   t.after(()=>rm(root,{recursive:true,force:true}));

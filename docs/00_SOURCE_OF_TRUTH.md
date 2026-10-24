@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Govern browser readiness investigation (2026-10-24)
+
+PR #327 merged and its verified release's focused diagnostic retained an ordinary Govern/Studio browser failure with independent cleanup. AP authorized local reproduction before correction and now approves the fix PR and required checks, verified merge/release, then exactly one focused Govern/Studio diagnostic with independent cleanup. Full acceptance remains unauthorized. Local production-UI/handler/PostgreSQL evidence reproduces a race in the denial helper: a completed server response precedes client consumption and rendered controls, so an immediate count sees zero instead of eleven. Awaiting the exact count within the unchanged 15 seconds makes the identical delayed journey pass through Studio consumption. A separately reproduced reporter defect omitted ordinary failures' fixed operation; its correction retains only bounded operation/location metadata. Providers remain OFF. Historical exclusive attribution remains unproven because the failed artifact omitted its operation. Follow the [active completion plan](planning/hosted-acceptance-completion.md) for exact evidence, remaining verification and rollback; no full acceptance or readiness promotion is implied.
+
 ## Govern reviewer authority correction (2026-10-24)
 
 PR #326's verified release `00b2bcc760015fa6d243078ca943f01e71cf4ac9` completed its separately approved full run `39988435817` with **61 PASS / 0 FAIL / 47 BLOCKED / 0 UNCOVERED** and independently verified cleanup. The Govern/Studio failure was retained at a shared observer without an exact operation, so exclusive historical attribution remains unproven.

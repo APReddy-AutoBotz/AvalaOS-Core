@@ -155,12 +155,39 @@ test('verifies disabled reviewer UI, authenticated denial and independent resolu
     if (new URL(request.url()).pathname === '/functions/v1/assess-v2-command') reviewerCommandRequests += 1;
   };
   page.on('request', countTarget);
-  const reviewerDenial = await exerciseReviewerGovernDenial({
-    page,
-    workspace: page.getByTestId('assess-v2-review-workspace'),
-    apiBaseUrl: process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '',
-    rationale: 'The final reviewer must not resolve this financial high-impact decision.',
+  // Keep transport completion ahead of client consumption so both real browser
+  // profiles exercise the loading-to-ready boundary, not just a warm render.
+  const consumptionGate = await page.evaluateHandle(() => {
+    const originalFetch = window.fetch;
+    let delayedReads = 0;
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const response = await originalFetch.apply(window, args);
+      if (new URL(response.url).pathname === '/rest/v1/rpc/assess_v2_review_workspace') {
+        const originalText = response.text.bind(response);
+        response.text = async () => {
+          const text = await originalText();
+          delayedReads += 1;
+          await new Promise(resolve => window.setTimeout(resolve, 750));
+          return text;
+        };
+      }
+      return response;
+    };
+    return { delayedReads: () => delayedReads, restore: () => { window.fetch = originalFetch; } };
   });
+  let reviewerDenial: Awaited<ReturnType<typeof exerciseReviewerGovernDenial>>;
+  try {
+    reviewerDenial = await exerciseReviewerGovernDenial({
+      page,
+      workspace: page.getByTestId('assess-v2-review-workspace'),
+      apiBaseUrl: process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '',
+      rationale: 'The final reviewer must not resolve this financial high-impact decision.',
+    });
+    expect(await consumptionGate.evaluate(gate => gate.delayedReads())).toBe(1);
+  } finally {
+    await consumptionGate.evaluate(gate => gate.restore());
+    await consumptionGate.dispose();
+  }
   page.off('request', countTarget);
   expect(reviewerDenial.status).toBe(403);
   expect(reviewerDenial.errorCode).toBe('PERMISSION_DENIED');
