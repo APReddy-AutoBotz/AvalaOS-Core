@@ -145,7 +145,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
       if ((this.failureDescriptor?.phase === 'CONTROL_CHANNEL'
         && this.failureDescriptor.code === 'CONTROL_REQUEST_TIMEOUT')
         || this.failureDescriptor?.phase === 'ACTOR_TRANSITION'
-        || (result.status === 'timedOut' && !this.failureDescriptor)) {
+        || !this.failureDescriptor) {
         const correlated = correlatedFailedOperation(this.failedOperations, primary);
         this.failureOperation = correlated?.operation;
         this.failureLocation ??= correlated?.location ?? null;

@@ -100,6 +100,9 @@ export const exerciseReviewerGovernDenial = async ({
   }
 
   const controlSelects = workspace.getByLabel(/^Disposition for /u);
+  // Observing the RPC body does not mean the client has consumed it or React
+  // has replaced the loading state. Require the exact committed control set.
+  await expect(controlSelects).toHaveCount(projection.controls.length, { timeout: 15_000 });
   const controlCount = await controlSelects.count();
   expect(controlCount).toBe(projection.controls.length);
   for (let index = 0; index < controlCount; index += 1) {

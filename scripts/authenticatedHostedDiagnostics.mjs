@@ -85,6 +85,7 @@ const PLAYWRIGHT_OPERATIONS = new Set([
 const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
   'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts',
+  'tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts',
   'tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts',
   'tests/browser/enterpriseLifecycleAcceptance/v1AssessmentCompletion.ts',
   'tests/browser/authenticatedLifecycleHarness.ts',
