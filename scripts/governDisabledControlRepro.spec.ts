@@ -176,6 +176,11 @@ test('verifies disabled reviewer UI, authenticated denial and independent resolu
     return { delayedReads: () => delayedReads, restore: () => { window.fetch = originalFetch; } };
   });
   let reviewerDenial: Awaited<ReturnType<typeof exerciseReviewerGovernDenial>>;
+  const tenantResponses: import('@playwright/test').Response[] = [];
+  const observeTenant = (response: import('@playwright/test').Response) => {
+    if (new URL(response.url()).pathname === '/functions/v1/tenant-session') tenantResponses.push(response);
+  };
+  page.on('response', observeTenant);
   try {
     reviewerDenial = await exerciseReviewerGovernDenial({
       page,
@@ -185,10 +190,16 @@ test('verifies disabled reviewer UI, authenticated denial and independent resolu
     });
     expect(await consumptionGate.evaluate(gate => gate.delayedReads())).toBe(1);
   } finally {
+    page.off('response', observeTenant);
     await consumptionGate.evaluate(gate => gate.restore());
     await consumptionGate.dispose();
   }
   page.off('request', countTarget);
+  expect(tenantResponses).toHaveLength(1);
+  expect(tenantResponses[0].request().method()).toBe('POST');
+  expect(tenantResponses[0].request().postDataJSON()).toEqual({});
+  expect(tenantResponses[0].request().headers()['content-type']).toBe('application/json');
+  expect(tenantResponses[0].status()).toBe(200);
   expect(reviewerDenial.status).toBe(403);
   expect(reviewerDenial.errorCode).toBe('PERMISSION_DENIED');
   expect(reviewerCommandRequests).toBe(1);

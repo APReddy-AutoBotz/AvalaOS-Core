@@ -182,13 +182,32 @@ try {
     path.join(browserResultDirectory, `browser-${projectName}.json`), 'utf8'))));
   const readCapabilities = async actor => {
     const response = await fetch(`${apiBaseUrl}/functions/v1/tenant-session`, {
-      headers: { authorization: `Bearer ${actor.token}`, apikey: fixture.publicAnonKey },
+      method: 'POST',
+      headers: { authorization: `Bearer ${actor.token}`, apikey: fixture.publicAnonKey, 'content-type': 'application/json' },
+      body: '{}', signal: AbortSignal.timeout(15_000),
     });
     if (response.status !== 200) throw new Error('GOVERN_REVIEWER_DENIAL_AUTHORITY_READ_FAILED');
     return (await response.json()).contexts?.[0]?.capabilities ?? [];
   };
   const reviewerCapabilities = await readCapabilities(fixture.actors.reviewer);
   const approverCapabilities = await readCapabilities(fixture.actors.approver);
+  // Exercise the fixture's actual HTTP boundary: a permissive context stub must
+  // never mask a malformed caller again. These rejected reads cannot mutate state.
+  for (const [method, body, authenticated, status, code] of [
+    ['GET', undefined, true, 405, 'METHOD_NOT_ALLOWED'],
+    ['POST', undefined, true, 400, 'INVALID_REQUEST'],
+    ['POST', '{"workspaceId":"client-claim"}', true, 400, 'INVALID_REQUEST'],
+    ['POST', '{}', false, 401, 'AUTHENTICATION_REQUIRED'],
+  ]) {
+    const response = await fetch(`${apiBaseUrl}/functions/v1/tenant-session`, {
+      method, body, signal: AbortSignal.timeout(15_000),
+      headers: { 'content-type': 'application/json', apikey: fixture.publicAnonKey,
+        ...(authenticated ? { authorization: `Bearer ${fixture.actors.reviewer.token}` } : {}) },
+    });
+    if (response.status !== status || (await response.json()).code !== code) {
+      throw new Error('GOVERN_REVIEWER_DENIAL_TENANT_CONTRACT_REJECTED');
+    }
+  }
 
   const persisted = (await fixture.db.query(`SELECT
     (SELECT count(*)::int FROM assess_v2_govern_resolutions) govern_resolutions,
