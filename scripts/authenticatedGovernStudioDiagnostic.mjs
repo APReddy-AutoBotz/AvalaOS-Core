@@ -23,9 +23,9 @@ export const AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT = Object.freeze([
   Object.freeze({ key: 'reviewerGovernDenial', commandType: 'assessment_v2.govern.resolve', persona: 'reviewer', status: 403 }),
   Object.freeze({ key: 'approverGovernResolution', commandType: 'assessment_v2.govern.resolve', persona: 'approver', status: 200 }),
   Object.freeze({ key: 'assessStudioHandoff', commandType: 'assessment_v2.studio.handoff', persona: 'approver', status: 200 }),
-  Object.freeze({ key: 'studioRequest', commandType: 'studio.handoff.request', persona: 'approver', status: 201 }),
+  Object.freeze({ key: 'studioRequest', commandType: 'studio.handoff.request', persona: 'author', status: 201 }),
   Object.freeze({ key: 'studioReview', commandType: 'studio.handoff.review.resolve', persona: 'reviewer', status: 201 }),
-  Object.freeze({ key: 'studioFinalAccept', commandType: 'studio.handoff.approval.resolve', persona: 'author', status: 201 }),
+  Object.freeze({ key: 'studioFinalAccept', commandType: 'studio.handoff.approval.resolve', persona: 'approver', status: 201 }),
   Object.freeze({ key: 'studioConsume', commandType: 'studio.handoff.consume', persona: 'approver', status: 201 }),
 ]);
 

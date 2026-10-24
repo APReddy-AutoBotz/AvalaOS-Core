@@ -308,6 +308,7 @@ export async function createEnterpriseLifecycleFixture({
       role: uuid(20), process: uuid(21), case: uuid(22), rejectCase: uuid(23), deniedCase: uuid(24),
       providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27), deliveryRestrictedRole: uuid(28),
       primaryRestrictedReviewerRole: uuid(29), hostedReviewerRole: uuid(30), hostedApproverRole: uuid(31),
+      hostedAuthorRole: uuid(32),
     };
     // These are inert fixture credentials, accepted only by exact map lookup below.
     // Claims let shared browser observers correlate the same actor/session shape
@@ -353,24 +354,29 @@ export async function createEnterpriseLifecycleFixture({
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read')", [ids.deliveryRestrictedRole]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM role_capabilities WHERE role_id=$2 AND capability_key<>'assess.process.update'", [ids.primaryRestrictedReviewerRole, ids.role]);
     if (hostedPersonaRoleParity) {
-      await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Hosted lifecycle reviewer','hosted-lifecycle-reviewer','organization','[]'),($3,$2,'Hosted lifecycle approver','hosted-lifecycle-approver','organization','[]')", [ids.hostedReviewerRole, ids.organization, ids.hostedApproverRole]);
+      await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Hosted lifecycle reviewer','hosted-lifecycle-reviewer','organization','[]'),($3,$2,'Hosted lifecycle approver','hosted-lifecycle-approver','organization','[]'),($4,$2,'Hosted lifecycle author','hosted-lifecycle-author','organization','[]')", [ids.hostedReviewerRole, ids.organization, ids.hostedApproverRole, ids.hostedAuthorRole]);
+      await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key=ANY($2::text[])",
+        [ids.hostedAuthorRole, REQUIRED_PERSONA_CAPABILITIES.author]);
       await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key=ANY($2::text[])",
         [ids.hostedReviewerRole, REQUIRED_PERSONA_CAPABILITIES.reviewer]);
       await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key=ANY($2::text[])",
         [ids.hostedApproverRole, REQUIRED_PERSONA_CAPABILITIES.approver]);
-      for (const [persona, roleId] of [['reviewer',ids.hostedReviewerRole],['approver',ids.hostedApproverRole]]) {
+      for (const [persona, roleId] of [['author',ids.hostedAuthorRole],['reviewer',ids.hostedReviewerRole],['approver',ids.hostedApproverRole]]) {
         const actual = new Set((await db.query(
           'SELECT capability_key FROM role_capabilities WHERE role_id=$1', [roleId],
         )).rows.map(row => row.capability_key));
         assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].every(capability => actual.has(capability)), true,
           `ENTERPRISE_LIFECYCLE_${persona.toUpperCase()}_REQUIRED_CAPABILITY_MISSING`);
+        assert.equal(actual.size, REQUIRED_PERSONA_CAPABILITIES[persona].length,
+          `ENTERPRISE_LIFECYCLE_${persona.toUpperCase()}_EXTRA_CAPABILITY_PRESENT`);
         assert.equal(FORBIDDEN_PERSONA_CAPABILITIES[persona].every(capability => !actual.has(capability)), true,
           `ENTERPRISE_LIFECYCLE_${persona.toUpperCase()}_FORBIDDEN_CAPABILITY_PRESENT`);
       }
     }
     for (const actor of [ids.author, ids.reviewer, ids.approver]) {
       const roleId = hostedPersonaRoleParity && actor === ids.reviewer ? ids.hostedReviewerRole
-        : hostedPersonaRoleParity && actor === ids.approver ? ids.hostedApproverRole : ids.role;
+        : hostedPersonaRoleParity && actor === ids.approver ? ids.hostedApproverRole
+          : hostedPersonaRoleParity && actor === ids.author ? ids.hostedAuthorRole : ids.role;
       await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [ids.organization, actor, roleId]);
       await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [ids.organization, ids.workspace, actor]);
     }
@@ -1192,6 +1198,8 @@ export async function createEnterpriseLifecycleFixture({
             [ids.organization,ids.reviewer,hostedPersonaRoleParity ? ids.hostedReviewerRole : ids.role]);
           if (hostedPersonaRoleParity) {
             await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
+              [ids.organization,ids.author,ids.hostedAuthorRole]);
+            await db.query('UPDATE public.organization_members SET role_id=$3 WHERE org_id=$1 AND user_id=$2',
               [ids.organization,ids.approver,ids.hostedApproverRole]);
           }
           await db.query("DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key='operations.read'", [ids.role]);
@@ -1512,6 +1520,47 @@ export async function createEnterpriseLifecycleFixture({
           }
           return json({ denied: true, candidateAuthorityDenied: true,
             denialClass: 'candidate-authority' },200,cors);
+        }
+        if (url.pathname === '/control/studio-final-accept-direct-denial') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!hostedPersonaRoleParity || !setup || providersEnabled) return json({ error: 'CONTROL_REJECTED' },409,cors);
+          const handoffs = (await db.query(`SELECT module.id,module.current_version
+            FROM public.enterprise_module_handoffs module
+            JOIN public.assess_v2_studio_handoffs upstream ON upstream.id=module.upstream_handoff_id
+            JOIN public.assess_v2_cases assessed ON assessed.id=upstream.case_id
+            WHERE assessed.process_id=$1 AND module.org_id=$2 AND module.workspace_id=$3
+              AND module.status='approval_ready'`, [setup.processId,ids.organization,ids.workspace])).rows;
+          if (handoffs.length!==1) return json({ error: 'CONTROL_REJECTED' },409,cors);
+          const handoff=handoffs[0];
+          const frame=async()=>(await db.query(`SELECT
+            (SELECT current_version FROM public.enterprise_module_handoffs WHERE id=$1) version,
+            (SELECT count(*)::int FROM public.enterprise_module_handoff_approval_events WHERE handoff_id=$1) approvals,
+            (SELECT count(*)::int FROM public.enterprise_module_handoff_command_receipts WHERE org_id=$2 AND workspace_id=$3) receipts,
+            (SELECT count(*)::int FROM public.privileged_audit_events WHERE org_id=$2 AND workspace_id=$3) audits,
+            (SELECT count(*)::int FROM public.studio_artifact_source_packages WHERE org_id=$2 AND workspace_id=$3) packages`,
+          [handoff.id,ids.organization,ids.workspace])).rows[0];
+          const before=await frame();
+          const projection=(await actorQuery(ids.author,
+            'SELECT public.enterprise_assess_studio_handoff_projection($1,$2) value',
+            [ids.organization,ids.workspace])).rows[0]?.value;
+          const response=await executeStudio(new Request(`${url.origin}/functions/v1/studio-artifact-command`, {
+            method:'POST',headers:{authorization:`Bearer ${fixtureActors.author.token}`,'content-type':'application/json'},
+            body:JSON.stringify({contractVersion:'studio-artifact-2',requestId:randomUUID(),
+              idempotencyKey:`author-final-accept-denied:${handoff.id}`,commandType:'studio.handoff.approval.resolve',
+              organizationId:ids.organization,workspaceId:ids.workspace,
+              authorizationVersion:await authorizationVersion(ids.author),
+              expectedAggregateVersion:Number(handoff.current_version),expectedArtifactVersion:Number(handoff.current_version),
+              payload:{handoffId:handoff.id,handoffVersion:Number(handoff.current_version),outcome:'approve',
+                rationale:'Synthetic requester cannot approve its own handoff.',conditions:[]}}),
+          }));
+          const body=await response.json();
+          const zeroEffects=JSON.stringify(before)===JSON.stringify(await frame());
+          if (response.status!==403 || body?.error?.code!=='PERMISSION_DENIED' || !zeroEffects || !projection) {
+            return json({error:'CONTROL_DENIAL_NOT_PROVEN'},409,cors);
+          }
+          return json({denied:true,status:403,errorCode:'PERMISSION_DENIED',zeroEffects:true,
+            projectionReadRefused:false},200,cors);
         }
         if (url.pathname === '/control/snapshot') {
           const snapshot = (await db.query(`SELECT

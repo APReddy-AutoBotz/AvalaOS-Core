@@ -893,14 +893,18 @@ export const authenticatedLifecycleResolveEveryGovernControl = async (page: Page
   return fields.length;
 };
 
-export const authenticatedLifecycleEnterStudioAs = async (page: Page, actor: AuthenticatedLifecycleActor) => {
-  await authenticatedLifecycleEnterAs(page, actor);
+export const authenticatedLifecycleEnterStudioAs = async (
+  page: Page,
+  actor: AuthenticatedLifecycleActor,
+  beforeActorNavigation: () => Promise<void> = async () => undefined,
+) => {
+  await authenticatedLifecycleEnterAs(page, actor, beforeActorNavigation);
   await authenticatedLifecycleClickProduct(page, 'Studio');
   await expect(page.getByTestId('governed-studio-creation-route')).toBeVisible();
   await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
 };
 
-export const authenticatedLifecycleCommitStudioHandoffAction = async (
+export const authenticatedLifecycleOpenStudioHandoffDecision = async (
   page: Page,
   buttonName: string,
   rationale?: string,
@@ -915,6 +919,16 @@ export const authenticatedLifecycleCommitStudioHandoffAction = async (
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   if (rationale) await dialog.getByLabel('Decision rationale', { exact: true }).fill(rationale);
+  return dialog;
+};
+
+export const authenticatedLifecycleCommitStudioHandoffAction = async (
+  page: Page,
+  buttonName: string,
+  rationale?: string,
+  mailbox: 'Inbox' | 'Outbox' = 'Inbox',
+) => {
+  const dialog = await authenticatedLifecycleOpenStudioHandoffDecision(page, buttonName, rationale, mailbox);
   await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(dialog).toBeHidden();
 };

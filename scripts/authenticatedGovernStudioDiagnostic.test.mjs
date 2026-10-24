@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { REQUIRED_PERSONA_CAPABILITIES, FORBIDDEN_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 
 import {
   AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT,
@@ -56,6 +57,28 @@ const input = () => ({
   cleanup: { status: 'verified' },
 });
 
+test('Studio diagnostic actors have exact command capabilities and three-party separation', () => {
+  const handoffCapabilities = {
+    studioRequest: 'studio.handoffs.request', studioReview: 'studio.handoffs.review',
+    studioFinalAccept: 'studio.handoffs.approve', studioConsume: 'studio.handoffs.consume',
+  };
+  const assigned = Object.fromEntries(AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT
+    .filter(action => Object.hasOwn(handoffCapabilities, action.key))
+    .map(action => [action.key, action.persona]));
+  for (const [action, persona] of Object.entries(assigned)) {
+    assert.ok(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.handoffs.read'), `${action} can read handoffs`);
+    assert.ok(REQUIRED_PERSONA_CAPABILITIES[persona].includes(handoffCapabilities[action]), `${action} can command`);
+  }
+  assert.equal(new Set([assigned.studioRequest, assigned.studioReview, assigned.studioFinalAccept]).size, 3);
+  assert.equal(assigned.studioRequest, 'author');
+  assert.equal(assigned.studioFinalAccept, 'approver');
+  assert.equal(assigned.studioConsume, 'approver');
+  for (const capability of ['studio.handoffs.review', 'studio.handoffs.approve', 'studio.handoffs.consume']) {
+    assert.ok(FORBIDDEN_PERSONA_CAPABILITIES.author.includes(capability));
+    assert.ok(!REQUIRED_PERSONA_CAPABILITIES.author.includes(capability));
+  }
+});
+
 test('builds bounded non-promoting Govern and Studio diagnostic evidence', () => {
   const result = buildAuthenticatedGovernStudioDiagnostic(input());
   assert.equal(result.schemaVersion, 'authenticated-govern-studio-diagnostic-v1');
@@ -74,6 +97,10 @@ for (const [name, mutate, code] of [
   ['wrong inventory', value => { value.browserCases.pop(); }, 'CASE_INVENTORY_REJECTED'],
   ['wrong action order', value => { [value.trustedActions[0], value.trustedActions[1]] = [value.trustedActions[1], value.trustedActions[0]]; }, 'ACTION_REJECTED'],
   ['wrong persona', value => { value.trustedActions[1].persona = 'approver'; }, 'ACTION_REJECTED'],
+  ['legacy approver-request author-approval order', value => {
+    value.trustedActions[4].persona = 'approver';
+    value.trustedActions[6].persona = 'author';
+  }, 'ACTION_REJECTED'],
   ['wrong denial status', value => { value.trustedActions[1].status = 200; value.trustedActions[1].response.status = 200; }, 'ACTION_REJECTED'],
   ['unexpected success classification', value => { value.trustedActions[0].response.classification = 'SUCCEEDED'; }, 'ACTION_REJECTED'],
   ['denial effect', value => { value.trustedActions[1].after.records.push(record('assess_v2_cases', 'f')); }, 'REVIEWER_DENIAL_REJECTED'],
