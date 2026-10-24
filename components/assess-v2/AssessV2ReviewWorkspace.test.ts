@@ -26,4 +26,21 @@ assert.match(source, /Browser-supplied handoff content is never accepted/);
 assert.match(source, /aria-live="polite"/);
 assert.match(source, /aria-label="Assigned-review queue"/);
 assert.match(source, /sm:grid-cols-2/);
+assert.ok(source.indexOf('setReview(current)') < source.indexOf('await readEligibleAssessV2Reviewers'),
+  'validated committed review must publish before eligible-reviewer discovery settles');
+for (const scopePart of ['userId', 'organizationId', 'workspaceId', 'authorizationVersion']) {
+  assert.match(source, new RegExp(`tenantContext[.]${scopePart}`), `request scope must bind ${scopePart}`);
+}
+for (const epochPart of ['sequence', 'scopeKey', 'caseId', 'decisionId']) {
+  assert.match(source, new RegExp(epochPart), `request epoch must bind ${epochPart}`);
+}
+assert.match(source, /if \(!isActiveLoad\(request\)\) return;/, 'stale load completions must not publish');
+assert.match(source, /if \(!isActiveAction\(request\)\) return;/, 'stale command completions must not publish');
+assert.match(source, /mountedRef[.]current = false/, 'unmount must invalidate pending completions');
+assert.match(source, /candidateBindingRef[.]current = null; setEligibleReviewers\(\[\]\); setSelectedReviewerId\(''\)/,
+  'candidate failure must clear candidate identity labels');
+assert.match(source, /candidateState !== 'ready'/, 'assignment must remain fail closed until candidate discovery succeeds');
+assert.match(source, /reviewScopeKey === viewKey/, 'review labels must remain current actor, tenant and initial-case view only');
+assert.match(source, /!isActiveLoad\(request\) \|\| !sameProjection\(reviewBindingRef[.]current, projectionBinding\)/,
+  'candidate completions must not publish over a newer committed projection');
 console.log('Assess V2 enterprise review workspace source suite passed.');
