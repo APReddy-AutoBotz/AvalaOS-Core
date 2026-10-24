@@ -146,7 +146,6 @@ try {
     : 'scripts/playwright.reviewer-ready-candidate-latency.config.ts';
   browserExit = await run(['node_modules/@playwright/test/cli.js', 'test', `--config=${browserConfig}`], {
     ...env,
-    PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? path.join(root, '.agent', 'playwright-browsers'),
     ENTERPRISE_LIFECYCLE_APP_BASE_URL: `http://127.0.0.1:${previewPort}`,
     ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.baseUrl,
     ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: fixture.controlToken,

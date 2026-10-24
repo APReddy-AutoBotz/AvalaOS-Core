@@ -29,6 +29,15 @@ test('candidate and release require isolated Reviewer-ready proof with a fresh s
   assert.match(packageJson.scripts['test:reviewer-ready:browser'], /REVIEWER_READY_MODE='after'/u);
   const runner = await readFile('scripts/reproduceReviewerReadyCandidateLatency.mjs', 'utf8');
   assert.match(runner, /mode === 'after' \? process\.env\.REVIEWER_READY_AFTER_ATTEMPT/u);
+  assert.doesNotMatch(runner, /PLAYWRIGHT_BROWSERS_PATH\s*:/u,
+    'an unset parent must retain Playwright default cache discovery');
+  assert.match(runner, /const env = \{\s*\.\.\.process\.env,/u,
+    'an explicit parent Playwright cache override must be inherited');
+  assert.match(runner, /browserExit = await run\([\s\S]+?\{\s*\.\.\.env,/u,
+    'the browser child must retain the inherited environment');
+  const installIndex = job.steps.findIndex(step => step.run === 'npx playwright install --with-deps chromium');
+  assert.ok(installIndex >= 0 && installIndex < job.steps.indexOf(proof),
+    'the default Playwright browser install must precede Reviewer-ready proof');
 });
 
 test('candidate and release preparation require isolated semantic replay proof and sanitized retention', async () => {
