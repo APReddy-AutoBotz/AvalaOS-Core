@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { REQUIRED_PERSONA_CAPABILITIES, FORBIDDEN_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 
@@ -73,10 +74,24 @@ test('Studio diagnostic actors have exact command capabilities and three-party s
   assert.equal(assigned.studioRequest, 'author');
   assert.equal(assigned.studioFinalAccept, 'approver');
   assert.equal(assigned.studioConsume, 'approver');
+  assert.deepEqual(Object.fromEntries(['author','reviewer','approver'].map(persona => [
+    persona, REQUIRED_PERSONA_CAPABILITIES[persona].length,
+  ])), { author:25, reviewer:14, approver:18 });
+  assert.deepEqual(REQUIRED_PERSONA_CAPABILITIES.author
+    .filter(capability => capability.startsWith('studio.handoffs.')),
+  ['studio.handoffs.read','studio.handoffs.request']);
   for (const capability of ['studio.handoffs.review', 'studio.handoffs.approve', 'studio.handoffs.consume']) {
     assert.ok(FORBIDDEN_PERSONA_CAPABILITIES.author.includes(capability));
     assert.ok(!REQUIRED_PERSONA_CAPABILITIES.author.includes(capability));
   }
+});
+
+test('default browser discovery excludes the fixture-only Studio persona contract', () => {
+  const configSource = readFileSync(new URL('../playwright.config.ts', import.meta.url), 'utf8');
+  const testIgnoreSource = configSource.match(/testIgnore:\s*\[(?<entries>[\s\S]*?)\],\s*forbidOnly:/u);
+  assert.ok(testIgnoreSource?.groups?.entries, 'default config must expose a bounded testIgnore array');
+  assert.match(testIgnoreSource.groups.entries,
+    /['"]enterpriseLifecycleAcceptance\/studioHandoffPersonaContract[.]spec[.]ts['"]/u);
 });
 
 test('builds bounded non-promoting Govern and Studio diagnostic evidence', () => {
