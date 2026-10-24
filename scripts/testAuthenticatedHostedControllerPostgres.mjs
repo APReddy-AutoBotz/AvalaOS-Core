@@ -9,7 +9,8 @@ import { AUTHENTICATED_CASE_ASSERTIONS, authenticatedAcceptanceScenario } from '
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
 import { AuthenticatedHostedController, authenticatedHostedDigest,
   AUTHENTICATED_HOSTED_PERSONAS } from './authenticatedHostedController.mjs';
-import { createAuthenticatedHostedPostgresAdapter } from './authenticatedHostedControllerAdapters.mjs';
+import { createAuthenticatedHostedPostgresAdapter, FORBIDDEN_PERSONA_CAPABILITIES,
+  REQUIRED_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA } from './authenticatedHostedFixtureIdentity.mjs';
 import { reconstructAuthenticatedHostedCaseEvidence } from './authenticatedHostedEvidence.mjs';
 import {
@@ -55,27 +56,24 @@ const safetyDefinition = catalog.cases.find(item => item.testId === 'SAFETY-002'
 assert.ok(definition);
 assert.ok(deniedDefinition);
 assert.ok(safetyDefinition);
-const requiredCapabilities = Object.freeze({
-  author: ['org.admin','operations.read','assess.read','assess.create','assess.response.write','assess.finalize',
-    'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
-    'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve',
-    'project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import'],
-  reviewer: ['assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest','assess.v2.approve',
-    'studio.handoffs.read','studio.handoffs.review','studio.artifacts.read','studio.artifacts.review',
-    'project.read','backlog.read','task.read','task.update.own','delivery.outcomes.read'],
-  approver: ['assess.read','assess.v2.read','assess.v2.govern.resolve','assess.v2.studio.handoff',
-    'studio.handoffs.read','studio.handoffs.request','studio.handoffs.approve','studio.handoffs.consume',
-    'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.approve',
-    'project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import'],
-  outsider: [],
-});
-const forbiddenCapabilities = Object.freeze({
-  reviewer: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.process.update','assess.v2.govern.resolve'],
-  approver: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.approve'],
-  outsider: ['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.process.update',
-    'assess.v2.create','assess.v2.draft.write','assess.v2.review','assess.v2.approve','assess.v2.govern.resolve',
-    'studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve','backlog.manage'],
-});
+const requiredCapabilities = REQUIRED_PERSONA_CAPABILITIES;
+const pinnedAuthorHandoffRequired = Object.freeze(['studio.handoffs.read','studio.handoffs.request']);
+const pinnedAuthorHandoffForbidden = Object.freeze([
+  'studio.handoffs.review','studio.handoffs.approve','studio.handoffs.consume',
+]);
+const pinnedPersonaCapabilityCounts = Object.freeze({ author:25, reviewer:14, approver:18 });
+assert.deepEqual(requiredCapabilities.author.filter(capability => capability.startsWith('studio.handoffs.')),
+  pinnedAuthorHandoffRequired);
+assert.deepEqual(FORBIDDEN_PERSONA_CAPABILITIES.author, pinnedAuthorHandoffForbidden);
+for (const [persona, count] of Object.entries(pinnedPersonaCapabilityCounts)) {
+  assert.equal(requiredCapabilities[persona].length, count);
+}
+const additionalForbiddenCapabilities = Object.freeze({ reviewer:Object.freeze(['assess.process.update']) });
+const forbiddenCapabilities = Object.freeze(Object.fromEntries(AUTHENTICATED_HOSTED_PERSONAS.map(persona => [
+  persona,
+  Object.freeze([...(FORBIDDEN_PERSONA_CAPABILITIES[persona] ?? []),
+    ...(additionalForbiddenCapabilities[persona] ?? [])]),
+])));
 
 const ids = {
   org: '82000000-0000-4000-8000-000000000001',
@@ -311,6 +309,31 @@ try {
     verifySecretBackend: async () => ({ kind: 'hashicorp_vault', writable: true }),
     cleanupSecretBackend: async input => { secretCalls.push(input); },
   });
+  const assertScopeMutationRejected = async ({ capability, mutation, sql }) => {
+    await db.query('BEGIN');
+    try {
+      const changed = await db.query(sql, [ids.roles.author, capability]);
+      assert.equal(changed.rowCount, 1, `${mutation}:${capability}:mutation must change one capability row`);
+      const rejected = await adapter.preflight({ config, exerciseId: ids.exercise });
+      assert.equal(rejected.scopeReady, false, `${mutation}:${capability}:scope must fail closed`);
+    } finally {
+      await db.query('ROLLBACK');
+    }
+  };
+  for (const capability of pinnedAuthorHandoffRequired) {
+    await assertScopeMutationRejected({
+      capability,
+      mutation: 'required_removed',
+      sql: 'DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key=$2',
+    });
+  }
+  for (const capability of pinnedAuthorHandoffForbidden) {
+    await assertScopeMutationRejected({
+      capability,
+      mutation: 'forbidden_added',
+      sql: 'INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,$2)',
+    });
+  }
   const preflight = await adapter.preflight({ config, exerciseId: ids.exercise });
   assert.match(preflight.baselineDigest, /^sha256:[0-9a-f]{64}$/u);
   config.baselineDigest = preflight.baselineDigest;
@@ -322,7 +345,7 @@ try {
     observationStartedAt: preflight.observationStartedAt,
   });
   assert.ok(Number.isFinite(Date.parse(preflight.observationStartedAt)));
-  assert.equal(deploymentCalls.length, 1);
+  assert.equal(deploymentCalls.length, 1 + pinnedAuthorHandoffRequired.length + pinnedAuthorHandoffForbidden.length);
   for (const persona of AUTHENTICATED_HOSTED_PERSONAS) {
     const actual = new Set((await db.query('SELECT capability_key FROM public.role_capabilities WHERE role_id=$1',
       [ids.roles[persona]])).rows.map(row => row.capability_key));

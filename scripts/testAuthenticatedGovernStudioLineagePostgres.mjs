@@ -105,7 +105,8 @@ const main = async () => {
       key: 'lineage-finalize' }));
     const firstDecisionId = firstFinalize.response.body.resource.decisionId;
     const reviewPayload = (decisionId, extra = {}) => ({ decisionId, reviewSequence: 1, ...extra });
-    committed(await assess({ commandType: 'assessment_v2.review.assign', expectedVersion: 3,
+    committed(await assess({ actor: ids.reviewer, token: 'enterprise-reviewer-token',
+      commandType: 'assessment_v2.review.assign', expectedVersion: 3,
       payload: reviewPayload(firstDecisionId, { reviewerId: ids.reviewer }), key: 'lineage-assign' }));
     const attest = async (decisionId, expectedVersion, prefix) => {
       const assignment = (await db.query(
@@ -144,7 +145,8 @@ const main = async () => {
     const secondFinalize = committed(await assess({ commandType: 'assessment_v2.finalize',
       expectedVersion: revisionVersion + 1, key: 'lineage-resubmit' }));
     const decisionId = secondFinalize.response.body.resource.decisionId;
-    committed(await assess({ commandType: 'assessment_v2.review.assign', expectedVersion: revisionVersion + 2,
+    committed(await assess({ actor: ids.reviewer, token: 'enterprise-reviewer-token',
+      commandType: 'assessment_v2.review.assign', expectedVersion: revisionVersion + 2,
       payload: reviewPayload(decisionId, { reviewerId: ids.reviewer }), key: 'lineage-reassign' }));
     await attest(decisionId, revisionVersion + 3, 'lineage-attest-two');
     const approval = committed(await assess({ actor: ids.reviewer, token: 'enterprise-reviewer-token',
@@ -199,7 +201,7 @@ const main = async () => {
       assert.equal(responseBody.outcome, 'committed', JSON.stringify(responseBody));
       return { body, response: { status: response.status, body: responseBody } };
     };
-    const requested = await studio({ actor: ids.approver, token: 'enterprise-approver-token',
+    const requested = await studio({ actor: ids.author, token: 'enterprise-author-token',
       commandType: 'studio.handoff.request', expectedAggregateVersion: 0, expectedArtifactVersion: null,
       payload: { upstreamHandoffId: assessHandoffId, artifactType: 'brd', targetInputBundle: null },
       key: 'lineage-studio-request' });
@@ -208,7 +210,7 @@ const main = async () => {
       commandType: 'studio.handoff.review.resolve', expectedAggregateVersion: 1, expectedArtifactVersion: 1,
       payload: { handoffId: moduleHandoffId, handoffVersion: 1, outcome: 'approve',
         rationale: 'Synthetic lineage independently reviewed.', conditions: [] }, key: 'lineage-studio-review' });
-    const accepted = await studio({ actor: ids.author, token: 'enterprise-author-token',
+    const accepted = await studio({ actor: ids.approver, token: 'enterprise-approver-token',
       commandType: 'studio.handoff.approval.resolve', expectedAggregateVersion: 2, expectedArtifactVersion: 1,
       payload: { handoffId: moduleHandoffId, handoffVersion: 2, outcome: 'approve',
         rationale: 'Synthetic lineage accepted.', conditions: [] }, key: 'lineage-studio-accept' });
@@ -242,7 +244,7 @@ const main = async () => {
       'privileged_audit_events'].map((source, index) => rowRecord(source, governRows[index].rows[0]));
     const actionInput = [
       [approval, ids.reviewer], [denied, ids.reviewer], [governed, ids.approver], [assessHandoff, ids.approver],
-      [requested, ids.approver], [reviewed, ids.reviewer], [accepted, ids.author], [consumed, ids.approver],
+      [requested, ids.author], [reviewed, ids.reviewer], [accepted, ids.approver], [consumed, ids.approver],
     ];
     const actions = actionInput.map(([result, actor], index) => {
       const payload = result.body.payload ?? {};

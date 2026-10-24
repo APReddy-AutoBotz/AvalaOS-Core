@@ -7,6 +7,8 @@ import {
   authenticatedLifecycleControl as control,
   authenticatedLifecycleAttemptUnauthorizedProcessUpdate as attemptUnauthorizedProcessUpdate,
   authenticatedLifecycleEnterAs as enterAs,
+  authenticatedLifecycleEnterStudioAs as enterStudioAs,
+  authenticatedLifecycleOpenStudioHandoffDecision as openStudioHandoffDecision,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
@@ -425,32 +427,13 @@ const assertNoHorizontalViewportOverflow = async (page: Page) => {
     .toBeLessThanOrEqual(dimensions.viewportWidth + 1);
 };
 
-const enterStudioAs = async (
-  page: Page,
-  actor: FixtureActor,
-  beforeActorNavigation: () => Promise<void> = async () => undefined,
-) => {
-  await enterAs(page, actor, beforeActorNavigation);
-  await clickProduct(page, 'Studio');
-  await expect(page.getByTestId('governed-studio-creation-route')).toBeVisible();
-  await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
-};
-
 const commitStudioHandoffAction = async (
   page: Page,
   buttonName: string,
   rationale?: string,
   mailbox: 'Inbox' | 'Outbox' = 'Inbox',
 ): Promise<ApiResponseObservation> => {
-  const handoffCenter = page.getByRole('region', { name: 'Assess → Studio handoffs', exact: true });
-  await expect(handoffCenter).toBeVisible();
-  const mailboxTab = handoffCenter.getByRole('tab', { name: new RegExp(`^${mailbox} \\(\\d+\\)$`, 'u') });
-  await mailboxTab.click();
-  await expect(mailboxTab).toHaveAttribute('aria-selected', 'true');
-  await handoffCenter.getByRole('button', { name: buttonName, exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  if (rationale) await dialog.getByLabel('Decision rationale', { exact: true }).fill(rationale);
+  const dialog = await openStudioHandoffDecision(page, buttonName, rationale, mailbox);
   const response = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
     dialog.getByRole('button', { name: 'Confirm', exact: true }).click());
   await expect(dialog).toBeHidden();
@@ -1761,7 +1744,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Handed off to Studio');
 
-    await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
+    await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
     const studioRequestApi = await test.step('hosted:govern-studio:studio-request', () =>
       commitStudioHandoffAction(page, 'Request handoff'));
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
@@ -1771,14 +1754,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       commitStudioHandoffAction(page, 'Approve review', 'Independent Studio handoff review approved.'));
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
-    await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
+    await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
     const studioFinalAcceptApi = await test.step('hosted:govern-studio:studio-final-accept', () =>
       commitStudioHandoffAction(page, 'Final accept', 'Final Studio handoff acceptance by an independent actor.'));
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
     const sourcePackageApi = await test.step('hosted:govern-studio:source-consume', () =>
-      commitStudioHandoffAction(page, 'Start Studio draft', undefined, 'Outbox'));
+      commitStudioHandoffAction(page, 'Start Studio draft', undefined, 'Inbox'));
     expect(sourcePackageApi.status).toBe(201);
     await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\./u)).toBeVisible();
     observe('studio-consume', 'ui.studio-lineage-consumed');

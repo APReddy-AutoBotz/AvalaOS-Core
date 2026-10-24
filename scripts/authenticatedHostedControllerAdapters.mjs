@@ -57,6 +57,7 @@ export const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
   author:Object.freeze(['org.admin','operations.read','assess.read','assess.create','assess.response.write','assess.finalize',
     'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
     'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve',
+    'studio.handoffs.read','studio.handoffs.request',
     'project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import']),
   reviewer:Object.freeze(['assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest','assess.v2.approve',
     'studio.handoffs.read','studio.handoffs.review','studio.artifacts.read','studio.artifacts.review',
@@ -68,7 +69,7 @@ export const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
   outsider:Object.freeze([]),
 });
 export const FORBIDDEN_PERSONA_CAPABILITIES=Object.freeze({
-  author:Object.freeze([]),
+  author:Object.freeze(['studio.handoffs.review','studio.handoffs.approve','studio.handoffs.consume']),
   reviewer:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.govern.resolve']),
   approver:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.approve']),
   outsider:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.process.update',
