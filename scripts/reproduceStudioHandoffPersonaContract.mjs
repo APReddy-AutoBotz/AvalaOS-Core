@@ -149,6 +149,7 @@ const sanitizedFailureCode = error => {
   ]).has(code) ? code : 'STUDIO_HANDOFF_PERSONA_RUNNER_FAILED';
 };
 const projects=['desktop-chromium','pixel-7-chromium'];
+const cases=projects.flatMap(project=>['artifact-unavailable','held-null-control'].map(scenario=>({project,scenario,key:`${project}-${scenario}`})));
 const exactRoles = {};
 let exactRolesAfterRun = {};
 let exactRolesStable = true;
@@ -174,7 +175,7 @@ let fixtureCreateCount=0,fixtureCloseCount=0,observerCreateCount=0,observerClose
 const captureProviders=fixture=>{if(!fixture||accountedFixtures.has(fixture))return;accountedFixtures.add(fixture);
   providers.calls+=fixture.evidence.providerEffects.calls;providers.paidCalls+=fixture.evidence.providerEffects.paidCalls;providers.egressAttempts+=fixture.evidence.providerEffects.egressAttempts;};
 try {
-  activeFixture=await createProjectFixture(projects[0]);
+  activeFixture=await createProjectFixture(cases[0].key);
   fixtureCreateCount+=1;
   const expectedFixtureBase=`http://127.0.0.1:${fixturePort}`;
   if(activeFixture.baseUrl!==expectedFixtureBase)throw new Error('STUDIO_HANDOFF_PERSONA_FIXTURE_ISOLATION_REJECTED');
@@ -210,9 +211,15 @@ try {
   if (!ready) throw new Error('STUDIO_HANDOFF_PERSONA_PREVIEW_NOT_READY');
 
   const projectExits=[];
-  for(let index=0;index<projects.length;index+=1){
-    const project=projects[index];
-    if(index>0){activeFixture=await createProjectFixture(project);fixtureCreateCount+=1;if(activeFixture.baseUrl!==expectedFixtureBase)throw new Error('STUDIO_HANDOFF_PERSONA_FIXTURE_ISOLATION_REJECTED');}
+  for(let index=0;index<cases.length;index+=1){
+    const {project,scenario,key}=cases[index];
+    if(index>0){activeFixture=await createProjectFixture(key);fixtureCreateCount+=1;if(activeFixture.baseUrl!==expectedFixtureBase)throw new Error('STUDIO_HANDOFF_PERSONA_FIXTURE_ISOLATION_REJECTED');}
+    const isolationPath=path.join(base,`artifact-isolation-${project}.json`);
+    if(scenario==='artifact-unavailable'&&await access(isolationPath).then(()=>true).catch(()=>false))throw new Error('STUDIO_HANDOFF_PERSONA_FIXTURE_ISOLATION_REJECTED');
+    if(scenario==='held-null-control'){
+      const isolation=JSON.parse(await readFile(isolationPath,'utf8'));
+      if(isolation.schemaVersion!=='studio-artifact-read-isolation-browser-v1'||isolation.project!==project||isolation.actorLimitMs!==15_000||isolation.providersEnabled!==false)throw new Error('STUDIO_HANDOFF_PERSONA_FIXTURE_ISOLATION_REJECTED');
+    }
     let projectObserverCreated=false,projectObserverClosed=false,projectFixtureClosed=false,projectExit=null;
     try{
       const beforeRoles=await readExactRoles(activeFixture);
@@ -225,13 +232,17 @@ try {
         ENTERPRISE_LIFECYCLE_API_BASE_URL:activeFixture.baseUrl,ENTERPRISE_LIFECYCLE_CONTROL_TOKEN:activeFixture.controlToken,
         ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY:activeFixture.authStorageKey,ENTERPRISE_LIFECYCLE_AUTHENTICATED:'true',
         ENTERPRISE_LIFECYCLE_HOSTED_PERSONA_ROLE_PARITY:'true',STUDIO_HANDOFF_PERSONA_RESULT_DIRECTORY:base,
-        STUDIO_HANDOFF_PERSONA_PLAYWRIGHT_OUTPUT_DIRECTORY:path.join(playwrightOutput,project),
+        STUDIO_HANDOFF_PERSONA_SCENARIO:scenario,
+        STUDIO_HANDOFF_PERSONA_PLAYWRIGHT_OUTPUT_DIRECTORY:path.join(playwrightOutput,key),
         AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH:path.join(base,`browser-failure-${project}.json`),
         STUDIO_HANDOFF_PERSONA_OBSERVER_BASE_URL:activeObserver.baseUrl,STUDIO_HANDOFF_PERSONA_OBSERVER_TOKEN:activeObserver.token,
       });
       projectExits.push(projectExit);
       if(projectExit!==0)throw new Error('STUDIO_HANDOFF_PERSONA_PROJECT_FAILED');
-      browserResults.push(JSON.parse(await readFile(path.join(base,`browser-${project}.json`),'utf8')));
+      if(scenario==='held-null-control'){
+        browserResults.push(JSON.parse(await readFile(path.join(base,`browser-${project}.json`),'utf8')));
+        await rm(isolationPath,{force:false});
+      }
       const afterRoles=await readExactRoles(activeFixture);
       if(JSON.stringify(afterRoles)!==JSON.stringify(beforeRoles)||Object.values(afterRoles).some(role=>!role.exact)){
         exactRolesStable=false;throw new Error('STUDIO_HANDOFF_PERSONA_ROLE_PARITY_CHANGED');
@@ -241,17 +252,19 @@ try {
       captureProviders(activeFixture);
       if(activeObserver){projectObserverClosed=await activeObserver.close();if(projectObserverClosed)observerCloseCount+=1;activeObserver=null;}
       if(activeFixture){projectFixtureClosed=await activeFixture.close();if(projectFixtureClosed)fixtureCloseCount+=1;activeFixture=null;}
-      projectIsolation.push({project,browserExit:projectExit,observerCreated:projectObserverCreated,observerClosed:projectObserverClosed,fixtureCreated:true,fixtureClosed:projectFixtureClosed});
+      projectIsolation.push({project,scenario,browserExit:projectExit,observerCreated:projectObserverCreated,observerClosed:projectObserverClosed,fixtureCreated:true,fixtureClosed:projectFixtureClosed});
       if(!projectObserverClosed||!projectFixtureClosed)throw new Error('STUDIO_HANDOFF_PERSONA_PROJECT_CLEANUP_FAILED');
     }
   }
   browserExit=projectExits.every(value=>value===0)?0:(projectExits.find(value=>value!==0)??1);
   exactRolesStable=exactRolesStable&&JSON.stringify(exactRolesAfterRun)===JSON.stringify(exactRoles);
-  fixtureClosed=projectIsolation.length===projects.length&&projectIsolation.every(item=>item.fixtureClosed);
-  observerClosed=projectIsolation.length===projects.length&&projectIsolation.every(item=>item.observerClosed);
-  status = browserExit === 0 && browserResults.length===projects.length && browserResults.every(result => result.schemaVersion==='studio-handoff-persona-browser-v2'
+  fixtureClosed=projectIsolation.length===cases.length&&projectIsolation.every(item=>item.fixtureClosed);
+  observerClosed=projectIsolation.length===cases.length&&projectIsolation.every(item=>item.observerClosed);
+  status = browserExit === 0 && browserResults.length===projects.length && browserResults.every(result => result.schemaVersion==='studio-handoff-persona-browser-v3'
     && result.status === 'passed' && result.authorityBoundReadiness?.committedBeforeDetailRelease===true
-    && result.authorityBoundReadiness?.staleDetailDidNotOverwrite===true) ? 'passed' : 'failed';
+    && result.authorityBoundReadiness?.staleDetailDidNotOverwrite===true
+    && result.artifactReadIsolation?.finalAcceptStatus===201
+    && result.artifactReadIsolation?.artifactMutationBlocked===true) ? 'passed' : 'failed';
 } catch (error) {
   failureCode = sanitizedFailureCode(error);
   status = 'failed';
@@ -279,13 +292,14 @@ try {
   const cleanupPassed = fixtureClosed && observerClosed && previewExited && buildRemoved && playwrightOutputRemoved;
   status = status === 'passed' && sourceUnchanged && providersZero && cleanupPassed ? 'passed' : 'failed';
   const result = {
-    schemaVersion: 'studio-handoff-persona-result-v2',
+    schemaVersion: 'studio-handoff-persona-result-v3',
     status,
     ...(failureCode ? { failureCode } : {}),
     releaseSha: process.env.RELEASE_SHA,
     exactRoles,
     exactRolesAfterRun,
     exactRolesStable,
+    scenarioIsolation:{fixturesCreated:fixtureCreateCount,fixturesClosed:fixtureCloseCount,observersCreated:observerCreateCount,observersClosed:observerCloseCount,cases:projectIsolation},
     source: { count: sourceBindings.length, digest: sourceDigest, unchangedAfterRun: sourceUnchanged },
     build: buildProof,
     browserExit,

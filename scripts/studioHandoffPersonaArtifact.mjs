@@ -36,13 +36,13 @@ const text=value=>typeof value==='string'&&value.length>0&&value.length<=500?val
 const digest=value=>typeof value==='string'&&/^sha256:[a-f0-9]{64}$/u.test(value)?value:fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
 const equal=(left,right)=>JSON.stringify(left)===JSON.stringify(right);
 const requiredKeys={
-  browser:['schemaVersion','status','project','mode','fixtureSessionPrimed','actorSequence','responseStatuses','directAuthorApproval','sourcePackages','authorityBoundReadiness','proofDigest','actorLimitMs','providersEnabled','hostedRun','fullAcceptance'],
-  result:['schemaVersion','status','releaseSha','exactRoles','exactRolesAfterRun','exactRolesStable','source','build','browserExit','browsers','providers','cleanup','constraints'],
+  browser:['schemaVersion','status','project','mode','fixtureSessionPrimed','actorSequence','responseStatuses','directAuthorApproval','sourcePackages','authorityBoundReadiness','artifactReadIsolation','proofDigest','actorLimitMs','providersEnabled','hostedRun','fullAcceptance'],
+  result:['schemaVersion','status','releaseSha','exactRoles','exactRolesAfterRun','exactRolesStable','scenarioIsolation','source','build','browserExit','browsers','providers','cleanup','constraints'],
 };
 const validateRole=(value,count)=>{exact(value,['actualCount','requiredCount','requiredComplete','forbiddenAbsent','exact']);if(integer(value.actualCount)!==count||integer(value.requiredCount)!==count||boolean(value.requiredComplete)!==true||boolean(value.forbiddenAbsent)!==true||boolean(value.exact)!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');return value;};
 const validateBrowser=(value,project)=>{
   exact(value,requiredKeys.browser);
-  if(value.schemaVersion!=='studio-handoff-persona-browser-v2'||value.status!=='passed'||value.project!==project
+  if(value.schemaVersion!=='studio-handoff-persona-browser-v3'||value.status!=='passed'||value.project!==project
     ||value.mode!=='actual-chromium-production-ui-production-handlers-disposable-postgresql'||boolean(value.fixtureSessionPrimed)!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
   const sequence=['author-request','reviewer-review','approver-final-accept','approver-consume-inbox'];
   if(!equal(value.actorSequence,sequence))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
@@ -61,6 +61,15 @@ const validateBrowser=(value,project)=>{
     ||readiness.staleDetailDidNotOverwrite!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
   exact(readiness.effects,['approvals','receipts','audits','sourcePackages']);
   if(!equal(readiness.effects,{approvals:1,receipts:1,audits:1,sourcePackages:0}))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
+  const isolation=value.artifactReadIsolation;
+  exact(isolation,['projectionRoute','injectedStatus','requestCount','actualStatus','legitimateNull','exactApproverActor','artifactState','handoffPhase','finalAcceptUnique','finalAcceptEnabled','artifactMutationBlocked','finalAcceptStatus','finalAcceptElapsedMs','effects']);
+  if(isolation.projectionRoute!=='studio_artifact_projection'||isolation.injectedStatus!==503||isolation.requestCount!==1
+    ||isolation.actualStatus!==200||isolation.legitimateNull!==true||isolation.exactApproverActor!==true
+    ||isolation.artifactState!=='artifact_unavailable'||isolation.handoffPhase!=='ready'||isolation.finalAcceptUnique!==true
+    ||isolation.finalAcceptEnabled!==true||isolation.artifactMutationBlocked!==true||isolation.finalAcceptStatus!==201
+    ||integer(isolation.finalAcceptElapsedMs,0,14_999)!==isolation.finalAcceptElapsedMs)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
+  exact(isolation.effects,['approvals','receipts','audits','sourcePackages']);
+  if(!equal(isolation.effects,{approvals:1,receipts:1,audits:1,sourcePackages:0}))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
   if(digest(value.proofDigest)!==sha256(Buffer.from(JSON.stringify({actorSequence:sequence,sourcePackageDelta:1}))))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
   if(value.actorLimitMs!==15_000||value.providersEnabled!==false||value.hostedRun!==false||value.fullAcceptance!==false)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID');
   return value;
@@ -92,10 +101,15 @@ export const verifyStudioHandoffPersonaArtifact=async({directory,expectedRelease
   const browsers=[];
   for(const project of ['desktop-chromium','pixel-7-chromium'])browsers.push(validateBrowser(await readJson(`browser-${project}.json`),project));
   const result=await readJson('result.json');exact(result,requiredKeys.result);
-  if(result.schemaVersion!=='studio-handoff-persona-result-v2'||result.status!=='passed'||result.releaseSha!==expectedReleaseSha||result.browserExit!==0||result.exactRolesStable!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
+  if(result.schemaVersion!=='studio-handoff-persona-result-v3'||result.status!=='passed'||result.releaseSha!==expectedReleaseSha||result.browserExit!==0||result.exactRolesStable!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
   exact(result.exactRoles,['author','reviewer','approver']);validateRole(result.exactRoles.author,25);validateRole(result.exactRoles.reviewer,14);validateRole(result.exactRoles.approver,18);
   exact(result.exactRolesAfterRun,['author','reviewer','approver']);validateRole(result.exactRolesAfterRun.author,25);validateRole(result.exactRolesAfterRun.reviewer,14);validateRole(result.exactRolesAfterRun.approver,18);
   if(!equal(result.exactRoles,result.exactRolesAfterRun))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
+  exact(result.scenarioIsolation,['fixturesCreated','fixturesClosed','observersCreated','observersClosed','cases']);
+  for(const key of ['fixturesCreated','fixturesClosed','observersCreated','observersClosed'])if(result.scenarioIsolation[key]!==4)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
+  const expectedCases=['desktop-chromium','pixel-7-chromium'].flatMap(project=>['artifact-unavailable','held-null-control'].map(scenario=>({project,scenario,
+    browserExit:0,observerCreated:true,observerClosed:true,fixtureCreated:true,fixtureClosed:true})));
+  if(!equal(result.scenarioIsolation.cases,expectedCases))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
   exact(result.source,['count','digest','unchangedAfterRun']);if(result.source.count!==studioHandoffPersonaSourcePaths.length||result.source.digest!==bindings.sourceDigest||result.source.unchangedAfterRun!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
   if(!equal(result.build,{status:build.status,fileCount:build.fileCount,digest:build.digest})||!equal(result.browsers,browsers))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
   exact(result.providers,['calls','paidCalls','egressAttempts']);if(!equal(result.providers,{calls:0,paidCalls:0,egressAttempts:0}))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');

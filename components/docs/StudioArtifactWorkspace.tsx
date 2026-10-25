@@ -85,6 +85,7 @@ type ViewState =
   | 'approval_rejected'
   | 'superseded'
   | 'offline'
+  | 'artifact_unavailable'
   | 'stale'
   | 'version_conflict'
   | 'authorization_revoked'
@@ -184,7 +185,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const canReadWorkspace = capabilities.some(item => ['studio.sources.read', 'studio.handoffs.read', 'studio.templates.read'].includes(item));
   const offline = !online || !navigator.onLine;
   const blockedByReload = state==='committed_reload_failed';
-  const blocked = offline || blockedByReload || ['loading', 'generating', 'stale', 'version_conflict', 'authorization_revoked', 'read_only', 'command_failed', 'generation_failed'].includes(state) || artifact?.readOnly === true || workspace?.readOnly === true;
+  const blocked = offline || blockedByReload || ['loading', 'generating', 'artifact_unavailable', 'stale', 'version_conflict', 'authorization_revoked', 'read_only', 'command_failed', 'generation_failed'].includes(state) || artifact?.readOnly === true || workspace?.readOnly === true;
   const conditions = useMemo(() => conditionsText.split('\n').map(item => item.trim()).filter(Boolean), [conditionsText]);
   const controlledHumanSyntheticGeneration = isControlledHumanRuntimeEnabled();
 
@@ -259,6 +260,18 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     setSelectedBundleVersionId('');
     setSelectedTemplateVersionId('');
     syntheticGenerationAttemptRef.current=null;
+  }, []);
+
+  const clearArtifactProjection = useCallback(() => {
+    setArtifact(null);
+    setArtifactWorkspace(null);
+    selectedArtifactIdRef.current='';
+    setSelectedArtifactId('');
+    setGovernedSelection(null);
+    setReviewers([]);
+    setReviewerId('');
+    setDraft('');
+    setDraftValidationError(null);
   }, []);
 
   const loadGovernedSummary = useCallback(async (summary: StudioArtifactSummaryDto, ticket: StudioAuthorityTicket,
@@ -366,31 +379,38 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         setMessage(artifactResult.unavailable ? 'Artifact discovery is unavailable. Other authorized Studio projections remain usable.' : 'No accepted governed Studio handoffs are available.');
         return;
       }
+      let value: StudioArtifactProjectionDto;
       try {
-        const value = await readStudioArtifact(context, id, type, transport);
-        if (!loadIsCurrent()) return;
-        setArtifact(value);
-        if (value.contractVersion === 'studio-artifact-2') {
-          const exactWorkspace = await readStudioArtifactWorkspace(context, value.id, 0, 20, transport);
-          if (!loadIsCurrent()) return;
-          setArtifactWorkspace(exactWorkspace);
-        }
-        setState(value.readOnly ? 'read_only' : value.lifecycle);
-        setMessage(captureMode ? 'Synthetic capture fixture · AP Invoice Exception Handling control brief. No persisted artifact state is changed.' : value.readOnly ? 'Read-only maintenance. Committed canonical artifacts remain available.' : workspaceResult.unavailable ? 'Current committed legacy artifact loaded. Optional multi-source projections are unavailable for this authority context.' : 'Current committed artifact loaded.');
-        if (['reviewer_ready', 'in_review'].includes(value.lifecycle)) {
-          const eligible = await readStudioEligibleReviewers(context, value.id, value.currentVersion.id, transport);
-          if (!loadIsCurrent()) return;
-          setReviewers(eligible);
-          setReviewerId(current => eligible.some(item => item.actorId === current) ? current : (eligible[0]?.actorId ?? ''));
-        }
+        value = await readStudioArtifact(context, id, type, transport);
       } catch (error) {
         if(!loadIsCurrent())return;
         if (error instanceof StudioArtifactBoundaryError && error.code === 'RESOURCE_NOT_AVAILABLE') {
           setState('empty');
           setMessage('No canonical artifact exists for this source and type.');
+          return;
+        } else if (error instanceof StudioArtifactBoundaryError && error.code === 'COMMAND_UNAVAILABLE') {
+          clearArtifactProjection();
+          setState('artifact_unavailable');
+          setMessage('Artifact details are temporarily unavailable. Reload to edit this artifact. Available handoff actions can still be completed.');
+          return;
         } else {
           throw error;
         }
+      }
+      if (!loadIsCurrent()) return;
+      setArtifact(value);
+      if (value.contractVersion === 'studio-artifact-2') {
+        const exactWorkspace = await readStudioArtifactWorkspace(context, value.id, 0, 20, transport);
+        if (!loadIsCurrent()) return;
+        setArtifactWorkspace(exactWorkspace);
+      }
+      setState(value.readOnly ? 'read_only' : value.lifecycle);
+      setMessage(captureMode ? 'Synthetic capture fixture · AP Invoice Exception Handling control brief. No persisted artifact state is changed.' : value.readOnly ? 'Read-only maintenance. Committed canonical artifacts remain available.' : workspaceResult.unavailable ? 'Current committed legacy artifact loaded. Optional multi-source projections are unavailable for this authority context.' : 'Current committed artifact loaded.');
+      if (['reviewer_ready', 'in_review'].includes(value.lifecycle)) {
+        const eligible = await readStudioEligibleReviewers(context, value.id, value.currentVersion.id, transport);
+        if (!loadIsCurrent()) return;
+        setReviewers(eligible);
+        setReviewerId(current => eligible.some(item => item.actorId === current) ? current : (eligible[0]?.actorId ?? ''));
       }
     } catch (error) {
       if (!loadIsCurrent()) return;
@@ -398,7 +418,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setState(next.state === 'command_failed' ? 'stale' : next.state);
       setMessage(next.state === 'command_failed' ? 'Studio authority is unavailable. Reload the current committed state.' : next.message);
     }
-  }, [accepts, artifactType, beginHandoffLoad, canReadArtifacts, canReadSources, canReadWorkspace, captureMode, clearProjection, context, loadGovernedSummary, offline, publishHandoffProjection, sourceFlowTransport, transport]);
+  }, [accepts, artifactType, beginHandoffLoad, canReadArtifacts, canReadSources, canReadWorkspace, captureMode, clearArtifactProjection, clearProjection, context, loadGovernedSummary, offline, publishHandoffProjection, sourceFlowTransport, transport]);
 
   useEffect(() => {
     void load('', artifactType, false);
@@ -640,7 +660,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const sourceIntake=!canReadSources?null:studioSourceFlow?<div className="px-4 sm:px-5"><StudioSourceIntakeReview key={`studio-source-flow:${authorityIdentity}`} projection={studioSourceFlow} disabled={blocked||Boolean(workspace?.readOnly)} canManageSources={capabilities.includes('studio.sources.manage')} selectedBundleVersionId={selectedBundleVersionId} onSelectBundle={setSelectedBundleVersionId} onCreateSource={input=>withWorkspaceMutation(()=>createStudioSource(input))} onExtract={bundle=>withWorkspaceMutation(()=>extractStudioBundle(bundle))} onReview={input=>withWorkspaceMutation(()=>reviewStudioCandidate(input))}/></div>:<div className="px-4 sm:px-5"><section aria-labelledby="studio-source-intake-unavailable" className="av-surface mt-4 p-4"><h3 id="studio-source-intake-unavailable" className="text-lg font-bold">Studio source intake unavailable</h3><p role="status" className="mt-2 text-sm font-semibold">The exact Studio source projection could not be verified. Upload, extraction, candidate review, and direct-package creation are disabled; no Assess fallback is used.</p></section></div>;
 
   return (
-    <section data-testid="studio-artifact-workspace" data-studio-usable={state !== 'loading' && Boolean(artifact || workspace || studioSourceFlow) ? 'true' : 'false'} data-studio-handoff-phase={handoffReadiness.phase} data-studio-projection-state={artifact ? 'artifact-ready' : workspace ? 'workspace-ready' : studioSourceFlow ? 'source-ready' : state === 'loading' ? 'loading' : 'empty-ready'} aria-labelledby="studio-artifact-title" className="av-surface mt-6 overflow-hidden">
+    <section data-testid="studio-artifact-workspace" data-studio-usable={state !== 'loading' && Boolean(artifact || workspace || studioSourceFlow) ? 'true' : 'false'} data-studio-artifact-state={state} data-studio-artifact-mutations={blocked?'blocked':'available'} data-studio-handoff-phase={handoffReadiness.phase} data-studio-projection-state={artifact ? 'artifact-ready' : workspace ? 'workspace-ready' : studioSourceFlow ? 'source-ready' : state === 'loading' ? 'loading' : 'empty-ready'} aria-labelledby="studio-artifact-title" className="av-surface mt-6 overflow-hidden">
       <header className="border-b border-[var(--av-color-border)] bg-[var(--av-color-bg-subtle)]/70 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="av-eyebrow">Avala Studio · governed artifact</p><h2 id="studio-artifact-title" className="mt-1 text-2xl font-bold text-[var(--av-color-text)]">Artifact workspace</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--av-color-text-muted)]">Structured content is committed by server authority. Business users see the governed artifact first; exact JSON, hashes, ancestry, and receipts remain available under advanced details.</p></div><StatusBadge tone="info">{captureMode ? 'Synthetic fixture' : 'Committed source'}</StatusBadge></div>
       </header>
@@ -691,7 +711,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
           </div>
           <div className="flex flex-wrap content-start items-start gap-2">
             <button type="button" disabled={blocked||!capabilities.includes('studio.artifacts.generate')||!governedSelection||!selectedTemplateVersionId||state==='generating'} onClick={()=>void withWorkspaceMutation(generateGovernedPackage)} className="btn-primary min-h-10 px-3 text-xs font-bold disabled:opacity-50">{controlledHumanSyntheticGeneration?'Generate synthetic controlled-human draft':'Generate governed package draft'}</button>
-            <button type="button" disabled={!handoffId||!can('studio.artifact.generation.request') || state === 'generating' || Boolean(artifact && !['draft', 'changes_requested', 'review_rejected', 'approval_rejected', 'approved'].includes(artifact.lifecycle))} onClick={() => void run('studio.artifact.generation.request', { studioHandoffId: handoffId, artifactType })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">{legacyProjection ? 'Generate draft' : 'Generate legacy accepted-handoff draft'}</button>
+            <button type="button" disabled={blocked||!handoffId||!can('studio.artifact.generation.request') || state === 'generating' || Boolean(artifact && !['draft', 'changes_requested', 'review_rejected', 'approval_rejected', 'approved'].includes(artifact.lifecycle))} onClick={() => void run('studio.artifact.generation.request', { studioHandoffId: handoffId, artifactType })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">{legacyProjection ? 'Generate draft' : 'Generate legacy accepted-handoff draft'}</button>
             <button type="button" disabled={!can('studio.artifact.draft.revise') || !artifact || !draft || !exact('draft', 'changes_requested', 'review_rejected', 'approval_rejected')} onClick={revise} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Commit revision</button>
             <button type="button" disabled={!can('studio.artifact.review.submit') || !exact('draft')} onClick={() => void run('studio.artifact.review.submit', { artifactId: artifact!.id, artifactVersionId: artifact!.currentVersion.id })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Submit for review</button>
             <button type="button" disabled={!can('studio.artifact.review.assign') || !exact('reviewer_ready') || !reviewerId} onClick={() => void run('studio.artifact.review.assign', { artifactId: artifact!.id, artifactVersionId: artifact!.currentVersion.id, reviewerId })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Assign reviewer</button>
