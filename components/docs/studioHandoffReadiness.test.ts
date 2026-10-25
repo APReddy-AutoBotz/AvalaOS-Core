@@ -6,6 +6,7 @@ import {
   studioHandoffAuthorityIdentity,
   studioHandoffCommandIsCurrent,
   studioHandoffLoadIsCurrent,
+  studioHandoffLoadMayBegin,
   studioHandoffProjectionMatchesContext,
   type StudioHandoffReadiness,
 } from './studioHandoffReadiness.ts';
@@ -32,7 +33,7 @@ const projection = (item = handoff(), overrides: Partial<StudioWorkspaceProjecti
 const context = { organizationId: U(4), workspaceId: U(5), userId: U(6), authorizationVersion: 7 };
 const identity = studioHandoffAuthorityIdentity(context);
 const ready = (value: StudioWorkspaceProjection = projection()): StudioHandoffReadiness => ({
-  identity, requestSequence: 9, phase: 'ready', projection: value,
+  identity, requestSequence: 9, viewEpoch: 9, phase: 'ready', projection: value,
 });
 
 assert.equal(studioHandoffProjectionMatchesContext(projection(), context), true);
@@ -63,10 +64,16 @@ assert.equal(studioHandoffLoadIsCurrent(firstLoad,firstLoad,true),true);
 assert.equal(studioHandoffLoadIsCurrent(laterLoad,firstLoad,true),false);
 assert.equal(studioHandoffLoadIsCurrent(firstLoad,firstLoad,false),false);
 const command={identity,loadSequence:9,commandSequence:1};
+assert.equal(studioHandoffLoadMayBegin(null,identity),true);
+assert.equal(studioHandoffLoadMayBegin(command,identity),false);
+assert.equal(studioHandoffLoadMayBegin(command,`${identity}:next`),true);
+assert.equal(studioHandoffLoadMayBegin(command,identity),false);
+const commandReadiness={...firstLoad,requestSequence:10,phase:'committing' as const};
+assert.equal(commandReadiness.viewEpoch,firstLoad.viewEpoch);
 assert.equal(studioHandoffCommandIsCurrent(firstLoad,command,command,true,true),true);
 assert.equal(studioHandoffCommandIsCurrent(laterLoad,command,command,true,true),false);
 assert.equal(studioHandoffCommandIsCurrent(firstLoad,{...command},command,true,true),false);
 assert.equal(studioHandoffCommandIsCurrent(firstLoad,command,command,false,true),false);
 assert.equal(studioHandoffCommandIsCurrent(firstLoad,command,command,true,false),false);
 
-console.log('studio handoff readiness: 27 identity, phase, scope, read-only, offline, pending, monotonic-load and stale-dialog assertions passed');
+console.log('studio handoff readiness: 31 identity, phase, scope, read-only, offline, pending, view-epoch, load-barrier and stale-dialog assertions passed');

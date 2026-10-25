@@ -8,6 +8,7 @@ export type StudioHandoffPhase = 'loading' | 'ready' | 'committing' | 'reload_fa
 export interface StudioHandoffReadiness {
   readonly identity: string;
   readonly requestSequence: number;
+  readonly viewEpoch: number;
   readonly phase: StudioHandoffPhase;
   readonly projection: StudioWorkspaceProjection | null;
 }
@@ -17,6 +18,11 @@ export interface StudioHandoffCommandBinding {
   readonly loadSequence: number;
   readonly commandSequence: number;
 }
+
+export const studioHandoffLoadMayBegin = (
+  active: StudioHandoffCommandBinding | null,
+  currentIdentity: string,
+) => active === null || active.identity !== currentIdentity;
 
 export const studioHandoffLoadIsCurrent = (
   current: Pick<StudioHandoffReadiness, 'identity' | 'requestSequence'>,

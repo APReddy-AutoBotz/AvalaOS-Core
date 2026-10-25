@@ -186,27 +186,59 @@ test('PR C synthetic runner scopes a Studio handoff action to one exact resource
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('PR C exact handoff action waits for the retained artifact projection after selecting its bundle', async ({page}) => {
+test('PR C exact handoff action stays usable while the retained artifact projection is pending', async ({page}) => {
   await open(page,'?multiEligible=1&syntheticSelection=1&delayedHandoffArtifact=1');
   const center=page.getByRole('region',{name:'Assess → Studio handoffs'});
   const card=center.locator('[data-upstream-handoff-id="00000033-0000-4000-8000-000000000033"]').filter({hasText:'Eligible approved Assess result · source v3'});
-  await expect(card.getByRole('button',{name:'Request handoff',exact:true})).toBeDisabled();
+  const request=card.getByRole('button',{name:'Request handoff',exact:true});
+  const artifactWorkspace=page.getByTestId('studio-artifact-workspace');
+  await expect(card).toHaveCount(1);
+  await expect(request).toHaveCount(1);
+  await expect(artifactWorkspace).toHaveAttribute('data-studio-projection-state','workspace-ready');
+  await expect(artifactWorkspace).toHaveAttribute('data-studio-handoff-phase','ready');
+  await expect(request).toBeEnabled();
   const interactions:string[]=[];
-  await selectExactEligibleStudioBundle(page,interactions,{versionId:'00000032-0000-4000-8000-000000000032'});
-  // Bundle selection is usable while the independent artifact read is pending.
-  await expect(card.getByRole('button',{name:'Request handoff',exact:true})).toBeDisabled();
-  await page.evaluate(()=>{setTimeout(()=>(window as any).__releaseHandoffArtifact(),1000);});
-  const selected=await exactStudioHandoffAction(page,interactions,{
-    tab:'Inbox',resource:/^Eligible approved Assess result · source v3$/u,state:'eligible',button:'Request handoff',
-    upstreamHandoffId:'00000033-0000-4000-8000-000000000033',
-  });
-  await expect(selected.control).toBeEnabled();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await selected.control.click();
+  let artifactProjectionReleased=false;
+  try {
+    await selectExactEligibleStudioBundle(page,interactions,{versionId:'00000032-0000-4000-8000-000000000032'});
+    await expect(request).toBeEnabled();
+    const selected=await exactStudioHandoffAction(page,interactions,{
+      tab:'Inbox',resource:/^Eligible approved Assess result · source v3$/u,state:'eligible',button:'Request handoff',
+      upstreamHandoffId:'00000033-0000-4000-8000-000000000033',
+    });
+    await expect(selected.card).toHaveCount(1);
+    await expect(selected.control).toBeEnabled();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await selected.control.click();
+    const dialog=page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button',{name:'Confirm',exact:true}).click();
+    await center.getByRole('tab',{name:/^Outbox \(/u}).click();
+    const committed=center.locator('[data-handoff-id="00000010-0000-4000-8000-000000000010"]').filter({hasText:'Approved AP assessment v3 · v2'});
+    await expect(committed).toHaveCount(1);
+    await expect(committed.getByText('reviewer ready',{exact:true})).toBeVisible();
+    await expect(committed.getByRole('button',{name:'Withdraw',exact:true})).toBeEnabled();
+    expect(interactions).toEqual(['select:exact-bound-studio-bundle','tab:studio-handoff-inbox']);
+    await page.evaluate(()=>(window as any).__releaseHandoffArtifact());
+    artifactProjectionReleased=true;
+    await expect(page.getByText('No committed artifact')).toBeVisible();
+    await expect(committed.getByText('reviewer ready',{exact:true})).toBeVisible();
+  } finally {
+    if(!artifactProjectionReleased)await page.evaluate(()=>(window as any).__releaseHandoffArtifact?.()).catch(()=>undefined);
+  }
+});
+
+test('PR C fresh handoff view load invalidates a pending dialog without submitting a command', async ({page}) => {
+  await open(page,'?multiEligible=1');
+  const center=page.getByRole('region',{name:'Assess → Studio handoffs'});
+  const card=center.locator('[data-upstream-handoff-id="00000033-0000-4000-8000-000000000033"]').filter({hasText:'Eligible approved Assess result · source v3'});
+  await card.getByRole('button',{name:'Request handoff',exact:true}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
-  await center.getByRole('tab',{name:/^Outbox \(/u}).click();
-  await expect(center.getByText('reviewer ready',{exact:true})).toBeVisible();
+  await page.getByLabel('Artifact type',{exact:true}).selectOption('frd');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByTestId('studio-artifact-workspace')).toHaveAttribute('data-studio-handoff-phase','ready');
+  await expect(card.getByText('eligible',{exact:true})).toBeVisible();
+  await expect(center.getByRole('tab',{name:'Outbox (0)',exact:true})).toBeVisible();
 });
 
 for(const invalid of ['missing','duplicate']){
