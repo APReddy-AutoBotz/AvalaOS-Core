@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page, type Request, type Route } from '@playwright/test';
 import {
   authenticatedLifecycleAttestEverySubmittedEvidence as attestEverySubmittedEvidence,
   authenticatedLifecycleClickProduct as clickProduct,
@@ -25,7 +25,9 @@ import {
 import { primeV2FullPrefixFixtureSession } from '../../../scripts/v2FullPrefixReproduction.mjs';
 
 const outputDirectory = process.env.STUDIO_HANDOFF_PERSONA_RESULT_DIRECTORY;
-if (!outputDirectory) throw new Error('STUDIO_HANDOFF_PERSONA_RESULT_DIRECTORY_REQUIRED');
+const observerBaseUrl=process.env.STUDIO_HANDOFF_PERSONA_OBSERVER_BASE_URL;
+const observerToken=process.env.STUDIO_HANDOFF_PERSONA_OBSERVER_TOKEN;
+if (!outputDirectory||!observerBaseUrl||!observerToken) throw new Error('STUDIO_HANDOFF_PERSONA_ENV_REQUIRED');
 const digest = (value: unknown) => `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`;
 
 type LifecycleFrame = Readonly<{
@@ -39,6 +41,14 @@ type DirectAuthorDenial = Readonly<{
   zeroEffects: boolean;
   projectionReadRefused: boolean;
 }>;
+type HandoffAuthorityFrame=Readonly<{handoffCount:number;approvalReadyCount:number;approvedCount:number;
+  approvals:number;approvalReceipts:number;approvalAudits:number;sourcePackages:number}>;
+
+const handoffAuthorityFrame=async(processLabel:string):Promise<HandoffAuthorityFrame>=>{
+  const response=await fetch(`${observerBaseUrl}/frame`,{method:'POST',headers:{'content-type':'application/json','x-local-proof-token':observerToken},body:JSON.stringify({processLabel}),signal:AbortSignal.timeout(15_000)});
+  if(!response.ok)throw new Error('STUDIO_HANDOFF_PERSONA_OBSERVER_REJECTED');
+  return response.json() as Promise<HandoffAuthorityFrame>;
+};
 
 const observe = async (page: Page, route: string, action: () => Promise<unknown>) => {
   const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === route, { timeout: 15_000 });
@@ -101,9 +111,14 @@ const commitStudioDecision = async (
 test('exact Studio handoff personas preserve three-party authority in production UI', async ({ context, page }, testInfo) => {
   const projectSlug = testInfo.project.name.replaceAll(/[^a-z0-9-]/giu, '-').toLowerCase();
   const outputPath = path.join(outputDirectory, `browser-${projectSlug}.json`);
+  const checkpointPath=path.join(outputDirectory,`checkpoint-${projectSlug}.json`);
+  const checkpoint=async(phase:string,counts?:Readonly<{approvals:number;receipts:number;audits:number;sourcePackages:number}>)=>
+    writeFile(checkpointPath,`${JSON.stringify({schemaVersion:'studio-handoff-persona-checkpoint-v1',project:projectSlug,phase,...(counts?{counts}: {})})}\n`,'utf8');
+  await checkpoint('started');
   const setup = await control<AuthenticatedLifecycleSetup>('/control/setup', {
     projectName: `studio-handoff-persona-${projectSlug}`,
   });
+  await checkpoint('setup');
   const settleBoundary = await installLocalNetworkBoundary(context);
   const fixtureSessionPrimed = await primeV2FullPrefixFixtureSession(
     page,
@@ -139,6 +154,7 @@ test('exact Studio handoff personas preserve three-party authority in production
     reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click())).status()).toBe(200);
   expect((await observe(page, '/functions/v1/assess-v2-command', () =>
     reviewWorkspace.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click())).status()).toBe(200);
+  await checkpoint('assess-handoff-ready');
 
   const before = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName: setup.projectName });
   expect(before.sourcePackages).toBe(0);
@@ -147,11 +163,13 @@ test('exact Studio handoff personas preserve three-party authority in production
   const requestResponse = await test.step('local:studio-handoff:author-request', () =>
     commitStudioDecision(page, 'Request handoff'));
   expect(requestResponse.status()).toBe(201);
+  await checkpoint('author-request');
 
   await enterStudioAs(page, setup.actors.reviewer, settleBoundary);
   const reviewResponse = await test.step('local:studio-handoff:reviewer-review', () =>
     commitStudioDecision(page, 'Approve review', 'Independent Studio handoff review approved.'));
   expect(reviewResponse.status()).toBe(201);
+  await checkpoint('reviewer-review');
 
   const directDenial = await control<DirectAuthorDenial>('/control/studio-final-accept-direct-denial', {
     projectName: setup.projectName,
@@ -164,19 +182,100 @@ test('exact Studio handoff personas preserve three-party authority in production
     projectionReadRefused: false,
   });
 
-  await enterStudioAs(page, setup.actors.approver, settleBoundary);
-  const acceptanceResponse = await test.step('local:studio-handoff:approver-final-accept', () =>
-    commitStudioDecision(page, 'Final accept', 'Independent Studio handoff approval accepted.'));
-  expect(acceptanceResponse.status()).toBe(201);
+  let releaseProjection=()=>{};
+  const projectionRelease=new Promise<void>(resolve=>{releaseProjection=resolve;});
+  let projectionReadyResolve=()=>{};
+  const projectionReady=new Promise<void>(resolve=>{projectionReadyResolve=resolve;});
+  let projectionRequests=0;
+  let heldProjectionFetched=false;
+  let heldProjectionNull=false;
+  let heldProjectionApproverBound=false;
+  const projectionHandler=async(route:Route,request:Request)=>{
+    if(request.method()!=='POST')return route.continue();
+    projectionRequests+=1;
+    if(projectionRequests!==1)return route.continue();
+    heldProjectionApproverBound=request.headers().authorization===`Bearer ${setup.actors.approver.token}`;
+    const actual=await route.fetch();
+    const body=await actual.body();
+    heldProjectionFetched=actual.status()===200;
+    try{heldProjectionNull=JSON.parse(body.toString('utf8'))===null;}catch{heldProjectionNull=false;}
+    projectionReadyResolve();
+    await projectionRelease;
+    await route.fulfill({status:actual.status(),headers:actual.headers(),body});
+  };
+  await page.route('**/rest/v1/rpc/studio_artifact_projection',projectionHandler);
+  await checkpoint('projection-armed');
+  let acceptanceResponseStatus=0;
+  let finalAcceptElapsedMs=0;
+  let readinessBeforeCommit='unknown';
+  let staleProjectionDidNotOverwrite=false;
+  let approvalEffects={approvals:0,receipts:0,audits:0,sourcePackages:0};
+  try{
+    await enterStudioAs(page, setup.actors.approver, settleBoundary);
+    await checkpoint('approver-entered');
+    await expect.poll(()=>projectionRequests,{timeout:15_000}).toBe(1);
+    await projectionReady;
+    await checkpoint('projection-captured');
+    expect({heldProjectionFetched,heldProjectionNull,heldProjectionApproverBound,projectionRequests}).toEqual({
+      heldProjectionFetched:true,heldProjectionNull:true,heldProjectionApproverBound:true,projectionRequests:1});
+    const studioWorkspace=page.getByTestId('studio-artifact-workspace');
+    const center=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true});
+    const finalAccept=center.getByRole('button',{name:'Final accept',exact:true});
+    await expect(finalAccept).toHaveCount(1);
+    await expect(finalAccept).toBeVisible();
+    await expect(finalAccept).toBeEnabled();
+    await checkpoint('final-accept-enabled');
+    readinessBeforeCommit=await studioWorkspace.getAttribute('data-studio-handoff-phase')??'unknown';
+    expect(readinessBeforeCommit).toBe('ready');
+    expect(await studioWorkspace.getAttribute('data-studio-usable')).toBe('false');
+    const approvalBefore=await handoffAuthorityFrame(setup.aliases.process);
+    expect(approvalBefore).toEqual({handoffCount:1,approvalReadyCount:1,approvedCount:0,
+      approvals:0,approvalReceipts:0,approvalAudits:0,sourcePackages:0});
+    const startedAt=Date.now();
+    const acceptanceResponse = await test.step('local:studio-handoff:approver-final-accept', () =>
+      commitStudioDecision(page, 'Final accept', 'Independent Studio handoff approval accepted.'));
+    finalAcceptElapsedMs=Date.now()-startedAt;
+    acceptanceResponseStatus=acceptanceResponse.status();
+    expect(acceptanceResponseStatus).toBe(201);
+    expect(finalAcceptElapsedMs).toBeLessThan(15_000);
+    await acceptanceResponse.finished();
+    await checkpoint('final-accept-committed');
+    let approvalAfter:HandoffAuthorityFrame;
+    try{approvalAfter=await handoffAuthorityFrame(setup.aliases.process);}
+    catch(error){await checkpoint('approval-observer-failed');throw error;}
+    approvalEffects={approvals:approvalAfter.approvals-approvalBefore.approvals,
+      receipts:approvalAfter.approvalReceipts-approvalBefore.approvalReceipts,
+      audits:approvalAfter.approvalAudits-approvalBefore.approvalAudits,
+      sourcePackages:approvalAfter.sourcePackages-approvalBefore.sourcePackages};
+    await checkpoint('approval-effects-observed',approvalEffects);
+    expect(approvalEffects).toEqual({approvals:1,receipts:1,audits:1,sourcePackages:0});
+    await checkpoint('approval-effects-verified');
+    releaseProjection();
+    await settleBoundary();
+    await checkpoint('detail-settled');
+    await expect(center.getByText('approved',{exact:true})).toBeVisible();
+    await checkpoint('approved-visible');
+    await expect(finalAccept).toHaveCount(0);
+    await checkpoint('final-accept-absent');
+    await expect(center.getByRole('button',{name:'Start Studio draft',exact:true})).toBeEnabled();
+    await checkpoint('consume-enabled');
+    staleProjectionDidNotOverwrite=await studioWorkspace.getAttribute('data-studio-handoff-phase')==='ready';
+    expect(staleProjectionDidNotOverwrite).toBe(true);
+    await checkpoint('detail-released');
+  }finally{
+    releaseProjection();
+    await page.unroute('**/rest/v1/rpc/studio_artifact_projection',projectionHandler);
+  }
   const consumeResponse = await test.step('local:studio-handoff:approver-consume-inbox', () =>
     commitStudioDecision(page, 'Start Studio draft', undefined, 'Inbox'));
   expect(consumeResponse.status()).toBe(201);
+  await checkpoint('consume-committed');
 
   const after = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName: setup.projectName });
   expect(after.sourcePackages).toBe(1);
   expect(after.sourcePackages - before.sourcePackages).toBe(1);
   const result = {
-    schemaVersion: 'studio-handoff-persona-browser-v1',
+    schemaVersion: 'studio-handoff-persona-browser-v2',
     status: 'passed',
     project: projectSlug,
     mode: 'actual-chromium-production-ui-production-handlers-disposable-postgresql',
@@ -185,9 +284,13 @@ test('exact Studio handoff personas preserve three-party authority in production
     responseStatuses: {
       request: requestResponse.status(),
       review: reviewResponse.status(),
-      finalAccept: acceptanceResponse.status(),
+      finalAccept: acceptanceResponseStatus,
       consume: consumeResponse.status(),
     },
+    authorityBoundReadiness:{projectionRoute:'studio_artifact_projection',actualResponseFetched:heldProjectionFetched,
+      legitimateNull:heldProjectionNull,exactApproverActor:heldProjectionApproverBound,requestCount:projectionRequests,
+      phaseBeforeCommit:readinessBeforeCommit,finalAcceptElapsedMs,committedBeforeDetailRelease:true,
+      staleDetailDidNotOverwrite:staleProjectionDidNotOverwrite,effects:approvalEffects},
     directAuthorApproval: directDenial,
     sourcePackages: { before: before.sourcePackages, after: after.sourcePackages, delta: after.sourcePackages - before.sourcePackages },
     proofDigest: digest({ actorSequence: ['author-request', 'reviewer-review', 'approver-final-accept', 'approver-consume-inbox'], sourcePackageDelta: 1 }),
@@ -198,4 +301,5 @@ test('exact Studio handoff personas preserve three-party authority in production
   };
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await rm(checkpointPath,{force:true});
 });

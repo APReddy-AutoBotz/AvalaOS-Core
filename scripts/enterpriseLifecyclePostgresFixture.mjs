@@ -1877,6 +1877,7 @@ export async function createEnterpriseLifecycleFixture({
 }
 
 export const enterpriseLifecycleSourcePaths = Object.freeze([...new Set([
+  'components/docs/studioHandoffReadiness.ts',
   'scripts/enterpriseLifecyclePostgresFixture.mjs',
   'scripts/enterpriseLifecyclePersistenceAssertions.mjs',
   'scripts/enterpriseLifecycleStudioGeneration.mjs',

@@ -30,6 +30,7 @@ export const authenticatedLocalSourceDigests = () => {
     'services/viewAccessGuard.ts', 'services/governedCreationNavigation.ts',
     'components/delivery/WorkspaceView.tsx',
     'components/docs/GovernedStudioRoute.tsx', 'components/docs/StudioArtifactWorkspace.tsx',
+    'components/docs/studioHandoffReadiness.ts',
     'components/docs/StudioApprovedArtifactPublish.tsx',
     'components/delivery/ProjectView.tsx', 'components/delivery/TaskDetailModal.tsx',
     'components/delivery/DeliveryPackView.tsx', 'components/delivery/DeliveryPackSnapshotAction.tsx',

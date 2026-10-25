@@ -8,6 +8,28 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('Studio persona proof rejects stale outputs and independently verifies handoff readiness', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const job = workflow.jobs['connected-browser'];
+  const proof = job.steps.find(step => step.name === 'Verify exact Studio handoff personas on Desktop and Pixel');
+  assert.equal(proof.env.STUDIO_HANDOFF_PERSONA_ATTEMPT,
+    'output/local-private/authenticated-product-acceptance/studio-handoff-persona');
+  assert.equal(proof.env.PLAYWRIGHT_BROWSERS_PATH, undefined);
+  assert.equal(proof.run.trim(), 'test ! -e "$STUDIO_HANDOFF_PERSONA_ATTEMPT"\n'
+    + 'node scripts/reproduceStudioHandoffPersonaContract.mjs\n'
+    + 'node scripts/studioHandoffPersonaArtifact.mjs "$STUDIO_HANDOFF_PERSONA_ATTEMPT"');
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
+    /node --test scripts\/studioHandoffPersonaArtifact\.test\.mjs/u);
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
+    /node scripts\/runPr1fTypeScriptTest\.mjs components\/docs\/studioHandoffReadiness\.ts components\/docs\/studioHandoffReadiness\.test\.ts/u);
+  const retain = job.steps.find(step => step.name === 'Retain sanitized Studio handoff persona proof');
+  assert.equal(retain.if, 'always()');
+  assert.equal(retain.with.name, 'studio-handoff-persona-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.equal(retain.with['if-no-files-found'], 'error');
+});
+
 test('candidate and release retain one source-bound eligible reviewer request diagnostic archive', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   const job = workflow.jobs['connected-browser'];
