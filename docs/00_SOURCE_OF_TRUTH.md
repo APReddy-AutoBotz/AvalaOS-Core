@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Eligible reviewer request diagnostics (2026-10-24)
+
+PR #331's verified release completed its single focused diagnostic with an Eligible reviewer visibility assertion failure; independent cleanup and credential-handoff removal are complete. Two unchanged-source local revised-decision experiments displayed the selector within the existing 15 seconds, so the root cause remains unconfirmed. On 2026-10-25 AP approved the diagnostics-only PR and required checks, verified merge/release, then exactly one focused Govern/Studio diagnostic and independent cleanup. Preserve the original failure, 15,000 ms limit, providers OFF and server authority. No product fix or full acceptance is authorized. The [active completion plan](planning/hosted-acceptance-completion.md) owns the bounded diagnostic fields, local proof, exact candidate/release gates, uncertainty and rollback. Earlier run allowances remain consumed; this new single allowance cannot be retried and does not promote acceptance.
+
 ## Reviewer-ready assertion investigation (2026-10-24)
 
 PR #331 is the implementation boundary. Its initial candidate failed the new preparation step before browser checkpoints because the launcher forced a repository-local cache while CI installed Chromium in the default cache. Sanitized failure evidence and cleanup are preserved; unchanged local launcher selection reproduces the missing-executable failure. Correct cache inheritance and require fresh candidate/release proof before using the single approved diagnostic allowance. No diagnostic has been dispatched for PR #331.

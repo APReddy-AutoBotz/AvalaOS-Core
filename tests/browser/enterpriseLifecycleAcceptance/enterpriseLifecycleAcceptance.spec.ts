@@ -51,6 +51,8 @@ import {
   type V2ReloadReadStageObservation,
   type V2ReloadRenderOutcome,
 } from '../v2ReloadDiagnosticObserver';
+import { createEligibleReviewerRequestDiagnostics } from '../eligibleReviewerRequestDiagnostics';
+import { ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT } from '../../../scripts/eligibleReviewerRequestDiagnostic.mjs';
 
 type ObservedStage = Readonly<{ id: string; uiObserved: true; reloadObserved?: true }>;
 type MutationSnapshot = Readonly<{
@@ -504,6 +506,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   }>;
   let activeTestWorkQueues: TestWorkQueues | null = null;
   let activeNetworkLifecycle: Awaited<ReturnType<typeof installAuthenticatedHostedNetwork>> | null = null;
+  let eligibleReviewerRequestDiagnostics: ReturnType<typeof createEligibleReviewerRequestDiagnostics> | null = null;
   const activeTrackedActionIds = new Set<string>();
   let pendingTrackedActionStarts = 0;
   const projectWorkQueues: TestWorkQueues[] = [];
@@ -666,6 +669,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     });
     activeTestWorkQueues = owningTestWorkQueues;
     projectWorkQueues.push(owningTestWorkQueues);
+    eligibleReviewerRequestDiagnostics = null;
+    if (controllerBackedAcceptance) {
+      const backendOrigin = new URL(hostedAuthenticatedAcceptance
+        ? process.env.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL ?? ''
+        : process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '').origin;
+      eligibleReviewerRequestDiagnostics = createEligibleReviewerRequestDiagnostics({ backendOrigin });
+      eligibleReviewerRequestDiagnostics.registerPage(page);
+    }
     activeNetworkLifecycle = await installAuthenticatedHostedNetwork({
       context,
       hosted: controllerBackedAcceptance,
@@ -678,6 +689,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       },
       onHttpRequest: () => { observedHttpRequests += 1; },
       onTrackerError: error => owningTestWorkQueues.network.enqueue(async () => { throw error; }),
+      requestDiagnostics: eligibleReviewerRequestDiagnostics,
     });
   });
 
@@ -1613,10 +1625,26 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   }));
 
   test('independent approval, Govern separation and synthetic Studio generation retain exact lineage',
-    { tag: '@govern-studio-diagnostic' }, async ({ page }) => {
+    { tag: '@govern-studio-diagnostic' }, async ({ page }, testInfo) => {
+    const reviewerSelection = eligibleReviewerRequestDiagnostics?.beginSelection(page) ?? null;
     await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
     let reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
-    await selectReviewer(page, setup.actors.reviewer);
+    const eligibleReviewer = page.getByLabel('Eligible reviewer', { exact: true });
+    try {
+      await test.step('hosted:govern-studio:eligible-reviewer-visible', () => expect(eligibleReviewer).toBeVisible());
+    } catch (error) {
+      try {
+        const diagnostic = reviewerSelection && eligibleReviewerRequestDiagnostics
+          ? eligibleReviewerRequestDiagnostics.freeze(reviewerSelection, testInfo.project.name,
+            { workspace: 'unknown', candidates: 'unknown' }) : null;
+        if (diagnostic) {
+          await testInfo.attach(ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT,
+            { body: Buffer.from(JSON.stringify(diagnostic), 'utf8'), contentType: 'application/json' });
+        }
+      } catch { /* diagnostics cannot replace the original assertion */ }
+      throw error;
+    }
+    await eligibleReviewer.selectOption(setup.actors.reviewer.user.id);
     await reviewWorkspace.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
     await expect(page.getByText(/Reviewer assignment committed\./u)).toBeVisible();
     expect((await attestSubmittedEvidence(page, 'Revised evidence independently verified.')).length).toBeGreaterThan(0);

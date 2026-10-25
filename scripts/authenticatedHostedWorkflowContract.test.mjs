@@ -8,6 +8,40 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('candidate and release retain one source-bound eligible reviewer request diagnostic archive', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const job = workflow.jobs['connected-browser'];
+  const proof = job.steps.find(step => step.name === 'Verify eligible reviewer request diagnostics in Chromium');
+  assert.deepEqual(proof.env, {
+    ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTICS_EVIDENCE_DIR:
+      'output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1',
+    ELIGIBLE_REVIEWER_DIAGNOSTICS_RELEASE_SHA: '${{ env.RELEASE_SHA }}',
+    ELIGIBLE_REVIEWER_DIAGNOSTICS_RUN_ID: '${{ github.run_id }}',
+    ELIGIBLE_REVIEWER_DIAGNOSTICS_RUN_ATTEMPT: '${{ github.run_attempt }}',
+    ELIGIBLE_REVIEWER_DIAGNOSTICS_JOB: 'connected-browser',
+  });
+  assert.equal(proof.run.trim(), 'test ! -e "$ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTICS_EVIDENCE_DIR"\n'
+    + 'node scripts/runEligibleReviewerRequestDiagnosticsBrowser.mjs');
+  assert.equal(proof.env.PLAYWRIGHT_BROWSERS_PATH, undefined,
+    'CI must use the Chromium cache populated by the standard Playwright install');
+  const retain = job.steps.find(step => step.name === 'Retain sanitized eligible reviewer request diagnostics');
+  assert.equal(retain.if, 'always()');
+  assert.equal(retain.uses, 'actions/upload-artifact@v4');
+  assert.equal(retain.with.name,
+    'eligible-reviewer-request-diagnostics-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}');
+  assert.deepEqual(retain.with.path.trim().split(/\r?\n/u), [
+    'output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/cleanup.json',
+    'output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/diagnostic.json',
+    'output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/result.json',
+    'output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/source-bindings.json',
+  ]);
+  assert.equal(retain.with['if-no-files-found'], 'error');
+  const installIndex = job.steps.findIndex(step => step.run === 'npx playwright install --with-deps chromium');
+  assert.ok(installIndex >= 0 && installIndex < job.steps.indexOf(proof));
+  assert.doesNotMatch(JSON.stringify([proof, retain]),
+    /secrets[.]|vars[.]|DATABASE_URL|SERVICE_ROLE|MANAGEMENT_TOKEN|full_acceptance|[.]log|[.]zip/u);
+});
+
 test('candidate and release require isolated Reviewer-ready proof with a fresh sanitized archive', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   const job = workflow.jobs['connected-browser'];
