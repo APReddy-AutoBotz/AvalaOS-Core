@@ -113,6 +113,8 @@ jobs:
         run: |
           npm run test:authenticated-product:source
           npm run test:provider-secret-backend
+          node --test scripts/studioHandoffPersonaArtifact.test.mjs
+          node scripts/runPr1fTypeScriptTest.mjs components/docs/studioHandoffReadiness.ts components/docs/studioHandoffReadiness.test.ts
           node scripts/runPr1fTypeScriptTest.mjs services/deliveryReadiness.ts services/deliveryReadiness.test.ts
           npm run typecheck
           npm run typecheck:edge
@@ -279,7 +281,10 @@ jobs:
       - name: Verify exact Studio handoff personas on Desktop and Pixel
         env:
           STUDIO_HANDOFF_PERSONA_ATTEMPT: output/local-private/authenticated-product-acceptance/studio-handoff-persona
-        run: node scripts/reproduceStudioHandoffPersonaContract.mjs
+        run: |
+          test ! -e "$STUDIO_HANDOFF_PERSONA_ATTEMPT"
+          node scripts/reproduceStudioHandoffPersonaContract.mjs
+          node scripts/studioHandoffPersonaArtifact.mjs "$STUDIO_HANDOFF_PERSONA_ATTEMPT"
       - name: Retain sanitized Studio handoff persona proof
         if: always()
         uses: actions/upload-artifact@v4
