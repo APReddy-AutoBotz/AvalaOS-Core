@@ -10,13 +10,17 @@ const sha256=value=>`sha256:${createHash('sha256').update(value).digest('hex')}`
 const sourceBytes=new Map(studioHandoffPersonaSourcePaths.map(source=>[source,Buffer.from(`bound:${source}`)]));
 const sequence=['author-request','reviewer-review','approver-final-accept','approver-consume-inbox'];
 const role=count=>({actualCount:count,requiredCount:count,requiredComplete:true,forbiddenAbsent:true,exact:true});
-const browser=project=>({schemaVersion:'studio-handoff-persona-browser-v2',status:'passed',project,
+const browser=project=>({schemaVersion:'studio-handoff-persona-browser-v3',status:'passed',project,
   mode:'actual-chromium-production-ui-production-handlers-disposable-postgresql',fixtureSessionPrimed:true,
   actorSequence:sequence,responseStatuses:{request:201,review:201,finalAccept:201,consume:201},
   directAuthorApproval:{denied:true,status:403,errorCode:'PERMISSION_DENIED',zeroEffects:true,projectionReadRefused:false},
   sourcePackages:{before:0,after:1,delta:1},authorityBoundReadiness:{projectionRoute:'studio_artifact_projection',
     actualResponseFetched:true,legitimateNull:true,exactApproverActor:true,requestCount:1,phaseBeforeCommit:'ready',
     finalAcceptElapsedMs:250,committedBeforeDetailRelease:true,staleDetailDidNotOverwrite:true,
+    effects:{approvals:1,receipts:1,audits:1,sourcePackages:0}},
+  artifactReadIsolation:{projectionRoute:'studio_artifact_projection',injectedStatus:503,requestCount:1,actualStatus:200,
+    legitimateNull:true,exactApproverActor:true,artifactState:'artifact_unavailable',handoffPhase:'ready',
+    finalAcceptUnique:true,finalAcceptEnabled:true,artifactMutationBlocked:true,finalAcceptStatus:201,finalAcceptElapsedMs:200,
     effects:{approvals:1,receipts:1,audits:1,sourcePackages:0}},
   proofDigest:sha256(Buffer.from(JSON.stringify({actorSequence:sequence,sourcePackageDelta:1}))),actorLimitMs:15_000,
   providersEnabled:false,hostedRun:false,fullAcceptance:false});
@@ -32,9 +36,12 @@ const writeFixture=async(root,mutate=()=>{})=>{
     'build-proof.json':build,
     'browser-desktop-chromium.json':browsers[0],
     'browser-pixel-7-chromium.json':browsers[1],
-    'result.json':{schemaVersion:'studio-handoff-persona-result-v2',status:'passed',releaseSha,
+    'result.json':{schemaVersion:'studio-handoff-persona-result-v3',status:'passed',releaseSha,
       exactRoles:{author:role(25),reviewer:role(14),approver:role(18)},
       exactRolesAfterRun:{author:role(25),reviewer:role(14),approver:role(18)},exactRolesStable:true,
+      scenarioIsolation:{fixturesCreated:4,fixturesClosed:4,observersCreated:4,observersClosed:4,
+        cases:['desktop-chromium','pixel-7-chromium'].flatMap(project=>['artifact-unavailable','held-null-control'].map(scenario=>({project,scenario,
+          browserExit:0,observerCreated:true,observerClosed:true,fixtureCreated:true,fixtureClosed:true})))},
       source:{count:sourceBindings.length,digest:sha256(Buffer.from(JSON.stringify(sourceBindings))),unchangedAfterRun:true},
       build:{status:'passed',fileCount:10,digest:build.digest},browserExit:0,browsers,providers:{calls:0,paidCalls:0,egressAttempts:0},
       cleanup:{fixtureClosed:true,observerClosed:true,previewExited:true,buildRemoved:true,playwrightOutputRemoved:true},
@@ -63,8 +70,16 @@ try{
     ['stale-overwrite',files=>{files['browser-desktop-chromium.json'].authorityBoundReadiness.staleDetailDidNotOverwrite=false;}],
     ['limit',files=>{files['browser-desktop-chromium.json'].authorityBoundReadiness.finalAcceptElapsedMs=15_000;}],
     ['effects',files=>{files['browser-desktop-chromium.json'].authorityBoundReadiness.effects.approvals=0;}],
+    ['artifact-isolation-status',files=>{files['browser-desktop-chromium.json'].artifactReadIsolation.actualStatus=503;}],
+    ['artifact-isolation-state',files=>{files['browser-desktop-chromium.json'].artifactReadIsolation.artifactState='stale';}],
+    ['artifact-isolation-action',files=>{files['browser-desktop-chromium.json'].artifactReadIsolation.finalAcceptEnabled=false;}],
+    ['artifact-isolation-mutation',files=>{files['browser-desktop-chromium.json'].artifactReadIsolation.artifactMutationBlocked=false;}],
+    ['artifact-isolation-limit',files=>{files['browser-desktop-chromium.json'].artifactReadIsolation.finalAcceptElapsedMs=15_000;}],
+    ['artifact-isolation-effects',files=>{files['browser-desktop-chromium.json'].artifactReadIsolation.effects.receipts=0;}],
     ['provider',files=>{files['result.json'].providers.calls=1;}],
     ['cleanup',files=>{files['result.json'].cleanup.observerClosed=false;}],
+    ['scenario-reuse',files=>{files['result.json'].scenarioIsolation.fixturesCreated=2;}],
+    ['scenario-missing',files=>{files['result.json'].scenarioIsolation.cases.pop();}],
     ['role',files=>{files['result.json'].exactRoles.author.actualCount=24;}],
     ['result-browser',files=>{files['result.json'].browsers[0].authorityBoundReadiness.requestCount=2;}],
     ['schema',files=>{files['result.json'].schemaVersion='studio-handoff-persona-result-v1';}],
@@ -76,4 +91,4 @@ try{
   const nonFile=path.join(base,'non-file');await writeFixture(nonFile);await rm(path.join(nonFile,'build-proof.json'));await mkdir(path.join(nonFile,'build-proof.json'));
   await assert.rejects(verifyStudioHandoffPersonaArtifact({directory:nonFile,expectedReleaseSha:releaseSha,readSourceBytes}),/FILE_SET_REJECTED/u);
 }finally{await rm(base,{recursive:true,force:true});}
-console.log('studio handoff persona artifact: synthetic contract fixture and 20 observer-isolation, source, project, limit, effect, provider, cleanup, shape and file-boundary assertions passed');
+console.log('studio handoff persona artifact: synthetic contract fixture and strict scenario-isolation, artifact-read, source, project, limit, effect, provider, cleanup, shape and file-boundary assertions passed');

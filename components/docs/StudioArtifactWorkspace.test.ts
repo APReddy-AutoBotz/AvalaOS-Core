@@ -38,6 +38,14 @@ for(const token of [
   'if(handoffReadinessRef.current.identity!==authorityIdentity)',
   "setState('authorization_revoked')",
   'Studio authority changed while a handoff command is still settling.',
+  "| 'artifact_unavailable'",
+  "['loading', 'generating', 'artifact_unavailable'",
+  "error.code === 'COMMAND_UNAVAILABLE'",
+  'clearArtifactProjection();',
+  "setState('artifact_unavailable')",
+  'Available handoff actions can still be completed.',
+  'data-studio-artifact-state={state}',
+  "data-studio-artifact-mutations={blocked?'blocked':'available'}",
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
 const offlineBranch=source.indexOf("if (offline)"), ordinaryClearBranch=source.indexOf('if (!preserveProjection)');
@@ -46,6 +54,15 @@ assert.equal(source.match(/clearProjection\(\);/g)?.length, 2, 'only a genuine s
 assert.ok(!source.includes("setState('command_failed');\n      setMessage('Draft must"), 'invalid JSON must not globally block the workspace');
 assert.ok(source.indexOf('publishHandoffProjection(handoffBinding,workspaceProjection,workspaceResult.unavailable)')
   < source.indexOf('await loadGovernedSummary(summary, ticket, loadIsCurrent)'), 'handoff authority must publish before unrelated artifact detail loading');
+const legacyRead=source.indexOf('value = await readStudioArtifact(context, id, type, transport)');
+const unavailableBranch=source.indexOf("error.code === 'COMMAND_UNAVAILABLE'",legacyRead);
+const eligibleRead=source.indexOf('const eligible = await readStudioEligibleReviewers(context, value.id, value.currentVersion.id, transport)',legacyRead);
+assert.ok(legacyRead>0&&unavailableBranch>legacyRead&&eligibleRead>unavailableBranch,'COMMAND_UNAVAILABLE isolation must wrap only the optional legacy detail read, not later authority reads');
+assert.equal(source.match(/error\.code === 'COMMAND_UNAVAILABLE'/g)?.length,1,'only the optional legacy detail read may receive artifact-only COMMAND_UNAVAILABLE handling');
+const artifactClear=source.slice(source.indexOf('const clearArtifactProjection'),source.indexOf('const loadGovernedSummary'));
+for(const token of ["setArtifact(null)","setArtifactWorkspace(null)","selectedArtifactIdRef.current=''","setSelectedArtifactId('')","setGovernedSelection(null)","setReviewers([])","setReviewerId('')"])
+  assert.ok(artifactClear.includes(token),`artifact-only failure must clear dependent stale selection: ${token}`);
+assert.ok(!source.slice(source.indexOf('const handoffFailureState='),source.indexOf('const handoffDisabled=')).includes('artifact_unavailable'),'artifact-only unavailability must not revoke an independently current handoff projection');
 assert.ok(governedRoute.includes('key={`${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}:${sessionState}`}'), 'governed route must remount Studio generic projections across authority scope');
 assert.ok(docsView.includes('key={`${studioPresentationContext.organizationId}:${studioPresentationContext.workspaceId}:${studioPresentationContext.userId}:${studioPresentationContext.authorizationVersion}:'), 'Docs view must remount Studio generic projections across authority scope');
-console.log('studio artifact workspace: 40 lifecycle, handoff authority, cross-scope clearing, view-epoch, load-barrier, detail-race, recovery, validation, rendition and false-success assertions passed');
+console.log('studio artifact workspace: scoped lifecycle, handoff authority, legacy-read isolation, artifact mutation blocking, stale-selection clearing, view-epoch, load-barrier, detail-race, recovery, validation, rendition and false-success assertions passed');
