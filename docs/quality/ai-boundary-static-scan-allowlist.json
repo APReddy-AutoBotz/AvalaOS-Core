@@ -93,6 +93,20 @@
   ],
   "entries": [
     {
+      "pattern": "GEMINI_API_KEY",
+      "path": "scripts/runStudioHandoffActionTargetingBrowser.mjs",
+      "lines": [174],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this exact reference confined to deleting the provider credential from the local test child environment; never read, supply or retain its value."
+    },
+    {
+      "pattern": "GROQ_API_KEY",
+      "path": "scripts/runStudioHandoffActionTargetingBrowser.mjs",
+      "lines": [174],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this exact reference confined to deleting the provider credential from the local test child environment; never read, supply or retain its value."
+    },
+    {
       "pattern": "localStorage",
       "path": "scripts/prCSyntheticBrowserReadOnly.test.mjs",
       "lines": [

@@ -1,16 +1,18 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { expect, type Page, type Request, test } from '@playwright/test';
+import { expect, type Page, type Request, type Response as PlaywrightResponse, test } from '@playwright/test';
 import {
   authenticatedLifecycleClickProduct as clickProduct,
   authenticatedLifecycleControl as control,
   authenticatedLifecycleAttemptUnauthorizedProcessUpdate as attemptUnauthorizedProcessUpdate,
   authenticatedLifecycleEnterAs as enterAs,
   authenticatedLifecycleEnterStudioAs as enterStudioAs,
-  authenticatedLifecycleOpenStudioHandoffDecision as openStudioHandoffDecision,
+  authenticatedLifecycleCommitEligibleStudioHandoffRequest as commitEligibleStudioHandoffRequest,
+  authenticatedLifecycleCommitPersistedStudioHandoffAction as commitPersistedStudioHandoffAction,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
+  authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
   authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
   createAuthenticatedLifecycleWorkQueue,
   authenticatedHostedActionIds,
@@ -429,18 +431,11 @@ const assertNoHorizontalViewportOverflow = async (page: Page) => {
     .toBeLessThanOrEqual(dimensions.viewportWidth + 1);
 };
 
-const commitStudioHandoffAction = async (
-  page: Page,
-  buttonName: string,
-  rationale?: string,
-  mailbox: 'Inbox' | 'Outbox' = 'Inbox',
-): Promise<ApiResponseObservation> => {
-  const dialog = await openStudioHandoffDecision(page, buttonName, rationale, mailbox);
-  const response = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
-    dialog.getByRole('button', { name: 'Confirm', exact: true }).click());
-  await expect(dialog).toBeHidden();
-  return response;
-};
+const observeStudioHandoffResponse = (response: PlaywrightResponse): ApiResponseObservation => ({
+  route: '/functions/v1/studio-artifact-command',
+  status: response.status(),
+  actionId: actionReference(response.request()),
+});
 
 const connectedEvidenceClaims = [
   'primitive.businessDisposition', 'primitive.type', 'primitive.rulesStable', 'primitive.workflowPatternKnown',
@@ -1773,23 +1768,49 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Handed off to Studio');
 
     await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
-    const studioRequestApi = await test.step('hosted:govern-studio:studio-request', () =>
-      commitStudioHandoffAction(page, 'Request handoff'));
+    const studioRequestResponse = await test.step('hosted:govern-studio:studio-request', () =>
+      commitEligibleStudioHandoffRequest(page));
+    const studioRequestApi = observeStudioHandoffResponse(studioRequestResponse);
+    const requestedHandoffTarget = await persistedHandoffTargetFromResponse(studioRequestResponse, 'requested');
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
-    const studioReviewApi = await test.step('hosted:govern-studio:studio-review', () =>
-      commitStudioHandoffAction(page, 'Approve review', 'Independent Studio handoff review approved.'));
+    const studioReviewResponse = await test.step('hosted:govern-studio:studio-review', () =>
+      commitPersistedStudioHandoffAction(
+        page,
+        requestedHandoffTarget,
+        'Approve review',
+        'Independent Studio handoff review approved.',
+      ));
+    const studioReviewApi = observeStudioHandoffResponse(studioReviewResponse);
+    const reviewedHandoffTarget = await persistedHandoffTargetFromResponse(
+      studioReviewResponse,
+      'approval_ready',
+      requestedHandoffTarget,
+    );
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
-    const studioFinalAcceptApi = await test.step('hosted:govern-studio:studio-final-accept', () =>
-      commitStudioHandoffAction(page, 'Final accept', 'Final Studio handoff acceptance by an independent actor.'));
+    const studioFinalAcceptResponse = await test.step('hosted:govern-studio:studio-final-accept', () =>
+      commitPersistedStudioHandoffAction(
+        page,
+        reviewedHandoffTarget,
+        'Final accept',
+        'Final Studio handoff acceptance by an independent actor.',
+      ));
+    const studioFinalAcceptApi = observeStudioHandoffResponse(studioFinalAcceptResponse);
+    const acceptedHandoffTarget = await persistedHandoffTargetFromResponse(
+      studioFinalAcceptResponse,
+      'approved',
+      reviewedHandoffTarget,
+    );
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
     await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
-    const sourcePackageApi = await test.step('hosted:govern-studio:source-consume', () =>
-      commitStudioHandoffAction(page, 'Start Studio draft', undefined, 'Inbox'));
+    const sourcePackageResponse = await test.step('hosted:govern-studio:source-consume', () =>
+      commitPersistedStudioHandoffAction(page, acceptedHandoffTarget, 'Start Studio draft', undefined, 'Inbox'));
+    const sourcePackageApi = observeStudioHandoffResponse(sourcePackageResponse);
+    await persistedHandoffTargetFromResponse(sourcePackageResponse, 'consumed', acceptedHandoffTarget);
     expect(sourcePackageApi.status).toBe(201);
     await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\./u)).toBeVisible();
     observe('studio-consume', 'ui.studio-lineage-consumed');

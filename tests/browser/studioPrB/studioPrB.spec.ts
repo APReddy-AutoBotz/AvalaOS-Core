@@ -1,6 +1,9 @@
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { assertSyntheticStudioDraftReadback, buildBrowserExecutionCatalog, editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, executePlannedStep, persistAndSubmitSyntheticStudioDraft, prepareSyntheticDirectPdd, runSyntheticObservationPrerequisites, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
+import { authenticatedLifecycleOpenPersistedStudioHandoffDecision } from '../authenticatedLifecycleHarness';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -15,6 +18,102 @@ const isSourceProviderTraffic=(request:Request)=>{const url=request.url();if(/ht
 const navigate=async(page:Page,url:string,ready?:()=>Promise<void>)=>{let lastError:unknown;for(let attempt=1;attempt<=2;attempt+=1){try{await page.goto(url,{waitUntil:'commit',timeout:60_000});if(ready)await ready();return;}catch(error){lastError=error;if(attempt<2)await page.goto('about:blank',{waitUntil:'load',timeout:5_000}).catch(()=>undefined);}}throw lastError;};
 const open=async(page:Page,query='')=>navigate(page,`/tests/browser/studioPrB/harness.html${query}`,async()=>{await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible({timeout:15_000});});
 const captureStudioFixtureCommand=async(page:Page,{commandType}:{commandType:string},activate:()=>Promise<unknown>)=>{const before=await page.evaluate(()=>(window as any).__studioCommandCalls.length);await activate();await page.waitForFunction(count=>(window as any).__studioCommandCalls.length===count+1,before);const command=await page.evaluate(index=>structuredClone((window as any).__studioCommandCalls[index]),before);expect(command.commandType).toBe(commandType);return command;};
+
+const exactTarget={handoffId:'00000010-0000-4000-8000-000000000010',handoffVersion:2} as const;
+const targetingResultDirectory=process.env.STUDIO_HANDOFF_TARGETING_RESULT_DIRECTORY;
+const targetingProject=(info:TestInfo)=>info.project.name==='Desktop Chrome'?'desktop-chrome':'pixel-7';
+const installTargetingNetworkGuard=async(page:Page)=>{
+  let count=0;
+  const guard=async(route:import('@playwright/test').Route,request:Request)=>{
+    try{
+      const url=new URL(request.url());
+      if(url.protocol==='data:'||url.protocol==='blob:'||url.origin==='http://127.0.0.1:4197')return route.continue();
+    }catch{}
+    count+=1;
+    await route.abort('blockedbyclient');
+  };
+  await page.route('**/*',guard);
+  return async()=>{await page.unroute('**/*',guard);return count;};
+};
+const targetingSnapshot=async(page:Page)=>{
+  const center=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true});
+  return{
+    commands:await page.evaluate(()=>(window as any).__studioCommandCalls.length),
+    cards:await center.locator('li[data-handoff-id][data-handoff-version]').count(),
+    approvalReady:await center.getByText('approval ready',{exact:true}).count(),
+    approved:await center.getByText('approved',{exact:true}).count(),
+    dialogs:await page.getByRole('dialog').count(),
+  };
+};
+const retainTargetingResult=async(info:TestInfo,result:{case:string;readyCardCount:number;matchedCardCount:number;
+  zeroCommands:boolean;zeroEffects:boolean;externalAttemptCount:number;elapsedMs:number})=>{
+  if(!targetingResultDirectory)return;
+  const project=targetingProject(info);
+  await mkdir(targetingResultDirectory,{recursive:true});
+  await writeFile(path.join(targetingResultDirectory,`${project}-${result.case}.json`),`${JSON.stringify({
+    schemaVersion:'studio-handoff-targeting-component-v1',project,...result,status:'passed',actorLimitMs:15_000,
+    providersEnabled:false,
+  })}\n`);
+};
+
+test('persisted Studio helper opens only the exact id and numeric-version target among retained ready cards',async({page},info)=>{
+  const readExternalAttempts=await installTargetingNetworkGuard(page);
+  await open(page,'?targeting=two-ready');
+  const before=await targetingSnapshot(page);
+  const matched=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true}).getByRole('tabpanel')
+    .locator(`li[data-handoff-id="${exactTarget.handoffId}"][data-handoff-version="${exactTarget.handoffVersion}"]`);
+  await expect(matched).toHaveCount(1);
+  page.setDefaultTimeout(15_000);
+  const targetingStarted=Date.now();
+  const dialog=await authenticatedLifecycleOpenPersistedStudioHandoffDecision(
+    page,exactTarget,'Final accept','Exact target remains bound.','Inbox');
+  const elapsedMs=Date.now()-targetingStarted;
+  expect(elapsedMs).toBeLessThan(15_000);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(dialog).toBeHidden();
+  const after=await targetingSnapshot(page);
+  const externalAttemptCount=await readExternalAttempts();
+  expect(after.commands).toBe(0);
+  expect(externalAttemptCount).toBe(0);
+  expect(before.approvalReady).toBe(2);
+  expect(await matched.count()).toBe(1);
+  expect(JSON.stringify({...before,dialogs:0})).toBe(JSON.stringify({...after,dialogs:0}));
+  await retainTargetingResult(info,{case:'exact-target',readyCardCount:before.approvalReady,
+    matchedCardCount:await matched.count(),zeroCommands:after.commands===0,
+    zeroEffects:JSON.stringify({...before,dialogs:0})===JSON.stringify({...after,dialogs:0}),externalAttemptCount,elapsedMs});
+});
+
+for(const sample of [
+  {name:'missing target',query:'?targeting=two-ready',target:{handoffId:'00000059-0000-4000-8000-000000000059',handoffVersion:2} as const,matched:0,actions:0,ready:2},
+  {name:'stale version',query:'?targeting=two-ready',target:{...exactTarget,handoffVersion:1} as const,matched:0,actions:0,ready:2},
+  {name:'wrong mailbox',query:'?targeting=wrong-mailbox',target:exactTarget,matched:0,actions:0,ready:0},
+  {name:'ineligible action',query:'?targeting=ineligible',target:exactTarget,matched:1,actions:0,ready:1},
+  {name:'duplicate exact pair',query:'?targeting=duplicate-exact',target:exactTarget,matched:2,actions:2,ready:2},
+])test(`persisted Studio helper rejects ${sample.name} without dispatch`,async({page},info)=>{
+  const readExternalAttempts=await installTargetingNetworkGuard(page);
+  await open(page,sample.query);
+  const before=await targetingSnapshot(page);
+  const matched=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true}).getByRole('tabpanel')
+    .locator(`li[data-handoff-id="${sample.target.handoffId}"][data-handoff-version="${sample.target.handoffVersion}"]`);
+  expect(before.approvalReady).toBe(sample.ready);
+  await expect(matched).toHaveCount(sample.matched);
+  await expect(matched.getByRole('button',{name:'Final accept',exact:true})).toHaveCount(sample.actions);
+  page.setDefaultTimeout(15_000);
+  const targetingStarted=Date.now();
+  await expect(authenticatedLifecycleOpenPersistedStudioHandoffDecision(
+    page,sample.target,'Final accept','Rejected target must not dispatch.','Inbox')).rejects.toThrow();
+  const elapsedMs=Date.now()-targetingStarted;
+  expect(elapsedMs).toBeLessThan(15_000);
+  const after=await targetingSnapshot(page);
+  const externalAttemptCount=await readExternalAttempts();
+  expect(after.commands).toBe(0);
+  expect(externalAttemptCount).toBe(0);
+  expect(after).toEqual(before);
+  await retainTargetingResult(info,{case:sample.name.replaceAll(' ','-'),readyCardCount:before.approvalReady,
+    matchedCardCount:await matched.count(),zeroCommands:after.commands===before.commands,
+    zeroEffects:JSON.stringify(before)===JSON.stringify(after),externalAttemptCount,elapsedMs});
+});
 
 test('PR C synthetic CH-10 executes the full direct Studio PDD catalog action through retained asynchronous state', async ({page}) => {
   page.setDefaultTimeout(3_000);

@@ -15,7 +15,7 @@ export default defineConfig({
   retries: 0,
   timeout: 90_000,
   reporter: 'line',
-  use: { baseURL: 'http://127.0.0.1:4197', trace: 'off' },
+  use: { baseURL: 'http://127.0.0.1:4197', trace: 'off', screenshot: 'off', video: 'off' },
   projects: [
     { name: 'Desktop Chrome', use: { ...devices['Desktop Chrome'] } },
     { name: 'Pixel 7', use: { ...devices['Pixel 7'] } },

@@ -904,33 +904,245 @@ export const authenticatedLifecycleEnterStudioAs = async (
   await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
 };
 
-export const authenticatedLifecycleOpenStudioHandoffDecision = async (
+export type AuthenticatedLifecyclePersistedHandoffTarget = Readonly<{
+  handoffId: string;
+  handoffVersion: number;
+}>;
+
+export type AuthenticatedLifecyclePersistedHandoffStatus =
+  | 'requested'
+  | 'approval_ready'
+  | 'approved'
+  | 'changes_requested'
+  | 'rejected'
+  | 'withdrawn'
+  | 'consumed';
+
+export type AuthenticatedLifecyclePersistedHandoffAction =
+  | 'Approve review'
+  | 'Request changes'
+  | 'Reject review'
+  | 'Final accept'
+  | 'Final reject'
+  | 'Withdraw'
+  | 'Start Studio draft';
+
+const persistedHandoffId = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
+const persistedHandoffTargetRejected = () => new Error('ENTERPRISE_LIFECYCLE_PERSISTED_HANDOFF_TARGET_REJECTED');
+const persistedHandoffResponseRejected = () => new Error('ENTERPRISE_LIFECYCLE_PERSISTED_HANDOFF_RESPONSE_REJECTED');
+
+export const authenticatedLifecycleValidatePersistedHandoffTarget = (
+  value: unknown,
+): AuthenticatedLifecyclePersistedHandoffTarget => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw persistedHandoffTargetRejected();
+  const candidate = value as { handoffId?: unknown; handoffVersion?: unknown };
+  if (typeof candidate.handoffId !== 'string' || !persistedHandoffId.test(candidate.handoffId)
+    || !Number.isSafeInteger(candidate.handoffVersion) || Number(candidate.handoffVersion) <= 0) {
+    throw persistedHandoffTargetRejected();
+  }
+  return { handoffId: candidate.handoffId, handoffVersion: Number(candidate.handoffVersion) };
+};
+
+export const authenticatedLifecycleDecodePersistedHandoffTarget = (
+  response: Readonly<{ status: number; body: unknown }>,
+  expectedStatus: AuthenticatedLifecyclePersistedHandoffStatus,
+  previous?: AuthenticatedLifecyclePersistedHandoffTarget,
+): AuthenticatedLifecyclePersistedHandoffTarget => {
+  if (response.status !== 201 || !response.body || typeof response.body !== 'object' || Array.isArray(response.body)) {
+    throw persistedHandoffResponseRejected();
+  }
+  const body = response.body as {
+    ok?: unknown;
+    outcome?: unknown;
+    receiptId?: unknown;
+    resourceId?: unknown;
+    resource?: unknown;
+  };
+  if (body.ok !== true || body.outcome !== 'committed'
+    || typeof body.receiptId !== 'string' || !persistedHandoffId.test(body.receiptId)
+    || typeof body.resourceId !== 'string' || !persistedHandoffId.test(body.resourceId)
+    || !body.resource || typeof body.resource !== 'object' || Array.isArray(body.resource)) {
+    throw persistedHandoffResponseRejected();
+  }
+  const resource = body.resource as {
+    handoffId?: unknown;
+    version?: unknown;
+    status?: unknown;
+    resourceId?: unknown;
+    sourcePackageId?: unknown;
+  };
+  if (resource.status !== expectedStatus) throw persistedHandoffResponseRejected();
+  let target: AuthenticatedLifecyclePersistedHandoffTarget;
+  try {
+    target = authenticatedLifecycleValidatePersistedHandoffTarget({
+      handoffId: resource.handoffId,
+      handoffVersion: resource.version,
+    });
+  } catch {
+    throw persistedHandoffResponseRejected();
+  }
+  if (expectedStatus === 'consumed') {
+    if (resource.resourceId !== body.resourceId
+      || typeof resource.sourcePackageId !== 'string' || !persistedHandoffId.test(resource.sourcePackageId)) {
+      throw persistedHandoffResponseRejected();
+    }
+  } else if (body.resourceId !== target.handoffId) {
+    throw persistedHandoffResponseRejected();
+  }
+  if (previous) {
+    let prior: AuthenticatedLifecyclePersistedHandoffTarget;
+    try {
+      prior = authenticatedLifecycleValidatePersistedHandoffTarget(previous);
+    } catch {
+      throw persistedHandoffResponseRejected();
+    }
+    if (target.handoffId !== prior.handoffId || target.handoffVersion !== prior.handoffVersion + 1) {
+      throw persistedHandoffResponseRejected();
+    }
+  }
+  return target;
+};
+
+export const authenticatedLifecyclePersistedHandoffTargetFromResponse = async (
+  response: PlaywrightResponse,
+  expectedStatus: AuthenticatedLifecyclePersistedHandoffStatus,
+  previous?: AuthenticatedLifecyclePersistedHandoffTarget,
+) => authenticatedLifecycleDecodePersistedHandoffTarget({
+  status: response.status(),
+  body: await response.json().catch(() => null),
+}, expectedStatus, previous);
+
+const authenticatedLifecycleSelectStudioMailbox = async (
   page: Page,
-  buttonName: string,
-  rationale?: string,
-  mailbox: 'Inbox' | 'Outbox' = 'Inbox',
+  mailbox: 'Inbox' | 'Outbox',
 ) => {
   const center = page.getByRole('region', { name: 'Assess → Studio handoffs', exact: true });
   await expect(center).toBeVisible();
   const tab = center.getByRole('tab', { name: new RegExp(`^${mailbox} \\(\\d+\\)$`, 'u') });
   await tab.click();
   await expect(tab).toHaveAttribute('aria-selected', 'true');
-  await center.getByRole('button', { name: buttonName, exact: true }).click();
+  const tabpanel = center.getByRole('tabpanel');
+  await expect(tabpanel).toHaveCount(1);
+  await expect(tabpanel).toBeVisible();
+  return tabpanel;
+};
+
+export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (page: Page) => {
+  const tabpanel = await authenticatedLifecycleSelectStudioMailbox(page, 'Inbox');
+  const action = tabpanel.getByRole('button', { name: 'Request handoff', exact: true });
+  await expect(action).toHaveCount(1);
+  await expect(action).toBeVisible();
+  await expect(action).toBeEnabled();
+  const card = action.locator('xpath=ancestor::li');
+  await expect(card).toHaveCount(1);
+  const upstreamHandoffId = await card.getAttribute('data-upstream-handoff-id');
+  if (!upstreamHandoffId || !persistedHandoffId.test(upstreamHandoffId)) throw persistedHandoffTargetRejected();
+  await action.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return { dialog, upstreamHandoffId };
+};
+
+export const authenticatedLifecycleCommitEligibleStudioHandoffRequest = async (page: Page) => {
+  const { dialog, upstreamHandoffId } = await authenticatedLifecycleOpenEligibleStudioHandoffRequest(page);
+  const responsePromise = page.waitForResponse(response => (
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/functions/v1/studio-artifact-command'
+    && (() => {
+      try {
+        const request = response.request().postDataJSON() as {
+          commandType?: unknown;
+          payload?: { upstreamHandoffId?: unknown };
+        };
+        return request.commandType === 'studio.handoff.request'
+          && request.payload?.upstreamHandoffId === upstreamHandoffId;
+      } catch { return false; }
+    })()
+  ), { timeout: 15_000 });
+  const [response] = await Promise.all([
+    responsePromise,
+    dialog.getByRole('button', { name: 'Confirm', exact: true }).click(),
+  ]);
+  await expect(dialog).toBeHidden();
+  return response;
+};
+
+export const authenticatedLifecycleOpenPersistedStudioHandoffDecision = async (
+  page: Page,
+  rawTarget: AuthenticatedLifecyclePersistedHandoffTarget,
+  buttonName: AuthenticatedLifecyclePersistedHandoffAction,
+  rationale?: string,
+  mailbox: 'Inbox' | 'Outbox' = 'Inbox',
+) => {
+  const target = authenticatedLifecycleValidatePersistedHandoffTarget(rawTarget);
+  const tabpanel = await authenticatedLifecycleSelectStudioMailbox(page, mailbox);
+  const card = tabpanel.locator(
+    `li[data-handoff-id="${target.handoffId}"][data-handoff-version="${target.handoffVersion}"]`,
+  );
+  await expect(card).toHaveCount(1);
+  await expect(card).toBeVisible();
+  const action = card.getByRole('button', { name: buttonName, exact: true });
+  await expect(action).toHaveCount(1);
+  await expect(action).toBeVisible();
+  await expect(action).toBeEnabled();
+  await action.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   if (rationale) await dialog.getByLabel('Decision rationale', { exact: true }).fill(rationale);
   return dialog;
 };
 
-export const authenticatedLifecycleCommitStudioHandoffAction = async (
+export const authenticatedLifecycleCommitPersistedStudioHandoffAction = async (
   page: Page,
-  buttonName: string,
+  target: AuthenticatedLifecyclePersistedHandoffTarget,
+  buttonName: AuthenticatedLifecyclePersistedHandoffAction,
   rationale?: string,
   mailbox: 'Inbox' | 'Outbox' = 'Inbox',
 ) => {
-  const dialog = await authenticatedLifecycleOpenStudioHandoffDecision(page, buttonName, rationale, mailbox);
-  await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
+  const validatedTarget = authenticatedLifecycleValidatePersistedHandoffTarget(target);
+  const dialog = await authenticatedLifecycleOpenPersistedStudioHandoffDecision(
+    page,
+    validatedTarget,
+    buttonName,
+    rationale,
+    mailbox,
+  );
+  const expectedCommand = buttonName === 'Withdraw'
+    ? 'studio.handoff.withdraw'
+    : buttonName === 'Start Studio draft'
+      ? 'studio.handoff.consume'
+      : buttonName === 'Final accept' || buttonName === 'Final reject'
+        ? 'studio.handoff.approval.resolve'
+        : 'studio.handoff.review.resolve';
+  const expectedOutcome = buttonName === 'Approve review' || buttonName === 'Final accept'
+    ? 'approve'
+    : buttonName === 'Request changes'
+      ? 'changes_requested'
+      : buttonName === 'Reject review' || buttonName === 'Final reject'
+        ? 'reject'
+        : undefined;
+  const responsePromise = page.waitForResponse(response => {
+    if (response.request().method() !== 'POST'
+      || new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command') return false;
+    try {
+      const request = response.request().postDataJSON() as {
+        commandType?: unknown;
+        expectedAggregateVersion?: unknown;
+        payload?: { handoffId?: unknown; handoffVersion?: unknown; outcome?: unknown };
+      };
+      return request.commandType === expectedCommand
+        && request.expectedAggregateVersion === validatedTarget.handoffVersion
+        && request.payload?.handoffId === validatedTarget.handoffId
+        && request.payload?.handoffVersion === validatedTarget.handoffVersion
+        && (expectedOutcome === undefined || request.payload?.outcome === expectedOutcome);
+    } catch { return false; }
+  }, { timeout: 15_000 });
+  const [response] = await Promise.all([
+    responsePromise,
+    dialog.getByRole('button', { name: 'Confirm', exact: true }).click(),
+  ]);
   await expect(dialog).toBeHidden();
+  return response;
 };
 
 export const authenticatedLifecycleCompleteRequiredAssessmentFacts = async (

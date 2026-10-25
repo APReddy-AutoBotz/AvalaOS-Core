@@ -1,5 +1,18 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Exact persisted Studio handoff targeting (2026-10-25)
+
+AP's Continue authorizes the narrow persisted-handoff driver correction and required local verification/reviewable fix PR after the completed database-backed reproduction. It does not renew a hosted allowance or authorize merge/release, live access, credentials, grants, deployment/migration, Netlify, full acceptance or paid calls. Keep the original 15,000 ms limits and providers OFF. The prior PR #334 diagnostic allowance is consumed and independent cleanup is complete.
+
+Unchanged production UI/handlers/disposable PostgreSQL confirmed two distinct approval-ready handoffs in one workspace cause the original mailbox-wide Final accept helper to fail strictly at line 918 in 84 ms with zero commands/effects. A fresh one-card control opens/cancels in 208 ms. All 154 source bindings, exact roles 25/14/18, provider/paid/egress zero and owned cleanup independently passed. The first new PG attempt remains a failed pre-target private setup test; its cleanup passed. The successful private reporter's unexpected_status labels are reconciled separately because their underlying status is passed. Preserve all prior evidence. Exact historical hosted cardinality and exclusive causation remain unproven.
+
+All three read-only reviewers completed before writes. Root selects a dedicated required-bound persisted helper using a validated response-derived handoffId plus positive safe numeric version. This is the immutable concurrency pair enforced by the existing command/SQL contract; backend normalization intentionally omits the version-row UUID. Add only inert data-handoff-version markup alongside the existing handoff ID. Chain actual committed request/review/final command responses into the next action, checking status, identity and version transition without inventing identities or treating UI state as authority. Require one exact card/action in the explicit mailbox, visible and enabled. No first/nth, force, newest/label fallback, history deletion, retry or increased timeout. The separate eligible Request handoff path stays strict and unchanged. Product revalidation and server authorization remain unchanged; no backend response expansion or controller endpoint is included.
+
+Fresh local Desktop/Pixel production-handler/PostgreSQL evidence now verifies the targeted transition in 267/261 ms, competing-card noninterference, bound consume lineage, six isolated fixture/observer pairs, exact roles, 163 sources, ten authentic-artifact rejections and owned cleanup. Earlier setup/component failures and both 119/120 retained-suite attempts remain failed; an isolated pass does not promote that full suite. Non-browser repository gates pass; fresh exact-head candidate CI remains pending.
+
+The [active completion plan](../planning/hosted-acceptance-completion.md) owns implementation, exact local gates, the draft PR boundary and rollback.
+
+
 ## Studio artifact-read failure isolation (2026-10-25)
 
 AP approves the narrow fix PR and required checks, verified merge/release, then exactly one focused Govern/Studio diagnostic and independent cleanup. Keep the 15,000 ms action limit and providers OFF; full acceptance allowance is zero. No live grant, backend deployment/migration, Netlify, production/customer data or paid call is included. The prior PR #333 diagnostic allowance is consumed and cleanup is complete; this approval creates one new allowance only after the new release independently passes.

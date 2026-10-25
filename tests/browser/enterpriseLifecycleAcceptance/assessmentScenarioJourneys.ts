@@ -3,7 +3,8 @@ import type { FitBand } from '../../../services/assessV2/types';
 import {
   authenticatedLifecycleAttestEverySubmittedEvidence as attestEvidence,
   authenticatedLifecycleClickProduct as clickProduct,
-  authenticatedLifecycleCommitStudioHandoffAction as commitHandoff,
+  authenticatedLifecycleCommitEligibleStudioHandoffRequest as commitEligibleHandoff,
+  authenticatedLifecycleCommitPersistedStudioHandoffAction as commitPersistedHandoff,
   authenticatedLifecycleCompleteRequiredAssessmentFacts as completeFacts,
   authenticatedLifecycleControl as control,
   authenticatedLifecycleEnterAs as enterAs,
@@ -13,6 +14,7 @@ import {
   authenticatedLifecycleResolveEveryGovernControl as resolveGovernControls,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   authenticatedLifecycleSelectReviewer as selectReviewer,
+  authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
   authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
   type AuthenticatedAssessmentVariant,
   type AuthenticatedLifecycleSetup,
@@ -172,16 +174,30 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
 
   await enterStudioAs(page, setup.actors.approver);
-  await commitHandoff(page, 'Request handoff');
+  const requestedResponse = await commitEligibleHandoff(page);
+  const requestedTarget = await persistedHandoffTargetFromResponse(requestedResponse, 'requested');
   await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
   await enterStudioAs(page, setup.actors.reviewer);
-  await commitHandoff(page, 'Approve review', 'Independent scenario handoff review approved.');
+  const reviewedResponse = await commitPersistedHandoff(
+    page,
+    requestedTarget,
+    'Approve review',
+    'Independent scenario handoff review approved.',
+  );
+  const reviewedTarget = await persistedHandoffTargetFromResponse(reviewedResponse, 'approval_ready', requestedTarget);
   await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
   await enterStudioAs(page, setup.actors.author);
-  await commitHandoff(page, 'Final accept', 'Independent final acceptance for the scenario.');
+  const acceptedResponse = await commitPersistedHandoff(
+    page,
+    reviewedTarget,
+    'Final accept',
+    'Independent final acceptance for the scenario.',
+  );
+  const acceptedTarget = await persistedHandoffTargetFromResponse(acceptedResponse, 'approved', reviewedTarget);
   await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
   await enterStudioAs(page, setup.actors.approver);
-  await commitHandoff(page, 'Start Studio draft', undefined, 'Outbox');
+  const consumedResponse = await commitPersistedHandoff(page, acceptedTarget, 'Start Studio draft', undefined, 'Outbox');
+  await persistedHandoffTargetFromResponse(consumedResponse, 'consumed', acceptedTarget);
   await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\. Approval alone did not create a document\./u)).toBeVisible();
   const studio = page.getByTestId('studio-artifact-workspace');
   const template = studio.getByLabel('Exact approved Studio template', { exact: true });
