@@ -17,6 +17,12 @@ type InstallAuthenticatedHostedNetworkInput = Readonly<{
   onTrackerError: (error: unknown) => void;
   dispatchAllowedRequest?: (route: Route) => Promise<void>;
   responseBodyTimeoutMs?: number;
+  requestDiagnostics?: Readonly<{
+    onRequest: (request: Request) => void;
+    onResponse: (request: Request, status: number) => void;
+    onResponseBody: (request: Request, body: unknown) => void;
+    onRequestFailed: (request: Request) => void;
+  }>;
 }>;
 
 export const authenticatedHostedResponseBodyTimeoutMs = 30_000;
@@ -190,6 +196,7 @@ export const installAuthenticatedHostedNetwork = async ({
   onTrackerError,
   dispatchAllowedRequest,
   responseBodyTimeoutMs = authenticatedHostedResponseBodyTimeoutMs,
+  requestDiagnostics,
 }: InstallAuthenticatedHostedNetworkInput) => {
   const responseBodies = new Set<Promise<unknown>>();
   const actionAdmissions = new Set<Promise<unknown>>();
@@ -284,6 +291,7 @@ export const installAuthenticatedHostedNetwork = async ({
     onHttpRequest();
     if (!allowedWebOrigin(url, hosted, allowedOrigins)) onExternalRequest(url.origin);
     else if (hosted) {
+      try { requestDiagnostics?.onRequest(request); } catch { /* diagnostics never affect the request */ }
       // Playwright can report a navigation-cancelled request before its async
       // route callback reaches the tracker. Prime the same idempotent begin
       // promise at the request event so response/requestfailed observers can
@@ -297,6 +305,7 @@ export const installAuthenticatedHostedNetwork = async ({
     context.on('response', response => {
       const request = response.request();
       responseObserved.add(request);
+      try { requestDiagnostics?.onResponse(request, response.status()); } catch { /* diagnostics remain passive */ }
       if (!tracker) {
         onTrackerError(new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING'));
         return;
@@ -313,8 +322,9 @@ export const installAuthenticatedHostedNetwork = async ({
           if (classification.kind !== 'business-action') {
             return Object.freeze({ state: 'ignored' as const });
           }
-          return Object.freeze({ state: 'fulfilled' as const,
-            value: await readAuthenticatedHostedResponseBody(context, response, responseBodyTimeoutMs) });
+          const value = await readAuthenticatedHostedResponseBody(context, response, responseBodyTimeoutMs);
+          try { requestDiagnostics?.onResponseBody(request, value); } catch { /* diagnostics remain passive */ }
+          return Object.freeze({ state: 'fulfilled' as const, value });
         } catch (error) {
           responseBodyFailures.add(Object.freeze({ request, error }));
           return Object.freeze({ state: 'rejected' as const, error });
@@ -350,6 +360,7 @@ export const installAuthenticatedHostedNetwork = async ({
     });
     context.on('requestfailed', request => {
       transportFailed.add(request);
+      try { requestDiagnostics?.onRequestFailed(request); } catch { /* diagnostics remain passive */ }
       // When response headers were observed, the owned response-body operation
       // has enough information to distinguish a genuine browser transport
       // failure from malformed JSON. It alone may emit status zero. A request

@@ -53,6 +53,7 @@ const networkFixture = async (startAction, options = {}) => {
     onExternalRequest: () => assert.fail('unexpected external request'), onHttpRequest: () => {},
     onTrackerError: error => { errors.push(error.message); },
     dispatchAllowedRequest: async route => { dispatches.push(route); },
+    ...(options.requestDiagnostics ? { requestDiagnostics: options.requestDiagnostics } : {}),
     ...(options.responseBodyTimeoutMs ? { responseBodyTimeoutMs: options.responseBodyTimeoutMs } : {}),
   });
   const drain = async () => {
@@ -64,6 +65,23 @@ const networkFixture = async (startAction, options = {}) => {
   };
   return { context, errors, finishes, preparations, dispatches, lifecycle, route: value => routeHandler(value), drain };
 };
+
+test('passive request diagnostics observe request, response and failure without delaying or throwing', async () => {
+  const observed = [];
+  const fixture = await networkFixture(async () => ({ actionId: 'action-safe' }), { requestDiagnostics: {
+    onRequest: () => { observed.push('request'); throw new Error('ignored diagnostic'); },
+    onResponse: (_request, status) => observed.push(`response:${status}`),
+    onResponseBody: () => observed.push('body'),
+    onRequestFailed: () => { observed.push('failed'); throw new Error('ignored diagnostic'); },
+  } });
+  const request = { url: () => `${backendOrigin}/rest/v1/rpc/assess_v2_eligible_reviewers`,
+    method: () => 'POST', allHeaders: async () => ({}), postDataJSON: () => ({}), resourceType: () => 'fetch' };
+  fixture.context.emit('request', request);
+  fixture.context.emit('response', { request: () => request, status: () => 200, json: async () => [] });
+  fixture.context.emit('requestfailed', request);
+  await fixture.lifecycle.settleResponseBodies();
+  assert.deepEqual(observed, ['request', 'response:200', 'failed', 'body']);
+});
 
 test('response body ownership fails closed and joins context cancellation before returning', async () => {
   const { readAuthenticatedHostedResponseBody } = loadNetworkInstaller();

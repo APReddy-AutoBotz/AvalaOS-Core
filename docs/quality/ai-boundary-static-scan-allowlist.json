@@ -11,6 +11,12 @@
   ],
   "pathPrefixes": [
     {
+      "pattern": "GEMINI_API_KEY",
+      "pathPrefix": "scripts/runEligibleReviewerRequestDiagnosticsBrowser.mjs",
+      "reason": "test/control documentation",
+      "futureAction": "Keep this reference confined to removing the provider credential from the local diagnostic child environment; never read, supply or retain its value."
+    },
+    {
       "pathPrefix": "docs/planning/",
       "reason": "test/control documentation",
       "futureAction": "Keep planning references classified as control documentation; do not treat them as runtime permission."

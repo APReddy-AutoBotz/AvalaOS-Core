@@ -302,6 +302,28 @@ jobs:
           path: output/local-private/authenticated-product-acceptance/reviewer-ready-projection/
           if-no-files-found: error
           retention-days: 14
+      - name: Verify eligible reviewer request diagnostics in Chromium
+        env:
+          ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTICS_EVIDENCE_DIR: output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1
+          ELIGIBLE_REVIEWER_DIAGNOSTICS_RELEASE_SHA: ${{ env.RELEASE_SHA }}
+          ELIGIBLE_REVIEWER_DIAGNOSTICS_RUN_ID: ${{ github.run_id }}
+          ELIGIBLE_REVIEWER_DIAGNOSTICS_RUN_ATTEMPT: ${{ github.run_attempt }}
+          ELIGIBLE_REVIEWER_DIAGNOSTICS_JOB: connected-browser
+        run: |
+          test ! -e "$ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTICS_EVIDENCE_DIR"
+          node scripts/runEligibleReviewerRequestDiagnosticsBrowser.mjs
+      - name: Retain sanitized eligible reviewer request diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eligible-reviewer-request-diagnostics-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/cleanup.json
+            output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/diagnostic.json
+            output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/result.json
+            output/local-private/authenticated-product-acceptance/eligible-reviewer-request-diagnostics/attempt-1/source-bindings.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Actual product cases on desktop and Pixel 7
         run: node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated
       - name: Independently verify case observations and cleanup

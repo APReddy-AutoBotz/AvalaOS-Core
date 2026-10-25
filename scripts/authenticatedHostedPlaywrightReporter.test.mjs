@@ -6,8 +6,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 
-import AuthenticatedHostedPlaywrightReporter from './authenticatedHostedPlaywrightReporter.mjs';
+import AuthenticatedHostedPlaywrightReporter, { authenticatedHostedChildDiagnosticWithinCap,
+  boundedAuthenticatedHostedPlaywrightDiagnostic } from './authenticatedHostedPlaywrightReporter.mjs';
 import { validateAuthenticatedHostedPlaywrightDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT,
+  ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_SCHEMA } from './eligibleReviewerRequestDiagnostic.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,6 +23,86 @@ const titles = new Map([
   ['authenticated Admin, AI and private Studio controls use server authority and measured storage boundaries', 'authenticated-controls'],
 ]);
 const fixture = title => ({ title, expectedStatus: 'passed', parent: { project: () => ({ name: 'desktop-chromium' }) } });
+const requestContext = (overrides = {}) => ({ schemaVersion: ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_SCHEMA,
+  project: 'desktop-chromium', testCategory: 'govern-studio-lifecycle', assertion: 'eligible-reviewer-visible',
+  pageOrdinal: 1, selectionOrdinal: 1, frozen: true, elapsedMs: 15_000, elapsedSaturated: true,
+  requests: ['queue', 'workspace', 'eligible'].map((route, index) => ({ route,
+    firstRequestOrdinal: index === 2 ? 1 : null, requestCount: index === 2 ? 1 : 0,
+    responseCount: 0, pendingCount: index === 2 ? 1 : 0,
+    state: index === 2 ? 'pending' : 'not-observed', lastHttpStatus: null,
+    statusClass: 'unavailable', outcome: index === 2 ? 'pending' : 'unavailable',
+    elapsedMs: index === 2 ? 15_000 : 0, elapsedSaturated: index === 2 })),
+  decisionBinding: 'unavailable', candidateCount: null, candidateCountSaturated: false,
+  correlation: 'exact', ui: { workspace: 'unknown', candidates: 'unknown' }, ...overrides });
+
+test('child cap counts the trailing newline and bounded fallback drops only optional request context', () => {
+  assert.equal(authenticatedHostedChildDiagnosticWithinCap({ x: 'x'.repeat(1991) }), true);
+  assert.equal(authenticatedHostedChildDiagnosticWithinCap({ x: 'x'.repeat(1992) }), false);
+  const fields = { schemaVersion: 'authenticated-hosted-playwright-diagnostic-v1', project: 'desktop-chromium',
+    testCategory: 'govern-studio-lifecycle', category: 'unexpected-failure',
+    operation: 'GOVERN_STUDIO_ELIGIBLE_REVIEWER_VISIBLE', requestContext: requestContext() };
+  const base = { ...fields }; delete base.requestContext;
+  const baseBytes = Buffer.byteLength(`${JSON.stringify(validateAuthenticatedHostedPlaywrightDiagnostic(base))}\n`);
+  const value = boundedAuthenticatedHostedPlaywrightDiagnostic(fields, baseBytes);
+  assert.ok(value); assert.equal(value.requestContext, undefined);
+  assert.equal(validateAuthenticatedHostedPlaywrightDiagnostic({ ...fields, operation: 'GOVERN_STUDIO_CHECKPOINT' }), null);
+});
+
+test('reporter preserves one correlated bounded request context and the original assertion failure', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'eligible-reviewer-request-reporter-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(() => { if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior; });
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = path.join(root, 'diagnostic.json');
+  const reporter = new AuthenticatedHostedPlaywrightReporter();
+  const current = fixture('independent approval, Govern separation and synthetic Studio generation retain exact lineage');
+  const error = { message: 'original assertion' };
+  const step = { title: 'hosted:govern-studio:eligible-reviewer-visible', error };
+  reporter.onTestBegin(current); reporter.onStepBegin(current, {}, step); reporter.onStepEnd(current, { status: 'failed' }, step);
+  reporter.onTestEnd(current, { status: 'failed', error, attachments: [{
+    name: ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT, contentType: 'application/json',
+    body: Buffer.from(JSON.stringify(requestContext())),
+  }] });
+  await reporter.onEnd({ status: 'failed' });
+  const value = JSON.parse(await readFile(process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH, 'utf8'));
+  assert.deepEqual(value.requestContext, requestContext());
+  assert.equal(value.operation, 'GOVERN_STUDIO_ELIGIBLE_REVIEWER_VISIBLE');
+  assert.equal(value.category, 'unexpected-failure');
+  assert.ok(validateAuthenticatedHostedPlaywrightDiagnostic(value));
+  assert.ok(Buffer.byteLength(JSON.stringify(value), 'utf8') <= 2000);
+});
+
+test('reporter ignores duplicate, stale, malformed, path-backed and uncorrelated request contexts', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'eligible-reviewer-request-reporter-negative-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(() => { if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior; });
+  const current = fixture('independent approval, Govern separation and synthetic Studio generation retain exact lineage');
+  const validAttachment = { name: ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT,
+    contentType: 'application/json', body: Buffer.from(JSON.stringify(requestContext())) };
+  for (const [label, attachments, correlated] of [
+    ['duplicate', [validAttachment, validAttachment], true],
+    ['stale-project', [{ ...validAttachment, body: Buffer.from(JSON.stringify(requestContext({ project: 'pixel-7-chromium' }))) }], true],
+    ['malformed', [{ ...validAttachment, body: Buffer.from('{') }], true],
+    ['path-backed', [{ ...validAttachment, path: 'forbidden.json' }], true],
+    ['uncorrelated', [validAttachment], false],
+  ]) {
+    const destination = path.join(root, `${label}.json`);
+    process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = destination;
+    const reporter = new AuthenticatedHostedPlaywrightReporter(), error = new Error('original');
+    reporter.onTestBegin(current);
+    if (correlated) {
+      const step = { title: 'hosted:govern-studio:eligible-reviewer-visible', error };
+      reporter.onStepBegin(current, {}, step); reporter.onStepEnd(current, { status: 'failed' }, step);
+    }
+    reporter.onTestEnd(current, { status: 'failed', error, attachments });
+    await reporter.onEnd({ status: 'failed' });
+    const value = JSON.parse(await readFile(destination, 'utf8'));
+    assert.equal(value.requestContext, undefined);
+  }
+});
 
 test('Govern and Studio diagnostic step labels map to fixed allowlisted operations', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-govern-studio-reporter-'));

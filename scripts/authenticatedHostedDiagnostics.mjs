@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { validateObservationTimings } from './authenticatedObservationTimings.mjs';
+import { validateEligibleReviewerRequestDiagnostic } from './eligibleReviewerRequestDiagnostic.mjs';
 
 const STAGES = new Set([
   'DATABASE_CONNECT',
@@ -81,6 +82,7 @@ const PLAYWRIGHT_OPERATIONS = new Set([
   'GOVERN_STUDIO_STUDIO_FINAL_ACCEPT',
   'GOVERN_STUDIO_SOURCE_CONSUME',
   'GOVERN_STUDIO_CHECKPOINT',
+  'GOVERN_STUDIO_ELIGIBLE_REVIEWER_VISIBLE',
 ]);
 const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
@@ -213,21 +215,29 @@ export function validateAuthenticatedHostedPlaywrightDiagnostic(value) {
     ...(value?.operation === undefined ? [] : ['operation']),
     ...(hasPhase ? ['phase', 'code'] : []),
     ...(value?.phaseTimings === undefined ? [] : ['phaseTimings']),
-    ...(value?.location === undefined ? [] : ['location'])];
+    ...(value?.location === undefined ? [] : ['location']),
+    ...(value?.requestContext === undefined ? [] : ['requestContext'])];
   if (!exactKeys(value, keys)
     || value.schemaVersion !== AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA
     || !PLAYWRIGHT_PROJECTS.has(value.project) || !PLAYWRIGHT_TEST_CATEGORIES.has(value.testCategory)
     || !PLAYWRIGHT_CATEGORIES.has(value.category)
     || (value.operation !== undefined && !PLAYWRIGHT_OPERATIONS.has(value.operation))
     || (hasPhase && !PLAYWRIGHT_FAILURE_PAIRS.has(`${value.phase}:${value.code}`))
-    || (value.phaseTimings !== undefined && !validateAuthenticatedActorPhaseTimings(value.phaseTimings))) return null;
+    || (value.phaseTimings !== undefined && !validateAuthenticatedActorPhaseTimings(value.phaseTimings))
+    || (value.requestContext !== undefined && !validateEligibleReviewerRequestDiagnostic(value.requestContext))) return null;
   const location = value.location === undefined ? null : validateAuthenticatedHostedPlaywrightFailureLocation(value.location);
+  const requestContext = value.requestContext === undefined ? null
+    : validateEligibleReviewerRequestDiagnostic(value.requestContext);
+  if (requestContext && (requestContext.project !== value.project
+    || requestContext.testCategory !== value.testCategory
+    || value.operation !== 'GOVERN_STUDIO_ELIGIBLE_REVIEWER_VISIBLE')) return null;
   return Object.freeze({ schemaVersion: value.schemaVersion, project: value.project,
     testCategory: value.testCategory, category: value.category,
     ...(value.operation === undefined ? {} : { operation: value.operation }),
     ...(hasPhase ? { phase: value.phase, code: value.code } : {}),
     ...(value.phaseTimings === undefined ? {} : { phaseTimings: validateAuthenticatedActorPhaseTimings(value.phaseTimings) }),
-    ...(location ? { location } : {}) });
+    ...(location ? { location } : {}),
+    ...(requestContext ? { requestContext } : {}) });
 }
 
 export function authenticatedHostedPlaywrightFailureDescriptor(error) {

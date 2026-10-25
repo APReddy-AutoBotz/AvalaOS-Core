@@ -5,6 +5,9 @@ import { AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA,
   validateAuthenticatedHostedPlaywrightDiagnostic,
   validateAuthenticatedActorPhaseTimings,
   validateAuthenticatedHostedPlaywrightFailureLocation } from './authenticatedHostedDiagnostics.mjs';
+import { ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT,
+  ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_MAX_BYTES,
+  validateEligibleReviewerRequestDiagnostic } from './eligibleReviewerRequestDiagnostic.mjs';
 
 const TEST_CATEGORIES = new Map([
   ['authors, replays, rejects stale work, requests changes and resubmits through the production UI', 'primary-lifecycle'],
@@ -48,6 +51,7 @@ const OPERATION_TITLES = new Map([
   ['hosted:govern-studio:studio-final-accept', 'GOVERN_STUDIO_STUDIO_FINAL_ACCEPT'],
   ['hosted:govern-studio:source-consume', 'GOVERN_STUDIO_SOURCE_CONSUME'],
   ['hosted:govern-studio:checkpoint', 'GOVERN_STUDIO_CHECKPOINT'],
+  ['hosted:govern-studio:eligible-reviewer-visible', 'GOVERN_STUDIO_ELIGIBLE_REVIEWER_VISIBLE'],
 ]);
 
 const projectCategory = test => {
@@ -73,6 +77,26 @@ const boundedLocation = location => {
   const root = process.cwd().replaceAll('\\', '/');
   const relative = source.startsWith(`${root}/`) ? source.slice(root.length + 1) : source;
   return validateAuthenticatedHostedPlaywrightFailureLocation({ source: relative, line: location?.line });
+};
+export const authenticatedHostedChildDiagnosticWithinCap = (value, maxBytes = 2000) =>
+  Number.isSafeInteger(maxBytes) && maxBytes >= 1 && maxBytes <= 2000
+  && Buffer.byteLength(`${JSON.stringify(value)}\n`, 'utf8') <= maxBytes;
+export const boundedAuthenticatedHostedPlaywrightDiagnostic = (fields, maxBytes = 2000) => {
+  let value = validateAuthenticatedHostedPlaywrightDiagnostic(fields);
+  if (value && authenticatedHostedChildDiagnosticWithinCap(value, maxBytes)) return value;
+  if (!fields?.requestContext) return null;
+  const { requestContext: _discarded, ...base } = fields;
+  value = validateAuthenticatedHostedPlaywrightDiagnostic(base);
+  return value && authenticatedHostedChildDiagnosticWithinCap(value, maxBytes) ? value : null;
+};
+const requestContext = (result, project, category) => {
+  const matches = (result?.attachments ?? []).filter(item => item?.name === ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT);
+  if (matches.length !== 1 || matches[0].contentType !== 'application/json' || matches[0].path
+    || !Buffer.isBuffer(matches[0].body) || matches[0].body.length > ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_MAX_BYTES) return null;
+  try {
+    const value = validateEligibleReviewerRequestDiagnostic(JSON.parse(matches[0].body.toString('utf8')));
+    return value && value.project === project && value.testCategory === category ? value : null;
+  } catch { return null; }
 };
 
 export default class AuthenticatedHostedPlaywrightReporter {
@@ -158,6 +182,8 @@ export default class AuthenticatedHostedPlaywrightReporter {
       this.failure = { project: projectCategory(test),
         testCategory: primaryHook?.category ?? testCategory(test),
         category: resultCategory(result.status) };
+      this.requestContext = this.failureOperation === 'GOVERN_STUDIO_ELIGIBLE_REVIEWER_VISIBLE'
+        ? requestContext(result, this.failure.project, this.failure.testCategory) : null;
       this.currentHookFailures = [];
     }
   }
@@ -173,7 +199,7 @@ export default class AuthenticatedHostedPlaywrightReporter {
     const category = result.status === 'timedout' ? 'timeout'
       : result.status === 'interrupted' ? 'interrupted'
         : this.runnerError && !this.failure ? 'configuration' : 'unexpected-failure';
-    const value = validateAuthenticatedHostedPlaywrightDiagnostic({
+    const fields = {
       schemaVersion: AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_SCHEMA,
       project: this.failure?.project ?? this.current?.project ?? 'unknown',
       testCategory: this.failure?.testCategory ?? this.current?.testCategory ?? 'runner',
@@ -182,7 +208,9 @@ export default class AuthenticatedHostedPlaywrightReporter {
       ...(this.failureDescriptor ?? {}),
       ...(this.failurePhaseTimings ? { phaseTimings: this.failurePhaseTimings } : {}),
       ...(this.failureLocation ? { location: this.failureLocation } : {}),
-    });
+      ...(this.requestContext ? { requestContext: this.requestContext } : {}),
+    };
+    const value = boundedAuthenticatedHostedPlaywrightDiagnostic(fields);
     if (!value) return;
     const temporary = `${path}.${process.pid}.tmp`;
     await writeFile(temporary, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
