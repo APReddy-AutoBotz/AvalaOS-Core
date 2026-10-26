@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## PR #338 connected-browser diagnostics (2026-10-27)
+
+**Latest authorization (2026-10-27):** AP now authorizes committing and pushing these verified diagnostics to the same draft PR #338, then verifying all 17 exact-candidate attempt-1 workflows, eleven fresh preparation archives (including the connected-browser diagnostic), PR C85commands/241assertions/audit0 and retained-only108-row reconstruction. This supersedes the earlier no-push/new-CI boundary below only for this diagnostics candidate. Keep the PR draft, 15,000 ms and real providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/infrastructure, Netlify, paid calls or full acceptance is authorized. Preserve prior failures and do not reuse their artifacts.
+
+AP authorizes diagnostics and local verification only. The failed connected-browser command lacks sanitized failure evidence; an unchanged-source Desktop/Pixel replay passed 12 tests and 94 local case observations with owned cleanup. Its exact hosted cause remains unproven. The [active completion plan](planning/hosted-acceptance-completion.md) owns a separate source-bound failure artifact that survives ordinary setup/browser/cleanup/aggregation failures without retaining raw data or changing acceptance gates. The final diagnostics implementation passes 59 focused/manifest/workflow tests, 85 PR C contract tests, a real Chromium redaction probe and a fresh 94-observation disposable-PostgreSQL replay with independently verified source bindings and owned cleanup. This is local evidence, not CI or a reproduction of the hosted failure. Keep 15 seconds and real providers OFF; no product fix, push/new CI, merge/release, hosted diagnostic or full acceptance. Historical failures and acceptance totals remain unchanged.
+
 ## Hosted sign-in session synchronization (2026-10-26)
 
 AP's next-task continuation authorizes the reproduced harness correction, feature-owned checks and one reviewable draft PR. It does not authorize merge/release, another hosted diagnostic, credentials/live access, grants, deployment/migration, Netlify, full acceptance or paid calls. Keep 15,000 ms and providers OFF. PR #337's focused diagnostic is incomplete at IDENTITY_ENTRY/SESSION_MISSING; its independent cleanup and supplied-handoff removal passed.

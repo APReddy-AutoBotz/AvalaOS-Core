@@ -8,6 +8,36 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('connected browser failures retain a separate verified sanitized diagnostic without weakening acceptance', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const job = workflow.jobs['connected-browser'];
+  const index = job.steps.findIndex(step => step.name === 'Actual product cases on desktop and Pixel 7');
+  const command = job.steps[index];
+  const verify = job.steps[index + 1];
+  const upload = job.steps[index + 2];
+  assert.equal(job['timeout-minutes'], 35);
+  assert.equal(job.if, "github.event_name != 'workflow_dispatch'");
+  assert.equal(command.run, 'node scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs --authenticated');
+  assert.equal(command['continue-on-error'], undefined);
+  assert.equal(verify.if, 'always()');
+  assert.equal(verify.id, 'connected_browser_diagnostic_verify');
+  assert.equal(verify.run, 'node scripts/verifyConnectedBrowserDiagnostics.mjs --retain-incomplete');
+  assert.equal(verify['continue-on-error'], undefined);
+  assert.equal(upload.if, "always() && steps.connected_browser_diagnostic_verify.outcome == 'success'");
+  assert.equal(upload.uses, 'actions/upload-artifact@v4');
+  assert.deepEqual(upload.with, {
+    name: 'connected-browser-diagnostic-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}',
+    path: 'output/acceptance/authenticated-product/connected-browser-diagnostic.json',
+    'if-no-files-found': 'error', 'retention-days': 14,
+  });
+  const acceptance = job.steps[index + 3];
+  assert.equal(acceptance.run, 'node scripts/verifyAuthenticatedLocalEvidence.mjs output/acceptance/authenticated-product/local-evidence.json');
+  assert.equal(acceptance.if, undefined);
+  assert.equal(acceptance['continue-on-error'], undefined);
+  assert.equal(job.steps[index + 4].with.path, 'output/acceptance/authenticated-product/local-evidence.json');
+  assert.doesNotMatch(JSON.stringify([command, verify, upload]), /secrets\.|vars\.|inputs\.|full_acceptance|\.zip|\.log|trace|screenshot|retry/u);
+});
+
 test('Studio persona proof rejects stale outputs and independently verifies handoff readiness', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   const job = workflow.jobs['connected-browser'];

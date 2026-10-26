@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.ENTERPRISE_LIFECYCLE_APP_BASE_URL ?? 'http://127.0.0.1:4431';
+const authenticated = process.env.ENTERPRISE_LIFECYCLE_AUTHENTICATED === 'true';
+const connectedBrowserIdentity = (() => {
+  if (!authenticated) return null;
+  try { return JSON.parse(process.env.CONNECTED_BROWSER_DIAGNOSTIC_IDENTITY_JSON ?? 'null'); } catch { return null; }
+})();
 
 export default defineConfig({
   captureGitInfo: { commit: false, diff: false },
@@ -9,17 +14,20 @@ export default defineConfig({
   forbidOnly: true,
   fullyParallel: false,
   workers: 1,
-  maxFailures: process.env.ENTERPRISE_LIFECYCLE_AUTHENTICATED === 'true' ? 1 : undefined,
-  reporter: 'list',
+  maxFailures: authenticated ? 1 : undefined,
+  reporter: authenticated
+    ? [['./scripts/connectedBrowserPlaywrightReporter.mjs', { identity: connectedBrowserIdentity }]]
+    : 'list',
   outputDir: '.agent/enterprise-lifecycle-acceptance-playwright',
-  timeout: process.env.ENTERPRISE_LIFECYCLE_AUTHENTICATED === 'true' ? 300_000 : 120_000,
+  preserveOutput: authenticated ? 'never' : 'always',
+  timeout: authenticated ? 300_000 : 120_000,
   expect: { timeout: 15_000 },
   use: {
     baseURL,
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: authenticated ? 'off' : 'retain-on-failure',
+    screenshot: authenticated ? 'off' : 'only-on-failure',
     video: 'off',
     serviceWorkers: 'block',
   },

@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## PR #338 connected-browser diagnostics (2026-10-27)
+
+**Latest authorization (2026-10-27):** AP now authorizes committing and pushing these verified diagnostics to the same draft PR #338, then verifying all 17 exact-candidate attempt-1 workflows, eleven fresh preparation archives (including the connected-browser diagnostic), PR C85commands/241assertions/audit0 and retained-only108-row reconstruction. This supersedes the earlier no-push/new-CI boundary below only for this diagnostics candidate. Keep the PR draft, 15,000 ms and real providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/infrastructure, Netlify, paid calls or full acceptance is authorized. Preserve prior failures and do not reuse their artifacts.
+
+The diagnostics/local-check slice in the [active completion plan](../planning/hosted-acceptance-completion.md) is locally verified: 59 focused/manifest/workflow tests, 85 PR C contract tests, real Chromium redaction/early-failure probes and final 94-observation PostgreSQL/browser replay pass with owned cleanup. Three read-only reviews closed before writes; root integrated the worker's bounded schema/reporter and independently verified final sources. The unchanged candidate replay and instrumented replay both passed; hosted failure attribution remains unproven. Stop with uncommitted local changes on the same draft PR worktree, 15 seconds/providers OFF and zero hosted allowances. No product fix, push/new CI, merge, release or full acceptance is authorized.
+
 ## Hosted sign-in session synchronization (2026-10-26)
 
 Proceed with one narrow harness synchronization and regression PR under the [active completion plan](../planning/hosted-acceptance-completion.md). Three read-only reviewers closed and the unchanged production UI/SDK/helper locally reproduced premature session inspection on Desktop and Pixel. Root owns integration, evidence, source bindings and the draft PR; the implementation worker owns the harness and sign-in fixture coverage. Keep 15,000 ms/providers OFF, preserve prior failures, and stop at the draft boundary. No new hosted allowance, merge/release, live access or product authentication change is included. Correction verification is planned until recorded.
