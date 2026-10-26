@@ -28,6 +28,14 @@ const localApiOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LO
 const processSeedMode = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE ?? '';
 const processReadStateOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY === 'true';
 const scopedNavigationOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_ONLY === 'true';
+const contractPhase = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE ?? '';
+if (!['entry', 'assessment-negatives', 'assessment-positives', 'safety', 'specialized'].includes(contractPhase)) {
+  throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_REJECTED');
+}
+if ((processSeedMode === 'nullable-reproduction' || processReadStateOnly || scopedNavigationOnly)
+  !== (contractPhase === 'specialized')) {
+  throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_MODE_REJECTED');
+}
 const scopedNavigationEvidencePath = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_EVIDENCE_PATH ?? '';
 const syntheticProjectRef = 'abcdefghijklmnopqrst';
 if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
@@ -259,6 +267,17 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   });
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
+
+  let selectedProcessId: string;
+  if (['assessment-negatives', 'assessment-positives', 'safety'].includes(contractPhase)) {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
+    await networkActionTail;
+    if (networkActionError) throw networkActionError;
+    selectedProcessId = await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
+    await networkActionTail;
+    if (networkActionError) throw networkActionError;
+  } else {
 
   const loopbackFailure = context.waitForEvent('requestfailed', {
     predicate: request => request.url() === `${localApiOrigin}/functions/v1/process-command`,
@@ -516,7 +535,6 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     openSettled = true;
     return processId;
   });
-  let selectedProcessId: string;
   try {
     await expect.poll(() => page.evaluate(() => {
       const gate = (window as unknown as Record<string, {
@@ -908,12 +926,48 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     expect(pageErrors).toEqual([]);
     return;
   }
-  await authenticatedLifecycleEnterAs(page, actor(projectName, 'A'), settleActorTransitionEvidence);
-  await networkActionTail;
-  if (networkActionError) throw networkActionError;
-  await authenticatedLifecycleOpenConnectedProcess(page, setup.aliases.process);
-  await networkActionTail;
-  if (networkActionError) throw networkActionError;
+  if (contractPhase === 'specialized') {
+    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SPECIALIZED_MODE_INCOMPLETE');
+  }
+  const entryObservation = await authenticatedLifecycleControl<{
+    passwordRequests: unknown[];
+    diagnostic: unknown;
+    bindings: unknown[];
+    actions: Array<{ route: string; persona: string; complete: boolean; status: number | null }>;
+    processCommandRequests: number;
+    anonymousProcessCommandRequests: number;
+    browserCases: number;
+    serverCases: number;
+  }>('/control/sign-in-entry-observation', { projectName });
+  expect(entryObservation).toMatchObject({
+    passwordRequests: [
+      { actor: 'rejected', outcome: 'rejected' },
+      { actor: 'A', outcome: 'accepted' },
+      { actor: 'B', outcome: 'accepted' },
+    ],
+    diagnostic: { source: 'browser', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
+    bindings: [
+      { actor: 'A', persona: 'author' },
+      { actor: 'B', persona: 'reviewer' },
+    ],
+  });
+  expect(entryObservation.actions.filter(action => action.route === '/functions/v1/process-command')).toEqual([
+    expect.objectContaining({ persona: 'reviewer', complete: true, status: 403 }),
+  ]);
+  expect(entryObservation.processCommandRequests).toBe(1);
+  expect(entryObservation.anonymousProcessCommandRequests).toBe(0);
+  expect(entryObservation.actions.every(action => action.route !== '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
+    && !action.route.startsWith('/auth/'))).toBe(true);
+  expect(entryObservation.browserCases).toBe(0);
+  expect(entryObservation.serverCases).toBe(0);
+  await settleActorTransitionEvidence();
+  expect(observedHttpRequests).toBeGreaterThan(0);
+  expect(proxiedOrigins.length).toBeGreaterThan(0);
+  expect(proxiedOrigins.every(origin => origin === appOrigin || origin === apiOrigin)).toBe(true);
+  expect(unexpectedOrigins).toEqual([]);
+  expect(pageErrors).toEqual([]);
+  return;
+  }
 
   type AssessmentControl = Readonly<{
     mode: string;
@@ -970,6 +1024,38 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     expect(state.version).toBe(state.commandTypes.length);
   };
 
+  const assertAssessmentOnlyObservation = async () => {
+    await settleActorTransitionEvidence();
+    const phaseObservation = await authenticatedLifecycleControl<{
+      passwordRequests: unknown[];
+      diagnostic: unknown;
+      bindings: unknown[];
+      actions: Array<{ route: string }>;
+      processCommandRequests: number;
+      anonymousProcessCommandRequests: number;
+      browserCases: number;
+      serverCases: number;
+    }>('/control/sign-in-entry-observation', { projectName });
+    expect(phaseObservation).toMatchObject({
+      passwordRequests: [{ actor: 'A', outcome: 'accepted' }],
+      diagnostic: null,
+      bindings: [{ actor: 'A', persona: 'author' }],
+    });
+    expect(phaseObservation.actions.filter(action => action.route === '/functions/v1/process-command')).toEqual([]);
+    expect(phaseObservation.processCommandRequests).toBe(0);
+    expect(phaseObservation.anonymousProcessCommandRequests).toBe(0);
+    expect(phaseObservation.actions.every(action => action.route !== '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
+      && !action.route.startsWith('/auth/'))).toBe(true);
+    expect(phaseObservation.browserCases).toBe(0);
+    expect(phaseObservation.serverCases).toBe(0);
+    expect(observedHttpRequests).toBeGreaterThan(0);
+    expect(proxiedOrigins.length).toBeGreaterThan(0);
+    expect(proxiedOrigins.every(origin => origin === appOrigin || origin === apiOrigin)).toBe(true);
+    expect(unexpectedOrigins).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  };
+
+  if (contractPhase === 'assessment-negatives') {
   await resetAssessment('reject-finalize', true);
   let legacyDialogObserverSettled = false;
   const legacyDialogObserver = () => { legacyDialogObserverSettled = true; };
@@ -1020,7 +1106,11 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(missingReadback.version).toBe(missingReadback.commandTypes.length + 1);
   await expect(page.getByText('Assessed & Scored', { exact: true })).toHaveCount(0);
   await exitAssessment();
+  await assertAssessmentOnlyObservation();
+  return;
+  }
 
+  if (contractPhase === 'assessment-positives') {
   await resetAssessment('single-readback', true);
   const existingDraftCompletion = await completePositiveV1('actual-app:v1-existing-draft-success');
   expect(existingDraftCompletion.commandTypes[0]).toBe('assessment.response.upsert');
@@ -1052,6 +1142,12 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   expect(completedAssessment.commandTypes).toEqual(v1Completion.commandTypes);
   expect(completedAssessment.version).toBe(completedAssessment.commandTypes.length);
   await exitAssessment();
+  await assertAssessmentOnlyObservation();
+  return;
+  }
+  if (contractPhase !== 'safety') {
+    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_UNREACHABLE');
+  }
   await networkActionTail;
   if (networkActionError) throw networkActionError;
 
@@ -1213,24 +1309,20 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   }>('/control/sign-in-entry-observation', { projectName });
   expect(observation).toMatchObject({
     passwordRequests: [
-      { actor: 'rejected', outcome: 'rejected' },
       { actor: 'A', outcome: 'accepted' },
-      { actor: 'B', outcome: 'accepted' },
     ],
-    diagnostic: { source: 'browser', operation: 'SIGN_IN', category: 'CREDENTIAL_REJECTED', upstreamCode: 'invalid_credentials' },
+    diagnostic: null,
     bindings: [
       { actor: 'A', persona: 'author' },
-      { actor: 'B', persona: 'reviewer' },
     ],
   });
   const processActions = observation.actions.filter(action => action.route === '/functions/v1/process-command');
-  expect(processActions).toHaveLength(3);
+  expect(processActions).toHaveLength(2);
   expect(processActions).toEqual([
-    expect.objectContaining({ persona: 'reviewer', complete: true, status: 403 }),
     expect.objectContaining({ persona: 'author', complete: true, status: 503 }),
     expect.objectContaining({ persona: 'author', complete: true, status: 0 }),
   ]);
-  expect(observation.processCommandRequests).toBe(2);
+  expect(observation.processCommandRequests).toBe(1);
   expect(observation.anonymousProcessCommandRequests).toBe(0);
   expect(observation.actions.every(action => action.route !== '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
     && !action.route.startsWith('/auth/'))).toBe(true);
