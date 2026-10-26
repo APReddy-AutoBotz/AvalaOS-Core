@@ -37,6 +37,7 @@ import {
 import {
   authenticatedHostedClosePageAfterOwnedNetwork,
   authenticatedHostedConfigureChromiumDurableResponseBodies,
+  authenticatedLifecycleSettleCheckpointBoundary as settleCheckpointBoundary,
   authenticatedLifecycleSettleActorNavigationBoundary as settleActorNavigationBoundary,
   installAuthenticatedHostedNetwork,
 } from '../authenticatedHostedNetwork';
@@ -1841,16 +1842,21 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
 
     if (governStudioDiagnostic) {
-      const actionIds = await Promise.all([
-        approvalApi.actionId, governDenialApi.actionId, governResolutionApi.actionId, studioHandoffApi.actionId,
-        studioRequestApi.actionId, studioReviewApi.actionId, studioFinalAcceptApi.actionId, sourcePackageApi.actionId,
-      ]);
-      if (actionIds.some((actionId): actionId is null => actionId === null)) {
-        throw new Error('AUTHENTICATED_GOVERN_STUDIO_ACTION_REFERENCE_MISSING');
-      }
-      await test.step('hosted:govern-studio:checkpoint', () => control('/control/govern-studio-diagnostic', {
-        projectName, actionIds,
-      }));
+      await settleCheckpointBoundary({
+        settleOwnedNetwork: settleActorTransitionEvidence,
+        checkpoint: async () => {
+          const actionIds = await Promise.all([
+            approvalApi.actionId, governDenialApi.actionId, governResolutionApi.actionId, studioHandoffApi.actionId,
+            studioRequestApi.actionId, studioReviewApi.actionId, studioFinalAcceptApi.actionId, sourcePackageApi.actionId,
+          ]);
+          if (actionIds.some((actionId): actionId is null => actionId === null)) {
+            throw new Error('AUTHENTICATED_GOVERN_STUDIO_ACTION_REFERENCE_MISSING');
+          }
+          await test.step('hosted:govern-studio:checkpoint', () => control('/control/govern-studio-diagnostic', {
+            projectName, actionIds,
+          }));
+        },
+      });
       return;
     }
 

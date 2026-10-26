@@ -16,6 +16,7 @@ import {
 } from './authenticatedLifecycleHarness';
 import {
   authenticatedHostedClosePageAfterOwnedNetwork,
+  authenticatedLifecycleSettleCheckpointBoundary,
   authenticatedLifecycleSettleActorNavigationBoundary,
 } from './authenticatedHostedNetwork';
 
@@ -162,6 +163,16 @@ test('phase timing wrappers preserve join order, two empty samples and first fai
     runPhase: async (phase, operation) => { phases.push(phase); await operation(); },
   }), error => error === first);
   assert.deepEqual(phases, [...expected, ...expected]);
+});
+
+test('checkpoint boundary preserves settlement failure and never starts the checkpoint', async () => {
+  const firstFailure = new Error('OWNED_NETWORK_SETTLEMENT_REJECTED');
+  let checkpointCalls = 0;
+  await assert.rejects(authenticatedLifecycleSettleCheckpointBoundary({
+    settleOwnedNetwork: async () => { throw firstFailure; },
+    checkpoint: async () => { checkpointCalls += 1; },
+  }), error => error === firstFailure);
+  assert.equal(checkpointCalls, 0);
 });
 
 const actorEntryPage = (events: string[]) => ({

@@ -9,6 +9,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES,
   AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS,
   AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPE,
   assertAuthenticatedHostedSignInEntryLoopbackUrl,
@@ -560,10 +561,12 @@ test('inert reviewer session omits process update authority and rejects only a v
 });
 
 test('shared helper retains the scrub navigation and enters the actual sign-in route', async () => {
-  const [source, runnerSource, viteSource] = await Promise.all([
+  const [source, runnerSource, viteSource, specSource, playwrightSource] = await Promise.all([
     readFile('tests/browser/authenticatedLifecycleHarness.ts', 'utf8'),
     readFile('scripts/testAuthenticatedHostedSignInEntry.mjs', 'utf8'),
     readFile('vite.authenticated-hosted-sign-in-entry.config.ts', 'utf8'),
+    readFile('tests/browser/authenticatedHostedSignInEntry.spec.ts', 'utf8'),
+    readFile('playwright.authenticated-hosted-sign-in-entry.config.ts', 'utf8'),
   ]);
   const realAuthBranch = source.slice(
     source.indexOf('export const authenticatedLifecycleEnterAs'),
@@ -574,6 +577,15 @@ test('shared helper retains the scrub navigation and enters the actual sign-in r
   assert.match(runnerSource, /--config', 'vite[.]authenticated-hosted-sign-in-entry[.]config[.]ts'/u);
   assert.match(runnerSource, /VITE_PR_C_CONTROLLED_HUMAN_ENABLED: 'authorized'/u);
   assert.match(runnerSource, /startAuthenticatedHostedControllerServer/u);
+  assert.match(runnerSource, /for \(const contractPhase of phases\)[\s\S]*runAuthenticatedHostedSignInEntryPhase/u);
+  assert.match(runnerSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE: contractPhase/u);
+  assert.deepEqual(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES,
+    ['entry', 'assessment-negatives', 'assessment-positives', 'safety']);
+  assert.match(specSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_REJECTED/u);
+  assert.match(specSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_MODE_REJECTED/u);
+  assert.match(playwrightSource, /timeout: 60_000/u);
+  assert.match(playwrightSource, /actionTimeout: 10_000/u);
+  assert.match(playwrightSource, /navigationTimeout: 20_000/u);
   assert.match(viteSource, /envDir: false as const/u);
   assert.deepEqual(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS, ['desktop-chromium', 'pixel-7-chromium']);
 });

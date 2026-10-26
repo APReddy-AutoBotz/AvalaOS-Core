@@ -1260,17 +1260,13 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
   };
 };
 
-export const runAuthenticatedHostedSignInEntry = async ({
-  processSeedMode = 'valid', processReadStateOnly = false, scopedNavigationOnly = false,
-} = {}) => {
-  const stateBefore = await checkoutState();
-  const scopedNavigationEvidencePath = scopedNavigationOnly
-    ? path.resolve('output/local-private/authenticated-product-acceptance/scoped-navigation-corrected.jsonl')
-    : '';
-  if (scopedNavigationEvidencePath) {
-    await mkdir(path.dirname(scopedNavigationEvidencePath), { recursive: true });
-    await rm(scopedNavigationEvidencePath, { force: true });
-  }
+export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES = Object.freeze([
+  'entry', 'assessment-negatives', 'assessment-positives', 'safety',
+]);
+
+const runAuthenticatedHostedSignInEntryPhase = async ({
+  processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
+}) => {
   let temporaryRoot;
   let fixture;
   let preview;
@@ -1325,6 +1321,7 @@ export const runAuthenticatedHostedSignInEntry = async ({
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY: String(processReadStateOnly),
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_ONLY: String(scopedNavigationOnly),
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_EVIDENCE_PATH: scopedNavigationEvidencePath,
+      AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE: contractPhase,
       ENTERPRISE_LIFECYCLE_APP_BASE_URL: fixture.previewOrigin,
       ENTERPRISE_LIFECYCLE_API_BASE_URL: fixture.backendOrigin,
       ENTERPRISE_LIFECYCLE_CONTROL_URL: fixture.controlBaseUrl,
@@ -1341,6 +1338,33 @@ export const runAuthenticatedHostedSignInEntry = async ({
       : true;
     cleanupSucceeded = previewStopped && fixtureClosed && tlsClosed && temporaryRemoved;
     if (!cleanupSucceeded) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
+  }
+  return true;
+};
+
+export const runAuthenticatedHostedSignInEntry = async ({
+  processSeedMode = 'valid', processReadStateOnly = false, scopedNavigationOnly = false,
+} = {}) => {
+  const stateBefore = await checkoutState();
+  const scopedNavigationEvidencePath = scopedNavigationOnly
+    ? path.resolve('output/local-private/authenticated-product-acceptance/scoped-navigation-corrected.jsonl')
+    : '';
+  if (scopedNavigationEvidencePath) {
+    await mkdir(path.dirname(scopedNavigationEvidencePath), { recursive: true });
+    await rm(scopedNavigationEvidencePath, { force: true });
+  }
+  const specialized = processSeedMode === 'nullable-reproduction' || processReadStateOnly || scopedNavigationOnly;
+  const phases = specialized ? ['specialized'] : AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES;
+  for (const contractPhase of phases) {
+    const phaseStartedAt = Date.now();
+    try {
+      await runAuthenticatedHostedSignInEntryPhase({
+        processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
+      });
+      console.log(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_PASS:${contractPhase}:${Date.now() - phaseStartedAt}`);
+    } catch (error) {
+      throw new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_FAILED:${contractPhase}`, { cause: error });
+    }
   }
   if (await checkoutState() !== stateBefore) {
     throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHECKOUT_CHANGED');
