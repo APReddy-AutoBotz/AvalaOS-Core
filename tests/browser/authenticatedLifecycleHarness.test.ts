@@ -10,6 +10,8 @@ import {
   authenticatedLifecycleValidateSessionBinding,
   authenticatedLifecycleValidateSetupLabels,
   authenticatedLifecycleValidatePersistedHandoffTarget,
+  authenticatedLifecycleExpectedAuthStorageKey,
+  authenticatedLifecycleValidateStoredSession,
   authenticatedLifecycleEnterAs,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
@@ -24,6 +26,64 @@ const actorEntryFixture = {
   token: 'fixture-actor-token',
   user: { id: '10000000-0000-4000-8000-000000000001', email: 'actor@example.invalid' },
 };
+
+// Generated inert project reference matches the loopback TLS fixture; never a live backend.
+const syntheticProjectRef = 'abcdefghijklmnopqrst';
+const syntheticBackendUrl = `https://${syntheticProjectRef}.supabase.co`;
+
+const storedSessionFixture = (actorId = actorEntryFixture.user.id,
+  sessionId = '11000000-0000-4000-8000-000000000001', userId = actorId) => {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const accessToken = `${encode({ alg: 'none' })}.${encode({ sub: actorId, session_id: sessionId })}.${'x'.repeat(48)}`;
+  return JSON.stringify({ access_token: accessToken, user: { id: userId } });
+};
+
+test('real-auth session validation binds the exact backend key, actor and JWT session', () => {
+  const key = authenticatedLifecycleExpectedAuthStorageKey(syntheticBackendUrl);
+  assert.equal(key, 'sb-abcdefghijklmnopqrst-auth-token');
+  assert.deepEqual(authenticatedLifecycleValidateStoredSession(
+    [{ key, value: storedSessionFixture() }], key, actorEntryFixture.user.id,
+  ), {
+    key,
+    value: storedSessionFixture(),
+    accessToken: JSON.parse(storedSessionFixture()).access_token,
+    actorId: actorEntryFixture.user.id,
+    sessionId: '11000000-0000-4000-8000-000000000001',
+  });
+});
+
+test('real-auth session validation rejects malformed, ambiguous, wrong actor, key and session state', () => {
+  const key = authenticatedLifecycleExpectedAuthStorageKey(syntheticBackendUrl);
+  for (const operation of [
+    () => authenticatedLifecycleExpectedAuthStorageKey('not a URL'),
+    () => authenticatedLifecycleExpectedAuthStorageKey(`http://${syntheticProjectRef}.supabase.co`),
+    () => authenticatedLifecycleExpectedAuthStorageKey(`${syntheticBackendUrl}:444`),
+    () => authenticatedLifecycleExpectedAuthStorageKey('https://example.invalid'),
+    () => authenticatedLifecycleValidateStoredSession([], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([
+      { key, value: storedSessionFixture() }, { key: 'sb-decoy-auth-token', value: storedSessionFixture() },
+    ], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([
+      { key: 'sb-decoy-auth-token', value: storedSessionFixture() },
+    ], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: '{' }], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: '{}' }], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: JSON.stringify({
+      access_token: 'invalid-payload', user: { id: actorEntryFixture.user.id },
+    }) }], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: storedSessionFixture(
+      '10000000-0000-4000-8000-000000000002', '11000000-0000-4000-8000-000000000001', actorEntryFixture.user.id,
+    ) }], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: storedSessionFixture(
+      actorEntryFixture.user.id, 'invalid-session-id',
+    ) }], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: storedSessionFixture(
+      '10000000-0000-4000-8000-000000000002',
+    ) }], key, actorEntryFixture.user.id),
+    () => authenticatedLifecycleValidateStoredSession([{ key, value: storedSessionFixture() }],
+      key, actorEntryFixture.user.id, '11000000-0000-4000-8000-000000000002'),
+  ]) assert.throws(operation, /ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_(?:STORAGE_KEY|SESSION)_REJECTED/u);
+});
 
 const persistedHandoffId = '10000000-0000-4000-8000-000000000010';
 const persistedHandoffReceiptId = '10000000-0000-4000-8000-000000000011';

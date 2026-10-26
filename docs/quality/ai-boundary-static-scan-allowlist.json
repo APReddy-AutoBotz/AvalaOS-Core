@@ -95,14 +95,18 @@
     {
       "pattern": "GEMINI_API_KEY",
       "path": "scripts/runStudioHandoffActionTargetingBrowser.mjs",
-      "lines": [174],
+      "lines": [
+        174
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep this exact reference confined to deleting the provider credential from the local test child environment; never read, supply or retain its value."
     },
     {
       "pattern": "GROQ_API_KEY",
       "path": "scripts/runStudioHandoffActionTargetingBrowser.mjs",
-      "lines": [174],
+      "lines": [
+        174
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep this exact reference confined to deleting the provider credential from the local test child environment; never read, supply or retain its value."
     },
@@ -535,14 +539,15 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        327,
-        368,
-        369,
-        454,
-        455,
-        549,
-        550,
-        1292
+        333,
+        416,
+        457,
+        458,
+        543,
+        544,
+        638,
+        639,
+        1381
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
@@ -551,23 +556,21 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        300,
-        301,
-        302,
-        309,
-        336,
-        337,
-        347,
+        346,
         348,
-        366,
-        367,
-        368,
+        380,
+        381,
+        382,
+        400,
+        470,
+        471,
         472,
-        473,
-        639,
-        642,
-        793,
-        794
+        576,
+        577,
+        743,
+        746,
+        897,
+        898
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -639,6 +642,15 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep the in-memory storage mock confined to the no-Docker fixture-session contract test; restore global descriptors and never read real credentials."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "scripts/testAuthenticatedHostedSignInEntry.test.mjs",
+      "lines": [
+        662
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this source assertion limited to rejecting arbitrary session-key selection in the acceptance harness. It does not read credentials or grant server authority."
     }
   ]
 }

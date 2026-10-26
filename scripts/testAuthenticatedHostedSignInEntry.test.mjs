@@ -31,7 +31,8 @@ const waitFor = async (operation, predicate, message) => {
   assert.fail(`${message}:${JSON.stringify(value)}`);
 };
 
-const startTlsDeliveryRequest = async ({ bridge, ca, accessToken, body }) => {
+const startTlsDeliveryRequest = async ({ bridge, ca, accessToken, body,
+  requestPath = '/functions/v1/legacy-delivery-query' }) => {
   const proxy = new URL(bridge.origin);
   const socket = await new Promise((resolve, reject) => {
     const candidate = connect({ host: proxy.hostname, port: Number(proxy.port) }, () => {
@@ -45,10 +46,19 @@ const startTlsDeliveryRequest = async ({ bridge, ca, accessToken, body }) => {
   });
   const encoded = JSON.stringify(body);
   const tls = connectTls({ socket, ca, servername: 'localhost' });
+  let resolveHeaders;
+  const headers = new Promise(resolve => { resolveHeaders = resolve; });
   const response = new Promise(resolve => {
     const chunks = [];
     let ended = false;
-    tls.on('data', data => chunks.push(data));
+    let headersObserved = false;
+    tls.on('data', data => {
+      chunks.push(data);
+      if (!headersObserved && Buffer.concat(chunks).includes('\r\n\r\n')) {
+        headersObserved = true;
+        resolveHeaders(Buffer.concat(chunks).toString());
+      }
+    });
     tls.once('end', () => { ended = true; });
     tls.once('close', () => resolve({ ended, raw: Buffer.concat(chunks).toString() }));
   });
@@ -56,8 +66,8 @@ const startTlsDeliveryRequest = async ({ bridge, ca, accessToken, body }) => {
     tls.once('secureConnect', resolve);
     tls.once('error', reject);
   });
-  tls.write(`POST /functions/v1/legacy-delivery-query HTTP/1.1\r\nHost: ${BACKEND_HOST}\r\nAuthorization: Bearer ${accessToken}\r\napikey: sb_publishable_authenticated_hosted_sign_in_entry\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(encoded)}\r\nConnection: close\r\n\r\n${encoded}`);
-  return { response, tls };
+  tls.write(`POST ${requestPath} HTTP/1.1\r\nHost: ${BACKEND_HOST}\r\nAuthorization: Bearer ${accessToken}\r\napikey: sb_publishable_authenticated_hosted_sign_in_entry\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(encoded)}\r\nConnection: close\r\n\r\n${encoded}`);
+  return { response, headers, tls };
 };
 
 const assertCommittedDeliverySettlement = (before, after) => {
@@ -147,6 +157,68 @@ test('local TLS bridge preserves requests, rejects other targets/redirects and c
     await new Promise(resolve => upstream.close(resolve));
     assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
     assert(path.basename(directory).startsWith('avalaos-bridge-test-'));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('local TLS token gate exposes headers before body and releases within the fixed bound', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'avalaos-token-gate-test-'));
+  const marker = 'synthetic-session-body-complete';
+  const upstream = createServer(async (incoming, outgoing) => {
+    for await (const _chunk of incoming) { /* consume bounded synthetic request */ }
+    outgoing.writeHead(200, { 'content-type': 'application/json' });
+    outgoing.end(JSON.stringify({ marker }));
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const target = `http://127.0.0.1:${upstream.address().port}`;
+  let bridge;
+  let exchange;
+  try {
+    bridge = await startAuthenticatedHostedSignInEntryTlsBridge({
+      directory, appBaseUrl: target, apiBaseUrl: target, tokenBodyGate: true,
+    });
+    assert.ok(bridge.tokenBodyGate);
+    const gate = async action => {
+      const response = await fetch(`${bridge.tokenBodyGate.controlUrl}/control/token-body-gate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json',
+          'x-authenticated-sign-in-gate': bridge.tokenBodyGate.controlToken },
+        body: JSON.stringify({ action }),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    assert.match(bridge.tokenBodyGate.controlToken, /^[a-f0-9]{64}$/u);
+    assert.equal((await gate('arm')).mode, 'armed');
+    exchange = await startTlsDeliveryRequest({
+      bridge,
+      ca: await readFile(path.join(directory, 'loopback-cert.pem')),
+      accessToken: 'synthetic',
+      requestPath: '/auth/v1/token?grant_type=password',
+      body: { email: 'synthetic@local.invalid', password: 'synthetic' },
+    });
+    const headers = await exchange.headers;
+    assert.match(headers, /HTTP\/1.1 200/u);
+    assert.equal(headers.includes(marker), false);
+    assert.deepEqual(await gate('inspect'), {
+      mode: 'holding', headersSent: true, waiting: true, released: false,
+      automaticRelease: false, requests: 1, completed: 0,
+    });
+    await gate('release');
+    const completed = await exchange.response;
+    assert.equal(completed.ended, true);
+    assert(completed.raw.includes(marker));
+    assert.deepEqual(await gate('inspect'), {
+      mode: 'released', headersSent: true, waiting: false, released: true,
+      automaticRelease: false, requests: 1, completed: 1,
+    });
+  } finally {
+    exchange?.tls.destroy();
+    await bridge?.close();
+    upstream.closeAllConnections();
+    await new Promise(resolve => upstream.close(resolve));
+    assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+    assert(path.basename(directory).startsWith('avalaos-token-gate-test-'));
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -580,8 +652,18 @@ test('shared helper retains the scrub navigation and enters the actual sign-in r
   assert.match(runnerSource, /for \(const contractPhase of phases\)[\s\S]*runAuthenticatedHostedSignInEntryPhase/u);
   assert.match(runnerSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE: contractPhase/u);
   assert.deepEqual(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES,
-    ['entry', 'assessment-negatives', 'assessment-positives', 'safety']);
+    ['session-persistence', 'entry', 'assessment-negatives', 'assessment-positives', 'safety']);
+  assert.match(runnerSource, /tokenBodyGate: contractPhase === 'session-persistence'/u);
+  assert.match(runnerSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_URL/u);
+  assert.match(realAuthBranch, /authenticatedLifecycleExpectedAuthStorageKey/u);
+  assert.match(realAuthBranch, /authenticatedLifecycleReadStoredSession/u);
+  assert.match(realAuthBranch, /onHostedSessionPending/u);
+  assert.match(realAuthBranch, /hostedRealAuthSessionLimitMs/u);
+  assert.doesNotMatch(realAuthBranch, /Object[.]keys\(localStorage\)[.]find\(candidate => candidate[.]startsWith\('sb-'\)\)/u);
   assert.match(specSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_REJECTED/u);
+  assert.match(specSource, /contractPhase === 'session-persistence'/u);
+  assert.match(specSource, /sessionPendingObserved/u);
+  assert.match(specSource, /mode: 'holding', headersSent: true, waiting: true/u);
   assert.match(specSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_MODE_REJECTED/u);
   assert.match(playwrightSource, /timeout: 60_000/u);
   assert.match(playwrightSource, /actionTimeout: 10_000/u);

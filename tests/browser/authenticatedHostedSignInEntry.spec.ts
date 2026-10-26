@@ -29,7 +29,8 @@ const processSeedMode = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_S
 const processReadStateOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY === 'true';
 const scopedNavigationOnly = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_ONLY === 'true';
 const contractPhase = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE ?? '';
-if (!['entry', 'assessment-negatives', 'assessment-positives', 'safety', 'specialized'].includes(contractPhase)) {
+if (!['session-persistence', 'entry', 'assessment-negatives', 'assessment-positives', 'safety', 'specialized']
+  .includes(contractPhase)) {
   throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_REJECTED');
 }
 if ((processSeedMode === 'nullable-reproduction' || processReadStateOnly || scopedNavigationOnly)
@@ -37,6 +38,8 @@ if ((processSeedMode === 'nullable-reproduction' || processReadStateOnly || scop
   throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_MODE_REJECTED');
 }
 const scopedNavigationEvidencePath = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_SCOPED_NAVIGATION_EVIDENCE_PATH ?? '';
+const tokenGateUrl = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_URL ?? '';
+const tokenGateToken = process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_TOKEN ?? '';
 const syntheticProjectRef = 'abcdefghijklmnopqrst';
 if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
   || apiOrigin !== `https://${syntheticProjectRef}.supabase.co`
@@ -44,6 +47,16 @@ if (appOrigin !== 'https://deploy-preview-264--avalaos-pilot.netlify.app'
   || !/^http:\/\/127[.]0[.]0[.]1:\d+$/u.test(localApiOrigin)
   || !['valid', 'nullable-reproduction'].includes(processSeedMode)) {
   throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROXY_BINDING_REJECTED');
+}
+if (contractPhase === 'session-persistence') {
+  const parsedTokenGate = new URL(tokenGateUrl);
+  if (parsedTokenGate.protocol !== 'http:' || parsedTokenGate.hostname !== '127.0.0.1'
+    || !/^\d+$/u.test(parsedTokenGate.port) || parsedTokenGate.pathname !== '/'
+    || parsedTokenGate.search || parsedTokenGate.hash || !/^[a-f0-9]{64}$/u.test(tokenGateToken)) {
+    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_REJECTED');
+  }
+} else if (tokenGateUrl || tokenGateToken) {
+  throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_UNEXPECTED');
 }
 
 const actor = (
@@ -267,6 +280,82 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   });
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.name));
+
+  if (contractPhase === 'session-persistence') {
+    type TokenGateState = Readonly<{
+      mode: string;
+      headersSent: boolean;
+      waiting: boolean;
+      released: boolean;
+      automaticRelease: boolean;
+      requests: number;
+      completed: number;
+    }>;
+    const tokenGate = async (action: 'arm' | 'release' | 'inspect') => {
+      const response = await fetch(`${tokenGateUrl}/control/token-body-gate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-authenticated-sign-in-gate': tokenGateToken },
+        body: JSON.stringify({ action }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (response.status !== 200) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_REJECTED');
+      return await response.json() as TokenGateState;
+    };
+    const before = await authenticatedLifecycleControl<{
+      passwordRequests: unknown[];
+      bindings: unknown[];
+      processAtomicCalls: number;
+    }>('/control/sign-in-entry-observation', { projectName });
+    await tokenGate('arm');
+    let entrySettled = false;
+    let sessionPendingObserved = false;
+    const entry = authenticatedLifecycleEnterAs(page, actor(projectName, 'B'), settleActorTransitionEvidence, {
+      onHostedSessionPending: () => { sessionPendingObserved = true; },
+    })
+      .finally(() => { entrySettled = true; });
+    try {
+      await expect.poll(() => sessionPendingObserved, { timeout: 15_000 }).toBe(true);
+      await expect.poll(() => tokenGate('inspect'), { timeout: 15_000 }).toMatchObject({
+        mode: 'holding', headersSent: true, waiting: true, released: false,
+        automaticRelease: false, requests: 1, completed: 0,
+      });
+      const held = await authenticatedLifecycleControl<{
+        passwordRequests: unknown[];
+        bindings: unknown[];
+        processAtomicCalls: number;
+      }>('/control/sign-in-entry-observation', { projectName });
+      expect(entrySettled).toBe(false);
+      expect(held.passwordRequests.slice(before.passwordRequests.length)).toEqual([
+        { actor: 'B', outcome: 'accepted' },
+      ]);
+      expect(held.bindings).toHaveLength(before.bindings.length);
+      expect(held.processAtomicCalls).toBe(before.processAtomicCalls);
+      expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('sb-')))).toEqual([]);
+      await tokenGate('release');
+      await entry;
+      expect(await tokenGate('inspect')).toMatchObject({
+        mode: 'released', headersSent: true, waiting: false, released: true,
+        automaticRelease: false, requests: 1, completed: 1,
+      });
+      const after = await authenticatedLifecycleControl<{
+        bindings: Array<{ actor: string; persona: string }>;
+        processAtomicCalls: number;
+      }>('/control/sign-in-entry-observation', { projectName });
+      expect(after.bindings.slice(before.bindings.length)).toEqual([
+        { actor: 'B', persona: 'reviewer', sessionHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) },
+      ]);
+      expect(after.processAtomicCalls).toBe(before.processAtomicCalls);
+      await settleActorTransitionEvidence();
+      await networkActionTail;
+      if (networkActionError) throw networkActionError;
+      expect(pageErrors).toEqual([]);
+      expect(unexpectedOrigins).toEqual([]);
+      return;
+    } finally {
+      await tokenGate('release').catch(() => undefined);
+      await entry.catch(() => undefined);
+    }
+  }
 
   let selectedProcessId: string;
   if (['assessment-negatives', 'assessment-positives', 'safety'].includes(contractPhase)) {

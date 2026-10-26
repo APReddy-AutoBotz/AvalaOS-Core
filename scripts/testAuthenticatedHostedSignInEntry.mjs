@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { execFile } from 'node:child_process';
-import { createHash, X509Certificate } from 'node:crypto';
+import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createServer as createNetServer, connect } from 'node:net';
@@ -1156,7 +1156,9 @@ const checkoutState = async () => (await execFileAsync('git', ['status', '--porc
 // Continue Chromium requests over a real, loopback-only TLS connection. CDP
 // response fulfillment bypasses durable network-body storage across reloads.
 // The browser trusts only this run's ephemeral public-key fingerprint.
-export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, appBaseUrl, apiBaseUrl }) => {
+export const startAuthenticatedHostedSignInEntryTlsBridge = async ({
+  directory, appBaseUrl, apiBaseUrl, tokenBodyGate = false,
+}) => {
   const targets = {
     [new URL(PREVIEW_ORIGIN).hostname]: assertAuthenticatedHostedSignInEntryLoopbackUrl(appBaseUrl),
     [new URL(BACKEND_ORIGIN).hostname]: assertAuthenticatedHostedSignInEntryLoopbackUrl(apiBaseUrl),
@@ -1176,6 +1178,65 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
     .update(new X509Certificate(cert).publicKey.export({ type: 'spki', format: 'der' })).digest('base64');
   const pending = new Set();
   let closing = false;
+  const tokenGate = {
+    mode: 'open',
+    headersSent: false,
+    waiting: false,
+    released: true,
+    automaticRelease: false,
+    requests: 0,
+    completed: 0,
+    resolve: null,
+    timer: null,
+  };
+  const releaseTokenGate = automatic => {
+    if (tokenGate.released) return false;
+    if (!tokenGate.waiting && tokenGate.mode !== 'armed') return false;
+    tokenGate.released = true;
+    tokenGate.automaticRelease = automatic;
+    if (tokenGate.mode === 'armed') tokenGate.mode = 'released';
+    if (tokenGate.timer) clearTimeout(tokenGate.timer);
+    tokenGate.timer = null;
+    tokenGate.resolve?.();
+    tokenGate.resolve = null;
+    return true;
+  };
+  const tokenGateToken = tokenBodyGate ? randomBytes(32).toString('hex') : '';
+  const tokenGateServer = tokenBodyGate ? createServer(async (incoming, outgoing) => {
+    try {
+      if (incoming.method !== 'POST' || incoming.url !== '/control/token-body-gate'
+        || incoming.headers['x-authenticated-sign-in-gate'] !== tokenGateToken) {
+        outgoing.writeHead(404); outgoing.end(); return;
+      }
+      const input = JSON.parse(await readBody(incoming) || '{}');
+      if (!['arm', 'release', 'inspect'].includes(input.action)) {
+        outgoing.writeHead(400); outgoing.end(); return;
+      }
+      if (input.action === 'arm') {
+        if (tokenGate.waiting || tokenGate.mode === 'armed') {
+          outgoing.writeHead(409); outgoing.end(); return;
+        }
+        tokenGate.mode = 'armed';
+        tokenGate.headersSent = false;
+        tokenGate.waiting = false;
+        tokenGate.released = false;
+        tokenGate.automaticRelease = false;
+        tokenGate.requests = 0;
+        tokenGate.completed = 0;
+      } else if (input.action === 'release') {
+        releaseTokenGate(false);
+      }
+      outgoing.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      outgoing.end(JSON.stringify({ mode: tokenGate.mode, headersSent: tokenGate.headersSent,
+        waiting: tokenGate.waiting, released: tokenGate.released,
+        automaticRelease: tokenGate.automaticRelease, requests: tokenGate.requests,
+        completed: tokenGate.completed }));
+    } catch {
+      if (!outgoing.headersSent) outgoing.writeHead(400);
+      outgoing.end();
+    }
+  }) : null;
+  let tokenGateControlUrl = '';
   const server = createHttpsServer({ cert, key: await readFile(keyPath) }, (incoming, outgoing) => {
     const operation = (async () => {
       const host = (incoming.headers.host || '').replace(/:443$/u, '');
@@ -1196,8 +1257,23 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
         if (response.status >= 300 && response.status < 400) throw new Error('LOCAL_TLS_REDIRECT_REJECTED');
         const responseHeaders = Object.fromEntries(response.headers);
         for (const name of ['connection', 'content-encoding', 'content-length', 'transfer-encoding']) delete responseHeaders[name];
-        const body = Buffer.from(await response.arrayBuffer());
         outgoing.writeHead(response.status, responseHeaders);
+        if (tokenBodyGate && response.status === 200 && target.pathname === '/auth/v1/token'
+          && target.searchParams.get('grant_type') === 'password' && tokenGate.mode === 'armed') {
+          tokenGate.mode = 'holding';
+          tokenGate.headersSent = true;
+          tokenGate.waiting = true;
+          tokenGate.requests += 1;
+          outgoing.flushHeaders();
+          await new Promise(resolve => {
+            tokenGate.resolve = resolve;
+            tokenGate.timer = setTimeout(() => releaseTokenGate(true), 15_000);
+          });
+          tokenGate.waiting = false;
+          tokenGate.completed += 1;
+          tokenGate.mode = 'released';
+        }
+        const body = Buffer.from(await response.arrayBuffer());
         outgoing.end(body);
       } finally { outgoing.off('close', disconnected); }
     })().catch(() => {
@@ -1211,6 +1287,20 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
     server.once('error', reject);
     server.listen(0, LOOPBACK_HOST, resolve);
   });
+  // Start the optional gate only after TLS setup succeeds; a setup failure
+  // must not leave an unreachable gate listener outside the returned owner.
+  if (tokenGateServer) {
+    try {
+      tokenGateControlUrl = await new Promise((resolve, reject) => {
+        tokenGateServer.once('error', reject);
+        tokenGateServer.listen(0, LOOPBACK_HOST, () => resolve(`http://${LOOPBACK_HOST}:${tokenGateServer.address().port}`));
+      });
+    } catch (error) {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+      throw error;
+    }
+  }
   // CONNECT preserves the browser's original URL/origin, including response
   // observers. Every tunnel terminates at our TLS listener, never remote DNS.
   const tunnels = new Set();
@@ -1237,21 +1327,38 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
       proxy.once('error', reject);
       proxy.listen(0, LOOPBACK_HOST, resolve);
     });
-  } catch (error) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); throw error; }
+  } catch (error) {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+    if (tokenGateServer) {
+      tokenGateServer.closeAllConnections();
+      await new Promise(resolve => tokenGateServer.close(resolve));
+    }
+    throw error;
+  }
   let closed;
   return {
     origin: `http://${LOOPBACK_HOST}:${proxy.address().port}`,
     certificateSpki,
+    tokenBodyGate: tokenGateServer ? Object.freeze({
+      controlUrl: tokenGateControlUrl,
+      controlToken: tokenGateToken,
+    }) : null,
     close() {
       if (closed) return closed;
       closing = true;
       closed = (async () => {
+        releaseTokenGate(false);
         const proxyStopped = new Promise((resolve, reject) => proxy.close(error => error ? reject(error) : resolve()));
         for (const socket of tunnels) socket.destroy();
         proxy.closeAllConnections();
         const stopped = new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
         server.closeAllConnections();
-        await Promise.all([proxyStopped, stopped]);
+        const gateStopped = tokenGateServer
+          ? new Promise((resolve, reject) => tokenGateServer.close(error => error ? reject(error) : resolve()))
+          : Promise.resolve();
+        tokenGateServer?.closeAllConnections();
+        await Promise.all([proxyStopped, stopped, gateStopped]);
         await Promise.all([...pending]);
         return true;
       })();
@@ -1261,7 +1368,7 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
 };
 
 export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES = Object.freeze([
-  'entry', 'assessment-negatives', 'assessment-positives', 'safety',
+  'session-persistence', 'entry', 'assessment-negatives', 'assessment-positives', 'safety',
 ]);
 
 const runAuthenticatedHostedSignInEntryPhase = async ({
@@ -1306,6 +1413,7 @@ const runAuthenticatedHostedSignInEntryPhase = async ({
     await waitForHttp(`${appBaseUrl}/`);
     tlsBridge = await startAuthenticatedHostedSignInEntryTlsBridge({
       directory: temporaryRoot, appBaseUrl, apiBaseUrl: fixture.baseUrl,
+      tokenBodyGate: contractPhase === 'session-persistence',
     });
     await run(process.execPath, [path.resolve('node_modules/@playwright/test/cli.js'), 'test',
       '--config=playwright.authenticated-hosted-sign-in-entry.config.ts', '--workers=1'], {
@@ -1316,6 +1424,10 @@ const runAuthenticatedHostedSignInEntryPhase = async ({
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL: fixture.baseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TLS_BRIDGE: tlsBridge.origin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TLS_SPKI: tlsBridge.certificateSpki,
+      ...(tlsBridge.tokenBodyGate ? {
+        AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_URL: tlsBridge.tokenBodyGate.controlUrl,
+        AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_TOKEN: tlsBridge.tokenBodyGate.controlToken,
+      } : {}),
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OUTPUT_DIR: playwrightOutputDirectory,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE: processSeedMode,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY: String(processReadStateOnly),

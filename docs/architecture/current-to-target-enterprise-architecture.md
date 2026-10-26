@@ -1,5 +1,9 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Hosted sign-in session synchronization (2026-10-26)
+
+HTTP response headers are not proof that the browser SDK has persisted a session. The real-auth test driver must join durable session readiness within 15,000 ms before caching or controller binding. Bind the expected backend storage key and actor/session claims; reject malformed or mismatched state. Browser state remains evidence input, never server authority: existing controller token/session verification remains mandatory. Correct test infrastructure and adversarial response scheduling coverage only; no product auth, schema, role or public API change is indicated. The [active completion plan](../planning/hosted-acceptance-completion.md) governs verification and rollback; historical hosted exclusivity remains unproven.
+
 ## Govern/Studio observation ownership correction (2026-10-26)
 
 The observation layer must use the existing migrated `resolver_id` and `handed_off_by` columns for Govern resolutions and Assess-to-Studio handoffs, including optimized query filters and retained-history ownership. Actual PostgreSQL handler-to-reader-to-lineage coverage replaces the manually constructed Govern-frame oracle. Preserve strict tenant/workspace predicates, actor/session/receipt bindings and fail-closed checkpoint/cleanup invariants. No product command, schema, role or public interface changes are required. The [active completion plan](../planning/hosted-acceptance-completion.md) governs the authorized local correction/draft PR; hosted execution remains unauthorized.
