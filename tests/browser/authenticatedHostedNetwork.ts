@@ -61,6 +61,17 @@ export const authenticatedHostedClosePageAfterOwnedNetwork = async ({
   await closePage();
 };
 
+export const authenticatedLifecycleSettleCheckpointBoundary = async <Result>({
+  settleOwnedNetwork,
+  checkpoint,
+}: Readonly<{
+  settleOwnedNetwork: () => Promise<void>;
+  checkpoint: () => Promise<Result>;
+}>): Promise<Result> => {
+  await settleOwnedNetwork();
+  return checkpoint();
+};
+
 export const authenticatedLifecycleSettleActorNavigationBoundary = async ({
   settleActionAdmissions,
   settleResponseBodies,

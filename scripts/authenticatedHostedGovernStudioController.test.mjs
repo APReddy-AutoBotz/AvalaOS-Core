@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import net from 'node:net';
+import path from 'node:path';
 import test from 'node:test';
+import ts from 'typescript';
 
 import { AuthenticatedHostedController, authenticatedHostedBindResponseObservation,
-  authenticatedHostedResponseObservation }
+  authenticatedHostedResponseObservation, startAuthenticatedHostedControllerServer }
   from './authenticatedHostedController.mjs';
+import { AuthenticatedHostedBrowserActionTracker }
+  from './authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT,
   AUTHENTICATED_GOVERN_STUDIO_CASE_IDS,
@@ -12,6 +18,41 @@ import {
 } from './authenticatedGovernStudioDiagnostic.mjs';
 
 const D = seed => `sha256:${createHash('sha256').update(seed).digest('hex')}`;
+
+const loadCheckpointSettlementHarness = async () => {
+  const declarations = [
+    {
+      file: path.resolve('tests/browser/authenticatedLifecycleHarness.ts'),
+      names: new Set([
+        'required', 'loopbackBaseUrl', 'boundedControlFailure', 'authenticatedLifecycleControlTimeoutMs',
+        'authenticatedLifecycleControlStepTitles', 'authenticatedLifecycleControlStepTitle',
+        'createAuthenticatedLifecycleControl', 'createAuthenticatedLifecycleWorkQueue',
+      ]),
+    },
+    {
+      file: path.resolve('tests/browser/authenticatedHostedNetwork.ts'),
+      names: new Set([
+        'authenticatedLifecycleSettleCheckpointBoundary',
+        'authenticatedLifecycleSettleActorNavigationBoundary',
+      ]),
+    },
+  ];
+  const selected = [];
+  for (const declaration of declarations) {
+    const source = fs.readFileSync(declaration.file, 'utf8');
+    const ast = ts.createSourceFile(declaration.file, source, ts.ScriptTarget.Latest, true);
+    const matches = ast.statements.filter(node => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some(item => ts.isIdentifier(item.name)
+        && declaration.names.has(item.name.text)));
+    assert.equal(matches.length, declaration.names.size);
+    selected.push(...matches.map(node => source.slice(node.getStart(ast), node.end)));
+  }
+  const compiled = ts.transpileModule(selected.join('\n'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+};
+
 const actionRows = () => AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT.map((contract, index) => ({
   actionId: D(String.fromCharCode(97 + index)), occurredAt: `2026-10-24T00:00:${String(index * 2).padStart(2, '0')}.000Z`,
   actorHash: D('a'), sessionHash: D('b'), requestIdHash: D(`request-${index}`),
@@ -79,6 +120,178 @@ test('checkpoint binds exact eight actions and closes mutation intake', async ()
   await assert.rejects(controller.control('/control/browser-action-start', { projectName: 'desktop-chromium' }),
     /GOVERN_STUDIO_DIAGNOSTIC_TERMINAL/u);
 });
+
+test('owned checkpoint settlement waits for held tracker finish and submits exactly once',
+  { timeout: 20_000 }, async () => {
+    const {
+      authenticatedLifecycleSettleActorNavigationBoundary,
+      authenticatedLifecycleSettleCheckpointBoundary,
+      createAuthenticatedLifecycleControl,
+      createAuthenticatedLifecycleWorkQueue,
+    } = await loadCheckpointSettlementHarness();
+    let releaseHeldFinish;
+    let enterHeldFinish;
+    const heldFinish = new Promise(resolve => { releaseHeldFinish = resolve; });
+    const heldFinishEntered = new Promise(resolve => { enterHeldFinish = resolve; });
+    let clock = Date.parse('2026-10-26T00:00:00Z');
+    let finishCalls = 0;
+    let lineageCalls = 0;
+    const identities = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider'].map(persona => [
+      persona, { id: randomUUID(), sessionId: randomUUID() },
+    ]));
+    const cleanupCalls = { quiesce: 0, revoke: 0, cleanup: 0, verify: 0 };
+    const adapter = {
+      bindSession: async () => undefined,
+      observe: async () => ({ capturedAt: new Date(clock += 10).toISOString(), records: [] }),
+      recordBrowserAction: async ({ requestBody }) => {
+        if (requestBody.commandType === 'studio.handoff.consume') {
+          enterHeldFinish();
+          await heldFinish;
+        }
+        finishCalls += 1;
+      },
+      verifyGovernStudioDiagnosticLineage: async () => { lineageCalls += 1; return lineage(); },
+      quiesce: async () => { cleanupCalls.quiesce += 1; },
+      cleanup: async () => { cleanupCalls.cleanup += 1; },
+      verifyCleanup: async () => {
+        cleanupCalls.verify += 1;
+        return {
+          activeSessions: 0, activeIdentities: 0, activeMemberships: 0, armedPermits: 0,
+          activeSecretMaterial: 0, unapprovedActiveResidue: 0,
+          nonExerciseChanged: false, immutableHistoryPreserved: true,
+        };
+      },
+    };
+    const controller = new AuthenticatedHostedController({
+      config: {
+        acceptanceMode: 'govern_studio_diagnostic', releaseSha: 'a'.repeat(40), sourceDigest: D('source'),
+        workflow: { runId: '42', attempt: '1' }, actorLimitMs: 15_000, providersEnabled: false,
+      },
+      adapter,
+      identity: {
+        created: new Map(), unknownMutationOutcomes: new Set(),
+        verifySession: async ({ actorId, sessionId }) => ({ actorId, sessionId }),
+        revokeAll: async () => { cleanupCalls.revoke += 1; },
+      },
+    });
+    controller.active = true;
+    controller.controlIntake = 'accepting';
+    controller.projects.set('desktop-chromium', {
+      processId: randomUUID(), identities, lastBoundaryAt: new Date(clock).toISOString(),
+    });
+    const server = await startAuthenticatedHostedControllerServer(controller, {
+      requestTimeoutMs: 15_000, settlementTimeoutMs: 15_000,
+    });
+    let externalRequests = 0;
+    const boundedFetch = async (url, options) => {
+      if (new URL(url).origin !== server.baseUrl) {
+        externalRequests += 1;
+        throw new Error('NON_OWNED_ORIGIN');
+      }
+      return fetch(url, options);
+    };
+    const control = createAuthenticatedLifecycleControl({
+      baseUrl: server.baseUrl, token: server.controlToken, timeoutMs: 15_000, fetchImpl: boundedFetch,
+    });
+    const queue = createAuthenticatedLifecycleWorkQueue();
+    const tracker = new AuthenticatedHostedBrowserActionTracker({
+      backendOrigin: 'http://127.0.0.1:9', appOrigin: 'http://127.0.0.1:10',
+      startAction: input => control('/control/browser-action-start', {
+        projectName: 'desktop-chromium', ...input,
+      }),
+      prepareAction: input => control('/control/browser-action-prepare', {
+        projectName: 'desktop-chromium', ...input,
+      }),
+      finishAction: input => control('/control/browser-action', {
+        projectName: 'desktop-chromium', ...input,
+      }),
+    });
+    const bearer = (actorId, sessionId) => `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({
+      sub: actorId, session_id: sessionId,
+    })).toString('base64url')}.${'x'.repeat(48)}`;
+    let checkpointCalls = 0;
+    try {
+      const references = [];
+      for (const contract of AUTHENTICATED_GOVERN_STUDIO_ACTION_CONTRACT) {
+        const actor = identities[contract.persona];
+        const requestBody = {
+          commandType: contract.commandType,
+          requestId: randomUUID(),
+          payload: {
+            ...(contract.key === 'studioRequest'
+              ? { upstreamHandoffId: randomUUID() }
+              : contract.commandType.startsWith('studio.')
+                ? { handoffId: randomUUID() } : { caseId: randomUUID() }),
+          },
+        };
+        const route = contract.commandType.startsWith('studio.')
+          ? '/functions/v1/studio-artifact-command' : '/functions/v1/assess-v2-command';
+        const request = {
+          url: () => `http://127.0.0.1:9${route}`,
+          method: () => 'POST',
+          postDataJSON: () => requestBody,
+          allHeaders: async () => ({ authorization: `Bearer ${bearer(actor.id, actor.sessionId)}` }),
+        };
+        await tracker.begin(request);
+        const responseBody = contract.status === 403
+          ? { ok: false, error: { code: 'PERMISSION_DENIED' } }
+          : { ok: true, outcome: 'committed', receiptId: randomUUID(), resourceId: randomUUID() };
+        await tracker.prepare(request, contract.status, responseBody);
+        queue.enqueue(() => tracker.finish(request, contract.status, responseBody));
+        references.push(tracker.reference(request));
+        if (contract.key !== 'studioConsume') await queue.drain();
+      }
+      const actionIds = await Promise.all(references);
+      await heldFinishEntered;
+      const actions = controller.browserActions.get('desktop-chromium');
+      assert.equal(actions.length, 8);
+      assert.equal(actions.filter(action => action.complete).length, 7);
+      await assert.rejects(controller.recordGovernStudioDiagnosticCheckpoint({
+        projectName: 'desktop-chromium', actionIds,
+      }), /GOVERN_STUDIO_DIAGNOSTIC_ACTION_REJECTED/u);
+      assert.equal(controller.governStudioCheckpoint, null);
+
+      const settledCheckpoint = authenticatedLifecycleSettleCheckpointBoundary({
+        settleOwnedNetwork: () => authenticatedLifecycleSettleActorNavigationBoundary({
+          settleActionAdmissions: async () => undefined,
+          settleResponseBodies: async () => undefined,
+          drainNetworkActions: queue.drain,
+          activeActionCount: () => 0,
+          waitForNextObservation: () => new Promise(resolve => setImmediate(resolve)),
+        }),
+        checkpoint: async () => {
+          checkpointCalls += 1;
+          return control('/control/govern-studio-diagnostic', {
+            projectName: 'desktop-chromium', actionIds: await Promise.all(references),
+          });
+        },
+      });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(checkpointCalls, 0);
+      assert.equal(controller.governStudioCheckpoint, null);
+      releaseHeldFinish();
+      assert.deepEqual(await settledCheckpoint, { recorded: true, actionCount: 8, terminal: true });
+      assert.equal(checkpointCalls, 1);
+      assert.equal(actions.filter(action => action.complete).length, 8);
+      assert.equal(finishCalls, 8);
+      assert.equal(lineageCalls, 1);
+      await assert.rejects(control('/control/browser-action-start', { projectName: 'desktop-chromium' }),
+        /ENTERPRISE_LIFECYCLE_BROWSER_CONTROL_REJECTED/u);
+    } finally {
+      releaseHeldFinish();
+      await queue.drain();
+      await server.stopAndDrain();
+      await controller.abortAndQuiesce();
+    }
+    assert.equal(externalRequests, 0);
+    assert.deepEqual(cleanupCalls, { quiesce: 1, revoke: 1, cleanup: 1, verify: 1 });
+    const listenerClosed = await new Promise(resolve => {
+      const socket = net.connect(Number(new URL(server.baseUrl).port), '127.0.0.1');
+      socket.once('connect', () => { socket.destroy(); resolve(false); });
+      socket.once('error', error => resolve(error.code === 'ECONNREFUSED'));
+    });
+    assert.equal(listenerClosed, true);
+  });
 
 for (const [name, mutate, pattern] of [
   ['wrong mode', controller => { controller.config.acceptanceMode = 'full_acceptance'; }, /CHECKPOINT_REJECTED/u],
