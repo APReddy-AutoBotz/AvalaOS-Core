@@ -1,12 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { access, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import pg from 'pg';
 import { REQUIRED_PERSONA_CAPABILITIES, FORBIDDEN_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
-import { createEnterpriseLifecycleFixture, enterpriseLifecycleSourcePaths } from './enterpriseLifecyclePostgresFixture.mjs';
+import { validateAuthenticatedHostedPlaywrightDiagnostic } from './authenticatedHostedDiagnostics.mjs';
+import { createEnterpriseLifecycleFixture } from './enterpriseLifecyclePostgresFixture.mjs';
+import { STUDIO_HANDOFF_TARGETING_CASES, STUDIO_HANDOFF_TARGETING_PROJECTS,
+  validateStudioHandoffTargetingComponentFragment } from './runStudioHandoffActionTargetingBrowser.mjs';
+import { createStudioHandoffPersonaComponentFailureEvidence, studioHandoffPersonaCleanupKeys,
+  studioHandoffPersonaFailureCodes, studioHandoffPersonaProjects, studioHandoffPersonaScenarioMatrix,
+  studioHandoffPersonaSourcePaths } from './studioHandoffPersonaArtifact.mjs';
 
 const { Client } = pg;
 
@@ -19,27 +25,12 @@ if (!process.env.STUDIO_HANDOFF_PERSONA_ATTEMPT || base === privateRoot
 }
 const build = path.join(base, 'build');
 const playwrightOutput = path.join(base, 'pw');
+const targetingComponentWork = `${base}-targeting-component-work`;
+const targetingComponentFailureEvidence = `${base}-targeting-component-failure-evidence`;
 if(await access(base).then(()=>true).catch(()=>false))throw new Error('STUDIO_HANDOFF_PERSONA_ATTEMPT_EXISTS');
 await mkdir(base, { recursive: false });
 const sha256 = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
-const sourcePaths = [...new Set([
-  ...enterpriseLifecycleSourcePaths,
-  'scripts/authenticatedHostedControllerAdapters.mjs',
-  'scripts/playwright.studio-handoff-persona-contract.config.ts',
-  'scripts/reproduceStudioHandoffPersonaContract.mjs',
-  'scripts/studioHandoffPersonaArtifact.mjs',
-  'tests/browser/authenticatedLifecycleHarness.ts',
-  'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
-  'tests/browser/enterpriseLifecycleAcceptance/studioHandoffPersonaContract.spec.ts',
-  'components/docs/StudioArtifactWorkspace.tsx',
-  'components/docs/studioHandoffReadiness.ts',
-  'components/docs/StudioArtifactWorkspace.test.ts',
-  'components/docs/studioHandoffReadiness.test.ts',
-  'services/studioArtifacts/client.ts',
-  'supabase/functions/_shared/studioArtifactCommand.ts',
-  'supabase/functions/_shared/studioArtifactHandler.ts',
-  'supabase/migrations/20260828120000_governed_multisource_studio_pr_b.sql',
-])].sort();
+const sourcePaths = studioHandoffPersonaSourcePaths;
 const sourceBindings = [];
 for (const source of sourcePaths) sourceBindings.push({ source, digest: sha256(await readFile(path.join(root, source))) });
 const sourceDigest = sha256(Buffer.from(JSON.stringify(sourceBindings)));
@@ -56,6 +47,48 @@ const run = (args, env) => new Promise((resolve, reject) => {
   child.on('error', reject);
   child.on('exit', code => resolve(code));
 });
+const readBoundJson=async file=>{
+  const stat=await lstat(file);
+  if(!stat.isFile()||stat.isSymbolicLink()||stat.size<2||stat.size>64*1024)throw new Error('STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_FAILED');
+  return JSON.parse(await readFile(file,'utf8'));
+};
+const preserveTargetingComponentFailure=async({stage,failureCode})=>{
+  await mkdir(targetingComponentFailureEvidence,{recursive:false});
+  const preserved=[];
+  let componentFailure=null;
+  let diagnostic=null;
+  const fragments=[];
+  try{
+    componentFailure=await readBoundJson(path.join(targetingComponentWork,'failure.json'));
+    createStudioHandoffPersonaComponentFailureEvidence({stage,failureCode,componentFailure,preservedFiles:[]});
+    await writeFile(path.join(targetingComponentFailureEvidence,'failure.json'),`${JSON.stringify(componentFailure,null,2)}\n`,{encoding:'utf8',flag:'wx',mode:0o600});
+    preserved.push('failure.json');
+  }catch{componentFailure=null;}
+  try{
+    diagnostic=validateAuthenticatedHostedPlaywrightDiagnostic(
+      await readBoundJson(path.join(targetingComponentWork,'failure-diagnostic.json')));
+    if(diagnostic){
+      await writeFile(path.join(targetingComponentFailureEvidence,'failure-diagnostic.json'),`${JSON.stringify(diagnostic,null,2)}\n`,{encoding:'utf8',flag:'wx',mode:0o600});
+      preserved.push('failure-diagnostic.json');
+    }
+  }catch{}
+  for(const project of STUDIO_HANDOFF_TARGETING_PROJECTS)for(const sample of STUDIO_HANDOFF_TARGETING_CASES){
+    const name=`${project}-${sample}.json`;
+    try{
+      const fragment=validateStudioHandoffTargetingComponentFragment(
+        await readBoundJson(path.join(targetingComponentWork,name)),{project,case:sample});
+      fragments.push(fragment);
+      await writeFile(path.join(targetingComponentFailureEvidence,name),`${JSON.stringify(fragment,null,2)}\n`,{encoding:'utf8',flag:'wx',mode:0o600});
+      preserved.push(name);
+    }catch{}
+  }
+  preserved.sort();
+  const context=createStudioHandoffPersonaComponentFailureEvidence({stage,failureCode,componentFailure,preservedFiles:preserved});
+  await writeFile(path.join(targetingComponentFailureEvidence,'context.json'),`${JSON.stringify(context,null,2)}\n`,{encoding:'utf8',flag:'wx',mode:0o600});
+  const aggregate={schemaVersion:'studio-handoff-persona-component-failure-aggregate-v1',status:'failed',
+    context,diagnostic,fragments};
+  await writeFile(path.join(base,'component-failure.json'),`${JSON.stringify(aggregate,null,2)}\n`,{encoding:'utf8',flag:'wx',mode:0o600});
+};
 const freePort = createServer();
 await new Promise(resolve => freePort.listen(0, '127.0.0.1', resolve));
 const previewPort = freePort.address().port;
@@ -141,15 +174,10 @@ const readExactRoles = async fixture => {
 };
 const sanitizedFailureCode = error => {
   const code = error instanceof Error ? error.message : '';
-  return new Set([
-    'STUDIO_HANDOFF_PERSONA_ROLE_PARITY_REJECTED',
-    'STUDIO_HANDOFF_PERSONA_ROLE_PARITY_CHANGED',
-    'STUDIO_HANDOFF_PERSONA_BUILD_FAILED',
-    'STUDIO_HANDOFF_PERSONA_PREVIEW_NOT_READY',
-  ]).has(code) ? code : 'STUDIO_HANDOFF_PERSONA_RUNNER_FAILED';
+  return studioHandoffPersonaFailureCodes.includes(code) ? code : 'STUDIO_HANDOFF_PERSONA_RUNNER_FAILED';
 };
-const projects=['desktop-chromium','pixel-7-chromium'];
-const cases=projects.flatMap(project=>['artifact-unavailable','held-null-control'].map(scenario=>({project,scenario,key:`${project}-${scenario}`})));
+const projects=studioHandoffPersonaProjects;
+const cases=studioHandoffPersonaScenarioMatrix.map(({project,scenario})=>({project,scenario,key:`${project}-${scenario}`}));
 const exactRoles = {};
 let exactRolesAfterRun = {};
 let exactRolesStable = true;
@@ -162,10 +190,14 @@ let previewExited = false;
 let buildRemoved = false;
 let playwrightOutputRemoved = false;
 let sourceUnchanged = false;
+let targetingComponentWorkRemoved = false;
+let targetingComponentProof = null;
 let browserResults = [];
 let buildProof = { status: 'not_run' };
 let status = 'setup_failed';
 let failureCode = null;
+let failureStage = null;
+let executionStage = 'targeting-component-preparation';
 let activeFixture=null;
 let activeObserver=null;
 const projectIsolation=[];
@@ -175,12 +207,26 @@ let fixtureCreateCount=0,fixtureCloseCount=0,observerCreateCount=0,observerClose
 const captureProviders=fixture=>{if(!fixture||accountedFixtures.has(fixture))return;accountedFixtures.add(fixture);
   providers.calls+=fixture.evidence.providerEffects.calls;providers.paidCalls+=fixture.evidence.providerEffects.paidCalls;providers.egressAttempts+=fixture.evidence.providerEffects.egressAttempts;};
 try {
+  const targetingComponentExit=await run(['scripts/runStudioHandoffActionTargetingBrowser.mjs'],{
+    ...process.env,STUDIO_HANDOFF_TARGETING_RESULT_DIRECTORY:targetingComponentWork,
+  });
+  if(targetingComponentExit!==0)throw new Error('STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_FAILED');
+  const targetingComponentBytes=await readFile(path.join(targetingComponentWork,'summary.json'));
+  targetingComponentProof=JSON.parse(targetingComponentBytes.toString('utf8'));
+  if(targetingComponentProof.schemaVersion!=='studio-handoff-targeting-component-summary-v1'
+    ||targetingComponentProof.status!=='passed')throw new Error('STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_FAILED');
+  await writeFile(path.join(base,'targeting-component-proof.json'),targetingComponentBytes);
+  await rm(targetingComponentWork,{recursive:true,force:false});
+  targetingComponentWorkRemoved=!(await access(targetingComponentWork).then(()=>true).catch(()=>false));
+  if(!targetingComponentWorkRemoved)throw new Error('STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_CLEANUP_FAILED');
+  executionStage='postgresql-fixture-preparation';
   activeFixture=await createProjectFixture(cases[0].key);
   fixtureCreateCount+=1;
   const expectedFixtureBase=`http://127.0.0.1:${fixturePort}`;
   if(activeFixture.baseUrl!==expectedFixtureBase)throw new Error('STUDIO_HANDOFF_PERSONA_FIXTURE_ISOLATION_REJECTED');
   env={...process.env,VITE_AVALA_RUNTIME_MODE:'pilot',VITE_SUPABASE_URL:expectedFixtureBase,
     VITE_SUPABASE_ANON_KEY:activeFixture.publicAnonKey,VITE_AI_EDGE_FUNCTIONS_ENABLED:'false'};
+  executionStage='production-build';
   if (await run(['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.enterprise-lifecycle-acceptance.config.ts', '--outDir', build], env) !== 0) {
     throw new Error('STUDIO_HANDOFF_PERSONA_BUILD_FAILED');
   }
@@ -201,6 +247,7 @@ try {
     ...buildProof,
   }, null, 2)}\n`);
 
+  executionStage='local-preview';
   preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--config', 'vite.enterprise-lifecycle-acceptance.config.ts', '--host', '127.0.0.1', '--port', String(previewPort), '--outDir', build], { cwd: root, env, windowsHide: true, stdio: 'ignore' });
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -210,6 +257,7 @@ try {
   }
   if (!ready) throw new Error('STUDIO_HANDOFF_PERSONA_PREVIEW_NOT_READY');
 
+  executionStage='postgresql-browser';
   const projectExits=[];
   for(let index=0;index<cases.length;index+=1){
     const {project,scenario,key}=cases[index];
@@ -240,7 +288,24 @@ try {
       projectExits.push(projectExit);
       if(projectExit!==0)throw new Error('STUDIO_HANDOFF_PERSONA_PROJECT_FAILED');
       if(scenario==='held-null-control'){
-        browserResults.push(JSON.parse(await readFile(path.join(base,`browser-${project}.json`),'utf8')));
+        const prior=JSON.parse(await readFile(path.join(base,`browser-${project}.json`),'utf8'));
+        const targeting=JSON.parse(await readFile(path.join(base,`targeting-${project}.json`),'utf8'));
+        const componentProject=project==='desktop-chromium'?'desktop-chrome':'pixel-7';
+        const duplicate=targetingComponentProof.results.find(result=>
+          result.project===componentProject&&result.case==='duplicate-exact-pair');
+        if(!duplicate||duplicate.zeroCommands!==true||duplicate.zeroEffects!==true
+          ||duplicate.externalAttemptCount!==0)throw new Error('STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_FAILED');
+        const exactTargeting={...targeting,
+          singleCardControl:{passed:prior.status==='passed',elapsedMs:prior.authorityBoundReadiness?.finalAcceptElapsedMs},
+          negativeCases:{...targeting.negativeCases,duplicateExactPair:{zeroCommands:true,zeroEffects:true,
+            scope:'component-fixture',proofDigest:targetingComponentProof.proofDigest}},
+        };
+        const proofDigest=sha256(Buffer.from(JSON.stringify({actorSequence:prior.actorSequence,
+          sourcePackageDelta:1,exactTargeting})));
+        const current={...prior,schemaVersion:'studio-handoff-persona-browser-v4',exactTargeting,proofDigest};
+        await writeFile(path.join(base,`browser-${project}.json`),`${JSON.stringify(current,null,2)}\n`);
+        browserResults.push(current);
+        await rm(path.join(base,`targeting-${project}.json`),{force:false});
         await rm(isolationPath,{force:false});
       }
       const afterRoles=await readExactRoles(activeFixture);
@@ -260,15 +325,21 @@ try {
   exactRolesStable=exactRolesStable&&JSON.stringify(exactRolesAfterRun)===JSON.stringify(exactRoles);
   fixtureClosed=projectIsolation.length===cases.length&&projectIsolation.every(item=>item.fixtureClosed);
   observerClosed=projectIsolation.length===cases.length&&projectIsolation.every(item=>item.observerClosed);
-  status = browserExit === 0 && browserResults.length===projects.length && browserResults.every(result => result.schemaVersion==='studio-handoff-persona-browser-v3'
+  status = browserExit === 0 && browserResults.length===projects.length && browserResults.every(result => result.schemaVersion==='studio-handoff-persona-browser-v4'
     && result.status === 'passed' && result.authorityBoundReadiness?.committedBeforeDetailRelease===true
     && result.authorityBoundReadiness?.staleDetailDidNotOverwrite===true
     && result.artifactReadIsolation?.finalAcceptStatus===201
     && result.artifactReadIsolation?.artifactMutationBlocked===true) ? 'passed' : 'failed';
 } catch (error) {
-  failureCode = sanitizedFailureCode(error);
+  failureStage = executionStage;
+  const closedCode=sanitizedFailureCode(error);
+  failureCode = executionStage==='targeting-component-preparation'
+    ? (closedCode==='STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_CLEANUP_FAILED'
+      ? closedCode : 'STUDIO_HANDOFF_PERSONA_TARGETING_COMPONENT_FAILED')
+    : closedCode;
   status = 'failed';
 } finally {
+  executionStage='finalization';
   if (preview) {
     preview.kill('SIGTERM');
     await Promise.race([new Promise(resolve => preview.once('exit', resolve)), new Promise(resolve => setTimeout(resolve, 5_000))]);
@@ -277,6 +348,13 @@ try {
   captureProviders(activeFixture);
   if(activeObserver){const closed=await activeObserver.close();if(closed)observerCloseCount+=1;projectIsolation.push({project:'active-failure',browserExit:null,observerCreated:true,observerClosed:closed,fixtureCreated:Boolean(activeFixture),fixtureClosed:false});activeObserver=null;}
   if(activeFixture){const closed=await activeFixture.close();if(closed)fixtureCloseCount+=1;const last=projectIsolation.at(-1);if(last?.project==='active-failure')last.fixtureClosed=closed;else projectIsolation.push({project:'active-failure',browserExit:null,observerCreated:false,observerClosed:true,fixtureCreated:true,fixtureClosed:closed});activeFixture=null;}
+  if(failureStage==='targeting-component-preparation'){
+    await preserveTargetingComponentFailure({stage:failureStage,failureCode});
+  }
+  if(await access(targetingComponentWork).then(()=>true).catch(()=>false)){
+    await rm(targetingComponentWork,{recursive:true,force:true});
+  }
+  targetingComponentWorkRemoved=!(await access(targetingComponentWork).then(()=>true).catch(()=>false));
   fixtureClosed=fixtureCreateCount===fixtureCloseCount;
   observerClosed=observerCreateCount===observerCloseCount;
   if (path.dirname(build) !== base) throw new Error('STUDIO_HANDOFF_PERSONA_BUILD_PATH_REJECTED');
@@ -289,12 +367,15 @@ try {
   for (const source of sourcePaths) finalSourceBindings.push({ source, digest: sha256(await readFile(path.join(root, source))) });
   sourceUnchanged = JSON.stringify(finalSourceBindings) === JSON.stringify(sourceBindings);
   const providersZero = providers.calls === 0 && providers.paidCalls === 0 && providers.egressAttempts === 0;
-  const cleanupPassed = fixtureClosed && observerClosed && previewExited && buildRemoved && playwrightOutputRemoved;
+  const cleanupState={fixtureClosed,observerClosed,previewExited,buildRemoved,playwrightOutputRemoved,targetingComponentWorkRemoved};
+  const cleanup=Object.fromEntries(studioHandoffPersonaCleanupKeys.map(key=>[key,cleanupState[key]]));
+  const cleanupPassed = studioHandoffPersonaCleanupKeys.every(key=>cleanup[key]===true);
   status = status === 'passed' && sourceUnchanged && providersZero && cleanupPassed ? 'passed' : 'failed';
   const result = {
-    schemaVersion: 'studio-handoff-persona-result-v3',
+    schemaVersion: 'studio-handoff-persona-result-v4',
     status,
     ...(failureCode ? { failureCode } : {}),
+    ...(failureStage ? { failureStage } : {}),
     releaseSha: process.env.RELEASE_SHA,
     exactRoles,
     exactRolesAfterRun,
@@ -305,7 +386,7 @@ try {
     browserExit,
     browsers: browserResults,
     providers,
-    cleanup: { fixtureClosed, observerClosed, previewExited, buildRemoved, playwrightOutputRemoved },
+    cleanup,
     constraints: { actorLimitMs: 15_000, providersEnabled: false, hostedRun: false, fullAcceptance: false, tokenRead: false },
   };
   await writeFile(path.join(base, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test, type BrowserContext, type Locator, type Page, type Request, type Route } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page, type Request, type Route } from '@playwright/test';
 import {
   authenticatedLifecycleAttestEverySubmittedEvidence as attestEverySubmittedEvidence,
   authenticatedLifecycleClickProduct as clickProduct,
@@ -11,9 +11,12 @@ import {
   authenticatedLifecycleEnterStudioAs as enterStudioAs,
   authenticatedLifecycleFinalizeDecisionPack as finalizeDecisionPack,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
-  authenticatedLifecycleOpenStudioHandoffDecision as openStudioHandoffDecision,
+  authenticatedLifecycleOpenPersistedStudioHandoffDecision as openPersistedStudioHandoffDecision,
+  authenticatedLifecycleCommitEligibleStudioHandoffRequest as commitEligibleStudioHandoffRequest,
+  authenticatedLifecycleCommitPersistedStudioHandoffAction as commitPersistedStudioHandoffAction,
   authenticatedLifecycleResolveEveryGovernControl as resolveEveryGovernControl,
   authenticatedLifecycleSelectReviewer as selectReviewer,
+  authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
   createAuthenticatedLifecycleWorkQueue,
   type AuthenticatedLifecycleActor,
   type AuthenticatedLifecycleSetup,
@@ -95,34 +98,11 @@ const enterProcess = async (
   return openConnectedProcess(page, processLabel);
 };
 
-const commitStudioDecision = async (
-  page: Page,
-  buttonName: string,
-  rationale?: string,
-  mailbox: 'Inbox' | 'Outbox' = 'Inbox',
-) => {
-  const dialog = await openStudioHandoffDecision(page, buttonName, rationale, mailbox);
-  const response = await observe(page, '/functions/v1/studio-artifact-command', () =>
-    dialog.getByRole('button', { name: 'Confirm', exact: true }).click());
-  await expect(dialog).toBeHidden();
-  return response;
-};
-
-const commitStudioCardDecision = async (page:Page,card:Locator,buttonName:string) => {
-  await card.getByRole('button',{name:buttonName,exact:true}).click();
-  const dialog=page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  const response=await observe(page,'/functions/v1/studio-artifact-command',()=>
-    dialog.getByRole('button',{name:'Confirm',exact:true}).click());
-  await expect(dialog).toBeHidden();
-  return response;
-};
-
 test('exact Studio handoff personas preserve three-party authority in production UI', async ({ context, page }, testInfo) => {
   const projectSlug = testInfo.project.name.replaceAll(/[^a-z0-9-]/giu, '-').toLowerCase();
   const outputPath = path.join(outputDirectory, `browser-${projectSlug}.json`);
   const scenario=process.env.STUDIO_HANDOFF_PERSONA_SCENARIO;
-  if(scenario!=='artifact-unavailable'&&scenario!=='held-null-control')throw new Error('STUDIO_HANDOFF_PERSONA_SCENARIO_REQUIRED');
+  if(scenario!=='artifact-unavailable'&&scenario!=='two-card-targeting'&&scenario!=='held-null-control')throw new Error('STUDIO_HANDOFF_PERSONA_SCENARIO_REQUIRED');
   const isolationPath=path.join(outputDirectory,`artifact-isolation-${projectSlug}.json`);
   const checkpointPath=path.join(outputDirectory,`checkpoint-${projectSlug}.json`);
   const checkpoint=async(phase:string,counts?:Readonly<{approvals:number;receipts:number;audits:number;sourcePackages:number}>)=>
@@ -142,7 +122,10 @@ test('exact Studio handoff personas preserve three-party authority in production
   );
   await checkpoint('fixture-session-primed');
 
-  const prepareApprovalReady = async (target: AuthenticatedLifecycleSetup, prefix: 'fault'|'control') => {
+  const prepareApprovalReady = async (
+    target: AuthenticatedLifecycleSetup,
+    prefix: 'fault'|'control'|'target-a'|'target-b',
+  ) => {
     await enterProcess(page, target.actors.author, target.aliases.process, settleBoundary);
     await checkpoint(`${prefix}-author-entered`);
     expect((await observe(page, '/functions/v1/assess-v2-command', () =>
@@ -177,17 +160,139 @@ test('exact Studio handoff personas preserve three-party authority in production
     await checkpoint(`${prefix}-assess-handoff-ready`);
 
     await enterStudioAs(page, target.actors.author, settleBoundary);
-    const requestResponse=await commitStudioDecision(page, 'Request handoff');
+    const requestResponse=await commitEligibleStudioHandoffRequest(page);
     expect(requestResponse.status()).toBe(201);
+    const requestedTarget=await persistedHandoffTargetFromResponse(requestResponse,'requested');
     await enterStudioAs(page, target.actors.reviewer, settleBoundary);
-    const reviewResponse=await commitStudioDecision(page, 'Approve review', 'Independent Studio handoff review approved.');
+    const reviewResponse=await commitPersistedStudioHandoffAction(
+      page,requestedTarget,'Approve review','Independent Studio handoff review approved.');
     expect(reviewResponse.status()).toBe(201);
+    const reviewedTarget=await persistedHandoffTargetFromResponse(reviewResponse,'approval_ready',requestedTarget);
     await checkpoint(`${prefix}-studio-review-approved`);
-    return{requestResponse,reviewResponse};
+    return{requestResponse,reviewResponse,requestedTarget,reviewedTarget};
   };
 
+  if(scenario==='two-card-targeting'){
+    const firstPrepared=await prepareApprovalReady(setup,'target-a');
+    const competingSetup=await control<AuthenticatedLifecycleSetup>('/control/setup',{
+      projectName:`studio-handoff-persona-${projectSlug}-target-b`,
+    });
+    const secondPrepared=await prepareApprovalReady(competingSetup,'target-b');
+    const commandPath='/functions/v1/studio-artifact-command';
+    let commandRequests=0;
+    const countCommand=(request:Request)=>{if(request.method()==='POST'&&new URL(request.url()).pathname===commandPath)commandRequests+=1;};
+    page.on('request',countCommand);
+    const firstBefore=await handoffAuthorityFrame(setup.aliases.process);
+    const secondBefore=await handoffAuthorityFrame(competingSetup.aliases.process);
+    expect(firstBefore).toEqual({handoffCount:1,approvalReadyCount:1,approvedCount:0,
+      approvals:0,approvalReceipts:0,approvalAudits:0,sourcePackages:0});
+    expect(secondBefore).toEqual(firstBefore);
+    await enterStudioAs(page,competingSetup.actors.approver,settleBoundary);
+    const center=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true});
+    const finalAccept=center.getByRole('button',{name:'Final accept',exact:true});
+    await expect(finalAccept).toHaveCount(2);
+    const firstCard=center.locator(
+      `li[data-handoff-id="${firstPrepared.reviewedTarget.handoffId}"][data-handoff-version="${firstPrepared.reviewedTarget.handoffVersion}"]`,
+    );
+    const secondCard=center.locator(
+      `li[data-handoff-id="${secondPrepared.reviewedTarget.handoffId}"][data-handoff-version="${secondPrepared.reviewedTarget.handoffVersion}"]`,
+    );
+    await expect(firstCard).toHaveCount(1);
+    await expect(secondCard).toHaveCount(1);
+    const readyCards={count:await finalAccept.count(),distinct:
+      firstPrepared.reviewedTarget.handoffId!==secondPrepared.reviewedTarget.handoffId
+        || firstPrepared.reviewedTarget.handoffVersion!==secondPrepared.reviewedTarget.handoffVersion};
+    expect(readyCards).toEqual({count:2,distinct:true});
+
+    const zeroEffectNegative=async(
+      target:Readonly<{handoffId:string;handoffVersion:number}>,
+      action:'Approve review'|'Final accept',
+      mailbox:'Inbox'|'Outbox',
+    )=>{
+      const commandsBefore=commandRequests;
+      const framesBefore=[await handoffAuthorityFrame(setup.aliases.process),await handoffAuthorityFrame(competingSetup.aliases.process)];
+      await expect(openPersistedStudioHandoffDecision(
+        page,target,action,'This target must fail before dispatch.',mailbox)).rejects.toThrow();
+      const framesAfter=[await handoffAuthorityFrame(setup.aliases.process),await handoffAuthorityFrame(competingSetup.aliases.process)];
+      return{zeroCommands:commandRequests===commandsBefore,zeroEffects:JSON.stringify(framesAfter)===JSON.stringify(framesBefore)};
+    };
+    const missingTarget=await zeroEffectNegative(
+      {handoffId:'ffffffff-ffff-4fff-8fff-ffffffffffff',handoffVersion:1},'Final accept','Inbox');
+    const staleVersion=await zeroEffectNegative(
+      {...secondPrepared.reviewedTarget,handoffVersion:secondPrepared.reviewedTarget.handoffVersion-1},'Final accept','Inbox');
+    const wrongMailbox=await zeroEffectNegative(secondPrepared.reviewedTarget,'Final accept','Outbox');
+    expect({missingTarget,staleVersion,wrongMailbox}).toEqual({
+      missingTarget:{zeroCommands:true,zeroEffects:true},
+      staleVersion:{zeroCommands:true,zeroEffects:true},
+      wrongMailbox:{zeroCommands:true,zeroEffects:true},
+    });
+
+    const finalCommandsBefore=commandRequests;
+    const finalStarted=Date.now();
+    const finalResponse=await commitPersistedStudioHandoffAction(
+      page,secondPrepared.reviewedTarget,'Final accept','The exact retained target is independently accepted.');
+    const finalElapsedMs=Date.now()-finalStarted;
+    expect(finalResponse.status()).toBe(201);
+    expect(finalElapsedMs).toBeLessThan(15_000);
+    const acceptedTarget=await persistedHandoffTargetFromResponse(
+      finalResponse,'approved',secondPrepared.reviewedTarget);
+    await finalResponse.finished();
+    const firstAfterFinal=await handoffAuthorityFrame(setup.aliases.process);
+    const secondAfterFinal=await handoffAuthorityFrame(competingSetup.aliases.process);
+    const effects={approvals:secondAfterFinal.approvals-secondBefore.approvals,
+      receipts:secondAfterFinal.approvalReceipts-secondBefore.approvalReceipts,
+      audits:secondAfterFinal.approvalAudits-secondBefore.approvalAudits,
+      sourcePackages:secondAfterFinal.sourcePackages-secondBefore.sourcePackages};
+    expect(commandRequests-finalCommandsBefore).toBe(1);
+    expect(effects).toEqual({approvals:1,receipts:1,audits:1,sourcePackages:0});
+    expect(firstAfterFinal).toEqual(firstBefore);
+    await expect(firstCard).toHaveCount(1);
+    await expect(firstCard.getByText('approval ready',{exact:true})).toBeVisible();
+    const competing={sameIdentity:await firstCard.getAttribute('data-handoff-id')===firstPrepared.reviewedTarget.handoffId,
+      sameVersion:await firstCard.getAttribute('data-handoff-version')===String(firstPrepared.reviewedTarget.handoffVersion),
+      sameState:firstAfterFinal.approvalReadyCount===1,zeroEffects:JSON.stringify(firstAfterFinal)===JSON.stringify(firstBefore)};
+    expect(competing).toEqual({sameIdentity:true,sameVersion:true,sameState:true,zeroEffects:true});
+
+    const ineligibleState=await zeroEffectNegative(acceptedTarget,'Approve review','Inbox');
+    expect(ineligibleState).toEqual({zeroCommands:true,zeroEffects:true});
+    const sourcePackagesBeforeConsume=secondAfterFinal.sourcePackages;
+    const consumeResponse=await commitPersistedStudioHandoffAction(
+      page,acceptedTarget,'Start Studio draft',undefined,'Inbox');
+    expect(consumeResponse.status()).toBe(201);
+    const consumedTarget=await persistedHandoffTargetFromResponse(consumeResponse,'consumed',acceptedTarget);
+    await consumeResponse.finished();
+    const secondAfterConsume=await handoffAuthorityFrame(competingSetup.aliases.process);
+    const firstAfterConsume=await handoffAuthorityFrame(setup.aliases.process);
+    expect(firstAfterConsume).toEqual(firstBefore);
+    await expect(firstCard).toHaveCount(1);
+    await expect(firstCard.getByText('approval ready',{exact:true})).toBeVisible();
+    competing.zeroEffects=competing.zeroEffects&&JSON.stringify(firstAfterConsume)===JSON.stringify(firstBefore);
+    const sourcePackageDelta=secondAfterConsume.sourcePackages-sourcePackagesBeforeConsume;
+    expect(sourcePackageDelta).toBe(1);
+    const targeting={
+      readyCards,
+      request:{status:secondPrepared.requestResponse.status(),targetValid:
+        /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(secondPrepared.requestedTarget.handoffId)
+          && Number.isSafeInteger(secondPrepared.requestedTarget.handoffVersion)&&secondPrepared.requestedTarget.handoffVersion>0},
+      review:{status:secondPrepared.reviewResponse.status(),targetBound:true,monotonic:
+        secondPrepared.reviewedTarget.handoffId===secondPrepared.requestedTarget.handoffId
+          && secondPrepared.reviewedTarget.handoffVersion===secondPrepared.requestedTarget.handoffVersion+1},
+      finalAccept:{status:finalResponse.status(),targetBound:
+        acceptedTarget.handoffId===secondPrepared.reviewedTarget.handoffId,transitionCount:secondAfterFinal.approvedCount-secondBefore.approvedCount,
+        elapsedMs:finalElapsedMs,effects},
+      competing,
+      consume:{status:consumeResponse.status(),targetBound:consumedTarget.handoffId===acceptedTarget.handoffId
+        && consumedTarget.handoffVersion===acceptedTarget.handoffVersion+1,sourcePackageDelta},
+      negativeCases:{missingTarget,staleVersion,wrongMailbox,ineligibleState},
+    };
+    await writeFile(path.join(outputDirectory,`targeting-${projectSlug}.json`),`${JSON.stringify(targeting)}\n`);
+    page.off('request',countCommand);
+    await rm(checkpointPath,{force:true});
+    return;
+  }
+
   if(scenario==='artifact-unavailable'){
-  await prepareApprovalReady(faultSetup,'fault');
+  const faultPrepared=await prepareApprovalReady(faultSetup,'fault');
   let artifactFaultRequests=0;
   let artifactFaultActualStatus=0;
   let artifactFaultActualNull=false;
@@ -253,11 +358,13 @@ test('exact Studio handoff personas preserve three-party authority in production
     artifactFaultMutationBlocked=await studioWorkspace.getAttribute('data-studio-artifact-mutations')==='blocked'
       && await artifactMutation.isDisabled();
     const startedAt=Date.now();
-    const response=await commitStudioDecision(page,'Final accept','Artifact detail failure must not revoke independent handoff authority.');
+    const response=await commitPersistedStudioHandoffAction(
+      page,faultPrepared.reviewedTarget,'Final accept','Artifact detail failure must not revoke independent handoff authority.');
     artifactFaultFinalAcceptElapsedMs=Date.now()-startedAt;
     artifactFaultFinalAcceptStatus=response.status();
     expect(artifactFaultFinalAcceptStatus).toBe(201);
     expect(artifactFaultFinalAcceptElapsedMs).toBeLessThan(15_000);
+    await persistedHandoffTargetFromResponse(response,'approved',faultPrepared.reviewedTarget);
     await response.finished();
     const faultAfter=await handoffAuthorityFrame(faultSetup.aliases.process);
     artifactFaultEffects={approvals:faultAfter.approvals-faultBefore.approvals,
@@ -330,7 +437,8 @@ test('exact Studio handoff personas preserve three-party authority in production
   let finalAcceptElapsedMs=0;
   let readinessBeforeCommit='unknown';
   let staleProjectionDidNotOverwrite=false;
-  let controlHandoffId='';
+  let controlHandoffId=prepared.reviewedTarget.handoffId;
+  let acceptedTarget=prepared.reviewedTarget;
   let approvalEffects={approvals:0,receipts:0,audits:0,sourcePackages:0};
   try{
     await enterStudioAs(page, setup.actors.approver, settleBoundary);
@@ -348,8 +456,8 @@ test('exact Studio handoff personas preserve three-party authority in production
     await expect(finalAccept).toBeEnabled();
     const controlCardBefore=finalAccept.locator('xpath=ancestor::li');
     await expect(controlCardBefore).toHaveCount(1);
-    controlHandoffId=await controlCardBefore.getAttribute('data-handoff-id')??'';
-    expect(controlHandoffId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
+    expect(await controlCardBefore.getAttribute('data-handoff-id')).toBe(controlHandoffId);
+    expect(await controlCardBefore.getAttribute('data-handoff-version')).toBe(String(prepared.reviewedTarget.handoffVersion));
     await checkpoint('final-accept-enabled');
     readinessBeforeCommit=await studioWorkspace.getAttribute('data-studio-handoff-phase')??'unknown';
     expect(readinessBeforeCommit).toBe('ready');
@@ -359,11 +467,13 @@ test('exact Studio handoff personas preserve three-party authority in production
       approvals:0,approvalReceipts:0,approvalAudits:0,sourcePackages:0});
     const startedAt=Date.now();
     const acceptanceResponse = await test.step('local:studio-handoff:approver-final-accept', () =>
-      commitStudioDecision(page, 'Final accept', 'Independent Studio handoff approval accepted.'));
+      commitPersistedStudioHandoffAction(
+        page,prepared.reviewedTarget,'Final accept','Independent Studio handoff approval accepted.'));
     finalAcceptElapsedMs=Date.now()-startedAt;
     acceptanceResponseStatus=acceptanceResponse.status();
     expect(acceptanceResponseStatus).toBe(201);
     expect(finalAcceptElapsedMs).toBeLessThan(15_000);
+    acceptedTarget=await persistedHandoffTargetFromResponse(acceptanceResponse,'approved',prepared.reviewedTarget);
     await acceptanceResponse.finished();
     await checkpoint('final-accept-committed');
     let approvalAfter:HandoffAuthorityFrame;
@@ -379,7 +489,9 @@ test('exact Studio handoff personas preserve three-party authority in production
     releaseProjection();
     await settleBoundary();
     await checkpoint('detail-settled');
-    const controlCard=center.locator(`li[data-handoff-id="${controlHandoffId}"]`);
+    const controlCard=center.locator(
+      `li[data-handoff-id="${controlHandoffId}"][data-handoff-version="${acceptedTarget.handoffVersion}"]`,
+    );
     await expect(controlCard).toHaveCount(1);
     await expect(controlCard.getByText('approved',{exact:true})).toBeVisible();
     await checkpoint('approved-visible');
@@ -394,15 +506,10 @@ test('exact Studio handoff personas preserve three-party authority in production
     releaseProjection();
     await page.unroute('**/rest/v1/rpc/studio_artifact_projection',projectionHandler);
   }
-  const consumeCenter=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true});
-  const inboxTab=consumeCenter.getByRole('tab',{name:/^Inbox \(\d+\)$/u});
-  await inboxTab.click();
-  await expect(inboxTab).toHaveAttribute('aria-selected','true');
-  const consumeCard=consumeCenter.locator(`li[data-handoff-id="${controlHandoffId}"]`);
-  await expect(consumeCard).toHaveCount(1);
   const consumeResponse = await test.step('local:studio-handoff:approver-consume-inbox', () =>
-    commitStudioCardDecision(page,consumeCard,'Start Studio draft'));
+    commitPersistedStudioHandoffAction(page,acceptedTarget,'Start Studio draft',undefined,'Inbox'));
   expect(consumeResponse.status()).toBe(201);
+  await persistedHandoffTargetFromResponse(consumeResponse,'consumed',acceptedTarget);
   await checkpoint('consume-committed');
 
   const after = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName: setup.projectName });

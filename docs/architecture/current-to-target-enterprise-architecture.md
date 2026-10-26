@@ -1,5 +1,12 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Exact persisted Studio handoff targeting (2026-10-25)
+
+All three read-only reviewers completed before writes. Root selects a dedicated required-bound persisted helper using a validated response-derived handoffId plus positive safe numeric version. This is the immutable concurrency pair enforced by the existing command/SQL contract; backend normalization intentionally omits the version-row UUID. Add only inert data-handoff-version markup alongside the existing handoff ID. Chain actual committed request/review/final command responses into the next action, checking status, identity and version transition without inventing identities or treating UI state as authority. Require one exact card/action in the explicit mailbox, visible and enabled. No first/nth, force, newest/label fallback, history deletion, retry or increased timeout. The separate eligible Request handoff path stays strict and unchanged. Product revalidation and server authorization remain unchanged; no backend response expansion or controller endpoint is included.
+
+This boundary changes driver selection and inert diagnostic markup only. It does not expand product authority, command/response contracts, SQL, RLS, roles, scoring or provider behavior. Fresh local Desktop/Pixel production-handler/PostgreSQL proof now verifies one exact transition, unchanged competing identity/version/state/effects and separately bound consume lineage across six isolated fixtures. The six-file v4 artifact binds 163 sources and the twelve-case component fixture proof; the duplicate projection case is component-only, not a database authorization claim. The [active completion plan](../planning/hosted-acceptance-completion.md) owns execution and evidence. Historical hosted attribution remains unproven.
+
+
 ## Studio artifact-read failure isolation (2026-10-25)
 
 All three read-only reviewers completed before writes. Root resolves the design in favor of a distinct artifact-only-unavailable state for COMMAND_UNAVAILABLE caught directly at the optional legacy artifact projection call. Do not remove global stale/error guards. Artifact mutations stay blocked and stale artifact-dependent details/selections are cleared; only an independently current handoff projection may remain usable. Authority/version/identity/expiry/offline/read-only, missing projected action/capability, active command/workspace mutation, uncertain outcome and committed-reload failures remain fail-closed. Server authorization and command contracts are unchanged.

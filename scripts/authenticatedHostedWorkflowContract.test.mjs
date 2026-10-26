@@ -23,6 +23,15 @@ test('Studio persona proof rejects stale outputs and independently verifies hand
     /node --test scripts\/studioHandoffPersonaArtifact\.test\.mjs/u);
   assert.match(workflow.jobs['source-and-authority'].steps
     .find(step => step.name === 'Feature contracts and evidence rejection').run,
+    /node --test scripts\/studioHandoffActionTargeting\.test\.mjs/u);
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
+    /node --test scripts\/runStudioHandoffActionTargetingBrowser\.test\.mjs/u);
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
+    /node scripts\/runPr1fTypeScriptTest\.mjs tests\/browser\/productNavigationReadiness\.ts tests\/browser\/authenticatedLifecycleHarness\.ts tests\/browser\/authenticatedLifecycleHarness\.test\.ts/u);
+  assert.match(workflow.jobs['source-and-authority'].steps
+    .find(step => step.name === 'Feature contracts and evidence rejection').run,
     /node scripts\/runPr1fTypeScriptTest\.mjs components\/docs\/studioHandoffReadiness\.ts components\/docs\/studioHandoffReadiness\.test\.ts/u);
   const retain = job.steps.find(step => step.name === 'Retain sanitized Studio handoff persona proof');
   assert.equal(retain.if, 'always()');

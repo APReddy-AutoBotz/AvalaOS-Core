@@ -3,11 +3,13 @@ import test from 'node:test';
 import { ScopeType } from '../../types';
 
 import {
+  authenticatedLifecycleDecodePersistedHandoffTarget,
   authenticatedLifecycleValidateProcessCatalogNavigation,
   authenticatedLifecycleValidateProcessNavigation,
   authenticatedLifecycleValidateDeniedProcessAuthority,
   authenticatedLifecycleValidateSessionBinding,
   authenticatedLifecycleValidateSetupLabels,
+  authenticatedLifecycleValidatePersistedHandoffTarget,
   authenticatedLifecycleEnterAs,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
@@ -21,6 +23,130 @@ const actorEntryFixture = {
   token: 'fixture-actor-token',
   user: { id: '10000000-0000-4000-8000-000000000001', email: 'actor@example.invalid' },
 };
+
+const persistedHandoffId = '10000000-0000-4000-8000-000000000010';
+const persistedHandoffReceiptId = '10000000-0000-4000-8000-000000000011';
+const persistedArtifactId = '10000000-0000-4000-8000-000000000012';
+const persistedSourcePackageId = '10000000-0000-4000-8000-000000000013';
+
+const persistedHandoffResponse = (
+  status: 'requested' | 'approval_ready' | 'approved',
+  version: number,
+) => ({
+  status: 201,
+  body: {
+    ok: true,
+    outcome: 'committed',
+    receiptId: persistedHandoffReceiptId,
+    resourceId: persistedHandoffId,
+    resource: { handoffId: persistedHandoffId, version, status },
+  },
+});
+
+test('persisted Studio handoff responses require committed 201 status and a monotonic exact target', () => {
+  const requested = authenticatedLifecycleDecodePersistedHandoffTarget(
+    persistedHandoffResponse('requested', 2),
+    'requested',
+  );
+  assert.deepEqual(requested, { handoffId: persistedHandoffId, handoffVersion: 2 });
+  const reviewed = authenticatedLifecycleDecodePersistedHandoffTarget(
+    persistedHandoffResponse('approval_ready', 3),
+    'approval_ready',
+    requested,
+  );
+  assert.deepEqual(reviewed, { handoffId: persistedHandoffId, handoffVersion: 3 });
+  const approved = authenticatedLifecycleDecodePersistedHandoffTarget(
+    persistedHandoffResponse('approved', 4),
+    'approved',
+    reviewed,
+  );
+  const consumed = authenticatedLifecycleDecodePersistedHandoffTarget({
+    status: 201,
+    body: {
+      ok: true,
+      outcome: 'committed',
+      receiptId: persistedHandoffReceiptId,
+      resourceId: persistedArtifactId,
+      resource: {
+        handoffId: persistedHandoffId,
+        version: 5,
+        status: 'consumed',
+        resourceId: persistedArtifactId,
+        sourcePackageId: persistedSourcePackageId,
+      },
+    },
+  }, 'consumed', approved);
+  assert.deepEqual(consumed, { handoffId: persistedHandoffId, handoffVersion: 5 });
+
+  for (const sample of [
+    { status: 201, body: { outcome: 'committed', handoffId: persistedHandoffId, version: 4, status: 'approved' } },
+    { ...persistedHandoffResponse('approved', 4), status: 200 },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, ok: false } },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, outcome: 'replayed' } },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, receiptId: 'not-an-id' } },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, resourceId: persistedArtifactId } },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, resource: { handoffId: persistedHandoffId, version: 4, status: 'rejected' } } },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, resource: { handoffId: 'not-an-id', version: 4, status: 'approved' } } },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, resource: { handoffId: persistedHandoffId, version: 0, status: 'approved' } } },
+    { ...persistedHandoffResponse('approved', 3), body: persistedHandoffResponse('approved', 3).body },
+    { ...persistedHandoffResponse('approved', 5), body: persistedHandoffResponse('approved', 5).body },
+    { ...persistedHandoffResponse('approved', 4), body: { ...persistedHandoffResponse('approved', 4).body, resource: { handoffId: '20000000-0000-4000-8000-000000000020', version: 4, status: 'approved' } } },
+  ]) {
+    assert.throws(
+      () => authenticatedLifecycleDecodePersistedHandoffTarget(sample, 'approved', reviewed),
+      /ENTERPRISE_LIFECYCLE_PERSISTED_HANDOFF_RESPONSE_REJECTED/u,
+    );
+  }
+
+  for (const resource of [
+    {
+      handoffId: persistedHandoffId,
+      version: 5,
+      status: 'consumed',
+      resourceId: '20000000-0000-4000-8000-000000000020',
+      sourcePackageId: persistedSourcePackageId,
+    },
+    {
+      handoffId: persistedHandoffId,
+      version: 5,
+      status: 'consumed',
+      resourceId: persistedArtifactId,
+    },
+  ]) {
+    assert.throws(
+      () => authenticatedLifecycleDecodePersistedHandoffTarget({
+        status: 201,
+        body: {
+          ok: true,
+          outcome: 'committed',
+          receiptId: persistedHandoffReceiptId,
+          resourceId: persistedArtifactId,
+          resource,
+        },
+      }, 'consumed', approved),
+      /ENTERPRISE_LIFECYCLE_PERSISTED_HANDOFF_RESPONSE_REJECTED/u,
+    );
+  }
+});
+
+test('persisted Studio handoff targets reject missing, unsafe and nonpositive bindings', () => {
+  assert.deepEqual(authenticatedLifecycleValidatePersistedHandoffTarget({
+    handoffId: persistedHandoffId,
+    handoffVersion: 1,
+  }), { handoffId: persistedHandoffId, handoffVersion: 1 });
+  for (const sample of [
+    null,
+    {},
+    { handoffId: persistedHandoffId },
+    { handoffId: persistedHandoffId, handoffVersion: Number.MAX_SAFE_INTEGER + 1 },
+    { handoffId: persistedHandoffId, handoffVersion: -1 },
+  ]) {
+    assert.throws(
+      () => authenticatedLifecycleValidatePersistedHandoffTarget(sample),
+      /ENTERPRISE_LIFECYCLE_PERSISTED_HANDOFF_TARGET_REJECTED/u,
+    );
+  }
+});
 
 test('phase timing wrappers preserve join order, two empty samples and first failure', async () => {
   const phases: string[] = [];

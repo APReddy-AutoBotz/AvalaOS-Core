@@ -114,6 +114,9 @@ jobs:
           npm run test:authenticated-product:source
           npm run test:provider-secret-backend
           node --test scripts/studioHandoffPersonaArtifact.test.mjs
+          node --test scripts/studioHandoffActionTargeting.test.mjs
+          node --test scripts/runStudioHandoffActionTargetingBrowser.test.mjs
+          node scripts/runPr1fTypeScriptTest.mjs tests/browser/productNavigationReadiness.ts tests/browser/authenticatedLifecycleHarness.ts tests/browser/authenticatedLifecycleHarness.test.ts
           node scripts/runPr1fTypeScriptTest.mjs components/docs/studioHandoffReadiness.ts components/docs/studioHandoffReadiness.test.ts
           node scripts/runPr1fTypeScriptTest.mjs services/deliveryReadiness.ts services/deliveryReadiness.test.ts
           npm run typecheck
