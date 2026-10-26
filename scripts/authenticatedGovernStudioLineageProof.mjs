@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 export const AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_SCHEMA =
-  'authenticated-govern-studio-lineage-postgres-proof-v1';
+  'authenticated-govern-studio-lineage-postgres-proof-v2';
 export const AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_MAX_BYTES = 12_288;
 export const AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_SOURCE_PATHS = Object.freeze([
   'scripts/authenticatedGovernStudioLineageProof.mjs',
@@ -37,10 +37,11 @@ export function validateAuthenticatedGovernStudioLineageProof(value) {
   if (!exactKeys(value, ['schemaVersion', 'status', 'source', 'runtime', 'positive', 'negative', 'cleanup'])
     || !exactKeys(value.source, ['releaseSha', 'runId', 'attempt', 'workflow', 'job', 'sourceDigest'])
     || !exactKeys(value.runtime, ['postgresql', 'productionHandlers', 'providersEnabled', 'providerCalls', 'paidCalls'])
-    || !exactKeys(value.positive, ['verified', 'actionCount', 'lineageDigest'])
+    || !exactKeys(value.positive, ['verified', 'actionCount', 'lineageDigest',
+      'observationReaderVerified', 'ownershipSchemaVerified', 'nonExerciseOwnedRowsExcluded', 'immutableHistoryPreserved'])
     || !exactKeys(value.negative, [
       'resourceSubstitutionRejected', 'receiptSubstitutionRejected', 'actorSubstitutionRejected',
-      'extraScopedRowRejected',
+      'extraScopedRowRejected', 'foreignScopeExcluded', 'foreignMutationDetected',
     ])
     || !exactKeys(value.cleanup, ['databaseRemoved'])
     || value.schemaVersion !== AUTHENTICATED_GOVERN_STUDIO_LINEAGE_PROOF_SCHEMA
@@ -51,6 +52,8 @@ export function validateAuthenticatedGovernStudioLineageProof(value) {
     || value.runtime.postgresql !== true || value.runtime.productionHandlers !== true
     || value.runtime.providersEnabled !== false || value.runtime.providerCalls !== 0 || value.runtime.paidCalls !== 0
     || value.positive.verified !== true || value.positive.actionCount !== 8
+    || value.positive.observationReaderVerified !== true || value.positive.ownershipSchemaVerified !== true
+    || value.positive.nonExerciseOwnedRowsExcluded !== true || value.positive.immutableHistoryPreserved !== true
     || !DIGEST.test(value.positive.lineageDigest ?? '')
     || Object.values(value.negative).some(item => item !== true)
     || value.cleanup.databaseRemoved !== true) return null;

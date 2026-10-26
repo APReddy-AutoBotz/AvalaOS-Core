@@ -13,9 +13,12 @@ const proof = () => ({
   source: { releaseSha: 'a'.repeat(40), runId: '42', attempt: '1',
     workflow: 'Authenticated Product Acceptance Preparation', job: 'connected-browser', sourceDigest: digest('source') },
   runtime: { postgresql: true, productionHandlers: true, providersEnabled: false, providerCalls: 0, paidCalls: 0 },
-  positive: { verified: true, actionCount: 8, lineageDigest: digest('lineage') },
+  positive: { verified: true, actionCount: 8, lineageDigest: digest('lineage'),
+    observationReaderVerified: true, ownershipSchemaVerified: true,
+    nonExerciseOwnedRowsExcluded: true, immutableHistoryPreserved: true },
   negative: { resourceSubstitutionRejected: true, receiptSubstitutionRejected: true,
-    actorSubstitutionRejected: true, extraScopedRowRejected: true },
+    actorSubstitutionRejected: true, extraScopedRowRejected: true,
+    foreignScopeExcluded: true, foreignMutationDetected: true },
   cleanup: { databaseRemoved: true },
 });
 
@@ -31,6 +34,16 @@ for (const [name, mutate] of [
   ['missing negative', value => { value.negative.actorSubstitutionRejected = false; }],
   ['missing cleanup', value => { value.cleanup.databaseRemoved = false; }],
   ['unsafe source', value => { value.source.url = 'https://invalid.example'; }],
+  ['legacy fabricated-frame schema', value => { value.schemaVersion = 'authenticated-govern-studio-lineage-postgres-proof-v1'; }],
+  ...['observationReaderVerified', 'ownershipSchemaVerified', 'nonExerciseOwnedRowsExcluded', 'immutableHistoryPreserved']
+    .flatMap(key => [
+      [`absent ${key}`, value => { delete value.positive[key]; }],
+      [`false ${key}`, value => { value.positive[key] = false; }],
+    ]),
+  ...['foreignScopeExcluded', 'foreignMutationDetected'].flatMap(key => [
+    [`absent ${key}`, value => { delete value.negative[key]; }],
+    [`false ${key}`, value => { value.negative[key] = false; }],
+  ]),
 ]) test(`rejects ${name}`, () => {
   const value = proof(); mutate(value);
   assert.equal(validateAuthenticatedGovernStudioLineageProof(value), null);

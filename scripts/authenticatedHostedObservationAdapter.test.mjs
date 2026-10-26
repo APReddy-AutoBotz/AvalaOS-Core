@@ -119,6 +119,22 @@ test('observation ownership filters never deserialize excluded payloads and reta
     'serialize matched rows once; do not inspect payloads to filter ownership');
   assert.deepEqual(Object.keys(AUTHENTICATED_OBSERVATION_FILTER_COLUMNS).sort(),
     AUTHENTICATED_HOSTED_OBSERVATION_SOURCES.map(source => source.table).sort());
+  const ownershipBySource = Object.fromEntries(AUTHENTICATED_HOSTED_OBSERVATION_SOURCES
+    .map(source => [source.table, source.actorFields]));
+  assert.deepEqual(ownershipBySource.assess_v2_govern_resolutions, ['resolver_id']);
+  assert.deepEqual(ownershipBySource.assess_v2_studio_handoffs, ['handed_off_by']);
+  assert.deepEqual(AUTHENTICATED_OBSERVATION_FILTER_COLUMNS.assess_v2_govern_resolutions,
+    ['workspace_id', 'resolver_id']);
+  assert.deepEqual(AUTHENTICATED_OBSERVATION_FILTER_COLUMNS.assess_v2_studio_handoffs,
+    ['workspace_id', 'handed_off_by']);
+  const sourceStatement = table => query.split('\nUNION ALL\n')
+    .find(statement => statement.includes(`FROM public.${table} x`));
+  const governStatement = sourceStatement('assess_v2_govern_resolutions');
+  const handoffStatement = sourceStatement('assess_v2_studio_handoffs');
+  assert.match(governStatement, /x\.resolver_id=ANY\(\$3::text\[\]::uuid\[\]\)/u);
+  assert.match(handoffStatement, /x\.handed_off_by=ANY\(\$3::text\[\]::uuid\[\]\)/u);
+  assert.doesNotMatch(governStatement, /resolved_by|actor_id/u);
+  assert.doesNotMatch(handoffStatement, /created_by|actor_id/u);
   assert.match(query, /linked\.id=x\.attempt_id AND linked\.requested_by=ANY\(\$3::uuid\[\]\)/u);
   assert.match(query, /linked\.id=x\.task_id AND linked\.project_id=\$4::uuid/u);
   assert.doesNotMatch(query, /WHERE to_jsonb|to_jsonb\(x\)->>/u);
