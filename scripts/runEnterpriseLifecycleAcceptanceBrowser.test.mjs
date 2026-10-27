@@ -6,8 +6,17 @@ import {
   ENTERPRISE_LIFECYCLE_BROWSER_ASSERTIONS,
   ENTERPRISE_LIFECYCLE_BROWSER_PROJECTS,
   ENTERPRISE_LIFECYCLE_BROWSER_STAGES,
+  ENTERPRISE_LIFECYCLE_BROWSER_SOURCES,
   resolveEnterpriseLifecycleExecutionIdentity,
+  runConnectedBrowserDiagnosticOrchestration,
 } from './runEnterpriseLifecycleAcceptanceBrowser.mjs';
+import { REQUIRED_BROWSER_SOURCES } from './enterpriseLifecycleAcceptanceEvidence.mjs';
+
+test('browser evidence producer binds every diagnostic module required by its independent verifier', () => {
+  const diagnosticSources = REQUIRED_BROWSER_SOURCES.filter(source => /(?:connectedBrowser|verifyConnectedBrowser)/u.test(source));
+  assert.equal(diagnosticSources.length, 3);
+  for (const source of diagnosticSources) assert.ok(ENTERPRISE_LIFECYCLE_BROWSER_SOURCES.includes(source), source);
+});
 
 const binding = `sha256:${'a'.repeat(64)}`;
 const executionId = `sha256:${'b'.repeat(64)}`;
@@ -89,4 +98,59 @@ test('rejects missing stages, substituted bindings and false observations', () =
   assert.throws(() => aggregateEnterpriseLifecycleBrowserEvidence(input({
     cleanup: { ...cleanup, backendSucceeded: false },
   })), /CLEANUP_INVALID/u);
+});
+
+const injectedOrchestration = ({ failPhase, cleanupFailure, sessionFailure } = {}) => {
+  const calls = [], active = new Set();
+  const session = {
+    async start(phase) { calls.push(`start:${phase}`); active.add(phase);
+      if (sessionFailure === `start:${phase}`) throw new Error('DIAGNOSTIC_WRITE_FAILED'); },
+    async pass(phase) { calls.push(`pass:${phase}`); active.delete(phase);
+      if (sessionFailure === `pass:${phase}`) throw new Error('DIAGNOSTIC_WRITE_FAILED'); },
+    async fail(phase) { calls.push(`fail:${phase}`); active.delete(phase);
+      if (sessionFailure === `fail:${phase}`) throw new Error('DIAGNOSTIC_WRITE_FAILED'); },
+    async setCleanup() { calls.push('setCleanup');
+      if (sessionFailure === 'setCleanup') throw new Error('DIAGNOSTIC_WRITE_FAILED'); },
+    async finalize(status) { calls.push(`finalize:${status}`);
+      if (sessionFailure === 'finalize') throw new Error('DIAGNOSTIC_WRITE_FAILED');
+      return { status }; },
+  };
+  const operations = Object.fromEntries(['fixture', 'build', 'preview', 'browser', 'inventory', 'aggregation', 'manifest']
+    .map(phase => [phase, async () => { calls.push(`operation:${phase}`);
+      if (failPhase === phase) throw new Error(`PRIMARY_${phase.toUpperCase()}`); }]));
+  operations.cleanupPreview = async () => { calls.push('cleanup:preview');
+    if (cleanupFailure === 'preview') throw new Error('PREVIEW_CLEANUP'); return 'passed'; };
+  operations.cleanupFixture = async () => { calls.push('cleanup:fixture');
+    if (cleanupFailure === 'fixture') throw new Error('FIXTURE_CLEANUP'); return 'passed'; };
+  return { session, operations, calls, active };
+};
+
+test('real orchestration injects each operation failure and still attempts both owned cleanups', async () => {
+  for (const phase of ['fixture', 'build', 'preview', 'browser', 'inventory', 'aggregation', 'manifest']) {
+    const fixture = injectedOrchestration({ failPhase: phase });
+    await assert.rejects(runConnectedBrowserDiagnosticOrchestration(fixture),
+      new RegExp(`PRIMARY_${phase.toUpperCase()}`, 'u'));
+    assert.equal(fixture.calls.filter(call => call === 'cleanup:preview').length, 1, phase);
+    assert.equal(fixture.calls.filter(call => call === 'cleanup:fixture').length, 1, phase);
+  }
+});
+
+test('primary failure survives cleanup failure after both cleanup attempts', async () => {
+  const fixture = injectedOrchestration({ failPhase: 'browser', cleanupFailure: 'preview' });
+  await assert.rejects(runConnectedBrowserDiagnosticOrchestration(fixture), /PRIMARY_BROWSER/u);
+  assert.deepEqual(fixture.calls.filter(call => call.startsWith('cleanup:')), ['cleanup:preview', 'cleanup:fixture']);
+  assert.ok(fixture.calls.includes('finalize:incomplete'));
+});
+
+test('diagnostic write failures cannot skip cleanup after fixture and preview become active', async () => {
+  for (const failure of ['start:browser', 'pass:browser', 'fail:browser', 'start:cleanup',
+    'setCleanup', 'pass:cleanup', 'finalize']) {
+    const fixture = injectedOrchestration({
+      failPhase: failure === 'fail:browser' ? 'browser' : undefined,
+      sessionFailure: failure,
+    });
+    await assert.rejects(runConnectedBrowserDiagnosticOrchestration(fixture));
+    assert.deepEqual(fixture.calls.filter(call => call.startsWith('cleanup:')),
+      ['cleanup:preview', 'cleanup:fixture'], failure);
+  }
 });

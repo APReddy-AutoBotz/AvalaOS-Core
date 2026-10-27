@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { execFile } from 'node:child_process';
-import { createHash, X509Certificate } from 'node:crypto';
+import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createServer as createNetServer, connect } from 'node:net';
@@ -17,6 +17,8 @@ import {
 import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
   authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 import { loadEnterpriseLifecycleProductionModule } from './enterpriseLifecyclePostgresFixture.mjs';
+import { createPreactivationSignInDiagnosticSession,
+  preactivationSignInParentFailureCode } from './preactivationSignInDiagnostics.mjs';
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = '127.0.0.1';
@@ -1112,12 +1114,17 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
   };
 };
 
-const run = (command, args, environment) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { cwd: process.cwd(), env: environment, stdio: 'inherit' });
+const run = (command, args, environment, options = {}) => new Promise((resolve, reject) => {
+  const child = spawn(command, args, { cwd: process.cwd(), env: environment,
+    stdio: options.stdio ?? 'inherit' });
   child.once('error', reject);
   child.once('exit', (code, signal) => code === 0
     ? resolve()
-    : reject(new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHILD_FAILED:${path.basename(command)}:${code ?? signal}`)));
+    : (() => {
+      const error = new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHILD_FAILED:${path.basename(command)}:${code ?? signal}`);
+      error.childExitCode = Number.isInteger(code) && code >= 0 && code <= 255 ? code : null;
+      reject(error);
+    })());
 });
 
 const stop = async child => {
@@ -1156,7 +1163,9 @@ const checkoutState = async () => (await execFileAsync('git', ['status', '--porc
 // Continue Chromium requests over a real, loopback-only TLS connection. CDP
 // response fulfillment bypasses durable network-body storage across reloads.
 // The browser trusts only this run's ephemeral public-key fingerprint.
-export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, appBaseUrl, apiBaseUrl }) => {
+export const startAuthenticatedHostedSignInEntryTlsBridge = async ({
+  directory, appBaseUrl, apiBaseUrl, tokenBodyGate = false,
+}) => {
   const targets = {
     [new URL(PREVIEW_ORIGIN).hostname]: assertAuthenticatedHostedSignInEntryLoopbackUrl(appBaseUrl),
     [new URL(BACKEND_ORIGIN).hostname]: assertAuthenticatedHostedSignInEntryLoopbackUrl(apiBaseUrl),
@@ -1176,6 +1185,65 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
     .update(new X509Certificate(cert).publicKey.export({ type: 'spki', format: 'der' })).digest('base64');
   const pending = new Set();
   let closing = false;
+  const tokenGate = {
+    mode: 'open',
+    headersSent: false,
+    waiting: false,
+    released: true,
+    automaticRelease: false,
+    requests: 0,
+    completed: 0,
+    resolve: null,
+    timer: null,
+  };
+  const releaseTokenGate = automatic => {
+    if (tokenGate.released) return false;
+    if (!tokenGate.waiting && tokenGate.mode !== 'armed') return false;
+    tokenGate.released = true;
+    tokenGate.automaticRelease = automatic;
+    if (tokenGate.mode === 'armed') tokenGate.mode = 'released';
+    if (tokenGate.timer) clearTimeout(tokenGate.timer);
+    tokenGate.timer = null;
+    tokenGate.resolve?.();
+    tokenGate.resolve = null;
+    return true;
+  };
+  const tokenGateToken = tokenBodyGate ? randomBytes(32).toString('hex') : '';
+  const tokenGateServer = tokenBodyGate ? createServer(async (incoming, outgoing) => {
+    try {
+      if (incoming.method !== 'POST' || incoming.url !== '/control/token-body-gate'
+        || incoming.headers['x-authenticated-sign-in-gate'] !== tokenGateToken) {
+        outgoing.writeHead(404); outgoing.end(); return;
+      }
+      const input = JSON.parse(await readBody(incoming) || '{}');
+      if (!['arm', 'release', 'inspect'].includes(input.action)) {
+        outgoing.writeHead(400); outgoing.end(); return;
+      }
+      if (input.action === 'arm') {
+        if (tokenGate.waiting || tokenGate.mode === 'armed') {
+          outgoing.writeHead(409); outgoing.end(); return;
+        }
+        tokenGate.mode = 'armed';
+        tokenGate.headersSent = false;
+        tokenGate.waiting = false;
+        tokenGate.released = false;
+        tokenGate.automaticRelease = false;
+        tokenGate.requests = 0;
+        tokenGate.completed = 0;
+      } else if (input.action === 'release') {
+        releaseTokenGate(false);
+      }
+      outgoing.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      outgoing.end(JSON.stringify({ mode: tokenGate.mode, headersSent: tokenGate.headersSent,
+        waiting: tokenGate.waiting, released: tokenGate.released,
+        automaticRelease: tokenGate.automaticRelease, requests: tokenGate.requests,
+        completed: tokenGate.completed }));
+    } catch {
+      if (!outgoing.headersSent) outgoing.writeHead(400);
+      outgoing.end();
+    }
+  }) : null;
+  let tokenGateControlUrl = '';
   const server = createHttpsServer({ cert, key: await readFile(keyPath) }, (incoming, outgoing) => {
     const operation = (async () => {
       const host = (incoming.headers.host || '').replace(/:443$/u, '');
@@ -1196,8 +1264,23 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
         if (response.status >= 300 && response.status < 400) throw new Error('LOCAL_TLS_REDIRECT_REJECTED');
         const responseHeaders = Object.fromEntries(response.headers);
         for (const name of ['connection', 'content-encoding', 'content-length', 'transfer-encoding']) delete responseHeaders[name];
-        const body = Buffer.from(await response.arrayBuffer());
         outgoing.writeHead(response.status, responseHeaders);
+        if (tokenBodyGate && response.status === 200 && target.pathname === '/auth/v1/token'
+          && target.searchParams.get('grant_type') === 'password' && tokenGate.mode === 'armed') {
+          tokenGate.mode = 'holding';
+          tokenGate.headersSent = true;
+          tokenGate.waiting = true;
+          tokenGate.requests += 1;
+          outgoing.flushHeaders();
+          await new Promise(resolve => {
+            tokenGate.resolve = resolve;
+            tokenGate.timer = setTimeout(() => releaseTokenGate(true), 15_000);
+          });
+          tokenGate.waiting = false;
+          tokenGate.completed += 1;
+          tokenGate.mode = 'released';
+        }
+        const body = Buffer.from(await response.arrayBuffer());
         outgoing.end(body);
       } finally { outgoing.off('close', disconnected); }
     })().catch(() => {
@@ -1211,6 +1294,20 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
     server.once('error', reject);
     server.listen(0, LOOPBACK_HOST, resolve);
   });
+  // Start the optional gate only after TLS setup succeeds; a setup failure
+  // must not leave an unreachable gate listener outside the returned owner.
+  if (tokenGateServer) {
+    try {
+      tokenGateControlUrl = await new Promise((resolve, reject) => {
+        tokenGateServer.once('error', reject);
+        tokenGateServer.listen(0, LOOPBACK_HOST, () => resolve(`http://${LOOPBACK_HOST}:${tokenGateServer.address().port}`));
+      });
+    } catch (error) {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+      throw error;
+    }
+  }
   // CONNECT preserves the browser's original URL/origin, including response
   // observers. Every tunnel terminates at our TLS listener, never remote DNS.
   const tunnels = new Set();
@@ -1237,21 +1334,38 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
       proxy.once('error', reject);
       proxy.listen(0, LOOPBACK_HOST, resolve);
     });
-  } catch (error) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); throw error; }
+  } catch (error) {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+    if (tokenGateServer) {
+      tokenGateServer.closeAllConnections();
+      await new Promise(resolve => tokenGateServer.close(resolve));
+    }
+    throw error;
+  }
   let closed;
   return {
     origin: `http://${LOOPBACK_HOST}:${proxy.address().port}`,
     certificateSpki,
+    tokenBodyGate: tokenGateServer ? Object.freeze({
+      controlUrl: tokenGateControlUrl,
+      controlToken: tokenGateToken,
+    }) : null,
     close() {
       if (closed) return closed;
       closing = true;
       closed = (async () => {
+        releaseTokenGate(false);
         const proxyStopped = new Promise((resolve, reject) => proxy.close(error => error ? reject(error) : resolve()));
         for (const socket of tunnels) socket.destroy();
         proxy.closeAllConnections();
         const stopped = new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
         server.closeAllConnections();
-        await Promise.all([proxyStopped, stopped]);
+        const gateStopped = tokenGateServer
+          ? new Promise((resolve, reject) => tokenGateServer.close(error => error ? reject(error) : resolve()))
+          : Promise.resolve();
+        tokenGateServer?.closeAllConnections();
+        await Promise.all([proxyStopped, stopped, gateStopped]);
         await Promise.all([...pending]);
         return true;
       })();
@@ -1261,26 +1375,106 @@ export const startAuthenticatedHostedSignInEntryTlsBridge = async ({ directory, 
 };
 
 export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES = Object.freeze([
-  'entry', 'assessment-negatives', 'assessment-positives', 'safety',
+  'session-persistence', 'entry', 'assessment-negatives', 'assessment-positives', 'safety',
 ]);
+
+export const runPreactivationSignInDiagnosticPhase = async ({ phase, session, operations }) => {
+  let primaryFailure = null;
+  let diagnosticFailure = null;
+  let phaseStarted = false;
+  let phaseNonce = null;
+  let failedStage = null;
+  const diagnostic = async operation => {
+    if (!session) return true;
+    try { await operation(); return true; } catch (error) {
+      diagnosticFailure ??= error;
+      return false;
+    }
+  };
+  if (session) {
+    try { phaseNonce = await session.startPhase(phase); phaseStarted = true; } catch (error) {
+      diagnosticFailure = error;
+    }
+  } else phaseStarted = true;
+  try {
+    if (diagnosticFailure) throw diagnosticFailure;
+    for (const stage of ['setup', 'build', 'preview', 'tls', 'browser']) {
+      if (!await diagnostic(() => session.startStage(phase, stage))) throw diagnosticFailure;
+      try {
+        await operations[stage]({ phaseNonce });
+        if (!await diagnostic(() => session.finishStage(phase, stage, 'passed'))) throw diagnosticFailure;
+      } catch (error) {
+        primaryFailure ??= error;
+        failedStage = stage;
+        await diagnostic(() => session.finishStage(phase, stage, 'failed'));
+        await diagnostic(() => session.recordFailure(phase, stage,
+          preactivationSignInParentFailureCode(stage)));
+        break;
+      }
+    }
+  } catch (error) { primaryFailure ??= error; } finally {
+    if (phaseStarted) {
+      await diagnostic(() => session.startStage(phase, 'cleanup'));
+      let cleanupFailed = false;
+      for (const [resource, operation] of [
+        ['preview', operations.cleanupPreview],
+        ['fixture', operations.cleanupFixture],
+        ['tls', operations.cleanupTls],
+        ['temporary', operations.cleanupTemporary],
+      ]) {
+        let state = 'unknown';
+        try { state = await operation(); } catch (error) {
+          state = 'failed'; cleanupFailed = true; primaryFailure ??= error;
+        }
+        if (!['passed', 'failed', 'not-attempted', 'unknown'].includes(state)) state = 'unknown';
+        if (!['passed', 'not-attempted'].includes(state)) cleanupFailed = true;
+        await diagnostic(() => session.setCleanup(phase, resource, state));
+      }
+      if (cleanupFailed) {
+        primaryFailure ??= new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
+        await diagnostic(() => session.finishStage(phase, 'cleanup', 'failed'));
+        await diagnostic(() => session.recordFailure(phase, 'cleanup', 'CLEANUP_FAILED'));
+      } else await diagnostic(() => session.finishStage(phase, 'cleanup', 'passed'));
+      await diagnostic(() => session.observeBrowserChild(phase, failedStage === 'browser'));
+      let phaseResult = null;
+      await diagnostic(async () => { phaseResult = await session.finishPhase(phase); });
+      if (phaseResult && phaseResult.status !== 'passed' && !primaryFailure) {
+        primaryFailure = new Error('PREACTIVATION_SIGN_IN_DIAGNOSTIC_PHASE_INCOMPLETE');
+      }
+    }
+  }
+  if (primaryFailure) throw primaryFailure;
+  if (diagnosticFailure) throw diagnosticFailure;
+  return true;
+};
 
 const runAuthenticatedHostedSignInEntryPhase = async ({
   processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
+  diagnosticSession,
 }) => {
   let temporaryRoot;
   let fixture;
   let preview;
   let tlsBridge;
-  let cleanupSucceeded = false;
-  try {
-    temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'avalaos-sign-in-entry-'));
+  let temporaryCreationStarted = false;
+  let fixtureCreationStarted = false;
+  let previewCreationStarted = false;
+  let tlsCreationStarted = false;
+  let buildEnvironment;
+  let appBaseUrl;
+  let playwrightOutputDirectory;
+  const operations = {
+    setup: async () => {
+      temporaryCreationStarted = true;
+      temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'avalaos-sign-in-entry-'));
     const buildDirectory = path.join(temporaryRoot, 'build');
-    const playwrightOutputDirectory = path.join(temporaryRoot, 'playwright');
-    fixture = await startAuthenticatedHostedSignInEntryFixture({ processSeedMode });
+      playwrightOutputDirectory = path.join(temporaryRoot, 'playwright');
+      fixtureCreationStarted = true;
+      fixture = await startAuthenticatedHostedSignInEntryFixture({ processSeedMode });
     const appPort = await availablePort();
-    const appBaseUrl = assertAuthenticatedHostedSignInEntryLoopbackUrl(`http://${LOOPBACK_HOST}:${appPort}`);
+      appBaseUrl = assertAuthenticatedHostedSignInEntryLoopbackUrl(`http://${LOOPBACK_HOST}:${appPort}`);
     const baseEnvironment = authenticatedHostedSignInEntryChildEnvironment(process.env);
-    const buildEnvironment = {
+      buildEnvironment = {
       ...baseEnvironment,
       VITE_AVALA_RUNTIME_MODE: 'pilot',
       VITE_SUPABASE_URL: fixture.backendOrigin,
@@ -1294,28 +1488,47 @@ const runAuthenticatedHostedSignInEntryPhase = async ({
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: fixture.exerciseDigest,
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: fixture.targetFingerprint,
     };
+      operations.buildDirectory = buildDirectory;
+      operations.baseEnvironment = baseEnvironment;
+    },
+    build: async () => {
     await run(process.execPath, [path.resolve('node_modules/vite/bin/vite.js'), 'build',
-      '--config', 'vite.authenticated-hosted-sign-in-entry.config.ts', '--outDir', buildDirectory, '--emptyOutDir'], buildEnvironment);
+        '--config', 'vite.authenticated-hosted-sign-in-entry.config.ts', '--outDir', operations.buildDirectory,
+        '--emptyOutDir'], buildEnvironment);
+    },
+    preview: async () => {
+      previewCreationStarted = true;
     preview = spawn(process.execPath, [path.resolve('node_modules/vite/bin/vite.js'), 'preview',
       '--config', 'vite.authenticated-hosted-sign-in-entry.config.ts', '--host', LOOPBACK_HOST,
-      '--port', String(appPort), '--outDir', buildDirectory], {
+        '--port', new URL(appBaseUrl).port, '--outDir', operations.buildDirectory], {
       cwd: process.cwd(),
       env: buildEnvironment,
       stdio: 'inherit',
     });
-    await waitForHttp(`${appBaseUrl}/`);
+      const previewError = new Promise((_, reject) => preview.once('error', reject));
+      await Promise.race([waitForHttp(`${appBaseUrl}/`), previewError]);
+    },
+    tls: async () => {
+      tlsCreationStarted = true;
     tlsBridge = await startAuthenticatedHostedSignInEntryTlsBridge({
       directory: temporaryRoot, appBaseUrl, apiBaseUrl: fixture.baseUrl,
+      tokenBodyGate: contractPhase === 'session-persistence',
     });
+    },
+    browser: async ({ phaseNonce }) => {
     await run(process.execPath, [path.resolve('node_modules/@playwright/test/cli.js'), 'test',
       '--config=playwright.authenticated-hosted-sign-in-entry.config.ts', '--workers=1'], {
-      ...baseEnvironment,
+        ...operations.baseEnvironment,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_APP_URL: fixture.previewOrigin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_APP_URL: appBaseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_BACKEND_URL: fixture.backendOrigin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_BACKEND_URL: fixture.baseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TLS_BRIDGE: tlsBridge.origin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TLS_SPKI: tlsBridge.certificateSpki,
+      ...(tlsBridge.tokenBodyGate ? {
+        AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_URL: tlsBridge.tokenBodyGate.controlUrl,
+        AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_TOKEN_GATE_TOKEN: tlsBridge.tokenBodyGate.controlToken,
+      } : {}),
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_OUTPUT_DIR: playwrightOutputDirectory,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_SEED_MODE: processSeedMode,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROCESS_READ_STATE_ONLY: String(processReadStateOnly),
@@ -1328,18 +1541,34 @@ const runAuthenticatedHostedSignInEntryPhase = async ({
       ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: fixture.controlToken,
       AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: fixture.backendOrigin,
       ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH: 'true',
-    });
-  } finally {
-    const previewStopped = await stop(preview).catch(() => false);
-    const fixtureClosed = fixture ? await fixture.close().catch(() => false) : true;
-    const tlsClosed = tlsBridge ? await tlsBridge.close().catch(() => false) : true;
-    const temporaryRemoved = temporaryRoot
-      ? await rm(temporaryRoot, { recursive: true, force: true }).then(() => true, () => false)
-      : true;
-    cleanupSucceeded = previewStopped && fixtureClosed && tlsClosed && temporaryRemoved;
-    if (!cleanupSucceeded) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
-  }
-  return true;
+        ...(diagnosticSession ? { PREACTIVATION_SIGN_IN_DIAGNOSTIC_IDENTITY_JSON: JSON.stringify({
+          identity: diagnosticSession.identity, phase: contractPhase, phaseNonce,
+        }) } : {}),
+      }, { stdio: diagnosticSession ? 'ignore' : 'inherit' });
+    },
+    cleanupPreview: async () => {
+      if (!previewCreationStarted) return 'not-attempted';
+      if (!preview) return 'unknown';
+      return await stop(preview) ? 'passed' : 'failed';
+    },
+    cleanupFixture: async () => {
+      if (!fixtureCreationStarted) return 'not-attempted';
+      if (!fixture) return 'unknown';
+      return await fixture.close() ? 'passed' : 'failed';
+    },
+    cleanupTls: async () => {
+      if (!tlsCreationStarted) return 'not-attempted';
+      if (!tlsBridge) return 'unknown';
+      return await tlsBridge.close() ? 'passed' : 'failed';
+    },
+    cleanupTemporary: async () => {
+      if (!temporaryCreationStarted) return 'not-attempted';
+      if (!temporaryRoot) return 'unknown';
+      return await rm(temporaryRoot, { recursive: true, force: true }).then(() => 'passed', () => 'failed');
+    },
+  };
+  return runPreactivationSignInDiagnosticPhase({ phase: contractPhase,
+    session: diagnosticSession, operations });
 };
 
 export const runAuthenticatedHostedSignInEntry = async ({
@@ -1355,20 +1584,40 @@ export const runAuthenticatedHostedSignInEntry = async ({
   }
   const specialized = processSeedMode === 'nullable-reproduction' || processReadStateOnly || scopedNavigationOnly;
   const phases = specialized ? ['specialized'] : AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES;
-  for (const contractPhase of phases) {
-    const phaseStartedAt = Date.now();
+  const diagnosticSession = specialized ? null : await createPreactivationSignInDiagnosticSession();
+  let primaryFailure = null;
+  let diagnosticFailure = null;
+  try {
+    for (const contractPhase of phases) {
+      const phaseStartedAt = Date.now();
+      try {
+        await runAuthenticatedHostedSignInEntryPhase({
+          processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
+          diagnosticSession,
+        });
+        console.log(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_PASS:${contractPhase}:${Date.now() - phaseStartedAt}`);
+      } catch (error) {
+        throw new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_FAILED:${contractPhase}`, { cause: error });
+      }
+    }
+  } catch (error) { primaryFailure = error; } finally {
     try {
-      await runAuthenticatedHostedSignInEntryPhase({
-        processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
-      });
-      console.log(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_PASS:${contractPhase}:${Date.now() - phaseStartedAt}`);
-    } catch (error) {
-      throw new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_FAILED:${contractPhase}`, { cause: error });
+      if (await checkoutState() !== stateBefore) {
+        if (diagnosticSession) await diagnosticSession.recordFailure('run', 'checkout', 'CHECKOUT_CHANGED');
+        primaryFailure ??= new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHECKOUT_CHANGED');
+      }
+    } catch (error) { primaryFailure ??= error; }
+    if (diagnosticSession) {
+      try {
+        const finalDiagnostic = await diagnosticSession.finalize();
+        if (finalDiagnostic.status !== 'passed' && !primaryFailure) {
+          diagnosticFailure = new Error('PREACTIVATION_SIGN_IN_DIAGNOSTIC_RUN_INCOMPLETE');
+        }
+      } catch (error) { diagnosticFailure = error; }
     }
   }
-  if (await checkoutState() !== stateBefore) {
-    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHECKOUT_CHANGED');
-  }
+  if (primaryFailure) throw primaryFailure;
+  if (diagnosticFailure) throw diagnosticFailure;
   return true;
 };
 

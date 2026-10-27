@@ -36,6 +36,7 @@ const networkFixture = async (startAction, options = {}) => {
   let tail = Promise.resolve();
   const errors = []; const finishes = []; const preparations = []; const dispatches = [];
   const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin, startAction,
+    ...(options.actionDiagnostics ? { actionDiagnostics: options.actionDiagnostics } : {}),
     ...(options.prepareAction ? { prepareAction: async value => {
       preparations.push(value);
       return options.prepareAction(value);
@@ -66,9 +67,10 @@ const networkFixture = async (startAction, options = {}) => {
   return { context, errors, finishes, preparations, dispatches, lifecycle, route: value => routeHandler(value), drain };
 };
 
-test('passive request diagnostics observe request, response and failure without delaying or throwing', async () => {
+test('passive request diagnostics observe route, request, response and failure without delaying or throwing', async () => {
   const observed = [];
   const fixture = await networkFixture(async () => ({ actionId: 'action-safe' }), { requestDiagnostics: {
+    onRoute: () => { observed.push('route'); throw new Error('ignored diagnostic'); },
     onRequest: () => { observed.push('request'); throw new Error('ignored diagnostic'); },
     onResponse: (_request, status) => observed.push(`response:${status}`),
     onResponseBody: () => observed.push('body'),
@@ -76,11 +78,35 @@ test('passive request diagnostics observe request, response and failure without 
   } });
   const request = { url: () => `${backendOrigin}/rest/v1/rpc/assess_v2_eligible_reviewers`,
     method: () => 'POST', allHeaders: async () => ({}), postDataJSON: () => ({}), resourceType: () => 'fetch' };
+  await fixture.route({ request: () => request, continue: async () => undefined, abort: async () => undefined });
   fixture.context.emit('request', request);
   fixture.context.emit('response', { request: () => request, status: () => 200, json: async () => [] });
   fixture.context.emit('requestfailed', request);
   await fixture.lifecycle.settleResponseBodies();
-  assert.deepEqual(observed, ['request', 'response:200', 'failed', 'body']);
+  assert.deepEqual(observed, ['route', 'request', 'response:200', 'failed', 'body']);
+});
+
+test('action diagnostics use the explicitly aliased original request and remain passive', async () => {
+  const observed = [];
+  const original = { url: () => `${backendOrigin}/functions/v1/process-command`, method: () => 'POST',
+    allHeaders: async () => ({ authorization: 'Bearer fixture.jwt.token' }), postDataJSON: () => ({}) };
+  const proxy = new Proxy(original, {});
+  const tracker = new AuthenticatedHostedBrowserActionTracker({ backendOrigin, appOrigin,
+    startAction: async () => ({ actionId: 'aliased-action' }), finishAction: async () => undefined,
+    actionDiagnostics: {
+      onStart: (request, classification) => { observed.push(['start', request, classification.route]);
+        throw new Error('ignored diagnostic'); },
+      onSettled: (request, classification) => { observed.push(['settled', request, classification.route]);
+        throw new Error('ignored diagnostic'); },
+    },
+  });
+  tracker.aliasRequest(proxy, original);
+  assert.equal(await tracker.begin(proxy), 'aliased-action');
+  assert.deepEqual(observed.map(([event, request, route]) => [event, request === original, route]), [
+    ['start', true, '/functions/v1/process-command'],
+    ['settled', true, '/functions/v1/process-command'],
+  ]);
+  assert.throws(() => tracker.aliasRequest(proxy, {}), /REQUEST_ALIAS_REJECTED/u);
 });
 
 test('response body ownership fails closed and joins context cancellation before returning', async () => {

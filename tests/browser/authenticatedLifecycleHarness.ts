@@ -16,6 +16,10 @@ export type AuthenticatedLifecycleActor = Readonly<{
   user: Readonly<{ id: string; email: string }>;
 }>;
 
+type AuthenticatedLifecycleEntryObservation = Readonly<{
+  onHostedSessionPending?: () => void;
+}>;
+
 export type AuthenticatedLifecycleSetup = Readonly<{
   executionId: string;
   journeyBinding: string;
@@ -66,8 +70,16 @@ const apiBaseUrl = process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '';
 const controlBaseUrl = process.env.ENTERPRISE_LIFECYCLE_CONTROL_URL ?? apiBaseUrl;
 const authStorageKey = process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token';
 const hostedRealAuth = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
-const hostedSessionCache = new Map<string, Readonly<{ key: string; value: string }>>();
+type AuthenticatedLifecycleStoredSession = Readonly<{
+  key: string;
+  value: string;
+  accessToken: string;
+  actorId: string;
+  sessionId: string;
+}>;
+const hostedSessionCache = new Map<string, AuthenticatedLifecycleStoredSession>();
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const hostedRealAuthSessionLimitMs = 15_000;
 const identityUpstreamCodes = new Set([
   'bad_jwt', 'email_address_invalid', 'email_address_not_authorized', 'email_not_confirmed', 'invalid_credentials',
   'not_admin', 'over_email_send_rate_limit', 'over_request_rate_limit', 'signup_disabled', 'user_already_exists',
@@ -275,6 +287,72 @@ const identityCategoryForStatus = (status: number) => status === 400 ? 'IDENTITY
           : status === 429 ? 'RATE_LIMITED' as const
             : status >= 500 && status <= 599 ? 'UPSTREAM_UNAVAILABLE' as const : 'TRANSPORT_FAILURE' as const;
 
+export const authenticatedLifecycleExpectedAuthStorageKey = (backendUrl: string) => {
+  try {
+    const backend = new URL(backendUrl);
+    const match = /^([a-z0-9]{20})[.]supabase[.]co$/u.exec(backend.hostname);
+    if (backend.protocol === 'https:' && match && !backend.username && !backend.password && !backend.port
+      && backend.pathname === '/' && !backend.search && !backend.hash) {
+      return `sb-${match[1]}-auth-token`;
+    }
+  } catch {
+    // Normalize malformed and non-Supabase inputs to the same fail-closed boundary.
+  }
+  throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_STORAGE_KEY_REJECTED');
+};
+
+export const authenticatedLifecycleValidateStoredSession = (
+  entries: ReadonlyArray<Readonly<{ key: string; value: string }>>,
+  expectedKey: string,
+  expectedActorId: string,
+  expectedSessionId?: string,
+): AuthenticatedLifecycleStoredSession => {
+  if (entries.length !== 1 || entries[0]?.key !== expectedKey || !entries[0].value || !uuid.test(expectedActorId)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REJECTED');
+  }
+  try {
+    const stored = JSON.parse(entries[0].value) as Record<string, unknown>;
+    const currentSession = stored.currentSession && typeof stored.currentSession === 'object'
+      ? stored.currentSession as Record<string, unknown> : stored;
+    const user = currentSession.user && typeof currentSession.user === 'object'
+      ? currentSession.user as Record<string, unknown> : null;
+    const accessToken = currentSession.access_token;
+    if (typeof accessToken !== 'string' || !accessToken || user?.id !== expectedActorId) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REJECTED');
+    }
+    const encoded = accessToken.split('.')[1] ?? '';
+    const normalized = encoded.replace(/-/gu, '+').replace(/_/gu, '/');
+    const claims = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as Record<string, unknown>;
+    const sessionId = claims.session_id;
+    if (claims.sub !== expectedActorId || typeof sessionId !== 'string' || !uuid.test(sessionId)
+      || (expectedSessionId !== undefined && sessionId !== expectedSessionId)) {
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REJECTED');
+    }
+    return Object.freeze({ key: entries[0].key, value: entries[0].value,
+      accessToken, actorId: expectedActorId, sessionId });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REJECTED') {
+      throw error;
+    }
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REJECTED');
+  }
+};
+
+const authenticatedLifecycleReadStoredSession = async (
+  page: Page,
+  expectedKey: string,
+  expectedActorId: string,
+  expectedSessionId?: string,
+) => authenticatedLifecycleValidateStoredSession(await page.evaluate(() => Object.keys(localStorage)
+  .filter(key => key.startsWith('sb-'))
+  .map(key => ({ key, value: localStorage.getItem(key) || '' }))), expectedKey, expectedActorId, expectedSessionId);
+
+const authenticatedLifecycleRemainingSessionMs = (deadline: number) => {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+  return remaining;
+};
+
 const sessionFor = (actor: AuthenticatedLifecycleActor) => ({
   access_token: actor.token,
   refresh_token: `${actor.token}-refresh`,
@@ -288,11 +366,13 @@ export const authenticatedLifecycleEnterAs = async (
   page: Page,
   actor: AuthenticatedLifecycleActor,
   beforeIntentionalNavigation: () => Promise<void> = async () => undefined,
+  observation: AuthenticatedLifecycleEntryObservation = {},
 ) => {
   if (hostedRealAuth) {
     if (actor.authKind !== 'supabase_auth' || !actor.persona || !actor.projectName || !actor.password) {
       throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_ACTOR_REQUIRED');
     }
+    const expectedStorageKey = authenticatedLifecycleExpectedAuthStorageKey(required(apiBaseUrl, 'API_BASE_URL'));
     await test.step('hosted:actor:entry-initial', beforeIntentionalNavigation);
     await page.goto('/');
     await test.step('hosted:actor:entry-canonical', beforeIntentionalNavigation);
@@ -302,20 +382,33 @@ export const authenticatedLifecycleEnterAs = async (
       localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({ type: 'my_work' }));
     });
     await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
-    const cacheKey = `${actor.user.id}:${actor.persona}`;
+    const cacheKey = `${new URL(apiBaseUrl).origin}:${expectedStorageKey}:${actor.projectName}:${actor.user.id}:${actor.persona}`;
     const cached = hostedSessionCache.get(cacheKey);
+    let sessionDeadline: number;
     if (cached) {
+      sessionDeadline = Date.now() + hostedRealAuthSessionLimitMs;
+      try {
+        authenticatedLifecycleValidateStoredSession(
+          [{ key: cached.key, value: cached.value }], expectedStorageKey, actor.user.id, cached.sessionId,
+        );
+      } catch {
+        hostedSessionCache.delete(cacheKey);
+        await reportIdentityDiagnostic(actor.projectName, 'SESSION_MISSING');
+        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+      }
       await test.step('hosted:actor:entry-cached', beforeIntentionalNavigation);
       await page.evaluate(({ key, value }) => localStorage.setItem(key, value), cached);
-      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.reload({ waitUntil: 'domcontentloaded',
+        timeout: authenticatedLifecycleRemainingSessionMs(sessionDeadline) });
     } else {
       await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toBeVisible();
       await page.getByLabel('Work email', { exact: false }).fill(actor.user.email);
       await page.getByLabel('Password', { exact: true }).fill(actor.password);
+      sessionDeadline = Date.now() + hostedRealAuthSessionLimitMs;
       const signInResponse = page.waitForResponse(response => {
         const url = new URL(response.url());
         return url.pathname.endsWith('/auth/v1/token') && url.searchParams.get('grant_type') === 'password';
-      });
+      }, { timeout: authenticatedLifecycleRemainingSessionMs(sessionDeadline) });
       let response;
       try {
         await page.getByRole('button', { name: 'Sign in to AvalaOS', exact: true }).click();
@@ -332,30 +425,41 @@ export const authenticatedLifecycleEnterAs = async (
         await reportIdentityDiagnostic(actor.projectName, category, upstreamCode);
         throw new Error(`ENTERPRISE_LIFECYCLE_BROWSER_IDENTITY_${category}`);
       }
-      const stored = await page.evaluate(() => {
-        const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
-        return key ? { key, value: localStorage.getItem(key) || '' } : null;
-      });
-      if (!stored?.value) {
-        await reportIdentityDiagnostic(actor.projectName, 'SESSION_MISSING');
-        throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
-      }
-      hostedSessionCache.set(cacheKey, stored);
     }
-    await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true })).toHaveCount(0);
-    const accessToken = await page.evaluate(() => {
-      const key = Object.keys(localStorage).find(candidate => candidate.startsWith('sb-'));
-      const stored = key ? JSON.parse(localStorage.getItem(key) || '{}') : {};
-      return stored.access_token ?? stored.currentSession?.access_token ?? '';
-    });
-    if (!accessToken) {
+    let stored: AuthenticatedLifecycleStoredSession | null = null;
+    let pendingSessionObserved = false;
+    try {
+      await expect.poll(async () => {
+        try {
+          stored = await authenticatedLifecycleReadStoredSession(page, expectedStorageKey, actor.user.id,
+            cached?.sessionId);
+          return true;
+        } catch {
+          if (!pendingSessionObserved) {
+            pendingSessionObserved = true;
+            observation.onHostedSessionPending?.();
+          }
+          return false;
+        }
+      }, { timeout: authenticatedLifecycleRemainingSessionMs(sessionDeadline) }).toBe(true);
+      await expect(page.getByRole('heading', { name: 'Sign in securely', exact: true }))
+        .toHaveCount(0, { timeout: authenticatedLifecycleRemainingSessionMs(sessionDeadline) });
+      stored = await authenticatedLifecycleReadStoredSession(page, expectedStorageKey, actor.user.id,
+        cached?.sessionId);
+    } catch {
+      if (cached) hostedSessionCache.delete(cacheKey);
       await reportIdentityDiagnostic(actor.projectName, 'SESSION_MISSING');
       throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
     }
+    if (!stored) {
+      await reportIdentityDiagnostic(actor.projectName, 'SESSION_MISSING');
+      throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_REAL_AUTH_SESSION_REQUIRED');
+    }
+    if (!cached) hostedSessionCache.set(cacheKey, stored);
     await authenticatedLifecycleControl('/control/bind-browser-session', {
       projectName: actor.projectName,
       persona: actor.persona,
-      accessToken,
+      accessToken: stored.accessToken,
     });
     return;
   }

@@ -23,6 +23,8 @@ export const authenticatedLocalSourceDigests = () => {
   const paths = [...new Set([
     ...catalog.cases.filter(c => AUTHENTICATED_ACCEPTANCE_TEST_IDS.includes(c.testId)).flatMap(c => c.sourceReference),
     'scripts/verifyAuthenticatedLocalEvidence.mjs', 'scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs',
+    'scripts/connectedBrowserDiagnostics.mjs', 'scripts/connectedBrowserPlaywrightReporter.mjs',
+    'scripts/verifyConnectedBrowserDiagnostics.mjs',
     'tests/acceptance/catalog/test-catalog.json', 'tests/acceptance/catalog/schema.json',
     'scripts/authenticatedAcceptanceCriteria.mjs',
     '.github/workflows/authenticated-product-acceptance.yml', 'package.json',
