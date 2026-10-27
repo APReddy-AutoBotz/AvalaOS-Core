@@ -1,5 +1,13 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## PR #338 ambient-CI unit-fixture failure (2026-10-27)
+
+**Latest authority (2026-10-27):** AP authorizes committing and pushing the verified test-environment isolation correction to the same draft PR #338 and verifying its new exact-candidate CI checks and fresh artifacts. This supersedes the earlier local-only/no-push stop for this correction. Keep strict CI identity validation, 15,000 ms and providers OFF. Require all 17 attempt-1 workflows, eleven fresh preparation archives, independently verified PR C85commands/241assertions/audit0 and retained-only108-row reconstruction before candidate PASS. Keep draft; no merge/release, hosted diagnostic/retry, live access, Netlify, paid calls or full acceptance. Both hosted allowances remain zero; failed candidate evidence stays immutable.
+
+**Confirmed source defect / executed before evidence:** local diagnostic fixtures inherited GITHUB_ACTIONS in verifier calls. The unchanged suite passes 12/12 locally and fails exactly four cases under ambient CI; the enterprise lifecycle group fails 4/40 and Preparation group fails 4/20, with the sibling eight tests passing. All runs completed below 15 seconds with zero network attempts and owned cleanup. The failed candidate's four workflows share this dependency; missing archives and release-gate failures are downstream consequences. Exclusive historical attribution remains limited by unavailable hosted test-level diagnostics. The private launcher NOT RUN and sandbox symlink EPERM attempts remain preserved.
+
+AP authorizes explicit test environments and regression checks only, preserving the runtime CI rejection guard. Correction verification is tracked under the [active completion plan](../planning/hosted-acceptance-completion.md). No push, merge, hosted retry/run, live access or acceptance promotion is authorized. Before evidence remains immutable at output/local-private/pr338-four-workflow-root-cause/.
+
 ## PR #338 connected-browser observability gap (2026-10-27)
 
 **Latest authorization (2026-10-27):** AP now authorizes committing and pushing these verified diagnostics to the same draft PR #338, then verifying all 17 exact-candidate attempt-1 workflows, eleven fresh preparation archives (including the connected-browser diagnostic), PR C85commands/241assertions/audit0 and retained-only108-row reconstruction. This supersedes the earlier no-push/new-CI boundary below only for this diagnostics candidate. Keep the PR draft, 15,000 ms and real providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/infrastructure, Netlify, paid calls or full acceptance is authorized. Preserve prior failures and do not reuse their artifacts.

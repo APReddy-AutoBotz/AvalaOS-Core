@@ -1,5 +1,11 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Diagnostic unit-test environment isolation (2026-10-27)
+
+**Latest authority (2026-10-27):** AP authorizes committing and pushing the verified test-environment isolation correction to the same draft PR #338 and verifying its new exact-candidate CI checks and fresh artifacts. This supersedes the earlier local-only/no-push stop for this correction. Keep strict CI identity validation, 15,000 ms and providers OFF. Require all 17 attempt-1 workflows, eleven fresh preparation archives, independently verified PR C85commands/241assertions/audit0 and retained-only108-row reconstruction before candidate PASS. Keep draft; no merge/release, hosted diagnostic/retry, live access, Netlify, paid calls or full acceptance. Both hosted allowances remain zero; failed candidate evidence stays immutable.
+
+Local artifact fixtures must explicitly supply a controlled local environment to the verifier. The runtime verifier continues to default to the real process environment and rejects local artifact identities under GitHub Actions. Test injection is not an artifact or workflow authority override. An isolated subprocess regression exercises the formerly failing local fixtures under ambient CI, while exact CI-context acceptance and head/run/attempt/workflow/job substitutions verify the strict boundary. No product, schema, role, timeout or runtime behavior changes. AP authorizes local correction/checks only; no push, merge or hosted run.
+
 ## Connected-browser diagnostic trust boundary (2026-10-27)
 
 **Latest authorization (2026-10-27):** AP now authorizes committing and pushing these verified diagnostics to the same draft PR #338, then verifying all 17 exact-candidate attempt-1 workflows, eleven fresh preparation archives (including the connected-browser diagnostic), PR C85commands/241assertions/audit0 and retained-only108-row reconstruction. This supersedes the earlier no-push/new-CI boundary below only for this diagnostics candidate. Keep the PR draft, 15,000 ms and real providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/infrastructure, Netlify, paid calls or full acceptance is authorized. Preserve prior failures and do not reuse their artifacts.

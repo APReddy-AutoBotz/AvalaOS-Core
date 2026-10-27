@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## PR #338 test-only CI environment correction (2026-10-27)
+
+**Latest authority (2026-10-27):** AP authorizes committing and pushing the verified test-environment isolation correction to the same draft PR #338 and verifying its new exact-candidate CI checks and fresh artifacts. This supersedes the earlier local-only/no-push stop for this correction. Keep strict CI identity validation, 15,000 ms and providers OFF. Require all 17 attempt-1 workflows, eleven fresh preparation archives, independently verified PR C85commands/241assertions/audit0 and retained-only108-row reconstruction before candidate PASS. Keep draft; no merge/release, hosted diagnostic/retry, live access, Netlify, paid calls or full acceptance. Both hosted allowances remain zero; failed candidate evidence stays immutable.
+
+AP authorizes local test-environment isolation and checks, with no push, merge or new hosted execution. Three read-only reviews completed before writes and the root independently reproduced four CI-only unit failures on unchanged source. Root owns the single test-file correction, ambient-CI regression, canonical documentation, provenance and local validation in the existing draft PR. Preserve strict runtime identity guards, 15,000 ms/providers OFF, prior failures and zero hosted allowances. Follow the [active completion plan](../planning/hosted-acceptance-completion.md); stop with reviewable uncommitted local changes.
+
 ## PR #338 connected-browser diagnostics (2026-10-27)
 
 **Latest authorization (2026-10-27):** AP now authorizes committing and pushing these verified diagnostics to the same draft PR #338, then verifying all 17 exact-candidate attempt-1 workflows, eleven fresh preparation archives (including the connected-browser diagnostic), PR C85commands/241assertions/audit0 and retained-only108-row reconstruction. This supersedes the earlier no-push/new-CI boundary below only for this diagnostics candidate. Keep the PR draft, 15,000 ms and real providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/infrastructure, Netlify, paid calls or full acceptance is authorized. Preserve prior failures and do not reuse their artifacts.

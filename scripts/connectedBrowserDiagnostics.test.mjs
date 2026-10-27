@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
@@ -24,6 +26,8 @@ import ConnectedBrowserPlaywrightReporter, {
 import { runConnectedBrowserDiagnosticOrchestration } from './runEnterpriseLifecycleAcceptanceBrowser.mjs';
 import { verifyConnectedBrowserDiagnostics } from './verifyConnectedBrowserDiagnostics.mjs';
 
+// Local artifact fixtures must not inherit the CI runner's identity context.
+const localEnvironment = Object.freeze({});
 const nonce = 'a'.repeat(64);
 const localIdentity = Object.freeze({ headSha: 'local-working-tree', runId: 'local-123', runAttempt: '1',
   workflow: 'local', logicalJob: 'local',
@@ -109,7 +113,7 @@ test('child boundary rejects missing, malformed, oversized, stale, extra-key and
   } finally { await unlink(paths.childPath); }
   await symlink(target, paths.finalPath, process.platform === 'win32' ? 'junction' : 'dir');
   try {
-    await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root }), /FILE_REJECTED/u);
+    await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment }), /FILE_REJECTED/u);
   } finally { await unlink(paths.finalPath); }
 });
 
@@ -130,7 +134,7 @@ test('session rejects stale final or private output and records early failure wi
   assert.equal(final.status, 'failed');
   assert.deepEqual(final.failure, { phase: 'fixture', code: 'FIXTURE_FAILED' });
   assert.deepEqual(final.cleanup, { preview: 'not-attempted', fixture: 'not-attempted' });
-  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root })).status, 'failed');
+  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment })).status, 'failed');
 });
 
 test('a successful browser exit cannot hide an unexpected child diagnostic', async t => {
@@ -143,7 +147,7 @@ test('a successful browser exit cannot hide an unexpected child diagnostic', asy
     operations.cleanupPreview = async () => 'passed';
     operations.cleanupFixture = async () => 'passed';
     await assert.rejects(runConnectedBrowserDiagnosticOrchestration({ session, operations }), /UNEXPECTED_CHILD/u);
-    await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root }), /SCHEMA_REJECTED/u);
+    await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment }), /SCHEMA_REJECTED/u);
     const retained = JSON.parse(await readFile(paths.finalPath, 'utf8'));
     assert.equal(retained.status, 'incomplete');
     assert.deepEqual(retained.cleanup, { preview: 'passed', fixture: 'passed' });
@@ -156,24 +160,24 @@ test('unknown cleanup makes the terminal incomplete and verifier rejects it', as
   const final = await completeFailure(session, 'fixture', { preview: 'not-attempted', fixture: 'unknown' });
   assert.equal(final.status, 'incomplete');
   assert.equal(final.failure.phase, 'fixture');
-  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root }), /INCOMPLETE/u);
-  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, retainIncomplete: true })).status, 'incomplete');
+  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment }), /INCOMPLETE/u);
+  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment, retainIncomplete: true })).status, 'incomplete');
 });
 
 test('retention validates interrupted checkpoints without accepting unsafe contents or substituted sources', async t => {
   const root = await workspace(t), paths = connectedBrowserDiagnosticPaths(root);
   const session = await createConnectedBrowserDiagnosticSession({ workspaceRoot: root, identity: localIdentity });
   await session.start('fixture');
-  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root }), /SCHEMA_REJECTED/u);
-  const interrupted = await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, retainIncomplete: true });
+  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment }), /SCHEMA_REJECTED/u);
+  const interrupted = await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment, retainIncomplete: true });
   assert.equal(interrupted.status, 'incomplete');
   assert.equal(interrupted.phase, 'fixture');
   assert.equal(interrupted.cleanup.fixture, 'unknown');
   await writeFile(paths.finalPath, JSON.stringify({ ...interrupted, rawMessage: 'private-canary' }));
-  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, retainIncomplete: true }), /SCHEMA_REJECTED/u);
+  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment, retainIncomplete: true }), /SCHEMA_REJECTED/u);
   await writeFile(paths.finalPath, JSON.stringify(interrupted));
   await writeFile(path.join(root, CONNECTED_BROWSER_SOURCE_PATHS[0]), 'changed');
-  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, retainIncomplete: true }), /SOURCE_REJECTED/u);
+  await assert.rejects(verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment, retainIncomplete: true }), /SOURCE_REJECTED/u);
 });
 
 test('early missing database produces a failed diagnostic with both cleanups positively not attempted', async t => {
@@ -190,7 +194,7 @@ test('early missing database produces a failed diagnostic with both cleanups pos
   assert.deepEqual(final.failure, { phase: 'fixture', code: 'DATABASE_URL_REQUIRED' });
   assert.deepEqual(final.cleanup, { preview: 'not-attempted', fixture: 'not-attempted' });
   assert.equal(JSON.stringify(final).includes('private database detail'), false);
-  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root })).status, 'failed');
+  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment: localEnvironment })).status, 'failed');
 });
 
 test('verifier derives CI context before trusting artifact classification', async t => {
@@ -202,6 +206,42 @@ test('verifier derives CI context before trusting artifact classification', asyn
     GITHUB_JOB: 'connected-browser', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '1',
     PILOT_ACCEPTANCE_HEAD: 'c'.repeat(40),
   } }), /IDENTITY_REJECTED/u);
+});
+
+test('verifier accepts exact CI identity and rejects substituted execution context', async t => {
+  const root = await workspace(t);
+  const environment = Object.freeze({
+    GITHUB_ACTIONS: 'true', GITHUB_WORKFLOW: 'Authenticated Product Acceptance Preparation',
+    GITHUB_JOB: 'connected-browser', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '1',
+    PILOT_ACCEPTANCE_HEAD: 'c'.repeat(40),
+  });
+  const identity = resolveConnectedBrowserDiagnosticIdentity(environment, nonce);
+  const session = await createConnectedBrowserDiagnosticSession({ workspaceRoot: root, identity });
+  await completeFailure(session);
+  assert.equal((await verifyConnectedBrowserDiagnostics({ workspaceRoot: root, environment })).status, 'failed');
+  for (const changed of [
+    { PILOT_ACCEPTANCE_HEAD: 'd'.repeat(40) }, { GITHUB_RUN_ID: '43' }, { GITHUB_RUN_ATTEMPT: '2' },
+    { GITHUB_WORKFLOW: 'Other workflow' }, { GITHUB_JOB: 'other-job' },
+  ]) {
+    await assert.rejects(verifyConnectedBrowserDiagnostics({
+      workspaceRoot: root, environment: { ...environment, ...changed },
+    }), /IDENTITY_REJECTED/u);
+  }
+});
+
+test('local fixture contracts stay isolated under ambient CI while CI rejection remains strict', { timeout: 15000 }, () => {
+  const environment = { ...process.env, GITHUB_ACTIONS: 'true' };
+  // The selected child tests exclude this subprocess regression itself.
+  delete environment.NODE_TEST_CONTEXT;
+  const child = spawnSync(process.execPath, [
+    '--test', '--test-timeout=15000', '--test-reporter=tap',
+    '--test-name-pattern=^(session rejects stale|unknown cleanup makes|retention validates interrupted|early missing database|verifier derives CI context)',
+    fileURLToPath(import.meta.url),
+  ], { env: environment, encoding: 'utf8', timeout: 15000, maxBuffer: 256 * 1024, windowsHide: true });
+  assert.equal(child.error, undefined, 'AMBIENT_CI_FIXTURE_CHILD_FAILED');
+  assert.equal(child.status, 0, 'AMBIENT_CI_FIXTURE_REGRESSION_FAILED');
+  assert.match(child.stdout, /^# pass 5$/mu);
+  assert.match(child.stdout, /^# fail 0$/mu);
 });
 
 test('reporter writes only a correlated terminal failure and ignores caught, unknown-title and unknown-project errors', async t => {
