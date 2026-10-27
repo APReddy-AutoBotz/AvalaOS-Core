@@ -56,21 +56,47 @@ const requestDescription = async request => {
 };
 
 export class AuthenticatedHostedBrowserActionTracker {
-  constructor({ backendOrigin, appOrigin, startAction, prepareAction = undefined, finishAction }) {
+  constructor({ backendOrigin, appOrigin, startAction, prepareAction = undefined, finishAction,
+    actionDiagnostics = undefined }) {
     if (typeof startAction !== 'function' || typeof finishAction !== 'function') {
       throw new Error('AUTHENTICATED_BROWSER_TRACKER_CALLBACK_REJECTED');
     }
     if (prepareAction !== undefined && typeof prepareAction !== 'function') {
       throw new Error('AUTHENTICATED_BROWSER_TRACKER_CALLBACK_REJECTED');
     }
+    if (actionDiagnostics !== undefined && (!actionDiagnostics || typeof actionDiagnostics !== 'object'
+      || (actionDiagnostics.onStart !== undefined && typeof actionDiagnostics.onStart !== 'function')
+      || (actionDiagnostics.onSettled !== undefined && typeof actionDiagnostics.onSettled !== 'function'))) {
+      throw new Error('AUTHENTICATED_BROWSER_TRACKER_CALLBACK_REJECTED');
+    }
     this.classifyRequest = createAuthenticatedHostedRequestClassifier({ backendOrigin, appOrigin });
     this.startAction = startAction;
     this.prepareAction = prepareAction ?? null;
     this.finishAction = finishAction;
+    this.actionDiagnostics = actionDiagnostics ?? null;
     this.classifications = new WeakMap();
     this.actionReferences = new WeakMap();
     this.preparations = new WeakMap();
     this.finishes = new WeakMap();
+    this.originalRequests = new WeakMap();
+  }
+
+  aliasRequest(alias, original) {
+    if (!alias || !original || (typeof alias !== 'object' && typeof alias !== 'function')
+      || (typeof original !== 'object' && typeof original !== 'function')) {
+      throw new Error('AUTHENTICATED_BROWSER_REQUEST_ALIAS_REJECTED');
+    }
+    const existing = this.originalRequests.get(alias);
+    if (existing && existing !== original) throw new Error('AUTHENTICATED_BROWSER_REQUEST_ALIAS_REJECTED');
+    this.originalRequests.set(alias, original);
+    return alias;
+  }
+
+  originalRequest(request) { return this.originalRequests.get(request) ?? request; }
+
+  observeAction(name, request, classification) {
+    try { this.actionDiagnostics?.[name]?.(this.originalRequest(request), classification); }
+    catch { /* diagnostics never affect action authority */ }
   }
 
   classify(request) {
@@ -93,11 +119,15 @@ export class AuthenticatedHostedBrowserActionTracker {
       const headers = await request.allHeaders();
       let requestBody = { method: request.method(), route: classification.route };
       try { requestBody = request.postDataJSON() ?? requestBody; } catch { /* body-free product query */ }
-      const result = await this.startAction({
-        accessToken: (header(headers, 'authorization')).replace(/^Bearer\s+/iu, ''),
-        requestBody,
-        route: classification.route,
-      });
+      this.observeAction('onStart', request, classification);
+      let result;
+      try {
+        result = await this.startAction({
+          accessToken: (header(headers, 'authorization')).replace(/^Bearer\s+/iu, ''),
+          requestBody,
+          route: classification.route,
+        });
+      } finally { this.observeAction('onSettled', request, classification); }
       if (!result || typeof result.actionId !== 'string') {
         throw new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED');
       }

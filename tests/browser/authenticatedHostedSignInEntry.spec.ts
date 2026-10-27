@@ -2,6 +2,10 @@ import { expect, test, type Request, type Route } from '@playwright/test';
 import { appendFile } from 'node:fs/promises';
 import { AuthenticatedHostedBrowserActionTracker } from '../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
+  capturePreactivationSignInRequestCorrelationAnnotation,
+  createPreactivationSignInRequestCorrelationCollector,
+} from '../../scripts/preactivationSignInRequestCorrelation.mjs';
+import {
   authenticatedLifecycleControl,
   authenticatedLifecycleAttemptUnauthorizedProcessUpdate,
   authenticatedLifecycleEnterAs,
@@ -196,6 +200,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   };
   let admissionGate: AdmissionGate | null = null;
   const gatedRequests = new WeakMap<Request, Request>();
+  const requestCorrelation = createPreactivationSignInRequestCorrelationCollector();
   const queueNetworkAction = (operation: () => Promise<unknown>) => {
     networkActionTail = networkActionTail.then(operation).catch(error => {
       if (!networkActionError) networkActionError = error;
@@ -204,6 +209,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   const tracker = new AuthenticatedHostedBrowserActionTracker({
     backendOrigin: apiOrigin,
     appOrigin,
+    actionDiagnostics: requestCorrelation.actionDiagnostics,
     startAction: async input => {
       pendingActionStarts += 1;
       try {
@@ -242,6 +248,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       },
     });
     gatedRequests.set(request, gated);
+    tracker.aliasRequest(gated, request);
     return gated;
   };
   const networkTracker = {
@@ -260,6 +267,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     onExternalRequest: origin => unexpectedOrigins.push(origin),
     onHttpRequest: () => { observedHttpRequests += 1; },
     onTrackerError: error => { if (!networkActionError) networkActionError = error; },
+    requestDiagnostics: requestCorrelation.requestDiagnostics,
     dispatchAllowedRequest: async route => {
       proxiedOrigins.push(new URL(route.request().url()).origin);
       await dispatchToLocalProxy(route);
@@ -469,7 +477,24 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     let boundaryOutcome: Promise<Readonly<{ state: 'fulfilled' }> | Readonly<{ state: 'rejected'; error: unknown }>> | null = null;
     try {
       await expect.poll(() => admissionGate?.waiting).toBe(true);
-      expect(pendingActionStarts).toBe(0);
+      try {
+        expect(pendingActionStarts).toBe(0);
+      } catch (error) {
+        try {
+          capturePreactivationSignInRequestCorrelationAnnotation({
+            collector: requestCorrelation,
+            annotations: testInfo.annotations,
+            input: {
+              targetRequest: admissionGate?.request ?? null,
+              gate: { armed: admissionGate?.armed === true, waiting: admissionGate?.waiting === true,
+                released: admissionGate?.released === true },
+              pendingActionStarts,
+              activeActionCount: activeActions.size,
+            },
+          });
+        } catch { /* diagnostics never replace the original assertion */ }
+        throw error;
+      }
       expect(activeActions.size).toBe(0);
       let boundaryResult: Readonly<{ state: 'fulfilled' }> | Readonly<{ state: 'rejected'; error: unknown }> | null = null;
       boundaryOutcome = settleActorTransitionEvidence().then(

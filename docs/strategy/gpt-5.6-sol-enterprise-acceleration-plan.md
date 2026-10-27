@@ -1,5 +1,18 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## PR #338 request-correlation diagnostics (2026-10-27)
+
+**Latest authorization (2026-10-27):** AP authorizes committing and pushing these verified diagnostics to the same draft PR #338, then independently verifying all 17 exact-candidate attempt-1 workflows and TWELVE fresh preparation archives, including the new preactivation sign-in diagnostic. Require PR C85commands/241assertions/audit0 and retained-only108-row reconstruction; no old candidate artifacts substitute. This supersedes the earlier local-only/no-push boundary for this diagnostics slice. Keep draft, strict CI identity, 15,000 ms and providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/access, Netlify, paid calls or full acceptance. Both hosted allowances remain zero. Preserve every prior failure and the incomplete one-case local parent.
+
+The current authorized boundary is local targeted diagnostics and required checks. Architecture, security and quality reviewers finished before implementation writes; root synthesized their findings. One implementation worker owns the coupled passive hooks, collector, assertion annotation and schema/reporter tests; root owns integration, documentation, provenance and final evidence. Preserve prior failures and strict identity, 15,000 ms/providers OFF. No product fix, push, merge, hosted retry/run or full acceptance. Follow the [active completion plan](../planning/hosted-acceptance-completion.md); stop with reviewable uncommitted changes.
+
+Executed targeted diagnostics verification passed, including 63 focused tests, strict identity/privacy checks and one isolated Pixel entry case with owned cleanup. The one-case parent remains deliberately incomplete; neither full acceptance nor the prior failure cause is established. Results: output/local-private/pr338-request-correlation-local/RESULTS.md. Changes remain local and uncommitted.
+
+
+## PR #338 preactivation diagnostic boundary (2026-10-27)
+
+AP authorizes local diagnostics and checks only, preserving 15,000 ms/providers OFF. Three read-only architecture/security/quality reviews closed before writes. Root synthesized the findings and owns workflow contracts, documentation, provenance and final verification; one implementation worker owns the coupled sign-in runner/schema/reporter/verifier/probe boundary. No nested delegation or reviewer runs during implementation. The unchanged 20-case replay passed, so no product fix or presumed hosted root cause is justified. Follow the [active completion plan](../planning/hosted-acceptance-completion.md), preserve prior failures and stop with uncommitted diagnostics. No push, merge/release or new hosted execution is authorized.
+
 ## PR #338 test-only CI environment correction (2026-10-27)
 
 **Latest authority (2026-10-27):** AP authorizes committing and pushing the verified test-environment isolation correction to the same draft PR #338 and verifying its new exact-candidate CI checks and fresh artifacts. This supersedes the earlier local-only/no-push stop for this correction. Keep strict CI identity validation, 15,000 ms and providers OFF. Require all 17 attempt-1 workflows, eleven fresh preparation archives, independently verified PR C85commands/241assertions/audit0 and retained-only108-row reconstruction before candidate PASS. Keep draft; no merge/release, hosted diagnostic/retry, live access, Netlify, paid calls or full acceptance. Both hosted allowances remain zero; failed candidate evidence stays immutable.

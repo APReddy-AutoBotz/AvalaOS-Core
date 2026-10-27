@@ -8,6 +8,37 @@ import { loadCatalog, loadExecutionBindings } from './exhaustiveAcceptanceModel.
 
 const digest = character => `sha256:${character.repeat(64)}`;
 
+test('preactivation sign-in failures retain only independently verified diagnostics without enabling later checks', async () => {
+  const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
+  const job = workflow.jobs['preactivation-checkout'];
+  const index = job.steps.findIndex(step => step.name === 'Verify actual application sign-in entry without credentials');
+  const command = job.steps[index], verify = job.steps[index + 1], upload = job.steps[index + 2];
+  assert.equal(job.if, "github.event_name != 'workflow_dispatch'");
+  assert.equal(job['timeout-minutes'], 45);
+  assert.equal(command['continue-on-error'], undefined);
+  assert.equal(command.if, undefined);
+  assert.match(command.run, /^node scripts\/testAuthenticatedHostedSignInEntry[.]mjs\n/u);
+  assert.equal(verify.id, 'preactivation_sign_in_diagnostic_verify');
+  assert.equal(verify.if, 'always()');
+  assert.equal(verify.run, 'node scripts/verifyPreactivationSignInDiagnostics.mjs --retain-incomplete');
+  assert.equal(verify['continue-on-error'], undefined);
+  assert.equal(upload.if, "always() && steps.preactivation_sign_in_diagnostic_verify.outcome == 'success'");
+  assert.equal(upload.uses, 'actions/upload-artifact@v4');
+  assert.deepEqual(upload.with, {
+    name: 'preactivation-sign-in-diagnostic-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}',
+    path: 'output/acceptance/authenticated-product/preactivation-sign-in-diagnostic.json',
+    'if-no-files-found': 'error', 'retention-days': 14,
+  });
+  for (const name of ['Verify completed process-read failure states', 'Verify scoped navigation while unrelated Delivery reads are pending']) {
+    const step = job.steps.find(value => value.name === name);
+    assert.equal(step.if, undefined);
+    assert.equal(step['continue-on-error'], undefined);
+  }
+  assert.doesNotMatch(JSON.stringify([verify, upload]), /secrets\.|vars\.|inputs\.|\.zip|\.log|trace|screenshot|retry/u);
+  assert.match(workflow.jobs['source-and-authority'].steps.find(step => step.name === 'Feature contracts and evidence rejection').run,
+    /node --test scripts\/preactivationSignInDiagnostics[.]test[.]mjs scripts\/preactivationSignInRequestCorrelation[.]test[.]mjs/u);
+});
+
 test('connected browser failures retain a separate verified sanitized diagnostic without weakening acceptance', async () => {
   const workflow = parseWorkflowYaml(await readFile('.github/workflows/authenticated-product-acceptance.yml', 'utf8'));
   const job = workflow.jobs['connected-browser'];

@@ -113,6 +113,7 @@ jobs:
         run: |
           npm run test:authenticated-product:source
           node --test scripts/runEnterpriseLifecycleAcceptanceBrowser.test.mjs scripts/connectedBrowserDiagnostics.test.mjs
+          node --test scripts/preactivationSignInDiagnostics.test.mjs scripts/preactivationSignInRequestCorrelation.test.mjs
           npm run test:provider-secret-backend
           node --test scripts/studioHandoffPersonaArtifact.test.mjs
           node --test scripts/studioHandoffActionTargeting.test.mjs
@@ -517,6 +518,18 @@ jobs:
           node scripts/testAuthenticatedHostedSignInEntry.mjs
           node scripts/authenticatedHostedCheckout.mjs || { git status --porcelain=v1 --untracked-files=all; exit 1; }
         shell: bash
+      - name: Verify sanitized preactivation sign-in diagnostic
+        id: preactivation_sign_in_diagnostic_verify
+        if: always()
+        run: node scripts/verifyPreactivationSignInDiagnostics.mjs --retain-incomplete
+      - name: Retain sanitized preactivation sign-in diagnostic
+        if: always() && steps.preactivation_sign_in_diagnostic_verify.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preactivation-sign-in-diagnostic-${{ env.RELEASE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/acceptance/authenticated-product/preactivation-sign-in-diagnostic.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify completed process-read failure states
         run: |-
           node scripts/testAuthenticatedHostedSignInEntry.mjs --process-read-state

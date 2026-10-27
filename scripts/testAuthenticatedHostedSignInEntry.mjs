@@ -17,6 +17,8 @@ import {
 import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
   authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 import { loadEnterpriseLifecycleProductionModule } from './enterpriseLifecyclePostgresFixture.mjs';
+import { createPreactivationSignInDiagnosticSession,
+  preactivationSignInParentFailureCode } from './preactivationSignInDiagnostics.mjs';
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = '127.0.0.1';
@@ -1112,12 +1114,17 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
   };
 };
 
-const run = (command, args, environment) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { cwd: process.cwd(), env: environment, stdio: 'inherit' });
+const run = (command, args, environment, options = {}) => new Promise((resolve, reject) => {
+  const child = spawn(command, args, { cwd: process.cwd(), env: environment,
+    stdio: options.stdio ?? 'inherit' });
   child.once('error', reject);
   child.once('exit', (code, signal) => code === 0
     ? resolve()
-    : reject(new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHILD_FAILED:${path.basename(command)}:${code ?? signal}`)));
+    : (() => {
+      const error = new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHILD_FAILED:${path.basename(command)}:${code ?? signal}`);
+      error.childExitCode = Number.isInteger(code) && code >= 0 && code <= 255 ? code : null;
+      reject(error);
+    })());
 });
 
 const stop = async child => {
@@ -1371,23 +1378,103 @@ export const AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES = Object.freeze(
   'session-persistence', 'entry', 'assessment-negatives', 'assessment-positives', 'safety',
 ]);
 
+export const runPreactivationSignInDiagnosticPhase = async ({ phase, session, operations }) => {
+  let primaryFailure = null;
+  let diagnosticFailure = null;
+  let phaseStarted = false;
+  let phaseNonce = null;
+  let failedStage = null;
+  const diagnostic = async operation => {
+    if (!session) return true;
+    try { await operation(); return true; } catch (error) {
+      diagnosticFailure ??= error;
+      return false;
+    }
+  };
+  if (session) {
+    try { phaseNonce = await session.startPhase(phase); phaseStarted = true; } catch (error) {
+      diagnosticFailure = error;
+    }
+  } else phaseStarted = true;
+  try {
+    if (diagnosticFailure) throw diagnosticFailure;
+    for (const stage of ['setup', 'build', 'preview', 'tls', 'browser']) {
+      if (!await diagnostic(() => session.startStage(phase, stage))) throw diagnosticFailure;
+      try {
+        await operations[stage]({ phaseNonce });
+        if (!await diagnostic(() => session.finishStage(phase, stage, 'passed'))) throw diagnosticFailure;
+      } catch (error) {
+        primaryFailure ??= error;
+        failedStage = stage;
+        await diagnostic(() => session.finishStage(phase, stage, 'failed'));
+        await diagnostic(() => session.recordFailure(phase, stage,
+          preactivationSignInParentFailureCode(stage)));
+        break;
+      }
+    }
+  } catch (error) { primaryFailure ??= error; } finally {
+    if (phaseStarted) {
+      await diagnostic(() => session.startStage(phase, 'cleanup'));
+      let cleanupFailed = false;
+      for (const [resource, operation] of [
+        ['preview', operations.cleanupPreview],
+        ['fixture', operations.cleanupFixture],
+        ['tls', operations.cleanupTls],
+        ['temporary', operations.cleanupTemporary],
+      ]) {
+        let state = 'unknown';
+        try { state = await operation(); } catch (error) {
+          state = 'failed'; cleanupFailed = true; primaryFailure ??= error;
+        }
+        if (!['passed', 'failed', 'not-attempted', 'unknown'].includes(state)) state = 'unknown';
+        if (!['passed', 'not-attempted'].includes(state)) cleanupFailed = true;
+        await diagnostic(() => session.setCleanup(phase, resource, state));
+      }
+      if (cleanupFailed) {
+        primaryFailure ??= new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
+        await diagnostic(() => session.finishStage(phase, 'cleanup', 'failed'));
+        await diagnostic(() => session.recordFailure(phase, 'cleanup', 'CLEANUP_FAILED'));
+      } else await diagnostic(() => session.finishStage(phase, 'cleanup', 'passed'));
+      await diagnostic(() => session.observeBrowserChild(phase, failedStage === 'browser'));
+      let phaseResult = null;
+      await diagnostic(async () => { phaseResult = await session.finishPhase(phase); });
+      if (phaseResult && phaseResult.status !== 'passed' && !primaryFailure) {
+        primaryFailure = new Error('PREACTIVATION_SIGN_IN_DIAGNOSTIC_PHASE_INCOMPLETE');
+      }
+    }
+  }
+  if (primaryFailure) throw primaryFailure;
+  if (diagnosticFailure) throw diagnosticFailure;
+  return true;
+};
+
 const runAuthenticatedHostedSignInEntryPhase = async ({
   processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
+  diagnosticSession,
 }) => {
   let temporaryRoot;
   let fixture;
   let preview;
   let tlsBridge;
-  let cleanupSucceeded = false;
-  try {
-    temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'avalaos-sign-in-entry-'));
+  let temporaryCreationStarted = false;
+  let fixtureCreationStarted = false;
+  let previewCreationStarted = false;
+  let tlsCreationStarted = false;
+  let buildEnvironment;
+  let appBaseUrl;
+  let playwrightOutputDirectory;
+  const operations = {
+    setup: async () => {
+      temporaryCreationStarted = true;
+      temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'avalaos-sign-in-entry-'));
     const buildDirectory = path.join(temporaryRoot, 'build');
-    const playwrightOutputDirectory = path.join(temporaryRoot, 'playwright');
-    fixture = await startAuthenticatedHostedSignInEntryFixture({ processSeedMode });
+      playwrightOutputDirectory = path.join(temporaryRoot, 'playwright');
+      fixtureCreationStarted = true;
+      fixture = await startAuthenticatedHostedSignInEntryFixture({ processSeedMode });
     const appPort = await availablePort();
-    const appBaseUrl = assertAuthenticatedHostedSignInEntryLoopbackUrl(`http://${LOOPBACK_HOST}:${appPort}`);
+      appBaseUrl = assertAuthenticatedHostedSignInEntryLoopbackUrl(`http://${LOOPBACK_HOST}:${appPort}`);
     const baseEnvironment = authenticatedHostedSignInEntryChildEnvironment(process.env);
-    const buildEnvironment = {
+      buildEnvironment = {
       ...baseEnvironment,
       VITE_AVALA_RUNTIME_MODE: 'pilot',
       VITE_SUPABASE_URL: fixture.backendOrigin,
@@ -1401,23 +1488,37 @@ const runAuthenticatedHostedSignInEntryPhase = async ({
       PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST: fixture.exerciseDigest,
       PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT: fixture.targetFingerprint,
     };
+      operations.buildDirectory = buildDirectory;
+      operations.baseEnvironment = baseEnvironment;
+    },
+    build: async () => {
     await run(process.execPath, [path.resolve('node_modules/vite/bin/vite.js'), 'build',
-      '--config', 'vite.authenticated-hosted-sign-in-entry.config.ts', '--outDir', buildDirectory, '--emptyOutDir'], buildEnvironment);
+        '--config', 'vite.authenticated-hosted-sign-in-entry.config.ts', '--outDir', operations.buildDirectory,
+        '--emptyOutDir'], buildEnvironment);
+    },
+    preview: async () => {
+      previewCreationStarted = true;
     preview = spawn(process.execPath, [path.resolve('node_modules/vite/bin/vite.js'), 'preview',
       '--config', 'vite.authenticated-hosted-sign-in-entry.config.ts', '--host', LOOPBACK_HOST,
-      '--port', String(appPort), '--outDir', buildDirectory], {
+        '--port', new URL(appBaseUrl).port, '--outDir', operations.buildDirectory], {
       cwd: process.cwd(),
       env: buildEnvironment,
       stdio: 'inherit',
     });
-    await waitForHttp(`${appBaseUrl}/`);
+      const previewError = new Promise((_, reject) => preview.once('error', reject));
+      await Promise.race([waitForHttp(`${appBaseUrl}/`), previewError]);
+    },
+    tls: async () => {
+      tlsCreationStarted = true;
     tlsBridge = await startAuthenticatedHostedSignInEntryTlsBridge({
       directory: temporaryRoot, appBaseUrl, apiBaseUrl: fixture.baseUrl,
       tokenBodyGate: contractPhase === 'session-persistence',
     });
+    },
+    browser: async ({ phaseNonce }) => {
     await run(process.execPath, [path.resolve('node_modules/@playwright/test/cli.js'), 'test',
       '--config=playwright.authenticated-hosted-sign-in-entry.config.ts', '--workers=1'], {
-      ...baseEnvironment,
+        ...operations.baseEnvironment,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_APP_URL: fixture.previewOrigin,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_LOCAL_APP_URL: appBaseUrl,
       AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_BACKEND_URL: fixture.backendOrigin,
@@ -1440,18 +1541,34 @@ const runAuthenticatedHostedSignInEntryPhase = async ({
       ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: fixture.controlToken,
       AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: fixture.backendOrigin,
       ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH: 'true',
-    });
-  } finally {
-    const previewStopped = await stop(preview).catch(() => false);
-    const fixtureClosed = fixture ? await fixture.close().catch(() => false) : true;
-    const tlsClosed = tlsBridge ? await tlsBridge.close().catch(() => false) : true;
-    const temporaryRemoved = temporaryRoot
-      ? await rm(temporaryRoot, { recursive: true, force: true }).then(() => true, () => false)
-      : true;
-    cleanupSucceeded = previewStopped && fixtureClosed && tlsClosed && temporaryRemoved;
-    if (!cleanupSucceeded) throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CLEANUP_FAILED');
-  }
-  return true;
+        ...(diagnosticSession ? { PREACTIVATION_SIGN_IN_DIAGNOSTIC_IDENTITY_JSON: JSON.stringify({
+          identity: diagnosticSession.identity, phase: contractPhase, phaseNonce,
+        }) } : {}),
+      }, { stdio: diagnosticSession ? 'ignore' : 'inherit' });
+    },
+    cleanupPreview: async () => {
+      if (!previewCreationStarted) return 'not-attempted';
+      if (!preview) return 'unknown';
+      return await stop(preview) ? 'passed' : 'failed';
+    },
+    cleanupFixture: async () => {
+      if (!fixtureCreationStarted) return 'not-attempted';
+      if (!fixture) return 'unknown';
+      return await fixture.close() ? 'passed' : 'failed';
+    },
+    cleanupTls: async () => {
+      if (!tlsCreationStarted) return 'not-attempted';
+      if (!tlsBridge) return 'unknown';
+      return await tlsBridge.close() ? 'passed' : 'failed';
+    },
+    cleanupTemporary: async () => {
+      if (!temporaryCreationStarted) return 'not-attempted';
+      if (!temporaryRoot) return 'unknown';
+      return await rm(temporaryRoot, { recursive: true, force: true }).then(() => 'passed', () => 'failed');
+    },
+  };
+  return runPreactivationSignInDiagnosticPhase({ phase: contractPhase,
+    session: diagnosticSession, operations });
 };
 
 export const runAuthenticatedHostedSignInEntry = async ({
@@ -1467,20 +1584,40 @@ export const runAuthenticatedHostedSignInEntry = async ({
   }
   const specialized = processSeedMode === 'nullable-reproduction' || processReadStateOnly || scopedNavigationOnly;
   const phases = specialized ? ['specialized'] : AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASES;
-  for (const contractPhase of phases) {
-    const phaseStartedAt = Date.now();
+  const diagnosticSession = specialized ? null : await createPreactivationSignInDiagnosticSession();
+  let primaryFailure = null;
+  let diagnosticFailure = null;
+  try {
+    for (const contractPhase of phases) {
+      const phaseStartedAt = Date.now();
+      try {
+        await runAuthenticatedHostedSignInEntryPhase({
+          processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
+          diagnosticSession,
+        });
+        console.log(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_PASS:${contractPhase}:${Date.now() - phaseStartedAt}`);
+      } catch (error) {
+        throw new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_FAILED:${contractPhase}`, { cause: error });
+      }
+    }
+  } catch (error) { primaryFailure = error; } finally {
     try {
-      await runAuthenticatedHostedSignInEntryPhase({
-        processSeedMode, processReadStateOnly, scopedNavigationOnly, scopedNavigationEvidencePath, contractPhase,
-      });
-      console.log(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_PASS:${contractPhase}:${Date.now() - phaseStartedAt}`);
-    } catch (error) {
-      throw new Error(`AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PHASE_FAILED:${contractPhase}`, { cause: error });
+      if (await checkoutState() !== stateBefore) {
+        if (diagnosticSession) await diagnosticSession.recordFailure('run', 'checkout', 'CHECKOUT_CHANGED');
+        primaryFailure ??= new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHECKOUT_CHANGED');
+      }
+    } catch (error) { primaryFailure ??= error; }
+    if (diagnosticSession) {
+      try {
+        const finalDiagnostic = await diagnosticSession.finalize();
+        if (finalDiagnostic.status !== 'passed' && !primaryFailure) {
+          diagnosticFailure = new Error('PREACTIVATION_SIGN_IN_DIAGNOSTIC_RUN_INCOMPLETE');
+        }
+      } catch (error) { diagnosticFailure = error; }
     }
   }
-  if (await checkoutState() !== stateBefore) {
-    throw new Error('AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CHECKOUT_CHANGED');
-  }
+  if (primaryFailure) throw primaryFailure;
+  if (diagnosticFailure) throw diagnosticFailure;
   return true;
 };
 
