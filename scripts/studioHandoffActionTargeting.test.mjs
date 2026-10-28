@@ -42,3 +42,45 @@ test('every persisted acceptance caller chains the validated response target', (
   }
   assert.match(sources.center, /data-handoff-version=\{item\.version\?\?undefined\}/u);
 });
+
+test('Studio generation binds the consuming approver and preserves independent review and final approval', () => {
+  const source = sources.aggregate;
+  const at = text => {
+    const index = source.indexOf(text);
+    assert.ok(index >= 0, `missing journey boundary: ${text}`);
+    return index;
+  };
+  const actorBefore = index => [...source.slice(0, index).matchAll(
+    /await enterStudioAs\(page, setup\.actors\.(\w+), settleActorTransitionEvidence\);/gu,
+  )].at(-1)?.[1];
+  const consume = at("'hosted:govern-studio:source-consume'");
+  const checkpoint = at('    if (governStudioDiagnostic) {');
+  const workspace = at("    const studioWorkspace = page.getByTestId('studio-artifact-workspace');");
+  const success = at('    const hostedSuccessRoute =');
+  const routeEnd = at('    if (hostedAuthenticatedAcceptance) await page.route');
+  const generation = source.indexOf('generationApi = await observeApiResponse', routeEnd);
+  const submit = at("name: 'Submit for review'");
+  const review = at("name: 'Approve review'");
+  const approve = at("name: 'Final approve'");
+  const failure = at('      const hostedFailureRoute =');
+  assert.ok(consume < checkpoint && checkpoint < workspace && workspace < success
+    && success < routeEnd && routeEnd < generation && generation < submit
+    && submit < review && review < approve && approve < failure);
+  const diagnostic = source.slice(checkpoint, workspace);
+  assert.match(diagnostic, /await settleCheckpointBoundary\(/u);
+  assert.match(diagnostic, /return;\s*\}\s*$/u);
+  assert.doesNotMatch(diagnostic, /arm-browser-fault/u);
+  for (const boundary of [consume, success, generation, submit]) {
+    assert.equal(actorBefore(boundary), 'approver');
+  }
+  const successRoute = source.slice(success, routeEnd);
+  assert.match(successRoute, /persona: 'approver'/u);
+  assert.match(successRoute, /kind: 'studio_deterministic_success'/u);
+  assert.match(successRoute, /accessToken: \(headers\.authorization \?\? ''\)\.replace/u);
+  assert.equal(actorBefore(review), 'reviewer');
+  assert.equal(actorBefore(approve), 'author');
+  assert.equal(actorBefore(failure), 'author');
+  const failureRoute = source.slice(failure, at('      let failedGenerationApi:'));
+  assert.match(failureRoute, /persona: 'author'/u);
+  assert.match(failureRoute, /kind: 'studio_failure_after_claim'/u);
+});
