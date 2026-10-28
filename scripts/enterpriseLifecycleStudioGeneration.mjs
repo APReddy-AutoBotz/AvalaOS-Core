@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 export function createEnterpriseLifecycleStudioGeneration({
   serviceQuery, providerEffects, studioDbModule, studioGenerationModule,
   providerBudgetModule, studioProviderModule, templateModule,
+  authenticatedSyntheticModule = null,
   toProductionJson = value => value,
 }) {
   let lastRpcError = null;
@@ -16,6 +17,10 @@ export function createEnterpriseLifecycleStudioGeneration({
     'studio_artifact_settle_provider_budget_v2',
     'studio_artifact_mark_provider_budget_uncertain_v2',
     'studio_artifact_release_provider_budget_v2',
+    ...(authenticatedSyntheticModule ? [
+      'authenticated_synthetic_resolve_studio_permit',
+      'authenticated_synthetic_consume_studio_permit',
+    ] : []),
   ]);
   const invoke = async (name, args) => {
     assert.ok(rpcNames.has(name), 'UNEXPECTED_STUDIO_RPC');
@@ -68,6 +73,8 @@ export function createEnterpriseLifecycleStudioGeneration({
   };
   let failNext = false;
   const runProvider = async input => {
+    assert.equal(authenticatedSyntheticModule, null,
+      'AUTHENTICATED_SYNTHETIC_PROVIDER_PATH_REJECTED');
     providerEffects.syntheticProviderCalls += 1;
     if (failNext) {
       failNext = false;
@@ -103,6 +110,21 @@ export function createEnterpriseLifecycleStudioGeneration({
       }),
       stage: input => studioDbModule.stageStudioGeneration(input, invoke).then(() => undefined),
       finalize: input => studioDbModule.finalizeStudioGeneration(input, invoke),
+      ...(authenticatedSyntheticModule ? {
+        consumeSynthetic: input => authenticatedSyntheticModule.consumeAuthenticatedSyntheticStudioPermit({
+          permitId: input.authenticatedSynthetic.permitId,
+          actorId: input.actorId,
+          organizationId: input.organizationId,
+          workspaceId: input.workspaceId,
+          sessionId: input.authenticatedSynthetic.sessionId,
+          requestId: input.requestId,
+          payloadHash: input.authenticatedSynthetic.payloadHash,
+          expectedVersion: input.authenticatedSynthetic.expectedVersion,
+          attemptId: input.attemptId,
+          executionToken: input.executionToken,
+          executionFence: input.executionFence,
+        }, invoke),
+      } : {}),
       fail: (attemptId, failureCode) => studioDbModule.failStudioGeneration({
         attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence, failureCode,
       }, invoke),

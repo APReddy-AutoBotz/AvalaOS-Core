@@ -104,6 +104,58 @@ test('request binding separates raw browser payload from command identity', () =
     commandType: 'post:/read', requireUuid: true }), /COMMAND_BINDING_REJECTED/u);
 });
 
+test('Studio version capture and non-exercise ownership use the persisted author within tenant scope', async () => {
+  const captureSql = AUTHENTICATED_HOSTED_CAPTURE_QUERY.split('\nUNION ALL\n')
+    .find(sql => sql.includes('FROM public.studio_artifact_versions x'));
+  assert.match(captureSql, /x\.author_id=ANY\(\$3::text\[\]::uuid\[\]\)/u);
+  assert.match(captureSql, /x\.author_id::text=ANY\(\$3::text\[\]\)/u);
+  assert.match(captureSql, /x\.org_id::text=\$1/u);
+  assert.match(captureSql, /x\.workspace_id::text=\$2/u);
+  assert.doesNotMatch(captureSql, /created_by|actor_id/u);
+  let versionDigestSql;
+  const reader = createAuthenticatedHostedObservationReader({
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } },
+    db: { async query(sql, parameters) {
+      assert.deepEqual(parameters, [[ids.author], [], [], from, ids.org, ids.workspace]);
+      if (tableFromSql(sql) === 'studio_artifact_versions') versionDigestSql = sql;
+      return { rows: [{ value: scalar(sql) }] };
+    } },
+  });
+  await reader.nonExerciseDigest({ cutoff: from,
+    ownership: { actorIds: [ids.author], projectIds: [], processIds: [] } });
+  assert.match(versionDigestSql, /->>'author_id',''\)::uuid=ANY\(o\.actor_ids\)/u);
+  assert.match(versionDigestSql, /->>'org_id'=o\.org_id/u);
+  assert.match(versionDigestSql, /->>'workspace_id'=o\.workspace_id/u);
+  assert.match(versionDigestSql, />=o\.cutoff/u);
+  assert.doesNotMatch(versionDigestSql, /->>'created_by'|->>'actor_id'/u);
+});
+
+test('Studio version author binds its session without inventing a receipt and preserves composite version identity', async () => {
+  const artifactId = randomUUID();
+  const versions = [1, 2].map(version => ({ id: randomUUID(), artifact_id: artifactId, version,
+    org_id: ids.org, workspace_id: ids.workspace, author_id: ids.author, created_at: to }));
+  const reader = createAuthenticatedHostedObservationReader({
+    config: { scope: { organizationId: ids.org, workspaceId: ids.workspace } },
+    db: { async query() { return { rows: [
+      { source: '__authority__', value: authorityFrame() },
+      ...versions.map(value => ({ source: 'studio_artifact_versions', value })),
+    ] }; } },
+  });
+  const frame = await reader.capture({ exerciseId: ids.exercise, from, project });
+  const rows = frame.records.filter(row => row.source === 'studio_artifact_versions');
+  assert.equal(rows.length, 2);
+  for (const [index, row] of rows.entries()) {
+    assert.equal(row.actorHash, actorHash);
+    assert.equal(row.sessionHash, sessionHash);
+    assert.equal(row.receiptIdHash, null);
+    assert.equal(row.commandBindingHash, null);
+    assert.equal(row.recordHash, authenticatedEvidenceDigest({ source: 'studio_artifact_versions',
+      identity: { artifact_id: artifactId, version: index + 1 } }));
+    assert.equal(row.rowHash, authenticatedEvidenceDigest(versions[index]));
+  }
+  assert.notEqual(rows[0].recordHash, rows[1].recordHash);
+});
+
 test('observation ownership filters never deserialize excluded payloads and retain all sources', async () => {
   let query;
   const base = fakeDb();
