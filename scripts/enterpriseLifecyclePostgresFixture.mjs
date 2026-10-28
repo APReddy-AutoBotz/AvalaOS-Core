@@ -280,12 +280,16 @@ export async function createEnterpriseLifecycleFixture({
   postgrestJwtSecret = null,
   hostedPersonaRoleParity = false,
   providersEnabled = true,
+  authenticatedSynthetic = false,
 } = {}) {
   if (!databaseUrl) throw new Error('ENTERPRISE_LIFECYCLE_DATABASE_URL_REQUIRED');
   if (typeof hostedPersonaRoleParity !== 'boolean') {
     throw new Error('ENTERPRISE_LIFECYCLE_PERSONA_ROLE_PROFILE_REJECTED');
   }
   if (typeof providersEnabled !== 'boolean') throw new Error('ENTERPRISE_LIFECYCLE_PROVIDER_PROFILE_REJECTED');
+  if (typeof authenticatedSynthetic !== 'boolean' || authenticatedSynthetic && providersEnabled) {
+    throw new Error('ENTERPRISE_LIFECYCLE_AUTHENTICATED_SYNTHETIC_PROFILE_REJECTED');
+  }
   databaseUrl = validateEnterpriseLifecycleDatabaseUrl(databaseUrl);
   const startedAt = new Date().toISOString();
   const database = `enterprise_lifecycle_${process.pid}_${Date.now()}`.toLowerCase();
@@ -322,7 +326,8 @@ export async function createEnterpriseLifecycleFixture({
       const token = postgrestJwtSecret === null
         ? `${Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.fixture-only`
         : fixtureJwt(postgrestJwtSecret, claims);
-      return [persona, { token, user: { id: ids[persona], email: `${persona}@fixture.invalid` } }];
+      return [persona, { token, ...(authenticatedSynthetic ? { sessionId: claims.session_id } : {}),
+        user: { id: ids[persona], email: `${persona}@fixture.invalid` } }];
     }));
     const tokens = new Map([
       ['enterprise-author-token', ids.author], ['enterprise-reviewer-token', ids.reviewer],
@@ -344,6 +349,17 @@ export async function createEnterpriseLifecycleFixture({
     const aliases = { case: 'primary-case', review: 'primary-review', handoff: 'primary-handoff', artifact: 'primary-artifact' };
 
     await db.query('INSERT INTO auth.users(id) VALUES($1),($2),($3),($4)', [ids.author, ids.reviewer, ids.approver, ids.outsider]);
+    if (authenticatedSynthetic) {
+      await db.query(`CREATE TABLE auth.sessions(
+        id uuid PRIMARY KEY,
+        user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        not_after timestamptz
+      )`);
+      await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])', [
+        Object.values(fixtureActors).map(actor => actor.sessionId),
+        Object.values(fixtureActors).map(actor => actor.user.id),
+      ]);
+    }
     await db.query("INSERT INTO profiles(id,email,full_name) VALUES($1,'author@fixture.invalid','Author'),($2,'reviewer@fixture.invalid','Reviewer'),($3,'approver@fixture.invalid','Approver'),($4,'outsider@fixture.invalid','Outsider')", [ids.author, ids.reviewer, ids.approver, ids.outsider]);
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Enterprise lifecycle','enterprise-lifecycle'),($2,'Foreign tenant','foreign-lifecycle')", [ids.organization, ids.foreignOrganization]);
     await db.query("INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,'Lifecycle workspace','lifecycle'),($3,$4,'Foreign workspace','foreign-lifecycle')", [ids.workspace, ids.organization, ids.foreignWorkspace, ids.foreignOrganization]);
@@ -423,6 +439,8 @@ export async function createEnterpriseLifecycleFixture({
     const studioGenerationModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactGeneration.ts'));
     const providerBudgetModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'providerBudget.ts'));
     const studioProviderModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactProvider.ts'));
+    const authenticatedSyntheticModule = authenticatedSynthetic
+      ? loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'authenticatedSyntheticAuthority.ts')) : null;
     const templateModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioArtifactTemplateContract.ts'));
     const tenantAuthorityModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'tenantAuthority.ts'));
     const tenantSessionModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'tenantSession.ts'));
@@ -499,6 +517,7 @@ export async function createEnterpriseLifecycleFixture({
     const studioGeneration = createEnterpriseLifecycleStudioGeneration({
       serviceQuery, providerEffects: evidence.providerEffects, studioDbModule, studioGenerationModule,
       providerBudgetModule, studioProviderModule, templateModule,
+      authenticatedSyntheticModule: authenticatedSynthetic ? authenticatedSyntheticModule : null,
       toProductionJson: loadProductionModule.clone,
     });
     const assessDependencies = {
@@ -601,6 +620,11 @@ export async function createEnterpriseLifecycleFixture({
       authenticate: assessDependencies.authenticate,
       loadFreshAuthority: assessDependencies.loadFreshAuthority,
       executeAtomicCommand: command => studioDbModule.executeStudioAtomicCommand(command, studioGeneration.invoke),
+      ...(authenticatedSynthetic ? {
+        resolveAuthenticatedSyntheticTransport: ({ request, body, command }) =>
+          authenticatedSyntheticModule.resolveAuthenticatedSyntheticStudioTransport(
+            request, body, command, studioGeneration.invoke),
+      } : {}),
       executeClaimedGeneration: studioGeneration.executeClaimedGeneration,
     };
     const processDependencies = {
@@ -1863,7 +1887,8 @@ export async function createEnterpriseLifecycleFixture({
       failNextProviderCall: studioGeneration.failNextProviderCall,
       getLastStudioRpcError: studioGeneration.getLastRpcError,
       production: { fixtureModule, commandModule, handlerModule, reviewCommandModule, reviewHandlerModule, studioHandlerModule,
-        studioDeliveryCommandModule,studioDeliveryQueryModule,legacyDeliveryCommandModule,legacyDeliveryQueryModule },
+        studioDeliveryCommandModule,studioDeliveryQueryModule,legacyDeliveryCommandModule,legacyDeliveryQueryModule,
+        ...(authenticatedSynthetic ? { authenticatedSyntheticModule } : {}) },
       close: cleanup,
     };
   } catch (error) {
