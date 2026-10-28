@@ -707,6 +707,33 @@ test('snapshot controls require an explicit registered project and preserve its 
   assert.equal(calls[0].input.scope,config.scope);
 });
 
+test('Studio generation binds the consuming approver and rejects an author selector without effects', async () => {
+  const authorId=id();const approverId=id();const sessionId=id();
+  const verifications=[];const permits=[];
+  const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),
+    identity:{verifySession:async input=>{verifications.push(input);return {actorId:input.actorId,sessionId:input.sessionId};}},
+    adapter:{armPermit:async input=>{permits.push(input);return {armed:true};}}});
+  controller.active=true;
+  controller.projects.set('desktop-chromium',{identities:{author:{id:authorId},approver:{id:approverId}}});
+  controller.boundSessions.set('desktop-chromium:approver',{project:'desktop-chromium',persona:'approver',
+    actorId:approverId,sessionId,actorHash:digest(approverId),sessionHash:digest(sessionId)});
+  const input={projectName:'desktop-chromium',kind:'studio_deterministic_success',commandType:'studio.generation.request',
+    accessToken:tokenFor(approverId,sessionId),requestBody:{requestId:id(),commandType:'studio.generation.request',
+      expectedAggregateVersion:7,payload:{source:'server-bound'}}};
+  try {
+    await assert.rejects(controller.armBrowserFault({...input,persona:'author'}),
+      /^Error: AUTHENTICATED_HOSTED_CONTROLLER_SESSION_ACTOR_REJECTED$/u);
+    assert.equal(verifications.length,0);assert.equal(permits.length,0);
+    await controller.armBrowserFault({...input,persona:'approver'});
+    assert.equal(verifications.length,1);assert.equal(permits.length,1);
+    assert.equal(verifications[0].actorId,approverId);assert.equal(verifications[0].sessionId,sessionId);
+    assert.equal(permits[0].actorId,approverId);assert.equal(permits[0].sessionId,sessionId);
+    assert.equal(permits[0].expectedVersion,7);
+  } finally {
+    controller.stopControlIntake();controller.projects.clear();controller.boundSessions.clear();
+  }
+});
+
 test('Studio fault arming uses the production expectedAggregateVersion envelope', async () => {
   const actorId=id();const sessionId=id();let permit;
   const controller=new AuthenticatedHostedController({config:validateAuthenticatedHostedControllerEnvironment(baseEnvironment()),

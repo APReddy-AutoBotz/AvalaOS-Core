@@ -1873,7 +1873,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         const headers = await route.request().allHeaders();
         await control('/control/arm-browser-fault', {
           projectName,
-          persona: 'author',
+          persona: 'approver',
           kind: 'studio_deterministic_success',
           commandType: requestBody.commandType ?? 'studio.document.generate',
           requestBody,
