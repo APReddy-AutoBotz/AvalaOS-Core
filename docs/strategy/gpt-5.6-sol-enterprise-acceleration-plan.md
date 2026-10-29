@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## PR342 persona evidence contract correction (2026-10-29)
+
+The failed Preparation candidate retained a successful six-scenario Studio persona result with current 26/14/19 capability counts and verified cleanup. Local exact-source replay reproduces rejection by the stale 25/14/18 artifact validator; the next Reviewer-ready gate also retains that stale pin. Correct these coupled evidence contracts and their regression/provenance coverage in the same draft PR342, then require fresh exact-candidate CI and twelve new sanitized archives. Follow the active completion plan. Keep 15,000 ms/providers OFF; no merge, blind workflow retry, live changes or new hosted acceptance/diagnostic. This validator failure does not change the prior incomplete full-run disposition or UAT forecast.
+
 ## Generator template projection correction (2026-10-29)
 
 The PR341 integrated result remains incomplete with verified cleanup. Local PostgreSQL reproduces a mismatch between the privileged setup binding and the generator's authorized template projection: the required author/approver contract omitted `studio.templates.read`. The approved local correction requires that read capability and adds actor-authorized projection/browser regressions. Preflight rejects an unconfigured role without granting access. No production authorization, schema, provider or timing change; preserve 15,000 ms/providers OFF. Follow the active hosted-acceptance completion plan, preserve both failed integrated runs, and stop before any new hosted run pending AP approval. Exclusive historical causality and hosted/UAT readiness remain unproven.

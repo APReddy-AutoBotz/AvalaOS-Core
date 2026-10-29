@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Risk And Evidence Register
 
+## PR342 persona evidence validator drift (2026-10-29)
+
+- **Confirmed source defect / executed evidence:** exact Preparation `40889922833/1` Studio persona archive records six successful scenarios, current 26/14/19 roles, zero provider effects and cleanup complete. The unchanged artifact verifier rejects it locally with `STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID` because its expected counts and synthetic unit fixture remain 25/14/18. The adjacent Reviewer-ready gate independently retains the same stale pin. This is fail-closed evidence-contract drift, not a product authorization failure.
+- **Correction / executed local evidence:** verifier counts now derive from the canonical required-capability arrays, preserving exact count/flag/before-after/source checks; the adjacent explicit pin is corrected. The red regression is preserved. Artifact/adversarial regressions, 27 diagnostic tests, six catalog commands and 85 PR-C tests pass with 85 commands / 241 assertions unchanged. Fresh candidate CI and all twelve source-bound archives remain mandatory. Old failed artifacts cannot substitute. Root owns correction after all three read-only reviewers closed; the active completion plan defines acceptance and rollback.
+- **Proof boundary:** no role, schema, product, provider or timing change. Preserve 15,000 ms/providers OFF and all failures, including the initial local replay's working-tree line-ending/source mismatch. Earlier integrated acceptance remains 61 PASS / 47 BLOCKED with cleanup verified; its exclusive historical cause remains unproven. No merge or new hosted acceptance/diagnostic until approval.
+
 ## Generator template projection boundary (2026-10-29)
 
 - **Confirmed source defect / executed evidence:** the generator persona contract omits the template-read capability required by the production transport and migrated RPC. Disposable PostgreSQL reproduces an available setup identity with a null authenticated author projection and zero matching options. The failed regression and successful owned cleanup are retained under `output/local-private/studio-template-projection-local/`.

@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## PR342 persona evidence contract correction (2026-10-29)
+
+AP authorizes reproducing and fixing the Studio handoff persona CI failure locally, updating the same draft PR342 and verifying fresh candidate CI. Keep 15,000 ms/providers OFF; no blind retry, merge or hosted acceptance/diagnostic run. Failed candidate `06341db22c786aa86c51c63eb3a54dad5f06b3c7` and Preparation `40889922833/1` remain immutable.
+
+Confirmed source defect: the exact sanitized artifact records all six persona scenarios passing with role counts 26/14/19 and complete cleanup, but its verifier and synthetic test fixture still expect 25/14/18. Local replay with exact committed source bytes reproduces `STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID`. The following Reviewer-ready preparation gate has the same stale pin. Correct the verifier to derive expected counts from the canonical required-capability contract, update the adjacent independent pin, and reject stale/extra/missing counts, false required/forbidden/exact flags, role drift and source tampering. Product authority, roles, fixtures, schema and timing remain unchanged. The [active completion plan](planning/hosted-acceptance-completion.md) owns verification and rollback. This CI cause is confirmed; the earlier integrated full-run cause and readiness remain unproven.
+
 ## Generator template projection correction (2026-10-29)
 
 **Latest AP authorization:** commit this verified correction, open a draft PR and verify exact-candidate CI. Keep 15,000 ms/providers OFF. Do not merge or start any hosted acceptance/diagnostic run until explicit approval. Include `[skip netlify]` in the initial PR title and commit; verify both hosting workflows skip. Require fresh exact-head checks and sanitized artifacts, never earlier candidate evidence.
