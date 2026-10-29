@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { REQUIRED_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 import { createStudioHandoffPersonaComponentFailureEvidence, studioHandoffPersonaCleanupKeys,
   studioHandoffPersonaProjects, studioHandoffPersonaScenarioMatrix, studioHandoffPersonaScenarios,
   studioHandoffPersonaSourcePaths, verifyStudioHandoffPersonaArtifact } from './studioHandoffPersonaArtifact.mjs';
@@ -18,6 +19,8 @@ sourceBytes.set('tests/browser/studioPrB/server.mjs',Buffer.from("import { creat
 sourceBytes.set('tests/browser/studioPrB/studioPrB.spec.ts',Buffer.from("url.origin==='http://127.0.0.1:4197';page.route('**/*',guard);route.abort('blockedbyclient');page.unroute('**/*',guard);page.setDefaultTimeout(15_000);const targetingStarted=Date.now();const elapsedMs=Date.now()-targetingStarted;expect(elapsedMs).toBeLessThan(15_000);"));
 const sequence=['author-request','reviewer-review','approver-final-accept','approver-consume-inbox'];
 const role=count=>({actualCount:count,requiredCount:count,requiredComplete:true,forbiddenAbsent:true,exact:true});
+const canonicalRoles=()=>Object.fromEntries(['author','reviewer','approver'].map(persona=>
+  [persona,role(REQUIRED_PERSONA_CAPABILITIES[persona].length)]));
 const componentCounts={
   'exact-target':[2,1],'missing-target':[2,0],'stale-version':[2,0],
   'wrong-mailbox':[0,0],'ineligible-action':[1,1],'duplicate-exact-pair':[2,2],
@@ -84,8 +87,8 @@ const writeFixture=async(root,mutate=()=>{})=>{
     'browser-pixel-7-chromium.json':browsers[1],
     'targeting-component-proof.json':componentProof,
     'result.json':{schemaVersion:'studio-handoff-persona-result-v4',status:'passed',releaseSha,
-      exactRoles:{author:role(25),reviewer:role(14),approver:role(18)},
-      exactRolesAfterRun:{author:role(25),reviewer:role(14),approver:role(18)},exactRolesStable:true,
+      exactRoles:canonicalRoles(),
+      exactRolesAfterRun:canonicalRoles(),exactRolesStable:true,
       scenarioIsolation:{fixturesCreated:6,fixturesClosed:6,observersCreated:6,observersClosed:6,
         cases:studioHandoffPersonaScenarioMatrix.map(({project,scenario})=>({project,scenario,
           browserExit:0,observerCreated:true,observerClosed:true,fixtureCreated:true,fixtureClosed:true}))},
@@ -199,7 +202,21 @@ try{
     ['scenario-observer-count',files=>{files['result.json'].scenarioIsolation.observersClosed=5;}],
     ['scenario-targeting-missing',files=>{const index=files['result.json'].scenarioIsolation.cases.findIndex(item=>item.scenario==='two-card-targeting');files['result.json'].scenarioIsolation.cases.splice(index,1);}],
     ['scenario-missing',files=>{files['result.json'].scenarioIsolation.cases.pop();}],
-    ['role',files=>{files['result.json'].exactRoles.author.actualCount=24;}],
+    ['legacy-role-counts',files=>{for(const phase of ['exactRoles','exactRolesAfterRun'])files['result.json'][phase]={author:role(25),reviewer:role(14),approver:role(18)};}],
+    ...['author','reviewer','approver'].flatMap(persona=>[
+      [`${persona}-extra-capability`,files=>{for(const phase of ['exactRoles','exactRolesAfterRun'])files['result.json'][phase][persona]=role(REQUIRED_PERSONA_CAPABILITIES[persona].length+1);}],
+      [`${persona}-missing-capability`,files=>{for(const phase of ['exactRoles','exactRolesAfterRun'])files['result.json'][phase][persona]=role(REQUIRED_PERSONA_CAPABILITIES[persona].length-1);}],
+      ...['exactRoles','exactRolesAfterRun'].flatMap(phase=>[
+        [`${persona}-${phase}-actual-count`,files=>{files['result.json'][phase][persona].actualCount+=1;}],
+        [`${persona}-${phase}-required-count`,files=>{files['result.json'][phase][persona].requiredCount-=1;}],
+        ...['requiredComplete','forbiddenAbsent','exact'].map(flag=>[
+          `${persona}-${phase}-${flag}`,files=>{files['result.json'][phase][persona][flag]=false;},
+        ]),
+      ]),
+    ]),
+    ...['scripts/authenticatedHostedControllerAdapters.mjs','scripts/studioHandoffPersonaArtifact.mjs'].map(source=>[
+      `tampered-${path.basename(source)}`,files=>{const bindings=files['source-bindings.json'];bindings.sourceBindings.find(item=>item.source===source).digest=sha256(Buffer.from('tampered'));bindings.sourceDigest=sha256(Buffer.from(JSON.stringify(bindings.sourceBindings)));files['result.json'].source.digest=bindings.sourceDigest;},
+    ]),
     ['result-browser',files=>{files['result.json'].browsers[0].authorityBoundReadiness.requestCount=2;}],
     ['schema',files=>{files['result.json'].schemaVersion='studio-handoff-persona-result-v1';}],
     ['source',files=>{files['source-bindings.json'].sourceBindings[0].digest=sha256(Buffer.from('wrong'));}],
@@ -210,6 +227,14 @@ try{
   const nonFile=path.join(base,'non-file');await writeFixture(nonFile);await rm(path.join(nonFile,'build-proof.json'));await mkdir(path.join(nonFile,'build-proof.json'));
   await assert.rejects(verifyStudioHandoffPersonaArtifact({directory:nonFile,expectedReleaseSha:releaseSha,readSourceBytes}),/FILE_SET_REJECTED/u);
 }finally{await rm(base,{recursive:true,force:true});}
+// The next real-browser gate keeps an independent count pin; fail locally when
+// a canonical persona change has not been propagated to that preparation gate.
+const reviewerReadySource=await readFile(new URL('./reproduceReviewerReadyCandidateLatency.mjs',import.meta.url),'utf8');
+for(const persona of ['author','reviewer','approver']){
+  const pin=reviewerReadySource.match(new RegExp(`exactRoles\\.${persona}\\.actualCount !== (\\d+)`));
+  assert.ok(pin,`${persona} reviewer-ready role-count pin must remain explicit`);
+  assert.equal(Number(pin[1]),REQUIRED_PERSONA_CAPABILITIES[persona].length,`${persona} reviewer-ready pin must match the canonical contract`);
+}
 const sanitizedComponentFailure={schemaVersion:'studio-handoff-targeting-component-failure-v1',status:'failed',playwrightExitCode:1,
   signal:'none',serverClosed:true,playwrightOutputRemoved:true,providersEnabled:false};
 assert.deepEqual(createStudioHandoffPersonaComponentFailureEvidence({stage:'targeting-component-preparation',

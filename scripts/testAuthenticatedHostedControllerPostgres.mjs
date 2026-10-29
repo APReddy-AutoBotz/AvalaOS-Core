@@ -61,7 +61,7 @@ const pinnedAuthorHandoffRequired = Object.freeze(['studio.handoffs.read','studi
 const pinnedAuthorHandoffForbidden = Object.freeze([
   'studio.handoffs.review','studio.handoffs.approve','studio.handoffs.consume',
 ]);
-const pinnedPersonaCapabilityCounts = Object.freeze({ author:25, reviewer:14, approver:18 });
+const pinnedPersonaCapabilityCounts = Object.freeze({ author:26, reviewer:14, approver:19 });
 assert.deepEqual(requiredCapabilities.author.filter(capability => capability.startsWith('studio.handoffs.')),
   pinnedAuthorHandoffRequired);
 assert.deepEqual(FORBIDDEN_PERSONA_CAPABILITIES.author, pinnedAuthorHandoffForbidden);
@@ -309,13 +309,16 @@ try {
     verifySecretBackend: async () => ({ kind: 'hashicorp_vault', writable: true }),
     cleanupSecretBackend: async input => { secretCalls.push(input); },
   });
-  const assertScopeMutationRejected = async ({ capability, mutation, sql }) => {
+  const assertScopeMutationRejected = async ({ capability, mutation, sql, persona='author' }) => {
     await db.query('BEGIN');
     try {
-      const changed = await db.query(sql, [ids.roles.author, capability]);
+      const changed = await db.query(sql, [ids.roles[persona], capability]);
       assert.equal(changed.rowCount, 1, `${mutation}:${capability}:mutation must change one capability row`);
       const rejected = await adapter.preflight({ config, exerciseId: ids.exercise });
       assert.equal(rejected.scopeReady, false, `${mutation}:${capability}:scope must fail closed`);
+      if(mutation==='required_removed')assert.equal((await db.query(
+        'SELECT count(*)::int count FROM public.role_capabilities WHERE role_id=$1 AND capability_key=$2',
+        [ids.roles[persona],capability])).rows[0].count,0,'preflight must not repair missing grants');
     } finally {
       await db.query('ROLLBACK');
     }
@@ -334,6 +337,9 @@ try {
       sql: 'INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,$2)',
     });
   }
+  for(const persona of ['author','approver'])await assertScopeMutationRejected({persona,
+    capability:'studio.templates.read',mutation:'required_removed',
+    sql:'DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key=$2'});
   const preflight = await adapter.preflight({ config, exerciseId: ids.exercise });
   assert.match(preflight.baselineDigest, /^sha256:[0-9a-f]{64}$/u);
   config.baselineDigest = preflight.baselineDigest;
@@ -345,7 +351,7 @@ try {
     observationStartedAt: preflight.observationStartedAt,
   });
   assert.ok(Number.isFinite(Date.parse(preflight.observationStartedAt)));
-  assert.equal(deploymentCalls.length, 1 + pinnedAuthorHandoffRequired.length + pinnedAuthorHandoffForbidden.length);
+  assert.equal(deploymentCalls.length, 3 + pinnedAuthorHandoffRequired.length + pinnedAuthorHandoffForbidden.length);
   for (const persona of AUTHENTICATED_HOSTED_PERSONAS) {
     const actual = new Set((await db.query('SELECT capability_key FROM public.role_capabilities WHERE role_id=$1',
       [ids.roles[persona]])).rows.map(row => row.capability_key));
@@ -391,6 +397,57 @@ try {
     version:activeSystemBrdTemplate[0].template_version,
   });
   const project = { ...setup, identities };
+  // A service-role setup binding is an expectation, never browser authorization.
+  // Exercise the migrated RPC as each real synthetic actor, then the production
+  // adapter; handcrafted workspace fixtures previously hid a missing capability.
+  const { adaptStudioWorkspaceRpcProjection } = loadEnterpriseLifecycleProductionModule(
+    path.join(root, 'services/studioArtifacts/workspaceRpcAdapter.ts'));
+  const templateProjectionFor = async (persona, organizationId=ids.org, workspaceId=ids.workspace, removeCapability=null) => {
+    await db.query('BEGIN');
+    try {
+      if(removeCapability)assert.equal((await db.query(
+        'DELETE FROM public.role_capabilities WHERE role_id=$1 AND capability_key=$2',
+        [ids.roles[persona],removeCapability])).rowCount,1);
+      await db.query("SELECT set_config('request.jwt.claim.sub',$1,true)", [ids.actors[persona]]);
+      await db.query('SET LOCAL ROLE authenticated');
+      return (await db.query('SELECT public.studio_tenant_template_projection($1,$2) value',
+        [organizationId,workspaceId])).rows[0].value;
+    } finally { await db.query('ROLLBACK'); }
+  };
+  const templateProof = { providersEnabled:false, limitMs:15000, personas:{} };
+  for (const persona of ['author','approver']) {
+    const projection=await templateProjectionFor(persona);
+    const context={userId:ids.actors[persona],organizationId:ids.org,organizationName:'Synthetic',
+      workspaceId:ids.workspace,workspaceName:'Synthetic',authorizationVersion:1,
+      capabilities:[...requiredCapabilities[persona]]};
+    const workspace=adaptStudioWorkspaceRpcProjection(null,projection,null,context);
+    const matches=workspace.templates.filter(item=>item.ownership==='system'&&item.artifactType==='brd'
+      &&item.lifecycle==='approved'&&item.actions.includes('studio.generation.request')
+      &&item.templateVersionId===setup.studioTemplate.templateVersionId&&item.version===setup.studioTemplate.version);
+    templateProof.personas[persona]={projectionPresent:projection!==null,exactMatches:matches.length};
+    writeFileSync(path.join(privateDirectory,'template-projection-proof.json'),JSON.stringify(templateProof,null,2)+'\n');
+    assert.equal(matches.length,1,`${persona}: protected setup binding must exist in the authenticated projection`);
+    assert.equal(matches[0].name,'System BRD');
+    assert.equal(await templateProjectionFor(persona,bootstrapFixture.org,bootstrapFixture.workspace),null,
+      'template projection must remain scoped to the actor membership');
+    const before=(await db.query('SELECT capability_key FROM public.role_capabilities WHERE role_id=$1 ORDER BY capability_key',
+      [ids.roles[persona]])).rows;
+    assert.equal(await templateProjectionFor(persona,ids.org,ids.workspace,'studio.templates.read'),null,
+      'revoked template read removes the projection');
+    const revoked=adaptStudioWorkspaceRpcProjection(null,null,null,
+      {...context,capabilities:context.capabilities.filter(value=>value!=='studio.templates.read')});
+    assert.equal(revoked.templates.length,0);
+    const readOnly=await templateProjectionFor(persona,ids.org,ids.workspace,'studio.artifacts.generate');
+    assert.ok(readOnly.templates.length>0);
+    assert.equal(readOnly.templates.some(item=>item.actions.includes('studio.generation.request')),false,
+      'template read alone does not grant generation');
+    assert.deepEqual((await db.query('SELECT capability_key FROM public.role_capabilities WHERE role_id=$1 ORDER BY capability_key',
+      [ids.roles[persona]])).rows,before,'local negative controls restore the exact fixture role');
+    templateProof.personas[persona].negativeControlsPassed=true;
+  }
+  for(const persona of ['reviewer','outsider'])assert.equal(await templateProjectionFor(persona),null);
+  templateProof.status='passed';
+  writeFileSync(path.join(privateDirectory,'template-projection-proof.json'),JSON.stringify(templateProof,null,2)+'\n');
   const observationEquivalence = await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
   const observationSnapshot = await verifyAuthenticatedObservationSnapshot({
     connectionString: urlFor(database), db, config, project, exerciseId: ids.exercise });

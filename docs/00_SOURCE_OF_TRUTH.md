@@ -1,5 +1,19 @@
 # AvalaOS Core Source Of Truth
 
+## PR342 persona evidence contract correction (2026-10-29)
+
+AP authorizes reproducing and fixing the Studio handoff persona CI failure locally, updating the same draft PR342 and verifying fresh candidate CI. Keep 15,000 ms/providers OFF; no blind retry, merge or hosted acceptance/diagnostic run. Failed candidate `06341db22c786aa86c51c63eb3a54dad5f06b3c7` and Preparation `40889922833/1` remain immutable.
+
+Confirmed source defect: the exact sanitized artifact records all six persona scenarios passing with role counts 26/14/19 and complete cleanup, but its verifier and synthetic test fixture still expect 25/14/18. Local replay with exact committed source bytes reproduces `STUDIO_HANDOFF_PERSONA_ARTIFACT_INVALID`. The following Reviewer-ready preparation gate has the same stale pin. Correct the verifier to derive expected counts from the canonical required-capability contract, update the adjacent independent pin, and reject stale/extra/missing counts, false required/forbidden/exact flags, role drift and source tampering. Product authority, roles, fixtures, schema and timing remain unchanged. The [active completion plan](planning/hosted-acceptance-completion.md) owns verification and rollback. This CI cause is confirmed; the earlier integrated full-run cause and readiness remain unproven.
+
+## Generator template projection correction (2026-10-29)
+
+**Latest AP authorization:** commit this verified correction, open a draft PR and verify exact-candidate CI. Keep 15,000 ms/providers OFF. Do not merge or start any hosted acceptance/diagnostic run until explicit approval. Include `[skip netlify]` in the initial PR title and commit; verify both hosting workflows skip. Require fresh exact-head checks and sanitized artifacts, never earlier candidate evidence.
+
+AP authorizes local investigation, correction and focused regression only; no further hosted run until approval. PR341 run `40838628656/1` remains incomplete at 61 PASS / 47 BLOCKED / 0 FAIL / 0 UNCOVERED, with independently verified cleanup. The sanitized failure points to the exact template option wait; its actual hosted projection and exclusive cause remain unproven.
+
+Confirmed source defect: the required author and approver capability contracts omit `studio.templates.read`, although the browser transport and database projection require it. A fresh disposable PostgreSQL reproduction returns a valid privileged setup binding but no authenticated author projection and zero exact matches. Require this read capability for both generator personas; existing hosted roles are not modified. Keep the product authorization, exact selector, 15,000 ms and providers OFF unchanged. The [active completion plan](planning/hosted-acceptance-completion.md) owns the focused verification and rollback. Local success does not clear hosted acceptance or establish UAT readiness.
+
 ## PR341 CI contract binding correction (2026-10-29)
 
 AP explicitly authorizes local reproduction/correction, updating the same draft PR341 and fresh CI verification. Candidate 0612ba5435c2ea44cc90fa2a87dd9cf726c96911 failed PR C run40809132945/1 at contract validation; no sanitized artifact was produced. The exact local command reproduces PR_C_OWNER_HASH:studio-source-browser after all 85 adversarial contract tests pass. Confirmed source defect: the current PR C registry retained the old owner hash for tests/browser/studioPrB/studioPrB.spec.ts after the approved browser regression changed that file. Correct only that hash and coupled current provenance; preserve all 85 registered commands, 241 assertion expectations, owner paths, runtime contexts, accepted baselines and strict validators. No product/runtime or historical PR B binding changes.

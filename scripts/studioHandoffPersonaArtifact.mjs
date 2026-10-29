@@ -3,6 +3,7 @@ import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterpriseLifecycleSourcePaths } from './enterpriseLifecyclePostgresFixture.mjs';
+import { REQUIRED_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 import { STUDIO_HANDOFF_TARGETING_CASES, STUDIO_HANDOFF_TARGETING_PROJECTS,
   validateStudioHandoffTargetingComponentProof } from './runStudioHandoffActionTargetingBrowser.mjs';
 
@@ -189,8 +190,10 @@ export const verifyStudioHandoffPersonaArtifact=async({directory,expectedRelease
   for(const project of studioHandoffPersonaProjects)browsers.push(validateBrowser(await readJson(`browser-${project}.json`),project,componentProof));
   const result=await readJson('result.json');exact(result,requiredKeys.result);
   if(result.schemaVersion!=='studio-handoff-persona-result-v4'||result.status!=='passed'||result.releaseSha!==expectedReleaseSha||result.browserExit!==0||result.exactRolesStable!==true)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
-  exact(result.exactRoles,['author','reviewer','approver']);validateRole(result.exactRoles.author,25);validateRole(result.exactRoles.reviewer,14);validateRole(result.exactRoles.approver,18);
-  exact(result.exactRolesAfterRun,['author','reviewer','approver']);validateRole(result.exactRolesAfterRun.author,25);validateRole(result.exactRolesAfterRun.reviewer,14);validateRole(result.exactRolesAfterRun.approver,18);
+  for(const phase of ['exactRoles','exactRolesAfterRun']){
+    exact(result[phase],['author','reviewer','approver']);
+    for(const persona of ['author','reviewer','approver'])validateRole(result[phase][persona],REQUIRED_PERSONA_CAPABILITIES[persona].length);
+  }
   if(!equal(result.exactRoles,result.exactRolesAfterRun))fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');
   exact(result.scenarioIsolation,['fixturesCreated','fixturesClosed','observersCreated','observersClosed','cases']);
   for(const key of ['fixturesCreated','fixturesClosed','observersCreated','observersClosed'])if(result.scenarioIsolation[key]!==studioHandoffPersonaScenarioMatrix.length)fail('STUDIO_HANDOFF_PERSONA_ARTIFACT_RESULT_REJECTED');

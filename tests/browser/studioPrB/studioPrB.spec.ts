@@ -5,6 +5,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { assertSyntheticStudioDraftReadback, buildBrowserExecutionCatalog, editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, executePlannedStep, persistAndSubmitSyntheticStudioDraft, prepareSyntheticDirectPdd, runSyntheticObservationPrerequisites, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
 import { authenticatedLifecycleOpenPersistedStudioHandoffDecision,
   authenticatedLifecycleSelectExactStudioTemplate } from '../authenticatedLifecycleHarness';
+import { REQUIRED_PERSONA_CAPABILITIES } from '../../../scripts/authenticatedHostedControllerAdapters.mjs';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -36,7 +37,7 @@ const installTargetingNetworkGuard=async(page:Page)=>{
     await route.abort('blockedbyclient');
   };
   await page.route('**/*',guard);
-  return async()=>{await page.unroute('**/*',guard);return count;};
+  return async()=>{if(!page.isClosed())await page.unroute('**/*',guard);return count;};
 };
 const targetingSnapshot=async(page:Page)=>{
   const center=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true});
@@ -58,6 +59,56 @@ const retainTargetingResult=async(info:TestInfo,result:{case:string;readyCardCou
     providersEnabled:false,
   })}\n`);
 };
+
+const rpcTemplateProjection={organizationId,workspaceId,templates:[{
+  ownership:'system',templateId:exactSystemBrdTemplate.templateVersionId,
+  templateVersionId:exactSystemBrdTemplate.templateVersionId,version:exactSystemBrdTemplate.version,
+  name:'System BRD',description:'Synthetic system template',artifactClass:'brd',lifecycle:'approved',
+  templateHash:'c'.repeat(64),rendererVersion:'studio-renderer-1',contentSchemaVersion:'studio-artifact-1',
+  sections:[],replacement:null,actions:['studio.generation.request'],
+},{ownership:'tenant',templateId:'00000080-0000-4000-8000-000000000080',
+  templateVersionId:'00000081-0000-4000-8000-000000000081',version:1,
+  name:'System BRD',description:'Tenant name decoy',artifactClass:'brd',lifecycle:'approved',
+  templateHash:'d'.repeat(64),rendererVersion:'studio-renderer-1',contentSchemaVersion:'studio-artifact-1',
+  sections:[],replacement:null,actions:['studio.generation.request'],
+}]};
+
+for(const persona of ['author','approver'] as const){
+test(`generator template projection ${persona} preserves exact binding through reorder and reload`,async({page})=>{
+  const readExternalAttempts=await installTargetingNetworkGuard(page);
+  try{
+    const capabilities=[...REQUIRED_PERSONA_CAPABILITIES[persona]];
+    expect(capabilities).toContain('studio.templates.read');
+    await page.addInitScript(value=>{(window as any).__templateProjectionCase=value;},
+      {capabilities,projection:rpcTemplateProjection});
+    await test.step('open local production component',()=>open(page));
+    const template=page.getByLabel('Exact approved Studio template',{exact:true});
+    await expect(template.locator('option')).toHaveCount(3,{timeout:15_000});
+    await template.evaluate((select:HTMLSelectElement)=>{
+      for(const option of [...select.options].filter(option=>option.value).reverse())select.append(option);
+    });
+    await test.step('select exact authorized projection',()=>authenticatedLifecycleSelectExactStudioTemplate(template,exactSystemBrdTemplate));
+    await test.step('reload local production component',()=>page.reload({waitUntil:'domcontentloaded'}));
+    await test.step('select exact projection after reload',()=>authenticatedLifecycleSelectExactStudioTemplate(page.getByLabel('Exact approved Studio template',{exact:true}),exactSystemBrdTemplate));
+    expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(0);
+  }finally{expect(await readExternalAttempts()).toBe(0);}
+});
+}
+
+test('generator template projection rejects revoked read capability before any command',async({page})=>{
+  const readExternalAttempts=await installTargetingNetworkGuard(page);
+  try{
+    await page.addInitScript(value=>{(window as any).__templateProjectionCase=value;},{
+      capabilities:REQUIRED_PERSONA_CAPABILITIES.approver.filter(value=>value!=='studio.templates.read'),
+      projection:rpcTemplateProjection,
+    });
+    await open(page);
+    const template=page.getByLabel('Exact approved Studio template',{exact:true});
+    await expect(template.locator('option')).toHaveCount(1,{timeout:15_000});
+    await expect(authenticatedLifecycleSelectExactStudioTemplate(template,exactSystemBrdTemplate)).rejects.toThrow(/toHaveCount/u);
+    expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(0);
+  }finally{expect(await readExternalAttempts()).toBe(0);}
+});
 
 test('exact system BRD template selection survives eligible competitors, reorder and reload',async({page})=>{
   const readExternalAttempts=await installTargetingNetworkGuard(page);

@@ -19,7 +19,8 @@ import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.m
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { createAuthenticatedHostedIdentityAdapter, createAuthenticatedHostedPostgresAdapter,
-  authenticatedHostedSystemBrdTemplateBinding, readAuthenticatedHostedCleanupControls } from './authenticatedHostedControllerAdapters.mjs';
+  authenticatedHostedSystemBrdTemplateBinding, readAuthenticatedHostedCleanupControls,
+  REQUIRED_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
@@ -30,6 +31,20 @@ const emptyTransportFailures = () => ({ aborted: 0, timeout: 0, connection: 0, p
 const digest = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const id = () => randomUUID();
 const studioTemplate = () => ({ kind:'system', artifactType:'brd', templateVersionId:id(), version:'studio-brd-2' });
+
+test('both generator personas require template read without template administration authority', () => {
+  for (const persona of ['author', 'approver']) {
+    assert.ok(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.artifacts.generate'));
+    assert.ok(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.templates.read'),
+      `${persona}: a privileged setup binding does not authorize the browser projection`);
+    assert.deepEqual(REQUIRED_PERSONA_CAPABILITIES[persona].filter(value => value.startsWith('studio.templates.')),
+      ['studio.templates.read']);
+  }
+  for (const persona of ['reviewer', 'outsider']) {
+    assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.templates.read'), false);
+    assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.artifacts.generate'), false);
+  }
+});
 
 test('hosted controller and adapter strictly bind one active system BRD template identity', () => {
   const templateVersionId=id();

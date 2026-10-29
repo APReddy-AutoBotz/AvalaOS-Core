@@ -109,7 +109,7 @@ let failureCode = null;
 try {
   exactRoles = await readExactRoles();
   if (Object.values(exactRoles).some(role => !role.exact)
-    || exactRoles.author.actualCount !== 25 || exactRoles.reviewer.actualCount !== 14 || exactRoles.approver.actualCount !== 18) {
+    || exactRoles.author.actualCount !== 26 || exactRoles.reviewer.actualCount !== 14 || exactRoles.approver.actualCount !== 19) {
     throw new Error('REVIEWER_READY_ROLE_PARITY_REJECTED');
   }
   if (await run(['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.enterprise-lifecycle-acceptance.config.ts', '--outDir', build], env) !== 0) {
