@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request, type Response as PlaywrightResponse } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request, type Response as PlaywrightResponse } from '@playwright/test';
 import { StorageKeys } from '../../services/storage';
 import { hasDurableProductNavigationAgreement, parseProductNavigationSearch } from '../../services/productNavigationState';
 import { areScopesEqual, isValidScope } from '../../services/viewStatePersistence';
@@ -26,8 +26,71 @@ export type AuthenticatedLifecycleSetup = Readonly<{
   projectName: string;
   deliveryProject: Readonly<{ id: string; name: string }>;
   aliases: Readonly<Record<'case' | 'review' | 'handoff' | 'artifact' | 'process', string>>;
+  studioTemplate: AuthenticatedLifecycleStudioTemplateBinding;
   actors: Readonly<Record<'author' | 'reviewer' | 'approver' | 'outsider', AuthenticatedLifecycleActor>>;
 }>;
+
+export type AuthenticatedLifecycleStudioTemplateBinding = Readonly<{
+  kind: 'system';
+  artifactType: 'brd';
+  templateVersionId: string;
+  version: string;
+}>;
+
+type AuthenticatedLifecycleStudioTemplateOption = Readonly<{ value: string; label: string }>;
+
+export const authenticatedLifecycleValidateStudioTemplateBinding = (
+  value: unknown,
+): AuthenticatedLifecycleStudioTemplateBinding => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_STUDIO_TEMPLATE_BINDING_REJECTED');
+  }
+  const candidate = value as Record<string, unknown>;
+  const keys = Object.keys(candidate).sort();
+  if (JSON.stringify(keys) !== JSON.stringify(['artifactType','kind','templateVersionId','version'])
+    || candidate.kind !== 'system' || candidate.artifactType !== 'brd'
+    || typeof candidate.templateVersionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(candidate.templateVersionId)
+    || typeof candidate.version !== 'string' || candidate.version.length < 1 || candidate.version.length > 128
+    || !/^[A-Za-z0-9._:-]+$/u.test(candidate.version)) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_STUDIO_TEMPLATE_BINDING_REJECTED');
+  }
+  return Object.freeze({ kind:'system', artifactType:'brd', templateVersionId:candidate.templateVersionId,
+    version:candidate.version });
+};
+
+export const authenticatedLifecycleResolveStudioTemplateOption = (
+  binding: unknown,
+  options: readonly AuthenticatedLifecycleStudioTemplateOption[],
+) => {
+  const expected = authenticatedLifecycleValidateStudioTemplateBinding(binding);
+  if (!Array.isArray(options) || options.some(option => option === null || typeof option !== 'object'
+    || typeof option.value !== 'string' || typeof option.label !== 'string')) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_STUDIO_TEMPLATE_OPTIONS_REJECTED');
+  }
+  const matches = options.filter(option => option.value === expected.templateVersionId);
+  const label = `System BRD · v${expected.version} · ${expected.templateVersionId}`;
+  if (matches.length !== 1 || matches[0].label !== label) {
+    throw new Error('ENTERPRISE_LIFECYCLE_BROWSER_STUDIO_TEMPLATE_OPTIONS_REJECTED');
+  }
+  return Object.freeze({ value:expected.templateVersionId, label });
+};
+
+export const authenticatedLifecycleSelectExactStudioTemplate = async (
+  template: Locator,
+  binding: unknown,
+) => {
+  const expected = authenticatedLifecycleValidateStudioTemplateBinding(binding);
+  await expect(template.locator(`option[value="${expected.templateVersionId}"]`)).toHaveCount(1, {
+    timeout:15_000,
+  });
+  const options = await template.locator('option').evaluateAll(nodes => nodes
+    .map(node => ({ value:(node as HTMLOptionElement).value, label:(node as HTMLOptionElement).label }))
+    .filter(option => option.value.length > 0));
+  const selected = authenticatedLifecycleResolveStudioTemplateOption(expected, options);
+  await template.selectOption({ value:selected.value, label:selected.label }, { timeout:15_000 });
+  await expect(template).toHaveValue(selected.value, { timeout:15_000 });
+  return selected;
+};
 
 const hostedSetupSuffix = /^\[run ([1-9][0-9]{0,19})[.]([1-9][0-9]{0,15}) ([a-f0-9]{12})\]$/u;
 

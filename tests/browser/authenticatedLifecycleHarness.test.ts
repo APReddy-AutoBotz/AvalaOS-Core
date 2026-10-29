@@ -12,6 +12,8 @@ import {
   authenticatedLifecycleValidatePersistedHandoffTarget,
   authenticatedLifecycleExpectedAuthStorageKey,
   authenticatedLifecycleValidateStoredSession,
+  authenticatedLifecycleValidateStudioTemplateBinding,
+  authenticatedLifecycleResolveStudioTemplateOption,
   authenticatedLifecycleEnterAs,
   createAuthenticatedLifecycleControl,
   createAuthenticatedLifecycleWorkQueue,
@@ -30,6 +32,56 @@ const actorEntryFixture = {
 // Generated inert project reference matches the loopback TLS fixture; never a live backend.
 const syntheticProjectRef = 'abcdefghijklmnopqrst';
 const syntheticBackendUrl = `https://${syntheticProjectRef}.supabase.co`;
+const studioTemplateBinding = Object.freeze({
+  kind:'system' as const,
+  artifactType:'brd' as const,
+  templateVersionId:'00000013-0000-4000-8000-000000000013',
+  version:'studio-brd-2',
+});
+const studioTemplateLabel = `System BRD · v${studioTemplateBinding.version} · ${studioTemplateBinding.templateVersionId}`;
+
+test('Studio template binding validation is strict and selects exact identity across competing reorderable options', () => {
+  assert.deepEqual(authenticatedLifecycleValidateStudioTemplateBinding(studioTemplateBinding), studioTemplateBinding);
+  const options = [
+    { value:'00000021-0000-4000-8000-000000000021', label:'Tenant BRD · vtenant-brd-3 · 00000021-0000-4000-8000-000000000021' },
+    { value:studioTemplateBinding.templateVersionId, label:studioTemplateLabel },
+    { value:'00000031-0000-4000-8000-000000000031', label:'System FRD · vstudio-frd-1 · 00000031-0000-4000-8000-000000000031' },
+  ];
+  assert.deepEqual(authenticatedLifecycleResolveStudioTemplateOption(studioTemplateBinding, options), {
+    value:studioTemplateBinding.templateVersionId, label:studioTemplateLabel,
+  });
+  assert.deepEqual(authenticatedLifecycleResolveStudioTemplateOption(studioTemplateBinding, [...options].reverse()), {
+    value:studioTemplateBinding.templateVersionId, label:studioTemplateLabel,
+  });
+});
+
+test('Studio template binding rejects malformed shape, unknown keys, kind and artifact type', () => {
+  for (const binding of [
+    null,
+    { ...studioTemplateBinding, extra:true },
+    { ...studioTemplateBinding, kind:'tenant' },
+    { ...studioTemplateBinding, artifactType:'frd' },
+    { ...studioTemplateBinding, templateVersionId:'not-a-uuid' },
+    { ...studioTemplateBinding, version:'' },
+    { ...studioTemplateBinding, version:'bad version' },
+    { ...studioTemplateBinding, version:'x'.repeat(129) },
+  ]) {
+    assert.throws(() => authenticatedLifecycleValidateStudioTemplateBinding(binding), /STUDIO_TEMPLATE_BINDING_REJECTED/u);
+  }
+});
+
+test('Studio template option resolution rejects zero, duplicate identity and wrong version label', () => {
+  assert.throws(() => authenticatedLifecycleResolveStudioTemplateOption(studioTemplateBinding, []),
+    /STUDIO_TEMPLATE_OPTIONS_REJECTED/u);
+  assert.throws(() => authenticatedLifecycleResolveStudioTemplateOption(studioTemplateBinding, [
+    { value:studioTemplateBinding.templateVersionId, label:studioTemplateLabel },
+    { value:studioTemplateBinding.templateVersionId, label:'Tenant impostor with duplicate identity' },
+  ]), /STUDIO_TEMPLATE_OPTIONS_REJECTED/u);
+  assert.throws(() => authenticatedLifecycleResolveStudioTemplateOption(studioTemplateBinding, [
+    { value:studioTemplateBinding.templateVersionId,
+      label:`System BRD · vstudio-brd-1 · ${studioTemplateBinding.templateVersionId}` },
+  ]), /STUDIO_TEMPLATE_OPTIONS_REJECTED/u);
+});
 
 const storedSessionFixture = (actorId = actorEntryFixture.user.id,
   sessionId = '11000000-0000-4000-8000-000000000001', userId = actorId) => {

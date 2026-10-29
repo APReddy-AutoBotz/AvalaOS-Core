@@ -378,9 +378,17 @@ try {
   assert.deepEqual(await initialControls(),beforeSetupControls,
     'aborting before setup must not remove or alter existing controls');
 
+  const activeSystemBrdTemplate=(await db.query(`SELECT id,template_version
+    FROM public.studio_system_template_versions
+    WHERE artifact_type='brd' AND superseded_at IS NULL`)).rows;
+  assert.equal(activeSystemBrdTemplate.length,1);
   const setup = await adapter.setupProject({
     projectName: 'desktop-chromium-postgres', exerciseId: ids.exercise,
     exerciseDigest: config.exerciseDigest, scope: config.scope, identities,
+  });
+  assert.deepEqual(setup.studioTemplate,{
+    kind:'system',artifactType:'brd',templateVersionId:activeSystemBrdTemplate[0].id,
+    version:activeSystemBrdTemplate[0].template_version,
   });
   const project = { ...setup, identities };
   const observationEquivalence = await verifyAuthenticatedObservationQueryEquivalence({ db, config, project, exerciseId: ids.exercise });
@@ -1268,6 +1276,27 @@ try {
 
   const processCount = (await db.query('SELECT count(*)::int count FROM public.assess_processes WHERE org_id=$1 AND workspace_id=$2',
     [ids.org, ids.workspace])).rows[0].count;
+  let injectedMissingSystemBrd=false;
+  const missingSystemBrdAdapter=createAuthenticatedHostedPostgresAdapter({
+    config,
+    db:{query:async(sql,params)=>{
+      if(/FROM\s+public[.]studio_system_template_versions\s+WHERE\s+artifact_type='brd'\s+AND\s+superseded_at IS NULL\s+FOR SHARE/iu.test(String(sql))){
+        injectedMissingSystemBrd=true;
+        return {rows:[]};
+      }
+      return adapterDb.query(sql,params);
+    }},
+    verifyDeployment:async()=>{throw new Error('UNEXPECTED_DEPLOYMENT_VERIFICATION');},
+    verifySecretBackend:async()=>{throw new Error('UNEXPECTED_SECRET_BACKEND_VERIFICATION');},
+    cleanupSecretBackend:async()=>{throw new Error('UNEXPECTED_SECRET_BACKEND_CLEANUP');},
+  });
+  await assert.rejects(() => missingSystemBrdAdapter.setupProject({
+    projectName:'pixel-7-chromium-injected-missing-system-brd',exerciseId:ids.exercise,
+    exerciseDigest:config.exerciseDigest,scope:config.scope,identities,
+  }),/SYSTEM_BRD_TEMPLATE_REJECTED/u);
+  assert.equal(injectedMissingSystemBrd,true);
+  assert.equal((await db.query('SELECT count(*)::int count FROM public.assess_processes WHERE org_id=$1 AND workspace_id=$2',
+    [ids.org,ids.workspace])).rows[0].count,processCount);
   await assert.rejects(() => adapter.setupProject({
     projectName: 'pixel-7-chromium-partial', exerciseId: ids.exercise,
     exerciseDigest: config.exerciseDigest, scope: config.scope, identities: { author: identities.author },

@@ -14,6 +14,7 @@ import {
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
   authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
+  authenticatedLifecycleSelectExactStudioTemplate as selectExactStudioTemplate,
   createAuthenticatedLifecycleWorkQueue,
   authenticatedHostedActionIds,
   type AuthenticatedLifecycleActor as FixtureActor,
@@ -1862,8 +1863,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
     const studioWorkspace = page.getByTestId('studio-artifact-workspace');
     const template = studioWorkspace.getByLabel('Exact approved Studio template', { exact: true });
-    await expect(template.locator('option')).toHaveCount(2);
-    await template.selectOption({ index: 1 });
+    await selectExactStudioTemplate(template, setup.studioTemplate);
     const beforeStudioGeneration = authenticatedProductAcceptance
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
     const hostedSuccessRoute = async (route: import('@playwright/test').Route) => {
@@ -1938,6 +1938,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       observe('studio-artifact-approval', 'ui.studio-approved-exact-version');
 
       const beforeFailure = await control<StudioFailureFrame>('/control/studio-failure-frame', { projectName });
+      await selectExactStudioTemplate(
+        page.getByLabel('Exact approved Studio template', { exact: true }), setup.studioTemplate,
+      );
       const hostedFailureRoute = async (route: import('@playwright/test').Route) => {
         const prepared = await prepareProductFaultRoute(route, async () => {
           await startProductAction(route.request());
@@ -1960,8 +1963,6 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       } else {
         await control('/control/fail-next-studio-provider', { projectName });
       }
-      const template = page.getByLabel('Exact approved Studio template', { exact: true });
-      if (!await template.inputValue()) await template.selectOption({ index: 1 });
       let failedGenerationApi: ApiResponseObservation;
       try {
         failedGenerationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>

@@ -12,13 +12,14 @@ import {
   controllerProfile,
   startAuthenticatedHostedControllerServer,
   validateAuthenticatedHostedControllerEnvironment,
+  validateAuthenticatedHostedStudioTemplateBinding,
 } from './authenticatedHostedController.mjs';
 import { deriveLocalAcceptanceExerciseDigest } from './localAcceptanceBuild.mjs';
 import { authenticatedEvidenceDigest } from './authenticatedBrowserCorrelation.mjs';
 import { authenticatedHostedRequestBinding } from './authenticatedHostedObservationAdapter.mjs';
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { createAuthenticatedHostedIdentityAdapter, createAuthenticatedHostedPostgresAdapter,
-  readAuthenticatedHostedCleanupControls } from './authenticatedHostedControllerAdapters.mjs';
+  authenticatedHostedSystemBrdTemplateBinding, readAuthenticatedHostedCleanupControls } from './authenticatedHostedControllerAdapters.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
@@ -28,6 +29,27 @@ const emptyTransportFailures = () => ({ aborted: 0, timeout: 0, connection: 0, p
 
 const digest = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const id = () => randomUUID();
+const studioTemplate = () => ({ kind:'system', artifactType:'brd', templateVersionId:id(), version:'studio-brd-2' });
+
+test('hosted controller and adapter strictly bind one active system BRD template identity', () => {
+  const templateVersionId=id();
+  const expected={kind:'system',artifactType:'brd',templateVersionId,version:'studio-brd-2'};
+  assert.deepEqual(authenticatedHostedSystemBrdTemplateBinding([
+    {id:templateVersionId,template_version:'studio-brd-2'},
+  ]),expected);
+  assert.deepEqual(validateAuthenticatedHostedStudioTemplateBinding(expected),expected);
+  for(const rows of [[],[
+    {id:templateVersionId,template_version:'studio-brd-2'},
+    {id:id(),template_version:'studio-brd-3'},
+  ],[{id:templateVersionId,template_version:'bad version'}],
+  [{id:templateVersionId,template_version:'studio-brd-2',extra:true}]]){
+    assert.throws(()=>authenticatedHostedSystemBrdTemplateBinding(rows),/SYSTEM_BRD_TEMPLATE_REJECTED/u);
+  }
+  for(const binding of [{...expected,extra:true},{...expected,kind:'tenant'},{...expected,artifactType:'frd'},
+    {...expected,templateVersionId:'bad'},{...expected,version:''}]){
+    assert.throws(()=>validateAuthenticatedHostedStudioTemplateBinding(binding),/STUDIO_TEMPLATE_BINDING_REJECTED/u);
+  }
+});
 // Deterministic fixture identity; never a configured hosted project.
 const fixtureProjectRef = 'abcdefghijklmnopqrst';
 const tokenFor = (actorId, sessionId) => `${Buffer.from('{}').toString('base64url')}.${
@@ -241,7 +263,8 @@ test('a project committed while intake stops remains owned for revocation and cl
       setupProject: async ({ projectName }) => {
         setupStarted();
         await setupGate;
-        return { projectName, processId: id(), projectId: id(), deliveryProject: { id: id(), name: 'fixture' }, aliases: {} };
+        return { projectName, processId: id(), projectId: id(), deliveryProject: { id: id(), name: 'fixture' },
+          studioTemplate:studioTemplate(), aliases: {} };
       },
       quiesce: async () => undefined,
       cleanup: async input => cleanupProjects.push(...input.projects),

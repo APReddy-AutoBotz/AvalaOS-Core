@@ -3,7 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { assertSyntheticStudioDraftReadback, buildBrowserExecutionCatalog, editAndSubmitSyntheticStudioDraft, exactStudioHandoffAction, executePlannedStep, persistAndSubmitSyntheticStudioDraft, prepareSyntheticDirectPdd, runSyntheticObservationPrerequisites, selectExactEligibleStudioBundle, selectStudioTranscriptSources, selectSyntheticStudioDraft, selectSyntheticHybridStudioDraft } from '../../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';import { prepareSyntheticStudioGeneration, verifySyntheticAssessHandoffReady } from '../../../scripts/prCSyntheticBrowserControls.mjs';
-import { authenticatedLifecycleOpenPersistedStudioHandoffDecision } from '../authenticatedLifecycleHarness';
+import { authenticatedLifecycleOpenPersistedStudioHandoffDecision,
+  authenticatedLifecycleSelectExactStudioTemplate } from '../authenticatedLifecycleHarness';
 
 const organizationId='00000002-0000-4000-8000-000000000002';
 const workspaceId='00000003-0000-4000-8000-000000000003';
@@ -20,6 +21,8 @@ const open=async(page:Page,query='')=>navigate(page,`/tests/browser/studioPrB/ha
 const captureStudioFixtureCommand=async(page:Page,{commandType}:{commandType:string},activate:()=>Promise<unknown>)=>{const before=await page.evaluate(()=>(window as any).__studioCommandCalls.length);await activate();await page.waitForFunction(count=>(window as any).__studioCommandCalls.length===count+1,before);const command=await page.evaluate(index=>structuredClone((window as any).__studioCommandCalls[index]),before);expect(command.commandType).toBe(commandType);return command;};
 
 const exactTarget={handoffId:'00000010-0000-4000-8000-000000000010',handoffVersion:2} as const;
+const exactSystemBrdTemplate={kind:'system' as const,artifactType:'brd' as const,
+  templateVersionId:'00000013-0000-4000-8000-000000000013',version:'studio-brd-2'};
 const targetingResultDirectory=process.env.STUDIO_HANDOFF_TARGETING_RESULT_DIRECTORY;
 const targetingProject=(info:TestInfo)=>info.project.name==='Desktop Chrome'?'desktop-chrome':'pixel-7';
 const installTargetingNetworkGuard=async(page:Page)=>{
@@ -55,6 +58,43 @@ const retainTargetingResult=async(info:TestInfo,result:{case:string;readyCardCou
     providersEnabled:false,
   })}\n`);
 };
+
+test('exact system BRD template selection survives eligible competitors, reorder and reload',async({page})=>{
+  const readExternalAttempts=await installTargetingNetworkGuard(page);
+  try{
+    await open(page);
+    const template=page.getByLabel('Exact approved Studio template',{exact:true});
+    await expect.poll(()=>template.locator('option').count(),{timeout:15_000}).toBeGreaterThan(2);
+    await template.evaluate((select:HTMLSelectElement)=>{
+      const options=[...select.options].filter(option=>option.value);
+      for(const option of options.reverse())select.append(option);
+    });
+    await authenticatedLifecycleSelectExactStudioTemplate(template,exactSystemBrdTemplate);
+    await expect(template).toHaveValue(exactSystemBrdTemplate.templateVersionId);
+    expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(0);
+    await page.reload({waitUntil:'domcontentloaded'});
+    const reloaded=page.getByLabel('Exact approved Studio template',{exact:true});
+    await expect(reloaded).toBeVisible();
+    await authenticatedLifecycleSelectExactStudioTemplate(reloaded,exactSystemBrdTemplate);
+    await expect(reloaded).toHaveValue(exactSystemBrdTemplate.templateVersionId);
+    expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(0);
+  }finally{
+    expect(await readExternalAttempts()).toBe(0);
+  }
+});
+
+test('template identity mismatch is rejected before any Studio command',async({page})=>{
+  const readExternalAttempts=await installTargetingNetworkGuard(page);
+  try{
+    await open(page);
+    const template=page.getByLabel('Exact approved Studio template',{exact:true});
+    await expect(authenticatedLifecycleSelectExactStudioTemplate(template,
+      {...exactSystemBrdTemplate,version:'studio-brd-999'})).rejects.toThrow(/STUDIO_TEMPLATE_OPTIONS_REJECTED/u);
+    expect(await page.evaluate(()=>(window as any).__studioCommandCalls.length)).toBe(0);
+  }finally{
+    expect(await readExternalAttempts()).toBe(0);
+  }
+});
 
 test('persisted Studio helper opens only the exact id and numeric-version target among retained ready cards',async({page},info)=>{
   const readExternalAttempts=await installTargetingNetworkGuard(page);
