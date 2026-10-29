@@ -82,6 +82,17 @@ const exactKeys = (value, expected, code) => {
   if (!record(value) || !isDeepStrictEqual(Object.keys(value).sort(), [...expected].sort())) fail(code);
 };
 
+export const validateAuthenticatedHostedStudioTemplateBinding = value => {
+  exactKeys(value, ['kind','artifactType','templateVersionId','version'], 'STUDIO_TEMPLATE_BINDING_REJECTED');
+  if (value.kind !== 'system' || value.artifactType !== 'brd' || !UUID.test(value.templateVersionId)
+    || typeof value.version !== 'string' || value.version.length < 1 || value.version.length > 128
+    || !/^[A-Za-z0-9._:-]+$/u.test(value.version)) {
+    fail('STUDIO_TEMPLATE_BINDING_REJECTED');
+  }
+  return Object.freeze({ kind:value.kind, artifactType:value.artifactType,
+    templateVersionId:value.templateVersionId, version:value.version });
+};
+
 const changedRecordHashes = (before, after) => {
   const prior = new Map(before.records.map(item => [item.recordHash, item]));
   const current = new Map(after.records.map(item => [item.recordHash, item]));
@@ -608,6 +619,7 @@ export class AuthenticatedHostedController {
     // before observing cancellation so cleanup cannot lose a successfully created
     // project whose response arrived while intake was stopping.
     this.ownedProjects.set(projectName, { ...project, identities });
+    const studioTemplate = validateAuthenticatedHostedStudioTemplateBinding(project.studioTemplate);
     this.assertControlCommitAllowed(signal);
     const actors = Object.fromEntries(AUTHENTICATED_HOSTED_PERSONAS.map(persona => {
       const actor = identities[persona];
@@ -629,6 +641,7 @@ export class AuthenticatedHostedController {
       projectName,
       deliveryProject: project.deliveryProject,
       aliases: project.aliases,
+      studioTemplate,
       actors,
     };
     if (!timestamp(this.observationStartedAt)) fail('OBSERVATION_CUTOFF_REJECTED');

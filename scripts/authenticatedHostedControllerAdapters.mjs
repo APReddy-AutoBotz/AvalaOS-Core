@@ -11,6 +11,10 @@ import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
+const strictUuid = value => typeof value === 'string'
+  && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
+const studioTemplateVersion = value => typeof value === 'string'
+  && value.length >= 1 && value.length <= 128 && /^[A-Za-z0-9._:-]+$/u.test(value);
 const digest = value => typeof value === 'string' && /^sha256:[0-9a-f]{64}$/u.test(value);
 const iso = value => {
   const parsed = value instanceof Date ? value : new Date(value);
@@ -23,6 +27,15 @@ const REVIEWER_COMMANDS=Object.freeze(['assessment_v2.review.assign','assessment
 const reviewerRecord=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const reviewerExactKeys=(value,keys)=>reviewerRecord(value)
   && Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+
+export const authenticatedHostedSystemBrdTemplateBinding = rows => {
+  if (!Array.isArray(rows) || rows.length !== 1 || !reviewerExactKeys(rows[0], ['id', 'template_version'])
+    || !strictUuid(rows[0].id) || !studioTemplateVersion(rows[0].template_version)) {
+    throw new Error('AUTHENTICATED_HOSTED_SYSTEM_BRD_TEMPLATE_REJECTED');
+  }
+  return Object.freeze({ kind:'system', artifactType:'brd', templateVersionId:rows[0].id,
+    version:rows[0].template_version });
+};
 
 export const AUTHENTICATED_HOSTED_SESSION_QUERY = `SELECT id,user_id,not_after,refreshed_at
         FROM auth.sessions WHERE id=$1 AND user_id=$2 AND (not_after IS NULL OR not_after>statement_timestamp())`;
@@ -740,8 +753,12 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       let capturedDeliveryControls = null;
       let capturedWorkspaceFlags = null;
       let createdProviderFixture = null;
+      let studioTemplate = null;
       await query('BEGIN');
       try {
+        studioTemplate=authenticatedHostedSystemBrdTemplateBinding((await query(`SELECT id,template_version
+          FROM public.studio_system_template_versions
+          WHERE artifact_type='brd' AND superseded_at IS NULL FOR SHARE`)).rows);
         if(!deliveryControlsBefore){
           capturedDeliveryControls={
             legacy:(await query('SELECT writes_enabled FROM public.legacy_delivery_workspace_controls WHERE org_id=$1 AND workspace_id=$2 FOR UPDATE',scopeParams())).rows[0]??null,
@@ -807,6 +824,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         if(createdProviderFixture)providerFixture=createdProviderFixture;
       } catch (error) { await query('ROLLBACK'); throw error; }
       const project = { projectName, processId, projectId, deliveryProject:{id:projectId,name:fixtureIdentity.deliveryProjectName},
+        studioTemplate,
         aliases:{case:`primary-case-${sequence}`,review:`primary-review-${sequence}`,handoff:`primary-handoff-${sequence}`,
           artifact:`primary-artifact-${sequence}`,process:fixtureIdentity.processName} };
       projects.set(projectName, project);

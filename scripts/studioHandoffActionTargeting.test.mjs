@@ -84,3 +84,20 @@ test('Studio generation binds the consuming approver and preserves independent r
   assert.match(failureRoute, /persona: 'author'/u);
   assert.match(failureRoute, /kind: 'studio_failure_after_claim'/u);
 });
+
+test('all lifecycle template selections bind the protected setup version without ordinal fallback', () => {
+  for (const key of ['aggregate', 'scenarios']) {
+    const source = sources[key];
+    assert.match(source, /authenticatedLifecycleSelectExactStudioTemplate as selectExactStudioTemplate/u, key);
+    assert.doesNotMatch(source, /template\.selectOption\(\{ index:/u, key);
+    assert.doesNotMatch(source, /template\.locator\('option'\)\)\.toHaveCount\(2\)/u, key);
+  }
+  assert.equal((sources.aggregate.match(/await selectExactStudioTemplate\(/gu) ?? []).length, 2);
+  assert.equal((sources.scenarios.match(/await selectExactStudioTemplate\(/gu) ?? []).length, 1);
+  assert.match(sources.aggregate, /selectExactStudioTemplate\(template, setup\.studioTemplate\)/u);
+  assert.match(sources.scenarios, /selectExactStudioTemplate\(template, setup\.studioTemplate\)/u);
+  const beforeFailure = sources.aggregate.indexOf('const beforeFailure =');
+  const failureRoute = sources.aggregate.indexOf('const hostedFailureRoute =', beforeFailure);
+  assert.ok(beforeFailure >= 0 && failureRoute > beforeFailure);
+  assert.match(sources.aggregate.slice(beforeFailure, failureRoute), /selectExactStudioTemplate\([\s\S]*setup\.studioTemplate/u);
+});

@@ -14,6 +14,7 @@ import {
   authenticatedLifecycleResolveEveryGovernControl as resolveGovernControls,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   authenticatedLifecycleSelectReviewer as selectReviewer,
+  authenticatedLifecycleSelectExactStudioTemplate as selectExactStudioTemplate,
   authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
   authenticatedLifecycleValidateSetupLabels as validateSetupLabels,
   type AuthenticatedAssessmentVariant,
@@ -201,7 +202,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\. Approval alone did not create a document\./u)).toBeVisible();
   const studio = page.getByTestId('studio-artifact-workspace');
   const template = studio.getByLabel('Exact approved Studio template', { exact: true });
-  await template.selectOption({ index: 1 });
+  await selectExactStudioTemplate(template, setup.studioTemplate);
   await studio.getByRole('button', { name: 'Generate governed package draft', exact: true }).click();
   await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
   await commitStudioArtifactCommand(

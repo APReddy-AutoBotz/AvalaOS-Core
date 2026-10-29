@@ -16,6 +16,7 @@ import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA } from './authenticated
 import {
   FORBIDDEN_PERSONA_CAPABILITIES,
   REQUIRED_PERSONA_CAPABILITIES,
+  authenticatedHostedSystemBrdTemplateBinding,
 } from './authenticatedHostedControllerAdapters.mjs';
 
 const { Client } = pg;
@@ -1212,6 +1213,9 @@ export async function createEnterpriseLifecycleFixture({
         if (request.headers.get('x-enterprise-lifecycle-control') !== controlToken) return json({ error: 'CONTROL_DENIED' }, 403, cors);
         if (url.pathname === '/control/setup') {
           const setup = await request.json().catch(() => ({}));
+          const studioTemplate = authenticatedHostedSystemBrdTemplateBinding((await db.query(`SELECT id,template_version
+            FROM public.studio_system_template_versions
+            WHERE artifact_type='brd' AND superseded_at IS NULL FOR SHARE`)).rows);
           setupSequence += 1;
           const projectName = typeof setup.projectName === 'string' && setup.projectName.trim() ? setup.projectName.trim() : `project-${setupSequence}`;
           const projectProcessId = randomUUID();
@@ -1257,7 +1261,8 @@ export async function createEnterpriseLifecycleFixture({
           const projectAliases = Object.fromEntries(Object.entries(aliases).map(([key, value]) => [key, `${value}-${setupSequence}`]));
           return json({ executionId, journeyBinding, projectName, projectSequence: setupSequence,
             deliveryProject: { id: deliveryProjectId, name: `${projectName} delivery project` },
-            aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, actors: fixtureActors }, 200, cors);
+            aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, studioTemplate,
+            actors: fixtureActors }, 200, cors);
         }
         if (url.pathname === '/control/process-update-capability') {
           const input = await request.json().catch(() => ({}));

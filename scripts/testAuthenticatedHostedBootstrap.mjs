@@ -148,6 +148,8 @@ try{
           const labels=authenticatedHostedFixtureIdentity({runId:config.workflow.runId,
             attempt:config.workflow.attempt,exerciseId,projectName});
           return {projectName,processId:'72000000-0000-4000-8000-000000000001',
+            studioTemplate:{kind:'system',artifactType:'brd',
+              templateVersionId:'74000000-0000-4000-8000-000000000001',version:'studio-brd-1'},
             projectId:'73000000-0000-4000-8000-000000000001',
             deliveryProject:{id:'73000000-0000-4000-8000-000000000001',name:labels.deliveryProjectName},
             aliases:{case:'primary-case-1',review:'primary-review-1',handoff:'primary-handoff-1',

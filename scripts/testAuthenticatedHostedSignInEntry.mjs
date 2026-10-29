@@ -792,6 +792,9 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
       deliveryProjects.set(projectName, deliveryProject);
       return {
         projectName,
+        // Inert setup contract only; this fixture never projects or generates Studio artifacts.
+        studioTemplate:{kind:'system',artifactType:'brd',
+          templateVersionId:'74000000-0000-4000-8000-000000000001',version:'studio-brd-1'},
         processId: process.id,
         projectId: deliveryProject.id,
         deliveryProject: { id: deliveryProject.id, name: deliveryProject.name },
