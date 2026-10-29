@@ -76,7 +76,7 @@ test('Studio diagnostic actors have exact command capabilities and three-party s
   assert.equal(assigned.studioConsume, 'approver');
   assert.deepEqual(Object.fromEntries(['author','reviewer','approver'].map(persona => [
     persona, REQUIRED_PERSONA_CAPABILITIES[persona].length,
-  ])), { author:25, reviewer:14, approver:18 });
+  ])), { author:26, reviewer:14, approver:19 });
   assert.deepEqual(REQUIRED_PERSONA_CAPABILITIES.author
     .filter(capability => capability.startsWith('studio.handoffs.')),
   ['studio.handoffs.read','studio.handoffs.request']);

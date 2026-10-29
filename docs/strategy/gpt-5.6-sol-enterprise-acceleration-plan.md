@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Generator template projection correction (2026-10-29)
+
+The PR341 integrated result remains incomplete with verified cleanup. Local PostgreSQL reproduces a mismatch between the privileged setup binding and the generator's authorized template projection: the required author/approver contract omitted `studio.templates.read`. The approved local correction requires that read capability and adds actor-authorized projection/browser regressions. Preflight rejects an unconfigured role without granting access. No production authorization, schema, provider or timing change; preserve 15,000 ms/providers OFF. Follow the active hosted-acceptance completion plan, preserve both failed integrated runs, and stop before any new hosted run pending AP approval. Exclusive historical causality and hosted/UAT readiness remain unproven.
+
 ## PR341 CI contract binding correction (2026-10-29)
 
 AP explicitly authorizes local reproduction/correction, updating the same draft PR341 and fresh CI verification. Candidate 0612ba5435c2ea44cc90fa2a87dd9cf726c96911 failed PR C run40809132945/1 at contract validation; no sanitized artifact was produced. The exact local command reproduces PR_C_OWNER_HASH:studio-source-browser after all 85 adversarial contract tests pass. Confirmed source defect: the current PR C registry retained the old owner hash for tests/browser/studioPrB/studioPrB.spec.ts after the approved browser regression changed that file. Correct only that hash and coupled current provenance; preserve all 85 registered commands, 241 assertion expectations, owner paths, runtime contexts, accepted baselines and strict validators. No product/runtime or historical PR B binding changes.
