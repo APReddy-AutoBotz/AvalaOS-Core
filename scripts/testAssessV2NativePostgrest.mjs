@@ -30,6 +30,19 @@ import {
 } from './v2FullPrefixReproduction.mjs';
 
 const { Client } = pg;
+const resolvePrimaryReproductionDirectory = () => {
+  const fallback = path.resolve(
+    'output/local-private/authenticated-product-acceptance/authenticated-native-primary-reproduction',
+  );
+  const requested = process.env.AUTHENTICATED_PRIMARY_LOCAL_PROOF_DIRECTORY;
+  if (!requested) return fallback;
+  const ownedRoot = path.resolve('output/local-private/primary-lifecycle-timeout-local');
+  const resolved = path.resolve(requested);
+  if (resolved !== ownedRoot && !resolved.startsWith(`${ownedRoot}${path.sep}`)) {
+    throw new Error('AUTHENTICATED_PRIMARY_LOCAL_PROOF_DIRECTORY_REJECTED');
+  }
+  return resolved;
+};
 const docker = (...args) => execFileSync('docker', args, {
   encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000, windowsHide: true,
 }).trim();
@@ -399,7 +412,7 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
       return;
     }
     if (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1') {
-      const reproductionDirectory = 'output/local-private/authenticated-product-acceptance/authenticated-native-primary-reproduction';
+      const reproductionDirectory = resolvePrimaryReproductionDirectory();
       await mkdir(reproductionDirectory, { recursive: true });
       const variants = await runIndependentV2FullPrefixVariants(async variant => {
         const projectName = `desktop-chromium-${variant}`;

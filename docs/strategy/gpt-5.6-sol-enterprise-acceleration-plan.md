@@ -1,5 +1,11 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Desktop primary lifecycle local correction (2026-10-30)
+
+Publication update: AP authorizes the verified correction's commit, one draft PR and fresh exact-candidate CI verification. Keep `[skip netlify]`, 15,000 ms/providers OFF and stop before merge or another hosted run. The local-only publication hold below is superseded by this instruction.
+
+AP authorizes local reproduction and focused correction only, retaining 15,000 ms/providers OFF and requiring approval before another hosted run. Preserve PR342 `40952852275/1` and its 61 PASS / 47 BLOCKED result with verified cleanup. The [completion plan](../planning/hosted-acceptance-completion.md) owns the primary attestation projection-progress correction, exact deadline-error attribution and initial document-navigation correction, local regression evidence and rollback. Three read-only reviewers completed before writes. Both complete local primary variants now pass all 13 cases through GOVERN-004 with real Chromium, disposable PostgreSQL/PostgREST, drained requests and verified cleanup. Do not infer historical hosted causation or promote this primary-only replay to integrated full acceptance. The November 11 target remains provisional; no readiness percentage or forecast improvement follows from these fixes alone.
+
 ## PR342 persona evidence contract correction (2026-10-29)
 
 The failed Preparation candidate retained a successful six-scenario Studio persona result with current 26/14/19 capability counts and verified cleanup. Local exact-source replay reproduces rejection by the stale 25/14/18 artifact validator; the next Reviewer-ready gate also retains that stale pin. Correct these coupled evidence contracts and their regression/provenance coverage in the same draft PR342, then require fresh exact-candidate CI and twelve new sanitized archives. Follow the active completion plan. Keep 15,000 ms/providers OFF; no merge, blind workflow retry, live changes or new hosted acceptance/diagnostic. This validator failure does not change the prior incomplete full-run disposition or UAT forecast.

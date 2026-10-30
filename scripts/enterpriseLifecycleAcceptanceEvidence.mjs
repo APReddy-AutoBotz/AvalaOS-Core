@@ -130,6 +130,7 @@ export const REQUIRED_BROWSER_SOURCES = Object.freeze([
   'vite.enterprise-lifecycle-acceptance.config.ts',
   'playwright.enterprise-lifecycle-acceptance.config.ts',
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
+  'tests/browser/enterpriseLifecycleAcceptance/evidenceAttestation.ts',
   'services/assessV2Client.ts',
   'services/assessV2Client.revisionProjection.test.mjs',
   'services/supabaseClient.ts',

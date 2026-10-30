@@ -437,7 +437,7 @@ export const authenticatedLifecycleEnterAs = async (
     }
     const expectedStorageKey = authenticatedLifecycleExpectedAuthStorageKey(required(apiBaseUrl, 'API_BASE_URL'));
     await test.step('hosted:actor:entry-initial', beforeIntentionalNavigation);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
     await test.step('hosted:actor:entry-canonical', beforeIntentionalNavigation);
     await page.evaluate(() => {
       for (const key of Object.keys(localStorage)) if (key.startsWith('sb-')) localStorage.removeItem(key);
@@ -527,7 +527,7 @@ export const authenticatedLifecycleEnterAs = async (
     return;
   }
   await beforeIntentionalNavigation();
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
   await beforeIntentionalNavigation();
   await page.evaluate(({ key, session }) => {
     localStorage.setItem(key, JSON.stringify(session));

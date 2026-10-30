@@ -72,6 +72,33 @@ const correlatedFailedOperation = (operations, primary) => {
   const equivalent = operations.filter(item => sameFailure(item.error, primary));
   return equivalent.length === 1 ? equivalent[0] : null;
 };
+const firstErrorLine = error => typeof error?.message === 'string'
+  ? error.message.replace(/\u001b\[[0-9;]*m/gu, '').split('\n')[0].trim().replace(/^Error: /u, '') : '';
+const isStepAncestor = (ancestor, step) => {
+  for (let parent = step?.parent; parent; parent = parent.parent) {
+    if (parent === ancestor) return true;
+  }
+  return false;
+};
+const correlatedDeadlineOperation = (operations, result, primary) => {
+  // Playwright reports the test deadline first, then the cancelled browser API
+  // error. Known steps can already have ended while result.status was still
+  // unset. Correlate that *reported* API error, never the last completed step.
+  if (result.status !== 'timedOut') return null;
+  const deadline = firstErrorLine(primary);
+  if (!/^Test timeout of [1-9][0-9]*ms exceeded\.$/u.test(deadline)) return null;
+  const secondary = (result.errors ?? []).filter(error => error !== primary
+    && /^[a-zA-Z][a-zA-Z0-9_.]*: /u.test(firstErrorLine(error))
+    && firstErrorLine(error).endsWith(`: ${deadline}`));
+  if (secondary.length !== 1) return null;
+  const matches = operations.filter(item => sameFailure(item.error, secondary[0])
+    || (typeof item.error?.stack === 'string' && item.error.stack.length > 0
+      && item.error.stack === secondary[0].stack && item.error.message === secondary[0].message));
+  const leaves = matches.filter(item => !matches.some(other => other !== item
+    && isStepAncestor(item.step, other.step)));
+  return leaves.length === 1 && matches.every(item => item === leaves[0]
+    || isStepAncestor(item.step, leaves[0].step)) ? leaves[0] : null;
+};
 const boundedLocation = location => {
   const source = typeof location?.file === 'string' ? location.file.replaceAll('\\', '/') : '';
   const root = process.cwd().replaceAll('\\', '/');
@@ -174,7 +201,12 @@ export default class AuthenticatedHostedPlaywrightReporter {
         this.failureOperation = correlated?.operation;
         this.failureLocation ??= correlated?.location ?? null;
       }
-      if (result.status === 'timedOut' && !this.failureDescriptor && !this.failureLocation) {
+      if (!this.failureDescriptor && !this.failureOperation) {
+        const correlated = correlatedDeadlineOperation(this.failedOperations, result, primary);
+        this.failureOperation = correlated?.operation;
+        this.failureLocation ??= correlated?.location ?? null;
+      }
+      if (result.status === 'timedOut' && !this.failureDescriptor && !this.failureLocation && !this.failureOperation) {
         const active = this.timedOutOperation ?? this.currentOperations.at(-1) ?? null;
         this.failureOperation = active?.operation;
         this.failureLocation = active?.location ?? null;

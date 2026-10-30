@@ -93,6 +93,13 @@
   ],
   "entries": [
     {
+      "pattern": "localStorage",
+      "path": "tests/browser/enterpriseLifecycleAcceptance/actorEntryNavigation.spec.ts",
+      "lines": [28],
+      "reason": "test/control documentation",
+      "futureAction": "Keep this exact synthetic-session assertion confined to the loopback navigation regression; never use real credentials or treat browser storage as runtime authority."
+    },
+    {
       "pattern": "GEMINI_API_KEY",
       "path": "scripts/runStudioHandoffActionTargetingBrowser.mjs",
       "lines": [

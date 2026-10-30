@@ -25,6 +25,7 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
 import { exerciseReviewerGovernDenial } from './governReviewerDenial';
+import { attestSubmittedEvidence } from './evidenceAttestation';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
 import {
   primeV2FullPrefixFixtureSession,
@@ -392,18 +393,6 @@ const selectReviewer = async (page: Page, actor: FixtureActor) => {
   const select = page.getByLabel('Eligible reviewer', { exact: true });
   await expect(select).toBeVisible();
   await select.selectOption(actor.user.id);
-};
-
-const attestSubmittedEvidence = async (page: Page, rationale: string, limit = Number.POSITIVE_INFINITY) => {
-  const workspace = page.getByTestId('assess-v2-review-workspace');
-  const responses: ApiResponseObservation[] = [];
-  while (responses.length < limit && await workspace.getByRole('button', { name: 'Accept evidence', exact: true }).count()) {
-    await workspace.getByLabel('Reviewer rationale', { exact: true }).first().fill(rationale);
-    responses.push(await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-      workspace.getByRole('button', { name: 'Accept evidence', exact: true }).first().click()));
-    await expect(workspace.getByText('Evidence attestation committed: Evidence accepted.', { exact: true })).toBeVisible();
-  }
-  return responses;
 };
 
 const resolveEveryGovernControl = async (page: Page) => {
@@ -1497,7 +1486,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       const beforeAttestation = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
-      const firstAttestationApi = await attestSubmittedEvidence(page, 'Independent evidence check before rework.', 1);
+      const firstAttestationApi = await attestSubmittedEvidence(
+        page, 'Independent evidence check before rework.', actionReference, 1,
+      );
       expect(firstAttestationApi).toHaveLength(1);
       const afterAttestation = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
@@ -1522,7 +1513,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           cleanup: { verified: true },
         });
       }
-      await attestSubmittedEvidence(page, 'Independent evidence check before rework.');
+      await attestSubmittedEvidence(page, 'Independent evidence check before rework.', actionReference);
       const reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
       const beforeChanges = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
@@ -1644,7 +1635,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await eligibleReviewer.selectOption(setup.actors.reviewer.user.id);
     await reviewWorkspace.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
     await expect(page.getByText(/Reviewer assignment committed\./u)).toBeVisible();
-    expect((await attestSubmittedEvidence(page, 'Revised evidence independently verified.')).length).toBeGreaterThan(0);
+    expect((await attestSubmittedEvidence(
+      page, 'Revised evidence independently verified.', actionReference,
+    )).length).toBeGreaterThan(0);
     const beforeApproval = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
     await reviewWorkspace.getByLabel('Review rationale', { exact: true }).fill('Revised decision and exact evidence are independently approved.');
     const approvalApi = await test.step('hosted:govern-studio:reviewer-approval', () =>
@@ -2025,7 +2018,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await enterProcessAs(page,rejection.actors.reviewer,rejection.aliases.process,settleActorTransitionEvidence);
       await selectReviewer(page,rejection.actors.reviewer);
       await page.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
-      expect((await attestSubmittedEvidence(page,'Independent evidence review before rejection.')).length).toBeGreaterThan(0);
+      expect((await attestSubmittedEvidence(
+        page, 'Independent evidence review before rejection.', actionReference,
+      )).length).toBeGreaterThan(0);
       const beforeRejection = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName: rejectionProjectName });
       const reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
       await reviewWorkspace.getByLabel('Review rationale', { exact: true }).fill('Reject this current decision because the recorded control posture is not acceptable.');

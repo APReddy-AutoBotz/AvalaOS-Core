@@ -761,6 +761,52 @@ for (const [stepTitle, expectedOperation] of [
   assert.equal(serialized.includes('authors, replays'),false);
 });
 
+for (const mode of ['unique', 'caught', 'different-deadline', 'siblings', 'multiple-errors', 'wrong-stack', 'not-timeout']) {
+  test(`serialized test-deadline correlation fails closed: ${mode}`, async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-deadline-correlation-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const prior = process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    t.after(() => { if (prior === undefined) delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+      else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = prior; });
+    const destination = path.join(root, 'diagnostic.json');
+    process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = destination;
+    const reporter = new AuthenticatedHostedPlaywrightReporter();
+    const current = fixture([...titles.keys()][0]);
+    const primary = { message: '\u001b[31mTest timeout of 3000ms exceeded.\u001b[39m' };
+    const deadline = mode === 'different-deadline' ? 4000 : 3000;
+    const error = () => ({ message: `Error: locator.click: Test timeout of ${deadline}ms exceeded.\nprivate call log`,
+      stack: 'private serialized stack', location: { file: path.resolve('tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts'), line: 1 } });
+    const outer = { title: 'hosted:primary:journey', error: error() };
+    const inner = { title: 'hosted:primary:v2-finalization-and-review', error: error(), parent: outer };
+    reporter.onTestBegin(current);
+    reporter.onStepBegin(current, {}, outer);
+    reporter.onStepBegin(current, {}, inner);
+    reporter.onStepEnd(current, {}, inner);
+    reporter.onStepEnd(current, {}, outer);
+    if (mode === 'siblings') {
+      const sibling = { title: 'hosted:control:observe', error: error() };
+      reporter.onStepBegin(current, {}, sibling);
+      reporter.onStepEnd(current, {}, sibling);
+    }
+    const secondary = error();
+    if (mode === 'wrong-stack') { secondary.stack = 'another private stack'; secondary.location.line = 2; }
+    const errors = mode === 'caught' ? [primary] : [primary, secondary];
+    if (mode === 'multiple-errors') errors.push(error());
+    const teardown = { title: 'hosted:queue:teardown' };
+    reporter.onStepBegin(current, {}, teardown);
+    reporter.onStepEnd(current, {}, teardown);
+    reporter.onTestEnd(current, { status: mode === 'not-timeout' ? 'failed' : 'timedOut', error: primary, errors });
+    await reporter.onEnd({ status: 'failed' });
+    const serialized = await readFile(destination, 'utf8');
+    const value = JSON.parse(serialized);
+    assert.equal(value.operation, mode === 'unique' ? 'PRIMARY_V2_FINALIZATION_AND_REVIEW' : undefined);
+    assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic(value), value);
+    assert.equal(serialized.includes('private'), false);
+    assert.equal(serialized.includes('locator.click'), false);
+    assert.equal(serialized.includes('3000'), false);
+  });
+}
+
 for (const mode of ['unique', 'ambiguous', 'unrelated', 'outside']) {
   test(`ordinary Govern failure attribution is bounded: ${mode}`, async t => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'authenticated-ordinary-correlation-'));
