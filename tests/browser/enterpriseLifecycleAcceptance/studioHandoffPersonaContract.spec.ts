@@ -14,6 +14,7 @@ import {
   authenticatedLifecycleOpenPersistedStudioHandoffDecision as openPersistedStudioHandoffDecision,
   authenticatedLifecycleCommitEligibleStudioHandoffRequest as commitEligibleStudioHandoffRequest,
   authenticatedLifecycleCommitPersistedStudioHandoffAction as commitPersistedStudioHandoffAction,
+  authenticatedLifecycleConsumeApprovedStudioHandoff as consumeApprovedStudioHandoff,
   authenticatedLifecycleResolveEveryGovernControl as resolveEveryGovernControl,
   authenticatedLifecycleSelectReviewer as selectReviewer,
   authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
@@ -31,6 +32,7 @@ const outputDirectory = process.env.STUDIO_HANDOFF_PERSONA_RESULT_DIRECTORY;
 const observerBaseUrl=process.env.STUDIO_HANDOFF_PERSONA_OBSERVER_BASE_URL;
 const observerToken=process.env.STUDIO_HANDOFF_PERSONA_OBSERVER_TOKEN;
 if (!outputDirectory||!observerBaseUrl||!observerToken) throw new Error('STUDIO_HANDOFF_PERSONA_ENV_REQUIRED');
+const reentryProbeEnabled=process.env.STUDIO_HANDOFF_REENTRY_PROBE==='1';
 const digest = (value: unknown) => `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`;
 
 type LifecycleFrame = Readonly<{
@@ -286,6 +288,118 @@ test('exact Studio handoff personas preserve three-party authority in production
       negativeCases:{missingTarget,staleVersion,wrongMailbox,ineligibleState},
     };
     await writeFile(path.join(outputDirectory,`targeting-${projectSlug}.json`),`${JSON.stringify(targeting)}\n`);
+    if(reentryProbeEnabled){
+      const firstFinalResponse=await commitPersistedStudioHandoffAction(
+        page,firstPrepared.reviewedTarget,'Final accept','The retained control is independently accepted for the re-entry boundary.');
+      expect(firstFinalResponse.status()).toBe(201);
+      const firstAcceptedTarget=await persistedHandoffTargetFromResponse(
+        firstFinalResponse,'approved',firstPrepared.reviewedTarget);
+      await firstFinalResponse.finished();
+      const frameBeforeBoundary=await handoffAuthorityFrame(setup.aliases.process);
+      const sameActor=setup.actors.approver.user.id===competingSetup.actors.approver.user.id;
+      expect(sameActor).toBe(true);
+      const handoffProjectionPath='/rest/v1/rpc/enterprise_assess_studio_handoff_projection';
+      const preCommandProjectionReleases=new Set<()=>void>();
+      const releaseFreshProjections=()=>{
+        for(const release of preCommandProjectionReleases)release();
+        preCommandProjectionReleases.clear();
+      };
+      let freshProjectionReadyResolve=()=>{};
+      const freshProjectionReady=new Promise<void>(resolve=>{freshProjectionReadyResolve=resolve;});
+      let heldProjectionReads=0;
+      let postCommandProjectionReads=0;
+      let studioCommandObserved=false;
+      let heldProjectionStatus=0;
+      const reentryProjectionHandler=async(route:Route,request:Request)=>{
+        if(request.method()!=='POST'||new URL(request.url()).pathname!==handoffProjectionPath)return route.continue();
+        if(studioCommandObserved){postCommandProjectionReads+=1;return route.continue();}
+        heldProjectionReads+=1;
+        const actual=await route.fetch({timeout:15_000});
+        const body=await actual.body();
+        heldProjectionStatus=actual.status();
+        let releaseProjection=()=>{};
+        const projectionRelease=new Promise<void>(resolve=>{releaseProjection=resolve;});
+        preCommandProjectionReleases.add(releaseProjection);
+        if(heldProjectionReads===1)freshProjectionReadyResolve();
+        await projectionRelease;
+        preCommandProjectionReleases.delete(releaseProjection);
+        await route.fulfill({status:actual.status(),headers:actual.headers(),body});
+      };
+      let boundaryCommandRequests=0;
+      const observeBoundaryCommand=(request:Request)=>{
+        if(request.method()==='POST'&&new URL(request.url()).pathname==='/functions/v1/studio-artifact-command'){
+          boundaryCommandRequests+=1;
+          studioCommandObserved=true;
+        }
+      };
+      await page.route('**/rest/v1/rpc/enterprise_assess_studio_handoff_projection',reentryProjectionHandler);
+      page.on('request',observeBoundaryCommand);
+      try{
+        const originalBoundaryStartedAt=Date.now();
+        await enterStudioAs(page,competingSetup.actors.approver,settleBoundary);
+        const reentryElapsedMs=Date.now()-originalBoundaryStartedAt;
+        await Promise.race([
+          freshProjectionReady,
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('STUDIO_HANDOFF_REENTRY_PROJECTION_NOT_OBSERVED')),15_000)),
+        ]);
+        const reenteredWorkspace=page.getByTestId('studio-artifact-workspace');
+        const phaseWhileHeld=await reenteredWorkspace.getAttribute('data-studio-handoff-phase');
+        const regionCountWhileHeld=await page.getByRole('region',{
+          name:'Assess → Studio handoffs',exact:true,
+        }).count();
+        let originalBoundaryRejected=false;
+        try{await consumeApprovedStudioHandoff(page,firstAcceptedTarget);}
+        catch{originalBoundaryRejected=true;}
+        const originalBoundaryElapsedMs=Date.now()-originalBoundaryStartedAt;
+        const frameWhileHeld=await handoffAuthorityFrame(setup.aliases.process);
+        const baselineCommandRequests=boundaryCommandRequests;
+        expect({phaseWhileHeld,regionCountWhileHeld,originalBoundaryRejected,boundaryCommandRequests,frameWhileHeld}).toEqual({
+          phaseWhileHeld:'loading',regionCountWhileHeld:0,originalBoundaryRejected:true,
+          boundaryCommandRequests:0,frameWhileHeld:frameBeforeBoundary,
+        });
+        releaseFreshProjections();
+        await expect(reenteredWorkspace).toHaveAttribute('data-studio-handoff-phase','ready',{timeout:15_000});
+        const reenteredCard=page.getByRole('region',{name:'Assess → Studio handoffs',exact:true}).locator(
+          `li[data-handoff-id="${firstAcceptedTarget.handoffId}"][data-handoff-version="${firstAcceptedTarget.handoffVersion}"]`,
+        );
+        await expect(reenteredCard).toHaveCount(1);
+        await expect(reenteredCard.getByRole('button',{name:'Start Studio draft',exact:true})).toBeEnabled();
+        const frameAfterRelease=await handoffAuthorityFrame(setup.aliases.process);
+        expect(frameAfterRelease).toEqual(frameBeforeBoundary);
+        expect(heldProjectionStatus).toBe(200);
+        expect(heldProjectionReads).toBe(1);
+        expect(reentryElapsedMs).toBeLessThan(15_000);
+
+        studioCommandObserved=false;
+        const correctedBoundaryStartedAt=Date.now();
+        const correctedResponse=await consumeApprovedStudioHandoff(page,firstAcceptedTarget);
+        const correctedBoundaryElapsedMs=Date.now()-correctedBoundaryStartedAt;
+        expect(correctedResponse.status()).toBe(201);
+        expect(correctedBoundaryElapsedMs).toBeLessThan(15_000);
+        await persistedHandoffTargetFromResponse(correctedResponse,'consumed',firstAcceptedTarget);
+        await correctedResponse.finished();
+        const frameAfterCorrected=await handoffAuthorityFrame(setup.aliases.process);
+        expect(frameAfterCorrected.sourcePackages-frameBeforeBoundary.sourcePackages).toBe(1);
+        expect(heldProjectionReads).toBe(1);
+        expect(postCommandProjectionReads).toBeGreaterThan(0);
+        await writeFile(path.join(outputDirectory,`reentry-probe-${projectSlug}.json`),`${JSON.stringify({
+          schemaVersion:'studio-handoff-reentry-probe-v1',status:'passed',project:projectSlug,
+          mode:'actual-chromium-production-ui-production-handlers-disposable-postgresql',sameActor,
+          fault:{path:handoffProjectionPath,status:heldProjectionStatus,heldReads:heldProjectionReads,
+            postCommandReads:postCommandProjectionReads},
+          originalBoundary:{reentryElapsedMs,elapsedMs:originalBoundaryElapsedMs,rejected:originalBoundaryRejected,
+            phaseWhileHeld,regionCountWhileHeld,zeroCommands:baselineCommandRequests===0,
+            zeroEffects:JSON.stringify(frameWhileHeld)===JSON.stringify(frameBeforeBoundary)},
+          correctedBoundary:{status:correctedResponse.status(),elapsedMs:correctedBoundaryElapsedMs,
+            exactTarget:true,sourcePackageDelta:frameAfterCorrected.sourcePackages-frameBeforeBoundary.sourcePackages},
+          actorLimitMs:15_000,providersEnabled:false,hostedRun:false,
+        },null,2)}\n`,'utf8');
+      }finally{
+        releaseFreshProjections();
+        page.off('request',observeBoundaryCommand);
+        await page.unroute('**/rest/v1/rpc/enterprise_assess_studio_handoff_projection',reentryProjectionHandler);
+      }
+    }
     page.off('request',countCommand);
     await rm(checkpointPath,{force:true});
     return;
@@ -506,9 +620,12 @@ test('exact Studio handoff personas preserve three-party authority in production
     releaseProjection();
     await page.unroute('**/rest/v1/rpc/studio_artifact_projection',projectionHandler);
   }
+  const correctedBoundaryStartedAt=Date.now();
   const consumeResponse = await test.step('local:studio-handoff:approver-consume-inbox', () =>
-    commitPersistedStudioHandoffAction(page,acceptedTarget,'Start Studio draft',undefined,'Inbox'));
+    consumeApprovedStudioHandoff(page,acceptedTarget));
+  const correctedBoundaryElapsedMs=Date.now()-correctedBoundaryStartedAt;
   expect(consumeResponse.status()).toBe(201);
+  expect(correctedBoundaryElapsedMs).toBeLessThan(15_000);
   await persistedHandoffTargetFromResponse(consumeResponse,'consumed',acceptedTarget);
   await checkpoint('consume-committed');
 

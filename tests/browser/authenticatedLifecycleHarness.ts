@@ -1312,6 +1312,17 @@ export const authenticatedLifecycleCommitPersistedStudioHandoffAction = async (
   return response;
 };
 
+export const authenticatedLifecycleConsumeApprovedStudioHandoff = (
+  page: Page,
+  target: AuthenticatedLifecyclePersistedHandoffTarget,
+) => authenticatedLifecycleCommitPersistedStudioHandoffAction(
+  page,
+  target,
+  'Start Studio draft',
+  undefined,
+  'Inbox',
+);
+
 export const authenticatedLifecycleCompleteRequiredAssessmentFacts = async (
   page: Page,
   variant: AuthenticatedAssessmentVariant,

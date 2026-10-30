@@ -54,6 +54,7 @@ test('Studio generation binds the consuming approver and preserves independent r
     /await enterStudioAs\(page, setup\.actors\.(\w+), settleActorTransitionEvidence\);/gu,
   )].at(-1)?.[1];
   const consume = at("'hosted:govern-studio:source-consume'");
+  const finalAccept = at("'hosted:govern-studio:studio-final-accept'");
   const checkpoint = at('    if (governStudioDiagnostic) {');
   const workspace = at("    const studioWorkspace = page.getByTestId('studio-artifact-workspace');");
   const success = at('    const hostedSuccessRoute =');
@@ -73,6 +74,11 @@ test('Studio generation binds the consuming approver and preserves independent r
   for (const boundary of [consume, success, generation, submit]) {
     assert.equal(actorBefore(boundary), 'approver');
   }
+  const approvedToConsume = source.slice(finalAccept, consume);
+  assert.match(approvedToConsume, /persistedHandoffTargetFromResponse\([\s\S]*'approved'/u);
+  assert.doesNotMatch(approvedToConsume, /enterStudioAs\(/u,
+    'the same approver must consume the committed ready projection without remounting Studio');
+  assert.match(source.slice(consume, checkpoint), /consumeApprovedStudioHandoff\(page, acceptedHandoffTarget\)/u);
   const successRoute = source.slice(success, routeEnd);
   assert.match(successRoute, /persona: 'approver'/u);
   assert.match(successRoute, /kind: 'studio_deterministic_success'/u);

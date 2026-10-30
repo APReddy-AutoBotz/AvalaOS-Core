@@ -10,6 +10,7 @@ import {
   authenticatedLifecycleEnterStudioAs as enterStudioAs,
   authenticatedLifecycleCommitEligibleStudioHandoffRequest as commitEligibleStudioHandoffRequest,
   authenticatedLifecycleCommitPersistedStudioHandoffAction as commitPersistedStudioHandoffAction,
+  authenticatedLifecycleConsumeApprovedStudioHandoff as consumeApprovedStudioHandoff,
   authenticatedLifecycleOpenConnectedProcess as openConnectedProcess,
   authenticatedLifecycleSelectProjectScope as selectProjectScope,
   authenticatedLifecyclePersistedHandoffTargetFromResponse as persistedHandoffTargetFromResponse,
@@ -1801,9 +1802,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     );
     await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
 
-    await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
     const sourcePackageResponse = await test.step('hosted:govern-studio:source-consume', () =>
-      commitPersistedStudioHandoffAction(page, acceptedHandoffTarget, 'Start Studio draft', undefined, 'Inbox'));
+      consumeApprovedStudioHandoff(page, acceptedHandoffTarget));
     const sourcePackageApi = observeStudioHandoffResponse(sourcePackageResponse);
     await persistedHandoffTargetFromResponse(sourcePackageResponse, 'consumed', acceptedHandoffTarget);
     expect(sourcePackageApi.status).toBe(201);
