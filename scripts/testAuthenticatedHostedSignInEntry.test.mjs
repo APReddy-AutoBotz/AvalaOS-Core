@@ -644,7 +644,7 @@ test('shared helper retains the scrub navigation and enters the actual sign-in r
     source.indexOf('export const authenticatedLifecycleEnterAs'),
     source.indexOf('export const authenticatedLifecycleClickProduct'),
   );
-  assert.match(realAuthBranch, /await page[.]goto\('\/'\);[\s\S]*await page[.]goto\('\/sign-in', \{ waitUntil: 'domcontentloaded' \}\);/u);
+  assert.match(realAuthBranch, /await page[.]goto\('\/', \{ waitUntil: 'domcontentloaded', timeout: 15_000 \}\);[\s\S]*await page[.]goto\('\/sign-in', \{ waitUntil: 'domcontentloaded' \}\);/u);
   assert.equal((realAuthBranch.match(/await page[.]goto\('\/sign-in'/gu) ?? []).length, 1);
   assert.match(runnerSource, /--config', 'vite[.]authenticated-hosted-sign-in-entry[.]config[.]ts'/u);
   assert.match(runnerSource, /VITE_PR_C_CONTROLLED_HUMAN_ENABLED: 'authorized'/u);

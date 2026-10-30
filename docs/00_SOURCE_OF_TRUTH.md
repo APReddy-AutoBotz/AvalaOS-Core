@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Desktop primary lifecycle local correction (2026-10-30)
+
+Latest AP authority includes committing the verified correction, opening one draft PR and verifying exact-candidate CI. Keep `[skip netlify]` in the initial commit and PR title and require fresh attempt-1 checks and sanitized archives. No merge or additional hosted acceptance/diagnostic run until approval. Preserve 15,000 ms/providers OFF. PR342 run `40952852275/1` remains incomplete at 61 PASS / 47 BLOCKED, with independently verified cleanup. Its exact timeout cause is **unproven**, and these blocked requirements are not a count of confirmed product defects.
+
+Local reproductions demonstrate three harness defects: the primary evidence-attestation loop can select the same item twice when the committed projection is delayed behind an unchanged success banner; Playwright's test-deadline error can lose its nested operation after the browser error and teardown are serialized separately; and initial actor navigation waits for the full load event even when the document is usable. A complete local replay reproduced the navigation timeout, and a focused Chromium fixture isolates the unnecessary wait on a pending image. The correction requires exact accepted-command responses plus pending/accepted projection progress, preserves action references, correlates only the uniquely reported deadline error to a fixed operation, and uses DOMContentLoaded with an explicit 15,000 ms initial-navigation limit. Session validation and navigation drains remain mandatory. No authorization observation, source validation, product control or case requirement is weakened. The [active completion plan](planning/hosted-acceptance-completion.md) records local proof and remaining replay limits. Local regressions do not establish hosted resolution or UAT readiness.
+
 ## PR342 persona evidence contract correction (2026-10-29)
 
 AP authorizes reproducing and fixing the Studio handoff persona CI failure locally, updating the same draft PR342 and verifying fresh candidate CI. Keep 15,000 ms/providers OFF; no blind retry, merge or hosted acceptance/diagnostic run. Failed candidate `06341db22c786aa86c51c63eb3a54dad5f06b3c7` and Preparation `40889922833/1` remain immutable.
