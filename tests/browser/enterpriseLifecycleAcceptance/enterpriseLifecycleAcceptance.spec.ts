@@ -522,14 +522,22 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (!activeNetworkLifecycle || !activeTestWorkQueues) {
       throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     }
-    // Actor entry intentionally disposes two documents. Join body ownership
-    // and only the network action queue at each boundary; case work and normal
-    // V2 reloads retain their existing independent lifecycle.
+    // Canonical navigation also owns native legacy reads started by global
+    // providers. Count them inside the unchanged 15-second boundary so refresh
+    // cannot cancel an untracked REST read. Normal V2 probes retain their lifecycle.
+    let canonicalNativeReads = 0;
     await test.step('hosted:actor-boundary', () => settleActorNavigationBoundary({
       settleActionAdmissions: activeNetworkLifecycle.settleActionAdmissions,
-      settleResponseBodies: activeNetworkLifecycle.settleResponseBodies,
+      settleResponseBodies: async () => {
+        await activeNetworkLifecycle!.settleResponseBodies();
+        if (canonicalInvoiceExceptionJourney) {
+          const stats = await control<{ active: number }>('/control/native-postgrest-stats', { projectName });
+          expect(Number.isSafeInteger(stats.active) && stats.active >= 0).toBe(true);
+          canonicalNativeReads = stats.active;
+        }
+      },
       drainNetworkActions: activeTestWorkQueues.network.drain,
-      activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,
+      activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size + canonicalNativeReads,
       runPhase: (phase, operation) => test.step(`hosted:actor-phase:${phase}`, operation),
     }));
   };
@@ -717,6 +725,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
     };
     if (owningTestWorkQueues && owningNetworkLifecycle) {
+      if (canonicalInvoiceExceptionJourney) {
+        try { await settleActorTransitionEvidence(); } catch (error) { retainBoundaryFailure(error); }
+      }
       await new Promise(resolve => setTimeout(resolve, 0));
       await test.step('hosted:queue:teardown', async () => {
         try {
@@ -965,6 +976,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     let createdRow = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
     await expect(createdRow).toContainText('Finance · Accounts Payable');
     await expect(createdRow).toContainText('High');
+    await settleActorTransitionEvidence();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
     createdRow = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
@@ -1706,6 +1718,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('New immutable draft revision committed.', { exact: true })).toBeVisible();
       observe('assess-revise', 'ui.revision-committed');
 
+      if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
@@ -1764,7 +1777,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   }));
 
   test('independent approval, Govern separation and synthetic Studio generation retain exact lineage',
-    { tag: ['@govern-studio-diagnostic', '@v2-primary-prefix-diagnostic'] }, async ({ page }, testInfo) => {
+    { tag: canonicalInvoiceExceptionJourney
+      ? ['@govern-studio-diagnostic', '@v2-primary-prefix-diagnostic'] : '@govern-studio-diagnostic' }, async ({ page }, testInfo) => {
     const reviewerSelection = eligibleReviewerRequestDiagnostics?.beginSelection(page) ?? null;
     await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
     let reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
@@ -2059,6 +2073,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       });
     }
 
+    if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
     await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
@@ -2080,6 +2095,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       expect((await revisionResponse).status()).toBe(201);
       await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
       await expect(page.getByText('v2', { exact: true }).first()).toBeVisible();
+      await settleActorTransitionEvidence();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: 'Structured section editor', exact: true })).toBeVisible();
       await expect(page.getByLabel('Section title', { exact: true })).toHaveValue('AP invoice exception handling scope and controls');

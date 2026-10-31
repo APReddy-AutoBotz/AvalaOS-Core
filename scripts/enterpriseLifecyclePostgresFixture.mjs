@@ -2244,7 +2244,6 @@ export const enterpriseLifecycleSourcePaths = Object.freeze([...new Set([
   'supabase/functions/_shared/enterpriseIntelligenceQuery.ts',
   'supabase/functions/_shared/deliveryMonitorCommand.ts',
   'supabase/functions/_shared/deliveryMonitorDb.ts',
-  'supabase/functions/_shared/deliveryMonitorQuery.ts',
   'services/assessV2/decisionVersion.ts',
   'services/assessV2/fixture.ts',
   'supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql',

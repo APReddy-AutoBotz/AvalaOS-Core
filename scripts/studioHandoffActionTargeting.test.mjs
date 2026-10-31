@@ -58,7 +58,7 @@ test('Studio generation binds the consuming approver and preserves independent r
   const checkpoint = at('    if (governStudioDiagnostic) {');
   const workspace = at("    const studioWorkspace = page.getByTestId('studio-artifact-workspace');");
   const success = at('    const hostedSuccessRoute =');
-  const routeEnd = at('    if (hostedAuthenticatedAcceptance) await page.route');
+  const routeEnd = at('    if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) await page.route');
   const generation = source.indexOf('generationApi = await observeApiResponse', routeEnd);
   const submit = at("name: 'Submit for review'");
   const review = at("name: 'Approve review'");
@@ -106,4 +106,8 @@ test('all lifecycle template selections bind the protected setup version without
   const failureRoute = sources.aggregate.indexOf('const hostedFailureRoute =', beforeFailure);
   assert.ok(beforeFailure >= 0 && failureRoute > beforeFailure);
   assert.match(sources.aggregate.slice(beforeFailure, failureRoute), /selectExactStudioTemplate\([\s\S]*setup\.studioTemplate/u);
+});
+
+test('only the opt-in canonical mode extends the native primary prefix into Studio generation', () => {
+  assert.match(sources.aggregate, /tag: canonicalInvoiceExceptionJourney\s*\? \['@govern-studio-diagnostic', '@v2-primary-prefix-diagnostic'\] : '@govern-studio-diagnostic'/u);
 });

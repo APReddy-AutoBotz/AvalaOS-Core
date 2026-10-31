@@ -184,3 +184,65 @@ test('a rejected owned-evidence drain prevents navigation and session replacemen
   expect(page.url()).toBe(urlBefore);
   expect(await actorId(page)).toBe(actors.approver.user.id);
 });
+
+for (const settled of [false, true]) {
+  test(`${settled ? 'settled' : 'raw'} refresh accounts for an actual held native document read`, async ({ context, page }) => {
+    const resource = `${backendOrigin}/rest/v1/document_generations`;
+    const entered = deferred();
+    const release = deferred();
+    const routeFinished = deferred();
+    let active = 0;
+    let completed = 0;
+    let cancelled = 0;
+    let boundaryEntered = false;
+    let refreshed = false;
+    page.on('requestfinished', request => {
+      if (request.url() === resource) { active -= 1; completed += 1; }
+    });
+    page.on('requestfailed', request => {
+      if (request.url() === resource) { active -= 1; cancelled += 1; }
+    });
+    await context.route(resource, async route => {
+      active += 1;
+      entered.resolve();
+      await release.promise;
+      try {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]',
+          headers: { 'access-control-allow-origin': appOrigin } });
+      } catch { /* The raw control intentionally discards the requesting document. */ }
+      finally { routeFinished.resolve(); }
+    });
+    await page.goto(appOrigin);
+    await page.evaluate(url => { void fetch(url).catch(() => undefined); }, resource);
+    await entered.promise;
+    const refresh = (async () => {
+      if (settled) await authenticatedLifecycleSettleActorNavigationBoundary({
+        settleActionAdmissions: async () => { boundaryEntered = true; },
+        settleResponseBodies: async () => undefined,
+        drainNetworkActions: async () => undefined,
+        activeActionCount: () => active,
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      refreshed = true;
+    })();
+    try {
+      if (settled) {
+        await expect.poll(() => boundaryEntered).toBe(true);
+        expect(refreshed).toBe(false);
+        expect(active).toBe(1);
+        release.resolve();
+        await refresh;
+        expect(completed).toBe(1);
+        expect(cancelled).toBe(0);
+      } else {
+        await refresh;
+        await expect.poll(() => cancelled).toBe(1);
+        expect(completed).toBe(0);
+      }
+    } finally {
+      release.resolve();
+      await Promise.all([refresh, routeFinished.promise]);
+    }
+    expect(active).toBe(0);
+  });
+}

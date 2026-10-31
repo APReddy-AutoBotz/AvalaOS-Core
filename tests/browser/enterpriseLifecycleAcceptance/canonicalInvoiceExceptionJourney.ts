@@ -252,6 +252,7 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   await expect(page.getByTestId('governed-delivery-workspace').getByRole('status').filter({ hasText: 'delivery.item.review committed and exact Delivery/Monitor projection reloaded.' })).toBeVisible();
   commands.push('delivery.item.review');
   await expect(page.getByText(AP_ITEM_TITLE, { exact: true })).toBeVisible();
+  await settleActorTransitionEvidence();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('enterprise-intelligence-workspace')).toBeVisible();
   await page.getByRole('button', { name: 'Work Package', exact: true }).click();
@@ -289,6 +290,7 @@ export const runCanonicalInvoiceExceptionJourney = async ({
     'Independent approver accepted the exact reviewed package version for the AP invoice exception baseline.',
   );
   await expect(page.getByText(/Approved identity: \d+ server-counted items\./u)).toBeVisible();
+  await settleActorTransitionEvidence();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('enterprise-intelligence-workspace')).toBeVisible();
   await page.getByRole('button', { name: 'Work Package', exact: true }).click();
