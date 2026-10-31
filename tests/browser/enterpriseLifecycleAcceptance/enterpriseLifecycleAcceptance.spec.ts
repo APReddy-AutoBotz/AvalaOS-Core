@@ -25,6 +25,7 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
+import { runCanonicalInvoiceExceptionJourney } from './canonicalInvoiceExceptionJourney';
 import { exerciseReviewerGovernDenial } from './governReviewerDenial';
 import { attestSubmittedEvidence } from './evidenceAttestation';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
@@ -178,6 +179,7 @@ const v2FullPrefixReproductionVariant = resolveV2FullPrefixLocalSelection({
   mode: authenticatedAcceptanceMode,
 });
 const v2FullPrefixReproduction = v2FullPrefixReproductionVariant !== null;
+const canonicalInvoiceExceptionJourney = process.env.ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION === '1';
 const controllerBackedAcceptance = hostedAuthenticatedAcceptance || v2FullPrefixReproduction || governStudioDiagnostic;
 if ((v2PrimaryPrefixDiagnostic || reviewerSelectionDiagnostic || governStudioDiagnostic)
   && (!authenticatedProductAcceptance || !hostedAuthenticatedAcceptance)) {
@@ -410,8 +412,9 @@ const assertHighImpactFinancialGovernActions = async (page: Page) => {
   const governReview = reviewWorkspace.getByRole('heading', { name: 'Avala Govern action and control review', exact: true }).locator('..');
   const actionBoundaries = governReview.getByRole('heading', { name: 'Action boundaries', exact: true }).locator('..');
   await expect(actionBoundaries.getByRole('listitem')).not.toHaveCount(0);
-  await expect(actionBoundaries.getByText('approval-bound · write with controls: Post financial decision', { exact: true })).toHaveCount(1);
-  await expect(actionBoundaries.getByText('prohibited · autonomous financial action: Post financial decision', { exact: true })).toHaveCount(1);
+  const action = canonicalInvoiceExceptionJourney ? 'Post approved invoice exception disposition' : 'Post financial decision';
+  await expect(actionBoundaries.getByText(`approval-bound · write with controls: ${action}`, { exact: true })).toHaveCount(1);
+  await expect(actionBoundaries.getByText(`prohibited · autonomous financial action: ${action}`, { exact: true })).toHaveCount(1);
 };
 
 const assertNoHorizontalViewportOverflow = async (page: Page) => {
@@ -446,12 +449,25 @@ const connectedEvidenceClaims = [
 ] as const;
 
 const completeRequiredAssessmentFacts = async (page: Page) => {
+  if (canonicalInvoiceExceptionJourney) {
+    await page.getByLabel('Primitive 1 name', { exact: true }).fill('Resolve AP invoice exception');
+    await page.getByLabel('Primitive 1 description', { exact: true }).fill(
+      'Assess unmatched, duplicate, tax, quantity and tolerance exceptions before financial release.',
+    );
+  }
   await page.getByLabel('Primitive 1 primitive.rulesStable', { exact: true }).selectOption('true');
   await page.getByText('3. Applications and interactions', { exact: true }).click();
+  if (canonicalInvoiceExceptionJourney) {
+    await page.getByLabel('Application 1 name', { exact: true }).fill('Synthetic accounts payable ledger');
+  }
   await page.getByLabel('Application 1 strategic lifespan', { exact: true }).selectOption('short');
-  await page.getByLabel('Application 1 accountable owner', { exact: true }).fill('Lifecycle operations owner');
+  await page.getByLabel('Application 1 accountable owner', { exact: true }).fill(
+    canonicalInvoiceExceptionJourney ? 'Accounts payable operations owner' : 'Lifecycle operations owner',
+  );
   const interaction = page.getByRole('group', { name: 'Interaction 1', exact: true });
-  await interaction.getByLabel('Interaction 1 operation name', { exact: true }).fill('Post financial decision');
+  await interaction.getByLabel('Interaction 1 operation name', { exact: true }).fill(
+    canonicalInvoiceExceptionJourney ? 'Post approved invoice exception disposition' : 'Post financial decision',
+  );
   await interaction.getByLabel('Interaction 1 mode', { exact: true }).selectOption('write');
   await interaction.getByLabel('Interaction 1 data classification', { exact: true }).selectOption('Restricted');
   for (const fact of [
@@ -486,6 +502,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let reworkJourneyApiResponses: ApiResponseObservation[] = [];
   let approvedDecisionApi: ApiResponseObservation | null = null;
   let v2FullPrefixObservation: V2FullPrefixReproductionObservation | null = null;
+  const canonicalRepresentativeOutputs: string[] = [];
   let v2FullPrefixQueues: V2FullPrefixQueueObservation = Object.freeze({ network: 'not_run', cases: 'not_run' });
   type TestWorkQueues = Readonly<{
     network: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
@@ -505,14 +522,24 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (!activeNetworkLifecycle || !activeTestWorkQueues) {
       throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     }
-    // Actor entry intentionally disposes two documents. Join body ownership
-    // and only the network action queue at each boundary; case work and normal
-    // V2 reloads retain their existing independent lifecycle.
+    // Canonical navigation also owns native legacy reads started by global
+    // providers. Count them inside the unchanged 15-second boundary so refresh
+    // cannot cancel an untracked REST read. Normal V2 probes retain their lifecycle.
+    let canonicalNativeReads = 0;
     await test.step('hosted:actor-boundary', () => settleActorNavigationBoundary({
       settleActionAdmissions: activeNetworkLifecycle.settleActionAdmissions,
-      settleResponseBodies: activeNetworkLifecycle.settleResponseBodies,
+      settleResponseBodies: async () => {
+        await activeNetworkLifecycle!.settleResponseBodies();
+        if (canonicalInvoiceExceptionJourney) {
+          const stats = await control<{ active: number; cancelled: number; failed: number }>('/control/native-postgrest-stats', { projectName });
+          expect(Number.isSafeInteger(stats.active) && stats.active >= 0).toBe(true);
+          expect(stats.cancelled, 'CANONICAL_NATIVE_READ_CANCELLED_BEFORE_BOUNDARY').toBe(0);
+          expect(stats.failed, 'CANONICAL_NATIVE_READ_FAILED_BEFORE_BOUNDARY').toBe(0);
+          canonicalNativeReads = stats.active;
+        }
+      },
       drainNetworkActions: activeTestWorkQueues.network.drain,
-      activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size,
+      activeActionCount: () => pendingTrackedActionStarts + activeTrackedActionIds.size + canonicalNativeReads,
       runPhase: (phase, operation) => test.step(`hosted:actor-phase:${phase}`, operation),
     }));
   };
@@ -565,9 +592,15 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const length = super.push(...items);
       if (controllerBackedAcceptance && !v2PrimaryPrefixDiagnostic) {
         for (const row of items) {
+          const testId=(row as any)?.testId;
+          if (canonicalInvoiceExceptionJourney
+            && (typeof testId !== 'string'
+              || !(V2_FULL_PRIMARY_EXPECTED_CASE_IDS as readonly string[]).includes(testId))) {
+            explicitCaseActions.delete(testId);
+            continue;
+          }
           const owningTestWorkQueues = activeTestWorkQueues;
           if (!owningTestWorkQueues) throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
-          const testId=(row as any)?.testId;
           const explicit=explicitCaseActions.get(testId);
           if(explicit){Object.defineProperty(row as object,authenticatedHostedActionIds,{value:explicit});explicitCaseActions.delete(testId);}
           owningTestWorkQueues.cases.enqueue(async () => {
@@ -600,7 +633,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     try { setup = await control<FixtureSetup>('/control/setup', { projectName }); }
     catch (error) { failed = true; throw error; }
     expect(setup.journeyBinding).toMatch(/^sha256:[a-f0-9]{64}$/u);
-    validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
+    if (canonicalInvoiceExceptionJourney) {
+      expect(hostedAuthenticatedAcceptance).toBe(false);
+      expect(setup.projectName).toBe(projectName);
+      expect(setup.aliases.process).toBe(`${projectName} prerequisite process`);
+      expect(setup.deliveryProject.name).toBe('AP Invoice Exception Workflow');
+    } else validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
     for (const key of ['case', 'review', 'handoff', 'artifact'] as const) expect(setup.aliases[key]).toMatch(new RegExp(`^primary-${key}-\\d+$`, 'u'));
     if (controllerBackedAcceptance) {
       const backendOrigin = new URL(hostedAuthenticatedAcceptance
@@ -689,6 +727,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (!hasBoundaryFailure) { hasBoundaryFailure = true; boundaryFailure = error; }
     };
     if (owningTestWorkQueues && owningNetworkLifecycle) {
+      if (canonicalInvoiceExceptionJourney) {
+        try { await settleActorTransitionEvidence(); } catch (error) { retainBoundaryFailure(error); }
+      }
       await new Promise(resolve => setTimeout(resolve, 0));
       await test.step('hosted:queue:teardown', async () => {
         try {
@@ -884,8 +925,79 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     await closePageAfterOwnedNetwork(stalePage);
   });
 
+  test('creates and reloads the canonical AP Invoice Exception process through the production UI',
+    { tag: '@v2-primary-prefix-diagnostic' }, async ({ page }) => {
+    test.skip(!canonicalInvoiceExceptionJourney,
+      'canonical process creation is an opt-in prerequisite for the AP Invoice Exception journey');
+    if (v2FullPrefixReproduction) {
+      await primeV2FullPrefixFixtureSession(
+        page,
+        setup.actors.author,
+        process.env.ENTERPRISE_LIFECYCLE_AUTH_STORAGE_KEY ?? 'sb-127-auth-token',
+      );
+    }
+    await enterAs(page, setup.actors.author, settleActorTransitionEvidence);
+    if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
+      await clickProduct(page, 'Assess');
+    }
+    await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'New process', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'New Assess process', exact: true });
+    await dialog.getByRole('textbox', { name: 'Process Name *', exact: true }).fill('AP Invoice Exception Handling');
+    await dialog.getByRole('textbox', { name: 'Description', exact: true }).fill(
+      'Assess unmatched, duplicate, tax, quantity and tolerance invoice exceptions before any financial release.',
+    );
+    await dialog.getByRole('textbox', { name: 'Department', exact: true }).fill('Finance · Accounts Payable');
+    await dialog.getByLabel(/^Assessed Criticality/u).selectOption('High');
+    const createResponse = page.waitForResponse(response => {
+      if (new URL(response.url()).pathname !== '/functions/v1/process-command'
+        || response.request().method() !== 'POST') return false;
+      try {
+        return (response.request().postDataJSON() as { commandType?: unknown }).commandType === 'process.create';
+      } catch { return false; }
+    }, { timeout: 15_000 });
+    await dialog.getByRole('button', { name: 'Create process', exact: true }).click();
+    const response = await createResponse;
+    expect([200, 201]).toContain(response.status());
+    const request = response.request().postDataJSON() as {
+      requestId?: unknown;
+      payload?: { processId?: unknown };
+    };
+    const body = await response.json() as {
+      ok?: unknown;
+      outcome?: unknown;
+      resource?: { id?: unknown; name?: unknown; receiptId?: unknown; requestId?: unknown };
+    };
+    expect(body.ok).toBe(true);
+    expect(['committed', 'replayed']).toContain(body.outcome);
+    expect(body.resource?.id).toBe(request.payload?.processId);
+    expect(body.resource?.requestId).toBe(request.requestId);
+    expect(body.resource?.name).toBe('AP Invoice Exception Handling');
+    expect(body.resource?.receiptId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
+    await expect(dialog).toHaveCount(0);
+    let createdRow = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
+    await expect(createdRow).toContainText('Finance · Accounts Payable');
+    await expect(createdRow).toContainText('High');
+    await settleActorTransitionEvidence();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+    createdRow = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
+    await expect(createdRow).toContainText('Finance · Accounts Payable');
+    await expect(createdRow).toContainText('High');
+    const adopted = await control<{ processId: string; name: string }>('/control/canonical-created-process', {
+      projectName,
+      processId: body.resource?.id,
+    });
+    expect(adopted).toEqual({ processId: body.resource?.id, name: 'AP Invoice Exception Handling' });
+    setup = Object.freeze({
+      ...setup,
+      aliases: Object.freeze({ ...setup.aliases, process: adopted.name }),
+    });
+    observe('canonical-process-create', 'ui.canonical-process-created-and-reloaded');
+  });
+
   test('authors, replays, rejects stale work, requests changes and resubmits through the production UI',
-    { tag: ['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'] }, async ({ page, context }) => test.step('hosted:primary:journey', async () => {
+    { tag: ['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'] }, async ({ page, context }, testInfo) => test.step('hosted:primary:journey', async () => {
     let diagnosticPrefixComplete = false;
     await test.step('hosted:primary:process-denial', async () => {
       const deniedEditPage = await context.newPage();
@@ -916,6 +1028,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await expect(deniedEditPage.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
       }
       expect(deniedEditApi.status).toBe(403);
+      if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
       await deniedEditPage.reload({ waitUntil: 'domcontentloaded' });
       await expect(deniedEditPage.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       const afterDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
@@ -1205,6 +1318,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             }
             if (retainedFailure === null) {
               try {
+                if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
                 await page.reload({ waitUntil: 'domcontentloaded' });
                 navigation = 'passed';
               } catch (error) { retainFailure('navigation', error); }
@@ -1373,6 +1487,58 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const finalizeV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page));
       expect(finalizeV2Api.status).toBe(200);
       await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
+      if (canonicalInvoiceExceptionJourney) {
+        await mkdir(outputDirectory, { recursive: true });
+        const decisionPack = page.getByTestId('assess-v2-decision-pack');
+        const header = decisionPack.locator(':scope > div').first();
+        const executiveSection = decisionPack.getByRole('heading', { name: 'Executive decision', exact: true }).locator('..');
+        const controlsSection = decisionPack.getByRole('heading', { name: 'Required controls', exact: true }).first().locator('..');
+        const nonClaimsSection = decisionPack.getByRole('heading', { name: 'Explicit non-claims', exact: true }).locator('..');
+        const referencesSection = decisionPack.getByRole('heading', { name: 'Immutable references', exact: true }).locator('..');
+        const decisionPackText = [
+          `# ${await header.getByRole('heading').innerText()}`,
+          '',
+          `Process: ${setup.aliases.process}`,
+          'Captured at deterministic finalization, before independent review and Govern resolution.',
+          '',
+          await header.locator('p').nth(0).innerText(),
+          await header.locator('p').nth(1).innerText(),
+          await header.locator('p').nth(2).innerText(),
+          await header.locator('p').nth(3).innerText(),
+          await header.locator('p').nth(4).innerText(),
+          '',
+          `## ${await executiveSection.getByRole('heading', { name: 'Executive decision', exact: true }).innerText()}`,
+          await executiveSection.locator('p').first().innerText(),
+          '',
+          `## ${await controlsSection.getByRole('heading', { name: 'Required controls', exact: true }).innerText()}`,
+          ...(await controlsSection.locator('li').allTextContents()).map(item => `- ${item}`),
+          '',
+          '## Canonical source/version labels',
+          `- Schema version: ${await referencesSection.locator('dd').nth(0).innerText()}`,
+          `- Rule-set version: ${await referencesSection.locator('dd').nth(1).innerText()}`,
+          `- Decision version: ${await referencesSection.locator('dd').nth(2).innerText()}`,
+          '',
+          `## ${await nonClaimsSection.getByRole('heading', { name: 'Explicit non-claims', exact: true }).innerText()}`,
+          ...(await nonClaimsSection.locator('p').allTextContents()).map(item => `- ${item}`),
+          '',
+        ].join('\n');
+        expect(decisionPackText).not.toMatch(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/iu);
+        const decisionPackOutput = `${testInfo.project.name}-ap-invoice-exception-decision-pack.md`;
+        await writeFile(path.join(outputDirectory, decisionPackOutput), decisionPackText, 'utf8');
+        canonicalRepresentativeOutputs.push(decisionPackOutput);
+        await testInfo.attach(decisionPackOutput, {
+          path: path.join(outputDirectory, decisionPackOutput),
+          contentType: 'text/markdown',
+        });
+        const decisionPackScreenshotName = `${testInfo.project.name}-ap-invoice-exception-decision-pack.png`;
+        const decisionPackScreenshot = path.join(outputDirectory, decisionPackScreenshotName);
+        await header.screenshot({ path: decisionPackScreenshot });
+        await testInfo.attach('ap-invoice-exception-decision-pack.png', {
+          path: decisionPackScreenshot,
+          contentType: 'image/png',
+        });
+        canonicalRepresentativeOutputs.push(decisionPackScreenshotName);
+      }
       observe('assess-finalize', 'ui.assess-finalized');
       if (authenticatedProductAcceptance && beforeV2Finalize) {
         const afterV2Finalize = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
@@ -1556,6 +1722,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('New immutable draft revision committed.', { exact: true })).toBeVisible();
       observe('assess-revise', 'ui.revision-committed');
 
+      if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
@@ -1614,7 +1781,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   }));
 
   test('independent approval, Govern separation and synthetic Studio generation retain exact lineage',
-    { tag: '@govern-studio-diagnostic' }, async ({ page }, testInfo) => {
+    { tag: canonicalInvoiceExceptionJourney
+      ? ['@govern-studio-diagnostic', '@v2-primary-prefix-diagnostic'] : '@govern-studio-diagnostic' }, async ({ page }, testInfo) => {
     const reviewerSelection = eligibleReviewerRequestDiagnostics?.beginSelection(page) ?? null;
     await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
     let reviewWorkspace = page.getByTestId('assess-v2-review-workspace');
@@ -1876,13 +2044,13 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (!prepared) return;
       await route.fallback();
     };
-    if (hostedAuthenticatedAcceptance) await page.route('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
+    if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) await page.route('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
     let generationApi: ApiResponseObservation;
     try {
       generationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
         studioWorkspace.getByRole('button', { name: 'Generate governed package draft', exact: true }).click());
     } finally {
-      if (hostedAuthenticatedAcceptance) await page.unroute('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
+      if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) await page.unroute('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
     }
     expect(generationApi.status).toBe(201);
     await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
@@ -1909,9 +2077,64 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       });
     }
 
+    if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
     await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
+
+    if (canonicalInvoiceExceptionJourney) {
+      const structuredEditor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+      await expect(structuredEditor).toBeVisible();
+      await structuredEditor.getByLabel('Section title', { exact: true }).fill('AP invoice exception handling scope and controls');
+      await structuredEditor.getByRole('textbox', { name: 'Section body', exact: true }).fill(
+        'Route unmatched, duplicate, tax, quantity and tolerance exceptions to an accountable AP specialist. Preserve invoice, purchase-order and receipt evidence; require human approval before any financial release.',
+      );
+      const revisionResponse = page.waitForResponse(response => {
+        if (new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command') return false;
+        try {
+          return (response.request().postDataJSON() as { commandType?: unknown }).commandType === 'studio.artifact.draft.revise';
+        } catch { return false; }
+      }, { timeout: 15_000 });
+      await structuredEditor.getByRole('button', { name: 'Commit immutable revision', exact: true }).click();
+      expect((await revisionResponse).status()).toBe(201);
+      await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
+      await expect(page.getByText('v2', { exact: true }).first()).toBeVisible();
+      await settleActorTransitionEvidence();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('heading', { name: 'Structured section editor', exact: true })).toBeVisible();
+      await expect(page.getByLabel('Section title', { exact: true })).toHaveValue('AP invoice exception handling scope and controls');
+      await mkdir(outputDirectory, { recursive: true });
+      const artifactPreview = page.getByRole('article', { name: 'Artifact preview', exact: true });
+      const studioText = [
+        '# AP Invoice Exception Handling BRD',
+        '',
+        `Source label: ${await artifactPreview.getByRole('heading', { name: 'BRD artifact', exact: true }).innerText()}`,
+        `Version label: ${await artifactPreview.getByText(/Aggregate v\d+ · Content v2/u).innerText()}`,
+        `Section title: ${await page.getByLabel('Section title', { exact: true }).inputValue()}`,
+        '',
+        '## Committed business content',
+        await structuredEditor.getByRole('textbox', { name: 'Section body', exact: true }).inputValue(),
+        '',
+      ].join('\n');
+      expect(studioText).not.toMatch(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/iu);
+      const studioOutput = `${testInfo.project.name}-ap-invoice-exception-studio-brd.md`;
+      await writeFile(path.join(outputDirectory, studioOutput), studioText, 'utf8');
+      canonicalRepresentativeOutputs.push(studioOutput);
+      await testInfo.attach(studioOutput, {
+        path: path.join(outputDirectory, studioOutput),
+        contentType: 'text/markdown',
+      });
+      const studioScreenshotName = `${testInfo.project.name}-ap-invoice-exception-studio-brd.png`;
+      const studioScreenshot = path.join(outputDirectory, studioScreenshotName);
+      const businessSection = structuredEditor.getByLabel('Section title', { exact: true })
+        .locator('..').locator('..');
+      await businessSection.screenshot({ path: studioScreenshot });
+      await testInfo.attach('ap-invoice-exception-studio-brd.png', {
+        path: studioScreenshot,
+        contentType: 'image/png',
+      });
+      canonicalRepresentativeOutputs.push(studioScreenshotName);
+    }
 
     if (authenticatedProductAcceptance) {
       await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
@@ -1951,7 +2174,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         if (!prepared) return;
         await route.fallback();
       };
-      if (hostedAuthenticatedAcceptance) {
+      if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) {
         await page.route('**/functions/v1/studio-artifact-command', hostedFailureRoute);
       } else {
         await control('/control/fail-next-studio-provider', { projectName });
@@ -1961,7 +2184,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         failedGenerationApi = await observeApiResponse(page, '/functions/v1/studio-artifact-command', () =>
           page.getByRole('button', { name: 'Generate governed package draft', exact: true }).click());
       } finally {
-        if (hostedAuthenticatedAcceptance) await page.unroute('**/functions/v1/studio-artifact-command', hostedFailureRoute);
+        if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) await page.unroute('**/functions/v1/studio-artifact-command', hostedFailureRoute);
       }
       expect(failedGenerationApi.status).toBe(200);
       await expect(page.getByRole('alert').getByText(
@@ -2000,6 +2223,25 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         cleanup: { verified: true },
       });
     }
+  });
+
+  test('canonical AP Invoice Exception continues through Delivery package approval and read-only Monitor',
+    { tag: '@v2-primary-prefix-diagnostic' }, async ({ page }, testInfo) => {
+    test.skip(!canonicalInvoiceExceptionJourney,
+      'the canonical AP Invoice Exception continuation is opt-in disposable evidence');
+    const result = await runCanonicalInvoiceExceptionJourney({
+      page,
+      testInfo,
+      setup,
+      outputDirectory,
+      enterAs,
+      settleActorTransitionEvidence,
+      clickProduct,
+      upstreamOutputs: canonicalRepresentativeOutputs,
+    });
+    expect(result.status).toBe('passed');
+    expect(result.assertions.providersOff).toBe(true);
+    expect(result.assertions.actorBoundary15000ms).toBe(true);
   });
 
   if (authenticatedProductAcceptance) {
@@ -2058,6 +2300,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         setup,
         control,
         enterAs,
+        settleActorTransitionEvidence,
         clickProduct,
         selectProjectScope,
         startTrackedRequest: hostedAuthenticatedAcceptance ? startProductAction : undefined,
@@ -2119,6 +2362,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
     test('production scoring preserves low-suitability and strong-automation decisions through governed publication', async ({ page }, testInfo) => {
       const scenarioCases = await runAssessmentScenarioJourneys(page, testInfo.project.name,
+        settleActorTransitionEvidence,
         hostedAuthenticatedAcceptance?startProductAction:undefined);
       authenticatedCases.push(...scenarioCases.map(scenarioCaseToLocal));
       for (const row of scenarioCases) for (const assertion of row.assertions) {

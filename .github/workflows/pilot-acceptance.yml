@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
+      - name: Current documentation route, claims, and links
+        run: npm run test:docs:pr1d
       - run: npm run test:pilot-acceptance
       - name: Accepted V1 decision, source, portfolio, and artifact authority
         run: |

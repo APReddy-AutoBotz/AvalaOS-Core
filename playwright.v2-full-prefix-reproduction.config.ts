@@ -25,5 +25,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    ...(process.env.ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION === '1'
+      ? [{ name: 'pixel-7-chromium', use: { ...devices['Pixel 7'] } }] : []),
   ],
 });

@@ -601,10 +601,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts",
       "lines": [
-        524,
-        525,
-        709,
-        710
+        530,
+        531,
+        715,
+        716
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and storage-exposure assertions to this approved acceptance harness. Real hosted sessions are independently verified; browser state never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -660,6 +660,16 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep this source assertion limited to rejecting arbitrary session-key selection in the acceptance harness. It does not read credentials or grant server authority."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/enterpriseLifecycleAcceptance/downstreamActorTransition.spec.ts",
+      "lines": [
+        24,
+        25
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Read only inert loopback fixture session identity to prove owned tracked work settles before actor replacement. Never read real credentials, grant authority from browser state, or persist provider secrets."
     }
   ]
 }

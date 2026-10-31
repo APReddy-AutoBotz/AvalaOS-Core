@@ -27,7 +27,7 @@ export type AuthenticatedLifecycleSetup = Readonly<{
   deliveryProject: Readonly<{ id: string; name: string }>;
   aliases: Readonly<Record<'case' | 'review' | 'handoff' | 'artifact' | 'process', string>>;
   studioTemplate: AuthenticatedLifecycleStudioTemplateBinding;
-  actors: Readonly<Record<'author' | 'reviewer' | 'approver' | 'outsider', AuthenticatedLifecycleActor>>;
+  actors: Readonly<Record<'author' | 'reviewer' | 'approver' | 'outsider', AuthenticatedLifecycleActor> & { deliveryOwner?: AuthenticatedLifecycleActor }>;
 }>;
 
 export type AuthenticatedLifecycleStudioTemplateBinding = Readonly<{

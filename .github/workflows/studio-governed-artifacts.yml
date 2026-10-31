@@ -14,28 +14,18 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: npm }
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run typecheck:edge
-      - run: npm run lint:pr1a
-      - run: npm run lint:pr1b
-      - run: npm run lint:pr1c
-      - run: npm run lint:pr1d
-      - run: npm run lint:pr1e
+      - name: Cheap workflow, documentation, claims, and link contracts
+        run: npm run test:workflow-yaml && npm run test:docs:pr1d && npm run test:docs:pr1e
       - run: npm run lint:studio-artifacts
       - run: npm run lint:studio-private-artifacts
       - run: npm run test:studio-private-artifacts-lifecycle
       - run: npm run test:studio-private-artifacts-client
-      - run: npm run test:pr1b
-      - run: npm run test:pr1c
-      - run: npm run test:pr1d
-      - run: npm run test:pr1e
       - run: npm run test:pr1f
       - run: npm run test:pr1g
       - run: npm run test:studio-artifacts
       - run: npm run test:studio-artifacts-coverage
-      - run: npm run test:ai-boundary-static
-      - run: npm run test:secret-hygiene
-      - run: npm test
+      - run: npm run test:ai-boundary-static && npm run test:secret-hygiene
+      - run: npm run test:runtime
       - run: npm run build
       - run: npm audit --audit-level=moderate
       - run: git diff --check

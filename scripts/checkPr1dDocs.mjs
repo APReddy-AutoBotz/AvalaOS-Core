@@ -1,10 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = process.cwd();
+const root = process.env.PR1D_DOC_ROOT ? path.resolve(process.env.PR1D_DOC_ROOT) : process.cwd();
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const baselines = ['779a4801aa7c6660ad4581f8e334f5ad422519e7','2c288870f14755c24da4f8c6465271cc2365ebbc','30883509b46b848eaf1d0d5fc4bb5898bade98a3'];
-const marker = '## PR 1D Current Authority';
 const activeFiles = [
   'README.md',
   'docs/00_SOURCE_OF_TRUTH.md',
@@ -15,6 +13,7 @@ const activeFiles = [
   'docs/05_IMPLEMENTATION_STATUS.md',
   'docs/06_SECURITY_AND_GOVERNANCE.md',
   'docs/07_AVALA_GOVERN_FRAMEWORK.md',
+  'docs/09_END_TO_END_PRODUCT_GUIDE.md',
   'docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md',
   'docs/architecture/current-to-target-enterprise-architecture.md',
   'docs/architecture/document-authority-map.md',
@@ -29,10 +28,40 @@ const canonicalFiles = [
   'docs/migrations/pr1d-assess-v2-decision-intelligence.md',
 ];
 
-for (const file of activeFiles) {
-  const source = read(file);
-  if (!source.includes(marker) || !baselines.some(baseline => source.includes(baseline))) throw new Error(`PR1D_DOC_AUTHORITY_MISSING: ${file}`);
-}
+export const validateCurrentReadingRoute = readFile => {
+  const contracts = {
+    'README.md': [
+      'docs/00_SOURCE_OF_TRUTH.md',
+      'docs/09_END_TO_END_PRODUCT_GUIDE.md',
+      'docs/05_IMPLEMENTATION_STATUS.md',
+      'docs/04_MVP_ROADMAP.md',
+    ],
+    'docs/00_SOURCE_OF_TRUTH.md': [
+      '09_END_TO_END_PRODUCT_GUIDE.md',
+      '05_IMPLEMENTATION_STATUS.md',
+      '04_MVP_ROADMAP.md',
+    ],
+    'docs/05_IMPLEMENTATION_STATUS.md': ['09_END_TO_END_PRODUCT_GUIDE.md', '04_MVP_ROADMAP.md'],
+    'docs/04_MVP_ROADMAP.md': ['09_END_TO_END_PRODUCT_GUIDE.md', '05_IMPLEMENTATION_STATUS.md'],
+    'docs/09_END_TO_END_PRODUCT_GUIDE.md': [
+      '| Assess |',
+      '| Govern |',
+      '| Studio |',
+      '| Delivery |',
+      '| Monitor |',
+      'A generated draft is not an approval',
+      'a passing source test is not production readiness',
+    ],
+  };
+  for (const [file, phrases] of Object.entries(contracts)) {
+    const source = readFile(file);
+    for (const phrase of phrases) {
+      if (!source.includes(phrase)) throw new Error(`CURRENT_DOC_ROUTE_MISSING: ${file} -> ${phrase}`);
+    }
+  }
+};
+
+validateCurrentReadingRoute(read);
 
 const architecture = read(canonicalFiles[0]);
 for (const phrase of [
@@ -144,23 +173,36 @@ for (const phrase of [
 }
 if (/80\.0[56]%/.test(evidence)) throw new Error('PR1D_EVIDENCE_STALE_BRANCH_COVERAGE');
 
-for (const file of [...activeFiles, ...canonicalFiles]) {
-  const source = read(file);
-  if (/Best Technology/i.test(source)) throw new Error(`PR1D_FORBIDDEN_V2_WINNER_COPY: ${file}`);
-  if (/\b(?:is|are) scientifically validated|guarantees? ROI|\bproduction-ready\b|\bcompliance-certified\b/i.test(source)) {
-    throw new Error(`PR1D_UNSUPPORTED_CLAIM: ${file}`);
+export const validateClaims = (files, readFile) => {
+  for (const file of files) {
+    const source = readFile(file);
+    if (/Best Technology/i.test(source)) throw new Error(`PR1D_FORBIDDEN_V2_WINNER_COPY: ${file}`);
+    if (/\b(?:is|are) scientifically validated|guarantees? ROI|\bproduction-ready\b|\bcompliance-certified\b/i.test(source)) {
+      throw new Error(`PR1D_UNSUPPORTED_CLAIM: ${file}`);
+    }
   }
-}
+};
+
+validateClaims([...activeFiles, ...canonicalFiles], read);
 
 const markdownLink = /\[[^\]]+\]\((?!https?:|mailto:|#)([^)]+)\)/g;
-for (const file of [...activeFiles, ...canonicalFiles]) {
-  const source = read(file);
-  for (const match of source.matchAll(markdownLink)) {
-    const raw = match[1].split('#')[0].replace(/^<|>$/g, '');
-    if (!raw) continue;
-    const resolved = path.resolve(path.dirname(path.join(root, file)), raw);
-    if (!fs.existsSync(resolved)) throw new Error(`PR1D_BROKEN_RELATIVE_LINK: ${file} -> ${match[1]}`);
+export const validateRelativeLinks = (files, readFile, resolveLink, exists) => {
+  for (const file of files) {
+    const source = readFile(file);
+    for (const match of source.matchAll(markdownLink)) {
+      const raw = match[1].split('#')[0].replace(/^<|>$/g, '');
+      if (!raw) continue;
+      const resolved = resolveLink(file, raw);
+      if (!exists(resolved)) throw new Error(`PR1D_BROKEN_RELATIVE_LINK: ${file} -> ${match[1]}`);
+    }
   }
-}
+};
+
+validateRelativeLinks(
+  [...activeFiles, ...canonicalFiles],
+  read,
+  (file, raw) => path.resolve(path.dirname(path.join(root, file)), raw),
+  resolved => fs.existsSync(resolved),
+);
 
 console.log('PR 1D active authority, correction architecture, evidence accuracy, migration, claims, and links verified.');

@@ -1,5 +1,15 @@
 # AvalaOS Core Current-To-Target Enterprise Architecture
 
+## Current architecture reading boundary — 2026-10-31
+
+[Technical overview](../03_TECHNICAL_ARCHITECTURE.md) describes the current source architecture. [Product guide](../09_END_TO_END_PRODUCT_GUIDE.md) describes the module inputs/outputs and explicit handoffs; [status](../05_IMPLEMENTATION_STATUS.md) distinguishes source support from executed and pending readiness proof.
+
+The downstream harness must settle the old actor's admitted action, response body, work queue and exact causal completion before replacing its shared session. Rejected settlement blocks navigation/session replacement. The correction wires the existing boundary into Studio/Delivery/Monitor and assessment-scenario entries; browser observations remain evidence inputs, never server authorization. Six local Chromium regressions and three source contracts pass at 15,000 ms/providers OFF. This is not real-auth, hosted or deployment proof and does not establish the historical failure's cause.
+
+## Retained architecture evolution
+
+Dated entries and PR-specific “current”, “candidate” and “target” sections below describe their original slice. In particular, the pre-PR1A browser-authority diagram and defect list are historical, not a new current defect inventory. Later accepted domain contracts govern the implemented path; current readiness is stated only in the status page.
+
 ## Pixel entry request-correlation boundary (2026-10-27)
 
 **Latest authorization (2026-10-27):** AP authorizes committing and pushing these verified diagnostics to the same draft PR #338, then independently verifying all 17 exact-candidate attempt-1 workflows and TWELVE fresh preparation archives, including the new preactivation sign-in diagnostic. Require PR C85commands/241assertions/audit0 and retained-only108-row reconstruction; no old candidate artifacts substitute. This supersedes the earlier local-only/no-push boundary for this diagnostics slice. Keep draft, strict CI identity, 15,000 ms and providers OFF. No product fix, merge/release, new hosted diagnostic/retry, live credentials/access, Netlify, paid calls or full acceptance. Both hosted allowances remain zero. Preserve every prior failure and the incomplete one-case local parent.

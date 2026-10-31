@@ -1,8 +1,10 @@
 # Avala Govern Framework
 
+Current evidence and pending gates: [implementation status](05_IMPLEMENTATION_STATUS.md). Module flow and outputs: [product guide](09_END_TO_END_PRODUCT_GUIDE.md). Earlier slice-specific exclusions below do not override later accepted domain authority.
+
 ## Studio PR A relationship
 
-An accepted PR 1E Govern resolution and Studio handoff are immutable source ancestry for Studio PR A. Studio artifact approval does not change or recreate Govern authority, and three-person Studio separation of duty is enforced independently. PR B storage/export authority remains future work.
+An accepted PR 1E Govern resolution and Studio handoff are immutable source ancestry for Studio PR A. Studio artifact approval does not change or recreate Govern authority, and three-person Studio separation of duty is enforced independently. Later private storage/export authority is governed by the [accepted Studio private-artifact contract](architecture/studio-private-artifact-authority.md); it does not change Govern approval authority.
 
 
 ## Avala Govern

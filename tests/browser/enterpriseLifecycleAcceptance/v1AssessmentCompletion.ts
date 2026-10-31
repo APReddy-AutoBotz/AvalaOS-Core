@@ -316,7 +316,7 @@ const runInner = async (options: CompletionOptions, deadline: CompletionDeadline
     await runStep('v1-assessment:open-and-complete-discovery', async () => {
       deadline.assertActive();
       const resume = options.page.getByRole('button', { name: 'Resume Assessment', exact: true });
-      const start = options.page.getByRole('button', { name: 'Start New Assessment', exact: true });
+      const start = options.page.getByRole('button', { name: /^Start (?:New )?Assessment$/u });
       if (await resume.isVisible().catch(() => false)) {
         await resume.click({ timeout: deadline.remaining() });
       } else {

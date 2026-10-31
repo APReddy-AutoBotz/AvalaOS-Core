@@ -13,7 +13,7 @@ Primary category language: Governed AI & Automation Delivery OS.
 ## Module Strategy
 
 - Avala Assess: process intake, deterministic scoring, automation/AI/RPA/workflow/HITL/agentic fitment, decision packs.
-- Avala Studio: BRD, PRD, PDD, SDD, diagrams, work items, editable governed documents.
+- Avala Studio: canonical BRD/FRD/PDD artifacts, governed editing/review/approval and work-item preparation; wider document/diagram ambitions are distinct from verified support.
 - Avala Govern: governance and control-plane surfaces for agents and automations covering autonomy, risk, approvals, evidence, allowed actions, blocked actions, AI/provider controls, and audit posture.
 - Avala Delivery: governed delivery workbench for approved work items, owners, status, blockers, handoff lineage, delivery packs, and downstream delivery handoff.
 - Avala Monitor: value, risk, blockers, portfolio visibility.
@@ -40,8 +40,10 @@ Avala Govern does not execute bots, agents, RPA jobs, external-system actions, M
 
 AvalaOS Core creates traceability from process idea to governed delivery evidence. Its core value is not task volume; it is decision quality, auditability, and governed handoff.
 
-## PR 1D Current Authority
+## Current product and delivery boundary
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+[End-to-end product guide](09_END_TO_END_PRODUCT_GUIDE.md) defines the supported starts, module inputs/outputs and explicit handoffs. [Implementation status](05_IMPLEMENTATION_STATUS.md) and [roadmap](04_MVP_ROADMAP.md) separate implemented contracts, executed evidence and pending readiness gates; old PR1D milestone language is not the active delivery status.
 
-Assess V2 selects the least-complex eligible mix of human-led work, rules, integration, workflow, UI automation, intelligence, and controls. It does not claim scientific validation, expert calibration, guaranteed ROI, buyer approval, or deployment readiness.
+Assess V2 selects the least-complex eligible mix of human-led work, rules, integration, workflow, UI automation, intelligence, and controls. It does not claim scientific validation, expert calibration, guaranteed ROI or deployment readiness. Independent Studio/Delivery starts remain planning-only and not assessed.
+
+BRD/FRD/PDD are the current canonical Studio aggregate types; PRD/SDD/diagram ambitions do not establish additional implemented type support. Source ingestion, Application Portfolio, Modernization, economics, Trust/Assurance, and draft-only Assemble Phase 1 extend the core modules under their own domain authority. No runtime agent, bot, RPA, MCP or A2A execution is part of the current baseline.

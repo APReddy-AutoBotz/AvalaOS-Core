@@ -78,6 +78,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Current documentation route, claims, and links
+        run: npm run test:docs:pr1d
       - run: npx playwright install --with-deps chromium
       - name: Cache exact disposable projection RPC test images
         run: |

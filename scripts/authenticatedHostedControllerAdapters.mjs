@@ -279,6 +279,22 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       targetHash: authenticatedHostedDigest(row.target) };
   };
 
+  const studioFailureBusinessHash = async project => {
+    const row=(await query(`WITH project_cases AS(
+      SELECT id FROM public.assess_v2_cases WHERE org_id=$1 AND workspace_id=$2 AND process_id=$3 AND deleted_at IS NULL
+    ), project_artifacts AS(
+      SELECT artifact.id FROM public.studio_artifact_aggregates artifact JOIN project_cases assessed ON assessed.id=artifact.case_id
+    ) SELECT jsonb_build_object(
+      'assessments',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.id),'[]') FROM public.assessments x WHERE x.org_id=$1 AND x.workspace_id=$2 AND x.process_id=$3 AND x.deleted_at IS NULL),
+      'cases',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.id),'[]') FROM public.assess_v2_cases x JOIN project_cases s ON s.id=x.id),
+      'versions',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.case_id,x.version),'[]') FROM public.assess_v2_case_versions x JOIN project_cases s ON s.id=x.case_id),
+      'decisions',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.case_id,x.created_at,x.id),'[]') FROM public.assess_v2_decision_versions x JOIN project_cases s ON s.id=x.case_id),
+      'artifacts',(SELECT coalesce(jsonb_agg((to_jsonb(x)-'aggregate_version'-'updated_at') ORDER BY x.id),'[]') FROM public.studio_artifact_aggregates x JOIN project_artifacts s ON s.id=x.id),
+      'artifactVersions',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.artifact_id,x.version),'[]') FROM public.studio_artifact_versions x JOIN project_artifacts s ON s.id=x.artifact_id)
+    ) target`,[config.scope.organizationId,config.scope.workspaceId,project.processId])).rows[0];
+    return authenticatedHostedDigest(row.target);
+  };
+
   const processFrame = async project => {
     const row = (await query(`SELECT to_jsonb(p) target,
       (SELECT count(*)::int FROM public.assess_command_receipts WHERE org_id=$2 AND workspace_id=$3 AND command_type='process.update') receipts,
@@ -877,7 +893,8 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         const aggregate = (await query(`SELECT coalesce(max(a.aggregate_version),0)::int version FROM public.studio_artifact_aggregates a
           JOIN public.assess_v2_cases c ON c.id=a.case_id WHERE c.process_id=$1`,[project.processId])).rows[0];
         return { artifacts:frame.artifacts,aggregateVersion:aggregate.version,versions:frame.artifactVersions,
-          generationAttempts:frame.generationAttempts,receipts:frame.receipts,audits:frame.audits,targetHash:frame.targetHash };
+          generationAttempts:frame.generationAttempts,receipts:frame.receipts,audits:frame.audits,
+          targetHash:await studioFailureBusinessHash(project) };
       }
       if (pathname === '/control/snapshot') return { reviewAssignments:(await lifecycleFrame(project)).assignments,
         governResolutions:(await lifecycleFrame(project)).governResolutions,

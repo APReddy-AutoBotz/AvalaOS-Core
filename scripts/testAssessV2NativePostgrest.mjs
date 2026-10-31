@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { test } from 'node:test';
 import pg from 'pg';
 import ts from 'typescript';
+import { readCanonicalInvoiceExceptionDatabaseEvidence, canonicalDatabaseEvidencePassed } from './canonicalInvoiceExceptionDatabaseEvidence.mjs';
 import { createClient } from '@supabase/supabase-js';
 import {
   createEnterpriseLifecycleFixture,
@@ -25,11 +26,20 @@ import {
 } from './v2FullPrefixLocalController.mjs';
 import {
   buildV2FullPrefixResult,
+  buildV2FullPrefixVariantResult,
   classifyV2FullPrefixFailure,
   runIndependentV2FullPrefixVariants,
 } from './v2FullPrefixReproduction.mjs';
 
 const { Client } = pg;
+const canonicalJourney = process.env.ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION === '1';
+const reportCanonicalStage = stage => {
+  if (canonicalJourney) process.stdout.write(`# CANONICAL_STAGE ${stage}\n`);
+};
+const canonicalProject = process.env.CANONICAL_AP_BROWSER_PROJECT ?? 'desktop-chromium';
+if (canonicalJourney && !['desktop-chromium', 'pixel-7-chromium'].includes(canonicalProject)) {
+  throw new Error('CANONICAL_AP_BROWSER_PROJECT_REJECTED');
+}
 const resolvePrimaryReproductionDirectory = () => {
   const fallback = path.resolve(
     'output/local-private/authenticated-product-acceptance/authenticated-native-primary-reproduction',
@@ -127,7 +137,7 @@ if (eligibleReviewerReproduction && (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCT
   || process.env.ASSESS_V2_NATIVE_DIAGNOSTIC_ONLY === '1')) {
   throw new Error('ASSESS_V2_ELIGIBLE_REVIEWER_REPRODUCTION_SCOPE_REJECTED');
 }
-const nativeTestTimeoutMs = process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1' ? 780_000 : 300_000;
+const nativeTestTimeoutMs = process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1' || canonicalJourney ? 780_000 : 300_000;
 test('native PostgREST resumes a freshly created Assess V2 version 1 under real RLS', { timeout: nativeTestTimeoutMs }, async () => {
   const createTransport = await loadProductionTransport();
   const runId = randomUUID();
@@ -174,7 +184,9 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     fixture = await createEnterpriseLifecycleFixture({ databaseUrl, postgrestJwtSecret: jwtSecret,
       runId: `native-${runId}`, runAttempt: '1', headSha: 'local-native-postgrest',
       hostedPersonaRoleParity: eligibleReviewerReproduction,
-      providersEnabled: !eligibleReviewerReproduction });
+      providersEnabled: !eligibleReviewerReproduction && !canonicalJourney,
+      authenticatedSynthetic: canonicalJourney,
+      canonicalApInvoiceException: canonicalJourney });
     const postgrestId = docker('run', '-d', ...limits, '--memory=256m', '--memory-swap=256m',
       '-e', `PGRST_DB_URI=postgresql://authenticator@${postgresName}:5432/${fixture.databaseName}`,
       '-e', 'PGRST_DB_SCHEMAS=public', '-e', 'PGRST_DB_ANON_ROLE=anon',
@@ -295,7 +307,9 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     preview = spawn(process.execPath, [
       'node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(appPort),
     ], { cwd: process.cwd(), stdio: 'inherit', env: appEnvironment });
+    reportCanonicalStage('preview-readiness');
     await waitForHttp(appBaseUrl);
+    reportCanonicalStage('preview-ready');
     if (eligibleReviewerReproduction) {
       // Exercise the auxiliary-page disposal race before the two role-parity profiles.
       await run(['--test', 'scripts/authenticatedHostedPageClose.test.mjs']);
@@ -411,11 +425,11 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
       process.stdout.write(`# ELIGIBLE_REVIEWER_AUTHORITY_LOCAL_RESULT ${JSON.stringify(result)}\n`);
       return;
     }
-    if (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1') {
+    if (process.env.ASSESS_V2_FULL_PREFIX_REPRODUCTION === '1' || canonicalJourney) {
       const reproductionDirectory = resolvePrimaryReproductionDirectory();
       await mkdir(reproductionDirectory, { recursive: true });
-      const variants = await runIndependentV2FullPrefixVariants(async variant => {
-        const projectName = `desktop-chromium-${variant}`;
+      const executeVariant = async variant => {
+        const projectName = `${canonicalJourney ? canonicalProject : 'desktop-chromium'}-${variant}`;
         const fragmentPath = `${reproductionDirectory}/browser-${projectName}.json`;
         let localController = null;
         let adapterClient = null;
@@ -423,15 +437,19 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
         let cleanup = 'not_started';
         let browser = null;
         let controller = null;
+        let databaseEvidence = null;
         let failureStage = 'artifact-reset';
         let setupFailure = null;
         try {
+          reportCanonicalStage('artifact-reset');
           await rm(fragmentPath, { force: true });
           failureStage = 'controller-create';
+          reportCanonicalStage('controller-connection');
           const adapterDatabaseUrl = new URL(databaseUrl);
           adapterDatabaseUrl.pathname = `/${fixture.databaseName}`;
           adapterClient = new Client({ connectionString: adapterDatabaseUrl.toString() });
           await adapterClient.connect();
+          reportCanonicalStage('controller-activation');
           localController = await createV2FullPrefixLocalController({
             fixture,
             origin: appBaseUrl,
@@ -439,11 +457,14 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
             adapterQuery: createV2FullPrefixAdapterQuery(adapterClient),
           });
           failureStage = 'controller-first-action';
+          reportCanonicalStage('controller-first-action');
           await localController.verifyFirstBrowserAction(projectName);
           failureStage = 'browser-execution';
+          reportCanonicalStage('browser-execution');
           await run([
             'node_modules/@playwright/test/cli.js', 'test',
             '--config=playwright.v2-full-prefix-reproduction.config.ts',
+            ...(canonicalJourney ? [`--project=${canonicalProject}`] : []),
           ], {
             env: {
               ...process.env,
@@ -459,6 +480,10 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
               ENTERPRISE_LIFECYCLE_V2_FULL_PREFIX_REPRODUCTION: variant,
             },
           });
+          if (canonicalJourney) {
+            reportCanonicalStage('database-lineage');
+            databaseEvidence = await readCanonicalInvoiceExceptionDatabaseEvidence(fixture, projectName);
+          }
           execution = 'passed';
         } catch (error) {
           execution = 'failed';
@@ -501,14 +526,18 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           artifactObserved: browser !== null,
           browser: browser?.v2FullPrefixReproduction ?? null,
           controller,
+          databaseEvidence,
           network: browser?.network ?? null,
         };
-      });
+      };
+      const variants = canonicalJourney
+        ? [await executeVariant('immediate')]
+        : await runIndependentV2FullPrefixVariants(executeVariant);
       const nativeStats = fixture.nativePostgrestStats();
       const nativeStatusDelta = Object.fromEntries(Object.entries(nativeStats.statuses)
         .map(([status, count]) => [status, count - (stats.statuses[status] ?? 0)])
         .filter(([, count]) => count > 0));
-      const result = buildV2FullPrefixResult({
+      const resultInput = {
         variants,
         native: {
           active: nativeStats.active,
@@ -516,11 +545,30 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           responses: nativeStats.responses - stats.responses,
           completed: nativeStats.completed - stats.completed,
           cancelled: nativeStats.cancelled - stats.cancelled,
+          ...(canonicalJourney ? { cancelledResources: nativeStats.cancelledResources } : {}),
           failed: nativeStats.failed - stats.failed,
           statusClasses: nativeStatusDelta,
         },
         baseline: process.env.RELEASE_SHA ?? process.env.GITHUB_SHA ?? 'unknown',
-      });
+      };
+      let result;
+      if (canonicalJourney) {
+        const primary = buildV2FullPrefixVariantResult(variants[0]);
+        const canonical = await readFile(`${reproductionDirectory}/canonical-${canonicalProject}-immediate.json`, 'utf8')
+          .then(JSON.parse).catch(() => null);
+        const required = ['processCreatedThroughUi', 'studioRevisionAfterReload', 'deliveryRevisionAfterReload', 'approvedPackageAfterReload',
+          'monitorAfterSignOutAndIn', 'independentHandoffReview', 'independentPackageReview', 'exactAcceptedSet',
+          'duplicateBaselineActionAbsent', 'baselineReplayStable', 'monitorReadOnly', 'providersOff', 'actorBoundary15000ms',
+          'noAuthorityRejected', 'staleCommandRejected', 'idempotentReplayStable', 'providerFailureRecoveryStable'];
+        const passed = primary.status === 'passed' && canonical?.status === 'passed'
+          && canonicalDatabaseEvidencePassed(variants[0].databaseEvidence)
+          && required.every(key => canonical.assertions?.[key] === true)
+          && nativeStats.active === 0 && nativeStats.cancelled === stats.cancelled && nativeStats.failed === stats.failed;
+        result = { schemaVersion: 'canonical-ap-invoice-exception-local-v1', status: passed ? 'passed' : 'failed',
+          project: canonicalProject, primary, canonical, database: variants[0].databaseEvidence, native: resultInput.native,
+          proofBoundary: 'production UI and handlers; disposable PostgreSQL/PostgREST; synthetic authentication and provider output; providers OFF; no hosted acceptance',
+          conclusion: passed ? 'canonical local journey verified' : 'canonical local journey incomplete' };
+      } else result = buildV2FullPrefixResult(resultInput);
       await writeFile(`${reproductionDirectory}/result.json`, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
       process.stdout.write(`# AUTHENTICATED_NATIVE_PRIMARY_LOCAL_REPRODUCTION_RESULT ${JSON.stringify({
         variants: variants.map(item => item.variant),
@@ -574,18 +622,31 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
     assert.equal(browserResourceDelta['assess_processes:403'], 2);
     process.stdout.write(`# ASSESS_V2_NATIVE_RESOURCE_STATUS_CLASSES ${JSON.stringify(browserResourceDelta)}\n`);
   } finally {
-    await stop(preview).catch(() => undefined);
-    await fixture?.close().catch(() => undefined);
+    const cleanup = { preview: false, fixture: fixture === null, containers: true, network: networkId === null };
+    await stop(preview).then(() => { cleanup.preview = !preview || preview.exitCode !== null || preview.signalCode !== null; }).catch(() => undefined);
+    await fixture?.close().then(value => { cleanup.fixture = value === true; }).catch(() => undefined);
     await admin?.end().catch(() => undefined);
     for (const id of containers.reverse()) {
-      try { owned(id, label, runId); docker('rm', '-f', id); } catch {}
+      try { owned(id, label, runId); docker('rm', '-f', id); } catch { cleanup.containers = false; }
     }
     if (networkId) {
       try {
         const info = JSON.parse(docker('network', 'inspect', networkId))[0];
         assert.equal(info.Labels[label], runId);
         docker('network', 'rm', networkId);
+        cleanup.network = true;
       } catch {}
+    }
+    if (canonicalJourney) {
+      // Only run-owned objects are removed. A failed cleanup never becomes a pass.
+      try {
+        cleanup.containers = cleanup.containers && docker('ps', '-aq', '--filter', `label=${label}=${runId}`) === '';
+        cleanup.network = cleanup.network && docker('network', 'ls', '-q', '--filter', `label=${label}=${runId}`) === '';
+      } catch { cleanup.containers = false; cleanup.network = false; }
+      const directory = resolvePrimaryReproductionDirectory();
+      await mkdir(directory, { recursive: true });
+      await writeFile(`${directory}/cleanup.json`, `${JSON.stringify(cleanup, null, 2)}\n`, 'utf8');
+      assert.ok(Object.values(cleanup).every(value => value === true), 'CANONICAL_AP_CLEANUP_INCOMPLETE');
     }
   }
 });
