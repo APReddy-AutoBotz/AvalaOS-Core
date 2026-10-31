@@ -1161,7 +1161,7 @@ export async function createEnterpriseLifecycleFixture({
     ]);
     const nativePostgrestStats = {
       active: 0, maxConcurrent: 0, requests: 0, statuses: new Map(), resourceStatuses: new Map(),
-      responses: 0, completed: 0, cancelled: 0, failed: 0, completionOrder: [],
+      responses: 0, completed: 0, cancelled: 0, failed: 0, completionOrder: [], cancelledResources: new Map(),
     };
     let nativePostgrestFault = null;
     let nativePostgrestStream = null;
@@ -1253,6 +1253,11 @@ export async function createEnterpriseLifecycleFixture({
         finalized = true;
         nativePostgrestStats.active -= 1;
         nativePostgrestStats[outcome] += 1;
+        if (outcome === 'cancelled') {
+          // Closed resource classes only: never retain URLs, selectors or object identities.
+          nativePostgrestStats.cancelledResources.set(resourceClass,
+            (nativePostgrestStats.cancelledResources.get(resourceClass) ?? 0) + 1);
+        }
         if (responseStatus !== null) {
           const resourceStatus = `${resourceClass}:${responseStatus}`;
           if (nativePostgrestStats.completionOrder.length < 512) {
@@ -2170,6 +2175,7 @@ export async function createEnterpriseLifecycleFixture({
         statuses: Object.fromEntries([...nativePostgrestStats.statuses].sort(([left], [right]) => left - right)),
         resourceStatuses: Object.fromEntries([...nativePostgrestStats.resourceStatuses].sort(([left], [right]) => left.localeCompare(right))),
         completionOrder: [...nativePostgrestStats.completionOrder],
+        cancelledResources: Object.fromEntries([...nativePostgrestStats.cancelledResources].sort()),
       }),
       controlToken, journeyBinding, aliases,
       actors: fixtureActors,

@@ -238,7 +238,7 @@ jobs:
         run: npm run test:migrations:pr1d
       - name: Canonical AP fixture authority and synthetic permit regressions
         env:
-          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
         run: node --test scripts/canonicalInvoiceExceptionBackend.test.mjs
 
   pr1e-migrations:

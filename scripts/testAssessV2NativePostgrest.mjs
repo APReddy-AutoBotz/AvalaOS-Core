@@ -545,6 +545,7 @@ test('native PostgREST resumes a freshly created Assess V2 version 1 under real 
           responses: nativeStats.responses - stats.responses,
           completed: nativeStats.completed - stats.completed,
           cancelled: nativeStats.cancelled - stats.cancelled,
+          ...(canonicalJourney ? { cancelledResources: nativeStats.cancelledResources } : {}),
           failed: nativeStats.failed - stats.failed,
           statusClasses: nativeStatusDelta,
         },
