@@ -528,7 +528,14 @@ export const authenticatedLifecycleEnterAs = async (
     return;
   }
   await beforeIntentionalNavigation();
-  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
+  const fixtureBaseURL = test.info().project.use.baseURL;
+  const alreadyOnFixtureOrigin = typeof fixtureBaseURL === 'string'
+    && new URL(page.url()).origin === new URL(fixtureBaseURL).origin;
+  // Existing fixture pages already provide the storage origin. An intermediate
+  // application load starts old-actor reads that the final navigation can cancel.
+  if (!alreadyOnFixtureOrigin) {
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
+  }
   await beforeIntentionalNavigation();
   await page.evaluate(({ key, session }) => {
     localStorage.setItem(key, JSON.stringify(session));

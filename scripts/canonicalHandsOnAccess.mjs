@@ -10,7 +10,7 @@ export const CANONICAL_HANDS_ON_SCHEMA = 'canonical-hands-on-access-v1';
 export const CANONICAL_HANDS_ON_PERSONAS = Object.freeze(['author', 'reviewer', 'approver', 'deliveryOwner']);
 export const CANONICAL_HANDS_ON_CAPABILITIES = Object.freeze({
   author: Object.freeze([
-    'assess.create', 'assess.finalize', 'assess.process.update', 'assess.read', 'assess.response.write',
+    'assess.create', 'assess.finalize', 'assess.process.create', 'assess.process.update', 'assess.read', 'assess.response.write',
     'assess.v2.clone', 'assess.v2.create', 'assess.v2.draft.write', 'assess.v2.finalize', 'assess.v2.read',
     'delivery.handoff.request', 'monitor.read', 'operations.read', 'project.read',
     'studio.artifacts.approve', 'studio.artifacts.read', 'studio.artifacts.review',

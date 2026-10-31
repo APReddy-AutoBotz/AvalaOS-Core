@@ -1,8 +1,22 @@
 import { expect, test } from '@playwright/test';
 import { authenticatedLifecycleEnterAs } from '../authenticatedLifecycleHarness';
 
-test.use({ baseURL: 'http://127.0.0.1:51999' });
 const actor = { token: 'local-fixture-token', user: { id: 'local-fixture-author', email: 'author@example.test' } };
+
+test('existing fixture-origin entry installs the actor before its only application navigation', async ({ page }) => {
+  let documents = 0;
+  await page.route('**/*', route => {
+    documents += 1;
+    return route.fulfill({ contentType: 'text/html', body: '<!doctype html><h1>Fixture application</h1>' });
+  });
+  await page.goto('/');
+  documents = 0;
+  let barriers = 0;
+  await authenticatedLifecycleEnterAs(page, actor, async () => { barriers += 1; });
+  expect(documents).toBe(1);
+  expect(barriers).toBe(2);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sb-127-auth-token')!).user.id)).toBe(actor.user.id);
+});
 
 test('actor entry uses the ready document while a nonessential image remains pending', async ({ page }) => {
   let releaseImage!: () => void;
