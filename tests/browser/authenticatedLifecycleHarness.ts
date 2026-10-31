@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page, type Request, type Response as PlaywrightResponse } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request, type Response as PlaywrightResponse, type Route } from '@playwright/test';
 import { StorageKeys } from '../../services/storage';
 import { hasDurableProductNavigationAgreement, parseProductNavigationSearch } from '../../services/productNavigationState';
 import { areScopesEqual, isValidScope } from '../../services/viewStatePersistence';
@@ -528,14 +528,26 @@ export const authenticatedLifecycleEnterAs = async (
     return;
   }
   await beforeIntentionalNavigation();
-  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
+  // Establish only the storage origin, without loading an old actor's app and
+  // starting reads that session installation would immediately interrupt.
+  const fixtureOriginRoute = async (route: Route) => {
+    if (route.request().isNavigationRequest() && route.request().frame() === page.mainFrame()) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Fixture session origin</title>' });
+    } else await route.fallback();
+  };
+  await page.route('**/', fixtureOriginRoute);
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
+  } finally {
+    await page.unroute('**/', fixtureOriginRoute);
+  }
   await beforeIntentionalNavigation();
   await page.evaluate(({ key, session }) => {
     localStorage.setItem(key, JSON.stringify(session));
     localStorage.setItem('avalaos-core-v1-view', JSON.stringify('process_catalog'));
     localStorage.setItem('avalaos-core-v1-scope', JSON.stringify({ type: 'my_work' }));
   }, { key: authStorageKey, session: sessionFor(actor) });
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
 };
 
 export const authenticatedLifecycleClickProduct = async (page: Page, label: string) => {

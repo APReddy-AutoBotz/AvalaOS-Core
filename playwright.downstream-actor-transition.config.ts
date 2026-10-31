@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser/enterpriseLifecycleAcceptance',
-  testMatch: 'downstreamActorTransition.spec.ts',
+  testMatch: ['downstreamActorTransition.spec.ts', 'canonicalRetainedRecordTargeting.spec.ts'],
   forbidOnly: true,
   fullyParallel: false,
   workers: 1,

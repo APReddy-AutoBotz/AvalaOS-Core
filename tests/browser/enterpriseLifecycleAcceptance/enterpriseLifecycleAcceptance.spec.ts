@@ -25,7 +25,8 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
-import { awaitCanonicalProjectIndexRead, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+import { awaitCanonicalProjectIndexRead, decodeCanonicalApprovedStudioArtifact, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+  type CanonicalApprovedStudioArtifact,
   type CanonicalInvoiceExceptionProofBoundary } from './canonicalInvoiceExceptionJourney';
 import { approvedBusinessOutputMarkdown } from './canonicalBusinessOutputEvidence';
 import { exerciseReviewerGovernDenial } from './governReviewerDenial';
@@ -571,6 +572,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let approvedDecisionApi: ApiResponseObservation | null = null;
   let v2FullPrefixObservation: V2FullPrefixReproductionObservation | null = null;
   const canonicalRepresentativeOutputs: string[] = [];
+  let canonicalApprovedStudioArtifact: CanonicalApprovedStudioArtifact | null = null;
   let v2FullPrefixQueues: V2FullPrefixQueueObservation = Object.freeze({ network: 'not_run', cases: 'not_run' });
   type TestWorkQueues = Readonly<{
     network: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
@@ -2208,7 +2210,20 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('Approval ready committed.', { exact: true })).toBeVisible();
       await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
       await page.getByLabel('Rationale', { exact: true }).fill('Independent final approval binds the exact reviewed Studio version.');
+      const finalApprovalResponse = canonicalInvoiceExceptionJourney ? page.waitForResponse(response => {
+        if (new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command'
+          || response.request().method() !== 'POST') return false;
+        try {
+          return (response.request().postDataJSON() as { commandType?: unknown }).commandType
+            === 'studio.artifact.approval.resolve';
+        } catch { return false; }
+      }, { timeout: 15_000 }) : null;
       await page.getByRole('button', { name: 'Final approve', exact: true }).click();
+      if (finalApprovalResponse) {
+        const response = await finalApprovalResponse;
+        expect([200, 201]).toContain(response.status());
+        canonicalApprovedStudioArtifact = decodeCanonicalApprovedStudioArtifact(await response.json());
+      }
       await expect(page.getByText('Approved committed.', { exact: true })).toBeVisible();
       observe('studio-artifact-approval', 'ui.studio-approved-exact-version');
 
@@ -2339,6 +2354,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     { tag: '@v2-primary-prefix-diagnostic' }, async ({ page }, testInfo) => {
     test.skip(!canonicalInvoiceExceptionJourney,
       'the canonical AP Invoice Exception continuation is opt-in disposable evidence');
+    if (!canonicalApprovedStudioArtifact) {
+      throw new Error('CANONICAL_APPROVED_STUDIO_ARTIFACT_MISSING');
+    }
     const result = await runCanonicalInvoiceExceptionJourney({
       page,
       testInfo,
@@ -2347,6 +2365,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       enterAs,
       settleActorTransitionEvidence,
       clickProduct,
+      approvedStudioArtifact: canonicalApprovedStudioArtifact,
       proofBoundary: canonicalProofBoundary(),
       readHostedDatabaseEvidence: hostedAuthenticatedAcceptance
         ? () => control<CanonicalHostedDatabaseEvidence>('/control/canonical-database-evidence', { projectName })

@@ -96,7 +96,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/enterpriseLifecycleAcceptance/actorEntryNavigation.spec.ts",
       "lines": [
-        28
+        19,
+        26,
+        30,
+        58
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep this exact synthetic-session assertion confined to the loopback navigation regression; never use real credentials or treat browser storage as runtime authority."
@@ -571,15 +574,15 @@
         445,
         446,
         464,
-        534,
-        535,
-        536,
-        640,
-        641,
-        807,
-        810,
-        961,
-        962
+        546,
+        547,
+        548,
+        652,
+        653,
+        819,
+        822,
+        973,
+        974
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."

@@ -54,6 +54,117 @@ type CanonicalCommand =
   | 'delivery.package.approval.resolve'
   | 'monitor.baseline.create';
 
+export type CanonicalApprovedStudioArtifact = Readonly<{
+  artifactId: string;
+  artifactVersionId: string;
+}>;
+
+export type CanonicalCommandReceipt = Readonly<{
+  ok: true;
+  outcome: 'committed' | 'replayed';
+  receiptId: string;
+  action: CanonicalCommand;
+  resourceId: string;
+  resourceVersion: number;
+  workPackageId?: string;
+  packageVersionId?: string;
+}>;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+const canonicalRecord = (value: unknown): Record<string, unknown> => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('CANONICAL_COMMAND_RECEIPT_REJECTED');
+  }
+  return value as Record<string, unknown>;
+};
+
+export const decodeCanonicalApprovedStudioArtifact = (value: unknown): CanonicalApprovedStudioArtifact => {
+  const body = canonicalRecord(value);
+  // The production adapter preserves the SQL receipt inside the public resource.
+  // Require both receipt identities before reading its artifact projection.
+  const receipt = canonicalRecord(body.resource);
+  const resource = canonicalRecord(receipt.resource);
+  const current = canonicalRecord(resource.currentVersion);
+  const approved = canonicalRecord(resource.currentApprovedVersion);
+  if (body.ok !== true || !['committed', 'replayed'].includes(String(body.outcome))
+    || receipt.outcome !== body.outcome
+    || typeof body.receiptId !== 'string' || !UUID.test(body.receiptId)
+    || receipt.receiptId !== body.receiptId
+    || typeof body.resourceId !== 'string' || !UUID.test(body.resourceId)
+    || receipt.resourceId !== body.resourceId || resource.id !== body.resourceId
+    || resource.lifecycle !== 'approved'
+    || typeof current.id !== 'string' || !UUID.test(current.id)
+    || current.lifecycle !== 'approved' || approved.id !== current.id
+    || approved.lifecycle !== 'approved') {
+    throw new Error('CANONICAL_APPROVED_STUDIO_RESPONSE_REJECTED');
+  }
+  return Object.freeze({ artifactId: body.resourceId, artifactVersionId: current.id });
+};
+
+export const decodeCanonicalCommandReceipt = (
+  value: unknown,
+  expectedAction: CanonicalCommand,
+): CanonicalCommandReceipt => {
+  const record = canonicalRecord(value);
+  if (record.ok !== true
+    || !['committed', 'replayed'].includes(String(record.outcome))
+    || record.action !== expectedAction
+    || typeof record.receiptId !== 'string' || !UUID.test(record.receiptId)
+    || typeof record.resourceId !== 'string' || !UUID.test(record.resourceId)
+    || !Number.isSafeInteger(record.resourceVersion) || Number(record.resourceVersion) < 1
+    || (record.workPackageId !== undefined
+      && (typeof record.workPackageId !== 'string' || !UUID.test(record.workPackageId)))
+    || (record.packageVersionId !== undefined
+      && (typeof record.packageVersionId !== 'string' || !UUID.test(record.packageVersionId)))) {
+    throw new Error('CANONICAL_COMMAND_RECEIPT_REJECTED');
+  }
+  const workPackageId = typeof record.workPackageId === 'string' ? record.workPackageId : undefined;
+  const packageVersionId = typeof record.packageVersionId === 'string' ? record.packageVersionId : undefined;
+  return Object.freeze({
+    ok: true,
+    outcome: record.outcome as 'committed' | 'replayed',
+    receiptId: record.receiptId,
+    action: expectedAction,
+    resourceId: record.resourceId,
+    resourceVersion: Number(record.resourceVersion),
+    ...(workPackageId === undefined ? {} : { workPackageId }),
+    ...(packageVersionId === undefined ? {} : { packageVersionId }),
+  });
+};
+
+export const requireCanonicalReceiptBinding = (
+  receipt: CanonicalCommandReceipt,
+  expected: Readonly<{
+    resourceId?: string;
+    resourceVersion?: number;
+    workPackageId?: string;
+    packageVersionId?: string;
+  }>,
+) => {
+  for (const [key, value] of Object.entries(expected)) {
+    if (receipt[key as keyof CanonicalCommandReceipt] !== value) {
+      throw new Error(`CANONICAL_COMMAND_RECEIPT_BINDING_REJECTED:${key}`);
+    }
+  }
+  return receipt;
+};
+
+export const requireCanonicalExactLocator = async (
+  locator: Locator,
+  boundary: string,
+): Promise<Locator> => {
+  // Navigation can render the workspace shell before its exact projection.
+  // Wait only for this receipt-bound target within the existing actor limit.
+  if (await locator.count() === 0) {
+    try { await locator.first().waitFor({ state: 'attached', timeout: 15_000 }); }
+    catch { throw new Error(`${boundary}:0`); }
+  }
+  const count = await locator.count();
+  if (count !== 1) throw new Error(`${boundary}:${count}`);
+  return locator;
+};
+
 export type CanonicalInvoiceExceptionProofBoundary = Readonly<{
   application: 'production UI and handlers';
   providers: 'off';
@@ -128,22 +239,35 @@ const expectCommitted = async (
   page: Page,
   commandType: CanonicalCommand,
   action: () => Promise<void>,
+  expectedRequestPayload: Readonly<Record<string, string | number>> = {},
 ) => {
   const responsePromise = responseCommand(page, commandType);
   await action();
   const response = await responsePromise;
   expect([200, 201]).toContain(response.status());
+  const request = canonicalRecord(response.request().postDataJSON());
+  const requestPayload = canonicalRecord(request.payload);
+  for (const [key, value] of Object.entries(expectedRequestPayload)) {
+    if (requestPayload[key] !== value) {
+      throw new Error(`CANONICAL_COMMAND_REQUEST_BINDING_REJECTED:${key}`);
+    }
+  }
+  const committed = decodeCanonicalCommandReceipt(await response.json(), commandType);
   if (commandType === 'monitor.baseline.create') {
     // Replay the exact authenticated browser command through the real handler.
     // Keep its token/identifiers in memory; evidence contains only the assertion.
-    const committed = await response.json();
-    expect(committed.resourceId).toMatch(/^[0-9a-f-]{36}$/iu);
     const replay = await page.request.fetch(response.request());
     expect(replay.status()).toBe(200);
-    expect((await replay.json()).resourceId).toBe(committed.resourceId);
+    const replayed = decodeCanonicalCommandReceipt(await replay.json(), commandType);
+    requireCanonicalReceiptBinding(replayed, {
+      resourceId: committed.resourceId,
+      resourceVersion: committed.resourceVersion,
+      workPackageId: committed.workPackageId,
+      packageVersionId: committed.packageVersionId,
+    });
   }
   await expect(page.getByTestId('governed-delivery-workspace').getByRole('status').filter({ hasText: `${commandType} committed and exact Delivery/Monitor projection reloaded.` })).toBeVisible();
-  return response.status();
+  return committed;
 };
 
 const confirmDecision = async (
@@ -189,6 +313,56 @@ const enterDeliveryAs = async (
   await openDelivery(page, clickProduct);
 };
 
+const exactOutboxHandoff = async (page: Page, handoffId: string) => {
+  const outbox = await requireCanonicalExactLocator(
+    page.getByRole('tab', { name: /^Outbox \(\d+\)$/u }),
+    'CANONICAL_EXACT_OUTBOX_TAB_REJECTED',
+  );
+  await outbox.click();
+  return requireCanonicalExactLocator(
+    page.locator(`[data-handoff-id="${handoffId}"]`),
+    'CANONICAL_EXACT_HANDOFF_REJECTED',
+  );
+};
+
+const selectExactPackage = async (page: Page, packageId: string, packageVersion: number) => {
+  const selector = await requireCanonicalExactLocator(
+    page.getByRole('list', { name: 'Delivery packages', exact: true })
+      .locator(`button[data-package-id="${packageId}"]`),
+    'CANONICAL_EXACT_PACKAGE_SELECTOR_REJECTED',
+  );
+  await selector.click();
+  const article = await requireCanonicalExactLocator(
+    page.getByTestId(`delivery-package-${packageId}`),
+    'CANONICAL_EXACT_PACKAGE_REJECTED',
+  );
+  await expect(article).toHaveAttribute('data-package-id', packageId);
+  await expect(article).toHaveAttribute('data-package-version', String(packageVersion));
+  return article;
+};
+
+const selectExactBaseline = async (
+  page: Page,
+  baselineId: string,
+  packageId: string,
+  packageVersion: number,
+) => {
+  const monitor = page.getByTestId('canonical-monitor-baselines');
+  const selector = await requireCanonicalExactLocator(
+    monitor.locator(`button[data-baseline-id="${baselineId}"]`),
+    'CANONICAL_EXACT_BASELINE_SELECTOR_REJECTED',
+  );
+  await selector.click();
+  const article = await requireCanonicalExactLocator(
+    monitor.getByTestId(`monitor-baseline-${baselineId}`),
+    'CANONICAL_EXACT_BASELINE_REJECTED',
+  );
+  await expect(article).toHaveAttribute('data-baseline-id', baselineId);
+  await expect(article).toHaveAttribute('data-package-id', packageId);
+  await expect(article).toHaveAttribute('data-package-version', String(packageVersion));
+  return article;
+};
+
 const screenshot = async (
   target: Locator,
   testInfo: TestInfo,
@@ -231,6 +405,7 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   enterAs,
   settleActorTransitionEvidence,
   clickProduct,
+  approvedStudioArtifact,
   proofBoundary,
   readHostedDatabaseEvidence,
   upstreamOutputs = [],
@@ -242,6 +417,7 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   enterAs: EnterAs;
   settleActorTransitionEvidence: () => Promise<void>;
   clickProduct: (page: Page, label: string) => Promise<void>;
+  approvedStudioArtifact: CanonicalApprovedStudioArtifact;
   proofBoundary: CanonicalInvoiceExceptionProofBoundary;
   readHostedDatabaseEvidence?: () => Promise<unknown>;
   upstreamOutputs?: readonly string[];
@@ -260,75 +436,121 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   if (proofBoundary.hostedAuth !== Boolean(readHostedDatabaseEvidence)) {
     throw new Error('CANONICAL_DATABASE_EVIDENCE_READER_BOUNDARY_REJECTED');
   }
+  if (!UUID.test(approvedStudioArtifact.artifactId)
+    || !UUID.test(approvedStudioArtifact.artifactVersionId)) {
+    throw new Error('CANONICAL_APPROVED_STUDIO_ARTIFACT_REJECTED');
+  }
   const deliveryOwner = setup.actors.deliveryOwner;
   if (!deliveryOwner) throw new Error('CANONICAL_INDEPENDENT_DELIVERY_OWNER_REQUIRED');
   for (const actor of [setup.actors.author, setup.actors.reviewer, setup.actors.approver]) {
     expect(deliveryOwner.user.id).not.toBe(actor.user.id);
   }
   const commands: CanonicalCommand[] = [];
-  const committed = async (commandType: CanonicalCommand, action: () => Promise<void>) => {
-    await expectCommitted(page, commandType, action);
+  const committed = async (
+    commandType: CanonicalCommand,
+    action: () => Promise<void>,
+    expectedRequestPayload: Readonly<Record<string, string | number>> = {},
+  ) => {
+    const receipt = await expectCommitted(page, commandType, action, expectedRequestPayload);
     commands.push(commandType);
+    return receipt;
   };
   const decided = async (commandType: CanonicalCommand, open: () => Promise<void>, rationale?: string) => {
-    await confirmDecision(page, commandType, open, rationale);
+    const receipt = await confirmDecision(page, commandType, open, rationale);
     commands.push(commandType);
+    return receipt;
   };
 
   await enterDeliveryAs(page, setup.actors.author, enterAs, settleActorTransitionEvidence, clickProduct);
   const candidate = page.getByRole('combobox', { name: 'Eligible exact Studio artifact', exact: true });
-  await expect(candidate.locator('option')).toHaveCount(1);
-  await expect(candidate.locator('option').first()).toContainText('BRD v2');
-  await committed('delivery.handoff.request', () => page.getByRole('button', { name: 'Request handoff', exact: true }).click());
-  await expect(page.getByRole('tab', { name: /Outbox \(1\)/u })).toBeVisible();
+  const candidateOption = await requireCanonicalExactLocator(
+    candidate.locator(`option[value="${approvedStudioArtifact.artifactVersionId}"]`),
+    'CANONICAL_EXACT_STUDIO_ARTIFACT_REJECTED',
+  );
+  await expect(candidateOption).toContainText('BRD v2');
+  await candidate.selectOption(approvedStudioArtifact.artifactVersionId);
+  await expect(candidate).toHaveValue(approvedStudioArtifact.artifactVersionId);
+  const requestReceipt = await committed(
+    'delivery.handoff.request',
+    () => page.getByRole('button', { name: 'Request handoff', exact: true }).click(),
+    {
+      studioArtifactId: approvedStudioArtifact.artifactId,
+      studioArtifactVersionId: approvedStudioArtifact.artifactVersionId,
+      expectedCurrentVersionId: approvedStudioArtifact.artifactVersionId,
+      expectedApprovedVersionId: approvedStudioArtifact.artifactVersionId,
+    },
+  );
+  requireCanonicalReceiptBinding(requestReceipt, { resourceVersion: 1 });
+  const handoffId = requestReceipt.resourceId;
+  let handoffArticle = await exactOutboxHandoff(page, handoffId);
+  await expect(handoffArticle).toContainText('handoff v1');
 
   await enterDeliveryAs(page, setup.actors.reviewer, enterAs, settleActorTransitionEvidence, clickProduct);
-  await page.getByRole('tab', { name: /^Outbox \(1\)$/u }).click();
-  await expect(page.getByRole('button', { name: 'Final handoff approval', exact: true })).toHaveCount(0);
-  await decided(
+  handoffArticle = await exactOutboxHandoff(page, handoffId);
+  await expect(handoffArticle.getByRole('button', { name: 'Final handoff approval', exact: true })).toHaveCount(0);
+  const reviewReceipt = await decided(
     'delivery.handoff.review.resolve',
-    () => page.getByRole('button', { name: 'Approve review', exact: true }).click(),
+    () => handoffArticle.getByRole('button', { name: 'Approve review', exact: true }).click(),
     'Independent Delivery reviewer approved the exact AP invoice exception handoff.',
   );
-  await expect(page.getByRole('button', { name: 'Final handoff approval', exact: true })).toHaveCount(0);
+  requireCanonicalReceiptBinding(reviewReceipt, { resourceId: handoffId, resourceVersion: 2 });
+  await expect(handoffArticle).toContainText('handoff v2');
+  await expect(handoffArticle.getByRole('button', { name: 'Final handoff approval', exact: true })).toHaveCount(0);
 
   await enterDeliveryAs(page, setup.actors.approver, enterAs, settleActorTransitionEvidence, clickProduct);
-  await page.getByRole('tab', { name: /^Outbox \(1\)$/u }).click();
-  await decided(
+  handoffArticle = await exactOutboxHandoff(page, handoffId);
+  const approvalReceipt = await decided(
     'delivery.handoff.approval.resolve',
-    () => page.getByRole('button', { name: 'Final handoff approval', exact: true }).click(),
+    () => handoffArticle.getByRole('button', { name: 'Final handoff approval', exact: true }).click(),
     'Independent approver accepted the exact reviewed AP invoice exception handoff.',
   );
+  requireCanonicalReceiptBinding(approvalReceipt, { resourceId: handoffId, resourceVersion: 3 });
+  await expect(handoffArticle).toContainText('handoff v3');
+  await expect(handoffArticle.getByRole('button', { name: 'Start Delivery draft', exact: true })).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: 'Start Delivery draft', exact: true })).toHaveCount(0);
   await enterDeliveryAs(page, deliveryOwner, enterAs, settleActorTransitionEvidence, clickProduct);
-  await page.getByRole('tab', { name: /^Outbox \(1\)$/u }).click();
-  await decided(
+  handoffArticle = await exactOutboxHandoff(page, handoffId);
+  const consumeReceipt = await decided(
     'delivery.handoff.consume',
-    () => page.getByRole('button', { name: 'Start Delivery draft', exact: true }).click(),
+    () => handoffArticle.getByRole('button', { name: 'Start Delivery draft', exact: true }).click(),
   );
-  const packageArticle = page.locator('[data-testid^="delivery-package-"]').first();
+  if (!consumeReceipt.packageVersionId) throw new Error('CANONICAL_CONSUMED_PACKAGE_VERSION_REJECTED');
+  const packageId = consumeReceipt.resourceId;
+  const packageVersionId = consumeReceipt.packageVersionId;
+  const packageVersion = consumeReceipt.resourceVersion;
+  requireCanonicalReceiptBinding(consumeReceipt, { resourceVersion: 1, packageVersionId });
+  await expect(handoffArticle).toContainText('handoff v4');
+  let packageArticle = await selectExactPackage(page, packageId, packageVersion);
   await expect(packageArticle).toContainText('Studio handoff');
   await expect(packageArticle.getByLabel('Exact source citation').first()).toContainText('BRD artifact v2');
 
-  await packageArticle.getByRole('button', { name: 'Edit immutable descendant', exact: true }).first().click();
+  const editedItem = await requireCanonicalExactLocator(
+    packageArticle.locator('article[data-testid^="delivery-item-"][data-item-citation="brd.sections.requirements"]'),
+    'CANONICAL_REQUIREMENTS_ITEM_REJECTED',
+  );
+  const editedItemTestId = await editedItem.getAttribute('data-testid');
+  if (!editedItemTestId?.startsWith('delivery-item-')) throw new Error('CANONICAL_EDITED_ITEM_ID_REJECTED');
+  const editedItemId = editedItemTestId.slice('delivery-item-'.length);
+  if (!UUID.test(editedItemId)) throw new Error('CANONICAL_EDITED_ITEM_ID_REJECTED');
+  await editedItem.getByRole('button', { name: 'Edit immutable descendant', exact: true }).click();
   const editDialog = page.getByRole('dialog', { name: 'Confirm governed decision', exact: true });
   await editDialog.getByLabel('Item title', { exact: true }).fill(AP_ITEM_TITLE);
   await editDialog.getByRole('textbox', { name: 'Description', exact: true }).fill('Route unmatched or tolerance-breaching invoices to an accountable AP specialist with evidence, reason code, and source-system trace.');
   await editDialog.getByRole('textbox', { name: 'Acceptance criteria · one per line', exact: true }).fill('Exact invoice and exception evidence remain linked\nDuplicate action is prevented\nHuman approval remains required for financial release');
   await editDialog.getByRole('textbox', { name: 'Non-functional requirements · one per line', exact: true }).fill('No autonomous payment execution\nTenant and workspace isolation\nAuditable idempotent commands');
   await editDialog.getByRole('textbox', { name: /^Decision rationale\b/u }).fill('Make the canonical Delivery item specific enough for AP business review.');
-  const editResponse = responseCommand(page, 'delivery.item.review');
-  await editDialog.getByRole('button', { name: 'Confirm', exact: true }).click();
-  expect([200, 201]).toContain((await editResponse).status());
-  await expect(page.getByTestId('governed-delivery-workspace').getByRole('status').filter({ hasText: 'delivery.item.review committed and exact Delivery/Monitor projection reloaded.' })).toBeVisible();
-  commands.push('delivery.item.review');
-  await expect(page.getByText(AP_ITEM_TITLE, { exact: true })).toBeVisible();
+  const editReceipt = await committed(
+    'delivery.item.review',
+    () => editDialog.getByRole('button', { name: 'Confirm', exact: true }).click(),
+  );
+  requireCanonicalReceiptBinding(editReceipt, { resourceId: editedItemId, workPackageId: packageId });
+  await expect(packageArticle.getByText(AP_ITEM_TITLE, { exact: true })).toBeVisible();
   await settleActorTransitionEvidence();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('enterprise-intelligence-workspace')).toBeVisible();
   await page.getByRole('button', { name: 'Work Package', exact: true }).click();
-  await expect(page.getByText(AP_ITEM_TITLE, { exact: true })).toBeVisible();
+  packageArticle = await selectExactPackage(page, packageId, packageVersion);
+  await expect(packageArticle.getByText(AP_ITEM_TITLE, { exact: true })).toBeVisible();
 
   const pendingItems = packageArticle.locator('[data-item-status="proposed"], [data-item-status="edited"]');
   const pendingItemCount = await pendingItems.count();
@@ -337,36 +559,48 @@ export const runCanonicalInvoiceExceptionJourney = async ({
     const item = pendingItems.first();
     const itemTestId = await item.getAttribute('data-testid');
     expect(itemTestId).toMatch(/^delivery-item-/u);
-    await decided(
+    const itemId = itemTestId!.slice('delivery-item-'.length);
+    if (!UUID.test(itemId)) throw new Error('CANONICAL_ACCEPTED_ITEM_ID_REJECTED');
+    const itemReceipt = await decided(
       'delivery.item.review',
       () => item.getByRole('button', { name: 'Accept proposal', exact: true }).click(),
       'Delivery owner accepted the exact current AP invoice exception proposal.',
     );
+    requireCanonicalReceiptBinding(itemReceipt, { resourceId: itemId, workPackageId: packageId });
     await expect(page.getByTestId(itemTestId!)).toHaveAttribute('data-item-status', 'accepted');
   }
   await expect(pendingItems).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Approve package review', exact: true })).toHaveCount(0);
+  await expect(packageArticle.getByRole('button', { name: 'Approve package review', exact: true })).toHaveCount(0);
 
   await enterDeliveryAs(page, setup.actors.reviewer, enterAs, settleActorTransitionEvidence, clickProduct);
-  await decided(
+  packageArticle = await selectExactPackage(page, packageId, packageVersion);
+  const packageReviewReceipt = await decided(
     'delivery.package.review.resolve',
-    () => page.getByRole('button', { name: 'Approve package review', exact: true }).click(),
+    () => packageArticle.getByRole('button', { name: 'Approve package review', exact: true }).click(),
     'Independent package reviewer verified every accepted AP invoice exception item and its exact source citation.',
   );
-  await expect(page.getByRole('button', { name: 'Final package approval', exact: true })).toHaveCount(0);
+  requireCanonicalReceiptBinding(packageReviewReceipt, {
+    resourceVersion: packageVersion, workPackageId: packageId, packageVersionId,
+  });
+  await expect(packageArticle.getByRole('button', { name: 'Final package approval', exact: true })).toHaveCount(0);
 
   await enterDeliveryAs(page, setup.actors.approver, enterAs, settleActorTransitionEvidence, clickProduct);
-  await decided(
+  packageArticle = await selectExactPackage(page, packageId, packageVersion);
+  const packageApprovalReceipt = await decided(
     'delivery.package.approval.resolve',
-    () => page.getByRole('button', { name: 'Final package approval', exact: true }).click(),
+    () => packageArticle.getByRole('button', { name: 'Final package approval', exact: true }).click(),
     'Independent approver accepted the exact reviewed package version for the AP invoice exception baseline.',
   );
-  await expect(page.getByText(/Approved identity: \d+ server-counted items\./u)).toBeVisible();
+  requireCanonicalReceiptBinding(packageApprovalReceipt, {
+    resourceVersion: packageVersion, workPackageId: packageId, packageVersionId,
+  });
+  await expect(packageArticle.getByText(/Approved identity: \d+ server-counted items\./u)).toBeVisible();
   await settleActorTransitionEvidence();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('enterprise-intelligence-workspace')).toBeVisible();
   await page.getByRole('button', { name: 'Work Package', exact: true }).click();
-  await expect(page.getByText(/Approved identity: \d+ server-counted items\./u)).toBeVisible();
+  packageArticle = await selectExactPackage(page, packageId, packageVersion);
+  await expect(packageArticle.getByText(/Approved identity: \d+ server-counted items\./u)).toBeVisible();
   const packageItems = packageArticle.locator(
     'article[data-testid^="delivery-item-"][data-item-title][data-item-status][data-item-citation]',
   );
@@ -450,20 +684,30 @@ export const runCanonicalInvoiceExceptionJourney = async ({
     packageArticle, testInfo, outputDirectory, 'ap-invoice-exception-delivery-package.png',
   );
 
-  await decided(
-    'monitor.baseline.create',
-    () => page.getByRole('button', { name: 'Create read-only Monitor baseline', exact: true }).click(),
+  const baselineEligibility = await requireCanonicalExactLocator(
+    page.getByTestId('baseline-eligibility-selectors').locator(`li[data-package-id="${packageId}"]`),
+    'CANONICAL_EXACT_BASELINE_ELIGIBILITY_REJECTED',
   );
-  await expect(page.getByRole('button', { name: 'Create read-only Monitor baseline', exact: true })).toHaveCount(0);
+  const baselineReceipt = await decided(
+    'monitor.baseline.create',
+    () => baselineEligibility.getByRole('button', { name: 'Create read-only Monitor baseline', exact: true }).click(),
+  );
+  requireCanonicalReceiptBinding(baselineReceipt, {
+    resourceVersion: 1, workPackageId: packageId, packageVersionId,
+  });
+  const baselineId = baselineReceipt.resourceId;
+  await expect(page.getByTestId('baseline-eligibility-selectors')
+    .locator(`li[data-package-id="${packageId}"]`)).toHaveCount(0);
   await page.getByRole('button', { name: 'Monitor Baseline', exact: true }).click();
   const monitor = page.getByTestId('canonical-monitor-baselines');
   await expect(monitor).toHaveAttribute('data-monitor-usable', 'true');
+  const monitorBaseline = await selectExactBaseline(page, baselineId, packageId, packageVersion);
+  await expect(monitorBaseline).toContainText('Canonical accepted set');
   await expect(monitor).toContainText('Read only · telemetry disabled');
-  await expect(monitor).toContainText('Canonical accepted set');
   const monitorScreenshot = await screenshot(
-    monitor, testInfo, outputDirectory, 'ap-invoice-exception-monitor-baseline.png', [
-      monitor.getByText('Baseline identity', { exact: true }).locator('..').locator('dd'),
-      monitor.getByText('Exact package', { exact: true }).locator('..').locator('dd'),
+    monitorBaseline, testInfo, outputDirectory, 'ap-invoice-exception-monitor-baseline.png', [
+      monitorBaseline.getByText('Baseline identity', { exact: true }).locator('..').locator('dd'),
+      monitorBaseline.getByText('Exact package', { exact: true }).locator('..').locator('dd'),
     ],
   );
 
@@ -471,8 +715,9 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   await signOutAndIn(page, setup.actors.approver);
   await openDelivery(page, clickProduct);
   await page.getByRole('button', { name: 'Monitor Baseline', exact: true }).click();
+  const persistedMonitorBaseline = await selectExactBaseline(page, baselineId, packageId, packageVersion);
   await expect(page.getByTestId('canonical-monitor-baselines')).toContainText('Read only · telemetry disabled');
-  await expect(page.getByTestId('canonical-monitor-baselines')).toContainText('Canonical accepted set');
+  await expect(persistedMonitorBaseline).toContainText('Canonical accepted set');
 
   let databaseEvidence: CanonicalHostedDatabaseEvidence | null = null;
   let databaseEvidenceOutput: string | null = null;

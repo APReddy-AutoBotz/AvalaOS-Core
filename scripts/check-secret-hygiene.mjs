@@ -170,6 +170,7 @@ const rawSecretLiteralPatterns = [
 
 const sensitiveStorageKeyPattern = /(?:api[-_ ]?key|provider[-_ ]?key|token|service[-_ ]?role|secret|credential|password)/i;
 const deterministicBrowserAuthFixturePaths = new Set([
+  'tests/browser/enterpriseLifecycleAcceptance/actorEntryNavigation.spec.ts',
   'tests/browser/pr1c.spec.ts',
   'tests/browser/pr1dNetworkFixture.ts',
   'tests/browser/pr1e.spec.ts',

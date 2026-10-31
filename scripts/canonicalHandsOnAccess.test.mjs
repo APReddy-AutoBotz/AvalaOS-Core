@@ -92,6 +92,22 @@ test('role inventory requires exact least-privilege sets and rejects org admin o
   assert.throws(()=>validateCanonicalHandsOnRoleInventory(inventory,value),/ROLE_INVENTORY_REJECTED/u);
 });
 
+test('only the hands-on author can create a process without administrative authority', () => {
+  assert.ok(CANONICAL_HANDS_ON_CAPABILITIES.author.includes('assess.read'));
+  assert.ok(CANONICAL_HANDS_ON_CAPABILITIES.author.includes('assess.process.create'));
+  for (const persona of ['reviewer','approver','deliveryOwner']) {
+    assert.equal(CANONICAL_HANDS_ON_CAPABILITIES[persona].includes('assess.process.create'), false);
+  }
+  for (const capabilities of Object.values(CANONICAL_HANDS_ON_CAPABILITIES)) {
+    for (const elevated of ['org.admin','security.manage','roles.manage']) assert.equal(capabilities.includes(elevated), false);
+  }
+  const value = validate(bundle());
+  const inventory = value.personas.map(persona => ({ id:persona.roleId, org_id:value.organizationId,
+    workspace_id:null, scope:'organization', status:'active', capabilities:[...CANONICAL_HANDS_ON_CAPABILITIES[persona.key]] }));
+  inventory[0].capabilities = inventory[0].capabilities.filter(capability => capability !== 'assess.process.create');
+  assert.throws(() => validateCanonicalHandsOnRoleInventory(inventory, value), /ROLE_INVENTORY_REJECTED/u);
+});
+
 test('Auth client sends password only to exact create call and reconciles by exact UUID', async () => {
   const value=validate(bundle());const calls=[];
   const client=createCanonicalHandsOnAuthClient({origin:`https://${bundle().targetProjectRef}.supabase.co`,
