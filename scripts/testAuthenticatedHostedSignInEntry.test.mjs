@@ -633,12 +633,13 @@ test('inert reviewer session omits process update authority and rejects only a v
 });
 
 test('shared helper retains the scrub navigation and enters the actual sign-in route', async () => {
-  const [source, runnerSource, viteSource, specSource, playwrightSource] = await Promise.all([
+  const [source, runnerSource, viteSource, specSource, playwrightSource, assessmentSource] = await Promise.all([
     readFile('tests/browser/authenticatedLifecycleHarness.ts', 'utf8'),
     readFile('scripts/testAuthenticatedHostedSignInEntry.mjs', 'utf8'),
     readFile('vite.authenticated-hosted-sign-in-entry.config.ts', 'utf8'),
     readFile('tests/browser/authenticatedHostedSignInEntry.spec.ts', 'utf8'),
     readFile('playwright.authenticated-hosted-sign-in-entry.config.ts', 'utf8'),
+    readFile('tests/browser/enterpriseLifecycleAcceptance/v1AssessmentCompletion.ts', 'utf8'),
   ]);
   const realAuthBranch = source.slice(
     source.indexOf('export const authenticatedLifecycleEnterAs'),
@@ -665,6 +666,14 @@ test('shared helper retains the scrub navigation and enters the actual sign-in r
   assert.match(specSource, /sessionPendingObserved/u);
   assert.match(specSource, /mode: 'holding', headersSent: true, waiting: true/u);
   assert.match(specSource, /AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_CONTRACT_PHASE_MODE_REJECTED/u);
+  assert.match(assessmentSource,
+    /scopedTimeoutMs > overallTimeoutMs[\s\S]*V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID/u);
+  assert.match(assessmentSource,
+    /await (?:resume|start)[.]click[\s\S]*resolveV1AssessmentDiscoveryVisibilityTimeoutMs\([\s\S]*options[.]discoveryVisibilityTimeoutMs,[\s\S]*deadline[.]remaining\(\)[\s\S]*waitFor\(\{[\s\S]*state: 'visible',[\s\S]*timeout: visibilityTimeoutMs/u);
+  assert.match(specSource,
+    /\[0, Number[.]NaN, -1, 15_001\][\s\S]*toEqual\(beforeInvalidDiscoveryTimeout\)/u);
+  assert.match(specSource,
+    /completeV1\(15_000, \{[\s\S]*discoveryVisibilityTimeoutMs: 300,[\s\S]*page[.]waitForTimeout\(350\)[\s\S]*status: null, version: null, commandTypes: \[\], finalizedReadbacks: 0, waiting: 0/u);
   assert.match(playwrightSource, /timeout: 60_000/u);
   assert.match(playwrightSource, /actionTimeout: 10_000/u);
   assert.match(playwrightSource, /navigationTimeout: 20_000/u);

@@ -23,6 +23,7 @@ import {
 import {
   runV1AssessmentCompletion,
   V1_ASSESSMENT_COMPLETION_TIMEOUT,
+  V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID,
 } from './enterpriseLifecycleAcceptance/v1AssessmentCompletion';
 
 const appOrigin = new URL(process.env.AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_APP_URL ?? '').origin;
@@ -1114,12 +1115,19 @@ test('actual application uses the shared real-auth helper for rejected, cold and
     }
     await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
   };
-  const completeV1 = (timeoutMs = 8_000) => runV1AssessmentCompletion({
+  const completeV1 = (
+    timeoutMs = 8_000,
+    options: Readonly<{
+      discoveryVisibilityTimeoutMs?: number;
+      runStep?: NonNullable<Parameters<typeof runV1AssessmentCompletion>[0]['runStep']>;
+    }> = {},
+  ) => runV1AssessmentCompletion({
     page,
     identity: { actorId: actor(projectName, 'A').user.id, processId: selectedProcessId },
     actionReference: request => networkTracker.reference(request),
-    runStep: (title, operation) => test.step(title, operation),
+    runStep: options.runStep ?? ((title, operation) => test.step(title, operation)),
     timeoutMs,
+    discoveryVisibilityTimeoutMs: options.discoveryVisibilityTimeoutMs,
   });
   const completePositiveV1 = async (label: string) => {
     try {
@@ -1183,10 +1191,24 @@ test('actual application uses the shared real-auth helper for rejected, cold and
   await exitAssessment();
 
   await resetAssessment('single-readback', false);
+  const beforeInvalidDiscoveryTimeout = await assessmentControl({ action: 'inspect' });
+  for (const invalidTimeout of [0, Number.NaN, -1, 15_001]) {
+    await expect(completeV1(15_000, { discoveryVisibilityTimeoutMs: invalidTimeout }))
+      .rejects.toThrow(V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID);
+  }
+  expect(await assessmentControl({ action: 'inspect' })).toEqual(beforeInvalidDiscoveryTimeout);
   const delayedDiscovery = await page.addStyleTag({
     content: '[data-testid="enterprise-assess"] { visibility: hidden !important; }',
   });
-  await expect(completeV1(300)).rejects.toThrow(V1_ASSESSMENT_COMPLETION_TIMEOUT);
+  await expect(completeV1(15_000, {
+    discoveryVisibilityTimeoutMs: 300,
+    runStep: async (title, operation) => {
+      // Deterministic pre-entry fault: this exceeds the old 300 ms total deadline;
+      // it is not a readiness sleep or retry.
+      if (title === 'v1-assessment:open-and-complete-discovery') await page.waitForTimeout(350);
+      return test.step(title, operation);
+    },
+  })).rejects.toThrow(V1_ASSESSMENT_COMPLETION_TIMEOUT);
   await delayedDiscovery.evaluate(node => (node as Element).remove());
   await expect(page.getByTestId('enterprise-assess')).toBeVisible();
   await page.waitForTimeout(100);
