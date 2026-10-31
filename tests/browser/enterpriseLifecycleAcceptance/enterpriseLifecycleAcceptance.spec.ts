@@ -1315,6 +1315,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             }
             if (retainedFailure === null) {
               try {
+                if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
                 await page.reload({ waitUntil: 'domcontentloaded' });
                 navigation = 'passed';
               } catch (error) { retainFailure('navigation', error); }
