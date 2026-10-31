@@ -372,7 +372,8 @@ export async function prepareCanonicalHandsOnAccess({ db, auth, bundle }) {
         VALUES($1,$2,$3,'active',statement_timestamp())`, [bundle.organizationId, persona.userId, persona.roleId]);
       await db.query(`INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,status,joined_at)
         VALUES($1,$2,$3,'active',statement_timestamp())`, [bundle.organizationId, bundle.workspaceId, persona.userId]);
-      await db.query('INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,1)',
+      await db.query(`INSERT INTO public.authorization_versions(org_id,user_id,version) VALUES($1,$2,1)
+        ON CONFLICT(org_id,user_id) DO NOTHING`,
         [bundle.organizationId, persona.userId]);
     }
     await db.query('COMMIT');

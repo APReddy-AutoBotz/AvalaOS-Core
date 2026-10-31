@@ -177,7 +177,24 @@ test('disposable PostgreSQL proves trigger-safe prepare and drift-tolerant histo
         joined_at timestamptz,deleted_at timestamptz,PRIMARY KEY(org_id,user_id));
       CREATE TABLE public.workspace_memberships(org_id uuid NOT NULL,workspace_id uuid NOT NULL,user_id uuid NOT NULL,status text NOT NULL,
         joined_at timestamptz,disabled_at timestamptz,deleted_at timestamptz,PRIMARY KEY(org_id,workspace_id,user_id));
-      CREATE TABLE public.authorization_versions(org_id uuid NOT NULL,user_id uuid NOT NULL,version bigint NOT NULL,PRIMARY KEY(org_id,user_id));
+      CREATE TABLE public.authorization_versions(org_id uuid NOT NULL,user_id uuid NOT NULL,version bigint NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT statement_timestamp(),PRIMARY KEY(org_id,user_id));
+      CREATE FUNCTION public.pr1b_bump_authorization_version(p_org_id uuid,p_user_id uuid) RETURNS bigint
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS 'DECLARE v_version bigint; BEGIN
+        IF p_org_id IS NULL OR p_user_id IS NULL THEN RETURN NULL; END IF;
+        INSERT INTO public.authorization_versions AS av(org_id,user_id,version,updated_at)
+        VALUES(p_org_id,p_user_id,1,statement_timestamp()) ON CONFLICT(org_id,user_id) DO UPDATE
+        SET version=av.version+1,updated_at=statement_timestamp() RETURNING version INTO v_version; RETURN v_version; END';
+      CREATE FUNCTION public.pr1b_bump_membership_authorization() RETURNS trigger
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS 'BEGIN
+        IF TG_OP=''DELETE'' THEN PERFORM public.pr1b_bump_authorization_version(OLD.org_id,OLD.user_id); RETURN OLD; END IF;
+        PERFORM public.pr1b_bump_authorization_version(NEW.org_id,NEW.user_id);
+        IF TG_OP=''UPDATE'' AND (OLD.org_id,OLD.user_id) IS DISTINCT FROM (NEW.org_id,NEW.user_id) THEN
+          PERFORM public.pr1b_bump_authorization_version(OLD.org_id,OLD.user_id); END IF; RETURN NEW; END';
+      CREATE TRIGGER trg_pr1b_org_membership_authorization AFTER INSERT OR UPDATE OR DELETE ON public.organization_members
+        FOR EACH ROW EXECUTE FUNCTION public.pr1b_bump_membership_authorization();
+      CREATE TRIGGER trg_pr1b_workspace_membership_authorization AFTER INSERT OR UPDATE OR DELETE ON public.workspace_memberships
+        FOR EACH ROW EXECUTE FUNCTION public.pr1b_bump_membership_authorization();
       CREATE TABLE public.hosted_pilot_environment_identity(singleton boolean PRIMARY KEY,product_key text NOT NULL,
         environment_class text NOT NULL,migration_tip text NOT NULL,production_authorized boolean NOT NULL,
         customer_data_authorized boolean NOT NULL,real_provider_calls_authorized boolean NOT NULL);
@@ -206,6 +223,12 @@ test('disposable PostgreSQL proves trigger-safe prepare and drift-tolerant histo
     const auth=disposableAuth(db,value);
     const prepared=await prepareCanonicalHandsOnAccess({db,auth,bundle:value});
     assert.equal(prepared.accessActive,true);
+    const preparedVersions=(await db.query(`SELECT user_id,version FROM public.authorization_versions
+      WHERE org_id=$1 AND user_id=ANY($2::uuid[]) ORDER BY user_id`,
+    [value.organizationId,value.personas.map(persona=>persona.userId)])).rows;
+    assert.equal(preparedVersions.length,4);
+    assert.equal(preparedVersions.every(row=>Number(row.version)>=2),true,
+      'organization and workspace membership triggers own the positive authorization version');
     assert.equal(Number((await db.query(`SELECT count(*) value FROM public.profiles
       WHERE metadata->>'canonicalHandsOnBundle'=$1`,[value.bundleId])).rows[0].value),4,
     'Auth-created profiles must be reconciled, not collide or be blindly adopted');
@@ -219,6 +242,9 @@ test('disposable PostgreSQL proves trigger-safe prepare and drift-tolerant histo
       await db.query('INSERT INTO public.business_history VALUES($1,$2,$3)',
         [`30000000-0000-4000-8000-00000000000${index+1}`,persona.userId,'immutable synthetic history']);
     }
+    const versionsBeforeRevoke=new Map((await db.query(`SELECT user_id,version FROM public.authorization_versions
+      WHERE org_id=$1 AND user_id=ANY($2::uuid[])`,[value.organizationId,value.personas.map(persona=>persona.userId)]))
+      .rows.map(row=>[row.user_id,Number(row.version)]));
     const revokeEnvironment={
       CANONICAL_HANDS_ON_OPERATION:'revoke',CANONICAL_HANDS_ON_OPERATOR_SHA:value.operatorSha,
       CANONICAL_HANDS_ON_PREVIEW_RELEASE_SHA:value.previewReleaseSha,CANONICAL_HANDS_ON_PREVIEW_URL:value.previewUrl,
@@ -239,6 +265,11 @@ test('disposable PostgreSQL proves trigger-safe prepare and drift-tolerant histo
       (SELECT count(*) FROM public.workspace_memberships WHERE status='active') active_workspace`)).rows[0];
     assert.deepEqual(Object.fromEntries(Object.entries(retained).map(([key,value])=>[key,Number(value)])),
       {users:4,sessions:0,history:4,disabled:4,active_org:0,active_workspace:0});
+    const versionsAfterRevoke=(await db.query(`SELECT user_id,version FROM public.authorization_versions
+      WHERE org_id=$1 AND user_id=ANY($2::uuid[])`,[value.organizationId,value.personas.map(persona=>persona.userId)])).rows;
+    assert.equal(versionsAfterRevoke.length,4);
+    assert.equal(versionsAfterRevoke.every(row=>Number(row.version)>versionsBeforeRevoke.get(row.user_id)),true,
+      'membership revocation increments and retains each positive authorization version');
     assert.equal((await revokeCanonicalHandsOnAccess({db,auth,bundle:value})).exactReplay,true);
     await db.query(`DELETE FROM public.role_capabilities WHERE capability_key='org.admin';
       UPDATE public.studio_artifact_runtime_control SET provider_enabled=false;
