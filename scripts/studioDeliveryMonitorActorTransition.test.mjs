@@ -78,3 +78,8 @@ test('focused Chromium regression retains the raw red control and corrected fail
   assert.match(regression, /expect\(cleanup\.map\(result => result\.status\)\)\.toEqual\(\['fulfilled', 'fulfilled'\]\)/u);
   assert.match(regression, /LOCAL_OWNED_EVIDENCE_DRAIN_FAILED/u);
 });
+
+// The negative edit scenario uses a second page; a main-page-only search misses it.
+test('canonical denied-edit refresh settles its native reads before navigation', () => {
+  assert.match(aggregate, /expect\(deniedEditApi.status\).toBe\(403\);\s*if \(canonicalInvoiceExceptionJourney\) await settleActorTransitionEvidence\(\);\s*await deniedEditPage.reload/u);
+});

@@ -531,8 +531,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       settleResponseBodies: async () => {
         await activeNetworkLifecycle!.settleResponseBodies();
         if (canonicalInvoiceExceptionJourney) {
-          const stats = await control<{ active: number }>('/control/native-postgrest-stats', { projectName });
+          const stats = await control<{ active: number; cancelled: number; failed: number }>('/control/native-postgrest-stats', { projectName });
           expect(Number.isSafeInteger(stats.active) && stats.active >= 0).toBe(true);
+          expect(stats.cancelled, 'CANONICAL_NATIVE_READ_CANCELLED_BEFORE_BOUNDARY').toBe(0);
+          expect(stats.failed, 'CANONICAL_NATIVE_READ_FAILED_BEFORE_BOUNDARY').toBe(0);
           canonicalNativeReads = stats.active;
         }
       },
@@ -1026,6 +1028,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         await expect(deniedEditPage.getByText('Process update denied. No changes were saved.', { exact: true })).toBeVisible();
       }
       expect(deniedEditApi.status).toBe(403);
+      if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
       await deniedEditPage.reload({ waitUntil: 'domcontentloaded' });
       await expect(deniedEditPage.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       const afterDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
