@@ -23,6 +23,10 @@ import {
   authenticatedLifecycleSettleCheckpointBoundary,
   authenticatedLifecycleSettleActorNavigationBoundary,
 } from './authenticatedHostedNetwork';
+import {
+  resolveV1AssessmentDiscoveryVisibilityTimeoutMs,
+  V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID,
+} from './enterpriseLifecycleAcceptance/v1AssessmentCompletion';
 
 const actorEntryFixture = {
   token: 'fixture-actor-token',
@@ -39,6 +43,17 @@ const studioTemplateBinding = Object.freeze({
   version:'studio-brd-2',
 });
 const studioTemplateLabel = `System BRD · v${studioTemplateBinding.version} · ${studioTemplateBinding.templateVersionId}`;
+
+test('assessment discovery visibility timeout rejects invalid input and stays within the overall remainder', () => {
+  for (const invalidTimeout of [0, Number.NaN, -1, 15_001]) {
+    assert.throws(
+      () => resolveV1AssessmentDiscoveryVisibilityTimeoutMs(invalidTimeout, 15_000, 15_000),
+      new RegExp(V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID, 'u'),
+    );
+  }
+  assert.equal(resolveV1AssessmentDiscoveryVisibilityTimeoutMs(700, 800, 450), 450);
+  assert.equal(resolveV1AssessmentDiscoveryVisibilityTimeoutMs(300, 15_000, 14_500), 300);
+});
 
 test('Studio template binding validation is strict and selects exact identity across competing reorderable options', () => {
   assert.deepEqual(authenticatedLifecycleValidateStudioTemplateBinding(studioTemplateBinding), studioTemplateBinding);

@@ -9,6 +9,19 @@ const MAX_TIMEOUT_MS = 60_000;
 
 export const V1_ASSESSMENT_COMPLETION_MILESTONE = 'hosted:primary:v1-assessment-completion';
 export const V1_ASSESSMENT_COMPLETION_TIMEOUT = 'ENTERPRISE_LIFECYCLE_BROWSER_V1_COMPLETION_TIMEOUT';
+export const V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID =
+  'V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID';
+
+export const resolveV1AssessmentDiscoveryVisibilityTimeoutMs = (
+  scopedTimeoutMs: number,
+  overallTimeoutMs: number,
+  overallRemainingMs: number,
+) => {
+  if (!Number.isFinite(scopedTimeoutMs) || scopedTimeoutMs <= 0 || scopedTimeoutMs > overallTimeoutMs) {
+    throw new Error(V1_ASSESSMENT_DISCOVERY_VISIBILITY_TIMEOUT_INVALID);
+  }
+  return Math.min(scopedTimeoutMs, Math.max(1, overallRemainingMs));
+};
 
 type JsonObject = Record<string, unknown>;
 type CommandType = 'assessment.create' | 'assessment.response.upsert' | 'assessment.finalize';
@@ -35,6 +48,7 @@ type CompletionOptions = Readonly<{
   actionReference: (request: Request) => ActionReference;
   runStep?: RunStep;
   timeoutMs?: number;
+  discoveryVisibilityTimeoutMs?: number;
 }>;
 
 class CompletionDeadline {
@@ -308,7 +322,28 @@ const runInner = async (options: CompletionOptions, deadline: CompletionDeadline
       } else {
         await start.click({ timeout: deadline.remaining() });
       }
-      await expect(options.page.getByTestId('enterprise-assess')).toBeVisible({ timeout: deadline.remaining() });
+      deadline.assertActive();
+      if (options.discoveryVisibilityTimeoutMs === undefined) {
+        await expect(options.page.getByTestId('enterprise-assess')).toBeVisible({ timeout: deadline.remaining() });
+      } else {
+        const visibilityTimeoutMs = resolveV1AssessmentDiscoveryVisibilityTimeoutMs(
+          options.discoveryVisibilityTimeoutMs,
+          options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+          deadline.remaining(),
+        );
+        try {
+          await options.page.getByTestId('enterprise-assess').waitFor({
+            state: 'visible',
+            timeout: visibilityTimeoutMs,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === 'TimeoutError') {
+            throw new Error(V1_ASSESSMENT_COMPLETION_TIMEOUT);
+          }
+          throw error;
+        }
+        deadline.assertActive();
+      }
       await completeLegacyDiscoveryInputs(options.page, deadline);
     });
 
@@ -362,6 +397,9 @@ export const runV1AssessmentCompletion = async (
 ): Promise<V1AssessmentCompletionResult> => {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const deadline = new CompletionDeadline(timeoutMs);
+  if (options.discoveryVisibilityTimeoutMs !== undefined) {
+    resolveV1AssessmentDiscoveryVisibilityTimeoutMs(options.discoveryVisibilityTimeoutMs, timeoutMs, timeoutMs);
+  }
   const runStep: RunStep = options.runStep ?? (async (_title, operation) => operation());
   let operation: Promise<V1AssessmentCompletionResult> | undefined;
   return runStep(V1_ASSESSMENT_COMPLETION_MILESTONE, async () => {
