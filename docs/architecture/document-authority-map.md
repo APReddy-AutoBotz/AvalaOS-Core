@@ -1,5 +1,13 @@
 # AvalaOS Core Document Authority Map
 
+## Reader entry points — 2026-10-31
+
+- [End-to-end product guide](../09_END_TO_END_PRODUCT_GUIDE.md): purpose, users, module inputs/outputs, supported routes and limits; summary of domain contracts, not new scope.
+- [Implementation status](../05_IMPLEMENTATION_STATUS.md): current release, local correction and integrated evidence, explicitly separated.
+- [Remaining delivery plan](../04_MVP_ROADMAP.md): dependencies, owners, exit evidence and approval boundaries.
+
+Older dated “current” entries below retain their original scope and history. They do not supersede the current status/sequence, and no source/CI result is promoted to deployed readiness. Agent reading order and domain-authority precedence remain unchanged.
+
 ## Netlify-free real-backend functional acceptance (2026-10-19)
 
 AP's approved replacement is governed by `docs/planning/hosted-acceptance-completion.md`: exact loopback build, existing real synthetic Supabase sessions/server authority, additive synthetic exercise identity, one protected full run and cleanup. `docs/quality/exhaustive-hosted-product-acceptance.md` owns the distinct local-real-backend evidence profile and unchanged 108 business requirements. This supersedes prior Netlify-only execution restrictions only for that explicitly labelled functional profile; historical hosted evidence and production/deployment proof boundaries remain unchanged. No Netlify operation or paid/production action is included.
@@ -92,6 +100,7 @@ The current configured-environment/no-release Pilot Operations frontend correcti
 | Studio source packages, tenant templates, structured editing, governed generation, and Assess-to-Studio handoff consumption | `docs/architecture/studio-governed-artifact-authority.md` |
 | Active security, reliability, quality, and readiness risks | `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md` |
 | Cross-layer execution-plan requirements | `PLANS.md` |
+| End-to-end user/module flow, inputs and outputs | `docs/09_END_TO_END_PRODUCT_GUIDE.md` (summary; detailed domain contracts retain authority) |
 | Product strategy and boundaries | `docs/01_PRODUCT_STRATEGY.md`, then `docs/02_PRODUCT_REQUIREMENTS.md` |
 | Architecture detail | `docs/03_TECHNICAL_ARCHITECTURE.md` |
 | Active roadmap | `docs/04_MVP_ROADMAP.md`, then `docs/planning/milestone-roadmap.md` for chronology |

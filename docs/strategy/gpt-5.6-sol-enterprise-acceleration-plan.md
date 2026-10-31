@@ -1,5 +1,25 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Current delivery snapshot — 2026-10-31
+
+The last verified release is PR345, `80f6e97b6047718c15163e51df3e879bc6307668`, identical to verified candidate tree `064b389ab3978513586bcde934b0650fdf312331`. Its three release workflows, twelve fresh sanitized preparation archives and 94 disposable browser cases passed. PR345 is no longer draft or CI-pending.
+
+The current downstream actor-transition harness correction has local proof: six Desktop/Pixel browser regressions, three source contracts, type/static/secret/catalog checks and 85 PR-C tests; registry 85 commands / 241 assertions is unchanged. The user authorizes clear documentation and publication with this correction in one draft PR. Fresh exact-candidate CI, approved merge and release verification remain separate requirements. The focused browser probe is opt-in local coverage, not default CI execution.
+
+The last integrated result is still **61 PASS / 47 BLOCKED / 0 FAIL / 0 UNCOVERED** on earlier PR343 release `38ffa87ab4e3f4f2e7deadc10f08ce56a4dac432`, run `41081605972/1`, with cleanup verified. It is not a result for the current corrected tree. Historical hosted causation remains unproven; the 47 blocked requirements are not 47 confirmed defects. No UAT, hosted, deployment or production readiness is promoted.
+
+Read the [end-to-end guide](../09_END_TO_END_PRODUCT_GUIDE.md), [current evidence table](../05_IMPLEMENTATION_STATUS.md) and [remaining gates](../04_MVP_ROADMAP.md). Keep **15,000 ms / providers OFF**. No new hosted acceptance/diagnostic, merge, deployment, provider activation or additional grant is authorized by publication. Detailed local-private evidence stays private; public summaries retain only sanitized outcomes and exact GitHub bindings.
+
+## Retained milestone notes — historical status, not the current queue
+
+The following dated and milestone sections preserve the progression of decisions and proof. Phrases such as “current”, “candidate pending”, “not started” and slice-specific prohibitions inside an older entry describe that entry's boundary. The current snapshot above supersedes those status/sequence claims; domain invariants and immutable evidence remain applicable. No failed result is erased or retroactively promoted.
+
+## Downstream actor-transition settlement correction (2026-10-31)
+
+After the verified PR345 release, the next controlled local slice closes one harness ordering gap without another hosted run. Require the existing owned-action settlement callback in both downstream journey modules, thread it through all actor changes, and gate it with source contracts plus a real loopback `AuthenticatedHostedBrowserActionTracker` regression on Desktop and Pixel 7 Chromium. The probe uses deterministic request-admission/terminal barriers, 15,000 ms, and providers OFF.
+
+Acceptance is: the raw baseline crosses the pending boundary and cancels with the same causal action ID; the corrected path retains the old actor until response/work settlement and completes that same ID exactly once; drain rejection prevents navigation and session replacement; all direct actor-entry call sites are source-guarded. Rollback removes this slice and re-blocks actor-transition readiness. Historical hosted causality is not claimed.
+
 ## PR345 static AI-boundary registration correction (2026-10-31)
 
 AP authorizes reproducing and fixing the static gate locally, updating the same draft PR345 and verifying fresh exact-candidate CI. Failed head `31bb7994e263e65cb2afa4308997c13bafc3802d` and all original attempt-1 failures remain preserved under `output/local-private/assessment-negative-discovery-ci/`; no workflow retry is authorized. Keep 15,000 ms/providers OFF, OPEN/draft and `[skip netlify]`. No merge or new hosted acceptance/diagnostic.

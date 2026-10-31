@@ -13,7 +13,7 @@ AvalaOS Core must support a complete governed lifecycle from assessment to monit
 
 ## Avala Studio
 
-- Generate governed BRD, PRD, PDD, SDD-oriented content, diagrams, quality gaps, approvals, and work item candidates.
+- Support canonical governed BRD/FRD/PDD artifacts, quality gaps, human approvals and work-item candidates. PRD/SDD-oriented content and wider diagram aspirations do not imply independently accepted canonical artifact types.
 - Keep generated content editable and reviewable.
 - Require human approval before downstream handoff.
 - Use server-side AI for pilot and production. Browser-side AI is local transitional behavior only.
@@ -47,9 +47,9 @@ Avala Govern and Avala Delivery are the buyer-facing canonical names for the pre
 
 ## Enterprise Readiness Requirements
 
-- M5 authority, ownership, RLS, audit, export, and deployment readiness must be tracked as evidence-backed milestones.
-- M5.2 authority migrations and ownership columns are prerequisites for future tenant-isolation policy work, not proof that tenant isolation is complete.
-- M5.3 is the RLS policy design and test plan. Implementation and policy evidence require a later approved milestone.
+- Source support, local fixtures, exact-head CI, release verification, integrated synthetic acceptance, human UAT and production approval are separate gates.
+- Current evidence and missing proof are recorded in [implementation status](05_IMPLEMENTATION_STATUS.md); the required sequence is in the [roadmap](04_MVP_ROADMAP.md).
+- Older M5/PR1D planning statements describe historical stages and must not replace current domain authority or evidence.
 - KlarityFlow Health remains outside core AvalaOS scope unless explicitly approved as separate Health work.
 
 ## Acceptance Requirements
@@ -59,8 +59,8 @@ Avala Govern and Avala Delivery are the buyer-facing canonical names for the pre
 - Scoring behavior is unchanged.
 - No unsupported compliance claims are introduced.
 
-## PR 1D Current Authority
+## Module inputs, outputs and acceptance
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
+The [end-to-end product guide](09_END_TO_END_PRODUCT_GUIDE.md) defines supported inputs, user responsibilities, module outputs, failure behavior and handoffs. Assess, Studio and Delivery may start independently. Every downstream resource requires explicit current authorization and target acceptance; direct paths cannot fabricate Assess ancestry. Monitor remains read-only.
 
-PR 1D requires explicit V2 cases, immutable authoring/decision versions, primitives, decisions, exceptions, application interactions, evidence links, a versioned deterministic rule registry, action-specific controls, modernization dispositions, and a read-only executive Decision Pack. V1 import is explicit and unverified; V2 finalization ends reviewer-ready.
+Each implementation must preserve exact versions, tenant boundaries, deterministic decisions, human approval, audit/receipt behavior, safe failure/replay and accessible loading/error/recovery states. Feature-owned executable criteria and the acceptance catalog provide detailed checks. Passing a local test does not satisfy a separate real-auth, deployed or human-UAT requirement.

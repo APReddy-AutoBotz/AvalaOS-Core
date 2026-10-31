@@ -1,8 +1,10 @@
 # AvalaOS Core Security And Governance
 
+Current evidence and pending gates: [implementation status](05_IMPLEMENTATION_STATUS.md). Module flow and outputs: [product guide](09_END_TO_END_PRODUCT_GUIDE.md). Earlier slice-specific exclusions below do not override later accepted domain authority.
+
 ## Studio PR A human authority
 
-Studio PR A permits AI only to propose strictly validated draft material. Three different freshly authorized humans author/request, review, and finally approve; AI/provider/service identities cannot review, approve, supersede, export, store, or deliver. Provider execution is not cross-system atomic. PR B private storage/export remains excluded, and legacy `document_generations` is unverified.
+Studio PR A permits AI only to propose strictly validated draft material. Three different freshly authorized humans author/request, review, and finally approve; AI/provider/service identities cannot review, approve, supersede, export, store, or deliver. Provider execution is not cross-system atomic. Private storage/export is governed by the accepted [Studio private-artifact contract](architecture/studio-private-artifact-authority.md); it was excluded from the original PR A slice, not from the later source baseline. Legacy `document_generations` remains unverified.
 
 
 ## Security Position

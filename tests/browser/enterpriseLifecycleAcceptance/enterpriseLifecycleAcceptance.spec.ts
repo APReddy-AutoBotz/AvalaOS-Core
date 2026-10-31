@@ -2058,6 +2058,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         setup,
         control,
         enterAs,
+        settleActorTransitionEvidence,
         clickProduct,
         selectProjectScope,
         startTrackedRequest: hostedAuthenticatedAcceptance ? startProductAction : undefined,
@@ -2119,6 +2120,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
     test('production scoring preserves low-suitability and strong-automation decisions through governed publication', async ({ page }, testInfo) => {
       const scenarioCases = await runAssessmentScenarioJourneys(page, testInfo.project.name,
+        settleActorTransitionEvidence,
         hostedAuthenticatedAcceptance?startProductAction:undefined);
       authenticatedCases.push(...scenarioCases.map(scenarioCaseToLocal));
       for (const row of scenarioCases) for (const assertion of row.assertions) {

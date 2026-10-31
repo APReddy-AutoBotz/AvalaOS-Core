@@ -6,7 +6,9 @@ Canonical tagline: **Evaluate before you automate. Govern before you execute.**
 
 ## Start Here
 
-Use the minimum authoritative route:
+For product understanding, start with the [end-to-end product guide](docs/09_END_TO_END_PRODUCT_GUIDE.md), [current implementation status](docs/05_IMPLEMENTATION_STATUS.md), and [remaining delivery plan](docs/04_MVP_ROADMAP.md).
+
+For agent execution, use the minimum authoritative route:
 
 1. [Source of Truth](docs/00_SOURCE_OF_TRUTH.md)
 2. [Agent Instructions](AGENTS.md)
@@ -18,13 +20,11 @@ Use the minimum authoritative route:
 
 Historical evidence under `docs/quality/` is immutable and is not the default reading path.
 
-## Current Maturity
+## Current position — 2026-10-31
 
-> AvalaOS Core is a credible deterministic enterprise demo with substantial source-level governance scaffolding, but not yet a coherent server-authoritative, tenant-safe pilot or production platform.
+PR345 release `80f6e97b6047718c15163e51df3e879bc6307668` is verified at its source/CI release boundary. The downstream actor-transition harness correction has passed focused local regressions and is being published with the current documentation; fresh candidate CI and release verification remain separate gates.
 
-The accepted source baseline is PR #208 / PR 1C merged on `main` at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. This does not prove deployment, tenant isolation, storage, export, hosted, pilot, production, security, buyer, release-candidate, or compliance readiness.
-
-PR 1D is the active substantial boundary; PR 1E review/approval/handoff and PR 1F calibration/economics follow before broader Studio/private-artifact expansion.
+The last integrated result remains **61 PASS / 47 BLOCKED** on the earlier PR343 release, with cleanup verified. These are blocked requirements, not 47 confirmed product defects. Local regression and release-preparation success do not promote UAT, hosted, deployment or production readiness. See the [status table](docs/05_IMPLEMENTATION_STATUS.md) for exact evidence and limits.
 
 ## P0 Readiness Stop
 
@@ -39,9 +39,11 @@ PR 1D is the active substantial boundary; PR 1E review/approval/handoff and PR 1
 - **Avala Monitor:** value, risk, blocker, and portfolio visibility.
 - **Avala Admin / AI Controls:** organization, users, providers, audit, evidence, and security settings.
 
-## Golden Path
+## Supported product flow
 
-Organization → Process Catalog → Guided Assessment → Deterministic Score → Recommendation → Decision Pack → Avala Govern → Avala Studio Handoff → Generated Document → Work Items → Avala Delivery → Avala Monitor
+Assess → human review/approval and Govern → explicit Studio handoff → reviewed/approved artifact → explicit Delivery handoff → approved Delivery package → read-only Monitor baseline.
+
+Users may also start in Studio or Delivery. Direct starts retain `not_assessed` / `planning_only` status; no module automatically creates or approves the next resource. Current canonical Studio artifact types are BRD, FRD and PDD. Supporting capabilities include Enterprise Intelligence/source ingestion, Application Portfolio/Modernization, economics, Trust/Assurance and draft-only Assemble Phase 1. The [product guide](docs/09_END_TO_END_PRODUCT_GUIDE.md) defines each input, output and boundary.
 
 ## Local Verification
 
@@ -66,8 +68,6 @@ Local demo behavior is not pilot or production authority. Pilot and production m
 
 This workspace is `APReddy-AutoBotz/AvalaOS-Core`. Do not push to the historical prototype repository. KlarityFlow Health remains separate unless explicitly opened.
 
-## PR 1D Current Authority
+## Publication and readiness
 
-PR #208 / PR 1C is accepted at `30883509b46b848eaf1d0d5fc4bb5898bade98a3`; Workstream 1A-1C is accepted at source/CI level. PR 1D is the active substantial Avala Assess V2 decision-correctness boundary. V1 `assess-core-2026-05` remains an unchanged legacy deterministic heuristic. PR 1E (review/approval and handoff authority) and PR 1F (calibration and economics) follow before broader Studio/private-artifact expansion. Hosted, deployment, pilot, production, security-certification, buyer, and compliance readiness remain unproven. Routine micro-PRs and plan/evidence/reconciliation/closure-only PRs remain prohibited.
-
-Avala Assess V2 decomposes processes into primitives and produces evidence-qualified hybrid operating models rather than one whole-process technology winner. PR 1D finalization ends reviewer-ready; V2 approval, Studio handoff, export, and sharing are not authorized.
+Published PR content and the corresponding local files must match. A PR branch is not `main`, a passing CI run is not integrated acceptance, and integrated acceptance is not production approval. Keep current documentation with its implementation PR; preserve historical evidence. No new hosted run or merge is authorized by this documentation update.

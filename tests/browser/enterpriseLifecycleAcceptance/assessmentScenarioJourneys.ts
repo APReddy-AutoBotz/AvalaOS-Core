@@ -35,8 +35,9 @@ const enterProcessAs = async (
   page: Page,
   actor: AuthenticatedLifecycleSetup['actors']['author'],
   processLabel: string,
+  settleActorTransitionEvidence: () => Promise<void>,
 ) => {
-  await enterAs(page, actor);
+  await enterAs(page, actor, settleActorTransitionEvidence);
   if (!(await page.getByRole('heading', { name: 'Process Catalog', exact: true }).isVisible().catch(() => false))) {
     await clickProduct(page, 'Assess');
   }
@@ -132,8 +133,10 @@ const createAndFinalizeDecision = async (
   setup: AuthenticatedLifecycleSetup,
   variant: AuthenticatedAssessmentVariant,
   actionReference: (request: Request) => Promise<string | null>,
+  settleActorTransitionEvidence: () => Promise<void>,
 ) => {
-  const processId = await enterProcessAs(page, setup.actors.author, setup.aliases.process);
+  const processId = await enterProcessAs(page, setup.actors.author, setup.aliases.process,
+    settleActorTransitionEvidence);
   await runV1AssessmentCompletion({
     page,
     identity: { actorId: setup.actors.author.user.id, processId },
@@ -155,8 +158,9 @@ const createAndFinalizeDecision = async (
   return control<ScenarioDecision>('/control/scenario-decision', { projectName: setup.projectName });
 };
 
-const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetup) => {
-  await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process);
+const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetup,
+  settleActorTransitionEvidence: () => Promise<void>) => {
+  await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
   let review = page.getByTestId('assess-v2-review-workspace');
   await selectReviewer(page, setup.actors.reviewer);
   await review.getByRole('button', { name: 'Commit reviewer assignment', exact: true }).click();
@@ -165,7 +169,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await review.getByRole('button', { name: 'Approve reviewed decision', exact: true }).click();
   await expect(page.getByText('Review resolution committed: Approved.', { exact: true })).toBeVisible();
 
-  await enterProcessAs(page, setup.actors.approver, setup.aliases.process);
+  await enterProcessAs(page, setup.actors.approver, setup.aliases.process, settleActorTransitionEvidence);
   review = page.getByTestId('assess-v2-review-workspace');
   expect(await resolveGovernControls(page)).toBeGreaterThan(0);
   await review.getByLabel('Govern rationale', { exact: true }).fill('Independent resolver confirmed every required scenario control.');
@@ -174,11 +178,11 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await review.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click();
   await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
 
-  await enterStudioAs(page, setup.actors.approver);
+  await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
   const requestedResponse = await commitEligibleHandoff(page);
   const requestedTarget = await persistedHandoffTargetFromResponse(requestedResponse, 'requested');
   await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
-  await enterStudioAs(page, setup.actors.reviewer);
+  await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
   const reviewedResponse = await commitPersistedHandoff(
     page,
     requestedTarget,
@@ -187,7 +191,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   );
   const reviewedTarget = await persistedHandoffTargetFromResponse(reviewedResponse, 'approval_ready', requestedTarget);
   await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
-  await enterStudioAs(page, setup.actors.author);
+  await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
   const acceptedResponse = await commitPersistedHandoff(
     page,
     reviewedTarget,
@@ -196,7 +200,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   );
   const acceptedTarget = await persistedHandoffTargetFromResponse(acceptedResponse, 'approved', reviewedTarget);
   await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
-  await enterStudioAs(page, setup.actors.approver);
+  await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
   const consumedResponse = await commitPersistedHandoff(page, acceptedTarget, 'Start Studio draft', undefined, 'Outbox');
   await persistedHandoffTargetFromResponse(consumedResponse, 'consumed', acceptedTarget);
   await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\. Approval alone did not create a document\./u)).toBeVisible();
@@ -211,7 +215,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     () => page.getByRole('button', { name: 'Submit for review', exact: true }).click(),
     'Reviewer ready committed.',
   );
-  await enterStudioAs(page, setup.actors.author);
+  await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
   await page.getByLabel('Eligible independent reviewer', { exact: true }).selectOption(setup.actors.reviewer.user.id);
   await commitStudioArtifactCommand(
     page,
@@ -219,7 +223,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     () => page.getByRole('button', { name: 'Assign reviewer', exact: true }).click(),
     'In review committed.',
   );
-  await enterStudioAs(page, setup.actors.reviewer);
+  await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
   await page.getByLabel('Rationale', { exact: true }).fill('Independent scenario Studio review approved.');
   await commitStudioArtifactCommand(
     page,
@@ -227,7 +231,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     () => page.getByRole('button', { name: 'Approve review', exact: true }).click(),
     'Approval ready committed.',
   );
-  await enterStudioAs(page, setup.actors.author);
+  await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
   await page.getByLabel('Rationale', { exact: true }).fill('Final approval binds the exact scenario version.');
   await commitStudioArtifactCommand(
     page,
@@ -245,13 +249,15 @@ const runScenario = async (
   page: Page, project: string, variant: 'low-suitability' | 'strong-automation',
   productionResponses: readonly ObservedProductionResponse[],
   actionReference: (request: Request) => Promise<string | null>,
+  settleActorTransitionEvidence: () => Promise<void>,
 ): Promise<AssessmentScenarioCaseResult> => {
   const testId: ScenarioCaseId = variant === 'low-suitability' ? 'E2E-005' : 'E2E-006';
   const responseStart = productionResponses.length;
   const projectName = `${project}-${variant}`;
   const setup = await control<AuthenticatedLifecycleSetup>('/control/setup', { projectName });
   validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
-  const decisionBefore = await createAndFinalizeDecision(page, setup, variant, actionReference);
+  const decisionBefore = await createAndFinalizeDecision(page, setup, variant, actionReference,
+    settleActorTransitionEvidence);
   expect(decisionBefore.outputHash).toMatch(/^[a-f0-9]{64}$/u); expectDigest(decisionBefore.targetHash);
   expect(decisionBefore.validationStatus).toBe('reviewer-ready');
   const writeDecisions = decisionBefore.interactionDecisions.filter(item => decisionBefore.sourceInteractions
@@ -266,9 +272,9 @@ const runScenario = async (
     expect(writeDecisions[0].approvalBoundActions).toHaveLength(0);
     expect(writeDecisions[0].prohibitedActions).toHaveLength(0);
   }
-  await approveGovernStudio(page, setup);
+  await approveGovernStudio(page, setup, settleActorTransitionEvidence);
   await control('/control/bind-delivery-project-source', { projectName });
-  await enterAs(page, setup.actors.approver);
+  await enterAs(page, setup.actors.approver, settleActorTransitionEvidence);
   await selectProjectScope(page, setup.deliveryProject.name);
   await clickProduct(page, 'Studio');
   const publisher = page.getByTestId('studio-approved-artifact-publish');
@@ -309,6 +315,7 @@ const runScenario = async (
 };
 
 export const runAssessmentScenarioJourneys = async (page: Page, project: string,
+  settleActorTransitionEvidence: () => Promise<void>,
   startTrackedRequest?: (request: Request)=>Promise<string|null>) => {
   const productionResponses: ObservedProductionResponse[] = [];
   page.on('response', response => {
@@ -318,7 +325,9 @@ export const runAssessmentScenarioJourneys = async (page: Page, project: string,
   });
   const actionReference = (request: Request) => startTrackedRequest?.(request) ?? Promise.resolve(null);
   return [
-    await runScenario(page, project, 'low-suitability', productionResponses, actionReference),
-    await runScenario(page, project, 'strong-automation', productionResponses, actionReference),
+    await runScenario(page, project, 'low-suitability', productionResponses, actionReference,
+      settleActorTransitionEvidence),
+    await runScenario(page, project, 'strong-automation', productionResponses, actionReference,
+      settleActorTransitionEvidence),
   ] as const;
 };

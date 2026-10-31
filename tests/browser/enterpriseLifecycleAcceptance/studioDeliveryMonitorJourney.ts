@@ -145,7 +145,11 @@ export type StudioDeliveryMonitorCaseResult = Readonly<{
 }>;
 
 type Control = <T>(pathname: string, body?: unknown) => Promise<T>;
-type EnterAs = (page: Page, actor: EnterpriseLifecycleActor) => Promise<void>;
+type EnterAs = (
+  page: Page,
+  actor: EnterpriseLifecycleActor,
+  beforeIntentionalNavigation: () => Promise<void>,
+) => Promise<void>;
 type ClickProduct = (page: Page, label: string) => Promise<void>;
 type SelectProjectScope = (page: Page, projectName: string) => Promise<void>;
 
@@ -156,6 +160,7 @@ export type StudioDeliveryMonitorJourneyInput = Readonly<{
   setup: EnterpriseLifecycleDownstreamSetup;
   control: Control;
   enterAs: EnterAs;
+  settleActorTransitionEvidence: () => Promise<void>;
   clickProduct: ClickProduct;
   selectProjectScope: SelectProjectScope;
   startTrackedRequest?: (request: import('@playwright/test').Request) => Promise<string | null>;
@@ -311,7 +316,8 @@ const scanAffectedSurface = async (page: Page, surface: string, selector: string
 };
 
 export const runStudioDeliveryMonitorJourney = async ({
-  page, projectName, project, setup, control, enterAs, clickProduct, selectProjectScope, startTrackedRequest,
+  page, projectName, project, setup, control, enterAs, settleActorTransitionEvidence,
+  clickProduct, selectProjectScope, startTrackedRequest,
 }: StudioDeliveryMonitorJourneyInput): Promise<StudioDeliveryMonitorJourneyResult> => {
   expect(project).toMatch(/^(?:chromium-(?:desktop|mobile)|desktop-chromium|pixel-7-chromium)$/u);
   const observations: StudioDeliveryMonitorObservation[] = [];
@@ -348,7 +354,7 @@ export const runStudioDeliveryMonitorJourney = async ({
   expect(hitlDecisionBefore.sourceInteractions.some(item => item.mode === 'write' && item.highImpact && item.financialAction)).toBe(true);
   expect(hitlDecisionBefore.interactionDecisions.some(item => item.approvalBoundActions.length > 0 && item.prohibitedActions.length > 0)).toBe(true);
 
-  await enterAs(page, setup.actors.approver);
+  await enterAs(page, setup.actors.approver, settleActorTransitionEvidence);
   await openProjectProduct(page, setup.deliveryProject, selectProjectScope, clickProduct, 'Studio');
   const publisher = page.getByTestId('studio-approved-artifact-publish');
   await expect(publisher).toBeVisible();
@@ -488,7 +494,7 @@ export const runStudioDeliveryMonitorJourney = async ({
   expectUuid(restrictedAuthority.organizationId);
   expectUuid(restrictedAuthority.workspaceId);
   try {
-    await enterAs(page, setup.actors.reviewer);
+    await enterAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
     await enterProjectBacklog(page, setup.deliveryProject, selectProjectScope, clickProduct);
     taskDialog = await openTask(page, itemTitles.blocker);
     await taskDialog.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -560,7 +566,7 @@ export const runStudioDeliveryMonitorJourney = async ({
     await control('/control/restricted-delete', { projectName, enabled: false });
   }
 
-  await enterAs(page, setup.actors.approver);
+  await enterAs(page, setup.actors.approver, settleActorTransitionEvidence);
   await enterProjectBacklog(page, setup.deliveryProject, selectProjectScope, clickProduct);
   taskDialog = await openTask(page, itemTitles.blocker);
   await taskDialog.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -703,7 +709,7 @@ export const runStudioDeliveryMonitorJourney = async ({
   const apiBaseUrl = process.env.ENTERPRISE_LIFECYCLE_API_BASE_URL ?? '';
   const apiUrl = new URL(apiBaseUrl);
   expect(['http:','https:']).toContain(apiUrl.protocol);
-  await enterAs(page,setup.actors.outsider);
+  await enterAs(page,setup.actors.outsider,settleActorTransitionEvidence);
   const foreignResponseStart = productionResponses.length;
   const foreignResponse = await page.evaluate(async ({ url, body }) => {
     const key=Object.keys(localStorage).find(candidate=>candidate.startsWith('sb-'))??'';
@@ -729,7 +735,7 @@ export const runStudioDeliveryMonitorJourney = async ({
   expect(foreignBody).not.toContain(outcome.detail);
   const foreignMonitorResponses = measuredResponses(productionResponses, foreignResponseStart,
     ['/functions/v1/studio-delivery-outcome-query']);
-  await enterAs(page,setup.actors.approver);
+  await enterAs(page,setup.actors.approver,settleActorTransitionEvidence);
   const afterMonitor = await getFrame(control, projectName);
   expect(afterMonitor.writeFingerprint).toBe(afterPackSnapshot.writeFingerprint);
   expect(afterMonitor.foreignProbe).toEqual({
