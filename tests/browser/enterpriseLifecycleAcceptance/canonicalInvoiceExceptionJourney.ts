@@ -5,6 +5,10 @@ import type {
   AuthenticatedLifecycleActor,
   AuthenticatedLifecycleSetup,
 } from '../authenticatedLifecycleHarness';
+import {
+  approvedBusinessOutputMarkdown,
+  validateApprovedDeliveryItemEvidence,
+} from './canonicalBusinessOutputEvidence';
 
 const COMMAND_ROUTE = '/functions/v1/enterprise-intelligence-command';
 const QUERY_ROUTE = '/functions/v1/enterprise-intelligence-query';
@@ -26,6 +30,37 @@ type CanonicalCommand =
   | 'delivery.package.approval.resolve'
   | 'monitor.baseline.create';
 
+export type CanonicalInvoiceExceptionProofBoundary = Readonly<{
+  application: 'production UI and handlers';
+  providers: 'off';
+  hostedProviders: false;
+  deployment: false;
+  database: 'disposable PostgreSQL' | 'existing synthetic nonproduction Supabase';
+  authentication: 'synthetic Supabase-compatible password session' | 'real Supabase password session';
+  generation: 'deterministic synthetic test-provider output; providers off';
+  frontend: 'local production build' | 'runner-local exact release build';
+  hostedAuth: boolean;
+}>;
+
+export type CanonicalHostedDatabaseEvidence = Readonly<{
+  baselineCount: 1;
+  exactApprovedPackage: true;
+  exactEditedStudioVersion: true;
+  exactAssessGovernAncestry: true;
+  singleHandoffConsumption: true;
+  independentPackageApproval: true;
+  exactAcceptedItemVersions: true;
+  readOnlyMonitorTruth: true;
+  singleBaselineEffect: true;
+  providersOff: true;
+}>;
+
+const HOSTED_DATABASE_BOOLEAN_KEYS = Object.freeze([
+  'exactApprovedPackage', 'exactEditedStudioVersion', 'exactAssessGovernAncestry',
+  'singleHandoffConsumption', 'independentPackageApproval', 'exactAcceptedItemVersions',
+  'readOnlyMonitorTruth', 'singleBaselineEffect', 'providersOff',
+] as const);
+
 export type CanonicalInvoiceExceptionJourneyResult = Readonly<{
   status: 'passed';
   journey: 'AP Invoice Exception Handling';
@@ -45,18 +80,13 @@ export type CanonicalInvoiceExceptionJourneyResult = Readonly<{
     staleCommandRejected: true;
     idempotentReplayStable: true;
     providerFailureRecoveryStable: true;
+    completeApprovedBusinessOutputs: true;
+    syntheticContentLabeled: true;
     providersOff: true;
     actorBoundary15000ms: true;
   }>;
-  proofBoundary: Readonly<{
-    application: 'production UI and handlers';
-    database: 'disposable PostgreSQL';
-    authentication: 'synthetic Supabase-compatible password session';
-    providers: 'off';
-    hostedAuth: false;
-    hostedProviders: false;
-    deployment: false;
-  }>;
+  proofBoundary: CanonicalInvoiceExceptionProofBoundary;
+  databaseEvidence: CanonicalHostedDatabaseEvidence | null;
   commands: readonly CanonicalCommand[];
   outputs: readonly string[];
 }>;
@@ -177,6 +207,8 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   enterAs,
   settleActorTransitionEvidence,
   clickProduct,
+  proofBoundary,
+  readHostedDatabaseEvidence,
   upstreamOutputs = [],
 }: Readonly<{
   page: Page;
@@ -186,8 +218,24 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   enterAs: EnterAs;
   settleActorTransitionEvidence: () => Promise<void>;
   clickProduct: (page: Page, label: string) => Promise<void>;
+  proofBoundary: CanonicalInvoiceExceptionProofBoundary;
+  readHostedDatabaseEvidence?: () => Promise<unknown>;
   upstreamOutputs?: readonly string[];
 }>): Promise<CanonicalInvoiceExceptionJourneyResult> => {
+  if (proofBoundary.hostedAuth) {
+    if (proofBoundary.database !== 'existing synthetic nonproduction Supabase'
+      || proofBoundary.authentication !== 'real Supabase password session'
+      || proofBoundary.frontend !== 'runner-local exact release build') {
+      throw new Error('CANONICAL_REAL_AUTH_PROOF_BOUNDARY_REJECTED');
+    }
+  } else if (proofBoundary.database !== 'disposable PostgreSQL'
+    || proofBoundary.authentication !== 'synthetic Supabase-compatible password session'
+    || proofBoundary.frontend !== 'local production build') {
+    throw new Error('CANONICAL_DISPOSABLE_PROOF_BOUNDARY_REJECTED');
+  }
+  if (proofBoundary.hostedAuth !== Boolean(readHostedDatabaseEvidence)) {
+    throw new Error('CANONICAL_DATABASE_EVIDENCE_READER_BOUNDARY_REJECTED');
+  }
   const deliveryOwner = setup.actors.deliveryOwner;
   if (!deliveryOwner) throw new Error('CANONICAL_INDEPENDENT_DELIVERY_OWNER_REQUIRED');
   for (const actor of [setup.actors.author, setup.actors.reviewer, setup.actors.approver]) {
@@ -295,6 +343,85 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   await expect(page.getByTestId('enterprise-intelligence-workspace')).toBeVisible();
   await page.getByRole('button', { name: 'Work Package', exact: true }).click();
   await expect(page.getByText(/Approved identity: \d+ server-counted items\./u)).toBeVisible();
+  const packageItems = packageArticle.locator(
+    'article[data-testid^="delivery-item-"][data-item-title][data-item-status][data-item-citation]',
+  );
+  const packageItemCount = await packageItems.count();
+  expect(packageItemCount).toBe(5);
+  await expect(packageItems).toHaveCount(5);
+  await expect(packageArticle.locator(
+    'article[data-testid^="delivery-item-"][data-item-title][data-item-status="accepted"][data-item-citation]',
+  )).toHaveCount(5);
+  const history = packageArticle.locator('details').first();
+  await history.locator('summary').click();
+  const deliverySections: { heading: string; body: string }[] = [{
+    heading: 'Package identity, lineage, review, and approval',
+    body: [
+      await packageArticle.locator(':scope > div').first().innerText(),
+      ...(await packageArticle.locator(':scope > p').allTextContents()),
+      await history.innerText(),
+    ].join('\n'),
+  }];
+  const deliveryItemEvidence = [];
+  for (let index = 0; index < packageItemCount; index += 1) {
+    const item = packageItems.nth(index);
+    await item.getByRole('button', { name: 'Version diff and history', exact: true }).click();
+    const title = await item.locator(':scope > h4').innerText();
+    const description = await item.locator(':scope > h4 + p').innerText();
+    const acceptanceCriteria = await item.locator('section[aria-label="Acceptance criteria"] li').allTextContents();
+    const nonFunctionalRequirements = await item
+      .locator('section[aria-label="Non-functional requirements"] li').allTextContents();
+    const sourceCitation = await item.getByLabel('Exact source citation', { exact: true }).innerText();
+    const decision = await item.locator(':scope > p').filter({ hasText: /^Decision: accepted\b/u }).innerText();
+    const itemHistory = await item.getByText('Immutable history', { exact: true }).locator('..').innerText();
+    deliveryItemEvidence.push({
+      title, description, acceptanceCriteria, nonFunctionalRequirements,
+      sourceCitation, decision, history: itemHistory,
+    });
+    deliverySections.push({
+      heading: `Accepted item ${index + 1}: ${title}`,
+      body: [
+        `Description: ${description}`,
+        `Acceptance criteria:\n${acceptanceCriteria.length
+          ? acceptanceCriteria.map(value => `- ${value}`).join('\n')
+          : 'None in the exact approved baseline.'}`,
+        `Non-functional requirements:\n${nonFunctionalRequirements.length
+          ? nonFunctionalRequirements.map(value => `- ${value}`).join('\n')
+          : 'None in the exact approved baseline.'}`,
+        sourceCitation,
+        decision,
+        itemHistory,
+      ].join('\n\n'),
+    });
+  }
+  validateApprovedDeliveryItemEvidence(deliveryItemEvidence);
+  const itemsWithoutAcceptanceCriteria = deliveryItemEvidence
+    .filter(item => item.acceptanceCriteria.length === 0).map(item => item.title);
+  const itemsWithoutNonFunctionalRequirements = deliveryItemEvidence
+    .filter(item => item.nonFunctionalRequirements.length === 0).map(item => item.title);
+  const deliveryText = approvedBusinessOutputMarkdown({
+    title: 'Approved AP Invoice Exception Delivery Package',
+    approvalState: `Independent package review and final approval committed for ${packageItemCount} server-counted accepted items; the approved package survived reload before capture.`,
+    contentOrigin: 'Providers were OFF. The package is a deterministic synthetic planning projection from the approved BRD; one item was test-authored through the normal UI and every item was accepted by the Delivery owner before independent review and approval. This is not live AI generation or human UAT sign-off.',
+    sections: deliverySections,
+    remainingGaps: [
+      'Business owners must assign real owners, dates, milestones, dependencies, and delivery sequencing before execution.',
+      'Tolerance values, regional tax rules, ERP connector priorities, and operational service levels remain open business decisions.',
+      ...(itemsWithoutAcceptanceCriteria.length ? [
+        `${itemsWithoutAcceptanceCriteria.length} of ${packageItemCount} accepted items have no acceptance criteria in the exact approved baseline: ${itemsWithoutAcceptanceCriteria.join('; ')}.`,
+      ] : []),
+      ...(itemsWithoutNonFunctionalRequirements.length ? [
+        `${itemsWithoutNonFunctionalRequirements.length} of ${packageItemCount} accepted items have no non-functional requirements in the exact approved baseline: ${itemsWithoutNonFunctionalRequirements.join('; ')}.`,
+      ] : []),
+      'This package contains planning outputs only; it does not authorize payment, automation execution, provider use, or production rollout.',
+    ],
+  });
+  await mkdir(outputDirectory, { recursive: true });
+  const deliveryOutput = `${testInfo.project.name}-ap-invoice-exception-delivery-package.md`;
+  await writeFile(path.join(outputDirectory, deliveryOutput), deliveryText, 'utf8');
+  await testInfo.attach(deliveryOutput, {
+    path: path.join(outputDirectory, deliveryOutput), contentType: 'text/markdown',
+  });
   const deliveryScreenshot = await screenshot(
     packageArticle, testInfo, outputDirectory, 'ap-invoice-exception-delivery-package.png',
   );
@@ -323,6 +450,30 @@ export const runCanonicalInvoiceExceptionJourney = async ({
   await expect(page.getByTestId('canonical-monitor-baselines')).toContainText('Read only · telemetry disabled');
   await expect(page.getByTestId('canonical-monitor-baselines')).toContainText('Canonical accepted set');
 
+  let databaseEvidence: CanonicalHostedDatabaseEvidence | null = null;
+  let databaseEvidenceOutput: string | null = null;
+  if (readHostedDatabaseEvidence) {
+    const candidate = await readHostedDatabaseEvidence();
+    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      throw new Error('CANONICAL_HOSTED_DATABASE_EVIDENCE_REJECTED');
+    }
+    const record = candidate as Record<string, unknown>;
+    const expectedKeys = ['baselineCount', ...HOSTED_DATABASE_BOOLEAN_KEYS].sort();
+    if (JSON.stringify(Object.keys(record).sort()) !== JSON.stringify(expectedKeys)
+      || record.baselineCount !== 1
+      || HOSTED_DATABASE_BOOLEAN_KEYS.some(key => record[key] !== true)) {
+      throw new Error('CANONICAL_HOSTED_DATABASE_EVIDENCE_REJECTED');
+    }
+    databaseEvidence = Object.freeze(record) as CanonicalHostedDatabaseEvidence;
+    databaseEvidenceOutput = `${testInfo.project.name}-ap-invoice-exception-database-evidence.json`;
+    await mkdir(outputDirectory, { recursive: true });
+    await writeFile(path.join(outputDirectory, databaseEvidenceOutput),
+      `${JSON.stringify(databaseEvidence, null, 2)}\n`, 'utf8');
+    await testInfo.attach(databaseEvidenceOutput, {
+      path: path.join(outputDirectory, databaseEvidenceOutput), contentType: 'application/json',
+    });
+  }
+
   const result: CanonicalInvoiceExceptionJourneyResult = Object.freeze({
     status: 'passed',
     journey: 'AP Invoice Exception Handling',
@@ -342,20 +493,18 @@ export const runCanonicalInvoiceExceptionJourney = async ({
       staleCommandRejected: true,
       idempotentReplayStable: true,
       providerFailureRecoveryStable: true,
+      completeApprovedBusinessOutputs: true,
+      syntheticContentLabeled: true,
       providersOff: true,
       actorBoundary15000ms: true,
     }),
-    proofBoundary: Object.freeze({
-      application: 'production UI and handlers',
-      database: 'disposable PostgreSQL',
-      authentication: 'synthetic Supabase-compatible password session',
-      providers: 'off',
-      hostedAuth: false,
-      hostedProviders: false,
-      deployment: false,
-    }),
+    proofBoundary: Object.freeze({ ...proofBoundary }),
+    databaseEvidence,
     commands: Object.freeze([...commands]),
-    outputs: Object.freeze([...upstreamOutputs, deliveryScreenshot, monitorScreenshot]),
+    outputs: Object.freeze([
+      ...upstreamOutputs, deliveryOutput, deliveryScreenshot, monitorScreenshot,
+      ...(databaseEvidenceOutput ? [databaseEvidenceOutput] : []),
+    ]),
   });
   await mkdir(outputDirectory, { recursive: true });
   const resultPath = path.join(outputDirectory, `canonical-${setup.projectName}.json`);

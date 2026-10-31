@@ -20,7 +20,7 @@ import { authenticatedHostedRequestBinding } from './authenticatedHostedObservat
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
 import { createAuthenticatedHostedIdentityAdapter, createAuthenticatedHostedPostgresAdapter,
   authenticatedHostedSystemBrdTemplateBinding, readAuthenticatedHostedCleanupControls,
-  REQUIRED_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
+  authenticatedHostedPersonaCapabilitiesReady, REQUIRED_PERSONA_CAPABILITIES } from './authenticatedHostedControllerAdapters.mjs';
 import { verifyAuthenticatedHostedCheckoutState } from './authenticatedHostedCheckout.mjs';
 import { runAuthenticatedHostedAcceptance, validateAuthenticatedDatabaseTarget,
   verifyAuthenticatedHostedCheckout, verifyAuthenticatedSecretBackend } from './runAuthenticatedHostedAcceptance.mjs';
@@ -44,6 +44,74 @@ test('both generator personas require template read without template administrat
     assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.templates.read'), false);
     assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].includes('studio.artifacts.generate'), false);
   }
+  assert.deepEqual(REQUIRED_PERSONA_CAPABILITIES.deliveryOwner,
+    ['assess.read','delivery.handoff.consume','delivery.package.manage','project.read']);
+  const exactOwner = new Set(REQUIRED_PERSONA_CAPABILITIES.deliveryOwner);
+  assert.equal(authenticatedHostedPersonaCapabilitiesReady('deliveryOwner',exactOwner),true);
+  assert.equal(authenticatedHostedPersonaCapabilitiesReady('deliveryOwner',new Set(['assess.read'])),false);
+  assert.equal(authenticatedHostedPersonaCapabilitiesReady('deliveryOwner',new Set([...exactOwner,'monitor.read'])),false);
+  for(const [persona,required,forbidden] of [
+    ['author',['delivery.handoff.request'],['delivery.handoff.review','delivery.handoff.approve']],
+    ['reviewer',['delivery.handoff.review','delivery.package.review'],['delivery.handoff.approve','delivery.package.approve']],
+    ['approver',['delivery.handoff.approve','delivery.package.approve','monitor.baseline.create'],
+      ['delivery.handoff.review','delivery.package.review']],
+  ]){
+    for(const capability of required)assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].includes(capability),true);
+    const exactRequired=new Set(REQUIRED_PERSONA_CAPABILITIES[persona]);
+    assert.equal(authenticatedHostedPersonaCapabilitiesReady(persona,exactRequired),true);
+    for(const capability of forbidden){
+      assert.equal(authenticatedHostedPersonaCapabilitiesReady(persona,new Set([...exactRequired,capability])),false);
+    }
+  }
+});
+
+test('canonical hosted process adoption verifies durable creation before rebinding Delivery once', async () => {
+  const organizationId=id();const workspaceId=id();const processId=id();const prerequisiteProcessId=id();
+  const projectId=id();const authorId=id();let updates=0;
+  const canonicalProcess='AP Invoice Exception Handling [run 123.1 abcdef012345]';
+  const lineage={baselineCount:1,exactApprovedPackage:true,exactEditedStudioVersion:true,
+    exactAssessGovernAncestry:true,singleHandoffConsumption:true,independentPackageApproval:true,
+    exactAcceptedItemVersions:true,readOnlyMonitorTruth:true,singleBaselineEffect:true};
+  const db={query:async(sql,params=[])=>{
+    if(sql.includes('FROM public.assess_processes process')){
+      assert.match(sql,/process\.name=\$3 AND process\.created_by=\$4/u);
+      assert.deepEqual(params,[organizationId,workspaceId,canonicalProcess,authorId]);
+      return {rows:[{
+      id:processId,name:canonicalProcess,receipt_status:'succeeded',command_type:'process.create',
+      receipt_actor_id:authorId,receipt_request_id:id(),receipt_idempotency_key:id(),receipt_ok:'true',
+      receipt_outcome:'committed',receipt_process_id:processId,exact_name_count:'1',audit_committed:true,
+      }]};
+    }
+    if(sql.includes('FROM public.enterprise_monitor_baselines')){
+      assert.deepEqual(params,[organizationId,workspaceId,processId]);
+      return {rows:[lineage]};
+    }
+    if(sql.includes('studio_artifact_runtime_control'))return {rows:[{providersOff:true}]};
+    if(sql.includes('UPDATE public.projects SET source_process_id')){
+      assert.deepEqual(params,[processId,authorId,projectId,organizationId,workspaceId,prerequisiteProcessId]);
+      updates+=1;return {rowCount:1,rows:[{id:projectId}]};
+    }
+    throw new Error(`unexpected query: ${sql}`);
+  }};
+  const adapter=createAuthenticatedHostedPostgresAdapter({
+    config:{acceptanceMode:'full_acceptance',scope:{organizationId,workspaceId}},db,
+  });
+  const project={projectName:'desktop-chromium',processId:prerequisiteProcessId,prerequisiteProcessId,
+    projectId,canonicalPrimary:true,canonicalCreatedProcessId:null,identities:{author:{id:authorId}},
+    aliases:{process:'desktop-chromium prerequisite process',canonicalProcess}};
+  const input={project,processId};
+  assert.deepEqual(await adapter.control('/control/canonical-created-process',input),
+    {processId,name:canonicalProcess});
+  assert.equal(project.processId,processId);
+  assert.equal(project.aliases.process,canonicalProcess);
+  assert.equal(updates,1);
+  assert.deepEqual(await adapter.control('/control/canonical-created-process',input),
+    {processId,name:canonicalProcess});
+  assert.equal(updates,1);
+  assert.deepEqual(await adapter.control('/control/canonical-database-evidence',{project}),
+    {...lineage,providersOff:true});
+  await assert.rejects(adapter.control('/control/canonical-created-process',{project,processId:id()}),
+    /AUTHENTICATED_HOSTED_CANONICAL_PROCESS_REJECTED/u);
 });
 
 test('hosted controller and adapter strictly bind one active system BRD template identity', () => {
@@ -261,7 +329,7 @@ test('late session binding cannot commit after intake stops', async () => {
 });
 
 test('a project committed while intake stops remains owned for revocation and cleanup', async () => {
-  const identities = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider']
+  const identities = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider', 'deliveryOwner']
     .map(persona => [persona, { id: id(), email: `${persona}@example.invalid`, password: `fixture-${persona}` }]));
   let releaseSetup; let setupStarted;
   const setupGate = new Promise(resolve => { releaseSetup = resolve; });
@@ -317,7 +385,7 @@ const baseEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_PROVIDERS_ENABLED: 'false', AUTHENTICATED_ACCEPTANCE_PAID_CALLS: 'false',
   AUTHENTICATED_ACCEPTANCE_SECRET_BACKEND: 'supabase_vault', AVALA_PROVIDER_SECRET_BACKEND: 'supabase_vault',
   AUTHENTICATED_ACCEPTANCE_SCOPE: JSON.stringify({ organizationId: id(), workspaceId: id(),
-    roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id() } }),
+    roleIds: { author: id(), reviewer: id(), approver: id(), outsider: id(), deliveryOwner: id() } }),
 });
 
 const reviewerDiagnosticEnvironment = () => ({
@@ -605,6 +673,11 @@ test('hosted environment binds the raw authenticated caller and canonical produc
     { GITHUB_JOB: 'acceptance' }, { GITHUB_EVENT_NAME: 'pull_request' },
     { AUTHENTICATED_ACCEPTANCE_PROVIDERS_ENABLED: 'true' }, { HOSTED_PILOT_URL: 'https://example.invalid' },
   ]) assert.throws(() => validateAuthenticatedHostedControllerEnvironment({ ...baseEnvironment(), ...changed }), /AUTHENTICATED_HOSTED_CONTROLLER_/u);
+  const missingOwnerRole = baseEnvironment();
+  const missingOwnerScope = JSON.parse(missingOwnerRole.AUTHENTICATED_ACCEPTANCE_SCOPE);
+  delete missingOwnerScope.roleIds.deliveryOwner;
+  assert.throws(() => validateAuthenticatedHostedControllerEnvironment({ ...missingOwnerRole,
+    AUTHENTICATED_ACCEPTANCE_SCOPE: JSON.stringify(missingOwnerScope) }), /SCOPE_REJECTED/u);
 });
 
 test('a failed browser assertion remains actual false instead of becoming proof', async () => {
@@ -655,6 +728,13 @@ test('real session binding is idempotent and namespaces the browser project pers
   await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken});
   await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'author',accessToken});
   assert.equal(calls.length,1);assert.equal(calls[0].persona,'author_desktop-chromium');
+
+  const deliveryOwnerId=id();const deliveryOwnerSession=id();
+  controller.projects.get('desktop-chromium').identities.deliveryOwner={id:deliveryOwnerId};
+  controller.identity.verifySession=async()=>({actorId:deliveryOwnerId,sessionId:deliveryOwnerSession});
+  await controller.bindBrowserSession({projectName:'desktop-chromium',persona:'deliveryOwner',
+    accessToken:tokenFor(deliveryOwnerId,deliveryOwnerSession)});
+  assert.equal(calls.length,2);assert.equal(calls[1].persona,'delivery_owner_desktop-chromium');
 });
 
 test('cached browser actions reverify the exact presented token before observation', async () => {

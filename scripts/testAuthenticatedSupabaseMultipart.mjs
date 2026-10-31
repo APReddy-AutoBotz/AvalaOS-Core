@@ -19,7 +19,7 @@ const functions = Object.freeze([
   'tenant-session', 'process-command', 'assess-command', 'assess-v2-command',
   'studio-artifact-command', 'studio-artifact-download', 'studio-delivery-authority-command',
   'legacy-delivery-command', 'legacy-delivery-query', 'studio-delivery-outcome-query',
-  'enterprise-intelligence-query', 'synthetic-admin', 'pilot-operations-query',
+  'enterprise-intelligence-command', 'enterprise-intelligence-query', 'synthetic-admin', 'pilot-operations-query',
   'enterprise-provider-lifecycle', 'enterprise-provider-lifecycle-authority',
   'enterprise-provider-lifecycle-recovery',
 ]);
@@ -50,10 +50,12 @@ async function repositoryClosures(root) {
     }
     closures.set(slug, entries);
   }
-  assert.equal(Object.keys(compared).length, 216);
+  assert.equal(Object.keys(compared).length, 247);
   assert.ok(closures.get('studio-artifact-command').some(entry =>
     entry.repositoryRelative === 'services/enterpriseIntelligence.ts'));
   assert.ok(closures.get('enterprise-intelligence-query').some(entry =>
+    entry.repositoryRelative === 'services/enterpriseIntelligence.ts'));
+  assert.ok(closures.get('enterprise-intelligence-command').some(entry =>
     entry.repositoryRelative === 'services/enterpriseIntelligence.ts'));
   assert.ok(closures.get('legacy-delivery-command').some(entry =>
     entry.repositoryRelative === 'services/legacyDelivery/contracts.ts'));
@@ -189,7 +191,7 @@ async function main() {
     const success = await downloadAndVerifyAuthenticatedEdgeSources(config, {
       root, managementToken: fakeToken, fetchImpl, deployments,
     });
-    assert.deepEqual(success, { backendDigest, files: 216 });
+    assert.deepEqual(success, { backendDigest, files: 247 });
     for (const [negative, code] of [
       ['stale', 'BACKEND_SOURCE_FILE_MISMATCH'],
       ['missing', 'BACKEND_DEPENDENCY_CLOSURE_MISSING'],
@@ -212,10 +214,10 @@ async function main() {
     assert.deepEqual(await currentSourceSnapshot(root, sourceSnapshot), sourceSnapshot);
     passResult = {
       status: 'PASS', transport: 'multipart/form-data', loopbackDownloads: requests.length,
-      successfulClosures: 216, deepEnterpriseIntelligenceSourceVerified: true,
+      successfulClosures: 247, deepEnterpriseIntelligenceSourceVerified: true,
       deepLegacyContractsSourceVerified: true, staleSourceRejected: true,
       missingDependencyRejected: true, extraDependencyRejected: true,
-      repositoryLayoutFunctions: 13, functionsLayoutFunctions: 3,
+      repositoryLayoutFunctions: 14, functionsLayoutFunctions: 3,
       repositorySourcesUnchanged: true, temporaryOutputs: 0, childProcesses: 0, hostedRequests: 0,
     };
   } finally {

@@ -777,6 +777,8 @@ jobs:
       - name: Stage sanitized same-run manifests
         if: always() && inputs.acceptance_mode == 'full_acceptance'
         shell: bash
+        env:
+          AUTHENTICATED_STEP_OUTCOME: ${{ steps.authenticated.outcome }}
         run: |
           set -euo pipefail
           mkdir -p acceptance-results
@@ -788,6 +790,10 @@ jobs:
           test -f "$AUTHENTICATED_CONTROLLER_BINDING" && cp "$AUTHENTICATED_CONTROLLER_BINDING" acceptance-results/authenticated-controller-binding.json || true
           test -f /tmp/authenticated-hosted-diagnostic.json && cp /tmp/authenticated-hosted-diagnostic.json acceptance-results/authenticated-hosted-diagnostic.json || true
           test -f /tmp/local-acceptance-build-proof.json && cp /tmp/local-acceptance-build-proof.json acceptance-results/local-acceptance-build-proof.json || true
+          if [ "$AUTHENTICATED_STEP_OUTCOME" = success ]; then
+            test -d /tmp/authenticated-canonical-review
+            cp -R /tmp/authenticated-canonical-review acceptance-results/canonical-review
+          fi
       - name: Stage sanitized V2 primary-prefix diagnostic
         if: always() && inputs.acceptance_mode == 'v2_primary_prefix_diagnostic'
         shell: bash

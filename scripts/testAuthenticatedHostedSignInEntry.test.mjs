@@ -568,6 +568,45 @@ test('inert fixture returns only scoped retained and current process rows with o
   }
 });
 
+test('inert fixture provisions and binds one distinct canonical Delivery owner session', async () => {
+  const fixture = await startAuthenticatedHostedSignInEntryFixture();
+  try {
+    const projectName='desktop-chromium';
+    const setupResponse=await fetch(`${fixture.controlBaseUrl}/control/setup`,{
+      method:'POST',headers:{'content-type':'application/json','x-enterprise-lifecycle-control':fixture.controlToken},
+      body:JSON.stringify({projectName}),
+    });
+    assert.equal(setupResponse.status,200);
+    const setup=await setupResponse.json();
+    const owner=setup.actors.deliveryOwner;
+    assert.ok(owner);
+    for(const persona of ['author','reviewer','approver','outsider']){
+      assert.notEqual(owner.user.id,setup.actors[persona].user.id);
+    }
+    const signIn=await fetch(`${fixture.baseUrl}/auth/v1/token?grant_type=password`,{
+      method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({email:`deliveryOwner.${projectName}@local.invalid`,
+        password:'synthetic-delivery-owner-password'}),
+    });
+    assert.equal(signIn.status,200);
+    const session=await signIn.json();
+    const bound=await fetch(`${fixture.controlBaseUrl}/control/bind-browser-session`,{
+      method:'POST',headers:{'content-type':'application/json','x-enterprise-lifecycle-control':fixture.controlToken},
+      body:JSON.stringify({projectName,persona:'deliveryOwner',accessToken:session.access_token}),
+    });
+    assert.equal(bound.status,200);
+    const observation=await (await fetch(`${fixture.controlBaseUrl}/control/sign-in-entry-observation`,{
+      method:'POST',headers:{'content-type':'application/json','x-enterprise-lifecycle-control':fixture.controlToken},
+      body:JSON.stringify({projectName}),
+    })).json();
+    assert.deepEqual(observation.bindings.map(({actor,persona})=>({actor,persona})),[
+      {actor:'E',persona:'deliveryOwner'},
+    ]);
+  } finally {
+    assert.equal(await fixture.close(),true);
+  }
+});
+
 test('inert reviewer session omits process update authority and rejects only a valid current-row command', async () => {
   const fixture = await startAuthenticatedHostedSignInEntryFixture();
   try {

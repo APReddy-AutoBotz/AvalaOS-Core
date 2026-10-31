@@ -1,9 +1,18 @@
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+export const CANONICAL_DATABASE_LINEAGE_BOOLEAN_KEYS = Object.freeze([
+  'exactApprovedPackage', 'exactEditedStudioVersion', 'exactAssessGovernAncestry', 'singleHandoffConsumption',
+  'independentPackageApproval', 'exactAcceptedItemVersions', 'readOnlyMonitorTruth', 'singleBaselineEffect',
+  'providersOff',
+]);
+
 // Read committed authority independently of browser assertions. Return only
-// counts/booleans; selectors, hashes and identities stay inside the disposable DB.
-export async function readCanonicalInvoiceExceptionDatabaseEvidence(fixture, projectName) {
-  const processId = fixture.expectedBrowserCaseProcesses().find(row => row.projectName === projectName)?.processId;
-  if (!processId) throw new Error('CANONICAL_PROCESS_BINDING_MISSING');
-  const { rows } = await fixture.db.query(`
+// counts/booleans; selectors, hashes and identities remain inside the database boundary.
+export async function readCanonicalInvoiceExceptionLineageEvidence(query,
+  { organizationId, workspaceId, processId }) {
+  if (typeof query !== 'function' || ![organizationId,workspaceId,processId].every(value=>UUID.test(value??''))) {
+    throw new Error('CANONICAL_PROCESS_BINDING_MISSING');
+  }
+  const { rows } = await query(`
     SELECT count(*)::int AS "baselineCount",
       COALESCE(bool_and(p.status='approved' AND pv.status='approved'
         AND p.current_version_id=b.work_package_version_id AND pv.content_hash=b.package_hash),false) AS "exactApprovedPackage",
@@ -46,17 +55,33 @@ export async function readCanonicalInvoiceExceptionDatabaseEvidence(fixture, pro
     JOIN public.enterprise_delivery_package_approval_events pa ON pa.id=b.package_approval_id
     JOIN public.enterprise_delivery_package_review_events pr ON pr.id=pa.review_event_id
     WHERE b.org_id=$1 AND b.workspace_id=$2 AND c.process_id=$3`,
-  [fixture.ids.organization, fixture.ids.workspace, processId]);
+  [organizationId,workspaceId,processId]);
   const summary = rows[0];
-  const provider = (await fixture.db.query(`SELECT
+  const provider = (await query(`SELECT
     NOT (SELECT provider_enabled FROM public.studio_artifact_runtime_control WHERE singleton)
     AND NOT (SELECT provider_enabled FROM public.enterprise_intelligence_runtime_control WHERE singleton) AS "providersOff"`)).rows[0];
-  return { ...summary, ...provider,
+  const evidence={...summary,...provider};
+  if(!Number.isSafeInteger(evidence.baselineCount)||evidence.baselineCount<0
+    ||CANONICAL_DATABASE_LINEAGE_BOOLEAN_KEYS.some(key=>typeof evidence[key]!=='boolean')
+    ||Object.keys(evidence).length!==CANONICAL_DATABASE_LINEAGE_BOOLEAN_KEYS.length+1){
+    throw new Error('CANONICAL_DATABASE_EVIDENCE_REJECTED');
+  }
+  return Object.freeze(evidence);
+}
+
+export async function readCanonicalInvoiceExceptionDatabaseEvidence(fixture, projectName) {
+  const processId = fixture.expectedBrowserCaseProcesses().find(row => row.projectName === projectName)?.processId;
+  if (!processId) throw new Error('CANONICAL_PROCESS_BINDING_MISSING');
+  const lineage=await readCanonicalInvoiceExceptionLineageEvidence(fixture.db.query.bind(fixture.db),{
+    organizationId:fixture.ids.organization,workspaceId:fixture.ids.workspace,processId,
+  });
+  return { ...lineage,
     noProviderEgress: fixture.evidence.providerEffects.egress === 0 && fixture.evidence.providerEffects.egressAttempts === 0
       && fixture.evidence.providerEffects.paidCalls === 0 && fixture.evidence.providerEffects.realProviderAllowed === false };
 }
 
-export const canonicalDatabaseEvidencePassed = evidence => evidence?.baselineCount === 1
-  && ['exactApprovedPackage', 'exactEditedStudioVersion', 'exactAssessGovernAncestry', 'singleHandoffConsumption',
-    'independentPackageApproval', 'exactAcceptedItemVersions', 'readOnlyMonitorTruth', 'singleBaselineEffect',
-    'providersOff', 'noProviderEgress'].every(key => evidence[key] === true);
+export const canonicalDatabaseLineageEvidencePassed = evidence => evidence?.baselineCount === 1
+  && CANONICAL_DATABASE_LINEAGE_BOOLEAN_KEYS.every(key => evidence[key] === true);
+
+export const canonicalDatabaseEvidencePassed = evidence => canonicalDatabaseLineageEvidencePassed(evidence)
+  && evidence.noProviderEgress === true;

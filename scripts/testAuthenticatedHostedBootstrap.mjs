@@ -41,7 +41,8 @@ const environment={
   AUTHENTICATED_ACCEPTANCE_SCOPE:JSON.stringify({organizationId:'11111111-1111-4111-8111-111111111111',
     workspaceId:'22222222-2222-4222-8222-222222222222',roleIds:{author:'33333333-3333-4333-8333-333333333333',
       reviewer:'44444444-4444-4444-8444-444444444444',approver:'55555555-5555-4555-8555-555555555555',
-      outsider:'66666666-6666-4666-8666-666666666666'}}),
+      outsider:'66666666-6666-4666-8666-666666666666',
+      deliveryOwner:'77777777-7777-4777-8777-777777777777'}}),
 };
 const validPreflight={syntheticTarget:true,production:false,releaseSha:release,deploymentId:environment.NETLIFY_DEPLOY_ID,
   migrationVersion:environment.AUTHENTICATED_ACCEPTANCE_MIGRATION_VERSION,backendDigest:environment.AUTHENTICATED_ACCEPTANCE_BACKEND_DIGEST,
@@ -133,6 +134,7 @@ try{
     reviewer:Object.freeze({id:'71000000-0000-4000-8000-000000000002',email:'reviewer.desktop@local.invalid',password:'synthetic-reviewer-password'}),
     approver:Object.freeze({id:'71000000-0000-4000-8000-000000000003',email:'approver.desktop@local.invalid',password:'synthetic-approver-password'}),
     outsider:Object.freeze({id:'71000000-0000-4000-8000-000000000004',email:'outsider.desktop@local.invalid',password:'synthetic-outsider-password'}),
+    deliveryOwner:Object.freeze({id:'71000000-0000-4000-8000-000000000005',email:'delivery-owner.desktop@local.invalid',password:'synthetic-delivery-owner-password'}),
   });
   const positiveLifecycle=[];
   let positiveSetupCount=0;
@@ -151,9 +153,10 @@ try{
             studioTemplate:{kind:'system',artifactType:'brd',
               templateVersionId:'74000000-0000-4000-8000-000000000001',version:'studio-brd-1'},
             projectId:'73000000-0000-4000-8000-000000000001',
-            deliveryProject:{id:'73000000-0000-4000-8000-000000000001',name:labels.deliveryProjectName},
+            deliveryProject:{id:'73000000-0000-4000-8000-000000000001',name:'AP Invoice Exception Workflow'},
             aliases:{case:'primary-case-1',review:'primary-review-1',handoff:'primary-handoff-1',
-              artifact:'primary-artifact-1',process:labels.processName}};
+              artifact:'primary-artifact-1',process:`${projectName} prerequisite process`,
+              canonicalProcess:`AP Invoice Exception Handling ${labels.suffix}`}};
         },
         quiesce:async()=>positiveLifecycle.push('quiesce'),cleanup:async()=>positiveLifecycle.push('cleanup'),
         verifyCleanup:async()=>({activeSessions:0,activeIdentities:0,activeMemberships:0,armedPermits:0,
