@@ -282,6 +282,7 @@ export async function createEnterpriseLifecycleFixture({
   hostedPersonaRoleParity = false,
   providersEnabled = true,
   authenticatedSynthetic = false,
+  canonicalApInvoiceException = process.env.ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION === '1',
 } = {}) {
   if (!databaseUrl) throw new Error('ENTERPRISE_LIFECYCLE_DATABASE_URL_REQUIRED');
   if (typeof hostedPersonaRoleParity !== 'boolean') {
@@ -290,6 +291,9 @@ export async function createEnterpriseLifecycleFixture({
   if (typeof providersEnabled !== 'boolean') throw new Error('ENTERPRISE_LIFECYCLE_PROVIDER_PROFILE_REJECTED');
   if (typeof authenticatedSynthetic !== 'boolean' || authenticatedSynthetic && providersEnabled) {
     throw new Error('ENTERPRISE_LIFECYCLE_AUTHENTICATED_SYNTHETIC_PROFILE_REJECTED');
+  }
+  if (typeof canonicalApInvoiceException !== 'boolean') {
+    throw new Error('ENTERPRISE_LIFECYCLE_CANONICAL_AP_PROFILE_REJECTED');
   }
   databaseUrl = validateEnterpriseLifecycleDatabaseUrl(databaseUrl);
   const startedAt = new Date().toISOString();
@@ -309,11 +313,11 @@ export async function createEnterpriseLifecycleFixture({
 
     const ids = {
       organization: uuid(1), workspace: uuid(2), foreignOrganization: uuid(3), foreignWorkspace: uuid(4),
-      author: uuid(10), reviewer: uuid(11), approver: uuid(12), outsider: uuid(13),
+      author: uuid(10), reviewer: uuid(11), approver: uuid(12), outsider: uuid(13), deliveryOwner: uuid(14),
       role: uuid(20), process: uuid(21), case: uuid(22), rejectCase: uuid(23), deniedCase: uuid(24),
       providerKeyRef: uuid(25), providerConfig: uuid(26), studioRoute: uuid(27), deliveryRestrictedRole: uuid(28),
       primaryRestrictedReviewerRole: uuid(29), hostedReviewerRole: uuid(30), hostedApproverRole: uuid(31),
-      hostedAuthorRole: uuid(32),
+      hostedAuthorRole: uuid(32), deliveryOwnerRole: uuid(33),
     };
     // These are inert fixture credentials, accepted only by exact map lookup below.
     // Claims let shared browser observers correlate the same actor/session shape
@@ -321,13 +325,18 @@ export async function createEnterpriseLifecycleFixture({
     if (postgrestJwtSecret !== null && (typeof postgrestJwtSecret !== 'string' || postgrestJwtSecret.length < 32)) {
       throw new Error('ENTERPRISE_LIFECYCLE_POSTGREST_JWT_SECRET_REJECTED');
     }
-    const fixtureActors = Object.fromEntries(['author', 'reviewer', 'approver', 'outsider'].map(persona => {
+    const syntheticPassword = 'AP-Invoice-Fixture-2026!';
+    const fixturePersonas = ['author', 'reviewer', 'approver', 'outsider',
+      ...(canonicalApInvoiceException ? ['deliveryOwner'] : [])];
+    const fixtureActors = Object.fromEntries(fixturePersonas.map(persona => {
       const claims = { sub: ids[persona], session_id: randomUUID(),
         aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 };
       const token = postgrestJwtSecret === null
         ? `${Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.fixture-only`
         : fixtureJwt(postgrestJwtSecret, claims);
-      return [persona, { token, ...(authenticatedSynthetic ? { sessionId: claims.session_id } : {}),
+      return [persona, { token, ...(canonicalApInvoiceException
+        ? { password:syntheticPassword,authKind:'disposable_synthetic_password' } : {}),
+        ...(authenticatedSynthetic ? { sessionId: claims.session_id } : {}),
         user: { id: ids[persona], email: `${persona}@fixture.invalid` } }];
     }));
     const tokens = new Map([
@@ -335,6 +344,7 @@ export async function createEnterpriseLifecycleFixture({
       ['enterprise-approver-token', ids.approver], ['enterprise-outsider-token', ids.outsider],
       ...Object.values(fixtureActors).map(actor => [actor.token, actor.user.id]),
     ]);
+    const signedOutSyntheticTokens = new Set();
     const controlToken = `control-${randomUUID()}`;
     const executionId = sha256(`${runId}\u0000${headSha}\u0000${randomUUID()}`);
     const journeyBinding = sha256(JSON.stringify({ executionId, runId, headSha, logicalJourney: 'assess-govern-studio-v1' }));
@@ -350,11 +360,13 @@ export async function createEnterpriseLifecycleFixture({
     const aliases = { case: 'primary-case', review: 'primary-review', handoff: 'primary-handoff', artifact: 'primary-artifact' };
 
     await db.query('INSERT INTO auth.users(id) VALUES($1),($2),($3),($4)', [ids.author, ids.reviewer, ids.approver, ids.outsider]);
+    if (canonicalApInvoiceException) await db.query('INSERT INTO auth.users(id) VALUES($1)', [ids.deliveryOwner]);
     if (authenticatedSynthetic) {
       await db.query(`CREATE TABLE auth.sessions(
         id uuid PRIMARY KEY,
         user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-        not_after timestamptz
+        not_after timestamptz,
+        refreshed_at timestamptz NOT NULL DEFAULT statement_timestamp()
       )`);
       await db.query('INSERT INTO auth.sessions(id,user_id) SELECT * FROM unnest($1::uuid[],$2::uuid[])', [
         Object.values(fixtureActors).map(actor => actor.sessionId),
@@ -362,11 +374,21 @@ export async function createEnterpriseLifecycleFixture({
       ]);
     }
     await db.query("INSERT INTO profiles(id,email,full_name) VALUES($1,'author@fixture.invalid','Author'),($2,'reviewer@fixture.invalid','Reviewer'),($3,'approver@fixture.invalid','Approver'),($4,'outsider@fixture.invalid','Outsider')", [ids.author, ids.reviewer, ids.approver, ids.outsider]);
+    if (canonicalApInvoiceException) {
+      await db.query("INSERT INTO profiles(id,email,full_name) VALUES($1,'deliveryOwner@fixture.invalid','Delivery owner')", [ids.deliveryOwner]);
+    }
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Enterprise lifecycle','enterprise-lifecycle'),($2,'Foreign tenant','foreign-lifecycle')", [ids.organization, ids.foreignOrganization]);
     await db.query("INSERT INTO workspaces(id,org_id,name,slug) VALUES($1,$2,'Lifecycle workspace','lifecycle'),($3,$4,'Foreign workspace','foreign-lifecycle')", [ids.workspace, ids.organization, ids.foreignWorkspace, ids.foreignOrganization]);
     await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Lifecycle authority','lifecycle-authority','organization','[]')", [ids.role, ids.organization]);
     await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Restricted Delivery operator','restricted-delivery-operator','organization','[]')", [ids.deliveryRestrictedRole, ids.organization]);
     await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Primary lifecycle reviewer','primary-lifecycle-reviewer','organization','[]')", [ids.primaryRestrictedReviewerRole, ids.organization]);
+    if (canonicalApInvoiceException) {
+      await db.query("INSERT INTO roles(id,org_id,name,slug,scope,permissions) VALUES($1,$2,'Canonical Delivery owner','canonical-delivery-owner','organization','[]')", [ids.deliveryOwnerRole, ids.organization]);
+      await db.query(`INSERT INTO role_capabilities(role_id,capability_key)
+        SELECT $1,capability FROM unnest($2::text[]) capability`, [
+        ids.deliveryOwnerRole,['assess.read','delivery.handoff.consume','delivery.package.manage','project.read'],
+      ]);
+    }
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('org.admin','assess.read','assess.create','assess.response.write','assess.finalize','assess.process.update','govern.resolve','studio.handoff.create','workitems.import','project.read','project.manage','backlog.read','backlog.manage','monitor.read') OR capability_key LIKE 'assess.v2.%' OR capability_key LIKE 'studio.%' OR capability_key LIKE 'task.%' OR capability_key LIKE 'delivery.%'", [ids.role]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM capabilities WHERE capability_key IN('assess.read','task.read','task.update.own','project.read','backlog.read','delivery.outcomes.read')", [ids.deliveryRestrictedRole]);
     await db.query("INSERT INTO role_capabilities(role_id,capability_key) SELECT $1,capability_key FROM role_capabilities WHERE role_id=$2 AND capability_key<>'assess.process.update'", [ids.primaryRestrictedReviewerRole, ids.role]);
@@ -390,12 +412,42 @@ export async function createEnterpriseLifecycleFixture({
           `ENTERPRISE_LIFECYCLE_${persona.toUpperCase()}_FORBIDDEN_CAPABILITY_PRESENT`);
       }
     }
+    if (canonicalApInvoiceException && hostedPersonaRoleParity) {
+      const canonicalPersonaCapabilities = {
+        author: ['assess.process.create','delivery.handoff.request','delivery.handoff.consume','delivery.package.manage','project.read','monitor.read'],
+        reviewer: ['delivery.handoff.review','delivery.package.review','project.read'],
+        approver: ['delivery.handoff.approve','delivery.package.approve','monitor.baseline.create','monitor.read','project.read'],
+      };
+      for (const [persona, roleId] of [['author',ids.hostedAuthorRole],['reviewer',ids.hostedReviewerRole],['approver',ids.hostedApproverRole]]) {
+        await db.query(`INSERT INTO role_capabilities(role_id,capability_key)
+          SELECT $1,capability FROM unnest($2::text[]) capability ON CONFLICT DO NOTHING`,
+        [roleId,canonicalPersonaCapabilities[persona]]);
+      }
+    } else if (canonicalApInvoiceException) {
+      await db.query(`INSERT INTO role_capabilities(role_id,capability_key)
+        SELECT $1,capability FROM unnest($2::text[]) capability ON CONFLICT DO NOTHING`, [
+        ids.role,['assess.process.create','monitor.baseline.create'],
+      ]);
+      await db.query(`INSERT INTO role_capabilities(role_id,capability_key)
+        SELECT $1,capability FROM unnest($2::text[]) capability ON CONFLICT DO NOTHING`, [
+        ids.primaryRestrictedReviewerRole,
+        ['delivery.handoff.review','delivery.package.review','project.read','monitor.read'],
+      ]);
+    }
     for (const actor of [ids.author, ids.reviewer, ids.approver]) {
       const roleId = hostedPersonaRoleParity && actor === ids.reviewer ? ids.hostedReviewerRole
         : hostedPersonaRoleParity && actor === ids.approver ? ids.hostedApproverRole
           : hostedPersonaRoleParity && actor === ids.author ? ids.hostedAuthorRole : ids.role;
       await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [ids.organization, actor, roleId]);
       await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [ids.organization, ids.workspace, actor]);
+    }
+    if (canonicalApInvoiceException) {
+      await db.query("INSERT INTO organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')", [
+        ids.organization,ids.deliveryOwner,ids.deliveryOwnerRole,
+      ]);
+      await db.query("INSERT INTO workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')", [
+        ids.organization,ids.workspace,ids.deliveryOwner,
+      ]);
     }
     await db.query("INSERT INTO organizations(id,name,slug) VALUES($1,'Outsider tenant','outsider-tenant') ON CONFLICT DO NOTHING", [ids.foreignOrganization]);
     await db.query(`INSERT INTO assess_processes(
@@ -408,10 +460,18 @@ export async function createEnterpriseLifecycleFixture({
       ids.author,
     ]);
     await db.query("INSERT INTO process_update_workspace_controls(org_id,workspace_id,enabled,read_only) VALUES($1,$2,true,false)", [ids.organization, ids.workspace]);
+    if (canonicalApInvoiceException) {
+      await db.query(`INSERT INTO process_creation_workspace_controls(org_id,workspace_id,enabled,read_only,max_active_processes)
+        VALUES($1,$2,true,false,10) ON CONFLICT(org_id,workspace_id) DO UPDATE SET
+        enabled=true,read_only=false,max_active_processes=10,updated_at=statement_timestamp()`, [ids.organization,ids.workspace]);
+    }
     await db.query(`INSERT INTO public.enterprise_transcript_workspace_flags(
-      org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,updated_by
-    ) VALUES($1,$2,true,true,true,$3) ON CONFLICT(org_id,workspace_id) DO UPDATE SET
-      unified_byok_gateway_enabled=true,studio_multisource_enabled=true,module_handoffs_enabled=true,updated_by=$3`, [ids.organization, ids.workspace, ids.author]);
+      org_id,workspace_id,unified_byok_gateway_enabled,studio_multisource_enabled,module_handoffs_enabled,
+      direct_delivery_planning_enabled,delivery_item_review_enabled,monitor_approved_baseline_enabled,updated_by
+    ) VALUES($1,$2,true,true,true,$4,$4,$4,$3) ON CONFLICT(org_id,workspace_id) DO UPDATE SET
+      unified_byok_gateway_enabled=true,studio_multisource_enabled=true,module_handoffs_enabled=true,
+      direct_delivery_planning_enabled=$4,delivery_item_review_enabled=$4,monitor_approved_baseline_enabled=$4,
+      updated_by=$3`, [ids.organization, ids.workspace, ids.author, canonicalApInvoiceException]);
     await db.query('UPDATE public.studio_artifact_runtime_control SET enabled=true,read_only=false,provider_enabled=$1 WHERE singleton', [providersEnabled]);
     await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=$1 WHERE singleton', [providersEnabled]);
     await db.query("INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true) ON CONFLICT(org_id,workspace_id) DO UPDATE SET writes_enabled=true,updated_at=statement_timestamp()", [ids.organization, ids.workspace]);
@@ -450,11 +510,14 @@ export async function createEnterpriseLifecycleFixture({
     const studioDeliveryQueryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'studioDeliveryOutcomeQuery.ts'));
     const legacyDeliveryCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryCommand.ts'));
     const legacyDeliveryQueryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryQuery.ts'));
+    const enterpriseCommandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'enterpriseIntelligenceCommand.ts'));
+    const enterpriseQueryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'enterpriseIntelligenceQuery.ts'));
+    const deliveryMonitorDbModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'deliveryMonitorDb.ts'));
     const fixtureModule = loadProductionModule(path.join(root, 'services', 'assessV2', 'fixture.ts'));
 
     const actorFromRequest = request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer\s+/iu, '');
-      const actor = token ? tokens.get(token) : null;
+      const actor = token && !signedOutSyntheticTokens.has(token) ? tokens.get(token) : null;
       if (!actor) throw new Error('AUTHENTICATION_REQUIRED');
       return actor;
     };
@@ -631,8 +694,20 @@ export async function createEnterpriseLifecycleFixture({
     const processDependencies = {
       creation: {
         authenticate: assessDependencies.authenticate,
-        authority: (request, actorId, envelope) => authorityFor(actorId,envelope.organizationId,envelope.workspaceId),
-        atomic: async () => { throw new Error('COMMAND_UNAVAILABLE'); },
+        authority: async (_request, actorId, envelope) => {
+          const authority = await authorityFor(actorId,envelope.organizationId,envelope.workspaceId);
+          return authority ? { ...authority,userId:authority.actorId } : null;
+        },
+        atomic: async (actorId,envelope) => {
+          if (!canonicalApInvoiceException) throw new Error('COMMAND_UNAVAILABLE');
+          return (await serviceQuery(`SELECT public.create_assess_process(
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) value`, [
+            actorId,envelope.organizationId,envelope.workspaceId,envelope.authorizationVersion,
+            envelope.requestId,envelope.idempotencyKey,envelope.expectedVersion,envelope.payload.processId,
+            envelope.payload.name,envelope.payload.description,envelope.payload.department,
+            envelope.payload.criticality,envelope.payload.templateId ?? null,
+          ])).rows[0]?.value;
+        },
       },
       update: {
         authenticate: assessDependencies.authenticate,
@@ -719,6 +794,73 @@ export async function createEnterpriseLifecycleFixture({
       organizationId: ids.organization, workspaceId: ids.workspace,
       authorizationVersion: (await authorityFor(actor, ids.organization, ids.workspace)).authorizationVersion,
       capabilities: (await authorityFor(actor, ids.organization, ids.workspace)).capabilities,
+    });
+
+    const invokeDeliveryMonitorRpc = async (name, args) => {
+      const calls = {
+        enterprise_delivery_monitor_command: [
+          'SELECT public.enterprise_delivery_monitor_command($1::jsonb) value',
+          [JSON.stringify(args.p_command)],
+        ],
+        enterprise_delivery_workspace_projection: [
+          'SELECT public.enterprise_delivery_workspace_projection($1,$2,$3::jsonb) value',
+          [args.p_org,args.p_workspace,JSON.stringify(args.p_query ?? {})],
+        ],
+        enterprise_monitor_approved_baselines_projection: [
+          'SELECT public.enterprise_monitor_approved_baselines_projection($1,$2,$3::jsonb) value',
+          [args.p_org,args.p_workspace,JSON.stringify(args.p_query ?? {})],
+        ],
+      };
+      const call = calls[name];
+      if (!call) throw new Error('ENTERPRISE_LIFECYCLE_DELIVERY_RPC_REJECTED');
+      const value = (await serviceQuery(call[0],call[1])).rows[0]?.value ?? null;
+      return value === null ? null : loadProductionModule.clone(value);
+    };
+    const deliveryMonitorDatabase = deliveryMonitorDbModule.createDeliveryMonitorDatabase(invokeDeliveryMonitorRpc);
+    const enterpriseQueryDatabase = enterpriseQueryModule.createEnterpriseIntelligenceQueryDatabase(
+      async () => [],deliveryMonitorDatabase,
+    );
+    const commandAuthority = async (actorId, organizationId, workspaceId) => {
+      const context = await authorityFor(actorId,organizationId,workspaceId);
+      if (!context) throw new enterpriseCommandModule.EnterpriseCommandError('TENANT_ACCESS_DENIED');
+      const permissions = new Set(context.capabilities);
+      return {
+        actorId:context.actorId,organizationId:context.organizationId,workspaceId:context.workspaceId,
+        isAdmin:permissions.has('org.admin'),permissions,
+        organizationPermissions:new Set(permissions),workspacePermissions:new Set(),
+        roleNames:new Set(),organizationRoleNames:new Set(),workspaceRoleNames:new Set(),
+        organizationRoleIds:new Set(),workspaceRoleIds:new Set(),
+        authorizationVersion:context.authorizationVersion,
+      };
+    };
+    const assertCanonicalCommandAuthority = async (authority, commandType, payload) => {
+      const fresh = await commandAuthority(authority.actorId,authority.organizationId,authority.workspaceId);
+      if (fresh.authorizationVersion !== authority.authorizationVersion) {
+        throw new enterpriseCommandModule.EnterpriseCommandError('AUTHORIZATION_STALE');
+      }
+      enterpriseCommandModule.assertEnterpriseCommandOperationAuthority(fresh,commandType,payload);
+      return fresh;
+    };
+    const enterpriseCommandDependencies = {
+      authenticate: async request => ({ id: actorFromRequest(request) }),
+      resolveOrganization: async (_actorId,organizationId) => organizationId,
+      resolveCommandAuthority: commandAuthority,
+      assertCurrentAuthority: assertCanonicalCommandAuthority,
+      deliveryMonitorDatabase,
+    };
+    const enterpriseQueryDependencies = actorId => ({
+      authenticate: async () => ({ id:actorId }),
+      authorityDatabase: {
+        loadFreshProjection: async input => {
+          const authority = await authorityFor(actorId,input.organizationId,input.workspaceId);
+          if (!authority) return null;
+          return {
+            userId:authority.actorId,organizationId:authority.organizationId,workspaceId:authority.workspaceId,
+            authorizationVersion:authority.authorizationVersion,capabilities:authority.capabilities,
+          };
+        },
+      },
+      queryDatabase: enterpriseQueryDatabase,
     });
 
     const selectRows = async (pathname, searchParams, actor) => {
@@ -1218,6 +1360,12 @@ export async function createEnterpriseLifecycleFixture({
             WHERE artifact_type='brd' AND superseded_at IS NULL FOR SHARE`)).rows);
           setupSequence += 1;
           const projectName = typeof setup.projectName === 'string' && setup.projectName.trim() ? setup.projectName.trim() : `project-${setupSequence}`;
+          const processName = canonicalApInvoiceException
+            ? `${projectName} prerequisite process`
+            : `${projectName} connected lifecycle`;
+          const deliveryProjectName = canonicalApInvoiceException
+            ? 'AP Invoice Exception Workflow'
+            : `${projectName} delivery project`;
           const projectProcessId = randomUUID();
           const deliveryProjectId = randomUUID();
           const controlsReset = controlsPostgres.resetProjectState();
@@ -1250,19 +1398,69 @@ export async function createEnterpriseLifecycleFixture({
           await db.query(`INSERT INTO assess_processes(
             id,org_id,workspace_id,name,description,department,criticality,status,owner_id,created_by,updated_by)
             VALUES($1,$2,$3,$4,$5,$6,$7,'Draft',$8,$8,$8)`, [
-            projectProcessId, ids.organization, ids.workspace, `${projectName} connected lifecycle`,
+            projectProcessId, ids.organization, ids.workspace, processName,
             AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.description,
             AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department,
             AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.criticality,
             ids.author,
           ]);
-          await db.query("INSERT INTO projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id) VALUES($1,$2,$3,$4,$5,$5,$5,$6)", [deliveryProjectId, ids.organization, ids.workspace, `${projectName} delivery project`, ids.author, projectProcessId]);
-          projectSetups.set(projectName, { processId: projectProcessId, projectId: deliveryProjectId });
+          await db.query("INSERT INTO projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id) VALUES($1,$2,$3,$4,$5,$5,$5,$6)", [deliveryProjectId, ids.organization, ids.workspace, deliveryProjectName, ids.author, projectProcessId]);
+          projectSetups.set(projectName, {
+            processId:projectProcessId,projectId:deliveryProjectId,
+            prerequisiteProcessId:projectProcessId,canonicalCreatedProcessId:null,
+          });
           const projectAliases = Object.fromEntries(Object.entries(aliases).map(([key, value]) => [key, `${value}-${setupSequence}`]));
           return json({ executionId, journeyBinding, projectName, projectSequence: setupSequence,
-            deliveryProject: { id: deliveryProjectId, name: `${projectName} delivery project` },
-            aliases: { ...projectAliases, process: `${projectName} connected lifecycle` }, studioTemplate,
+            deliveryProject: { id: deliveryProjectId, name: deliveryProjectName },
+            aliases: { ...projectAliases, process: processName }, studioTemplate,
+            authenticationBoundary: canonicalApInvoiceException ? 'disposable_synthetic_password' : 'fixture_session',
             actors: fixtureActors }, 200, cors);
+        }
+        if (url.pathname === '/control/canonical-created-process') {
+          const input = await request.json().catch(() => ({}));
+          const setup = typeof input.projectName === 'string' ? projectSetups.get(input.projectName) : null;
+          if (!canonicalApInvoiceException || !setup || !UUID.test(input.processId ?? '')) {
+            return json({ error:'CONTROL_REJECTED' },409,cors);
+          }
+          if (setup.canonicalCreatedProcessId && setup.canonicalCreatedProcessId !== input.processId) {
+            return json({ error:'CONTROL_REJECTED' },409,cors);
+          }
+          const created = (await db.query(`SELECT process.id,process.name,
+              receipt.id receipt_id,receipt.status receipt_status,receipt.command_type,
+              receipt.actor_id receipt_actor_id,receipt.request_id receipt_request_id,
+              receipt.idempotency_key receipt_idempotency_key,
+              receipt.response->>'ok' receipt_ok,
+              receipt.response->>'outcome' receipt_outcome,
+              receipt.response->'resource'->>'id' receipt_process_id,
+              count(*) OVER() exact_name_count,
+              EXISTS(SELECT 1 FROM public.privileged_audit_events audit
+                WHERE audit.org_id=process.org_id AND audit.workspace_id=process.workspace_id
+                  AND audit.actor_id=process.created_by AND audit.request_id=process.creation_request_id
+                  AND audit.action='process.create' AND audit.resource_type='assess_process'
+                  AND audit.resource_id=process.id AND audit.outcome='succeeded') audit_committed
+            FROM public.assess_processes process
+            JOIN public.assess_command_receipts receipt ON receipt.id=process.creation_receipt_id
+            WHERE process.org_id=$1 AND process.workspace_id=$2 AND process.name='AP Invoice Exception Handling'
+              AND process.deleted_at IS NULL`, [ids.organization,ids.workspace])).rows;
+          const process = created.length === 1 ? created[0] : null;
+          const valid = process?.id === input.processId
+            && process.receipt_status === 'succeeded' && process.command_type === 'process.create'
+            && process.receipt_actor_id === ids.author && process.receipt_request_id
+            && process.receipt_idempotency_key && process.receipt_ok === 'true'
+            && ['committed','replayed'].includes(process.receipt_outcome)
+            && process.receipt_process_id === input.processId
+            && Number(process.exact_name_count) === 1 && process.audit_committed === true;
+          if (!valid) return json({ error:'CONTROL_REJECTED' },409,cors);
+          if (!setup.canonicalCreatedProcessId) {
+            const rebound = await db.query(`UPDATE public.projects SET source_process_id=$1,updated_by=$2,
+                updated_at=statement_timestamp()
+              WHERE id=$3 AND org_id=$4 AND workspace_id=$5 AND source_process_id=$6
+              RETURNING id`, [input.processId,ids.author,setup.projectId,ids.organization,ids.workspace,setup.prerequisiteProcessId]);
+            if (rebound.rowCount !== 1) return json({ error:'CONTROL_REJECTED' },409,cors);
+            setup.processId = input.processId;
+            setup.canonicalCreatedProcessId = input.processId;
+          }
+          return json({ processId:input.processId,name:process.name },200,cors);
         }
         if (url.pathname === '/control/process-update-capability') {
           const input = await request.json().catch(() => ({}));
@@ -1346,6 +1544,64 @@ export async function createEnterpriseLifecycleFixture({
           const actorId = typeof input.accessToken === 'string' ? tokens.get(input.accessToken) : null;
           const body = input.requestBody;
           const requestId = body?.requestId;
+          const studioPermitKind = ['studio_deterministic_success','studio_failure_after_claim'].includes(input.kind);
+          if (canonicalApInvoiceException && authenticatedSynthetic && !providersEnabled && studioPermitKind) {
+            const expectedAggregateVersion = body?.expectedAggregateVersion;
+            const currentAuthorizationVersion = actorId ? await authorizationVersion(actorId) : null;
+            const lineage = setup && body?.payload && typeof body.payload === 'object'
+              ? (await db.query(`SELECT EXISTS(SELECT 1
+                    FROM public.studio_artifact_aggregates artifact
+                    JOIN public.studio_artifact_source_packages package
+                      ON package.id=artifact.source_package_id AND package.artifact_id=artifact.id
+                     AND package.org_id=artifact.org_id AND package.workspace_id=artifact.workspace_id
+                    JOIN public.assess_v2_studio_handoffs handoff
+                      ON handoff.id=package.assess_handoff_id AND handoff.org_id=package.org_id
+                     AND handoff.workspace_id=package.workspace_id
+                    JOIN public.assess_v2_cases assessed
+                      ON assessed.id=handoff.case_id AND assessed.org_id=handoff.org_id
+                     AND assessed.workspace_id=handoff.workspace_id
+                    WHERE artifact.id=$1 AND package.id=$2 AND assessed.process_id=$3
+                      AND artifact.org_id=$4 AND artifact.workspace_id=$5) value`, [
+                  body.payload.artifactId,body.payload.sourcePackageId,setup.processId,ids.organization,ids.workspace,
+                ])).rows[0]?.value === true : false;
+            const exercise = fixtureActor?.sessionId && actorId
+              ? (await db.query(`SELECT exercise.id,exercise.expires_at
+                  FROM public.authenticated_synthetic_exercises exercise
+                  JOIN public.authenticated_synthetic_actor_sessions binding
+                    ON binding.exercise_id=exercise.id AND binding.actor_id=$3 AND binding.session_id=$4
+                  JOIN auth.sessions session ON session.id=binding.session_id AND session.user_id=binding.actor_id
+                  WHERE exercise.org_id=$1 AND exercise.workspace_id=$2 AND exercise.lifecycle='active'
+                    AND exercise.expires_at>statement_timestamp() AND binding.state='active'
+                    AND(session.not_after IS NULL OR session.not_after>statement_timestamp())
+                    AND NOT EXISTS(SELECT 1 FROM public.authenticated_synthetic_permits permit
+                      WHERE permit.exercise_id=exercise.id AND permit.actor_id=$3 AND permit.request_id=$5)`, [
+                  ids.organization,ids.workspace,actorId,fixtureActor.sessionId,requestId,
+                ])).rows : [];
+            if (!setup || !fixtureActor || input.accessToken !== fixtureActor.token
+              || actorId !== fixtureActor.user.id || !body || typeof body !== 'object' || Array.isArray(body)
+              || input.commandType !== 'studio.generation.request' || body.commandType !== 'studio.generation.request'
+              || body.organizationId !== ids.organization || body.workspaceId !== ids.workspace
+              || typeof requestId !== 'string' || !UUID.test(requestId)
+              || !Number.isSafeInteger(expectedAggregateVersion) || expectedAggregateVersion < 0
+              || !Number.isSafeInteger(body.authorizationVersion)
+              || body.authorizationVersion !== currentAuthorizationVersion || !lineage || exercise.length !== 1) {
+              return json({ error:'CONTROL_FAULT_PERMIT_REJECTED' },409,cors);
+            }
+            const payloadHash = await authenticatedSyntheticModule.authenticatedSyntheticPayloadHash(body);
+            const expiresAt = new Date(Math.min(Date.now()+5*60_000,
+              new Date(exercise[0].expires_at).getTime()-1000));
+            if (expiresAt.getTime() <= Date.now()) return json({ error:'CONTROL_FAULT_PERMIT_REJECTED' },409,cors);
+            const permitId = randomUUID();
+            const armed = (await serviceQuery(`SELECT public.authenticated_synthetic_arm_permit(
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10) value`, [
+              exercise[0].id,permitId,input.kind,'studio.generation.request',actorId,fixtureActor.sessionId,
+              requestId,payloadHash,expectedAggregateVersion,expiresAt,
+            ])).rows[0]?.value;
+            if (armed?.permitId !== permitId || armed?.state !== 'armed') {
+              return json({ error:'CONTROL_FAULT_PERMIT_REJECTED' },409,cors);
+            }
+            return json({ armed:true },200,cors);
+          }
           const expectedVersion = body?.expectedVersion;
           if (!setup || input.kind !== 'process_server_error_precommit' || input.commandType !== 'process.update'
             || !fixtureActor || actorId !== fixtureActor.user.id
@@ -1674,7 +1930,12 @@ export async function createEnterpriseLifecycleFixture({
         }
         return json({ error: 'NOT_FOUND' }, 404, cors);
       }
-      const controlsResponse = await controlsFixture.handle(request);
+      // The legacy controls fixture owns a reduced EI projection. Canonical
+      // Delivery/Monitor must reach the production handlers mounted below.
+      const canonicalEnterpriseRoute = canonicalApInvoiceException && [
+        '/functions/v1/enterprise-intelligence-command', '/functions/v1/enterprise-intelligence-query',
+      ].includes(url.pathname);
+      const controlsResponse = canonicalEnterpriseRoute ? null : await controlsFixture.handle(request);
       if (controlsResponse) return new Response(controlsResponse.body, {
         status: controlsResponse.status, statusText: controlsResponse.statusText,
         headers: { ...Object.fromEntries(controlsResponse.headers.entries()), ...cors },
@@ -1691,6 +1952,28 @@ export async function createEnterpriseLifecycleFixture({
         });
         for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
         return response;
+      }
+      if (canonicalApInvoiceException && url.pathname === '/auth/v1/token'
+        && url.searchParams.get('grant_type') === 'password' && request.method === 'POST') {
+        const input = await request.json().catch(() => ({}));
+        const syntheticActor = Object.values(fixtureActors).find(candidate => candidate.user.email === input.email);
+        if (!syntheticActor || input.password !== syntheticActor.password) {
+          return json({ error:'invalid_grant',error_description:'Invalid login credentials' },400,cors);
+        }
+        signedOutSyntheticTokens.delete(syntheticActor.token);
+        return json({
+          access_token:syntheticActor.token,refresh_token:`${syntheticActor.token}-refresh`,token_type:'bearer',
+          expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,
+          user:{ id:syntheticActor.user.id,email:syntheticActor.user.email,aud:'authenticated',role:'authenticated',
+            user_metadata:{ full_name:syntheticActor.user.email.split('@')[0] },
+            app_metadata:{ provider:'disposable_synthetic_password' } },
+        },200,cors);
+      }
+      if (canonicalApInvoiceException && url.pathname === '/auth/v1/logout' && request.method === 'POST') {
+        const token = request.headers.get('authorization')?.replace(/^Bearer\s+/iu,'');
+        try { actorFromRequest(request); } catch { return json({ message:'Invalid token' },401,cors); }
+        signedOutSyntheticTokens.add(token);
+        return new Response(null,{status:204,headers:{...cors,'cache-control':'no-store'}});
       }
       let actor;
       try { actor = actorFromRequest(request); } catch { return json({ message: 'Invalid token' }, 401, cors); }
@@ -1750,6 +2033,16 @@ export async function createEnterpriseLifecycleFixture({
       if (url.pathname === '/functions/v1/studio-artifact-command') {
         const response = await executeStudio(request);
         for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
+        return response;
+      }
+      if (canonicalApInvoiceException && url.pathname === '/functions/v1/enterprise-intelligence-command') {
+        const response = await enterpriseCommandModule.handleEnterpriseIntelligenceRequest(request,enterpriseCommandDependencies);
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
+        return response;
+      }
+      if (canonicalApInvoiceException && url.pathname === '/functions/v1/enterprise-intelligence-query') {
+        const response = await enterpriseQueryModule.handleEnterpriseIntelligenceQuery(request,enterpriseQueryDependencies(actor));
+        for (const [key,value] of Object.entries(cors)) response.headers.set(key,value);
         return response;
       }
       if (url.pathname.startsWith('/rest/v1/rpc/')) {
@@ -1893,6 +2186,8 @@ export async function createEnterpriseLifecycleFixture({
       getLastStudioRpcError: studioGeneration.getLastRpcError,
       production: { fixtureModule, commandModule, handlerModule, reviewCommandModule, reviewHandlerModule, studioHandlerModule,
         studioDeliveryCommandModule,studioDeliveryQueryModule,legacyDeliveryCommandModule,legacyDeliveryQueryModule,
+        enterpriseCommandModule,enterpriseQueryModule,deliveryMonitorDbModule,
+        enterpriseQueryDatabase,deliveryMonitorDatabase,
         ...(authenticatedSynthetic ? { authenticatedSyntheticModule } : {}) },
       close: cleanup,
     };
@@ -1939,6 +2234,11 @@ export const enterpriseLifecycleSourcePaths = Object.freeze([...new Set([
   'supabase/functions/_shared/studioDeliveryOutcomeQuery.ts',
   'supabase/functions/_shared/legacyDeliveryCommand.ts',
   'supabase/functions/_shared/legacyDeliveryQuery.ts',
+  'supabase/functions/_shared/enterpriseIntelligenceCommand.ts',
+  'supabase/functions/_shared/enterpriseIntelligenceQuery.ts',
+  'supabase/functions/_shared/deliveryMonitorCommand.ts',
+  'supabase/functions/_shared/deliveryMonitorDb.ts',
+  'supabase/functions/_shared/deliveryMonitorQuery.ts',
   'services/assessV2/decisionVersion.ts',
   'services/assessV2/fixture.ts',
   'supabase/migrations/20260714120000_pr1d_assess_v2_decision_intelligence.sql',

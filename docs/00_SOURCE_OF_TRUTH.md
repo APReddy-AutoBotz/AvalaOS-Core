@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Active canonical journey work — 2026-10-31
+
+Draft PR #346 on `codex/downstream-actor-settlement` is the current implementation boundary. The goal is a reproducible AP Invoice Exception journey through Assess, Govern, Studio, canonical Delivery and read-only Monitor using the actual application UI/handlers and a disposable test backend. The [active completion plan](planning/hosted-acceptance-completion.md) owns the short execution plan and single blocker list. The shared documentation gate and duplicate CI execution are corrected. The complete canonical disposable browser journey passes locally, including independent Delivery consumption, package approval, Monitor, replay and sign-out/sign-in persistence; database lineage and cleanup checks pass. Fresh exact-candidate CI remains the review gate and is recorded on the draft PR. Local authentication and provider output are synthetic, providers remain OFF, and the actor boundary remains 15,000 ms. No merge, hosted acceptance, deployment, paid calls, production/customer data or broader grants are authorized. This local canonical pass is separate from the unchanged earlier 61 PASS / 47 BLOCKED integrated result and from complete product acceptance.
+
 ## Current delivery snapshot — 2026-10-31
 
 The last verified release is PR345, `80f6e97b6047718c15163e51df3e879bc6307668`, identical to verified candidate tree `064b389ab3978513586bcde934b0650fdf312331`. Its three release workflows, twelve fresh sanitized preparation archives and 94 disposable browser cases passed. PR345 is no longer draft or CI-pending.
@@ -1144,13 +1148,12 @@ This file governs product scope, maturity, readiness/proof boundaries, and the a
 
 ## Minimum Reading Sequence
 
-1. This file
+1. The current snapshot in this file; retained entries only for a specific linked dependency
 2. `AGENTS.md`
-3. `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md`
-4. `docs/architecture/current-to-target-enterprise-architecture.md`
-5. `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md`
-6. `PLANS.md` for substantial implementation
-7. A task-specific document selected through `docs/architecture/document-authority-map.md`
+3. Current product guide, implementation status and roadmap
+4. `PLANS.md` for substantial implementation, then the active task plan and domain authority selected through `docs/architecture/document-authority-map.md`
+
+Read relevant enterprise acceleration, target architecture and risk-register sections when their sequence, trust boundaries or proof disposition is affected. This shorter route preserves their authority and every execution/security gate; it avoids repeatedly reading duplicated historical snapshots.
 
 Do not read the full historical planning/evidence corpus by default.
 

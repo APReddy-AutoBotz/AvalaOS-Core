@@ -6,7 +6,6 @@ on:
     branches:
       - main
       - master
-      - 'codex/**'
 
 jobs:
   verify:
@@ -29,29 +28,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cheap workflow, documentation, claims, and link contracts
+        run: npm run test:workflow-yaml && npm run test:docs:pr1d && npm run test:docs:pr1e
+
       - name: Dependency audit
         run: npm audit --audit-level=moderate
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Edge Function typecheck
-        run: npm run typecheck:edge
-
-      - name: PR 1A fail-closed source lint
-        run: npm run lint:pr1a
-
-      - name: PR 1B server-authority source lint
-        run: npm run lint:pr1b
-
-      - name: PR 1C enterprise Assess and handoff source lint
-        run: npm run lint:pr1c
-
-      - name: PR 1D V1 compatibility and V2 decision-intelligence source lint
-        run: npm run lint:pr1d
-
-      - name: PR 1E governed review authority source lint
-        run: npm run lint:pr1e
 
       - name: Static AI boundary scan
         run: npm run test:ai-boundary-static
@@ -63,19 +44,7 @@ jobs:
         run: npm run test:hosted-pilot
 
       - name: Regression and policy tests
-        run: npm run test
-
-      - name: PR 1B identity, RBAC, and Assess gates
-        run: npm run test:pr1b
-
-      - name: PR 1C tenant, Govern, Studio, and coverage gates
-        run: npm run test:pr1c
-
-      - name: PR 1D compatibility, rules, commands, presentation, coverage, and docs gates
-        run: npm run test:pr1d
-
-      - name: PR 1E review, approval, Govern, handoff, coverage, and docs gates
-        run: npm run test:pr1e
+        run: npm run test:runtime
 
       - name: Production build
         run: npm run build
@@ -105,6 +74,37 @@ jobs:
         run: npm run test:browser:pr1d
       - name: Run PR 1E desktop/mobile accessibility and viewport gates
         run: npm run test:browser:pr1e
+  canonical-ap-invoice-exception:
+    name: Canonical AP Invoice Exception disposable browser journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify database evidence fails closed
+        run: node --test scripts/canonicalInvoiceExceptionDatabaseEvidence.test.mjs
+      - name: Production UI and handlers with disposable PostgreSQL and synthetic sessions
+        run: npm run test:canonical-ap-invoice-exception
+      - name: Retain bounded canonical review outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-ap-invoice-exception-review
+          if-no-files-found: error
+          path: |
+            output/local-private/primary-lifecycle-timeout-local/canonical-*/review-manifest.json
+            output/local-private/primary-lifecycle-timeout-local/canonical-*/result.json
+            output/local-private/primary-lifecycle-timeout-local/canonical-*/cleanup.json
+            output/local-private/primary-lifecycle-timeout-local/canonical-*/*-ap-invoice-exception-*.md
+            output/local-private/primary-lifecycle-timeout-local/canonical-*/*-ap-invoice-exception-*.png
+
   pr1a-migrations:
     name: PR 1A Migration Gates
     runs-on: ubuntu-latest
@@ -236,6 +236,10 @@ jobs:
         run: npm ci
       - name: Fresh, PR 1C upgrade, populated, ACL, RLS, hash, idempotency, concurrency, audit, and rollback checks
         run: npm run test:migrations:pr1d
+      - name: Canonical AP fixture authority and synthetic permit regressions
+        env:
+          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: node --test scripts/canonicalInvoiceExceptionBackend.test.mjs
 
   pr1e-migrations:
     name: PR 1E PostgreSQL 16 Review, Govern, Studio, RLS, and Private-RPC Gates

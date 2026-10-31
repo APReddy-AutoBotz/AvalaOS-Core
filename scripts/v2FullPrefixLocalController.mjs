@@ -13,12 +13,14 @@ import {
 const EXPECTED_PRIMARY_CASES = V2_FULL_PRIMARY_EXPECTED_CASES;
 const DIRECT_FIXTURE_CONTROLS = new Set([
   '/control/setup',
+  '/control/canonical-created-process',
   '/control/arm-browser-fault',
   '/control/assess-v2-runtime',
   '/control/native-postgrest-stream',
   '/control/native-postgrest-stream-release',
   '/control/native-postgrest-stats',
 ]);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const PREFIX_PREREQUISITE_FIELDS = Object.freeze([
   'reviewerRestricted',
   'reviewerCanRead',
@@ -40,6 +42,19 @@ const decodeClaims = token => {
   }
   return Object.freeze({ actorId: claims.sub, sessionId: claims.session_id });
 };
+
+// The canonical disposable journey needs a fourth business actor: production
+// consumption forbids the requester, reviewer and approver. Keep that extension
+// local; hosted persona admission and all exact token/session checks stay intact.
+export class CanonicalInvoiceExceptionLocalController extends AuthenticatedHostedController {
+  async verifyPresentedBrowserSession(input, options) {
+    const owner = this.projects.get(input.projectName)?.identities.delivery_owner;
+    if (input.persona == null && owner && decodeClaims(input.accessToken).actorId === owner.id) {
+      return super.verifyPresentedBrowserSession({ ...input, persona: 'delivery_owner' }, options);
+    }
+    return super.verifyPresentedBrowserSession(input, options);
+  }
+}
 const safeJson = async request => {
   const chunks = [];
   let bytes = 0;
@@ -192,7 +207,9 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
     // hosted adapter's supplemental browser-action recorder.
     recordBrowserAction: async () => {},
   });
-  const controller = new AuthenticatedHostedController({ config, adapter, identity });
+  const controller = fixture.actors.deliveryOwner
+    ? new CanonicalInvoiceExceptionLocalController({ config, adapter, identity })
+    : new AuthenticatedHostedController({ config, adapter, identity });
   await postgresAdapter.activate({
     exerciseId: controller.exerciseId,
     releaseSha: config.releaseSha,
@@ -227,7 +244,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
       throw new Error('V2_FULL_PREFIX_LOCAL_PROJECT_REJECTED');
     }
     const identities = Object.fromEntries(Object.entries(browserSetup.actors).map(([persona, actor]) => [
-      persona,
+      persona === 'deliveryOwner' ? 'delivery_owner' : persona,
       { id: actor.user.id, email: actor.user.email },
     ]));
     const sessions = Object.values(browserSetup.actors).map(actor => decodeClaims(actor.token));
@@ -295,6 +312,26 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
     });
     projectSetups.set(projectName, browserSetup);
   };
+  const adoptCanonicalCreatedProcess = (input, result) => {
+    const browserSetup = projectSetups.get(input.projectName);
+    const project = controller.projects.get(input.projectName);
+    const fixtureProcessId = fixture.expectedBrowserCaseProcesses()
+      .find(item => item.projectName === input.projectName)?.processId;
+    if (!browserSetup || !project || !UUID.test(input.processId ?? '')
+      || Object.keys(result ?? {}).sort().join(',') !== 'name,processId'
+      || result.processId !== input.processId || fixtureProcessId !== result.processId
+      || result.name !== 'AP Invoice Exception Handling') {
+      throw new Error('V2_FULL_PREFIX_LOCAL_CANONICAL_PROCESS_REJECTED');
+    }
+    const nextBrowserSetup = {
+      ...browserSetup,
+      aliases:{ ...browserSetup.aliases,process:result.name },
+    };
+    controller.projects.set(input.projectName, {
+      ...project,processId:result.processId,browserSetup:nextBrowserSetup,
+    });
+    projectSetups.set(input.projectName,nextBrowserSetup);
+  };
 
   const controlToken = authenticatedHostedDigest(controller.controlToken).slice('sha256:'.length);
   let firstControlFailureCode = null;
@@ -319,6 +356,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
         }
         const result = await requestFixtureControl(fixture, url.pathname, input);
         if (url.pathname === '/control/setup') await registerProject(input.projectName, result);
+        if (url.pathname === '/control/canonical-created-process') adoptCanonicalCreatedProcess(input,result);
         return send(200, result);
       }
       return send(200, await controller.control(url.pathname, input));
@@ -396,7 +434,9 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
          WHERE exercise_id=$1 AND actor_id=$2 AND session_id=$3`,
         [controller.exerciseId, claims.actorId, claims.sessionId],
       )).rows;
-      if (rows.length !== 1 || rows[0].persona !== 'reviewer_desktop-chromium' || rows[0].state !== 'active') {
+      const expectedPersona = projectName.startsWith('desktop-chromium')
+        ? 'reviewer_desktop-chromium' : 'reviewer_pixel-7-chromium';
+      if (rows.length !== 1 || rows[0].persona !== expectedPersona || rows[0].state !== 'active') {
         throw new Error('V2_FULL_PREFIX_LOCAL_FIRST_ACTION_BINDING_REJECTED');
       }
       setupProbe = 'passed';

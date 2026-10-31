@@ -14,7 +14,7 @@ import {
 import { AuthenticatedHostedBrowserActionTracker } from './authenticatedHostedBrowserRequestClassifier.mjs';
 import { AuthenticatedHostedController } from './authenticatedHostedController.mjs';
 import {
-  closeAndSummarizeV2FullPrefixLocalController,
+  closeAndSummarizeV2FullPrefixLocalController, CanonicalInvoiceExceptionLocalController,
   createV2FullPrefixAdapterQuery,
   validateV2FullPrefixFixturePrerequisites,
 } from './v2FullPrefixLocalController.mjs';
@@ -403,4 +403,60 @@ test('local control wrapper delegates action and case routes to the production c
   const fixtureSource = await readFile(new URL('./enterpriseLifecyclePostgresFixture.mjs', import.meta.url), 'utf8');
   assert.match(fixtureSource, /primaryRestrictedReviewerRole: uuid\(29\)/u);
   assert.match(fixtureSource, /capability_key<>'assess[.]process[.]update'/u);
+});
+
+test('canonical local Delivery owner retains exact actor/session observations without widening hosted admission', async () => {
+  const actorId = '10000000-0000-4000-8000-000000000001';
+  const authorId = '10000000-0000-4000-8000-000000000002';
+  const sessionId = '20000000-0000-4000-8000-000000000001';
+  const rotatedSession = '20000000-0000-4000-8000-000000000002';
+  const tokenFor = session => `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({
+    sub: actorId, session_id: session,
+  })).toString('base64url')}.disposable-test-signature`;
+  const token = tokenFor(sessionId);
+  const rotated = tokenFor(rotatedSession);
+  const bindings = [];
+  const make = Controller => {
+    const controller = new Controller({ config: {},
+      identity: { verifySession: async input => {
+        if (![token, rotated].includes(input.accessToken)) throw new Error('LOCAL_EXACT_TOKEN_REJECTED');
+        return { actorId, sessionId: input.accessToken === token ? sessionId : rotatedSession };
+      } },
+      adapter: {
+        bindSession: async input => bindings.push(input),
+        observe: async () => ({ capturedAt: '2026-10-31T00:00:01.000Z', records: [] }),
+      },
+    });
+    controller.active = true;
+    controller.controlIntake = 'accepting';
+    controller.projects.set('desktop-chromium-immediate', {
+      identities: { author: { id: authorId }, delivery_owner: { id: actorId } },
+      lastBoundaryAt: '2026-10-31T00:00:00.000Z',
+    });
+    return controller;
+  };
+  const input = { projectName: 'desktop-chromium-immediate', accessToken: token };
+  await assert.rejects(make(AuthenticatedHostedController).resolveBrowserActionBinding(input), /SESSION_ACTOR_REJECTED/u);
+  const local = make(CanonicalInvoiceExceptionLocalController);
+  const action = await local.beginBrowserAction({ ...input,
+    route: '/functions/v1/enterprise-intelligence-command',
+    requestBody: { requestId: '30000000-0000-4000-8000-000000000001', commandType: 'delivery.handoff.consume' },
+  });
+  assert.match(action.actionId, /^sha256:[a-f0-9]{64}$/u);
+  const observed = local.browserActions.get(input.projectName)[0];
+  assert.equal(observed.persona, 'delivery_owner');
+  assert.equal(observed.actorId, actorId);
+  assert.equal(observed.sessionId, sessionId);
+  assert.equal(observed.commandType, 'delivery.handoff.consume');
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0].persona, 'delivery_owner_desktop-chromium');
+  assert.match(bindings[0].persona, /^[a-z][a-z0-9_-]{1,63}$/u);
+  await local.resolveBrowserActionBinding(input);
+  assert.equal(bindings.length, 1);
+  await assert.rejects(local.resolveBrowserActionBinding({ ...input, accessToken: `${token}-forged` }), /LOCAL_EXACT_TOKEN_REJECTED/u);
+  await assert.rejects(local.resolveBrowserActionBinding({ ...input, accessToken: rotated }), /SESSION_ROTATION_REJECTED/u);
+  await assert.rejects(local.resolveBrowserActionBinding({ ...input, projectName: 'pixel-7-chromium-immediate' }), /PROJECT_NOT_FOUND/u);
+  local.projects.get(input.projectName).identities.delivery_owner = { id: authorId };
+  await assert.rejects(local.resolveBrowserActionBinding(input), /SESSION_ACTOR_REJECTED/u);
+  assert.equal(bindings.length, 1);
 });

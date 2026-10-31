@@ -6,7 +6,7 @@
 - [Implementation status](../05_IMPLEMENTATION_STATUS.md): current release, local correction and integrated evidence, explicitly separated.
 - [Remaining delivery plan](../04_MVP_ROADMAP.md): dependencies, owners, exit evidence and approval boundaries.
 
-Older dated “current” entries below retain their original scope and history. They do not supersede the current status/sequence, and no source/CI result is promoted to deployed readiness. Agent reading order and domain-authority precedence remain unchanged.
+Older dated “current” entries below retain their original scope and history. They do not supersede the current status/sequence, and no source/CI result is promoted to deployed readiness. The concise agent reading route below follows AGENTS.md; domain-authority precedence remains unchanged.
 
 ## Netlify-free real-backend functional acceptance (2026-10-19)
 
@@ -52,13 +52,12 @@ The canonical Studio governed-artifact data, command, lifecycle, source-package,
 
 Read only this sequence unless the active task requires more:
 
-1. `docs/00_SOURCE_OF_TRUTH.md`
+1. Current snapshot in `docs/00_SOURCE_OF_TRUTH.md`; retained entries only for a specific linked dependency
 2. `AGENTS.md`
-3. `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md`
-4. `docs/architecture/current-to-target-enterprise-architecture.md`
-5. `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md`
-6. `PLANS.md` for substantial implementation
-7. One or more domain documents from the routing table below
+3. Current product guide, implementation status and roadmap
+4. `PLANS.md` for substantial implementation, then the active task plan and applicable domain documents from the routing table below
+
+Consult the relevant current enterprise acceleration, target architecture and risk-register sections when changing their sequence, trust boundaries or risk/proof disposition. Their authority and all execution/security controls remain intact; duplicated historical snapshots are not mandatory reading for every scoped correction.
 
 ## Authority Precedence
 

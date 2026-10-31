@@ -4,13 +4,12 @@ Read `docs/00_SOURCE_OF_TRUTH.md` before planning, reviewing, or implementing re
 
 ## Minimum Authoritative Reading Sequence
 
-1. `docs/00_SOURCE_OF_TRUTH.md`
+1. The current snapshot in `docs/00_SOURCE_OF_TRUTH.md` (read retained entries only for a specific linked dependency)
 2. This `AGENTS.md`
-3. `docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md`
-4. `docs/architecture/current-to-target-enterprise-architecture.md`
-5. `docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md`
-6. `PLANS.md` for substantial execution work
-7. Only the task-specific canonical document routed by `docs/architecture/document-authority-map.md`
+3. `docs/09_END_TO_END_PRODUCT_GUIDE.md`, `docs/05_IMPLEMENTATION_STATUS.md` and `docs/04_MVP_ROADMAP.md` for current product work
+4. `PLANS.md` for substantial execution, then the active task plan and domain document routed by `docs/architecture/document-authority-map.md`
+
+Consult the relevant current sections of the enterprise acceleration plan, target architecture and risk register when changing their sequence, trust boundaries or risk/proof disposition. Their domain authority and all execution/security gates below remain unchanged. Do not repeatedly load their duplicated historical snapshots for an ordinary scoped correction.
 
 Do not read the full historical planning or evidence corpus by default. Historical plans, evidence, reconciliation records, and post-merge verification are consulted only when an active artifact links to them or the task requires a specific audit trail.
 

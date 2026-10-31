@@ -68,7 +68,15 @@ Completion never automatically creates the next module's resource. Each handoff 
 5. Delivery explicitly accepts the approved artifact version, organizes the work package and obtains the required package approval.
 6. Monitor displays the exact eligible baseline and recorded evidence. It does not execute invoice processing or claim realized savings without evidence.
 
-This describes the intended connected contract. The entire latest corrected journey has not yet passed integrated acceptance; see the current status page.
+This describes the intended connected contract. The canonical disposable walkthrough passes locally through Monitor, including edited BRD v2 and persistence after sign-out/sign-in. This is separate from complete integrated acceptance of the unchanged catalog; see the current status page and draft PR for exact-candidate CI.
+
+### Reproduce the canonical disposable walkthrough
+
+With Node 22, Docker and Chromium available, run `npm ci`, `npx playwright install chromium`, then `npm run test:canonical-ap-invoice-exception` from the repository root. The same command is a Core CI job. An optional `-- pixel-7-chromium` selects the mobile viewport. The runner builds the actual application, creates isolated PostgreSQL 16/PostgREST services, drives the UI and production handlers, verifies committed lineage independently, and removes its owned services. It never connects to a hosted environment or enables providers.
+
+The walkthrough creates **AP Invoice Exception Handling**, saves process facts and evidence, completes deterministic assessment and independent Govern decisions, edits a BRD into version 2, obtains independent Studio and Delivery approvals, and checks the read-only Monitor baseline after refresh and sign-out/sign-in. Four synthetic business actors preserve separation: the Delivery owner who consumes the handoff differs from its requester, reviewer and approver. It exercises rejected authority, stale commands, exact replays and a failed synthetic generation. Password sessions and generated text are synthetic test boundaries; database constraints, RLS, production commands and application UI are exercised locally.
+
+Each run retains its result, cleanup report, source/artifact digest manifest, representative rendered Decision Pack/BRD text and bounded screenshots beneath `output/local-private/primary-lifecycle-timeout-local/canonical-*`. Inspect `review-manifest.json` and `result.json`; a failed or incomplete run is not a walkthrough pass. Failure traces remain local and are excluded from the CI review archive. This evidence is separate from the unchanged acceptance catalog and hosted authentication, live AI generation, telemetry, deployment and complete product acceptance.
 
 ## Failure and safety behavior
 

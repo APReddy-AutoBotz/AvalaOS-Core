@@ -4,6 +4,8 @@ Snapshot: **2026-10-31**. The objective is controlled authenticated synthetic bu
 
 ## Remaining gates, in order
 
+Current authorized work extends draft PR #346 into a canonical AP Invoice Exception review candidate before the merge gate below. The documentation/CI correction and complete disposable Assess/Govern/edited Studio → canonical Delivery → Monitor journey pass locally, including persistence, lineage, replay and failure recovery. Publish this implementation with its evidence and verify fresh exact-candidate CI before independent review. The [completion plan](planning/hosted-acceptance-completion.md) owns the short plan and single blocker list. Repository fixes, local/disposable tests, commit/push and draft PR updates are authorized; merge and new hosted acceptance remain blocked.
+
 | Gate | Work and owner | Exit evidence | Current state / dependency |
 | --- | --- | --- | --- |
 | 1. Publish current correction | Engineering: publish the locally verified downstream actor-transition correction with reconciled docs in one draft PR. | Exact candidate commit, focused local evidence and owned file diff; local/GitHub content match. | Publication authorized. No separate documentation-only PR. |

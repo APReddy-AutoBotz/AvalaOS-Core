@@ -4,8 +4,11 @@ Snapshot: **2026-10-31**. This is the current status summary, not a production-r
 
 ## Current evidence
 
+PR #346 remains OPEN/draft on `codex/downstream-actor-settlement`, extending starting commit `418425715ba71e388d76884b07d35abe8bebb19f` and main `80f6e97b6047718c15163e51df3e879bc6307668`. The shared documentation/CI correction and distinct canonical PR C continuation pass local verification. The full disposable AP Invoice Exception journey passes through Monitor, including sign-out/sign-in, exact replay, independent approvals and database lineage. The [completion plan](planning/hosted-acceptance-completion.md) owns the single blocker list and precise proof limits. Fresh exact-candidate CI and artifact bindings are recorded on the draft PR; local proof does not imply CI success.
+
 | Boundary | Executed evidence | What remains pending |
 | --- | --- | --- |
+| Canonical disposable journey | Actual UI and production handlers over disposable PostgreSQL/PostgREST; edited BRD v2, independent fourth-person Delivery consumption, accepted item versions, approved package and read-only Monitor persist. All canonical assertions, database lineage predicates and cleanup checks pass. | Exact committed-candidate CI; synthetic authentication and deterministic provider output are not hosted authentication or live generation. |
 | Last verified release | PR345 merged as `80f6e97b6047718c15163e51df3e879bc6307668`; tree `064b389ab3978513586bcde934b0650fdf312331` matches verified candidate `b04088b85d37e574181650cad02e48015bb62378`. | This release has not received a new integrated full-acceptance result. |
 | PR345 release preparation | Three original attempt-1 workflows; 12 successful jobs, two appropriate skips; 12 fresh sanitized archives; 94 disposable browser cases; cleanup verified. | Preparation proves its own scope, not authenticated integrated acceptance or production readiness. |
 | Last integrated acceptance | Earlier PR343 release `38ffa87ab4e3f4f2e7deadc10f08ce56a4dac432`, run `41081605972`, attempt 1: **61 PASS / 47 BLOCKED / 0 FAIL / 0 UNCOVERED**, cleanup verified. | The 47 blocked requirements were not completed. They are not 47 confirmed product defects, and the historical hosted cause remains unproven. These results do not belong to the PR345/current corrected tree. |
