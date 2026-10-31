@@ -8,6 +8,9 @@ const journey = fs.readFileSync(
 const aggregate = fs.readFileSync(
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts', 'utf8',
 );
+const canonical = fs.readFileSync(
+  'tests/browser/enterpriseLifecycleAcceptance/canonicalInvoiceExceptionJourney.ts', 'utf8',
+);
 const scenarios = fs.readFileSync(
   'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts', 'utf8',
 );
@@ -80,6 +83,14 @@ test('focused Chromium regression retains the raw red control and corrected fail
 });
 
 // The negative edit scenario uses a second page; a main-page-only search misses it.
-test('canonical denied-edit refresh settles its native reads before navigation', () => {
-  assert.match(aggregate, /expect\(deniedEditApi.status\).toBe\(403\);\s*if \(canonicalInvoiceExceptionJourney\) await settleActorTransitionEvidence\(\);\s*await deniedEditPage.reload/u);
+test('canonical denied-edit refresh owns its late project-index read before page close', () => {
+  assert.match(aggregate, /await awaitCanonicalProjectIndexRead\(deniedEditPage, enterDeniedEditPage\)/u);
+  assert.match(aggregate, /expect\(deniedEditApi.status\).toBe\(403\);\s*if \(canonicalInvoiceExceptionJourney\) await settleActorTransitionEvidence\(\);\s*const reloadDeniedEditPage = \(\) => deniedEditPage.reload/u);
+  assert.match(aggregate, /await awaitCanonicalProjectIndexRead\(deniedEditPage, reloadDeniedEditPage\)/u);
+  assert.match(aggregate, /await closePageAfterOwnedNetwork\(deniedEditPage\)/u);
+  assert.match(canonical, /const projectRead = page.waitForResponse/u);
+  assert.match(canonical, /response.request\(\).method\(\) === 'GET' && url.pathname === '\/rest\/v1\/projects'/u);
+  assert.match(canonical, /const deadline = Date.now\(\) \+ 15_000/u);
+  assert.match(canonical, /CANONICAL_PROJECT_INDEX_READ_BODY_TIMEOUT/u);
+  assert.match(canonical, /CANONICAL_PROJECT_INDEX_READ_NOT_FINISHED/u);
 });

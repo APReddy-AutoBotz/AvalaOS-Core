@@ -665,8 +665,8 @@
       "pattern": "localStorage",
       "path": "tests/browser/enterpriseLifecycleAcceptance/downstreamActorTransition.spec.ts",
       "lines": [
-        24,
-        25
+        25,
+        26
       ],
       "reason": "test/control documentation",
       "futureAction": "Read only inert loopback fixture session identity to prove owned tracked work settles before actor replacement. Never read real credentials, grant authority from browser state, or persist provider secrets."

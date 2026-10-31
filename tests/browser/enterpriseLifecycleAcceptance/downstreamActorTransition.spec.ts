@@ -9,6 +9,7 @@ import {
   installAuthenticatedHostedNetwork,
 } from '../authenticatedHostedNetwork';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
+import { awaitCanonicalProjectIndexRead } from './canonicalInvoiceExceptionJourney';
 
 const appOrigin = 'http://127.0.0.1:51998';
 const backendOrigin = 'http://localhost:51998';
@@ -249,3 +250,70 @@ for (const nativeResource of ['document_generations', 'projects']) {
     });
   }
 }
+
+test('canonical auxiliary-page close joins a project read admitted after an initially empty boundary', async ({ context }) => {
+  const run = async (protectedRead: boolean) => {
+    const page = await context.newPage();
+    const resource = `${backendOrigin}/rest/v1/projects?case=${protectedRead ? 'protected' : 'raw'}`;
+    const entered = deferred();
+    const release = deferred();
+    const routeFinished = deferred();
+    let active = 0;
+    let completed = 0;
+    let cancelled = 0;
+    page.on('requestfinished', request => {
+      if (request.url() === resource) { active -= 1; completed += 1; }
+    });
+    page.on('requestfailed', request => {
+      if (request.url() === resource) { active -= 1; cancelled += 1; }
+    });
+    await context.route(resource, async route => {
+      active += 1;
+      entered.resolve();
+      await release.promise;
+      try {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]',
+          headers: { 'access-control-allow-origin': appOrigin } });
+      } catch { /* The raw control intentionally closes the requesting page. */ }
+      finally { routeFinished.resolve(); }
+    });
+    await page.goto(appOrigin);
+    await authenticatedLifecycleSettleActorNavigationBoundary({
+      settleActionAdmissions: async () => undefined,
+      settleResponseBodies: async () => undefined,
+      drainNetworkActions: async () => undefined,
+      activeActionCount: () => active,
+    });
+    expect(active).toBe(0);
+    const admitLateProjectRead = () => page.evaluate(url => {
+      void fetch(url).catch(() => undefined);
+    }, resource);
+    if (protectedRead) {
+      let readFinished = false;
+      const navigation = awaitCanonicalProjectIndexRead(page, admitLateProjectRead)
+        .then(() => { readFinished = true; });
+      await entered.promise;
+      expect(readFinished).toBe(false);
+      expect(active).toBe(1);
+      release.resolve();
+      await navigation;
+      await page.close();
+      expect(completed).toBe(1);
+      expect(cancelled).toBe(0);
+    } else {
+      await admitLateProjectRead();
+      await entered.promise;
+      const refresh = page.reload({ waitUntil: 'domcontentloaded' });
+      await refresh;
+      release.resolve();
+      await expect.poll(() => cancelled).toBe(1);
+      expect(completed).toBe(0);
+      await page.close();
+    }
+    release.resolve();
+    await routeFinished.promise;
+    expect(active).toBe(0);
+  };
+  await run(false);
+  await run(true);
+});

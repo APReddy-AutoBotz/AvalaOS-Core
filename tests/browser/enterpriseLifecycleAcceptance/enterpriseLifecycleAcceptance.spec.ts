@@ -25,7 +25,7 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
-import { runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+import { awaitCanonicalProjectIndexRead, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
   type CanonicalInvoiceExceptionProofBoundary } from './canonicalInvoiceExceptionJourney';
 import { approvedBusinessOutputMarkdown } from './canonicalBusinessOutputEvidence';
 import { exerciseReviewerGovernDenial } from './governReviewerDenial';
@@ -1085,7 +1085,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (controllerBackedAcceptance) {
         await authenticatedHostedConfigureChromiumDurableResponseBodies(context, deniedEditPage);
       }
-      await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
+      const enterDeniedEditPage = () => enterProcessAs(
+        deniedEditPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence,
+      );
+      if (canonicalInvoiceExceptionJourney) {
+        await awaitCanonicalProjectIndexRead(deniedEditPage, enterDeniedEditPage);
+      } else await enterDeniedEditPage();
       const beforeDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       let deniedEditApi: ApiResponseObservation;
       if (controllerBackedAcceptance) {
@@ -1110,7 +1115,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       }
       expect(deniedEditApi.status).toBe(403);
       if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
-      await deniedEditPage.reload({ waitUntil: 'domcontentloaded' });
+      const reloadDeniedEditPage = () => deniedEditPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
+      if (canonicalInvoiceExceptionJourney) {
+        await awaitCanonicalProjectIndexRead(deniedEditPage, reloadDeniedEditPage);
+      } else await reloadDeniedEditPage();
       await expect(deniedEditPage.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       const afterDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       expect(afterDeniedEdit).toEqual(beforeDeniedEdit);

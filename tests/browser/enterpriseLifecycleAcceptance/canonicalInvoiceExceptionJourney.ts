@@ -14,6 +14,30 @@ const COMMAND_ROUTE = '/functions/v1/enterprise-intelligence-command';
 const QUERY_ROUTE = '/functions/v1/enterprise-intelligence-query';
 const AP_ITEM_TITLE = 'Implement governed AP invoice exception triage';
 
+export const awaitCanonicalProjectIndexRead = async <Result>(
+  page: Page,
+  navigation: () => Promise<Result>,
+): Promise<Result> => {
+  const deadline = Date.now() + 15_000;
+  const projectRead = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === 'GET' && url.pathname === '/rest/v1/projects';
+  }, { timeout: Math.max(1, deadline - Date.now()) });
+  const [result, response] = await Promise.all([navigation(), projectRead]);
+  expect(response.status(), 'CANONICAL_PROJECT_INDEX_READ_STATUS_REJECTED').toBe(200);
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) throw new Error('CANONICAL_PROJECT_INDEX_READ_BODY_TIMEOUT');
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const bodyCompletion = await Promise.race([
+    response.finished(),
+    new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error('CANONICAL_PROJECT_INDEX_READ_BODY_TIMEOUT')), remainingMs);
+    }),
+  ]).finally(() => clearTimeout(timeout));
+  expect(bodyCompletion, 'CANONICAL_PROJECT_INDEX_READ_NOT_FINISHED').toBeNull();
+  return result;
+};
+
 type EnterAs = (
   page: Page,
   actor: AuthenticatedLifecycleActor,

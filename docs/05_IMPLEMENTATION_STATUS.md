@@ -1,5 +1,9 @@
 # AvalaOS Core: current implementation and verification status
 
+## Active hands-on acceptance — 2026-10-31
+
+PR #346 is merged as `451aa93bc762a3e92a8e81aa00108c10ec4c9f4f`, with the reviewed tree unchanged and all three release workflows verified. PR #347 connects the protected real-auth procedure to the canonical journey, complete synthetic business outputs and separate temporary hands-on access. Its first candidate passed the disposable canonical journey; the corrected candidate exposed one cancelled native project read, so candidate verification remains incomplete. The [active completion plan](planning/hosted-acceptance-completion.md) owns current blockers and verification. AP authorizes normal merge and controlled nonproduction acceptance; temporary accounts and the new protected real-auth run remain pending. The historical 61 PASS / 47 BLOCKED result below is unchanged. Earlier release and authorization snapshots below do not supersede this entry.
+
 Snapshot: **2026-10-31**. This is the current status summary, not a production-readiness certificate. [Product guide](09_END_TO_END_PRODUCT_GUIDE.md) explains module contracts; [roadmap](04_MVP_ROADMAP.md) defines remaining gates. Earlier milestone records describe their own execution dates and are not the current position.
 
 ## Current evidence
