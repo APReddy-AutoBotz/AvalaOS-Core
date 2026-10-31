@@ -303,6 +303,8 @@ test('checkpoint boundary preserves settlement failure and never starts the chec
 });
 
 const actorEntryPage = (events: string[]) => ({
+  route: async () => { events.push('origin-route'); },
+  unroute: async () => { events.push('origin-route-removed'); },
   goto: async (target: string) => { events.push(`goto:${target}`); },
   evaluate: async () => { events.push('session-write'); },
 }) as unknown as import('@playwright/test').Page;
@@ -314,7 +316,7 @@ test('local actor entry joins owned evidence before each intentional navigation 
     events.push(`boundary:${++boundary}`);
   });
   assert.deepEqual(events, [
-    'boundary:1', 'goto:/', 'boundary:2', 'session-write', 'goto:/'
+    'boundary:1', 'origin-route', 'goto:/', 'origin-route-removed', 'boundary:2', 'session-write', 'goto:/'
   ]);
 });
 
@@ -332,7 +334,7 @@ test('actor-entry boundary failure prevents the following session mutation and n
     if (boundary === 2) throw new Error('OWNED_EVIDENCE_REJECTED');
     secondEvents.push('boundary:1');
   }), /OWNED_EVIDENCE_REJECTED/u);
-  assert.deepEqual(secondEvents, ['boundary:1', 'goto:/']);
+  assert.deepEqual(secondEvents, ['boundary:1', 'origin-route', 'goto:/', 'origin-route-removed']);
 });
 
 test('actor-entry boundary retains a started request until its headers and owned finish settle', async () => {

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { authenticatedLifecycleEnterAs } from '../authenticatedLifecycleHarness';
 
+test.use({ baseURL: 'http://127.0.0.1:51999' });
 const actor = { token: 'local-fixture-token', user: { id: 'local-fixture-author', email: 'author@example.test' } };
 
 test('existing fixture-origin entry installs the actor before its only application navigation', async ({ page }) => {
@@ -16,6 +17,21 @@ test('existing fixture-origin entry installs the actor before its only applicati
   expect(documents).toBe(1);
   expect(barriers).toBe(2);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sb-127-auth-token')!).user.id)).toBe(actor.user.id);
+});
+
+test('new fixture page does not load the previous actor application before installing its own session', async ({ page, context }) => {
+  const applicationActors: string[] = [];
+  await context.route('**/*', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><h1>Fixture application</h1>' }));
+  await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('sb-127-auth-token', JSON.stringify({ user: { id: 'previous-fixture-actor' } })));
+  const next = await context.newPage();
+  await next.exposeFunction('observeFixtureActor', (id: string) => { applicationActors.push(id); });
+  await next.route('**/*', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><script>
+    window.observeFixtureActor(JSON.parse(localStorage.getItem('sb-127-auth-token')).user.id);
+    </script><h1>Fixture application</h1>` }));
+  await authenticatedLifecycleEnterAs(next, actor);
+  await expect.poll(() => applicationActors).toEqual([actor.user.id]);
+  await next.close();
 });
 
 test('actor entry uses the ready document while a nonessential image remains pending', async ({ page }) => {
@@ -63,7 +79,7 @@ test('actor entry fails closed within 15 seconds when the document never arrives
   try {
     await expect(authenticatedLifecycleEnterAs(page, actor, async () => { barriers += 1; }))
       .rejects.toThrow(/page.goto: Timeout 15000ms exceeded/);
-    expect(barriers).toBe(1);
+    expect(barriers).toBe(2);
   } finally {
     releaseDocument();
     await page.unrouteAll({ behavior: 'wait' });
