@@ -1,5 +1,9 @@
 # AvalaOS Core Enterprise Acceleration Plan
 
+## Studio handoff transition publication (2026-10-30)
+
+Continue the verified local correction as one draft PR from PR343 release `38ffa87ab4e3f4f2e7deadc10f08ce56a4dac432`. Remove only redundant same-approver re-entry before exact handoff consumption; preserve product controls, genuine actor transitions, 15,000 ms and providers OFF. The [completion plan](../planning/hosted-acceptance-completion.md) records the Desktop/Pixel red/green probes and independent cleanup. Local opt-in probe evidence remains distinct from default candidate CI. Verify all original candidate workflows and twelve fresh sanitized Preparation archives, then stop at the draft boundary. No merge or new hosted acceptance/diagnostic is included. Prior integrated evidence remains 61 PASS / 47 BLOCKED; this change does not improve the provisional UAT forecast by itself.
+
 ## Desktop primary lifecycle local correction (2026-10-30)
 
 Publication update: AP authorizes the verified correction's commit, one draft PR and fresh exact-candidate CI verification. Keep `[skip netlify]`, 15,000 ms/providers OFF and stop before merge or another hosted run. The local-only publication hold below is superseded by this instruction.

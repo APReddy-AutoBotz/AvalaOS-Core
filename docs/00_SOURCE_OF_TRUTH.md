@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Studio handoff transition correction (2026-10-30)
+
+AP's continuation advances the locally verified correction to one draft PR and exact-candidate CI verification. Use verified PR343 release `38ffa87ab4e3f4f2e7deadc10f08ce56a4dac432` as the base, retain `[skip netlify]` in the initial commit and PR title, and stop before merge or another hosted acceptance/diagnostic. Keep 15,000 ms/providers OFF; no role, backend, schema or product-authorization change.
+
+Executed local evidence demonstrates that unnecessary same-approver Studio re-entry discards an already refreshed handoff view and adds a fresh-read dependency before consumption. Removing that re-entry preserves the exact handoff target, command correlation, actor/session checks and genuine actor-transition drains. Desktop/Pixel production-UI/disposable-database probes reproduce the old visibility failure under a held fresh read and verify the corrected exact-target consumption and cleanup. The probe is opt-in local evidence; default Preparation CI does not execute it. Require fresh exact-head CI and twelve new sanitized Preparation archives for the candidate, without substituting the local probe for CI proof. PR343 full run `41081605972/1` remains 61 PASS / 47 BLOCKED with cleanup verified; its historical cause and UAT readiness remain unproven. The [completion plan](planning/hosted-acceptance-completion.md) owns detailed evidence and rollback.
+
 ## Desktop primary lifecycle local correction (2026-10-30)
 
 Latest AP authority includes committing the verified correction, opening one draft PR and verifying exact-candidate CI. Keep `[skip netlify]` in the initial commit and PR title and require fresh attempt-1 checks and sanitized archives. No merge or additional hosted acceptance/diagnostic run until approval. Preserve 15,000 ms/providers OFF. PR342 run `40952852275/1` remains incomplete at 61 PASS / 47 BLOCKED, with independently verified cleanup. Its exact timeout cause is **unproven**, and these blocked requirements are not a count of confirmed product defects.
