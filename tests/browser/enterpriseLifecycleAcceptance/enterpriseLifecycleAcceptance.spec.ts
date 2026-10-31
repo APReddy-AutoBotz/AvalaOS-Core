@@ -25,7 +25,9 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
-import { runCanonicalInvoiceExceptionJourney } from './canonicalInvoiceExceptionJourney';
+import { awaitCanonicalProjectIndexRead, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+  type CanonicalInvoiceExceptionProofBoundary } from './canonicalInvoiceExceptionJourney';
+import { approvedBusinessOutputMarkdown } from './canonicalBusinessOutputEvidence';
 import { exerciseReviewerGovernDenial } from './governReviewerDenial';
 import { attestSubmittedEvidence } from './evidenceAttestation';
 import { AuthenticatedHostedBrowserActionTracker } from '../../../scripts/authenticatedHostedBrowserRequestClassifier.mjs';
@@ -489,6 +491,72 @@ const finalizeDecisionPack = async (page: Page) => {
   await button.click();
 };
 
+const AP_INVOICE_EXCEPTION_BRD_SECTIONS = Object.freeze([
+  Object.freeze({
+    title: 'Executive summary',
+    body: 'Accounts Payable needs one governed path for invoices that fail purchase-order, goods-receipt, tax, quantity, price, duplicate, or tolerance checks. The target operating model routes each exception to an accountable AP specialist with the invoice, purchase order, receipt, reason code, and decision history linked. It supports triage and approval preparation only; it never releases a payment autonomously.',
+  }),
+  Object.freeze({
+    title: 'Objectives and success measures',
+    body: 'Route every detected exception into an owned queue with its evidence bundle and reason code. Prevent duplicate handling through idempotent commands. Preserve human approval before financial release and independent review for governed changes. Measure exception volume, ageing, reassignment, resolution outcome, and evidence completeness after telemetry is separately approved; this acceptance run does not claim an operational KPI baseline.',
+  }),
+  Object.freeze({
+    title: 'Scope, actors, and exception taxonomy',
+    body: 'In scope: unmatched purchase orders or receipts, suspected duplicates, tax discrepancies, quantity or price variance, tolerance breaches, and missing evidence. Actors: AP intake specialist, AP exception owner, independent reviewer, final approver, and read-only monitor user. Source systems provide invoice, purchase-order, receipt, supplier, and approval references. Out of scope: payment execution, supplier-master changes, tax advice, fraud adjudication, and automatic policy overrides.',
+  }),
+  Object.freeze({
+    title: 'Requirements, business rules, and acceptance criteria',
+    body: 'Each exception must retain its source invoice and exact reason code; show the matching purchase order and receipt when present; identify one accountable owner; reject stale or duplicate actions; preserve tenant and workspace isolation; and record every material decision in the audit trail. A case is acceptance-ready when evidence is linked, the current version survives refresh and sign-in, self-approval is denied, required reviewers approve the same version, and no payment or provider call occurs. Integrations are read-only for invoice, purchase-order, receipt, and supplier context unless a later governed milestone explicitly authorizes a write.',
+  }),
+  Object.freeze({
+    title: 'Risks, controls, dependencies, assumptions, and open questions',
+    body: 'Risks include false matches, missing receipt data, duplicate processing, cross-tenant disclosure, stale approvals, and premature financial release. Controls include exact version binding, independent approval, evidence attestation, least-privilege access, idempotency, immutable lineage, and a hard stop before payment. Dependencies are source-system availability, identity and role administration, evidence retention, and agreed exception ownership. Assumptions: synthetic records represent realistic AP fields and providers remain OFF. Open questions for business owners: tolerance thresholds, regional tax treatment, service-level targets, escalation ownership, retention periods, ERP connector priorities, and which approved metrics may be shown in Monitor.',
+  }),
+]);
+
+const COMPLETE_DECISION_PACK_SECTION_HEADINGS = Object.freeze([
+  'Executive decision',
+  'Process primitives, decisions and exceptions',
+  'Candidate evaluations',
+  'Composed operating model',
+  'Required controls',
+  'Application-interaction readiness',
+  'Modernization dispositions',
+  'Claim-linked evidence',
+  'Alternatives considered',
+  'Immutable references',
+  'Explicit non-claims',
+]);
+
+const canonicalProofBoundary = (): CanonicalInvoiceExceptionProofBoundary => {
+  if (hostedAuthenticatedAcceptance) {
+    expect(process.env.ACCEPTANCE_EXECUTION_KIND).toBe('local_real_backend');
+    expect(process.env.AUTHENTICATED_ACCEPTANCE_EXECUTION_KIND).toBe('local_real_backend_authenticated');
+    return Object.freeze({
+      application: 'production UI and handlers',
+      database: 'existing synthetic nonproduction Supabase',
+      authentication: 'real Supabase password session',
+      providers: 'off',
+      generation: 'deterministic synthetic test-provider output; providers off',
+      frontend: 'runner-local exact release build',
+      hostedAuth: true,
+      hostedProviders: false,
+      deployment: false,
+    });
+  }
+  return Object.freeze({
+    application: 'production UI and handlers',
+    database: 'disposable PostgreSQL',
+    authentication: 'synthetic Supabase-compatible password session',
+    providers: 'off',
+    generation: 'deterministic synthetic test-provider output; providers off',
+    frontend: 'local production build',
+    hostedAuth: false,
+    hostedProviders: false,
+    deployment: false,
+  });
+};
+
 test.describe.configure({ mode: 'serial' });
 test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let setup: FixtureSetup;
@@ -522,15 +590,16 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (!activeNetworkLifecycle || !activeTestWorkQueues) {
       throw new Error('AUTHENTICATED_BROWSER_ACTION_TRACKER_MISSING');
     }
-    // Canonical navigation also owns native legacy reads started by global
-    // providers. Count them inside the unchanged 15-second boundary so refresh
-    // cannot cancel an untracked REST read. Normal V2 probes retain their lifecycle.
+    // Disposable canonical navigation also owns native legacy reads started by
+    // global providers. Count those fixture-proxy reads inside the unchanged
+    // 15-second boundary. Real-auth reads are already owned by the hosted network
+    // lifecycle and must not fabricate the disposable proxy control.
     let canonicalNativeReads = 0;
     await test.step('hosted:actor-boundary', () => settleActorNavigationBoundary({
       settleActionAdmissions: activeNetworkLifecycle.settleActionAdmissions,
       settleResponseBodies: async () => {
         await activeNetworkLifecycle!.settleResponseBodies();
-        if (canonicalInvoiceExceptionJourney) {
+        if (canonicalInvoiceExceptionJourney && !hostedAuthenticatedAcceptance) {
           const stats = await control<{ active: number; cancelled: number; failed: number }>('/control/native-postgrest-stats', { projectName });
           expect(Number.isSafeInteger(stats.active) && stats.active >= 0).toBe(true);
           expect(stats.cancelled, 'CANONICAL_NATIVE_READ_CANCELLED_BEFORE_BOUNDARY').toBe(0);
@@ -634,10 +703,17 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     catch (error) { failed = true; throw error; }
     expect(setup.journeyBinding).toMatch(/^sha256:[a-f0-9]{64}$/u);
     if (canonicalInvoiceExceptionJourney) {
-      expect(hostedAuthenticatedAcceptance).toBe(false);
       expect(setup.projectName).toBe(projectName);
       expect(setup.aliases.process).toBe(`${projectName} prerequisite process`);
       expect(setup.deliveryProject.name).toBe('AP Invoice Exception Workflow');
+      if (hostedAuthenticatedAcceptance) {
+        expect(setup.aliases.canonicalProcess).toMatch(
+          /^AP Invoice Exception Handling \[run [1-9][0-9]{0,19}\.[1-9][0-9]* [0-9a-f]{12}\]$/u,
+        );
+        expect(setup.aliases.canonicalProcess).not.toBe(setup.aliases.process);
+      } else if (setup.aliases.canonicalProcess !== undefined) {
+        expect(setup.aliases.canonicalProcess).toBe('AP Invoice Exception Handling');
+      }
     } else validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
     for (const key of ['case', 'review', 'handoff', 'artifact'] as const) expect(setup.aliases[key]).toMatch(new RegExp(`^primary-${key}-\\d+$`, 'u'));
     if (controllerBackedAcceptance) {
@@ -941,9 +1017,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await clickProduct(page, 'Assess');
     }
     await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
+    const canonicalProcessName = setup.aliases.canonicalProcess ?? 'AP Invoice Exception Handling';
+    if (hostedAuthenticatedAcceptance) {
+      expect(setup.aliases.canonicalProcess).toBe(canonicalProcessName);
+      expect(canonicalProcessName).not.toBe(setup.aliases.process);
+    }
     await page.getByRole('button', { name: 'New process', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'New Assess process', exact: true });
-    await dialog.getByRole('textbox', { name: 'Process Name *', exact: true }).fill('AP Invoice Exception Handling');
+    await dialog.getByRole('textbox', { name: 'Process Name *', exact: true }).fill(canonicalProcessName);
     await dialog.getByRole('textbox', { name: 'Description', exact: true }).fill(
       'Assess unmatched, duplicate, tax, quantity and tolerance invoice exceptions before any financial release.',
     );
@@ -972,23 +1053,23 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     expect(['committed', 'replayed']).toContain(body.outcome);
     expect(body.resource?.id).toBe(request.payload?.processId);
     expect(body.resource?.requestId).toBe(request.requestId);
-    expect(body.resource?.name).toBe('AP Invoice Exception Handling');
+    expect(body.resource?.name).toBe(canonicalProcessName);
     expect(body.resource?.receiptId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
     await expect(dialog).toHaveCount(0);
-    let createdRow = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
+    let createdRow = page.getByRole('row').filter({ hasText: canonicalProcessName });
     await expect(createdRow).toContainText('Finance · Accounts Payable');
     await expect(createdRow).toContainText('High');
     await settleActorTransitionEvidence();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Process Catalog', exact: true })).toBeVisible();
-    createdRow = page.getByRole('row').filter({ hasText: 'AP Invoice Exception Handling' });
+    createdRow = page.getByRole('row').filter({ hasText: canonicalProcessName });
     await expect(createdRow).toContainText('Finance · Accounts Payable');
     await expect(createdRow).toContainText('High');
     const adopted = await control<{ processId: string; name: string }>('/control/canonical-created-process', {
       projectName,
       processId: body.resource?.id,
     });
-    expect(adopted).toEqual({ processId: body.resource?.id, name: 'AP Invoice Exception Handling' });
+    expect(adopted).toEqual({ processId: body.resource?.id, name: canonicalProcessName });
     setup = Object.freeze({
       ...setup,
       aliases: Object.freeze({ ...setup.aliases, process: adopted.name }),
@@ -1004,7 +1085,12 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (controllerBackedAcceptance) {
         await authenticatedHostedConfigureChromiumDurableResponseBodies(context, deniedEditPage);
       }
-      await enterProcessAs(deniedEditPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
+      const enterDeniedEditPage = () => enterProcessAs(
+        deniedEditPage, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence,
+      );
+      if (canonicalInvoiceExceptionJourney) {
+        await awaitCanonicalProjectIndexRead(deniedEditPage, enterDeniedEditPage);
+      } else await enterDeniedEditPage();
       const beforeDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       let deniedEditApi: ApiResponseObservation;
       if (controllerBackedAcceptance) {
@@ -1029,7 +1115,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       }
       expect(deniedEditApi.status).toBe(403);
       if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
-      await deniedEditPage.reload({ waitUntil: 'domcontentloaded' });
+      const reloadDeniedEditPage = () => deniedEditPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
+      if (canonicalInvoiceExceptionJourney) {
+        await awaitCanonicalProjectIndexRead(deniedEditPage, reloadDeniedEditPage);
+      } else await reloadDeniedEditPage();
       await expect(deniedEditPage.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       const afterDeniedEdit = await control<ReadOnlyTargetFrame>('/control/process-frame', { projectName });
       expect(afterDeniedEdit).toEqual(beforeDeniedEdit);
@@ -1487,58 +1576,6 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const finalizeV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page));
       expect(finalizeV2Api.status).toBe(200);
       await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
-      if (canonicalInvoiceExceptionJourney) {
-        await mkdir(outputDirectory, { recursive: true });
-        const decisionPack = page.getByTestId('assess-v2-decision-pack');
-        const header = decisionPack.locator(':scope > div').first();
-        const executiveSection = decisionPack.getByRole('heading', { name: 'Executive decision', exact: true }).locator('..');
-        const controlsSection = decisionPack.getByRole('heading', { name: 'Required controls', exact: true }).first().locator('..');
-        const nonClaimsSection = decisionPack.getByRole('heading', { name: 'Explicit non-claims', exact: true }).locator('..');
-        const referencesSection = decisionPack.getByRole('heading', { name: 'Immutable references', exact: true }).locator('..');
-        const decisionPackText = [
-          `# ${await header.getByRole('heading').innerText()}`,
-          '',
-          `Process: ${setup.aliases.process}`,
-          'Captured at deterministic finalization, before independent review and Govern resolution.',
-          '',
-          await header.locator('p').nth(0).innerText(),
-          await header.locator('p').nth(1).innerText(),
-          await header.locator('p').nth(2).innerText(),
-          await header.locator('p').nth(3).innerText(),
-          await header.locator('p').nth(4).innerText(),
-          '',
-          `## ${await executiveSection.getByRole('heading', { name: 'Executive decision', exact: true }).innerText()}`,
-          await executiveSection.locator('p').first().innerText(),
-          '',
-          `## ${await controlsSection.getByRole('heading', { name: 'Required controls', exact: true }).innerText()}`,
-          ...(await controlsSection.locator('li').allTextContents()).map(item => `- ${item}`),
-          '',
-          '## Canonical source/version labels',
-          `- Schema version: ${await referencesSection.locator('dd').nth(0).innerText()}`,
-          `- Rule-set version: ${await referencesSection.locator('dd').nth(1).innerText()}`,
-          `- Decision version: ${await referencesSection.locator('dd').nth(2).innerText()}`,
-          '',
-          `## ${await nonClaimsSection.getByRole('heading', { name: 'Explicit non-claims', exact: true }).innerText()}`,
-          ...(await nonClaimsSection.locator('p').allTextContents()).map(item => `- ${item}`),
-          '',
-        ].join('\n');
-        expect(decisionPackText).not.toMatch(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/iu);
-        const decisionPackOutput = `${testInfo.project.name}-ap-invoice-exception-decision-pack.md`;
-        await writeFile(path.join(outputDirectory, decisionPackOutput), decisionPackText, 'utf8');
-        canonicalRepresentativeOutputs.push(decisionPackOutput);
-        await testInfo.attach(decisionPackOutput, {
-          path: path.join(outputDirectory, decisionPackOutput),
-          contentType: 'text/markdown',
-        });
-        const decisionPackScreenshotName = `${testInfo.project.name}-ap-invoice-exception-decision-pack.png`;
-        const decisionPackScreenshot = path.join(outputDirectory, decisionPackScreenshotName);
-        await header.screenshot({ path: decisionPackScreenshot });
-        await testInfo.attach('ap-invoice-exception-decision-pack.png', {
-          path: decisionPackScreenshot,
-          contentType: 'image/png',
-        });
-        canonicalRepresentativeOutputs.push(decisionPackScreenshotName);
-      }
       observe('assess-finalize', 'ui.assess-finalized');
       if (authenticatedProductAcceptance && beforeV2Finalize) {
         const afterV2Finalize = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
@@ -1887,6 +1924,51 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     expect(governResolutionApi.status).toBe(200);
     await expect(page.getByText('Govern resolution committed.', { exact: true })).toBeVisible();
     observe('govern-resolve', 'ui.govern-resolved');
+    if (canonicalInvoiceExceptionJourney) {
+      await expect(reviewWorkspace).toContainText('Approved');
+      await expect(reviewWorkspace).toContainText('Govern resolved');
+      const decisionPack = page.getByTestId('assess-v2-decision-pack');
+      const header = decisionPack.locator(':scope > div').first();
+      const projectedBusinessSections = decisionPack.locator(
+        ':scope > section:not([data-testid]), :scope > div.grid > section',
+      );
+      const decisionSections: { heading: string; body: string }[] = [];
+      for (let index = 0; index < await projectedBusinessSections.count(); index += 1) {
+        const section = projectedBusinessSections.nth(index);
+        const heading = (await section.getByRole('heading').first().innerText()).trim();
+        const body = (await section.innerText()).trim();
+        decisionSections.push({ heading, body });
+      }
+      expect(decisionSections.map(section => section.heading)).toEqual([...COMPLETE_DECISION_PACK_SECTION_HEADINGS]);
+      const decisionPackText = approvedBusinessOutputMarkdown({
+        title: await header.getByRole('heading').innerText(),
+        approvalState: 'The current Decision Pack version was independently reviewed and approved; every required Govern control was resolved before this capture.',
+        contentOrigin: 'Deterministic AvalaOS scoring and rendering from realistic synthetic AP evidence. This is not provider-generated content and no AI provider was called.',
+        sections: [
+          { heading: 'Approval and process context', body: `Process: ${setup.aliases.process}\n${await header.innerText()}` },
+          ...decisionSections,
+        ],
+        remainingGaps: [
+          'The underlying records and evidence are synthetic and still require validation by AP business owners against their policies and source systems.',
+          'Thresholds, regional tax treatment, service-level targets, escalation ownership, retention periods, and ERP connector priorities remain business decisions.',
+          'This output proves the approved application journey; it is not a deployment, production, compliance, or buyer-acceptance claim.',
+        ],
+      });
+      await mkdir(outputDirectory, { recursive: true });
+      const decisionPackOutput = `${testInfo.project.name}-ap-invoice-exception-decision-pack.md`;
+      await writeFile(path.join(outputDirectory, decisionPackOutput), decisionPackText, 'utf8');
+      canonicalRepresentativeOutputs.push(decisionPackOutput);
+      await testInfo.attach(decisionPackOutput, {
+        path: path.join(outputDirectory, decisionPackOutput), contentType: 'text/markdown',
+      });
+      const decisionPackScreenshotName = `${testInfo.project.name}-ap-invoice-exception-decision-pack.png`;
+      const decisionPackScreenshot = path.join(outputDirectory, decisionPackScreenshotName);
+      await header.screenshot({ path: decisionPackScreenshot });
+      await testInfo.attach('ap-invoice-exception-decision-pack.png', {
+        path: decisionPackScreenshot, contentType: 'image/png',
+      });
+      canonicalRepresentativeOutputs.push(decisionPackScreenshotName);
+    }
     if (authenticatedProductAcceptance && beforeGovernBoundary) {
       const afterGovernBoundary = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
       expect(afterGovernBoundary.governResolutions).toBe(beforeGovernBoundary.governResolutions + 1);
@@ -2085,10 +2167,15 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     if (canonicalInvoiceExceptionJourney) {
       const structuredEditor = page.getByRole('region', { name: 'Structured section editor', exact: true });
       await expect(structuredEditor).toBeVisible();
-      await structuredEditor.getByLabel('Section title', { exact: true }).fill('AP invoice exception handling scope and controls');
-      await structuredEditor.getByRole('textbox', { name: 'Section body', exact: true }).fill(
-        'Route unmatched, duplicate, tax, quantity and tolerance exceptions to an accountable AP specialist. Preserve invoice, purchase-order and receipt evidence; require human approval before any financial release.',
-      );
+      const outline = structuredEditor.getByRole('navigation', { name: 'Document outline', exact: true });
+      await expect(outline.getByRole('button').filter({ hasNotText: 'Add section' }))
+        .toHaveCount(AP_INVOICE_EXCEPTION_BRD_SECTIONS.length);
+      for (let index = 0; index < AP_INVOICE_EXCEPTION_BRD_SECTIONS.length; index += 1) {
+        const section = AP_INVOICE_EXCEPTION_BRD_SECTIONS[index];
+        await outline.getByRole('button').nth(index).click();
+        await structuredEditor.getByLabel('Section title', { exact: true }).fill(section.title);
+        await structuredEditor.getByRole('textbox', { name: 'Section body', exact: true }).fill(section.body);
+      }
       const revisionResponse = page.waitForResponse(response => {
         if (new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command') return false;
         try {
@@ -2102,38 +2189,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await settleActorTransitionEvidence();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: 'Structured section editor', exact: true })).toBeVisible();
-      await expect(page.getByLabel('Section title', { exact: true })).toHaveValue('AP invoice exception handling scope and controls');
-      await mkdir(outputDirectory, { recursive: true });
-      const artifactPreview = page.getByRole('article', { name: 'Artifact preview', exact: true });
-      const studioText = [
-        '# AP Invoice Exception Handling BRD',
-        '',
-        `Source label: ${await artifactPreview.getByRole('heading', { name: 'BRD artifact', exact: true }).innerText()}`,
-        `Version label: ${await artifactPreview.getByText(/Aggregate v\d+ · Content v2/u).innerText()}`,
-        `Section title: ${await page.getByLabel('Section title', { exact: true }).inputValue()}`,
-        '',
-        '## Committed business content',
-        await structuredEditor.getByRole('textbox', { name: 'Section body', exact: true }).inputValue(),
-        '',
-      ].join('\n');
-      expect(studioText).not.toMatch(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/iu);
-      const studioOutput = `${testInfo.project.name}-ap-invoice-exception-studio-brd.md`;
-      await writeFile(path.join(outputDirectory, studioOutput), studioText, 'utf8');
-      canonicalRepresentativeOutputs.push(studioOutput);
-      await testInfo.attach(studioOutput, {
-        path: path.join(outputDirectory, studioOutput),
-        contentType: 'text/markdown',
-      });
-      const studioScreenshotName = `${testInfo.project.name}-ap-invoice-exception-studio-brd.png`;
-      const studioScreenshot = path.join(outputDirectory, studioScreenshotName);
-      const businessSection = structuredEditor.getByLabel('Section title', { exact: true })
-        .locator('..').locator('..');
-      await businessSection.screenshot({ path: studioScreenshot });
-      await testInfo.attach('ap-invoice-exception-studio-brd.png', {
-        path: studioScreenshot,
-        contentType: 'image/png',
-      });
-      canonicalRepresentativeOutputs.push(studioScreenshotName);
+      for (const section of AP_INVOICE_EXCEPTION_BRD_SECTIONS) {
+        await expect(page.getByRole('navigation', { name: 'Document outline', exact: true })
+          .getByRole('button', { name: new RegExp(`^\\d+\\. ${section.title}$`, 'u') })).toBeVisible();
+      }
     }
 
     if (authenticatedProductAcceptance) {
@@ -2152,6 +2211,57 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await page.getByRole('button', { name: 'Final approve', exact: true }).click();
       await expect(page.getByText('Approved committed.', { exact: true })).toBeVisible();
       observe('studio-artifact-approval', 'ui.studio-approved-exact-version');
+
+      if (canonicalInvoiceExceptionJourney) {
+        await settleActorTransitionEvidence();
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        const artifactPreview = page.getByRole('article', { name: 'Artifact preview', exact: true });
+        await expect(artifactPreview).toContainText('Approved');
+        await expect(artifactPreview).toContainText('Approved version');
+        await expect(artifactPreview.getByText(/Aggregate v\d+ · Content v2/u)).toBeVisible();
+        const approvedEditor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+        const approvedOutline = approvedEditor.getByRole('navigation', { name: 'Document outline', exact: true });
+        const approvedSections: { heading: string; body: string }[] = [];
+        for (let index = 0; index < AP_INVOICE_EXCEPTION_BRD_SECTIONS.length; index += 1) {
+          const expectedSection = AP_INVOICE_EXCEPTION_BRD_SECTIONS[index];
+          await approvedOutline.locator('ol button').nth(index).click();
+          await expect(approvedEditor.getByLabel('Section title', { exact: true })).toHaveValue(expectedSection.title);
+          await expect(approvedEditor.getByRole('textbox', { name: 'Section body', exact: true })).toHaveValue(expectedSection.body);
+          const citationPanel = approvedEditor.getByRole('complementary', { name: 'Citation and coverage panel', exact: true });
+          const provenance = (await citationPanel.locator('p').allTextContents())
+            .filter(value => /source citation|Labels:/u.test(value)).join(' · ');
+          approvedSections.push({
+            heading: expectedSection.title,
+            body: `${expectedSection.body}\n\nSection provenance: ${provenance || 'No projected citation label.'}`,
+          });
+        }
+        const studioText = approvedBusinessOutputMarkdown({
+          title: 'AP Invoice Exception Handling BRD',
+          approvalState: `Independent Studio review and final approval committed for ${await artifactPreview.getByText(/Aggregate v\d+ · Content v2/u).innerText()}.`,
+          contentOrigin: 'Providers were OFF. The base five-section structure came from deterministic synthetic test-provider output; all retained business sections were then test-authored through the normal UI and approved by separate synthetic test personas. This is not live AI generation or human UAT sign-off.',
+          sections: approvedSections,
+          remainingGaps: [
+            'Business owners must confirm tolerance thresholds, regional tax rules, service-level targets, escalation ownership, retention periods, and ERP connector priorities.',
+            'The source data, persona decisions, and business wording are realistic synthetic acceptance content rather than customer records or human UAT conclusions.',
+            'Operational telemetry, production integrations, payment execution, and provider-enabled content quality remain outside this journey.',
+          ],
+        });
+        await mkdir(outputDirectory, { recursive: true });
+        const studioOutput = `${testInfo.project.name}-ap-invoice-exception-studio-brd.md`;
+        await writeFile(path.join(outputDirectory, studioOutput), studioText, 'utf8');
+        canonicalRepresentativeOutputs.push(studioOutput);
+        await testInfo.attach(studioOutput, {
+          path: path.join(outputDirectory, studioOutput), contentType: 'text/markdown',
+        });
+        const studioScreenshotName = `${testInfo.project.name}-ap-invoice-exception-studio-brd.png`;
+        const studioScreenshot = path.join(outputDirectory, studioScreenshotName);
+        const citationPanel = approvedEditor.getByRole('complementary', { name: 'Citation and coverage panel', exact: true });
+        await approvedEditor.screenshot({ path: studioScreenshot, mask: [citationPanel.locator('ul')] });
+        await testInfo.attach('ap-invoice-exception-studio-brd.png', {
+          path: studioScreenshot, contentType: 'image/png',
+        });
+        canonicalRepresentativeOutputs.push(studioScreenshotName);
+      }
 
       const beforeFailure = await control<StudioFailureFrame>('/control/studio-failure-frame', { projectName });
       await selectExactStudioTemplate(
@@ -2237,6 +2347,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       enterAs,
       settleActorTransitionEvidence,
       clickProduct,
+      proofBoundary: canonicalProofBoundary(),
+      readHostedDatabaseEvidence: hostedAuthenticatedAcceptance
+        ? () => control<CanonicalHostedDatabaseEvidence>('/control/canonical-database-evidence', { projectName })
+        : undefined,
       upstreamOutputs: canonicalRepresentativeOutputs,
     });
     expect(result.status).toBe('passed');

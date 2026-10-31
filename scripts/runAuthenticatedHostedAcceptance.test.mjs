@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -14,7 +14,7 @@ import { cleanupAuthenticatedSupabaseVaultSecrets, collectAuthenticatedEdgeRunti
   buildAuthenticatedHostedChildEnvironment, createAuthenticatedHostedDatabaseClientConfig,
   downloadAndVerifyAuthenticatedEdgeSources,
   observeAuthenticatedSupabaseVaultSecret, runAuthenticatedHostedAcceptance,
-  runAuthenticatedHostedChild, stopAuthenticatedHostedRuntime,
+  runAuthenticatedHostedChild, stageAuthenticatedCanonicalReviewOutputs, stopAuthenticatedHostedRuntime,
   verifyAuthenticatedEdgeSourceResponse,verifyAuthenticatedHostedDeployment } from './runAuthenticatedHostedAcceptance.mjs';
 import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUNT_KEYS,
   emptyAuthenticatedV2ReloadReadStages } from './authenticatedV2ReloadDiagnostic.mjs';
@@ -23,7 +23,7 @@ const emptyTransportFailures = () => ({ aborted: 0, timeout: 0, connection: 0, p
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command',
   'legacy-delivery-command','legacy-delivery-query','studio-delivery-outcome-query',
-  'enterprise-intelligence-query','synthetic-admin','pilot-operations-query',
+  'enterprise-intelligence-command','enterprise-intelligence-query','synthetic-admin','pilot-operations-query',
   'enterprise-provider-lifecycle','enterprise-provider-lifecycle-authority','enterprise-provider-lifecycle-recovery'];
 const sha = text => `sha256:${createHash('sha256').update(text).digest('hex')}`;
 const shared = "export { value } from './nested.ts';\n";
@@ -153,7 +153,8 @@ const hostedEnvironment = () => ({
   AUTHENTICATED_ACCEPTANCE_SCOPE:JSON.stringify({organizationId:'11111111-1111-4111-8111-111111111111',
     workspaceId:'22222222-2222-4222-8222-222222222222',roleIds:{author:'33333333-3333-4333-8333-333333333333',
       reviewer:'44444444-4444-4444-8444-444444444444',approver:'55555555-5555-4555-8555-555555555555',
-      outsider:'66666666-6666-4666-8666-666666666666'}}),
+      outsider:'66666666-6666-4666-8666-666666666666',
+      deliveryOwner:'77777777-7777-4777-8777-777777777777'}}),
 });
 
 const validPreflight = environment => ({syntheticTarget:true,production:false,releaseSha:environment.RELEASE_SHA,
@@ -375,6 +376,25 @@ test('multipart source attestation verifies all functions and transitive depende
   assert.equal(await readFile(path.join(sample.root,'supabase/functions/_shared/nested.ts'),'utf8'),nested);
 });
 
+test('canonical review staging retains only the complete bounded two-project output set',async t=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'canonical-review-stage-test-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const source=path.join(root,'browser-workspace','evidence');
+  const destination=path.join(root,'authenticated-canonical-review');
+  await mkdir(source,{recursive:true});
+  const suffixes=['decision-pack.md','decision-pack.png','studio-brd.md','studio-brd.png',
+    'delivery-package.md','delivery-package.png','monitor-baseline.png','database-evidence.json'];
+  for(const project of ['desktop-chromium','pixel-7-chromium']){
+    await writeFile(path.join(source,`canonical-${project}.json`),'{}\n');
+    for(const suffix of suffixes)await writeFile(path.join(source,`${project}-ap-invoice-exception-${suffix}`),'bounded\n');
+  }
+  await writeFile(path.join(source,'browser-desktop-chromium.json'),'must-not-stage\n');
+  const staged=await stageAuthenticatedCanonicalReviewOutputs(source,destination,{tempRoot:root});
+  assert.equal(staged.length,18);
+  assert.deepEqual((await readdir(destination)).toSorted(),[...staged].toSorted());
+  await assert.rejects(readFile(path.join(destination,'browser-desktop-chromium.json')),/ENOENT/u);
+});
+
 test('multipart source attestation accepts the exact functions-only layout when the closure stays under functions',async t=>{
   const sample=await functionsOnlyFixture(t);
   const compared=await verifyAuthenticatedEdgeSourceResponse(sample.multipart(),{root:sample.root,slug:sample.slug,
@@ -506,6 +526,13 @@ test('multipart fetch sanitizes cancellation',async t=>{
 
 test('multipart source verification requires every exact deployment binding',async t=>{
   const sample=await fixture(t);sample.deployments[functions[0]]={...sample.deployments[functions[0]],status:'INACTIVE'};
+  await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
+    fetchImpl:sample.fetchImpl,deployments:sample.deployments,managementToken:'fake-management-token-only'}),
+  /BACKEND_DEPLOYMENT_BINDING_REJECTED/u);
+});
+
+test('protected backend binding rejects a missing canonical Delivery command deployment',async t=>{
+  const sample=await fixture(t);delete sample.deployments['enterprise-intelligence-command'];
   await assert.rejects(downloadAndVerifyAuthenticatedEdgeSources(sample.config,{root:sample.root,
     fetchImpl:sample.fetchImpl,deployments:sample.deployments,managementToken:'fake-management-token-only'}),
   /BACKEND_DEPLOYMENT_BINDING_REJECTED/u);
@@ -682,6 +709,14 @@ test('browser child environment is a strict public and ephemeral allowlist', () 
   assert.equal(child.ENTERPRISE_LIFECYCLE_CONTROL_TOKEN,'ephemeral-loopback-token');
   assert.equal(child.AUTHENTICATED_ACCEPTANCE_SUPABASE_URL,`https://${fixtureProjectRef}.supabase.co`);
   assert.equal(child.AUTHENTICATED_ACCEPTANCE_MODE,'full_acceptance');
+  assert.equal(child.ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION,'1');
+  const focusedChild=buildAuthenticatedHostedChildEnvironment(environment,
+    {origin:'https://avalaos-pilot.netlify.app',supabaseUrl:`https://${fixtureProjectRef}.supabase.co`,
+      acceptanceMode:'govern_studio_diagnostic'},
+    {baseUrl:'http://127.0.0.1:1234',controlToken:'ephemeral-loopback-token'},
+    {browserEvidence:path.join(os.tmpdir(),'owned','evidence'),playwright:path.join(os.tmpdir(),'owned','playwright'),
+      diagnostic:path.join(os.tmpdir(),'owned','diagnostic.json')});
+  assert.equal(Object.hasOwn(focusedChild,'ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION'),false);
   assert.equal(JSON.stringify(child).includes(secret),false);
   for(const forbidden of ['NODE_OPTIONS','AUTHENTICATED_ACCEPTANCE_DATABASE_URL','AUTHENTICATED_ACCEPTANCE_SUPABASE_SERVICE_ROLE_KEY',
     'AUTHENTICATED_ACCEPTANCE_SUPABASE_MANAGEMENT_TOKEN','AUTHENTICATED_ACCEPTANCE_SCOPE','AVALA_VAULT_TOKEN','OPENAI_API_KEY','GITHUB_TOKEN']){

@@ -54,8 +54,11 @@ export const AUTHENTICATED_HOSTED_OUTPUT_PATHS = Object.freeze({
   v2ReloadDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-v2-primary-prefix-diagnostic.json'),
   reviewerSelectionDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-reviewer-selection-diagnostic.json'),
   governStudioDiagnostic: path.join(HOSTED_TEMP_ROOT, 'authenticated-govern-studio-diagnostic.json'),
+  canonicalReview: path.join(HOSTED_TEMP_ROOT, 'authenticated-canonical-review'),
 });
-export const AUTHENTICATED_HOSTED_PERSONAS = Object.freeze(['author', 'reviewer', 'approver', 'outsider']);
+export const AUTHENTICATED_HOSTED_PERSONAS = Object.freeze([
+  'author', 'reviewer', 'approver', 'outsider', 'deliveryOwner',
+]);
 export const AUTHENTICATED_HOSTED_FAULT_KINDS = Object.freeze([
   'studio_deterministic_success',
   'studio_failure_after_claim',
@@ -683,7 +686,7 @@ export class AuthenticatedHostedController {
     if (prior && (prior.actorId !== claims.actorId || prior.sessionId !== claims.sessionId)) fail('SESSION_ROTATION_REJECTED');
     if (!prior) {
       await this.adapter.bindSession({ exerciseId: this.exerciseId, actorId: claims.actorId, sessionId: claims.sessionId,
-        persona: `${persona}_${browserProject}`, signal });
+        persona: `${persona === 'deliveryOwner' ? 'delivery_owner' : persona}_${browserProject}`, signal });
       this.assertControlCommitAllowed(signal);
       this.boundSessions.set(key, { ...binding, actorId: claims.actorId, sessionId: claims.sessionId });
     }

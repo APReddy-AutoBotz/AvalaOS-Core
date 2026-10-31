@@ -9,6 +9,7 @@ import { authenticatedHostedIdentityCategoryForStatus, authenticatedHostedIdenti
 import { AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA,
   authenticatedHostedFixtureIdentity } from './authenticatedHostedFixtureIdentity.mjs';
 import { createAuthenticatedHostedObservationReader } from './authenticatedHostedObservationAdapter.mjs';
+import { readCanonicalInvoiceExceptionLineageEvidence } from './canonicalInvoiceExceptionDatabaseEvidence.mjs';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(value);
 const strictUuid = value => typeof value === 'string'
@@ -71,24 +72,47 @@ export const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
     'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
     'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve',
     'studio.handoffs.read','studio.handoffs.request','studio.templates.read',
-    'project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import']),
+    'delivery.handoff.request','project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import']),
   reviewer:Object.freeze(['assess.read','assess.v2.read','assess.v2.review','assess.v2.evidence.attest','assess.v2.approve',
     'studio.handoffs.read','studio.handoffs.review','studio.artifacts.read','studio.artifacts.review',
-    'project.read','backlog.read','task.read','task.update.own','delivery.outcomes.read']),
+    'delivery.handoff.review','delivery.package.review','project.read','backlog.read','task.read','task.update.own',
+    'delivery.outcomes.read']),
   approver:Object.freeze(['assess.read','assess.v2.read','assess.v2.govern.resolve','assess.v2.studio.handoff',
     'studio.handoffs.read','studio.handoffs.request','studio.handoffs.approve','studio.handoffs.consume',
     'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.approve','studio.templates.read',
+    'delivery.handoff.approve','delivery.package.approve','monitor.baseline.create',
     'project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import']),
   outsider:Object.freeze([]),
+  deliveryOwner:Object.freeze([
+    'assess.read','delivery.handoff.consume','delivery.package.manage','project.read',
+  ]),
 });
 export const FORBIDDEN_PERSONA_CAPABILITIES=Object.freeze({
-  author:Object.freeze(['studio.handoffs.review','studio.handoffs.approve','studio.handoffs.consume']),
-  reviewer:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.govern.resolve']),
-  approver:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.approve']),
+  author:Object.freeze(['studio.handoffs.review','studio.handoffs.approve','studio.handoffs.consume',
+    'delivery.handoff.review','delivery.handoff.approve','delivery.handoff.consume',
+    'delivery.package.review','delivery.package.approve','monitor.baseline.create']),
+  reviewer:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.govern.resolve',
+    'delivery.handoff.request','delivery.handoff.approve','delivery.handoff.consume',
+    'delivery.package.manage','delivery.package.approve','monitor.baseline.create']),
+  approver:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.v2.approve',
+    'delivery.handoff.request','delivery.handoff.review','delivery.handoff.consume',
+    'delivery.package.manage','delivery.package.review']),
   outsider:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage','assess.process.update',
     'assess.v2.create','assess.v2.draft.write','assess.v2.review','assess.v2.approve','assess.v2.govern.resolve',
     'studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve','backlog.manage']),
+  deliveryOwner:Object.freeze(['org.admin','byok.manage','security.manage','admin.synthetic.users.manage',
+    'assess.create','assess.response.write','assess.finalize','assess.process.update','assess.v2.create',
+    'assess.v2.draft.write','assess.v2.review','assess.v2.approve','assess.v2.govern.resolve',
+    'studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve',
+    'studio.handoffs.request','studio.handoffs.review','studio.handoffs.approve',
+    'delivery.handoff.request','delivery.handoff.review','delivery.handoff.approve',
+    'delivery.package.review','delivery.package.approve','monitor.baseline.create','project.manage','backlog.manage']),
 });
+
+export const authenticatedHostedPersonaCapabilitiesReady = (persona, actual) => actual instanceof Set
+  && REQUIRED_PERSONA_CAPABILITIES[persona]?.every(item => actual.has(item)) === true
+  && FORBIDDEN_PERSONA_CAPABILITIES[persona]?.every(item => !actual.has(item)) === true
+  && (persona !== 'deliveryOwner' || actual.size === REQUIRED_PERSONA_CAPABILITIES.deliveryOwner.length);
 
 export function createAuthenticatedHostedIdentityAdapter({ config, db, fetchImpl = fetch }) {
   const created = new Map();
@@ -706,8 +730,7 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
       for(const capability of capabilityState.rows)capabilitiesByRole.get(capability.role_id)?.add(capability.capability_key);
       const rolesReady=AUTHENTICATED_HOSTED_PERSONAS.every(persona=>{
         const actual=capabilitiesByRole.get(config.scope.roleIds[persona]);
-        return actual&&REQUIRED_PERSONA_CAPABILITIES[persona].every(item=>actual.has(item))
-          &&FORBIDDEN_PERSONA_CAPABILITIES[persona].every(item=>!actual.has(item));
+        return authenticatedHostedPersonaCapabilitiesReady(persona,actual);
       });
       const runtimeReady=row.studio_enabled===true&&row.studio_read_only===false&&row.studio_provider===false
         &&row.ei_enabled===true&&row.ei_read_only===false&&row.ei_provider===false
@@ -724,7 +747,8 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         publicTargetDigest: deployment.publicTargetDigest,
         baselineDigest: nonExerciseStateBeforeHash,
         customerRows: row.customer_rows, unapprovedActiveResidue: row.active_residue,
-        scopeReady:row.synthetic_org===true&&row.synthetic_workspace===true&&row.scope_roles===4&&rolesReady,
+        scopeReady:row.synthetic_org===true&&row.synthetic_workspace===true
+          &&row.scope_roles===AUTHENTICATED_HOSTED_PERSONAS.length&&rolesReady,
         observationStartedAt };
       });
     },
@@ -766,6 +790,12 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         exerciseId,
         projectName,
       });
+      const canonicalPrimary = config.acceptanceMode === 'full_acceptance'
+        && ['desktop-chromium','pixel-7-chromium'].includes(projectName);
+      const processName = canonicalPrimary ? `${projectName} prerequisite process` : fixtureIdentity.processName;
+      const canonicalProcessName = canonicalPrimary
+        ? `AP Invoice Exception Handling ${fixtureIdentity.suffix}` : null;
+      const deliveryProjectName = canonicalPrimary ? 'AP Invoice Exception Workflow' : fixtureIdentity.deliveryProjectName;
       let capturedDeliveryControls = null;
       let capturedWorkspaceFlags = null;
       let createdProviderFixture = null;
@@ -806,14 +836,14 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         await query(`INSERT INTO public.assess_processes(
           id,org_id,workspace_id,name,description,department,criticality,status,owner_id,created_by,updated_by)
           VALUES($1,$2,$3,$4,$5,$6,$7,'Draft',$8,$8,$8)`,[
-          processId,...scopeParams(),fixtureIdentity.processName,
+          processId,...scopeParams(),processName,
           AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.description,
           AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.department,
           AUTHENTICATED_HOSTED_SYNTHETIC_PROCESS_METADATA.criticality,
           identities.author.id,
         ]);
         await query(`INSERT INTO public.projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id)
-          VALUES($1,$2,$3,$4,$5,$5,$5,$6)`,[projectId,...scopeParams(),fixtureIdentity.deliveryProjectName,identities.author.id,processId]);
+          VALUES($1,$2,$3,$4,$5,$5,$5,$6)`,[projectId,...scopeParams(),deliveryProjectName,identities.author.id,processId]);
         await query(`INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true)
           ON CONFLICT(org_id,workspace_id) DO UPDATE SET writes_enabled=true,updated_at=statement_timestamp()`,scopeParams());
         await query(`INSERT INTO public.studio_delivery_workspace_controls(org_id,workspace_id,publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled)
@@ -839,10 +869,12 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
         }
         if(createdProviderFixture)providerFixture=createdProviderFixture;
       } catch (error) { await query('ROLLBACK'); throw error; }
-      const project = { projectName, processId, projectId, deliveryProject:{id:projectId,name:fixtureIdentity.deliveryProjectName},
+      const project = { projectName, processId, projectId, prerequisiteProcessId:processId,
+        canonicalCreatedProcessId:null, canonicalPrimary, deliveryProject:{id:projectId,name:deliveryProjectName},
         studioTemplate,
         aliases:{case:`primary-case-${sequence}`,review:`primary-review-${sequence}`,handoff:`primary-handoff-${sequence}`,
-          artifact:`primary-artifact-${sequence}`,process:fixtureIdentity.processName} };
+          artifact:`primary-artifact-${sequence}`,process:processName,
+          ...(canonicalProcessName ? {canonicalProcess:canonicalProcessName} : {})} };
       projects.set(projectName, project);
       return project;
     },
@@ -951,6 +983,64 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
     },
     async control(pathname, input) {
       const project = input.project;
+      if(pathname==='/control/canonical-created-process'){
+        if(config.acceptanceMode!=='full_acceptance'||project?.canonicalPrimary!==true
+          ||!uuid(input.processId??'')||typeof project.aliases?.canonicalProcess!=='string'
+          ||project.canonicalCreatedProcessId&&project.canonicalCreatedProcessId!==input.processId){
+          throw new Error('AUTHENTICATED_HOSTED_CANONICAL_PROCESS_REJECTED');
+        }
+        const created=(await query(`SELECT process.id,process.name,
+            receipt.status receipt_status,receipt.command_type,receipt.actor_id receipt_actor_id,
+            receipt.request_id receipt_request_id,receipt.idempotency_key receipt_idempotency_key,
+            receipt.response->>'ok' receipt_ok,receipt.response->>'outcome' receipt_outcome,
+            receipt.response->'resource'->>'id' receipt_process_id,count(*) OVER() exact_name_count,
+            EXISTS(SELECT 1 FROM public.privileged_audit_events audit
+              WHERE audit.org_id=process.org_id AND audit.workspace_id=process.workspace_id
+                AND audit.actor_id=process.created_by AND audit.request_id=process.creation_request_id
+                AND audit.action='process.create' AND audit.resource_type='assess_process'
+                AND audit.resource_id=process.id AND audit.outcome='succeeded') audit_committed
+          FROM public.assess_processes process
+          JOIN public.assess_command_receipts receipt ON receipt.id=process.creation_receipt_id
+          WHERE process.org_id=$1 AND process.workspace_id=$2 AND process.name=$3 AND process.created_by=$4
+            AND process.deleted_at IS NULL`,[...scopeParams(),project.aliases.canonicalProcess,
+            project.identities.author.id])).rows;
+        const process=created.length===1?created[0]:null;
+        if(process?.id!==input.processId||process.receipt_status!=='succeeded'||process.command_type!=='process.create'
+          ||process.receipt_actor_id!==project.identities.author.id||!process.receipt_request_id
+          ||!process.receipt_idempotency_key||process.receipt_ok!=='true'
+          ||!['committed','replayed'].includes(process.receipt_outcome)||process.receipt_process_id!==input.processId
+          ||Number(process.exact_name_count)!==1||process.audit_committed!==true){
+          throw new Error('AUTHENTICATED_HOSTED_CANONICAL_PROCESS_REJECTED');
+        }
+        if(!project.canonicalCreatedProcessId){
+          const rebound=await query(`UPDATE public.projects SET source_process_id=$1,updated_by=$2,
+              updated_at=statement_timestamp()
+            WHERE id=$3 AND org_id=$4 AND workspace_id=$5 AND source_process_id=$6 RETURNING id`,
+          [input.processId,project.identities.author.id,project.projectId,...scopeParams(),project.prerequisiteProcessId]);
+          if(rebound.rowCount!==1)throw new Error('AUTHENTICATED_HOSTED_CANONICAL_PROCESS_REJECTED');
+          project.processId=input.processId;
+          project.canonicalCreatedProcessId=input.processId;
+          project.aliases.process=process.name;
+          const retained=projects.get(project.projectName);
+          if(retained&&retained!==project){
+            retained.processId=input.processId;
+            retained.canonicalCreatedProcessId=input.processId;
+            retained.aliases.process=process.name;
+          }
+        }
+        return {processId:input.processId,name:process.name};
+      }
+      if(pathname==='/control/canonical-database-evidence'){
+        if(config.acceptanceMode!=='full_acceptance'||project?.canonicalPrimary!==true
+          ||!uuid(project.canonicalCreatedProcessId??'')||project.processId!==project.canonicalCreatedProcessId
+          ||project.aliases?.process!==project.aliases?.canonicalProcess){
+          throw new Error('AUTHENTICATED_HOSTED_CANONICAL_EVIDENCE_REJECTED');
+        }
+        return readCanonicalInvoiceExceptionLineageEvidence(query,{
+          organizationId:config.scope.organizationId,workspaceId:config.scope.workspaceId,
+          processId:project.canonicalCreatedProcessId,
+        });
+      }
       if(pathname==='/control/assess-v2-runtime') {
         if(input.enabled===false){
           if(assessControlLease)throw new Error('AUTHENTICATED_HOSTED_ASSESS_CONTROL_ALREADY_OWNED');

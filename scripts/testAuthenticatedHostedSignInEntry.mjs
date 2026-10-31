@@ -145,10 +145,12 @@ const personaDefinition = Object.freeze({
   reviewer: { actor: 'B', password: 'synthetic-reviewer-password' },
   approver: { actor: 'C', password: 'synthetic-approver-password' },
   outsider: { actor: 'D', password: 'synthetic-outsider-password' },
+  deliveryOwner: { actor: 'E', password: 'synthetic-delivery-owner-password' },
 });
 const identityRows = Object.freeze(Object.fromEntries(AUTHENTICATED_HOSTED_SIGN_IN_ENTRY_PROJECTS.flatMap((projectName, projectIndex) =>
   Object.entries(personaDefinition).map(([persona, definition], personaIndex) => {
-    const ordinal = personaIndex < 2 ? projectIndex * 2 + personaIndex + 1 : 5 + projectIndex * 2 + (personaIndex - 2);
+    const ordinal = personaIndex < 2 ? projectIndex * 2 + personaIndex + 1
+      : personaIndex < 4 ? 5 + projectIndex * 2 + (personaIndex - 2) : 9 + projectIndex;
     const actorId = `10000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
     const sessionId = `11000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
     const email = `${persona}.${projectName}@local.invalid`;
@@ -720,6 +722,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
         reviewer: '21000000-0000-4000-8000-000000000002',
         approver: '21000000-0000-4000-8000-000000000003',
         outsider: '21000000-0000-4000-8000-000000000004',
+        deliveryOwner: '21000000-0000-4000-8000-000000000005',
       }),
     }),
   });

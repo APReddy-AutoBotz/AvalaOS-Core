@@ -60,11 +60,16 @@ const requiredCapabilities = REQUIRED_PERSONA_CAPABILITIES;
 const pinnedAuthorHandoffRequired = Object.freeze(['studio.handoffs.read','studio.handoffs.request']);
 const pinnedAuthorHandoffForbidden = Object.freeze([
   'studio.handoffs.review','studio.handoffs.approve','studio.handoffs.consume',
+  'delivery.handoff.review','delivery.handoff.approve','delivery.handoff.consume',
+  'delivery.package.review','delivery.package.approve','monitor.baseline.create',
 ]);
-const pinnedPersonaCapabilityCounts = Object.freeze({ author:26, reviewer:14, approver:19 });
+const pinnedPersonaCapabilityCounts = Object.freeze({ author:27, reviewer:16, approver:22 });
+assert.deepEqual(AUTHENTICATED_HOSTED_PERSONAS,['author','reviewer','approver','outsider','deliveryOwner']);
 assert.deepEqual(requiredCapabilities.author.filter(capability => capability.startsWith('studio.handoffs.')),
   pinnedAuthorHandoffRequired);
 assert.deepEqual(FORBIDDEN_PERSONA_CAPABILITIES.author, pinnedAuthorHandoffForbidden);
+assert.deepEqual(requiredCapabilities.deliveryOwner,
+  ['assess.read','delivery.handoff.consume','delivery.package.manage','project.read']);
 for (const [persona, count] of Object.entries(pinnedPersonaCapabilityCounts)) {
   assert.equal(requiredCapabilities[persona].length, count);
 }
@@ -83,18 +88,21 @@ const ids = {
     reviewer: '82000000-0000-4000-8000-000000000012',
     approver: '82000000-0000-4000-8000-000000000013',
     outsider: '82000000-0000-4000-8000-000000000014',
+    deliveryOwner: '82000000-0000-4000-8000-000000000015',
   },
   actors: {
     author: '82000000-0000-4000-8000-000000000021',
     reviewer: '82000000-0000-4000-8000-000000000022',
     approver: '82000000-0000-4000-8000-000000000023',
     outsider: '82000000-0000-4000-8000-000000000024',
+    deliveryOwner: '82000000-0000-4000-8000-000000000025',
   },
   sessions: {
     author: '82000000-0000-4000-8000-000000000031',
     reviewer: '82000000-0000-4000-8000-000000000032',
     approver: '82000000-0000-4000-8000-000000000033',
     outsider: '82000000-0000-4000-8000-000000000034',
+    deliveryOwner: '82000000-0000-4000-8000-000000000035',
   },
   exercise: '82000000-0000-4000-8000-000000000041',
   request: '82000000-0000-4000-8000-000000000042',
@@ -768,7 +776,7 @@ try {
   }), identities };
   assert.equal((await db.query(`SELECT count(*)::int count FROM public.organization_members
     WHERE org_id=$1 AND user_id=ANY($2::uuid[]) AND deleted_at IS NULL`,
-  [ids.org,Object.values(ids.actors)])).rows[0].count,4,
+  [ids.org,Object.values(ids.actors)])).rows[0].count,5,
   'a second scenario reuses the same verified persona memberships');
   assert.equal((await db.query('SELECT count(*)::int count FROM public.assess_processes WHERE id=$1 AND org_id=$2 AND workspace_id=$3',
     [project.processId, ids.org, ids.workspace])).rows[0].count, 1);
@@ -782,7 +790,7 @@ try {
   for (const persona of AUTHENTICATED_HOSTED_PERSONAS) {
     bindings[persona] = await adapter.bindSession({
       exerciseId: ids.exercise, actorId: ids.actors[persona], sessionId: ids.sessions[persona],
-      persona: `${persona}_desktop-chromium`,
+      persona: `${persona === 'deliveryOwner' ? 'delivery_owner' : persona}_desktop-chromium`,
     });
   }
   assert.deepEqual(await adapter.bindSession({
@@ -794,7 +802,7 @@ try {
     persona: 'author_desktop-chromium',
   }), /AUTHENTICATED_SYNTHETIC_SESSION_REJECTED|duplicate key/iu);
   assert.equal((await db.query('SELECT count(*)::int count FROM public.authenticated_synthetic_actor_sessions WHERE exercise_id=$1',
-    [ids.exercise])).rows[0].count, 4);
+    [ids.exercise])).rows[0].count, 5);
 
   // Independent fixed oracle for the trusted fixture binding above; do not derive
   // expected labels by calling the helper whose insertion/alias pairing we verify.

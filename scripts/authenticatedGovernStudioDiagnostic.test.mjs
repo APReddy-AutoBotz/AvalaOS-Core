@@ -76,7 +76,28 @@ test('Studio diagnostic actors have exact command capabilities and three-party s
   assert.equal(assigned.studioConsume, 'approver');
   assert.deepEqual(Object.fromEntries(['author','reviewer','approver'].map(persona => [
     persona, REQUIRED_PERSONA_CAPABILITIES[persona].length,
-  ])), { author:26, reviewer:14, approver:19 });
+  ])), { author:27, reviewer:16, approver:22 });
+  const canonicalDeliveryCapabilities = {
+    author: ['delivery.handoff.request'],
+    reviewer: ['delivery.handoff.review', 'delivery.package.review'],
+    approver: ['delivery.handoff.approve', 'delivery.package.approve', 'monitor.baseline.create'],
+  };
+  const incompatibleCanonicalDeliveryCapabilities = {
+    author: ['delivery.handoff.review', 'delivery.handoff.approve', 'delivery.package.review',
+      'delivery.package.approve', 'monitor.baseline.create'],
+    reviewer: ['delivery.handoff.request', 'delivery.handoff.approve', 'delivery.package.approve',
+      'monitor.baseline.create'],
+    approver: ['delivery.handoff.request', 'delivery.handoff.review', 'delivery.package.review'],
+  };
+  for (const persona of ['author', 'reviewer', 'approver']) {
+    for (const capability of canonicalDeliveryCapabilities[persona]) {
+      assert.ok(REQUIRED_PERSONA_CAPABILITIES[persona].includes(capability), `${persona} has ${capability}`);
+    }
+    for (const capability of incompatibleCanonicalDeliveryCapabilities[persona]) {
+      assert.ok(FORBIDDEN_PERSONA_CAPABILITIES[persona].includes(capability), `${persona} forbids ${capability}`);
+      assert.ok(!REQUIRED_PERSONA_CAPABILITIES[persona].includes(capability), `${persona} lacks ${capability}`);
+    }
+  }
   assert.deepEqual(REQUIRED_PERSONA_CAPABILITIES.author
     .filter(capability => capability.startsWith('studio.handoffs.')),
   ['studio.handoffs.read','studio.handoffs.request']);

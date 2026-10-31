@@ -215,6 +215,26 @@ test('the 85-command registry retains the standalone scoring-law source guard an
   assert.throws(() => validatePrCRegistryStructure(process.cwd(), substituted, provenance), /PR_C_COMMAND_SOURCE_CONTRACT/u);
 });
 
+test('PR C provenance retains the canonical hands-on operator and business-output source classes', () => {
+  const provenance = JSON.parse(readFileSync('testing/process-lifecycle/contracts/pr-c-source-provenance.json', 'utf8'));
+  const classifiedSources = {
+    operatorWorkflow: ['.github/workflows/canonical-hands-on-access.yml'],
+    operatorImplementation: ['scripts/canonicalHandsOnAccess.mjs', 'scripts/canonicalHandsOnAccess.test.mjs'],
+    businessOutputHelper: [
+      'tests/browser/enterpriseLifecycleAcceptance/canonicalBusinessOutputEvidence.ts',
+      'tests/browser/enterpriseLifecycleAcceptance/canonicalBusinessOutputEvidence.test.ts',
+    ],
+  };
+  assert.deepEqual(Object.keys(classifiedSources), [
+    'operatorWorkflow', 'operatorImplementation', 'businessOutputHelper',
+  ]);
+  for (const sources of Object.values(classifiedSources)) {
+    for (const source of sources) {
+      assert.match(provenance.sourceDigests[source] ?? '', /^sha256:[0-9a-f]{64}$/u, source);
+    }
+  }
+});
+
 test('PR C audit requires complete quick-fallback serialization and the unchanged moderate gate', () => {
   assert.equal(expectedPrCCommandRegistry(process.cwd()).find(item => item.id === 'audit').command,
     'npm audit --audit-level=moderate --lockfile-version=2');

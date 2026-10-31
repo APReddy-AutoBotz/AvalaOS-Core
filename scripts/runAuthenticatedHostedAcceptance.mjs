@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
-import { lstat, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -38,7 +38,7 @@ const execFileAsync = promisify(execFile);
 const AUTHENTICATED_MIGRATION_VERSION = '20261019161723';
 const AUTHENTICATED_EDGE_FUNCTIONS=Object.freeze(['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command','legacy-delivery-command',
-  'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-query','synthetic-admin',
+  'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-command','enterprise-intelligence-query','synthetic-admin',
   'pilot-operations-query','enterprise-provider-lifecycle','enterprise-provider-lifecycle-authority',
   'enterprise-provider-lifecycle-recovery']);
 const MAX_EDGE_SOURCE_RESPONSE_BYTES=32*1024*1024;
@@ -599,6 +599,8 @@ export function buildAuthenticatedHostedChildEnvironment(environment, config, se
     ENTERPRISE_LIFECYCLE_CONTROL_TOKEN: server.controlToken,
     ENTERPRISE_LIFECYCLE_AUTHENTICATED: 'true',
     ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH: 'true',
+    ...(config.acceptanceMode === 'full_acceptance'
+      ? { ENTERPRISE_LIFECYCLE_CANONICAL_AP_INVOICE_EXCEPTION: '1' } : {}),
     AUTHENTICATED_ACCEPTANCE_SUPABASE_URL: config.supabaseUrl,
     ENTERPRISE_LIFECYCLE_OUTPUT_DIR: paths.browserEvidence,
     AUTHENTICATED_HOSTED_PLAYWRIGHT_OUTPUT_DIR: paths.playwright,
@@ -617,6 +619,29 @@ const removeIfPresent = async file => {
   if (!file) return;
   try { await unlink(file); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
 };
+const CANONICAL_REVIEW_PROJECTS=Object.freeze(['desktop-chromium','pixel-7-chromium']);
+const canonicalReviewNames=()=>CANONICAL_REVIEW_PROJECTS.flatMap(project=>[
+  `canonical-${project}.json`,
+  `${project}-ap-invoice-exception-decision-pack.md`,
+  `${project}-ap-invoice-exception-decision-pack.png`,
+  `${project}-ap-invoice-exception-studio-brd.md`,
+  `${project}-ap-invoice-exception-studio-brd.png`,
+  `${project}-ap-invoice-exception-delivery-package.md`,
+  `${project}-ap-invoice-exception-delivery-package.png`,
+  `${project}-ap-invoice-exception-monitor-baseline.png`,
+  `${project}-ap-invoice-exception-database-evidence.json`,
+]);
+export async function stageAuthenticatedCanonicalReviewOutputs(source,destination,{tempRoot=os.tmpdir()}={}){
+  const root=path.resolve(tempRoot);const from=path.resolve(source);const to=path.resolve(destination);
+  const sourceRelative=path.relative(root,from);
+  if(path.basename(from)!=='evidence'||!sourceRelative||sourceRelative.startsWith('..')||path.isAbsolute(sourceRelative)
+    ||to!==path.join(root,'authenticated-canonical-review'))fail('CANONICAL_REVIEW_PATH_REJECTED');
+  const expected=canonicalReviewNames();const available=new Set(await readdir(from));
+  if(expected.some(name=>!available.has(name)))fail('CANONICAL_REVIEW_OUTPUT_REJECTED');
+  await rm(to,{recursive:true,force:true});await mkdir(to,{recursive:true});
+  for(const name of expected)await copyFile(path.join(from,name),path.join(to,name));
+  return Object.freeze([...expected]);
+}
 const safeRunCategory = (error, child) => error?.authenticatedHostedChildCategory==='EXIT_NONZERO' && !child
   ? 'UNCLASSIFIED' : ['START_FAILED','EXIT_NONZERO','TIMEOUT','CANCELLED']
   .includes(error?.authenticatedHostedChildCategory) ? error.authenticatedHostedChildCategory
@@ -784,6 +809,8 @@ async function runAuthenticatedHostedAcceptanceCore(environment, dependencies, d
       {timeoutMs:30*60_000,cancellationSignal:cancellation.signal,diagnosticPath:browserPaths.diagnostic});
     throwIfCancelled();
     if (config.acceptanceMode === 'full_acceptance') {
+      if(outputPaths.canonicalReview)await stageAuthenticatedCanonicalReviewOutputs(
+        browserPaths.browserEvidence,outputPaths.canonicalReview);
       diagnosticState.phase = 'FINALIZATION';
       await stopAuthenticatedHostedRuntime(server, controller);
       runtimeSettled = true;

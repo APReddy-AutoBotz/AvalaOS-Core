@@ -15,10 +15,13 @@ import { ELIGIBLE_REVIEWER_REQUEST_DIAGNOSTIC_ATTACHMENT,
 const execFileAsync = promisify(execFile);
 
 const titles = new Map([
+  ['selects the exact eligible reviewer, commits, replays and rejects a stale review command', 'primary-lifecycle'],
+  ['creates and reloads the canonical AP Invoice Exception process through the production UI', 'primary-lifecycle'],
   ['authors, replays, rejects stale work, requests changes and resubmits through the production UI', 'primary-lifecycle'],
   ['independent approval, Govern separation and synthetic Studio generation retain exact lineage', 'govern-studio-lifecycle'],
   ['independent reviewer rejects a separate current decision without mutating the approved primary chain', 'independent-rejection'],
   ['approved Studio work publishes through legacy Docs and Delivery into read-only Monitor', 'delivery-monitor'],
+  ['canonical AP Invoice Exception continues through Delivery package approval and read-only Monitor', 'delivery-monitor'],
   ['production scoring preserves low-suitability and strong-automation decisions through governed publication', 'scoring-policy'],
   ['authenticated Admin, AI and private Studio controls use server authority and measured storage boundaries', 'authenticated-controls'],
 ]);
