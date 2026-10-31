@@ -63,7 +63,7 @@ const pinnedAuthorHandoffForbidden = Object.freeze([
   'delivery.handoff.review','delivery.handoff.approve','delivery.handoff.consume',
   'delivery.package.review','delivery.package.approve','monitor.baseline.create',
 ]);
-const pinnedPersonaCapabilityCounts = Object.freeze({ author:27, reviewer:16, approver:22 });
+const pinnedPersonaCapabilityCounts = Object.freeze({ author:28, reviewer:16, approver:22 });
 assert.deepEqual(AUTHENTICATED_HOSTED_PERSONAS,['author','reviewer','approver','outsider','deliveryOwner']);
 assert.deepEqual(requiredCapabilities.author.filter(capability => capability.startsWith('studio.handoffs.')),
   pinnedAuthorHandoffRequired);
