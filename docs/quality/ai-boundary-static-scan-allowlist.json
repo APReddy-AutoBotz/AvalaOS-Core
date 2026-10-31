@@ -95,7 +95,9 @@
     {
       "pattern": "localStorage",
       "path": "tests/browser/enterpriseLifecycleAcceptance/actorEntryNavigation.spec.ts",
-      "lines": [28],
+      "lines": [
+        28
+      ],
       "reason": "test/control documentation",
       "futureAction": "Keep this exact synthetic-session assertion confined to the loopback navigation regression; never use real credentials or treat browser storage as runtime authority."
     },
@@ -546,15 +548,15 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedHostedSignInEntry.spec.ts",
       "lines": [
-        341,
-        424,
-        465,
+        342,
+        425,
         466,
-        568,
+        467,
         569,
-        663,
+        570,
         664,
-        1406
+        665,
+        1428
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep session and durable-navigation observations limited to inert loopback preparation: rejected credentials leave no session, actor switching replaces the token, and held navigation must settle before reload. Never read real credentials or promote preparation to hosted authority."
@@ -654,7 +656,7 @@
       "pattern": "localStorage",
       "path": "scripts/testAuthenticatedHostedSignInEntry.test.mjs",
       "lines": [
-        662
+        663
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep this source assertion limited to rejecting arbitrary session-key selection in the acceptance harness. It does not read credentials or grant server authority."
