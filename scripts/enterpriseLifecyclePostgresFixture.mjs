@@ -414,7 +414,7 @@ export async function createEnterpriseLifecycleFixture({
     }
     if (canonicalApInvoiceException && hostedPersonaRoleParity) {
       const canonicalPersonaCapabilities = {
-        author: ['assess.process.create','delivery.handoff.request','delivery.handoff.consume','delivery.package.manage','project.read','monitor.read'],
+        author: ['delivery.handoff.request','delivery.handoff.consume','delivery.package.manage','project.read','monitor.read'],
         reviewer: ['delivery.handoff.review','delivery.package.review','project.read'],
         approver: ['delivery.handoff.approve','delivery.package.approve','monitor.baseline.create','monitor.read','project.read'],
       };

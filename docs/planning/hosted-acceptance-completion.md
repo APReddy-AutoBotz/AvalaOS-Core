@@ -1,5 +1,15 @@
 # Hosted authenticated acceptance completion
 
+## Automated author creation correction — 2026-11-01
+
+PR #348 is merged as `e6d87f1d047e76a42f219554e3b53545d0ad65f2`, identical to its verified candidate tree. All three release workflows and thirteen independently verified archives passed. Protected full run `41236196719/1` then failed at the canonical **New process** click. Its independently reconstructed result is **61 PASS / 47 BLOCKED**, not complete real-auth acceptance; all five automated identities were revoked, the exercise quiesced, providers stayed OFF and non-exercise data was unchanged. The earlier integrated result remains historical evidence for its own release.
+
+**Confirmed source defect:** hosted author preflight accepts the old 27-capability role without the existing `assess.process.create` permission; the disposable canonical fixture adds that permission separately and masks the mismatch. The focused regression reproduces the incorrect readiness acceptance. Require that single capability in the base author contract, reject the old set, update the three pinned counts to 28, and remove the redundant fixture grant. Other personas, independent approval exclusions, server authorization and the 15,000 ms boundary remain unchanged.
+
+Four hands-on personas already pass real sign-in; the separate human author also saves a draft through normal UI with refresh/sign-out/sign-in persistence. Those results do not prove the complete canonical real-auth journey. After focused verification and normal candidate/release gates, add only the missing capability to the exact approved automated role under nonproduction, inactive-exercise, exact-role/capability-set and providers-OFF guards. Then recapture the baseline and run the protected procedure with human environment review. No production, provider activation, schema or product scope change.
+
+Acceptance requires old-role rejection, corrected-role readiness, unchanged other persona rights, production create-policy and disposable database/browser checks, fresh required merge gates, then complete real-auth canonical lineage and business outputs. Rollback reverts the coupled contract/pins/fixture change and removes only this capability from the exact automated role when inactive, using normal authorization invalidation. Retain records/history; blocked creation is the safe fallback. Detailed executed results belong in the implementation PR; hosted completion remains pending.
+
 ## Hands-on canonical acceptance — active 2026-10-31
 
 AP now authorizes normal merge, the existing synthetic nonproduction environment, real authentication, temporary least-privilege test personas, and demonstrated blocker corrections. This supersedes the earlier unmerged/local-only holds below. Providers remain OFF, actor settlement remains 15,000 ms, and production/customer access and paid providers remain excluded.

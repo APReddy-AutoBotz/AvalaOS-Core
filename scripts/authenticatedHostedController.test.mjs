@@ -65,6 +65,20 @@ test('both generator personas require template read without template administrat
   }
 });
 
+test('hosted author readiness rejects the retained role without process creation', () => {
+  const required = new Set(REQUIRED_PERSONA_CAPABILITIES.author);
+  const incomplete = new Set([...required].filter(capability => capability !== 'assess.process.create'));
+  assert.equal(authenticatedHostedPersonaCapabilitiesReady('author', incomplete), false,
+    'preflight must reject the old role before a disabled New process action');
+  assert.ok(required.has('assess.read'));
+  assert.ok(required.has('assess.process.create'));
+  assert.equal(required.size, 28);
+  assert.equal(authenticatedHostedPersonaCapabilitiesReady('author', required), true);
+  for (const persona of ['reviewer', 'approver', 'outsider', 'deliveryOwner']) {
+    assert.equal(REQUIRED_PERSONA_CAPABILITIES[persona].includes('assess.process.create'), false);
+  }
+});
+
 test('canonical hosted process adoption verifies durable creation before rebinding Delivery once', async () => {
   const organizationId=id();const workspaceId=id();const processId=id();const prerequisiteProcessId=id();
   const projectId=id();const authorId=id();let updates=0;

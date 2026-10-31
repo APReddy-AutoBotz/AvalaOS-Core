@@ -69,7 +69,7 @@ const authHeaders = config => ({
 
 export const REQUIRED_PERSONA_CAPABILITIES=Object.freeze({
   author:Object.freeze(['org.admin','operations.read','assess.read','assess.create','assess.response.write','assess.finalize',
-    'assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
+    'assess.process.create','assess.process.update','assess.v2.read','assess.v2.create','assess.v2.clone','assess.v2.draft.write','assess.v2.finalize',
     'studio.artifacts.read','studio.artifacts.generate','studio.artifacts.edit','studio.artifacts.review','studio.artifacts.approve',
     'studio.handoffs.read','studio.handoffs.request','studio.templates.read',
     'delivery.handoff.request','project.read','project.manage','backlog.read','backlog.manage','monitor.read','workitems.import']),
