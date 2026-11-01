@@ -25,10 +25,12 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
-import { awaitCanonicalProjectIndexRead, decodeCanonicalApprovedStudioArtifact,
+import { awaitCanonicalProjectIndexRead, captureCanonicalStudioArtifactReloadTarget,
+  decodeCanonicalApprovedStudioArtifact,
   observeCanonicalProcessCreateResponse, observeCanonicalStudioApprovalResponse,
-  runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+  reloadCanonicalStudioArtifact, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
   type CanonicalApprovedStudioArtifact,
+  type CanonicalStudioArtifactReloadTarget,
   type CanonicalInvoiceExceptionProofBoundary } from './canonicalInvoiceExceptionJourney';
 import { approvedBusinessOutputMarkdown } from './canonicalBusinessOutputEvidence';
 import { exerciseReviewerGovernDenial } from './governReviewerDenial';
@@ -575,6 +577,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   let v2FullPrefixObservation: V2FullPrefixReproductionObservation | null = null;
   const canonicalRepresentativeOutputs: string[] = [];
   let canonicalApprovedStudioArtifact: CanonicalApprovedStudioArtifact | null = null;
+  let canonicalStudioArtifactReloadTarget: CanonicalStudioArtifactReloadTarget | null = null;
   let v2FullPrefixQueues: V2FullPrefixQueueObservation = Object.freeze({ network: 'not_run', cases: 'not_run' });
   type TestWorkQueues = Readonly<{
     network: ReturnType<typeof createAuthenticatedLifecycleWorkQueue>;
@@ -2135,6 +2138,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     expect(generationApi.status).toBe(201);
     await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
     await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
+    if (canonicalInvoiceExceptionJourney) {
+      canonicalStudioArtifactReloadTarget = await captureCanonicalStudioArtifactReloadTarget(page, 1);
+    }
     observe('studio-synthetic-generation', 'ui.synthetic-provider-boundary');
     if (authenticatedProductAcceptance && beforeStudioGeneration) {
       const afterStudioGeneration = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
@@ -2158,7 +2164,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
 
     if (canonicalInvoiceExceptionJourney) await settleActorTransitionEvidence();
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    if (canonicalInvoiceExceptionJourney && canonicalStudioArtifactReloadTarget) {
+      await reloadCanonicalStudioArtifact(page, canonicalStudioArtifactReloadTarget);
+    } else await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
     await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
 
@@ -2185,8 +2193,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
       await expect(page.getByText('v2', { exact: true }).first()).toBeVisible();
       await settleActorTransitionEvidence();
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('heading', { name: 'Structured section editor', exact: true })).toBeVisible();
+      if (!canonicalStudioArtifactReloadTarget) throw new Error('CANONICAL_STUDIO_RELOAD_TARGET_MISSING');
+      canonicalStudioArtifactReloadTarget = Object.freeze({
+        ...canonicalStudioArtifactReloadTarget,
+        contentVersion: 2,
+      });
+      await reloadCanonicalStudioArtifact(page, canonicalStudioArtifactReloadTarget, {
+        expectedSectionTitles: AP_INVOICE_EXCEPTION_BRD_SECTIONS.map(section => section.title),
+      });
       for (const section of AP_INVOICE_EXCEPTION_BRD_SECTIONS) {
         await expect(page.getByRole('navigation', { name: 'Document outline', exact: true })
           .getByRole('button', { name: new RegExp(`^\\d+\\. ${section.title}$`, 'u') })).toBeVisible();
@@ -2225,7 +2239,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
 
       if (canonicalInvoiceExceptionJourney) {
         await settleActorTransitionEvidence();
-        await page.reload({ waitUntil: 'domcontentloaded' });
+        if (!canonicalStudioArtifactReloadTarget) throw new Error('CANONICAL_STUDIO_RELOAD_TARGET_MISSING');
+        await reloadCanonicalStudioArtifact(page, canonicalStudioArtifactReloadTarget, {
+          expectedSectionTitles: AP_INVOICE_EXCEPTION_BRD_SECTIONS.map(section => section.title),
+        });
         const artifactPreview = page.getByRole('article', { name: 'Artifact preview', exact: true });
         await expect(artifactPreview).toContainText('Approved');
         await expect(artifactPreview).toContainText('Approved version');
