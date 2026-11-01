@@ -25,7 +25,7 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
-import { awaitCanonicalProjectIndexRead, decodeCanonicalApprovedStudioArtifact, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+import { awaitCanonicalProjectIndexRead, decodeCanonicalApprovedStudioArtifact, observeCanonicalStudioApprovalResponse, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
   type CanonicalApprovedStudioArtifact,
   type CanonicalInvoiceExceptionProofBoundary } from './canonicalInvoiceExceptionJourney';
 import { approvedBusinessOutputMarkdown } from './canonicalBusinessOutputEvidence';
@@ -2210,19 +2210,19 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await expect(page.getByText('Approval ready committed.', { exact: true })).toBeVisible();
       await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
       await page.getByLabel('Rationale', { exact: true }).fill('Independent final approval binds the exact reviewed Studio version.');
-      const finalApprovalResponse = canonicalInvoiceExceptionJourney ? page.waitForResponse(response => {
-        if (new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command'
-          || response.request().method() !== 'POST') return false;
-        try {
-          return (response.request().postDataJSON() as { commandType?: unknown }).commandType
-            === 'studio.artifact.approval.resolve';
-        } catch { return false; }
-      }, { timeout: 15_000 }) : null;
-      await page.getByRole('button', { name: 'Final approve', exact: true }).click();
+      const finalApprovalResponse = canonicalInvoiceExceptionJourney
+        ? await observeCanonicalStudioApprovalResponse(
+          page,
+          () => page.getByRole('button', { name: 'Final approve', exact: true }).click(),
+          { controlledHuman: hostedAuthenticatedAcceptance },
+        )
+        : null;
+      if (!canonicalInvoiceExceptionJourney) {
+        await page.getByRole('button', { name: 'Final approve', exact: true }).click();
+      }
       if (finalApprovalResponse) {
-        const response = await finalApprovalResponse;
-        expect([200, 201]).toContain(response.status());
-        canonicalApprovedStudioArtifact = decodeCanonicalApprovedStudioArtifact(await response.json());
+        expect([200, 201]).toContain(finalApprovalResponse.status());
+        canonicalApprovedStudioArtifact = decodeCanonicalApprovedStudioArtifact(await finalApprovalResponse.json());
       }
       await expect(page.getByText('Approved committed.', { exact: true })).toBeVisible();
       observe('studio-artifact-approval', 'ui.studio-approved-exact-version');

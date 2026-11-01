@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type Response as PlaywrightResponse, type TestInfo } from '@playwright/test';
 import type {
   AuthenticatedLifecycleActor,
   AuthenticatedLifecycleSetup,
@@ -71,6 +71,148 @@ export type CanonicalCommandReceipt = Readonly<{
 }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+const STUDIO_COMMAND_ROUTE = '/functions/v1/studio-artifact-command';
+const CONTROLLED_HUMAN_ANCHOR_ROUTE = '/rest/v1/rpc/pr_c_controlled_human_anchor_step';
+const STUDIO_APPROVAL_ACTION = 'studio.artifact.approval.resolve';
+
+const studioApprovalRequest = (response: PlaywrightResponse, requestId?: string) => {
+  if (new URL(response.url()).pathname !== STUDIO_COMMAND_ROUTE
+    || response.request().method() !== 'POST') return false;
+  try {
+    const request = response.request().postDataJSON() as { commandType?: unknown; requestId?: unknown };
+    return request.commandType === STUDIO_APPROVAL_ACTION
+      && (requestId === undefined || request.requestId === requestId);
+  } catch {
+    return false;
+  }
+};
+
+export const observeCanonicalStudioApprovalResponse = async (
+  page: Page,
+  action: () => Promise<void>,
+  options: Readonly<{ controlledHuman: boolean; stageTimeoutMs?: number }>,
+): Promise<PlaywrightResponse> => {
+  const stageTimeoutMs = options.stageTimeoutMs ?? 15_000;
+  if (!Number.isSafeInteger(stageTimeoutMs) || stageTimeoutMs < 1 || stageTimeoutMs > 15_000) {
+    throw new Error('CANONICAL_STUDIO_APPROVAL_BOUNDARY_REJECTED');
+  }
+  if (!options.controlledHuman) {
+    const responsePromise = page.waitForResponse(
+      response => studioApprovalRequest(response),
+      { timeout: stageTimeoutMs },
+    );
+    void responsePromise.catch(() => {});
+    await action();
+    return responsePromise;
+  }
+
+  // The controlled-human pre-anchor is a separate server-authorized stage. Keep
+  // each stage inside the existing 15 second boundary without charging the
+  // product response for time spent obtaining its causal request identity.
+  const observed: PlaywrightResponse[] = [];
+  const waiters = new Set<() => void>();
+  let disposed = false;
+  const onResponse = (response: PlaywrightResponse) => {
+    observed.push(response);
+    for (const wake of [...waiters]) wake();
+  };
+  page.on('response', onResponse);
+
+  const waitForChange = (remainingMs: number, timeoutCode: string) => new Promise<void>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const wake = () => {
+      clearTimeout(timer);
+      waiters.delete(wake);
+      if (disposed) reject(new Error('CANONICAL_STUDIO_APPROVAL_OBSERVER_DISPOSED'));
+      else resolve();
+    };
+    waiters.add(wake);
+    timer = setTimeout(() => {
+      waiters.delete(wake);
+      reject(new Error(timeoutCode));
+    }, remainingMs);
+  });
+  const waitForObserved = async (
+    predicate: (response: PlaywrightResponse) => boolean,
+    timeoutCode: string,
+    deadline: number,
+    startIndex = 0,
+  ) => {
+    let cursor = startIndex;
+    while (true) {
+      while (cursor < observed.length) {
+        const index = cursor++;
+        const response = observed[index];
+        if (predicate(response)) return { response, index };
+      }
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) throw new Error(timeoutCode);
+      await waitForChange(remainingMs, timeoutCode);
+    }
+  };
+  const withinDeadline = async <Value>(promise: Promise<Value>, deadline: number, timeoutCode: string) => {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw new Error(timeoutCode);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutCode)), remainingMs);
+      }),
+    ]).finally(() => clearTimeout(timer));
+  };
+
+  const actionPromise = Promise.resolve().then(action);
+  // Attach rejection handling immediately; the anchor waiter may win the race.
+  void actionPromise.catch(() => {});
+  try {
+    const anchorDeadline = Date.now() + stageTimeoutMs;
+    const anchorWait = waitForObserved(response => {
+      const url = new URL(response.url());
+      return response.request().method() === 'POST' && url.pathname === CONTROLLED_HUMAN_ANCHOR_ROUTE;
+    }, 'CANONICAL_STUDIO_APPROVAL_ANCHOR_TIMEOUT', anchorDeadline);
+    const actionFailure = actionPromise.then<never>(
+      () => new Promise<never>(() => {}),
+      error => Promise.reject(error),
+    );
+    const { response: anchorResponse, index: anchorResponseIndex } = await Promise.race([anchorWait, actionFailure]);
+    if (anchorResponse.status() !== 200) throw new Error('CANONICAL_STUDIO_APPROVAL_ANCHOR_REJECTED');
+    let anchorBody: Record<string, unknown>;
+    try {
+      anchorBody = await withinDeadline(anchorResponse.json(), anchorDeadline,
+        'CANONICAL_STUDIO_APPROVAL_ANCHOR_TIMEOUT') as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'CANONICAL_STUDIO_APPROVAL_ANCHOR_TIMEOUT') throw error;
+      throw new Error('CANONICAL_STUDIO_APPROVAL_ANCHOR_REJECTED');
+    }
+    const safeAnchor = anchorBody?.safeAnchor;
+    const execution = anchorBody?.execution;
+    if (anchorBody === null || typeof anchorBody !== 'object' || Array.isArray(anchorBody)
+      || safeAnchor === null || typeof safeAnchor !== 'object' || Array.isArray(safeAnchor)
+      || execution === null || typeof execution !== 'object' || Array.isArray(execution)
+      || (safeAnchor as Record<string, unknown>).action !== STUDIO_APPROVAL_ACTION
+      || typeof (execution as Record<string, unknown>).requestId !== 'string'
+      || !UUID.test((execution as Record<string, unknown>).requestId as string)) {
+      throw new Error('CANONICAL_STUDIO_APPROVAL_ANCHOR_REJECTED');
+    }
+    const requestId = (execution as Record<string, unknown>).requestId as string;
+    const targetDeadline = Date.now() + stageTimeoutMs;
+    const targetWait = waitForObserved(
+      response => studioApprovalRequest(response, requestId),
+      'CANONICAL_STUDIO_APPROVAL_RESPONSE_TIMEOUT',
+      targetDeadline,
+      anchorResponseIndex + 1,
+    );
+    const { response: targetResponse } = await Promise.race([targetWait, actionFailure]);
+    await withinDeadline(actionPromise, targetDeadline, 'CANONICAL_STUDIO_APPROVAL_ACTION_TIMEOUT');
+    return targetResponse;
+  } finally {
+    disposed = true;
+    page.off('response', onResponse);
+    for (const wake of [...waiters]) wake();
+  }
+};
 
 const canonicalRecord = (value: unknown): Record<string, unknown> => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {

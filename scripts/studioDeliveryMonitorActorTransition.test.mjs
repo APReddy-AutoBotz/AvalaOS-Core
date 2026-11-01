@@ -94,3 +94,24 @@ test('canonical denied-edit refresh owns its late project-index read before page
   assert.match(canonical, /CANONICAL_PROJECT_INDEX_READ_BODY_TIMEOUT/u);
   assert.match(canonical, /CANONICAL_PROJECT_INDEX_READ_NOT_FINISHED/u);
 });
+
+test('canonical hosted Studio approval owns separate bounded pre-anchor and exact command stages', () => {
+  assert.match(canonical, /export const observeCanonicalStudioApprovalResponse/u);
+  assert.match(canonical, /stageTimeoutMs = options\.stageTimeoutMs \?\? 15_000/u);
+  assert.match(canonical, /stageTimeoutMs > 15_000/u);
+  assert.match(canonical, /CONTROLLED_HUMAN_ANCHOR_ROUTE = '\/rest\/v1\/rpc\/pr_c_controlled_human_anchor_step'/u);
+  assert.match(canonical, /STUDIO_APPROVAL_ACTION = 'studio\.artifact\.approval\.resolve'/u);
+  assert.match(canonical, /safeAnchor as Record<string, unknown>\)\.action !== STUDIO_APPROVAL_ACTION/u);
+  assert.match(canonical, /studioApprovalRequest\(response, requestId\)/u);
+  assert.match(canonical, /const targetDeadline = Date\.now\(\) \+ stageTimeoutMs/u);
+  assert.match(canonical, /anchorResponseIndex \+ 1/u);
+  assert.match(canonical, /withinDeadline\(actionPromise, targetDeadline, 'CANONICAL_STUDIO_APPROVAL_ACTION_TIMEOUT'\)/u);
+  assert.match(canonical, /page\.off\('response', onResponse\)/u);
+  const finalApproval = aggregate.slice(
+    aggregate.indexOf("await page.getByLabel('Rationale', { exact: true }).fill('Independent final approval"),
+    aggregate.indexOf("await expect(page.getByText('Approved committed.'", aggregate.indexOf('Independent final approval')),
+  );
+  assert.match(finalApproval, /await observeCanonicalStudioApprovalResponse\(/u);
+  assert.match(finalApproval, /controlledHuman: hostedAuthenticatedAcceptance/u);
+  assert.doesNotMatch(finalApproval, /page\.waitForResponse/u);
+});

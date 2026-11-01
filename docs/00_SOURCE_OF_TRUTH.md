@@ -1,5 +1,13 @@
 # AvalaOS Core Source Of Truth
 
+## Studio final-approval observation correction — 2026-11-01
+
+PR #349 is merged as `866d23eb6cf7a8bf0951a42701792c99d5534e13`, with its verified candidate tree unchanged; all three release workflows and thirteen independently verified archives passed. The guarded automated-author creation correction is applied. Protected real-auth run `41243957012/1` created the canonical process and persisted an independently reviewed, approved BRD at content version 2, but failed while waiting for its final-approval response. No complete approved Delivery/Monitor chain exists for that run. Its independently reconstructed result is **61 PASS / 47 BLOCKED**; cleanup revoked all five automated identities, quiesced the exercise, retained providers OFF and verified unchanged non-exercise data.
+
+**Confirmed source defect:** the canonical response waiter starts its 15,000 ms clock before the separate controlled-human pre-anchor RPC. Disposable canonical execution skips that RPC. The exact command predicate and production receipt decoder are correct; the specific historical action latency remains **suspected defect requiring deeper validation**, because the sanitized timing maxima are aggregate observations. Correct only the hosted harness observation: bind the anchor action and execution request ID to the exact Studio command response, with separately bounded stages and listener cleanup. Preserve product authorization, independent approval, strict receipt/version binding, providers OFF and the 15,000 ms actor boundary.
+
+The [completion plan](planning/hosted-acceptance-completion.md) owns focused red/green proof, candidate/release gates, rollback and the next protected run. Real-auth completion and hands-on navigation through retained Delivery and Monitor remain unproven.
+
 ## Automated author creation correction — 2026-11-01
 
 PR #348 is merged as `e6d87f1d047e76a42f219554e3b53545d0ad65f2`, identical to its verified candidate tree. All three release workflows and thirteen independently verified archives passed. Protected full run `41236196719/1` then failed at the canonical **New process** click. Its independently reconstructed result is **61 PASS / 47 BLOCKED**, not complete real-auth acceptance; all five automated identities were revoked, the exercise quiesced, providers stayed OFF and non-exercise data was unchanged. The earlier integrated result remains historical evidence for its own release.
