@@ -68,6 +68,7 @@ const PLAYWRIGHT_OPERATIONS = new Set([
   'SAFETY_SERVER',
   'SAFETY_TIMEOUT',
   'V1_ASSESSMENT_COMPLETION',
+  'PRIMARY_CANONICAL_PROCESS_CREATE',
   'PRIMARY_JOURNEY',
   'PRIMARY_PROCESS_DENIAL',
   'PRIMARY_SAFETY_AND_RUNTIME',
@@ -86,6 +87,7 @@ const PLAYWRIGHT_OPERATIONS = new Set([
 ]);
 const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
+  'tests/browser/enterpriseLifecycleAcceptance/canonicalInvoiceExceptionJourney.ts',
   'tests/browser/enterpriseLifecycleAcceptance/assessmentScenarioJourneys.ts',
   'tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts',
   'tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts',
@@ -96,6 +98,8 @@ const PLAYWRIGHT_LOCATION_SOURCES = Object.freeze([
   'tests/browser/productNavigationReadiness.ts',
 ]);
 const PLAYWRIGHT_FAILURE_DESCRIPTORS = new Map([
+  ['CANONICAL_PROCESS_CREATE_RESPONSE_TIMEOUT', ['PROCESS_CREATE_OBSERVATION', 'RESPONSE_TIMEOUT']],
+  ['CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT', ['PROCESS_CREATE_OBSERVATION', 'ACTION_TIMEOUT']],
   ['AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT', ['ACTOR_TRANSITION', 'NOT_QUIESCENT']],
   ['AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE', ['ACTOR_TRANSITION', 'EMPTY_AFTER_DEADLINE']],
   ['AUTHENTICATED_BROWSER_ACTOR_TRANSITION_STABILITY_AFTER_DEADLINE', ['ACTOR_TRANSITION', 'STABILITY_AFTER_DEADLINE']],

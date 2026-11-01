@@ -20,6 +20,10 @@ const TEST_CATEGORIES = new Map([
   ['production scoring preserves low-suitability and strong-automation decisions through governed publication', 'scoring-policy'],
   ['authenticated Admin, AI and private Studio controls use server authority and measured storage boundaries', 'authenticated-controls'],
 ]);
+const TEST_OPERATIONS = new Map([
+  ['creates and reloads the canonical AP Invoice Exception process through the production UI',
+    'PRIMARY_CANONICAL_PROCESS_CREATE'],
+]);
 
 const OPERATION_TITLES = new Map([
   ['hosted:actor:entry-initial', 'ACTOR_ENTRY_INITIAL'],
@@ -40,6 +44,7 @@ const OPERATION_TITLES = new Map([
   ['hosted:safety:server', 'SAFETY_SERVER'],
   ['hosted:safety:timeout', 'SAFETY_TIMEOUT'],
   ['hosted:primary:v1-assessment-completion', 'V1_ASSESSMENT_COMPLETION'],
+  ['hosted:primary:canonical-process-create', 'PRIMARY_CANONICAL_PROCESS_CREATE'],
   ['hosted:primary:journey', 'PRIMARY_JOURNEY'],
   ['hosted:primary:process-denial', 'PRIMARY_PROCESS_DENIAL'],
   ['hosted:primary:safety-and-runtime', 'PRIMARY_SAFETY_AND_RUNTIME'],
@@ -143,7 +148,8 @@ export default class AuthenticatedHostedPlaywrightReporter {
 
   onTestBegin(test) {
     if (!this.failure) {
-      this.current = { project: projectCategory(test), testCategory: testCategory(test) };
+      this.current = { project: projectCategory(test), testCategory: testCategory(test),
+        fallbackOperation: TEST_OPERATIONS.get(test?.title) };
       this.currentHookFailures = [];
       this.currentOperations = [];
       this.failedOperations = [];
@@ -213,6 +219,9 @@ export default class AuthenticatedHostedPlaywrightReporter {
         const active = this.timedOutOperation ?? this.currentOperations.at(-1) ?? null;
         this.failureOperation = active?.operation;
         this.failureLocation = active?.location ?? null;
+      }
+      if (!this.failureOperation && !primaryHook) {
+        this.failureOperation = this.current?.fallbackOperation;
       }
       this.failure = { project: projectCategory(test),
         testCategory: primaryHook?.category ?? testCategory(test),
