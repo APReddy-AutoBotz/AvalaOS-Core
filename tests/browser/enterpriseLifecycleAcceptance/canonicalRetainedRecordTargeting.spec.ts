@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   decodeCanonicalApprovedStudioArtifact,
   decodeCanonicalCommandReceipt,
+  observeCanonicalStudioApprovalResponse,
   requireCanonicalExactLocator,
   requireCanonicalReceiptBinding,
 } from './canonicalInvoiceExceptionJourney';
@@ -15,6 +16,37 @@ const targetPackageId = '10000000-0000-4000-8000-000000000003';
 const targetBaselineId = '10000000-0000-4000-8000-000000000004';
 const receiptId = '10000000-0000-4000-8000-000000000005';
 const packageVersionId = '10000000-0000-4000-8000-000000000006';
+const approvalRequestId = '10000000-0000-4000-8000-000000000008';
+
+const anchorRoute = '**/rest/v1/rpc/pr_c_controlled_human_anchor_step';
+const studioCommandRoute = '**/functions/v1/studio-artifact-command';
+const studioApprovalAction = 'studio.artifact.approval.resolve';
+
+const approvalPage = async (page: Parameters<typeof observeCanonicalStudioApprovalResponse>[0]) => {
+  await page.setContent(`
+    <base href="http://canonical.test/">
+    <button id="approve">Final approve</button>
+    <script>
+      document.querySelector('#approve').addEventListener('click', async () => {
+        const anchor = await fetch('/rest/v1/rpc/pr_c_controlled_human_anchor_step', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+        });
+        const body = await anchor.json();
+        if (!body.safeAnchor || body.safeAnchor.action !== '${studioApprovalAction}'
+          || !body.execution || typeof body.execution.requestId !== 'string') return;
+        const target = window.__canonicalTarget || {};
+        if (target.omit === true) return;
+        await fetch('/functions/v1/studio-artifact-command', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            commandType: target.action || '${studioApprovalAction}',
+            requestId: target.requestId || body.execution.requestId,
+          }),
+        });
+      });
+    </script>
+  `);
+};
 
 test('canonical Studio binding decodes the production nested approval receipt and rejects mismatches', async () => {
   const artifactId = targetPackageId;
@@ -38,6 +70,140 @@ test('canonical Studio binding decodes the production nested approval receipt an
     { ...response, resource: { ...raw, resource: { ...projection, currentApprovedVersion: { id: targetHandoffId, lifecycle: 'approved' } } } },
   ]) expect(() => decodeCanonicalApprovedStudioArtifact(changed)).toThrow('CANONICAL_APPROVED_STUDIO_RESPONSE_REJECTED');
   expect(() => decodeCanonicalApprovedStudioArtifact({ ...response, resource: projection })).toThrow();
+});
+
+test('hosted Studio approval gives the pre-anchor and exact command separate bounded stages', async ({ page }) => {
+  let targetResponses = 0;
+  await page.route(anchorRoute, async route => {
+    await new Promise(resolve => setTimeout(resolve, 220));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      safeAnchor: { action: studioApprovalAction }, execution: { requestId: approvalRequestId },
+    }) });
+  });
+  await page.route(studioCommandRoute, async route => {
+    await new Promise(resolve => setTimeout(resolve, 220));
+    await route.fulfill({ status: 201, contentType: 'application/json', body: '{}' });
+    targetResponses += 1;
+  });
+  await approvalPage(page);
+
+  const oldCombinedDeadline = page.waitForResponse(response => {
+    if (new URL(response.url()).pathname !== '/functions/v1/studio-artifact-command') return false;
+    try { return response.request().postDataJSON().commandType === studioApprovalAction; }
+    catch { return false; }
+  }, { timeout: 300 });
+  void oldCombinedDeadline.catch(() => {});
+  await page.locator('#approve').dispatchEvent('click');
+  await expect(oldCombinedDeadline).rejects.toThrow(/Timeout 300ms exceeded/u);
+  await expect.poll(() => targetResponses).toBe(1);
+
+  const response = await observeCanonicalStudioApprovalResponse(
+    page,
+    () => page.locator('#approve').dispatchEvent('click'),
+    { controlledHuman: true, stageTimeoutMs: 350 },
+  );
+  expect(response.status()).toBe(201);
+  expect(response.request().postDataJSON()).toMatchObject({
+    commandType: studioApprovalAction,
+    requestId: approvalRequestId,
+  });
+  expect(targetResponses).toBe(2);
+});
+
+test('hosted Studio approval rejects unbound stages and always disposes its observer', async ({ page }) => {
+  const scenario: {
+    anchorAction?: string;
+    anchorRequestId?: string;
+    targetAction?: string;
+    targetRequestId?: string;
+    omitTarget?: boolean;
+  } = {};
+  await page.route(anchorRoute, route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      safeAnchor: { action: scenario.anchorAction ?? studioApprovalAction },
+      execution: scenario.anchorRequestId === '' ? {} : { requestId: scenario.anchorRequestId ?? approvalRequestId },
+    }),
+  }));
+  await page.route(studioCommandRoute, route => route.fulfill({
+    status: 201, contentType: 'application/json', body: '{}',
+  }));
+  await approvalPage(page);
+  const responseListenerCount = () => (page as unknown as {
+    listenerCount: (event: string) => number;
+  }).listenerCount('response');
+  const baselineListeners = responseListenerCount();
+  const run = async () => {
+    await page.evaluate(value => {
+      (window as unknown as { __canonicalTarget?: unknown }).__canonicalTarget = value;
+    }, { action: scenario.targetAction, requestId: scenario.targetRequestId, omit: scenario.omitTarget });
+    return observeCanonicalStudioApprovalResponse(
+      page,
+      () => page.locator('#approve').dispatchEvent('click'),
+      { controlledHuman: true, stageTimeoutMs: 250 },
+    );
+  };
+
+  scenario.anchorAction = 'studio.artifact.review.resolve';
+  await expect(run()).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_ANCHOR_REJECTED');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  scenario.anchorAction = studioApprovalAction; scenario.anchorRequestId = '';
+  await expect(run()).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_ANCHOR_REJECTED');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  scenario.anchorRequestId = approvalRequestId; scenario.targetAction = 'studio.artifact.review.resolve';
+  await expect(run()).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_RESPONSE_TIMEOUT');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  scenario.targetAction = studioApprovalAction;
+  scenario.targetRequestId = '20000000-0000-4000-8000-000000000008';
+  await expect(run()).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_RESPONSE_TIMEOUT');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  scenario.targetRequestId = undefined; scenario.omitTarget = true;
+  await expect(run()).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_RESPONSE_TIMEOUT');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  await expect(observeCanonicalStudioApprovalResponse(
+    page, async () => {}, { controlledHuman: true, stageTimeoutMs: 250 },
+  )).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_ANCHOR_TIMEOUT');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  scenario.omitTarget = true;
+  await expect(observeCanonicalStudioApprovalResponse(
+    page,
+    async () => {
+      await page.evaluate(async ({ action, requestId }) => {
+        await fetch('/functions/v1/studio-artifact-command', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ commandType: action, requestId }),
+        });
+      }, { action: studioApprovalAction, requestId: approvalRequestId });
+      await page.locator('#approve').dispatchEvent('click');
+    },
+    { controlledHuman: true, stageTimeoutMs: 250 },
+  )).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_RESPONSE_TIMEOUT');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  await expect(observeCanonicalStudioApprovalResponse(
+    page, async () => { throw new Error('SYNTHETIC_CLICK_FAILED'); },
+    { controlledHuman: true, stageTimeoutMs: 250 },
+  )).rejects.toThrow('SYNTHETIC_CLICK_FAILED');
+  expect(responseListenerCount()).toBe(baselineListeners);
+
+  scenario.omitTarget = false;
+  await page.evaluate(() => {
+    (window as unknown as { __canonicalTarget?: unknown }).__canonicalTarget = {};
+  });
+  await expect(observeCanonicalStudioApprovalResponse(
+    page,
+    async () => {
+      await page.locator('#approve').dispatchEvent('click');
+      return new Promise<void>(() => {});
+    },
+    { controlledHuman: true, stageTimeoutMs: 250 },
+  )).rejects.toThrow('CANONICAL_STUDIO_APPROVAL_ACTION_TIMEOUT');
+  expect(responseListenerCount()).toBe(baselineListeners);
 });
 
 test('canonical retained-record targeting selects receipt-bound records instead of first records', async ({ page }) => {
