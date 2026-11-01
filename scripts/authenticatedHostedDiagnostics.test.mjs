@@ -18,6 +18,8 @@ const classified = async (stage, error, options) => {
 
 test('owned-work failures retain only fixed safe descriptors', () => {
   for (const [message, phase, code] of [
+    ['CANONICAL_PROCESS_CREATE_RESPONSE_TIMEOUT', 'PROCESS_CREATE_OBSERVATION', 'RESPONSE_TIMEOUT'],
+    ['CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT', 'PROCESS_CREATE_OBSERVATION', 'ACTION_TIMEOUT'],
     ['AUTHENTICATED_BROWSER_ACTOR_TRANSITION_NOT_QUIESCENT', 'ACTOR_TRANSITION', 'NOT_QUIESCENT'],
     ['AUTHENTICATED_BROWSER_ACTOR_TRANSITION_EMPTY_AFTER_DEADLINE', 'ACTOR_TRANSITION', 'EMPTY_AFTER_DEADLINE'],
     ['AUTHENTICATED_BROWSER_ACTOR_TRANSITION_STABILITY_AFTER_DEADLINE', 'ACTOR_TRANSITION', 'STABILITY_AFTER_DEADLINE'],
@@ -126,9 +128,24 @@ test('playwright locations retain only an exact allowlisted source and bounded p
   const navigationSource = 'tests/browser/productNavigationReadiness.ts';
   assert.deepEqual(validateAuthenticatedHostedPlaywrightFailureLocation({ source: navigationSource, line: 1 }),
     { source: navigationSource, line: 1 });
+  const canonicalSource = 'tests/browser/enterpriseLifecycleAcceptance/canonicalInvoiceExceptionJourney.ts';
+  assert.deepEqual(validateAuthenticatedHostedPlaywrightFailureLocation({ source: canonicalSource, line: 1 }),
+    { source: canonicalSource, line: 1 });
+  assert.equal(validateAuthenticatedHostedPlaywrightFailureLocation({
+    source: canonicalSource.replace('canonicalInvoiceExceptionJourney', 'canonicalBusinessOutputEvidence'), line: 1,
+  }), null);
 });
 
 test('playwright failure descriptors retain only closed phase and code pairs', () => {
+  for (const [message, code] of [
+    ['CANONICAL_PROCESS_CREATE_RESPONSE_TIMEOUT', 'RESPONSE_TIMEOUT'],
+    ['CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT', 'ACTION_TIMEOUT'],
+  ]) {
+    assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(new Error(message)),
+      { phase: 'PROCESS_CREATE_OBSERVATION', code });
+    assert.equal(authenticatedHostedPlaywrightFailureDescriptor(
+      new Error(`${message}:private-detail`)), null);
+  }
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(
     new Error('AUTHENTICATED_BROWSER_ACTION_START_REJECTED')),
   { phase: 'NETWORK_TRACKER', code: 'ACTION_START_REJECTED' });
@@ -190,7 +207,7 @@ test('playwright failure descriptors retain only closed phase and code pairs', (
     testCategory: 'primary-lifecycle', category: 'unexpected-failure' };
   for (const operation of ['ACTION_START','PERMIT_ARM','ACTION_FINISH','CASE_SUBMIT','SESSION_BIND','SETUP','OBSERVE',
     'OTHER_CONTROL','NETWORK_DRAIN','CASE_DRAIN','SAFETY_OFFLINE','SAFETY_SERVER','SAFETY_TIMEOUT',
-    'V1_ASSESSMENT_COMPLETION']) {
+    'V1_ASSESSMENT_COMPLETION','PRIMARY_CANONICAL_PROCESS_CREATE']) {
     assert.deepEqual(validateAuthenticatedHostedPlaywrightDiagnostic({ ...base, operation }), { ...base, operation });
   }
   assert.deepEqual(authenticatedHostedPlaywrightFailureDescriptor(

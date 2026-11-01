@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   decodeCanonicalApprovedStudioArtifact,
   decodeCanonicalCommandReceipt,
+  observeCanonicalProcessCreateResponse,
   observeCanonicalStudioApprovalResponse,
   requireCanonicalExactLocator,
   requireCanonicalReceiptBinding,
@@ -21,6 +22,7 @@ const approvalRequestId = '10000000-0000-4000-8000-000000000008';
 const anchorRoute = '**/rest/v1/rpc/pr_c_controlled_human_anchor_step';
 const studioCommandRoute = '**/functions/v1/studio-artifact-command';
 const studioApprovalAction = 'studio.artifact.approval.resolve';
+const processCommandRoute = '**/functions/v1/process-command';
 
 const approvalPage = async (page: Parameters<typeof observeCanonicalStudioApprovalResponse>[0]) => {
   await page.setContent(`
@@ -47,6 +49,79 @@ const approvalPage = async (page: Parameters<typeof observeCanonicalStudioApprov
     </script>
   `);
 };
+
+const responseListenerCount = (page: Parameters<typeof observeCanonicalProcessCreateResponse>[0]) =>
+  (page as unknown as { listenerCount: (event: string) => number }).listenerCount('response');
+
+test('canonical process create owns matching response and action within one bounded stage', async ({ page }) => {
+  let wrongResponses = 0;
+  let matchingResponses = 0;
+  await page.route(processCommandRoute, async route => {
+    const command = route.request().postDataJSON() as { commandType?: unknown };
+    if (command.commandType === 'process.create') matchingResponses += 1;
+    else wrongResponses += 1;
+    await route.fulfill({ status: command.commandType === 'process.create' ? 201 : 200,
+      contentType: 'application/json', body: '{}' });
+  });
+  await page.setContent('<base href="http://canonical.test/"><button id="create">Create</button>');
+  const baselineListeners = responseListenerCount(page);
+  const response = await observeCanonicalProcessCreateResponse(page, async () => {
+    await page.evaluate(async () => {
+      await fetch('/functions/v1/process-command', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ commandType: 'process.update' }) });
+      await fetch('/functions/v1/process-command', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ commandType: 'process.create' }) });
+    });
+  }, { timeoutMs: 500 });
+  expect(response.status()).toBe(201);
+  expect(response.request().postDataJSON()).toMatchObject({ commandType: 'process.create' });
+  expect({ wrongResponses, matchingResponses }).toEqual({ wrongResponses: 1, matchingResponses: 1 });
+  expect(responseListenerCount(page)).toBe(baselineListeners);
+});
+
+test('canonical process create owns early failures and always disposes its observer', async ({ page }) => {
+  await page.setContent('<base href="http://canonical.test/">');
+  const baselineListeners = responseListenerCount(page);
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    await expect(observeCanonicalProcessCreateResponse(page,
+      () => { throw new Error('SYNTHETIC_CREATE_SYNC_ACTION_FAILED'); },
+      { timeoutMs: 150 },
+    )).rejects.toThrow('SYNTHETIC_CREATE_SYNC_ACTION_FAILED');
+    expect(responseListenerCount(page)).toBe(baselineListeners);
+
+    await expect(observeCanonicalProcessCreateResponse(page,
+      async () => { throw new Error('SYNTHETIC_CREATE_ACTION_FAILED'); },
+      { timeoutMs: 150 },
+    )).rejects.toThrow('SYNTHETIC_CREATE_ACTION_FAILED');
+    expect(responseListenerCount(page)).toBe(baselineListeners);
+
+    await expect(observeCanonicalProcessCreateResponse(page,
+      async () => new Promise<void>(() => {}),
+      { timeoutMs: 150 },
+    )).rejects.toThrow('CANONICAL_PROCESS_CREATE_RESPONSE_TIMEOUT');
+    await new Promise(resolve => setImmediate(resolve));
+    expect(unhandled).toEqual([]);
+    expect(responseListenerCount(page)).toBe(baselineListeners);
+
+    await page.route(processCommandRoute, route => route.fulfill({
+      status: 201, contentType: 'application/json', body: '{}',
+    }));
+    await expect(observeCanonicalProcessCreateResponse(page, async () => {
+      await page.evaluate(() => fetch('/functions/v1/process-command', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ commandType: 'process.create' }),
+      }));
+      return new Promise<void>(() => {});
+    }, { timeoutMs: 750 })).rejects.toThrow('CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT');
+    expect(unhandled).toEqual([]);
+    expect(responseListenerCount(page)).toBe(baselineListeners);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
 
 test('canonical Studio binding decodes the production nested approval receipt and rejects mismatches', async () => {
   const artifactId = targetPackageId;

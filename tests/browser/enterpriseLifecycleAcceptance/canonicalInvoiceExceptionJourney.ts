@@ -75,6 +75,72 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const STUDIO_COMMAND_ROUTE = '/functions/v1/studio-artifact-command';
 const CONTROLLED_HUMAN_ANCHOR_ROUTE = '/rest/v1/rpc/pr_c_controlled_human_anchor_step';
 const STUDIO_APPROVAL_ACTION = 'studio.artifact.approval.resolve';
+const PROCESS_COMMAND_ROUTE = '/functions/v1/process-command';
+const PROCESS_CREATE_ACTION = 'process.create';
+
+const canonicalProcessCreateRequest = (response: PlaywrightResponse) => {
+  if (new URL(response.url()).pathname !== PROCESS_COMMAND_ROUTE
+    || response.request().method() !== 'POST') return false;
+  try {
+    return (response.request().postDataJSON() as { commandType?: unknown }).commandType
+      === PROCESS_CREATE_ACTION;
+  } catch {
+    return false;
+  }
+};
+
+export const observeCanonicalProcessCreateResponse = async (
+  page: Page,
+  action: () => Promise<void>,
+  options: Readonly<{ timeoutMs?: number }> = {},
+): Promise<PlaywrightResponse> => {
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15_000) {
+    throw new Error('CANONICAL_PROCESS_CREATE_BOUNDARY_REJECTED');
+  }
+  const deadline = Date.now() + timeoutMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let resolveResponse: ((response: PlaywrightResponse) => void) | undefined;
+  let rejectResponse: ((error: Error) => void) | undefined;
+  const responsePromise = new Promise<PlaywrightResponse>((resolve, reject) => {
+    resolveResponse = resolve;
+    rejectResponse = reject;
+  });
+  const onResponse = (response: PlaywrightResponse) => {
+    if (canonicalProcessCreateRequest(response)) resolveResponse?.(response);
+  };
+  page.on('response', onResponse);
+  timer = setTimeout(() => rejectResponse?.(
+    new Error('CANONICAL_PROCESS_CREATE_RESPONSE_TIMEOUT'),
+  ), timeoutMs);
+  const actionPromise = Promise.resolve().then(action);
+  // Both branches own rejection immediately. This prevents a response deadline
+  // from becoming an unhandled rejection while the click is still settling.
+  void responsePromise.catch(() => {});
+  void actionPromise.catch(() => {});
+  const actionFailure = actionPromise.then<never>(
+    () => new Promise<never>(() => {}),
+    error => Promise.reject(error),
+  );
+  try {
+    const response = await Promise.race([responsePromise, actionFailure]);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw new Error('CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT');
+    let actionTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      actionPromise,
+      new Promise<never>((_resolve, reject) => {
+        actionTimer = setTimeout(() => reject(
+          new Error('CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT'),
+        ), remainingMs);
+      }),
+    ]).finally(() => clearTimeout(actionTimer));
+    return response;
+  } finally {
+    clearTimeout(timer);
+    page.off('response', onResponse);
+  }
+};
 
 const studioApprovalRequest = (response: PlaywrightResponse, requestId?: string) => {
   if (new URL(response.url()).pathname !== STUDIO_COMMAND_ROUTE

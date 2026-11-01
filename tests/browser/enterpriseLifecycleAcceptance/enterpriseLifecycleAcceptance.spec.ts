@@ -25,7 +25,9 @@ import { runStudioDeliveryMonitorJourney, type StudioDeliveryMonitorCaseResult,
   type StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { runAssessmentScenarioJourneys } from './assessmentScenarioJourneys';
 import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
-import { awaitCanonicalProjectIndexRead, decodeCanonicalApprovedStudioArtifact, observeCanonicalStudioApprovalResponse, runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
+import { awaitCanonicalProjectIndexRead, decodeCanonicalApprovedStudioArtifact,
+  observeCanonicalProcessCreateResponse, observeCanonicalStudioApprovalResponse,
+  runCanonicalInvoiceExceptionJourney, type CanonicalHostedDatabaseEvidence,
   type CanonicalApprovedStudioArtifact,
   type CanonicalInvoiceExceptionProofBoundary } from './canonicalInvoiceExceptionJourney';
 import { approvedBusinessOutputMarkdown } from './canonicalBusinessOutputEvidence';
@@ -1004,7 +1006,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
   });
 
   test('creates and reloads the canonical AP Invoice Exception process through the production UI',
-    { tag: '@v2-primary-prefix-diagnostic' }, async ({ page }) => {
+    { tag: '@v2-primary-prefix-diagnostic' }, async ({ page }) => test.step(
+      'hosted:primary:canonical-process-create', async () => {
     test.skip(!canonicalInvoiceExceptionJourney,
       'canonical process creation is an opt-in prerequisite for the AP Invoice Exception journey');
     if (v2FullPrefixReproduction) {
@@ -1032,15 +1035,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     );
     await dialog.getByRole('textbox', { name: 'Department', exact: true }).fill('Finance · Accounts Payable');
     await dialog.getByLabel(/^Assessed Criticality/u).selectOption('High');
-    const createResponse = page.waitForResponse(response => {
-      if (new URL(response.url()).pathname !== '/functions/v1/process-command'
-        || response.request().method() !== 'POST') return false;
-      try {
-        return (response.request().postDataJSON() as { commandType?: unknown }).commandType === 'process.create';
-      } catch { return false; }
-    }, { timeout: 15_000 });
-    await dialog.getByRole('button', { name: 'Create process', exact: true }).click();
-    const response = await createResponse;
+    const response = await observeCanonicalProcessCreateResponse(page,
+      () => dialog.getByRole('button', { name: 'Create process', exact: true }).click());
     expect([200, 201]).toContain(response.status());
     const request = response.request().postDataJSON() as {
       requestId?: unknown;
@@ -1077,7 +1073,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       aliases: Object.freeze({ ...setup.aliases, process: adopted.name }),
     });
     observe('canonical-process-create', 'ui.canonical-process-created-and-reloaded');
-  });
+  }));
 
   test('authors, replays, rejects stale work, requests changes and resubmits through the production UI',
     { tag: ['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'] }, async ({ page, context }, testInfo) => test.step('hosted:primary:journey', async () => {

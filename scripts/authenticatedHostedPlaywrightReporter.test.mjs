@@ -239,10 +239,102 @@ test('static reporter maps every hosted test title without retaining raw errors'
     reporter.onTestBegin(current);reporter.onTestEnd(current,{status:'failed'});
     await reporter.onEnd({status:'failed'});
     const value=JSON.parse(await readFile(destination,'utf8'));
+    const operation = title === 'creates and reloads the canonical AP Invoice Exception process through the production UI'
+      ? { operation: 'PRIMARY_CANONICAL_PROCESS_CREATE' } : {};
     assert.deepEqual(value,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',project:'desktop-chromium',
-      testCategory:category,category:'unexpected-failure'});
+      testCategory:category,category:'unexpected-failure',...operation});
     assert.equal(JSON.stringify(value).includes('fixture-sensitive-value'),false);
   }
+});
+
+test('canonical process-create fallback retains only its fixed operation and exact helper location', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-canonical-create-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'canonical-create.json');
+  process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();
+  const current=fixture('creates and reloads the canonical AP Invoice Exception process through the production UI');
+  const sensitive='credential@example.invalid private-object-id';
+  const error=Object.assign(new Error(sensitive),{location:{
+    file:path.resolve('tests/browser/enterpriseLifecycleAcceptance/canonicalInvoiceExceptionJourney.ts'),line:1,column:99}});
+  reporter.onTestBegin(current);reporter.onTestEnd(current,{status:'failed',error,errors:[error]});
+  await reporter.onEnd({status:'failed'});
+  const serialized=await readFile(destination,'utf8');const value=JSON.parse(serialized);
+  assert.deepEqual(value,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+    project:'desktop-chromium',testCategory:'primary-lifecycle',category:'unexpected-failure',
+    operation:'PRIMARY_CANONICAL_PROCESS_CREATE',
+    location:{source:'tests/browser/enterpriseLifecycleAcceptance/canonicalInvoiceExceptionJourney.ts',line:1}});
+  assert.equal(serialized.includes(sensitive),false);
+  assert.ok(Buffer.byteLength(serialized,'utf8')<=2000);
+});
+
+test('canonical process-create timeouts retain only their fixed stage and operation', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-canonical-create-timeout-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  for(const [message,code] of [
+    ['CANONICAL_PROCESS_CREATE_RESPONSE_TIMEOUT','RESPONSE_TIMEOUT'],
+    ['CANONICAL_PROCESS_CREATE_ACTION_TIMEOUT','ACTION_TIMEOUT'],
+  ]){
+    const destination=path.join(root,`${code}.json`);process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+    const reporter=new AuthenticatedHostedPlaywrightReporter();
+    const current=fixture('creates and reloads the canonical AP Invoice Exception process through the production UI');
+    const error=new Error(message);reporter.onTestBegin(current);
+    reporter.onTestEnd(current,{status:'failed',error,errors:[error]});await reporter.onEnd({status:'failed'});
+    const serialized=await readFile(destination,'utf8');const value=JSON.parse(serialized);
+    assert.deepEqual(value,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+      project:'desktop-chromium',testCategory:'primary-lifecycle',category:'unexpected-failure',
+      operation:'PRIMARY_CANONICAL_PROCESS_CREATE',phase:'PROCESS_CREATE_OBSERVATION',code});
+    assert.equal(serialized.includes(message),false);
+    assert.ok(Buffer.byteLength(serialized,'utf8')<=2000);
+  }
+});
+
+test('canonical process-create fallback does not attribute hook or unrelated test failures', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-canonical-create-negative-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  for(const [label,title,hook] of [
+    ['unrelated',[...titles.keys()][0],null],
+    ['hook','creates and reloads the canonical AP Invoice Exception process through the production UI','beforeAll hook'],
+  ]){
+    const destination=path.join(root,`${label}.json`);process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+    const reporter=new AuthenticatedHostedPlaywrightReporter();const current=fixture(title);const error=new Error('private');
+    reporter.onTestBegin(current);if(hook)reporter.onStepEnd(current,{}, {category:'hook',title:hook,error});
+    reporter.onTestEnd(current,{status:'failed',error});await reporter.onEnd({status:'failed'});
+    const value=JSON.parse(await readFile(destination,'utf8'));
+    assert.equal(Object.hasOwn(value,'operation'),false);
+  }
+});
+
+test('canonical process-create ambiguous steps retain only the static prerequisite fallback', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'authenticated-reporter-canonical-create-ambiguous-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const prior=process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+  t.after(()=>{if(prior===undefined)delete process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH;
+    else process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=prior;});
+  const destination=path.join(root,'ambiguous.json');process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH=destination;
+  const reporter=new AuthenticatedHostedPlaywrightReporter();
+  const current=fixture('creates and reloads the canonical AP Invoice Exception process through the production UI');
+  const invalidLocation={file:path.resolve('outside-private-source.ts'),line:1};
+  const primary=Object.assign(new Error('private-same-error'),{location:invalidLocation});reporter.onTestBegin(current);
+  for(const title of ['hosted:control:observe','hosted:primary:process-denial']){
+    const error=Object.assign(new Error(primary.message),{location:{...invalidLocation}});
+    const step={title,error,location:error.location};reporter.onStepBegin(current,{},step);reporter.onStepEnd(current,{},step);
+  }
+  reporter.onTestEnd(current,{status:'failed',error:primary,errors:[primary]});await reporter.onEnd({status:'failed'});
+  const serialized=await readFile(destination,'utf8');const value=JSON.parse(serialized);
+  assert.deepEqual(value,{schemaVersion:'authenticated-hosted-playwright-diagnostic-v1',
+    project:'desktop-chromium',testCategory:'primary-lifecycle',category:'unexpected-failure',
+    operation:'PRIMARY_CANONICAL_PROCESS_CREATE'});
+  assert.equal(serialized.includes('private'),false);assert.equal(serialized.includes('hosted:'),false);
 });
 
 test('static reporter uses the first canonical errors entry when result.error is absent', async t => {
@@ -820,7 +912,7 @@ for (const mode of ['unique', 'ambiguous', 'unrelated', 'outside']) {
     const destination = path.join(root, 'diagnostic.json');
     process.env.AUTHENTICATED_HOSTED_PLAYWRIGHT_DIAGNOSTIC_PATH = destination;
     const reporter = new AuthenticatedHostedPlaywrightReporter();
-    const current = fixture([...titles.keys()][1]);
+    const current = fixture('independent approval, Govern separation and synthetic Studio generation retain exact lineage');
     const location = { file: path.resolve('tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts'), line: 70 };
     const error = message => Object.assign(new Error(message), { location });
     const primary = error('private-synthetic-ordinary-failure');
