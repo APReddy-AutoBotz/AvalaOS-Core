@@ -59,6 +59,11 @@ export type CanonicalApprovedStudioArtifact = Readonly<{
   artifactVersionId: string;
 }>;
 
+export type CanonicalStudioArtifactReloadTarget = Readonly<{
+  artifactId: string;
+  contentVersion: number;
+}>;
+
 export type CanonicalCommandReceipt = Readonly<{
   ok: true;
   outcome: 'committed' | 'replayed';
@@ -371,6 +376,108 @@ export const requireCanonicalExactLocator = async (
   const count = await locator.count();
   if (count !== 1) throw new Error(`${boundary}:${count}`);
   return locator;
+};
+
+const canonicalStudioReloadBoundary = (
+  target: CanonicalStudioArtifactReloadTarget,
+  timeoutMs: number,
+) => {
+  if (!UUID.test(target.artifactId)
+    || !Number.isSafeInteger(target.contentVersion) || target.contentVersion < 1
+    || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15_000) {
+    throw new Error('CANONICAL_STUDIO_RELOAD_BOUNDARY_REJECTED');
+  }
+};
+
+export const captureCanonicalStudioArtifactReloadTarget = async (
+  page: Page,
+  contentVersion: number,
+): Promise<CanonicalStudioArtifactReloadTarget> => {
+  const target = {
+    artifactId: await page.getByTestId('studio-artifact-workspace')
+      .getByLabel('Governed artifact', { exact: true }).inputValue(),
+    contentVersion,
+  };
+  canonicalStudioReloadBoundary(target, 15_000);
+  const exactOption = page.getByTestId('studio-artifact-workspace')
+    .getByLabel('Governed artifact', { exact: true })
+    .locator(`option[value="${target.artifactId}"]`);
+  if (await exactOption.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CAPTURE_REJECTED');
+  const preview = page.getByTestId('studio-artifact-workspace')
+    .getByRole('article', { name: 'Artifact preview', exact: true });
+  if (await preview.getByText(
+    new RegExp(`^Aggregate v\\d+ · Content v${contentVersion}$`, 'u'),
+  ).count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CAPTURE_REJECTED');
+  return Object.freeze(target);
+};
+
+export const reloadCanonicalStudioArtifact = async (
+  page: Page,
+  target: CanonicalStudioArtifactReloadTarget,
+  options: Readonly<{ timeoutMs?: number; expectedSectionTitles?: readonly string[] }> = {},
+) => {
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  canonicalStudioReloadBoundary(target, timeoutMs);
+  if (options.expectedSectionTitles !== undefined
+    && (options.expectedSectionTitles.length !== 5
+      || options.expectedSectionTitles.some(title => !title.trim())
+      || new Set(options.expectedSectionTitles).size !== options.expectedSectionTitles.length)) {
+    throw new Error('CANONICAL_STUDIO_RELOAD_SECTIONS_REJECTED');
+  }
+  const deadline = Date.now() + timeoutMs;
+  const remaining = () => {
+    const value = deadline - Date.now();
+    if (value <= 0) throw new Error('CANONICAL_STUDIO_RELOAD_TIMEOUT');
+    return value;
+  };
+
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: remaining() });
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  const selector = workspace.getByLabel('Governed artifact', { exact: true });
+  await selector.waitFor({ state: 'visible', timeout: remaining() });
+  const exactOption = selector.locator(`option[value="${target.artifactId}"]`);
+  if (await exactOption.count() === 0) {
+    try { await exactOption.first().waitFor({ state: 'attached', timeout: remaining() }); }
+    catch { /* Report the exact final target count below. */ }
+  }
+  const targetCount = await exactOption.count();
+  if (targetCount !== 1) throw new Error(`CANONICAL_STUDIO_RELOAD_TARGET_REJECTED:${targetCount}`);
+  const preview = workspace.getByRole('article', { name: 'Artifact preview', exact: true });
+  const reloadStatus = preview.getByRole('status').first();
+  if (await selector.inputValue() !== target.artifactId) {
+    await selector.selectOption({ value: target.artifactId }, { timeout: remaining() });
+  }
+  await expect(reloadStatus).toHaveText(
+    / reloaded from the server artifact index\.$/u,
+    { timeout: remaining() },
+  );
+  await expect(selector).toHaveValue(target.artifactId, { timeout: remaining() });
+  await page.locator('[data-testid="studio-artifact-workspace"][data-studio-projection-state="artifact-ready"]')
+    .waitFor({ state: 'visible', timeout: remaining() });
+  const version = preview.getByText(
+    new RegExp(`^Aggregate v\\d+ · Content v${target.contentVersion}$`, 'u'),
+  );
+  try { await version.waitFor({ state: 'visible', timeout: remaining() }); }
+  catch { throw new Error('CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED'); }
+  if (await version.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED');
+
+  if (options.expectedSectionTitles) {
+    const editor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+    await editor.waitFor({ state: 'visible', timeout: remaining() });
+    const outline = editor.getByRole('navigation', { name: 'Document outline', exact: true });
+    const sectionButtons = outline.getByRole('button').filter({ hasNotText: 'Add section' });
+    if (await sectionButtons.count() !== options.expectedSectionTitles.length) {
+      throw new Error('CANONICAL_STUDIO_RELOAD_SECTIONS_REJECTED');
+    }
+    for (let index = 0; index < options.expectedSectionTitles.length; index += 1) {
+      const exactSection = outline.getByRole('button', {
+        name: `${index + 1}. ${options.expectedSectionTitles[index]}`,
+        exact: true,
+      });
+      if (await exactSection.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_SECTIONS_REJECTED');
+    }
+  }
+  return workspace;
 };
 
 export type CanonicalInvoiceExceptionProofBoundary = Readonly<{

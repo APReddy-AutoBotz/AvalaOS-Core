@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
 import {
+  captureCanonicalStudioArtifactReloadTarget,
   decodeCanonicalApprovedStudioArtifact,
   decodeCanonicalCommandReceipt,
   observeCanonicalProcessCreateResponse,
   observeCanonicalStudioApprovalResponse,
+  reloadCanonicalStudioArtifact,
   requireCanonicalExactLocator,
   requireCanonicalReceiptBinding,
 } from './canonicalInvoiceExceptionJourney';
@@ -12,6 +14,8 @@ import { executeStudioAtomicCommand } from '../../../supabase/functions/_shared/
 import type { StudioArtifactAtomicCommand } from '../../../supabase/functions/_shared/studioArtifactCommand';
 
 const targetArtifactVersionId = '10000000-0000-4000-8000-000000000001';
+const targetArtifactId = '10000000-0000-4000-8000-000000000009';
+const competingArtifactId = '10000000-0000-4000-8000-000000000010';
 const targetHandoffId = '10000000-0000-4000-8000-000000000002';
 const targetPackageId = '10000000-0000-4000-8000-000000000003';
 const targetBaselineId = '10000000-0000-4000-8000-000000000004';
@@ -52,6 +56,50 @@ const approvalPage = async (page: Parameters<typeof observeCanonicalStudioApprov
 
 const responseListenerCount = (page: Parameters<typeof observeCanonicalProcessCreateResponse>[0]) =>
   (page as unknown as { listenerCount: (event: string) => number }).listenerCount('response');
+
+const reloadSectionTitles = Object.freeze([
+  'Business Context and Objectives',
+  'Current-State Process and Pain Points',
+  'Functional Requirements and Human Controls',
+  'Non-Functional Requirements',
+  'Acceptance Criteria and Open Questions',
+]);
+
+const studioReloadFixture = ({ missing = false, duplicate = false, targetVersion = 2,
+  wrongSection = false, delayMs = 0 } = {}) => {
+  const target = missing ? '' : `
+    <option value="${targetArtifactId}" data-version="${targetVersion}">Canonical AP BRD</option>
+    ${duplicate ? `<option value="${targetArtifactId}" data-version="${targetVersion}">Duplicate canonical AP BRD</option>` : ''}`;
+  return `<!doctype html><html><body>
+    <section data-testid="studio-artifact-workspace" data-studio-projection-state="artifact-ready">
+      <label>Governed artifact<select aria-label="Governed artifact">
+        <option value="${competingArtifactId}" data-version="3">Newer retained legacy BRD</option>${target}
+      </select></label>
+      <article aria-label="Artifact preview"><p role="status"></p><p data-version></p></article>
+    </section>
+    <section role="region" aria-labelledby="editor-heading"><h2 id="editor-heading">Structured section editor</h2>
+      <nav aria-label="Document outline"><ol>${reloadSectionTitles.map((title, index) =>
+        `<li><button>${index + 1}. ${wrongSection && index === 4 ? 'Unrelated retained section' : title}</button></li>`).join('')}</ol><button>Add section</button></nav>
+    </section>
+    <script>
+      const selector = document.querySelector('[aria-label="Governed artifact"]');
+      const workspace = document.querySelector('[data-testid="studio-artifact-workspace"]');
+      const version = document.querySelector('article [data-version]');
+      const status = document.querySelector('[role="status"]');
+      const render = () => {
+        workspace.dataset.studioProjectionState = 'loading';
+        status.textContent = 'Reloading exact governed artifact from the server index.';
+        setTimeout(() => {
+          const selected = selector.options[selector.selectedIndex];
+          version.textContent = 'Aggregate v7 ' + String.fromCharCode(183) + ' Content v' + selected.dataset.version;
+          status.textContent = selected.textContent + ' reloaded from the server artifact index.';
+          workspace.dataset.studioProjectionState = 'artifact-ready';
+        }, ${delayMs});
+      };
+      selector.addEventListener('change', render); render();
+    </script>
+  </body></html>`;
+};
 
 test('canonical process create owns matching response and action within one bounded stage', async ({ page }) => {
   let wrongResponses = 0;
@@ -121,6 +169,69 @@ test('canonical process create owns early failures and always disposes its obser
   } finally {
     process.off('unhandledRejection', onUnhandled);
   }
+});
+
+test('canonical Studio reload reselects the exact committed artifact instead of the first summary', async ({ page }) => {
+  let businessCommands = 0;
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/functions/v1/studio-artifact-command') {
+      businessCommands += 1;
+    }
+  });
+  await page.route('http://canonical.test/studio-reload', route => route.fulfill({
+    status: 200, contentType: 'text/html', body: studioReloadFixture(),
+  }));
+  await page.goto('http://canonical.test/studio-reload', { waitUntil: 'domcontentloaded' });
+  const selector = page.getByLabel('Governed artifact', { exact: true });
+  await expect(selector).toHaveValue(competingArtifactId);
+  await selector.selectOption(targetArtifactId);
+  await expect(page.getByRole('article', { name: 'Artifact preview', exact: true })
+    .getByText('Aggregate v7 · Content v2', { exact: true })).toBeVisible();
+  const target = await captureCanonicalStudioArtifactReloadTarget(page, 2);
+
+  // The old generic-heading boundary succeeds while the remount has selected
+  // the first unrelated summary. This observation is the focused red control.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Structured section editor', exact: true })).toBeVisible();
+  await expect(selector).toHaveValue(competingArtifactId);
+
+  await reloadCanonicalStudioArtifact(page, target, {
+    timeoutMs: 1_000,
+    expectedSectionTitles: reloadSectionTitles,
+  });
+  await expect(selector).toHaveValue(targetArtifactId);
+  await expect(page.getByRole('article', { name: 'Artifact preview', exact: true })
+    .getByText('Aggregate v7 · Content v2', { exact: true })).toBeVisible();
+  expect(businessCommands).toBe(0);
+});
+
+test('canonical Studio reload rejects missing, duplicate, wrong-version, wrong-target and wrong-section projections without mutation', async ({ page }) => {
+  let businessCommands = 0;
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/functions/v1/studio-artifact-command') {
+      businessCommands += 1;
+    }
+  });
+  for (const [path, fixture, artifactId, error, expectedSectionTitles] of [
+    ['missing', studioReloadFixture({ missing: true }), targetArtifactId, 'CANONICAL_STUDIO_RELOAD_TARGET_REJECTED:0', undefined],
+    ['duplicate', studioReloadFixture({ duplicate: true }), targetArtifactId, 'CANONICAL_STUDIO_RELOAD_TARGET_REJECTED:2', undefined],
+    ['wrong-version', studioReloadFixture({ targetVersion: 1 }), targetArtifactId, 'CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED', undefined],
+    ['wrong-target', studioReloadFixture(), competingArtifactId, 'CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED', undefined],
+    ['wrong-section', studioReloadFixture({ wrongSection: true }), targetArtifactId, 'CANONICAL_STUDIO_RELOAD_SECTIONS_REJECTED', reloadSectionTitles],
+  ] as const) {
+    const url = `http://canonical.test/studio-reload-${path}`;
+    await page.route(url, route => route.fulfill({ status: 200, contentType: 'text/html', body: fixture }));
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await expect(reloadCanonicalStudioArtifact(page, {
+      artifactId,
+      contentVersion: 2,
+    }, { timeoutMs: 1_000, expectedSectionTitles })).rejects.toThrow(error);
+  }
+  await expect(reloadCanonicalStudioArtifact(page, {
+    artifactId: 'not-an-artifact-id',
+    contentVersion: 2,
+  }, { timeoutMs: 1_000 })).rejects.toThrow('CANONICAL_STUDIO_RELOAD_BOUNDARY_REJECTED');
+  expect(businessCommands).toBe(0);
 });
 
 test('canonical Studio binding decodes the production nested approval receipt and rejects mismatches', async () => {
