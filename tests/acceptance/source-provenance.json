@@ -42,7 +42,7 @@
     "docs/00_SOURCE_OF_TRUTH.md": "sha256:29a6caff04713c236ffde177be050a0c2e66b333f9f5af37d719e324aa655c1e",
     "docs/architecture/current-to-target-enterprise-architecture.md": "sha256:30b28cc3318522f12b27bc7eca0361de5aebef77f6fd6254f53f91634cac1c4f",
     "docs/planning/hosted-acceptance-completion.md": "sha256:ddeedbb46aba8c2b4eb32ce2929d7b87cbaba027befd359be9deed490a1192eb",
-    "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:82467a16d95db696fb8b4acabceb2754ed16890d57fc986105e8fbbc7408e942",
+    "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:1437fa15dd50ddf6c69ab2b040e7e5fa967f107683eb5828507698b4f7a5389a",
     "docs/quality/gpt-5.6-sol-enterprise-risk-and-evidence-register.md": "sha256:fdaeb4e44245b940ccd1277fbaa5b326fa2119278f32f6f07eb17e20743bb87f",
     "docs/strategy/gpt-5.6-sol-enterprise-acceleration-plan.md": "sha256:e1fab28561dab990cf0b4e62191e293c4fa938be23075a6001521ff1676c2708",
     "index.css": "sha256:645f9ca9e3068604aee26a1521d0efd399a14d44fa24b42e34a5608c936da63c",

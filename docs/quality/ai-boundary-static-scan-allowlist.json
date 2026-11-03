@@ -673,6 +673,15 @@
       ],
       "reason": "test/control documentation",
       "futureAction": "Read only inert loopback fixture session identity to prove owned tracked work settles before actor replacement. Never read real credentials, grant authority from browser state, or persist provider secrets."
+    },
+    {
+      "pattern": "localStorage",
+      "path": "tests/browser/studioPrB/canonicalSddExport.spec.ts",
+      "lines": [
+        70
+      ],
+      "reason": "test/control documentation",
+      "futureAction": "Use only the synthetic local browser session for the scoped rendition and download fixture. Never store a real provider credential or use this fixture as server authorization."
     }
   ]
 }
