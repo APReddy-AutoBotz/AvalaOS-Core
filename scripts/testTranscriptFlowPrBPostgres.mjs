@@ -494,7 +494,7 @@ try{
   const templateProjectionBeforeReplace=(await asAuthenticated(fresh,runtime.approver,`SELECT public.studio_tenant_template_projection($1,$2) projection`,[runtime.org,runtime.workspace])).rows[0].projection;
   const projectedSystemTemplates=templateProjectionBeforeReplace.templates.filter(template=>template.ownership==='system'),projectedTenantTemplates=templateProjectionBeforeReplace.templates.filter(template=>template.ownership==='tenant');
   assert.equal(projectedSystemTemplates.length,4);assert.ok(projectedSystemTemplates.every(template=>typeof template.version==='string'&&template.version.startsWith('studio-')));assert.ok(projectedTenantTemplates.every(template=>Number.isSafeInteger(template.version)&&template.version>0));assert.equal(JSON.stringify(templateProjectionBeforeReplace).includes('providerInstructions'),false);assert.equal(JSON.stringify(templateProjectionBeforeReplace).includes('provider_instructions'),false);
-  const projectedSdd=projectedSystemTemplates.find(template=>template.artifactType==='sdd');assert.ok(projectedSdd);assert.equal(projectedSdd.version,'studio-sdd-1');assert.equal(projectedSdd.contentSchemaVersion,'studio-artifact-2');assert.deepEqual(projectedSdd.sections.map(section=>section.id),['summary','architecture','components','interfaces','dataDesign','asIsFlow','toBeFlow','securityControls','operationalDesign','designDecisions','openQuestionsAndProposals']);
+  const projectedSdd=projectedSystemTemplates.find(template=>template.artifactClass==='sdd');assert.ok(projectedSdd);assert.equal(projectedSdd.version,'studio-sdd-1');assert.equal(projectedSdd.contentSchemaVersion,'studio-artifact-2');assert.deepEqual(projectedSdd.sections.map(section=>section.id),['summary','architecture','components','interfaces','dataDesign','asIsFlow','toBeFlow','securityControls','operationalDesign','designDecisions','openQuestionsAndProposals']);
   const projectedTenant=templateProjectionBeforeReplace.templates.find(template=>template.templateVersionId===approvedTemplate.id);assert.ok(projectedTenant.actions.includes('studio.generation.request'));assert.ok(projectedTenant.actions.includes('studio.template.deprecate'));
   emit('TEMPLATE-PRB-001','IMMUTABLE-THREE-PERSON-APPROVAL','tenant-template-lifecycle',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:null,template:{id:tenantTemplateId,versionId:approvedTemplate.id,version:1,hash:approvedTemplate.template_hash,status:'approved',replacementTemplateId,replacementTemplateVersionId:replacementTemplate.id,unsafeProviderAuthorityRejected:true,selectorSubstitutionRejected:true,systemCompatibilityCount:4,providerInstructionsDisclosed:false,actions:projectedTenant.actions},handoff:null,artifact:null}));
 
@@ -635,7 +635,7 @@ try{
   await handoffCommand('handoff.review.resolve',runtime.reviewer,1,{outcome:'approve',rationale:'Independent generation review'},'generation-review','pr-b-handoff-generation-review',generationHandoffId);
   await handoffCommand('handoff.approval.resolve',runtime.approver,2,{outcome:'approve',rationale:'Independent generation approval'},'generation-approve','pr-b-handoff-generation-approve',generationHandoffId);
   const generationConsume=await handoffCommand('handoff.consume',runtime.requester,3,{},'generation-consume','pr-b-handoff-generation-consume',generationHandoffId);
-  const generationPackage=(await fresh.query(`SELECT id,artifact_id,package_hash,source_mode,assess_handoff_id,anchor_manifest,anchor_manifest_hash,anchor_count FROM public.studio_artifact_source_packages WHERE id=$1`,[generationConsume.result.sourcePackageId])).rows[0];
+  let generationPackage=(await fresh.query(`SELECT id,artifact_id,package_hash,source_mode,assess_handoff_id,anchor_manifest,anchor_manifest_hash,anchor_count,version,replaces_source_package_id FROM public.studio_artifact_source_packages WHERE id=$1`,[generationConsume.result.sourcePackageId])).rows[0];
   assert.equal(generationPackage.source_mode,'assess_handoff');assert.equal(generationPackage.assess_handoff_id,generationUpstream.handoff);
   const generationPreGenerationProjection=(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_source_package_projection($1,$2,$3) projection`,[runtime.org,runtime.workspace,generationPackage.artifact_id])).rows[0].projection;
   assert.equal(generationPreGenerationProjection.sourcePackageId,generationPackage.id);assert.equal(generationPreGenerationProjection.sourcePackageHash,generationPackage.package_hash);
@@ -651,6 +651,21 @@ try{
   const manualWorkspaceV2=(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_workspace_projection_v2($1,$2,$3,0,20) projection`,[runtime.org,runtime.workspace,manualArtifactId])).rows[0].projection;
   assert.equal(manualV2.ancestry.sourceMode,'manual_brief');assert.equal(manualV2.ancestry.caseId,null);assert.equal(manualV2.sourcePackage.manualBriefPresent,true);assert.equal(manualV2.sourcePackage.stale,false);assert.equal(manualV2.sourcePackage.coverage.selectedSources,0);assert.equal(manualV2.sourcePackage.coverage.coveredSources,0);assert.deepEqual(manualV2.sections[0].labels,['assumption']);assert.equal(JSON.stringify(manualV2).includes(manualBrief),false);assert.equal(JSON.stringify(manualV2).includes(manualBriefHash),false);
   assert.equal(manualWorkspaceV2.selectedSources.total,0);assert.deepEqual(manualWorkspaceV2.selectedSources.items,[]);assert.deepEqual(manualWorkspaceV2.coverage.selectedSourceVersionIds,[]);assert.deepEqual(manualWorkspaceV2.coverage.coveredSourceVersionIds,[]);assert.equal(manualV2.sourcePackage.coverage.selectedSources,manualWorkspaceV2.selectedSources.total);assert.equal(manualV2.sourcePackage.coverage.coveredSources,manualWorkspaceV2.coverage.coveredSourceVersionIds.length);
+  const manualBeforeAdoption=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id,source_package_id FROM public.studio_artifact_aggregates WHERE id=$1`,[manualArtifactId])).rows[0];
+  const manualSuccessorPackageId=runtime.uuid(7691),manualSuccessorBrief='Synthetic changed manual planning brief adopted into the same document.';
+  const manualReplaceArtifact={artifactId:manualArtifactId,sourcePackageId:manualPackageId,sourcePackageVersion:1,aggregateVersion:Number(manualBeforeAdoption.aggregate_version),currentVersionId:manualBeforeAdoption.current_version_id,currentApprovedVersionId:manualBeforeAdoption.current_approved_version_id};
+  const staleManualSuccessor={actorId:runtime.requester,organizationId:runtime.org,workspaceId:runtime.workspace,artifactId:manualArtifactId,sourcePackageId:runtime.uuid(7692),requestId:runtime.uuid(7693),idempotencyKey:'pr-b-source-package-manual-successor-stale',authorizationVersion:authVersion,payload:{sourceMode:'manual_brief',artifactType:'pdd',manualBrief:manualSuccessorBrief,replaceArtifact:{...manualReplaceArtifact,currentVersionId:runtime.uuid(7694)}}};
+  await assert.rejects(fresh.query(`SELECT public.studio_artifact_source_package_create($1::jsonb)`,[JSON.stringify(staleManualSuccessor)]),/VERSION_CONFLICT/);
+  const manualSuccessorCommand={actorId:runtime.requester,organizationId:runtime.org,workspaceId:runtime.workspace,artifactId:manualArtifactId,sourcePackageId:manualSuccessorPackageId,requestId:runtime.uuid(7695),idempotencyKey:'pr-b-source-package-manual-successor',authorizationVersion:authVersion,payload:{sourceMode:'manual_brief',artifactType:'pdd',manualBrief:manualSuccessorBrief,replaceArtifact:manualReplaceArtifact}};
+  const manualSuccessor=(await fresh.query(`SELECT public.studio_artifact_source_package_create($1::jsonb) result`,[JSON.stringify(manualSuccessorCommand)])).rows[0].result;
+  assert.equal(manualSuccessor.resourceId,manualArtifactId);assert.equal(manualSuccessor.sourcePackageId,manualSuccessorPackageId);
+  const manualAfterAdoption=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id,source_package_id FROM public.studio_artifact_aggregates WHERE id=$1`,[manualArtifactId])).rows[0];
+  assert.equal(Number(manualAfterAdoption.aggregate_version),Number(manualBeforeAdoption.aggregate_version)+1);assert.equal(manualAfterAdoption.current_version_id,manualBeforeAdoption.current_version_id);assert.equal(manualAfterAdoption.current_approved_version_id,manualBeforeAdoption.current_approved_version_id);assert.equal(manualAfterAdoption.source_package_id,manualSuccessorPackageId);
+  const manualSuccessorRow=(await fresh.query(`SELECT version,replaces_source_package_id,manual_brief_hash FROM public.studio_artifact_source_packages WHERE id=$1`,[manualSuccessorPackageId])).rows[0];
+  assert.equal(Number(manualSuccessorRow.version),2);assert.equal(manualSuccessorRow.replaces_source_package_id,manualPackageId);
+  assert.equal((await fresh.query(`SELECT source_package_id FROM public.studio_artifact_versions WHERE id=$1`,[manualVersionId])).rows[0].source_package_id,manualPackageId);
+  const manualSuccessorReplay=(await fresh.query(`SELECT public.studio_artifact_source_package_create($1::jsonb) result`,[JSON.stringify(manualSuccessorCommand)])).rows[0].result;assert.equal(manualSuccessorReplay.outcome,'replayed');assert.equal(manualSuccessorReplay.sourcePackageId,manualSuccessorPackageId);
+  console.log('STUDIO_REFRESH_ASSERTION',JSON.stringify({testId:'STUDIO-REFRESH-002',assertionId:'CHANGED-SOURCE-ORDINARY-COMMAND-CAS-HISTORY',result:'passed',sourcePackageVersion:2,headsPreserved:true,staleCasRejected:true,replayed:true}));
   const manualHead=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id,source_package_id FROM public.studio_artifact_aggregates WHERE id=$1`,[manualArtifactId])).rows[0];
   const manualGenerationCommand={actorId:runtime.requester,organizationId:runtime.org,workspaceId:runtime.workspace,requestId:runtime.uuid(7701),idempotencyKey:'pr-b-generation-manual-recovery',authorizationVersion:runtime.authorizationVersions[runtime.requester],artifactId:manualArtifactId,sourcePackageId:manualHead.source_package_id,templateKind:'system',templateVersionId:manualSystemTemplate.id,expectedAggregateVersion:Number(manualHead.aggregate_version),expectedCurrentVersionId:manualHead.current_version_id,expectedApprovedVersionId:manualHead.current_approved_version_id};
   const manualGeneration=(await fresh.query(`SELECT public.studio_artifact_generation_request_v2($1::jsonb) result`,[JSON.stringify(manualGenerationCommand)])).rows[0].result;
@@ -713,6 +728,31 @@ try{
     assert.ok(wrongAnchorAttemptId);assert.equal(Number((await fresh.query(`SELECT count(*) n FROM public.studio_artifact_generation_attempts WHERE id=$1`,[wrongAnchorAttemptId])).rows[0].n),0);assert.equal(Number((await fresh.query(`SELECT count(*) n FROM public.studio_artifact_versions WHERE generation_attempt_id=$1`,[wrongAnchorAttemptId])).rows[0].n),0);
   }
   const generationA=await generationRequest('tenant',approvedTemplate.id,'before-provider-loss');
+  // Exercise the actual package and generation-claim commands with the new system type.
+  // Roll back the probe so it cannot change the existing attempt/replay inventory.
+  await fresh.query('BEGIN');
+  try {
+    const sddArtifact = runtime.uuid(17301);
+    const sddSource = runtime.uuid(17302);
+    const createSdd = { ...manualCommand, artifactId: sddArtifact, sourcePackageId: sddSource,
+      authorizationVersion: generationA.command.authorizationVersion, requestId: runtime.uuid(17303),
+      idempotencyKey: 'process-evidence-sdd-source', payload: { ...manualCommand.payload, artifactType: 'sdd' } };
+    const created = (await fresh.query('SELECT public.studio_artifact_source_package_create($1::jsonb) result',
+      [JSON.stringify(createSdd)])).rows[0].result;
+    assert.equal(created.artifactId, sddArtifact);
+    const aggregate = (await fresh.query('SELECT aggregate_version,artifact_type FROM public.studio_artifact_aggregates WHERE id=$1', [sddArtifact])).rows[0];
+    assert.equal(aggregate.artifact_type, 'sdd');
+    const claim = { ...generationA.command, artifactId: sddArtifact, sourcePackageId: sddSource,
+      requestId: runtime.uuid(17304), idempotencyKey: 'process-evidence-sdd-generation', templateKind: 'system',
+      templateVersionId: projectedSdd.templateVersionId, expectedAggregateVersion: Number(aggregate.aggregate_version),
+      expectedCurrentVersionId: null, expectedApprovedVersionId: null };
+    const result = (await fresh.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) result',
+      [JSON.stringify(claim)])).rows[0].result;
+    assert.equal(result.generationPlan.sourcePackageId, sddSource);
+    const stored = (await fresh.query('SELECT artifact_id,template_id FROM public.studio_artifact_generation_attempts WHERE id=$1', [result.attemptId])).rows[0];
+    assert.deepEqual(stored, { artifact_id: sddArtifact, template_id: projectedSdd.templateVersionId });
+    console.log('SDD system generation claim persisted with its exact template and source package; provider not run.');
+  } finally { await fresh.query('ROLLBACK'); }
   assert.deepEqual(generationA.selectors,generationPreGenerationProjection);assert.equal(generationA.result.generationPlan.sourcePackageId,generationPreGenerationProjection.sourcePackageId);assert.equal(generationA.result.generationPlan.sourcePackageHash,generationPreGenerationProjection.sourcePackageHash);
   emit('SOURCEPKG-PRB-001','PREGENERATION-FIRST-GENERATION-BINDING','handoff-consume-first-generation',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:generationA.selectors.sourcePackageId,version:Number(generationA.selectors.sourcePackageVersion),hash:generationA.selectors.sourcePackageHash,projectionBound:true},template:{kind:'tenant',versionId:approvedTemplate.id,version:1,hash:approvedTemplate.template_hash},handoff:{id:generationHandoffId,status:'consumed'},artifact:{id:generationA.selectors.artifactId,aggregateVersion:Number(generationA.selectors.aggregateVersion),currentVersionId:generationA.selectors.currentVersionId,currentApprovedVersionId:generationA.selectors.currentApprovedVersionId,attemptId:generationA.result.attemptId,serverPlanHashBound:true}}));
   const attemptsBeforeReplay=Number((await fresh.query(`SELECT count(*) n FROM public.studio_artifact_generation_attempts WHERE artifact_id=$1`,[generationArtifactId])).rows[0].n);
@@ -735,11 +775,45 @@ try{
   emit('CONTRACT-PRB-002','POSTGRES-V2-MODE-PARITY-NONDISCLOSURE','studio-artifact-v2-projections',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{assessed:{id:generationPackage.id,artifactId:generationArtifactId},mixed:{id:hybridPackageId,artifactId:hybridArtifactId},direct:{id:directPackageId,artifactId:directArtifactId},manual:{id:manualPackageId,artifactId:manualArtifactId},rawManualBriefDisclosed:false},template:{tenantVersionId:approvedTemplate.id,systemDirectVersionId:directSystemTemplate.id,systemManualVersionId:manualSystemTemplate.id,providerInstructionsDisclosed:false},handoff:{id:generationHandoffId,hybridId:hybridHandoffId},artifact:{contractVersion:'studio-artifact-2',assessedId:generationArtifactId,mixedId:hybridArtifactId,directId:directArtifactId,manualId:manualArtifactId,truthfulDiscriminatedAncestry:true,unauthorizedNonDisclosure:true,crossWorkspaceNonDisclosure:true,legacyProjectionUnchanged:true}}));
   emit('STUDIO-TR-009','IDEMP-002-B','response-loss-before-provider',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:generationPackage.id,hash:generationPackage.package_hash},template:{kind:'tenant',versionId:approvedTemplate.id,version:1,hash:approvedTemplate.template_hash},handoff:{id:generationHandoffId},artifact:{id:generationArtifactId,attemptId:generationA.result.attemptId,versionId:finalizedA.versionId,providerEffectKey:claimA.providerEffectKey,gatewayEffectCount:1,responseLoss:'before_provider',stale:false}}));
 
-  const selectiveCandidate={...selectiveBaseContent,title:'Generated candidate title must not replace authored title',summary:'Generated candidate summary must not replace authored summary.',sections:[
-    {...selectiveBaseContent.sections[0],body:'Generated summary must remain candidate-only.'},
-    {...selectiveBaseContent.sections[1],body:'Refreshed functional requirement from the exact source package.'},
-    {...selectiveBaseContent.sections[2],body:'flowchart TD\nA[Original] --> C[Validated refresh]'},
+  const predecessorGenerationPackage=generationPackage;
+  const changedAssessmentUpstream=await cloneAssessHandoff(fresh,runtime,12),successorHandoffId=runtime.uuid(7718);
+  await handoffCommand('handoff.request',runtime.requester,0,{upstreamHandoffId:changedAssessmentUpstream.handoff,artifactType:'brd',targetInputBundleId:studioBundleId,targetInputBundleVersionId:studioBundle.inputBundleVersionId,targetInputBundleVersion:1},'changed-source-request','pr-b-handoff-changed-source-request',successorHandoffId);
+  await handoffCommand('handoff.review.resolve',runtime.reviewer,1,{outcome:'approve',rationale:'Independent changed-source review'},'changed-source-review','pr-b-handoff-changed-source-review',successorHandoffId);
+  await handoffCommand('handoff.approval.resolve',runtime.approver,2,{outcome:'approve',rationale:'Independent changed-source approval'},'changed-source-approve','pr-b-handoff-changed-source-approve',successorHandoffId);
+  const predecessorHeads=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id,source_package_id FROM public.studio_artifact_aggregates WHERE id=$1`,[generationArtifactId])).rows[0];
+  const replaceArtifact={artifactId:generationArtifactId,sourcePackageId:predecessorHeads.source_package_id,sourcePackageVersion:Number(predecessorGenerationPackage.version),aggregateVersion:Number(predecessorHeads.aggregate_version),currentVersionId:predecessorHeads.current_version_id,currentApprovedVersionId:predecessorHeads.current_approved_version_id};
+  const changedConsume=await handoffCommand('handoff.consume',runtime.requester,3,{replaceArtifact},'changed-source-consume','pr-b-handoff-changed-source-consume',successorHandoffId);
+  assert.equal(changedConsume.result.resourceId,generationArtifactId);
+  generationPackage=(await fresh.query(`SELECT id,artifact_id,package_hash,source_mode,assess_handoff_id,anchor_manifest,anchor_manifest_hash,anchor_count,version,replaces_source_package_id FROM public.studio_artifact_source_packages WHERE id=$1`,[changedConsume.result.sourcePackageId])).rows[0];
+  const successorHeads=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id,source_package_id FROM public.studio_artifact_aggregates WHERE id=$1`,[generationArtifactId])).rows[0];
+  assert.equal(Number(generationPackage.version),Number(predecessorGenerationPackage.version)+1);assert.equal(generationPackage.replaces_source_package_id,predecessorGenerationPackage.id);assert.equal(generationPackage.assess_handoff_id,changedAssessmentUpstream.handoff);
+  assert.equal(Number(successorHeads.aggregate_version),Number(predecessorHeads.aggregate_version)+1);assert.equal(successorHeads.current_version_id,predecessorHeads.current_version_id);assert.equal(successorHeads.current_approved_version_id,predecessorHeads.current_approved_version_id);assert.equal(successorHeads.source_package_id,generationPackage.id);
+  assert.equal((await fresh.query(`SELECT source_package_id FROM public.studio_artifact_versions WHERE id=$1`,[finalizedA.versionId])).rows[0].source_package_id,predecessorGenerationPackage.id);
+  const successorConsumptionHistory=(await fresh.query(`SELECT count(*)::int consumption_count,count(DISTINCT source_package_id)::int package_count FROM public.enterprise_module_handoff_consumptions WHERE artifact_id=$1`,[generationArtifactId])).rows[0];
+  assert.deepEqual(successorConsumptionHistory,{consumption_count:2,package_count:2});
+  console.log('STUDIO_REFRESH_ASSERTION',JSON.stringify({testId:'STUDIO-REFRESH-003',assertionId:'APPROVED-ASSESS-SUCCESSOR-SAME-DOCUMENT',result:'passed',sourcePackageVersion:Number(generationPackage.version),independentlyApproved:true,headsPreserved:true,immutableConsumptionCount:successorConsumptionHistory.consumption_count}));
+
+  const successorAnchors=generationPackage.anchor_manifest;
+  const successorAnchor=successorAnchors[0];
+  const successorSourceIds=[...new Set(successorAnchors.map(anchor=>anchor.sourceVersionId))].sort();
+  assert.equal(successorSourceIds.length,2);
+  const successorStudioAnchor=successorAnchors.find(anchor=>anchor.sourceVersionId!==assessedAnchor.sourceVersionId);assert.ok(successorStudioAnchor);
+  const selectiveSuccessorContent={...selectiveBaseContent,coverage:{selectedSourceVersionIds:successorSourceIds,coveredSourceVersionIds:successorSourceIds,complete:true},sections:selectiveBaseContent.sections.map(section=>({...section,sourceAnchors:section.id==='functionalRequirements'?successorAnchors:[successorAnchor]}))};
+  const selectiveCandidate={...selectiveSuccessorContent,title:'Generated candidate title must not replace authored title',summary:'Generated candidate summary must not replace authored summary.',sections:[
+    {...selectiveSuccessorContent.sections[0],body:'Generated summary must remain candidate-only.'},
+    {...selectiveSuccessorContent.sections[1],body:'Refreshed functional requirement from the exact source package.'},
+    {...selectiveSuccessorContent.sections[2],body:'flowchart TD\nA[Original] --> C[Validated refresh]'},
   ]};
+  let droppedSourceAttemptId=null;
+  await fresh.query('BEGIN');
+  try{
+    const droppedSourceGeneration=await generationRequest('tenant',approvedTemplate.id,'selected-dropped-source',['asIsFlow']);
+    droppedSourceAttemptId=droppedSourceGeneration.result.attemptId;
+    const droppedSourceToken=runtime.uuid(7723),droppedSourceClaim=(await fresh.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[droppedSourceAttemptId,droppedSourceToken])).rows[0].result;
+    await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-selective-dropped-source',$4::jsonb)`,[droppedSourceAttemptId,droppedSourceToken,droppedSourceClaim.executionFence,JSON.stringify(selectiveCandidate)]);
+    await assert.rejects(fresh.query(`SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result`,[droppedSourceAttemptId,droppedSourceToken,droppedSourceClaim.executionFence]),/SELECTIVE_REFRESH_COVERAGE_INCOMPLETE/);
+  }finally{await fresh.query('ROLLBACK')}
+  assert.ok(droppedSourceAttemptId);assert.equal(Number((await fresh.query(`SELECT count(*) n FROM public.studio_artifact_generation_attempts WHERE id=$1`,[droppedSourceAttemptId])).rows[0].n),0);
   let rejectedSelectiveAttemptId=null;
   await fresh.query('BEGIN');
   try{
@@ -779,13 +853,41 @@ try{
   assert.equal(stagedSelective.title,selectiveCandidate.title);assert.equal(stagedSelective.sections.find(section=>section.id==='summary').body,selectiveCandidate.sections[0].body);
   const selectiveBindings=(await fresh.query(`SELECT section_id,source_package_id,source_package_hash,origin_version_id,generation_attempt_id,disposition FROM public.studio_artifact_section_source_bindings WHERE artifact_version_id=$1 ORDER BY section_id`,[finalizedSelective.versionId])).rows;
   assert.deepEqual(selectiveBindings.map(binding=>[binding.section_id,binding.disposition]),[['asIsFlow','refreshed'],['functionalRequirements','refreshed'],['summary','carried']]);
-  assert.ok(selectiveBindings.every(binding=>binding.source_package_id===generationPackage.id&&binding.source_package_hash===generationPackage.package_hash));
-  assert.equal(selectiveBindings.find(binding=>binding.section_id==='summary').origin_version_id,finalizedA.versionId);
-  assert.ok(selectiveBindings.filter(binding=>binding.disposition==='refreshed').every(binding=>binding.origin_version_id===finalizedSelective.versionId&&binding.generation_attempt_id===selectiveGeneration.result.attemptId));
+  const carriedSummaryBinding=selectiveBindings.find(binding=>binding.section_id==='summary');
+  assert.equal(carriedSummaryBinding.source_package_id,predecessorGenerationPackage.id);assert.equal(carriedSummaryBinding.source_package_hash,predecessorGenerationPackage.package_hash);assert.equal(carriedSummaryBinding.origin_version_id,finalizedA.versionId);
+  assert.ok(selectiveBindings.filter(binding=>binding.disposition==='refreshed').every(binding=>binding.source_package_id===generationPackage.id&&binding.source_package_hash===generationPackage.package_hash&&binding.origin_version_id===finalizedSelective.versionId&&binding.generation_attempt_id===selectiveGeneration.result.attemptId));
+  let humanCommandOrdinal=0;
+  const humanArtifactCommand=async(commandType,actor,payload,label)=>{
+    const head=(await fresh.query(`SELECT aggregate.aggregate_version,version.id version_id,version.version FROM public.studio_artifact_aggregates aggregate JOIN public.studio_artifact_versions version ON version.id=aggregate.current_version_id WHERE aggregate.id=$1`,[generationArtifactId])).rows[0];
+    const command={commandType,actorId:actor,organizationId:runtime.org,workspaceId:runtime.workspace,expectedAggregateVersion:Number(head.aggregate_version),expectedArtifactVersion:Number(head.version),requestId:runtime.uuid(7850+humanCommandOrdinal++),idempotencyKey:`pr-b-selected-human-${label}`,authorizationVersion:runtime.authorizationVersions[actor],payload:{artifactId:generationArtifactId,...payload(head)}};
+    return(await fresh.query(`SELECT public.studio_artifact_command_claim($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result;
+  };
+  const invalidRetargetedHumanContent={...selectiveVersion.content,sections:selectiveVersion.content.sections.map(section=>section.id==='summary'?{...section,sourceAnchors:[successorStudioAnchor]}:section)};
+  await assert.rejects(humanArtifactCommand('studio.artifact.draft.revise',runtime.requester,head=>({parentVersionId:head.version_id,content:invalidRetargetedHumanContent}),'invalid-retarget'),/STUDIO_STRUCTURED_CONTENT_INVALID/);
+  const humanRevisionContent={...selectiveVersion.content,summary:'Human-reviewed mixed-source revision.',sections:[
+    ...selectiveVersion.content.sections.map(section=>section.id==='summary'?{...section,body:'Human edit retaining the original carried source binding.'}:section),
+    {id:'decisionNotes',title:'Decision notes',body:'New human-authored section grounded in the current successor package.',sourceAnchors:[successorStudioAnchor],labels:['human_authored']},
+  ]};
+  const humanRevisionResult=await humanArtifactCommand('studio.artifact.draft.revise',runtime.requester,head=>({parentVersionId:head.version_id,content:humanRevisionContent}),'revise');
+  assert.equal(humanRevisionResult.outcome,'committed');
+  const humanRevision=(await fresh.query(`SELECT id,version,parent_version_id,content,lifecycle,generation_attempt_id FROM public.studio_artifact_versions WHERE artifact_id=$1 ORDER BY version DESC LIMIT 1`,[generationArtifactId])).rows[0];
+  assert.equal(humanRevision.parent_version_id,finalizedSelective.versionId);assert.equal(humanRevision.generation_attempt_id,null);assert.equal(humanRevision.content.summary,humanRevisionContent.summary);
+  const humanBindings=(await fresh.query(`SELECT section_id,source_package_id,source_package_hash,generation_attempt_id,disposition FROM public.studio_artifact_section_source_bindings WHERE artifact_version_id=$1 ORDER BY section_id`,[humanRevision.id])).rows;
+  assert.equal(humanBindings.find(binding=>binding.section_id==='summary').source_package_id,predecessorGenerationPackage.id);
+  assert.ok(humanBindings.filter(binding=>['functionalRequirements','asIsFlow','decisionNotes'].includes(binding.section_id)).every(binding=>binding.source_package_id===generationPackage.id));
+  assert.ok(humanBindings.every(binding=>binding.generation_attempt_id===null&&binding.disposition==='human_edited'));
+  const humanReload=(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_projection_v2($1,$2,$3) projection`,[runtime.org,runtime.workspace,generationArtifactId])).rows[0].projection;
+  assert.equal(humanReload.currentVersion.id,humanRevision.id);assert.equal(humanReload.sections.find(section=>section.id==='summary').body,'Human edit retaining the original carried source binding.');assert.equal(humanReload.sections.find(section=>section.id==='decisionNotes').sourceAnchors[0].sourceVersionId,successorStudioAnchor.sourceVersionId);
+  await humanArtifactCommand('studio.artifact.review.submit',runtime.requester,()=>({artifactVersionId:humanRevision.id}),'submit');
+  await humanArtifactCommand('studio.artifact.review.assign',runtime.requester,()=>({artifactVersionId:humanRevision.id,reviewerId:runtime.reviewer}),'assign');
+  await humanArtifactCommand('studio.artifact.review.resolve',runtime.reviewer,()=>({artifactVersionId:humanRevision.id,outcome:'approve',rationale:'Independent review of the exact mixed-source human revision.',conditions:[]}),'review');
+  await humanArtifactCommand('studio.artifact.approval.resolve',runtime.approver,()=>({artifactVersionId:humanRevision.id,outcome:'approve',rationale:'Independent approval of the exact reviewed revision.',conditions:[]}),'approve');
+  const approvedHumanHead=(await fresh.query(`SELECT aggregate.current_version_id,aggregate.current_approved_version_id,aggregate.lifecycle,version.lifecycle version_lifecycle FROM public.studio_artifact_aggregates aggregate JOIN public.studio_artifact_versions version ON version.id=aggregate.current_version_id WHERE aggregate.id=$1`,[generationArtifactId])).rows[0];
+  assert.deepEqual(approvedHumanHead,{current_version_id:humanRevision.id,current_approved_version_id:humanRevision.id,lifecycle:'approved',version_lifecycle:'approved'});
   const selectiveFinalizeReplay=(await fresh.query(`SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result`,[selectiveGeneration.result.attemptId,selectiveToken,selectiveClaim.executionFence])).rows[0].result;
   assert.equal(selectiveFinalizeReplay.outcome,'replayed');assert.equal(selectiveFinalizeReplay.versionId,finalizedSelective.versionId);
   assert.equal(Number((await fresh.query(`SELECT count(*) n FROM public.studio_artifact_versions WHERE generation_attempt_id=$1`,[selectiveGeneration.result.attemptId])).rows[0].n),1);
-  emit('STUDIO-REFRESH-001','SELECTED-SECTIONS-ATOMIC-CAS-LINEAGE-REPLAY','server-authoritative-selective-refresh',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:generationPackage.id,hash:generationPackage.package_hash},template:{kind:'tenant',versionId:approvedTemplate.id},handoff:{id:generationHandoffId},artifact:{id:generationArtifactId,parentVersionId:finalizedA.versionId,versionId:finalizedSelective.versionId,selectedSectionIds,carriedSectionIds:['summary'],candidateRetained:true,intermediateHeadExposure:false,staleCasHeadUnchanged:true,replayedVersionId:selectiveFinalizeReplay.versionId}}));
+  console.log('STUDIO_REFRESH_ASSERTION',JSON.stringify({testId:'STUDIO-REFRESH-001',assertionId:'SELECTED-SECTIONS-ATOMIC-CAS-LINEAGE-REPLAY',result:'passed',selectedSectionIds,carriedSectionIds:['summary'],candidateRetained:true,intermediateHeadExposure:false,staleCasHeadUnchanged:true,replayed:true,humanRevisionReloaded:true,humanRevisionApproved:true}));
 
   const generationB=await generationRequest('tenant',approvedTemplate.id,'after-stage-loss');const tokenB1=runtime.uuid(7730);
   const claimB1=(await fresh.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[generationB.result.attemptId,tokenB1])).rows[0].result;await gatewayEffect(claimB1.providerEffectKey);

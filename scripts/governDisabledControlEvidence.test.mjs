@@ -209,3 +209,13 @@ test('proof rejects forged effects, incomplete cleanup, provider use, raw fields
   const source = document(); source.source.files[0].path = 'scripts/substituted.mjs';
   assert.throws(() => validateGovernReviewerDenialPreparationEvidence(source), /SOURCE_REJECTED/u);
 });
+
+for (const base of ['codex/process-evidence-to-assessment', 'codex/process-evidence-studio']) {
+  test(`stacked preparation binds both same-repository refs for ${base}`, () => {
+    const { environment, event, gitHead } = identityFixture();
+    event.pull_request.base.ref = base;
+    assert.equal(governReviewerDenialPreparationIdentity(environment, gitHead, event).releaseSha, gitHead);
+    event.pull_request.head.repo.full_name = 'different-owner/AvalaOS-Core';
+    assert.throws(() => governReviewerDenialPreparationIdentity(environment, gitHead, event), /IDENTITY_REJECTED/u);
+  });
+}

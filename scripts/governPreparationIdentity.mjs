@@ -31,7 +31,7 @@ export function governPreparationIdentity(environment, gitHead, event) {
     const pr = event?.pull_request;
     if (!Number.isSafeInteger(event?.number) || event.number < 1
       || environment.GITHUB_REF !== `refs/pull/${event.number}/merge`
-      || pr?.head?.sha !== value.releaseSha || pr?.base?.ref !== 'main'
+      || pr?.head?.sha !== value.releaseSha || !['main', 'codex/process-evidence-to-assessment', 'codex/process-evidence-studio'].includes(pr?.base?.ref)
       || pr?.head?.repo?.full_name !== REPOSITORY || pr?.base?.repo?.full_name !== REPOSITORY) reject();
   } else if (environment.GITHUB_EVENT_NAME === 'push') {
     if (environment.GITHUB_REF !== 'refs/heads/main' || event?.ref !== 'refs/heads/main'

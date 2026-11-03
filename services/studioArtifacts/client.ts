@@ -391,7 +391,9 @@ export const controlledHumanStudioTarget = (
   const inputBundle=payload.studioInputBundle&&typeof payload.studioInputBundle==='object'&&!Array.isArray(payload.studioInputBundle)
     ? payload.studioInputBundle as Record<string,unknown>:null;
   if(commandType==='studio.source-package.create') return payload.sourceMode==='direct_transcript_bundle'
-    ? {family:'input_bundle',id:typeof inputBundle?.id==='string'?inputBundle.id:'',version:Number(inputBundle?.version??-1)}
+    ? payload.replaceArtifact&&typeof payload.replaceArtifact==='object'&&!Array.isArray(payload.replaceArtifact)
+      ? {family:'studio_artifact',id:String((payload.replaceArtifact as Record<string,unknown>).artifactId??''),version:expectedVersion}
+      : {family:'input_bundle',id:typeof inputBundle?.id==='string'?inputBundle.id:'',version:Number(inputBundle?.version??-1)}
     : {family:'workspace',id:context.workspaceId,version:context.authorizationVersion};
   if(commandType==='studio.handoff.request') return {family:'assess_studio_handoff',id:typeof payload.upstreamHandoffId==='string'?payload.upstreamHandoffId:'',version:Number(controlledHuman?.handoffSourceVersion??expectedVersion)};
   if(commandType.startsWith('studio.handoff.')) return {family:'module_handoff',id:typeof payload.handoffId==='string'?payload.handoffId:'',version:expectedVersion};
@@ -423,8 +425,8 @@ export const executeStudioWorkspaceCommand = async (
   };
   let selectorBindings:Record<string,unknown>|null=null;
   if(commandType==='studio.source-package.create')selectorBindings=payload.sourceMode==='manual_brief'
-    ? {sourceMode:payload.sourceMode,artifactType:payload.artifactType,manualBriefDigest:await textDigest(payload.manualBrief)}
-    : {sourceMode:payload.sourceMode,artifactType:payload.artifactType,studioInputBundleId:inputBundle?.id,studioInputBundleVersionId:inputBundle?.versionId,studioInputBundleVersion:inputBundle?.version};
+    ? {sourceMode:payload.sourceMode,artifactType:payload.artifactType,manualBriefDigest:await textDigest(payload.manualBrief),replaceArtifact:payload.replaceArtifact??null}
+    : {sourceMode:payload.sourceMode,artifactType:payload.artifactType,studioInputBundleId:inputBundle?.id,studioInputBundleVersionId:inputBundle?.versionId,studioInputBundleVersion:inputBundle?.version,replaceArtifact:payload.replaceArtifact??null};
   else if(commandType==='studio.handoff.request'){
     const targetBundle=payload.targetInputBundle&&typeof payload.targetInputBundle==='object'&&!Array.isArray(payload.targetInputBundle)
       ? payload.targetInputBundle as Record<string,unknown>:null;
@@ -434,7 +436,7 @@ export const executeStudioWorkspaceCommand = async (
     handoffId:payload.handoffId,handoffVersion:payload.handoffVersion,outcome:payload.outcome,
     rationaleDigest:await digest(payload.rationale),conditionsDigest:await digest(payload.conditions??[]),
   };
-  else if(commandType==='studio.handoff.consume')selectorBindings={handoffId:payload.handoffId,handoffVersion:payload.handoffVersion};
+  else if(commandType==='studio.handoff.consume')selectorBindings={handoffId:payload.handoffId,handoffVersion:payload.handoffVersion,replaceArtifact:payload.replaceArtifact??null};
   else if(commandType==='studio.generation.request')selectorBindings={
     artifactId:payload.artifactId,sourcePackageId:payload.sourcePackageId,sourcePackageVersion:payload.sourcePackageVersion,
     templateKind:(payload.template as Record<string,unknown>)?.kind,templateId:(payload.template as Record<string,unknown>)?.templateId,

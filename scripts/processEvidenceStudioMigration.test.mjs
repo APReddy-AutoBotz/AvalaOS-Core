@@ -21,6 +21,19 @@ for (const required of [
   "section_id text NOT NULL CHECK(section_id~'^[A-Za-z][A-Za-z0-9_.-]{0,79}$')",
   "COALESCE(section.value->>'id',section.value->>'key')",
   'FOREIGN KEY(origin_version_id,artifact_id,org_id,workspace_id)',
+  "payload?'replaceArtifact'",
+  'replaces_source_package_id,source_mode',
+  "artifact.current_version_id IS DISTINCT FROM (payload#>>'{replaceArtifact,currentVersionId}')::uuid",
+  "artifact.current_approved_version_id IS DISTINCT FROM (payload#>>'{replaceArtifact,currentApprovedVersionId}')::uuid",
+  "artifact.case_id IS DISTINCT FROM upstream.case_id",
+  "aggregate_version=aggregate_version+1",
+  'DROP CONSTRAINT enterprise_module_handoff_consumptions_artifact_id_key',
+  'enterprise_module_handoff_consumptions_artifact_package_key',
+  'retained.section_id=current_section_key',
+  'studio_process_evidence_composite_content_safe(NEW.content,NULL,NEW.parent_version_id)',
+  'THEN COALESCE(prior.source_package_id,parent.source_package_id,NEW.source_package_id)',
+  "RAISE EXCEPTION 'SELECTIVE_REFRESH_COVERAGE_INCOMPLETE'",
+  "'selectedSourceVersionIds',selected_source_ids,'coveredSourceVersionIds',covered_source_ids",
 ]) assert.ok(migration.includes(required), `migration missing ${required}`);
 
 assert.ok(migration.indexOf('CREATE TRIGGER studio_a_process_evidence_merge_selected_sections')

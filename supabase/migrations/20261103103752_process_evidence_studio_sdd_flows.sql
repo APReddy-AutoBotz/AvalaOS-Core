@@ -325,8 +325,12 @@ CREATE OR REPLACE FUNCTION public.studio_process_evidence_merge_selected_section
 RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE
   binding public.studio_generation_section_refreshes;
+  attempt public.studio_artifact_generation_attempts;
   parent public.studio_artifact_versions;
+  package public.studio_artifact_source_packages;
   merged_sections jsonb;
+  selected_source_ids jsonb;
+  covered_source_ids jsonb;
 BEGIN
   IF NEW.generation_attempt_id IS NULL THEN RETURN NEW;END IF;
   SELECT * INTO binding FROM public.studio_generation_section_refreshes
@@ -335,7 +339,14 @@ BEGIN
   SELECT * INTO parent FROM public.studio_artifact_versions
    WHERE id=binding.parent_version_id AND artifact_id=NEW.artifact_id
      AND org_id=NEW.org_id AND workspace_id=NEW.workspace_id FOR SHARE;
+  SELECT * INTO attempt FROM public.studio_artifact_generation_attempts
+   WHERE id=NEW.generation_attempt_id AND artifact_id=NEW.artifact_id
+     AND org_id=NEW.org_id AND workspace_id=NEW.workspace_id;
+  SELECT * INTO package FROM public.studio_artifact_source_packages
+   WHERE id=attempt.source_package_id AND artifact_id=NEW.artifact_id
+     AND org_id=NEW.org_id AND workspace_id=NEW.workspace_id;
   IF parent.id IS NULL OR NEW.parent_version_id IS DISTINCT FROM parent.id
+     OR attempt.id IS NULL OR package.id IS NULL
      OR jsonb_typeof(parent.content->'sections')<>'array'
      OR jsonb_typeof(NEW.content->'sections')<>'array'
      OR EXISTS(SELECT 1 FROM unnest(binding.selected_section_ids)section_id
@@ -352,6 +363,24 @@ BEGIN
   ) INTO merged_sections
   FROM jsonb_array_elements(parent.content->'sections')WITH ORDINALITY parent_section(value,ordinality);
   NEW.content:=jsonb_set(parent.content,'{sections}',merged_sections,false);
+  SELECT COALESCE(jsonb_agg(source_id ORDER BY source_id),'[]'::jsonb) INTO covered_source_ids
+  FROM(SELECT DISTINCT anchor.value->>'sourceVersionId' source_id
+    FROM jsonb_array_elements(merged_sections)section(value)
+    CROSS JOIN LATERAL jsonb_array_elements(section.value->'sourceAnchors')anchor(value))sources;
+  SELECT COALESCE(jsonb_agg(source_id ORDER BY source_id),'[]'::jsonb) INTO selected_source_ids
+  FROM(SELECT DISTINCT source_id FROM(
+    SELECT anchor.value->>'sourceVersionId' source_id
+      FROM jsonb_array_elements(package.anchor_manifest)anchor(value)
+    UNION ALL
+    SELECT anchor.value->>'sourceVersionId' source_id
+      FROM jsonb_array_elements(merged_sections)section(value)
+      CROSS JOIN LATERAL jsonb_array_elements(section.value->'sourceAnchors')anchor(value)
+  )all_selected WHERE source_id IS NOT NULL)selected;
+  IF covered_source_ids IS DISTINCT FROM selected_source_ids THEN
+    RAISE EXCEPTION 'SELECTIVE_REFRESH_COVERAGE_INCOMPLETE';
+  END IF;
+  NEW.content:=jsonb_set(NEW.content,'{coverage}',jsonb_build_object(
+    'selectedSourceVersionIds',selected_source_ids,'coveredSourceVersionIds',covered_source_ids,'complete',true),false);
   NEW.content_hash:=public.enterprise_sha256_jsonb(NEW.content);
   RETURN NEW;
 END
@@ -378,11 +407,15 @@ BEGIN
     origin_version_id,generation_attempt_id,disposition
   )
   SELECT NEW.id,normalized.section_id,NEW.artifact_id,NEW.org_id,NEW.workspace_id,
-    CASE WHEN NEW.generation_attempt_id IS NOT NULL
+    CASE WHEN NEW.generation_attempt_id IS NULL
+      THEN COALESCE(prior.source_package_id,parent.source_package_id,NEW.source_package_id)
+      WHEN NEW.generation_attempt_id IS NOT NULL
               AND(binding.attempt_id IS NULL OR cardinality(binding.selected_section_ids)=0
                    OR normalized.section_id=ANY(binding.selected_section_ids))
       THEN NEW.source_package_id ELSE COALESCE(prior.source_package_id,parent.source_package_id,NEW.source_package_id) END,
-    CASE WHEN NEW.generation_attempt_id IS NOT NULL
+    CASE WHEN NEW.generation_attempt_id IS NULL
+      THEN COALESCE(prior.source_package_hash,parent.source_package_hash,NEW.source_package_hash)
+      WHEN NEW.generation_attempt_id IS NOT NULL
               AND(binding.attempt_id IS NULL OR cardinality(binding.selected_section_ids)=0
                    OR normalized.section_id=ANY(binding.selected_section_ids))
       THEN NEW.source_package_hash ELSE COALESCE(prior.source_package_hash,parent.source_package_hash,NEW.source_package_hash) END,
@@ -390,7 +423,8 @@ BEGIN
               AND(binding.attempt_id IS NULL OR cardinality(binding.selected_section_ids)=0
                    OR normalized.section_id=ANY(binding.selected_section_ids))
       THEN NEW.id ELSE COALESCE(prior.origin_version_id,parent.id,NEW.id) END,
-    CASE WHEN NEW.generation_attempt_id IS NOT NULL
+    CASE WHEN NEW.generation_attempt_id IS NULL THEN NULL
+      WHEN NEW.generation_attempt_id IS NOT NULL
               AND(binding.attempt_id IS NULL OR cardinality(binding.selected_section_ids)=0
                    OR normalized.section_id=ANY(binding.selected_section_ids))
       THEN NEW.generation_attempt_id ELSE prior.generation_attempt_id END,
@@ -434,3 +468,311 @@ REVOKE ALL ON FUNCTION public.studio_process_evidence_bind_section_sources() FRO
 REVOKE ALL ON FUNCTION public.studio_process_evidence_immutable() FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON TABLE public.studio_generation_section_refreshes FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON TABLE public.studio_artifact_section_source_bindings FROM PUBLIC,anon,authenticated;
+
+-- A document may adopt a later, independently approved Assess handoff without
+-- replacing the existing artifact. Retain one immutable consumption row for
+-- each exact successor package instead of constraining the artifact to its
+-- first handoff forever.
+ALTER TABLE public.enterprise_module_handoff_consumptions
+ DROP CONSTRAINT enterprise_module_handoff_consumptions_artifact_id_key;
+CREATE UNIQUE INDEX enterprise_module_handoff_consumptions_artifact_package_key
+ ON public.enterprise_module_handoff_consumptions(artifact_id,source_package_id);
+
+-- Changed inputs are adopted explicitly into the document aggregate the user
+-- is viewing. The immutable successor package becomes the aggregate binding,
+-- while current and approved document heads remain unchanged until a later
+-- user-selected section refresh commits a descendant revision.
+DO $studio_source_successor_commands$
+DECLARE definition text; previous text; replacement text;
+BEGIN
+  definition:=pg_get_functiondef('public.studio_artifact_source_package_create(jsonb)'::regprocedure);
+  previous:=$old$OR(payload-ARRAY['sourceMode','artifactType','studioInputBundleId','studioInputBundleVersionId','studioInputBundleVersion','manualBrief'])<>'{}'::jsonb$old$;
+  replacement:=$new$OR(payload-ARRAY['sourceMode','artifactType','studioInputBundleId','studioInputBundleVersionId','studioInputBundleVersion','manualBrief','replaceArtifact'])<>'{}'::jsonb$new$;
+  IF (length(definition)-length(replace(definition,previous,'')))/length(previous)<>1 THEN
+    RAISE EXCEPTION 'STUDIO_SOURCE_SUCCESSOR_PAYLOAD_PREDECESSOR_MISMATCH';
+  END IF;
+  definition:=replace(definition,previous,replacement);
+
+  previous:=$old$
+ IF artifact.id IS NOT NULL THEN
+$old$;
+  replacement:=$new$
+ IF payload?'replaceArtifact' THEN
+  IF jsonb_typeof(payload->'replaceArtifact')<>'object'
+     OR NOT((payload->'replaceArtifact')?&ARRAY['artifactId','sourcePackageId','sourcePackageVersion','aggregateVersion','currentVersionId','currentApprovedVersionId'])
+     OR((payload->'replaceArtifact')-ARRAY['artifactId','sourcePackageId','sourcePackageVersion','aggregateVersion','currentVersionId','currentApprovedVersionId'])<>'{}'::jsonb
+     OR COALESCE(payload#>>'{replaceArtifact,artifactId}','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+     OR COALESCE(payload#>>'{replaceArtifact,sourcePackageId}','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+     OR COALESCE(payload#>>'{replaceArtifact,sourcePackageVersion}','')!~'^[1-9][0-9]*$'
+     OR COALESCE(payload#>>'{replaceArtifact,aggregateVersion}','')!~'^[0-9]+$'
+     OR(payload#>>'{replaceArtifact,currentVersionId}' IS NOT NULL AND payload#>>'{replaceArtifact,currentVersionId}'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+     OR(payload#>>'{replaceArtifact,currentApprovedVersionId}' IS NOT NULL AND payload#>>'{replaceArtifact,currentApprovedVersionId}'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') THEN
+    RAISE EXCEPTION 'INVALID_COMMAND';
+  END IF;
+  IF artifact.id IS NULL OR artifact.id IS DISTINCT FROM (payload#>>'{replaceArtifact,artifactId}')::uuid
+     OR artifact.org_id IS DISTINCT FROM org OR artifact.workspace_id IS DISTINCT FROM workspace
+     OR artifact.artifact_type IS DISTINCT FROM artifact_type
+     OR artifact.source_mode NOT IN('direct_transcript_bundle','manual_brief')
+     OR artifact.aggregate_version IS DISTINCT FROM (payload#>>'{replaceArtifact,aggregateVersion}')::bigint
+     OR artifact.current_version_id IS DISTINCT FROM (payload#>>'{replaceArtifact,currentVersionId}')::uuid
+     OR artifact.current_approved_version_id IS DISTINCT FROM (payload#>>'{replaceArtifact,currentApprovedVersionId}')::uuid THEN
+    RAISE EXCEPTION 'VERSION_CONFLICT';
+  END IF;
+  SELECT * INTO package FROM public.studio_artifact_source_packages current_package
+   WHERE current_package.id=artifact.source_package_id AND current_package.artifact_id=artifact.id
+     AND current_package.org_id=org AND current_package.workspace_id=workspace FOR SHARE;
+  IF package.id IS NULL OR package.id IS DISTINCT FROM (payload#>>'{replaceArtifact,sourcePackageId}')::uuid
+     OR package.version IS DISTINCT FROM (payload#>>'{replaceArtifact,sourcePackageVersion}')::bigint
+     OR artifact.source_package_hash IS DISTINCT FROM package.package_hash THEN
+    RAISE EXCEPTION 'SOURCE_PACKAGE_STALE';
+  END IF;
+  INSERT INTO public.studio_artifact_source_packages(id,artifact_id,org_id,workspace_id,version,replaces_source_package_id,source_mode,studio_input_bundle_id,studio_input_bundle_version_id,
+   studio_input_bundle_version,studio_bundle_hash,manual_brief_hash,lineage_classification,planning_only,route_policy_version,route_policy_snapshot,route_policy_hash,package_hash,
+   candidate_manifest,candidate_manifest_hash,candidate_count,anchor_manifest,anchor_manifest_hash,anchor_count,created_by)
+  VALUES(source_package_id,artifact.id,org,workspace,package.version+1,package.id,source_mode,bundle.id,bundle_version.id,bundle_version.version,bundle_version.bundle_hash,
+   CASE WHEN source_mode='manual_brief' THEN manual_brief_hash END,'not_assessed',true,1,route_snapshot,route_hash,package_hash,
+   candidate_manifest,candidate_manifest_hash,jsonb_array_length(candidate_manifest),anchor_manifest,anchor_manifest_hash,jsonb_array_length(anchor_manifest),actor)
+  RETURNING * INTO package;
+  IF source_mode='manual_brief' THEN
+   INSERT INTO public.studio_artifact_manual_brief_materials(source_package_id,artifact_id,org_id,workspace_id,manual_brief,manual_brief_hash,created_by)
+   VALUES(package.id,artifact.id,org,workspace,payload->>'manualBrief',manual_brief_hash,actor);
+  END IF;
+  UPDATE public.studio_artifact_aggregates SET source_package_id=package.id,source_package_hash=package.package_hash,
+   source_mode=package.source_mode,lineage_classification=package.lineage_classification,planning_only=package.planning_only,
+   aggregate_version=aggregate_version+1,updated_at=statement_timestamp()
+  WHERE id=artifact.id RETURNING * INTO artifact;
+  result:=jsonb_build_object('outcome','committed','receiptId',receipt.id,'resourceId',artifact.id,'artifactId',artifact.id,'sourcePackageId',package.id,
+   'sourcePackageHash',package.package_hash,'sourceMode',package.source_mode,'lineageClassification','not_assessed','planningOnly',true);
+  INSERT INTO public.privileged_audit_events(id,org_id,workspace_id,actor_id,request_id,action,resource_type,resource_id,outcome,resource_version,metadata)
+  VALUES(audit_id,org,workspace,actor,request_id,'studio.source-package.create','studio_artifact',artifact.id,'succeeded',artifact.aggregate_version,
+   jsonb_build_object('sourcePackageId',package.id,'sourceMode',package.source_mode,'planningOnly',true,'replacesSourcePackageId',package.replaces_source_package_id));
+  UPDATE public.studio_artifact_command_receipts SET status='committed',resource_id=artifact.id,response=result,completed_at=statement_timestamp() WHERE id=receipt.id;
+  RETURN result;
+ END IF;
+ IF artifact.id IS NOT NULL THEN
+$new$;
+  IF (length(definition)-length(replace(definition,previous,'')))/length(previous)<>1 THEN
+    RAISE EXCEPTION 'STUDIO_SOURCE_SUCCESSOR_BRANCH_PREDECESSOR_MISMATCH';
+  END IF;
+  definition:=replace(definition,previous,replacement);
+  EXECUTE definition;
+
+  definition:=pg_get_functiondef('public.enterprise_assess_studio_handoff_command(jsonb)'::regprocedure);
+  previous:=$old$
+   artifact_id:=public.studio_pr_b_deterministic_uuid('assess-studio-handoff-artifact',handoff.id);
+   source_package_id:=public.studio_pr_b_deterministic_uuid('assess-studio-handoff-package',handoff.id);
+   INSERT INTO public.studio_artifact_aggregates(id,org_id,workspace_id,case_id,source_version_id,source_case_version,decision_id,decision_version,
+    review_resolution_id,govern_resolution_id,handoff_id,source_package_hash,source_schema_version,rule_set_version,review_schema_version,review_sequence,
+    artifact_type,aggregate_version,lifecycle,created_by,source_package_id,source_mode,lineage_classification,planning_only)
+   VALUES(artifact_id,org,workspace,upstream.case_id,upstream.source_version_id,upstream.source_case_version,upstream.decision_id,upstream.decision_version,
+    upstream.review_resolution_id,upstream.govern_resolution_id,upstream.id,handoff.target_package_hash,upstream.schema_version,upstream.rule_set_version,
+    upstream.review_schema_version,upstream.review_sequence,handoff.artifact_type,0,'draft',actor,source_package_id,
+    CASE WHEN handoff.target_input_bundle_version_id IS NULL THEN 'assess_handoff' ELSE 'assess_plus_transcript_bundle' END,handoff.lineage_classification,false)
+   RETURNING * INTO artifact;
+   INSERT INTO public.studio_artifact_source_packages(id,artifact_id,org_id,workspace_id,version,source_mode,assess_handoff_id,assess_package_hash,
+    studio_input_bundle_id,studio_input_bundle_version_id,studio_input_bundle_version,studio_bundle_hash,lineage_classification,planning_only,
+    route_policy_version,route_policy_snapshot,route_policy_hash,package_hash,candidate_manifest,candidate_manifest_hash,candidate_count,
+    anchor_manifest,anchor_manifest_hash,anchor_count,created_by)
+   VALUES(source_package_id,artifact.id,org,workspace,1,artifact.source_mode,upstream.id,upstream.package_hash,handoff.target_input_bundle_id,
+    handoff.target_input_bundle_version_id,handoff.target_input_bundle_version,handoff.target_input_bundle_hash,handoff.lineage_classification,false,
+    handoff.route_policy_version,handoff.route_policy_snapshot,handoff.route_policy_hash,handoff.target_package_hash,
+    handoff.candidate_manifest,handoff.candidate_manifest_hash,handoff.candidate_count,
+    handoff.anchor_manifest,handoff.anchor_manifest_hash,handoff.anchor_count,actor) RETURNING * INTO source_package;
+$old$;
+  replacement:=$new$
+   IF payload?'replaceArtifact' THEN
+    IF jsonb_typeof(payload->'replaceArtifact')<>'object'
+       OR NOT((payload->'replaceArtifact')?&ARRAY['artifactId','sourcePackageId','sourcePackageVersion','aggregateVersion','currentVersionId','currentApprovedVersionId'])
+       OR((payload->'replaceArtifact')-ARRAY['artifactId','sourcePackageId','sourcePackageVersion','aggregateVersion','currentVersionId','currentApprovedVersionId'])<>'{}'::jsonb
+       OR COALESCE(payload#>>'{replaceArtifact,artifactId}','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       OR COALESCE(payload#>>'{replaceArtifact,sourcePackageId}','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       OR COALESCE(payload#>>'{replaceArtifact,sourcePackageVersion}','')!~'^[1-9][0-9]*$'
+       OR COALESCE(payload#>>'{replaceArtifact,aggregateVersion}','')!~'^[0-9]+$'
+       OR(payload#>>'{replaceArtifact,currentVersionId}' IS NOT NULL AND payload#>>'{replaceArtifact,currentVersionId}'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+       OR(payload#>>'{replaceArtifact,currentApprovedVersionId}' IS NOT NULL AND payload#>>'{replaceArtifact,currentApprovedVersionId}'!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') THEN
+      RAISE EXCEPTION 'INVALID_COMMAND';
+    END IF;
+    artifact_id:=(payload#>>'{replaceArtifact,artifactId}')::uuid;
+    SELECT * INTO artifact FROM public.studio_artifact_aggregates target
+     WHERE target.id=artifact_id AND target.org_id=org AND target.workspace_id=workspace FOR UPDATE;
+    IF artifact.id IS NULL OR artifact.artifact_type IS DISTINCT FROM handoff.artifact_type
+       OR artifact.case_id IS DISTINCT FROM upstream.case_id OR artifact.source_mode NOT IN('assess_handoff','assess_plus_transcript_bundle')
+       OR artifact.aggregate_version IS DISTINCT FROM (payload#>>'{replaceArtifact,aggregateVersion}')::bigint
+       OR artifact.current_version_id IS DISTINCT FROM (payload#>>'{replaceArtifact,currentVersionId}')::uuid
+       OR artifact.current_approved_version_id IS DISTINCT FROM (payload#>>'{replaceArtifact,currentApprovedVersionId}')::uuid THEN
+      RAISE EXCEPTION 'VERSION_CONFLICT';
+    END IF;
+    SELECT * INTO source_package FROM public.studio_artifact_source_packages current_package
+     WHERE current_package.id=artifact.source_package_id AND current_package.artifact_id=artifact.id
+       AND current_package.org_id=org AND current_package.workspace_id=workspace FOR SHARE;
+    IF source_package.id IS NULL OR source_package.id IS DISTINCT FROM (payload#>>'{replaceArtifact,sourcePackageId}')::uuid
+       OR source_package.version IS DISTINCT FROM (payload#>>'{replaceArtifact,sourcePackageVersion}')::bigint
+       OR artifact.source_package_hash IS DISTINCT FROM source_package.package_hash THEN
+      RAISE EXCEPTION 'SOURCE_PACKAGE_STALE';
+    END IF;
+    source_package_id:=public.studio_pr_b_deterministic_uuid('assess-studio-handoff-successor-package',handoff.id);
+    INSERT INTO public.studio_artifact_source_packages(id,artifact_id,org_id,workspace_id,version,replaces_source_package_id,source_mode,assess_handoff_id,assess_package_hash,
+     studio_input_bundle_id,studio_input_bundle_version_id,studio_input_bundle_version,studio_bundle_hash,lineage_classification,planning_only,
+     route_policy_version,route_policy_snapshot,route_policy_hash,package_hash,candidate_manifest,candidate_manifest_hash,candidate_count,
+     anchor_manifest,anchor_manifest_hash,anchor_count,created_by)
+    VALUES(source_package_id,artifact.id,org,workspace,source_package.version+1,source_package.id,
+     CASE WHEN handoff.target_input_bundle_version_id IS NULL THEN 'assess_handoff' ELSE 'assess_plus_transcript_bundle' END,
+     upstream.id,upstream.package_hash,handoff.target_input_bundle_id,handoff.target_input_bundle_version_id,handoff.target_input_bundle_version,
+     handoff.target_input_bundle_hash,handoff.lineage_classification,false,handoff.route_policy_version,handoff.route_policy_snapshot,handoff.route_policy_hash,
+     handoff.target_package_hash,handoff.candidate_manifest,handoff.candidate_manifest_hash,handoff.candidate_count,
+     handoff.anchor_manifest,handoff.anchor_manifest_hash,handoff.anchor_count,actor) RETURNING * INTO source_package;
+    UPDATE public.studio_artifact_aggregates SET case_id=upstream.case_id,source_version_id=upstream.source_version_id,
+     source_case_version=upstream.source_case_version,decision_id=upstream.decision_id,decision_version=upstream.decision_version,
+     review_resolution_id=upstream.review_resolution_id,govern_resolution_id=upstream.govern_resolution_id,handoff_id=upstream.id,
+     source_package_id=source_package.id,source_package_hash=source_package.package_hash,source_schema_version=upstream.schema_version,
+     rule_set_version=upstream.rule_set_version,review_schema_version=upstream.review_schema_version,review_sequence=upstream.review_sequence,
+     source_mode=source_package.source_mode,lineage_classification=source_package.lineage_classification,planning_only=false,
+     aggregate_version=aggregate_version+1,updated_at=statement_timestamp()
+    WHERE id=artifact.id RETURNING * INTO artifact;
+   ELSE
+    artifact_id:=public.studio_pr_b_deterministic_uuid('assess-studio-handoff-artifact',handoff.id);
+    source_package_id:=public.studio_pr_b_deterministic_uuid('assess-studio-handoff-package',handoff.id);
+    INSERT INTO public.studio_artifact_aggregates(id,org_id,workspace_id,case_id,source_version_id,source_case_version,decision_id,decision_version,
+     review_resolution_id,govern_resolution_id,handoff_id,source_package_hash,source_schema_version,rule_set_version,review_schema_version,review_sequence,
+     artifact_type,aggregate_version,lifecycle,created_by,source_package_id,source_mode,lineage_classification,planning_only)
+    VALUES(artifact_id,org,workspace,upstream.case_id,upstream.source_version_id,upstream.source_case_version,upstream.decision_id,upstream.decision_version,
+     upstream.review_resolution_id,upstream.govern_resolution_id,upstream.id,handoff.target_package_hash,upstream.schema_version,upstream.rule_set_version,
+     upstream.review_schema_version,upstream.review_sequence,handoff.artifact_type,0,'draft',actor,source_package_id,
+     CASE WHEN handoff.target_input_bundle_version_id IS NULL THEN 'assess_handoff' ELSE 'assess_plus_transcript_bundle' END,handoff.lineage_classification,false)
+    RETURNING * INTO artifact;
+    INSERT INTO public.studio_artifact_source_packages(id,artifact_id,org_id,workspace_id,version,source_mode,assess_handoff_id,assess_package_hash,
+     studio_input_bundle_id,studio_input_bundle_version_id,studio_input_bundle_version,studio_bundle_hash,lineage_classification,planning_only,
+     route_policy_version,route_policy_snapshot,route_policy_hash,package_hash,candidate_manifest,candidate_manifest_hash,candidate_count,
+     anchor_manifest,anchor_manifest_hash,anchor_count,created_by)
+    VALUES(source_package_id,artifact.id,org,workspace,1,artifact.source_mode,upstream.id,upstream.package_hash,handoff.target_input_bundle_id,
+     handoff.target_input_bundle_version_id,handoff.target_input_bundle_version,handoff.target_input_bundle_hash,handoff.lineage_classification,false,
+     handoff.route_policy_version,handoff.route_policy_snapshot,handoff.route_policy_hash,handoff.target_package_hash,
+     handoff.candidate_manifest,handoff.candidate_manifest_hash,handoff.candidate_count,
+     handoff.anchor_manifest,handoff.anchor_manifest_hash,handoff.anchor_count,actor) RETURNING * INTO source_package;
+   END IF;
+$new$;
+  IF (length(definition)-length(replace(definition,previous,'')))/length(previous)<>1 THEN
+    RAISE EXCEPTION 'STUDIO_HANDOFF_SUCCESSOR_BRANCH_PREDECESSOR_MISMATCH';
+  END IF;
+  definition:=replace(definition,previous,replacement);
+  EXECUTE definition;
+END
+$studio_source_successor_commands$;
+
+CREATE OR REPLACE FUNCTION public.studio_process_evidence_composite_content_safe(
+  p_content jsonb,p_attempt uuid,p_parent_version uuid
+) RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  binding public.studio_generation_section_refreshes;
+  attempt public.studio_artifact_generation_attempts;
+  parent public.studio_artifact_versions;
+  package public.studio_artifact_source_packages;
+  prior public.studio_artifact_section_source_bindings;
+  section jsonb;
+  anchor jsonb;
+  labels jsonb;
+  current_section_key text;
+  content_source_ids jsonb;
+BEGIN
+  SELECT * INTO binding FROM public.studio_generation_section_refreshes WHERE attempt_id=p_attempt;
+  SELECT * INTO attempt FROM public.studio_artifact_generation_attempts WHERE id=p_attempt;
+  SELECT * INTO parent FROM public.studio_artifact_versions WHERE id=p_parent_version;
+  IF parent.id IS NULL
+     OR(p_attempt IS NOT NULL AND(binding.attempt_id IS NULL OR cardinality(binding.selected_section_ids)=0
+       OR attempt.id IS NULL OR binding.parent_version_id IS DISTINCT FROM parent.id
+       OR attempt.artifact_id IS DISTINCT FROM parent.artifact_id OR attempt.org_id IS DISTINCT FROM parent.org_id
+       OR attempt.workspace_id IS DISTINCT FROM parent.workspace_id))
+     OR p_content IS NULL OR jsonb_typeof(p_content)<>'object'
+     OR pg_column_size(p_content)>1048576 OR p_content->>'contractVersion'<>'studio-artifact-2'
+     OR NOT(p_content?&ARRAY['contractVersion','title','summary','sections','coverage'])
+     OR(p_content-ARRAY['contractVersion','title','summary','sections','coverage'])<>'{}'::jsonb
+     OR length(btrim(COALESCE(p_content->>'title',''))) NOT BETWEEN 1 AND 300
+     OR length(COALESCE(p_content->>'summary',''))>5000
+     OR jsonb_typeof(p_content->'sections')<>'array' OR jsonb_array_length(p_content->'sections') NOT BETWEEN 1 AND 100
+     OR jsonb_typeof(p_content->'coverage')<>'object'
+     OR NOT((p_content->'coverage')?&ARRAY['selectedSourceVersionIds','coveredSourceVersionIds','complete'])
+     OR((p_content->'coverage')-ARRAY['selectedSourceVersionIds','coveredSourceVersionIds','complete'])<>'{}'::jsonb
+     OR(p_content#>>'{coverage,complete}')::boolean IS DISTINCT FROM true
+     OR jsonb_typeof(p_content#>'{coverage,selectedSourceVersionIds}')<>'array'
+     OR jsonb_typeof(p_content#>'{coverage,coveredSourceVersionIds}')<>'array' THEN RETURN false;END IF;
+  SELECT COALESCE(jsonb_agg(source_id ORDER BY source_id),'[]'::jsonb) INTO content_source_ids
+  FROM(SELECT DISTINCT item.value->>'sourceVersionId' source_id
+    FROM jsonb_array_elements(p_content->'sections')section_item(value)
+    CROSS JOIN LATERAL jsonb_array_elements(section_item.value->'sourceAnchors')item(value))sources;
+  IF p_content#>'{coverage,selectedSourceVersionIds}' IS DISTINCT FROM content_source_ids
+     OR p_content#>'{coverage,coveredSourceVersionIds}' IS DISTINCT FROM content_source_ids THEN RETURN false;END IF;
+  FOR section IN SELECT value FROM jsonb_array_elements(p_content->'sections') LOOP
+    current_section_key:=COALESCE(section->>'id',section->>'key');
+    IF jsonb_typeof(section)<>'object' OR NOT(section?&ARRAY['id','title','body','sourceAnchors','labels'])
+       OR(section-ARRAY['id','title','body','sourceAnchors','labels'])<>'{}'::jsonb
+       OR COALESCE(current_section_key,'')!~'^[A-Za-z][A-Za-z0-9_.-]{0,79}$'
+       OR length(btrim(COALESCE(section->>'title',''))) NOT BETWEEN 1 AND 300 OR length(COALESCE(section->>'body',''))>20000
+       OR jsonb_typeof(section->'sourceAnchors')<>'array' OR jsonb_array_length(section->'sourceAnchors')>200
+       OR jsonb_typeof(section->'labels')<>'array' OR jsonb_array_length(section->'labels')>3 THEN RETURN false;END IF;
+    labels:=section->'labels';
+    IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(labels)value WHERE value NOT IN('human_authored','template_required','assumption'))
+       OR(SELECT count(DISTINCT value) FROM jsonb_array_elements_text(labels))<>jsonb_array_length(labels)
+       OR(jsonb_array_length(section->'sourceAnchors')=0 AND jsonb_array_length(labels)=0) THEN RETURN false;END IF;
+    IF p_attempt IS NOT NULL AND current_section_key=ANY(binding.selected_section_ids) THEN
+      SELECT * INTO package FROM public.studio_artifact_source_packages candidate
+       WHERE candidate.id=attempt.source_package_id AND candidate.artifact_id=attempt.artifact_id
+         AND candidate.org_id=attempt.org_id AND candidate.workspace_id=attempt.workspace_id;
+    ELSE
+      SELECT * INTO prior FROM public.studio_artifact_section_source_bindings retained
+       WHERE retained.artifact_version_id=parent.id AND retained.section_id=current_section_key;
+      SELECT * INTO package FROM public.studio_artifact_source_packages candidate
+       WHERE candidate.id=COALESCE(prior.source_package_id,parent.source_package_id)
+         AND candidate.artifact_id=attempt.artifact_id AND candidate.org_id=attempt.org_id AND candidate.workspace_id=attempt.workspace_id;
+    END IF;
+    IF package.id IS NULL OR NOT public.studio_pr_b_anchor_manifest_safe(package.anchor_manifest)
+       OR package.anchor_manifest_hash IS DISTINCT FROM public.enterprise_sha256_jsonb(package.anchor_manifest)
+       OR package.anchor_count IS DISTINCT FROM jsonb_array_length(package.anchor_manifest) THEN RETURN false;END IF;
+    FOR anchor IN SELECT value FROM jsonb_array_elements(section->'sourceAnchors') LOOP
+      IF jsonb_typeof(anchor)<>'object' OR NOT(anchor?&ARRAY['sourceVersionId','locator','anchorHash'])
+         OR(anchor-ARRAY['sourceVersionId','locator','anchorHash'])<>'{}'::jsonb
+         OR COALESCE(anchor->>'sourceVersionId','')!~*'^[0-9a-f-]{36}$'
+         OR length(btrim(COALESCE(anchor->>'locator',''))) NOT BETWEEN 1 AND 500
+         OR COALESCE(anchor->>'anchorHash','')!~'^[0-9a-f]{64}$'
+         OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(package.anchor_manifest)allowed
+           WHERE allowed->>'sourceVersionId'=anchor->>'sourceVersionId' AND allowed->>'locator'=anchor->>'locator'
+             AND allowed->>'anchorHash'=anchor->>'anchorHash') THEN RETURN false;END IF;
+    END LOOP;
+  END LOOP;
+  RETURN true;
+EXCEPTION WHEN OTHERS THEN RETURN false;
+END
+$$;
+
+DO $studio_composite_content_guard$
+DECLARE definition text; previous text; replacement text;
+BEGIN
+  definition:=pg_get_functiondef('public.studio_pr_b_structured_artifact_content_safe(jsonb,public.studio_artifact_source_packages)'::regprocedure);
+  previous:='^[a-z][a-z0-9_.-]{0,79}$';
+  replacement:='^[A-Za-z][A-Za-z0-9_.-]{0,79}$';
+  IF (length(definition)-length(replace(definition,previous,'')))/length(previous)=1 THEN
+    EXECUTE replace(definition,previous,replacement);
+  ELSIF (length(definition)-length(replace(definition,replacement,'')))/length(replacement)<>1 THEN
+    RAISE EXCEPTION 'STUDIO_SECTION_KEY_GUARD_PREDECESSOR_MISMATCH';
+  END IF;
+
+  definition:=pg_get_functiondef('public.studio_pr_b_fill_artifact_version_binding()'::regprocedure);
+  previous:=$old$IF NOT public.studio_pr_b_structured_artifact_content_safe(NEW.content,package) THEN
+  RAISE EXCEPTION 'STUDIO_STRUCTURED_CONTENT_INVALID';
+ END IF;$old$;
+  replacement:=$new$IF NEW.generation_attempt_id IS NULL AND NEW.parent_version_id IS NOT NULL
+    AND EXISTS(SELECT 1 FROM public.studio_artifact_section_source_bindings retained
+      WHERE retained.artifact_version_id=NEW.parent_version_id)
+    AND NOT public.studio_process_evidence_composite_content_safe(NEW.content,NULL,NEW.parent_version_id) THEN
+  RAISE EXCEPTION 'STUDIO_STRUCTURED_CONTENT_INVALID';
+ ELSIF NOT public.studio_pr_b_structured_artifact_content_safe(NEW.content,package)
+    AND NOT public.studio_process_evidence_composite_content_safe(NEW.content,NEW.generation_attempt_id,NEW.parent_version_id) THEN
+  RAISE EXCEPTION 'STUDIO_STRUCTURED_CONTENT_INVALID';
+ END IF;$new$;
+  IF (length(definition)-length(replace(definition,previous,'')))/length(previous)<>1 THEN
+    RAISE EXCEPTION 'STUDIO_COMPOSITE_CONTENT_GUARD_PREDECESSOR_MISMATCH';
+  END IF;
+  EXECUTE replace(definition,previous,replacement);
+END
+$studio_composite_content_guard$;
+
+REVOKE ALL ON FUNCTION public.studio_process_evidence_composite_content_safe(jsonb,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;

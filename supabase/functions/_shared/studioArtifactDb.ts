@@ -184,6 +184,8 @@ const handoffRpcCommand = (command: StudioArtifactAtomicCommand) => {
   const request = command.commandType === 'studio.handoff.request';
   const bundle = request && payload.targetInputBundle && typeof payload.targetInputBundle === 'object' && !Array.isArray(payload.targetInputBundle)
     ? payload.targetInputBundle as JsonObject : null;
+  const replacement = payload.replaceArtifact && typeof payload.replaceArtifact === 'object' && !Array.isArray(payload.replaceArtifact)
+    ? payload.replaceArtifact as JsonObject : null;
   const translatedPayload = request ? {
     upstreamHandoffId: payload.upstreamHandoffId,
     artifactType: payload.artifactType,
@@ -192,7 +194,9 @@ const handoffRpcCommand = (command: StudioArtifactAtomicCommand) => {
       targetInputBundleVersionId: bundle.versionId,
       targetInputBundleVersion: bundle.version,
     } : {}),
-  } : command.commandType === 'studio.handoff.withdraw'
+  } : command.commandType === 'studio.handoff.consume'
+    ? { handoffId: payload.handoffId, handoffVersion: payload.handoffVersion, ...(replacement ? { replaceArtifact: replacement } : {}) }
+    : command.commandType === 'studio.handoff.withdraw'
     ? { reason: payload.rationale }
     : payload;
   return {
@@ -217,19 +221,21 @@ const sourcePackageRpcCommand = async (command: StudioArtifactAtomicCommand) => 
   const stableIdentity = `${command.organizationId}\u0000${command.actorId}\u0000${command.idempotencyKey}`;
   const bundle = payload.studioInputBundle && typeof payload.studioInputBundle === 'object' && !Array.isArray(payload.studioInputBundle)
     ? payload.studioInputBundle as JsonObject : null;
+  const replacement = payload.replaceArtifact && typeof payload.replaceArtifact === 'object' && !Array.isArray(payload.replaceArtifact)
+    ? payload.replaceArtifact as JsonObject : null;
   const translated = payload.sourceMode === 'manual_brief' ? {
     sourceMode: payload.sourceMode, artifactType: payload.artifactType,
     // Raw authored material crosses only this service-role RPC. SQL hashes it
     // and stores it in the forced-private material relation transactionally.
-    manualBrief: string(payload.manualBrief),
+    manualBrief: string(payload.manualBrief), ...(replacement ? { replaceArtifact: replacement } : {}),
   } : {
     sourceMode: payload.sourceMode, artifactType: payload.artifactType,
     studioInputBundleId: bundle?.id, studioInputBundleVersionId: bundle?.versionId,
-    studioInputBundleVersion: bundle?.version,
+    studioInputBundleVersion: bundle?.version, ...(replacement ? { replaceArtifact: replacement } : {}),
   };
   return {
     actorId: command.actorId, organizationId: command.organizationId, workspaceId: command.workspaceId,
-    artifactId: await derivedUuid('studio-artifact', stableIdentity),
+    artifactId: replacement ? replacement.artifactId : await derivedUuid('studio-artifact', stableIdentity),
     sourcePackageId: await derivedUuid('studio-source-package', stableIdentity),
     requestId: command.requestId, idempotencyKey: command.idempotencyKey,
     authorizationVersion: command.authorizationVersion, payload: translated,
