@@ -48,7 +48,7 @@
     "index.css": "sha256:645f9ca9e3068604aee26a1521d0efd399a14d44fa24b42e34a5608c936da63c",
     "index.html": "sha256:492aa8446db47d0b50eb7700b379e0e19f9f7fdff1838cd95458e46be90e7b76",
     "package-lock.json": "sha256:a5033cdeadb9ad5511587c0b20612d94d5c68c1a418a8bdc3116f743ff84395a",
-    "package.json": "sha256:923c37088cb8dad30678ea7e0b51626eb6eea1f3cf154f7744db0acfdc18e51b",
+    "package.json": "sha256:767ebe29bb8ee911e7873e4737fa0a898cceec0345e0719169fcb47bc01dca39",
     "playwright.assess-v2-native-postgrest.config.ts": "sha256:198a64e6935bbf5c47536d2c8c049370c2ac70206b561fcb7f35e15206a9147e",
     "playwright.authenticated-hosted-sign-in-entry.config.ts": "sha256:35d6968cfe49608def2c9251c6f43fcac64ce1e3dca6323f4d05a0a379d52a4a",
     "playwright.authenticated-hosted.config.ts": "sha256:b348e959442fb906bf82e4efcb153b5cb5c0061b974ebd5a3e75865d6b3768c9",

@@ -31,6 +31,7 @@ const statusBadgeMap: Partial<Record<TaskStatus, string>> = {
 const statusKebabCase = (status: TaskStatus) => status.toLowerCase().replace(/ /g, '-');
 
 const formatDate = (dateString: string) => {
+    if (!dateString) return null;
     const date = new Date(dateString);
     if (Number.isNaN(date.valueOf())) return null;
     const adjustedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
@@ -38,7 +39,7 @@ const formatDate = (dateString: string) => {
 };
 
 const isOverdue = (task: Task) => {
-    if (task.status === 'Done') return false;
+    if (task.status === 'Done' || !task.dueDate) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const taskDate = new Date(task.dueDate);
