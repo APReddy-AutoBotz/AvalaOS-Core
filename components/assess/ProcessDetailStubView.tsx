@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useProcessService } from '../../services/processService';
 import { useOrganization } from '../../services/organizationService';
 import { useTemplateService } from '../../services/templateService';
@@ -20,6 +20,11 @@ import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { isModuleEnabled } from '../../constants/moduleConfig';
 import { ProcessUpdateError } from '../../services/processUpdateContract';
 import {
+    buildCurrentAssessmentPresentation,
+    createCurrentAssessmentScopeKey,
+    type CurrentAssessmentPresentation,
+} from '../../services/assessV2/currentAssessmentPresentation';
+import {
     ArrowLeftIcon,
     ChartPieIcon,
     CheckCircleIcon,
@@ -39,35 +44,53 @@ interface ProcessDetailStubViewProps {
 
 const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs, captureMode = false }) => {
     const { currentOrganization } = useOrganization();
-    const { currentOrganization: orgContext, tenantContext } = useOrganizationContext();
+    const { currentOrganization: orgContext, tenantContext, sessionState } = useOrganizationContext();
     const { getProcessById, readState, updateProcess, canUpdateProcess } = useProcessService();
     const { getTemplateById } = useTemplateService();
     const { getAssessmentForProcess } = useAssessmentService();
     const [assessment, setAssessment] = useState<Assessment | null>(null);
     const [assessmentLoading, setAssessmentLoading] = useState(false);
+    const [currentAssessmentPresentation, setCurrentAssessmentPresentation] = useState<CurrentAssessmentPresentation | null>(null);
     const process = currentOrganization ? getProcessById(processId, currentOrganization.id) : null;
     const [editingProcess, setEditingProcess] = useState(false);
     const [processDraft, setProcessDraft] = useState({ name: '', description: '', department: '', criticality: 'Medium' as 'Low' | 'Medium' | 'High' | 'Critical' });
     const [processSaving, setProcessSaving] = useState(false);
     const [processMessage, setProcessMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
-    const activeScopeKey = `${currentOrganization?.id ?? ''}:${processId}`;
+    const hasCurrentAssessmentAccess = Boolean(
+        tenantContext && ['ready', 'read_only'].includes(sessionState) && tenantContext.capabilities.includes(ASSESS_V2_CAPABILITIES.read),
+    );
+    const currentAssessmentScopeKey = createCurrentAssessmentScopeKey(tenantContext, processId);
+    const activeScopeKey = `${currentOrganization?.id ?? ''}:${currentAssessmentScopeKey}`;
     const activeProcessScopeRef = useRef(activeScopeKey);
+    const currentAssessmentScopeRef = useRef(currentAssessmentScopeKey);
     activeProcessScopeRef.current = activeScopeKey;
+    currentAssessmentScopeRef.current = currentAssessmentScopeKey;
+
+    const handleCurrentAssessmentPresentation = useCallback((presentation: CurrentAssessmentPresentation) => {
+        if (!hasCurrentAssessmentAccess || presentation.scopeKey !== currentAssessmentScopeRef.current || presentation.processId !== processId) return;
+        setCurrentAssessmentPresentation(presentation);
+    }, [hasCurrentAssessmentAccess, processId]);
 
     useEffect(() => {
         let active = true;
+        const requestScopeKey = activeScopeKey;
+        setAssessment(null);
         setAssessmentLoading(true);
         getAssessmentForProcess(processId)
             .then(result => {
-                if (active) setAssessment(result);
+                if (active && activeProcessScopeRef.current === requestScopeKey) setAssessment(result);
             })
             .finally(() => {
-                if (active) setAssessmentLoading(false);
+                if (active && activeProcessScopeRef.current === requestScopeKey) setAssessmentLoading(false);
             });
         return () => {
             active = false;
         };
-    }, [getAssessmentForProcess, processId]);
+    }, [activeScopeKey, getAssessmentForProcess, processId]);
+
+    useEffect(() => {
+        setCurrentAssessmentPresentation(null);
+    }, [currentAssessmentScopeKey, hasCurrentAssessmentAccess]);
 
     useEffect(() => {
         if (!process || editingProcess) return;
@@ -134,7 +157,13 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
         ? buildAssessToStudioHandoffPayload({ process, assessment, governCard, requireCommittedHandoff: true })
         : null;
     const docsEnabled = isModuleEnabled('docs', orgContext?.enabledModules);
-    const hasCurrentAssessmentAccess = tenantContext?.capabilities.includes(ASSESS_V2_CAPABILITIES.read) ?? false;
+    const presentedCurrentAssessment = hasCurrentAssessmentAccess && currentAssessmentPresentation?.scopeKey === currentAssessmentScopeKey
+        ? currentAssessmentPresentation
+        : buildCurrentAssessmentPresentation({
+            scopeKey: currentAssessmentScopeKey,
+            processId,
+            state: 'loading',
+        });
     const decisionRationaleItems = getDecisionRationaleItems(scores);
     const governanceControlItems = getDecisionGovernanceControlItems(scores);
     const requiredDocumentTypes = getRequiredDocumentTypes(scores);
@@ -146,12 +175,18 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
             .sort((a, b) => Number(b[1]) - Number(a[1]))[0]
         : null;
 
-    const stats = [
+    const legacyStats = [
         { label: 'Decision', value: scores?.gateDecision || 'In discovery', icon: CheckCircleIcon },
         { label: 'Earlier score outcome', value: topFit ? topFit[0] : 'Pending score', icon: SparklesIcon },
         { label: 'Risk tier', value: scores?.riskTier || process.criticality, icon: ExclamationTriangleIcon },
         { label: 'Confidence', value: scores?.confidenceBand || `${assessment?.metadata.completionQuality || 0}% complete`, icon: ChartPieIcon },
     ];
+    const stats = hasCurrentAssessmentAccess ? [
+        { label: 'Current assessment', value: presentedCurrentAssessment.statusLabel, icon: CheckCircleIcon },
+        { label: 'Readiness', value: presentedCurrentAssessment.readiness, icon: SparklesIcon },
+        { label: 'Evidence confidence', value: presentedCurrentAssessment.confidence, icon: ChartPieIcon },
+        { label: 'Studio next action', value: presentedCurrentAssessment.studioAction, icon: ClipboardDocumentListIcon },
+    ] : legacyStats;
 
     return (
         <div className="mx-auto max-w-7xl space-y-6 p-6 pb-20">
@@ -162,12 +197,16 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                 <ArrowLeftIcon className="w-4 h-4" /> Back to Catalog
             </button>
 
-            <div className="premium-surface overflow-hidden rounded-3xl">
+            <div className="premium-surface overflow-hidden rounded-3xl" data-testid="process-current-summary">
                 <div className="grid gap-0 lg:grid-cols-[1.35fr_0.65fr]">
                     <div className="p-7">
                         <div className="flex flex-wrap items-center gap-3 mb-4">
-                            <span className="rounded-full bg-[#ffbc03]/15 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-[#002C4B] ring-1 ring-[#ffbc03]/35 dark:text-[#ffcf45]">
-                                {assessment ? <>Assessment history &middot; {assessment.status}</> : <>Process &middot; {process.status}</>}
+                            <span data-testid="process-current-assessment-status" className="rounded-full bg-[#ffbc03]/15 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-[#002C4B] ring-1 ring-[#ffbc03]/35 dark:text-[#ffcf45]">
+                                {hasCurrentAssessmentAccess
+                                    ? <>Current assessment &middot; {presentedCurrentAssessment.statusLabel}</>
+                                    : assessment
+                                        ? <>Compatibility assessment &middot; {assessment.status}</>
+                                        : <>Process &middot; {process.status}</>}
                             </span>
                             {template && (
                                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800">
@@ -193,14 +232,21 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                                             ? 'Resume Assessment'
                                             : 'Open Decision Pack'}
                             </button>
-                            {hasCurrentAssessmentAccess && <details data-testid="assessment-compatibility-history" className="rounded-xl border border-slate-200 px-4 py-2 dark:border-slate-700"><summary className="cursor-pointer text-sm font-black">History and compatibility</summary><button data-testid="open-assessment-history" onClick={() => onStartAssessment(process.id)} className="mt-2 rounded-xl px-3 py-2 text-sm font-black btn-ghost">{assessment ? 'Open earlier assessment history' : 'Create compatibility assessment record'}</button></details>}
+                            {hasCurrentAssessmentAccess && <details data-testid="assessment-compatibility-history" className="rounded-xl border border-slate-200 px-4 py-2 dark:border-slate-700"><summary className="cursor-pointer text-sm font-black">Earlier assessment history</summary><div className="mt-3 max-w-md space-y-3 text-sm font-semibold text-slate-600 dark:text-slate-300">{assessment ? <dl data-testid="earlier-assessment-summary" className="grid grid-cols-2 gap-2"><div><dt className="text-xs font-black uppercase text-slate-400">Status</dt><dd>{assessment.status}</dd></div><div><dt className="text-xs font-black uppercase text-slate-400">Recommendation</dt><dd>{scores?.recommendation?.category || 'Not finalized'}</dd></div><div><dt className="text-xs font-black uppercase text-slate-400">Readiness</dt><dd>{readinessValue}</dd></div><div><dt className="text-xs font-black uppercase text-slate-400">Confidence</dt><dd>{scores?.confidenceBand || `${assessment.metadata.completionQuality || 0}% complete`}</dd></div></dl> : <p>No earlier compatibility assessment is recorded.</p>}<button data-testid="open-assessment-history" onClick={() => onStartAssessment(process.id)} className="rounded-xl px-3 py-2 text-sm font-black btn-ghost">{assessment ? 'Open earlier assessment record' : 'Create compatibility assessment record'}</button></div></details>}
                             {docsEnabled ? (
                                 <button
-                                    onClick={() => assessToStudioPayload && onGenerateDocs?.(assessToStudioPayload)}
-                                    disabled={!assessToStudioPayload}
-                                    className={`rounded-xl px-5 py-3 text-sm font-black btn-ghost ${assessToStudioPayload ? '' : 'cursor-not-allowed opacity-50'}`}
+                                    data-testid={hasCurrentAssessmentAccess ? 'current-studio-next-action' : 'compatibility-studio-action'}
+                                    onClick={() => hasCurrentAssessmentAccess
+                                        ? document.getElementById(presentedCurrentAssessment.state === 'reviewer-ready' ? 'assess-v2-review-workspace' : 'current-process-assessment')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                        : assessToStudioPayload && onGenerateDocs?.(assessToStudioPayload)}
+                                    disabled={!hasCurrentAssessmentAccess && !assessToStudioPayload}
+                                    className={`rounded-xl px-5 py-3 text-sm font-black btn-ghost ${!hasCurrentAssessmentAccess && !assessToStudioPayload ? 'cursor-not-allowed opacity-50' : ''}`}
                                 >
-                                    {assessToStudioPayload ? 'Open Avala Studio handoff' : 'Complete Govern approval and Studio handoff first'}
+                                    {hasCurrentAssessmentAccess
+                                        ? presentedCurrentAssessment.studioAction
+                                        : assessToStudioPayload
+                                            ? 'Open Avala Studio handoff'
+                                            : 'Complete Govern approval and Studio handoff first'}
                                 </button>
                             ) : (
                                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-black text-slate-400 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-500">
@@ -211,20 +257,22 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                     </div>
                     <div className="border-t border-slate-200/80 bg-gradient-to-br from-[#002C4B] to-[#00192b] p-7 text-white lg:border-l lg:border-t-0 dark:border-slate-700/80">
                         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#ffbc03]">Operating model</p>
-                        <h2 className="mt-3 text-2xl font-black">{scores?.recommendation?.category || 'Assessment pending'}</h2>
-                        <p className="mt-3 text-sm font-semibold leading-6 text-white/70">
-                            {scores?.recommendation
+                        <h2 data-testid="process-current-operating-model" className="mt-3 text-2xl font-black">{hasCurrentAssessmentAccess ? presentedCurrentAssessment.operatingModel : scores?.recommendation?.category || 'Assessment pending'}</h2>
+                        <p data-testid="process-current-assessment-summary" className="mt-3 text-sm font-semibold leading-6 text-white/70">
+                            {hasCurrentAssessmentAccess
+                                ? presentedCurrentAssessment.summary
+                                : scores?.recommendation
                                 ? `${scores.recommendation.primaryTechnology} with ${scores.recommendation.controlLayer}.`
                                 : assessmentLoading ? 'Loading decision pack...' : 'Complete assessment scoring to generate the automation decision.'}
                         </p>
                         <div className="mt-6 grid grid-cols-2 gap-3">
                             <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
                                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">Readiness</p>
-                                <p className="mt-2 text-3xl font-black">{readinessValue}</p>
+                                <p data-testid="process-current-readiness" className="mt-2 text-lg font-black leading-6">{hasCurrentAssessmentAccess ? presentedCurrentAssessment.readiness : readinessValue}</p>
                             </div>
                             <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">Priority</p>
-                                <p className="mt-2 text-sm font-black leading-5 text-[#ffdf77]">{scores?.priorityTier?.replace('Tier ', 'T') || process.criticality}</p>
+                                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/50">{hasCurrentAssessmentAccess ? 'Evidence confidence' : 'Priority'}</p>
+                                <p className="mt-2 text-sm font-black leading-5 text-[#ffdf77]">{hasCurrentAssessmentAccess ? presentedCurrentAssessment.confidence : scores?.priorityTier?.replace('Tier ', 'T') || process.criticality}</p>
                             </div>
                         </div>
                     </div>
@@ -290,9 +338,9 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                 ))}
             </div>
 
-            {governCard && <AvalaGovernLiteCardPanel governCard={governCard} />}
+            {!hasCurrentAssessmentAccess && governCard && <AvalaGovernLiteCardPanel governCard={governCard} />}
 
-            {scores ? (
+            {!hasCurrentAssessmentAccess && scores ? (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_0.75fr]">
                     <section className="premium-surface rounded-3xl p-6">
                         <div className="flex items-center gap-3">
@@ -373,7 +421,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                         </div>
                     </section>
                 </div>
-            ) : (
+            ) : !hasCurrentAssessmentAccess ? (
                 <div className="premium-surface rounded-3xl p-8 text-center">
                     <p className="text-lg font-black text-slate-950 dark:text-white">Decision pack not generated yet</p>
                     <p className="mx-auto mt-2 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">This process has discovery metadata, but it still needs a completed assessment before Avala Assess can recommend RPA, workflow, GenAI, agentic AI, or human-in-the-loop controls.</p>
@@ -383,7 +431,15 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                         {hasCurrentAssessmentAccess ? 'Open current assessment' : 'Continue Assessment'}
                     </button>
                 </div>
-            )}
+            ) : presentedCurrentAssessment.state !== 'reviewer-ready' ? (
+                <div className="premium-surface rounded-3xl p-8 text-center" data-testid="current-assessment-summary-state">
+                    <p className="text-lg font-black text-slate-950 dark:text-white">{presentedCurrentAssessment.statusLabel}</p>
+                    <p className="mx-auto mt-2 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{presentedCurrentAssessment.summary}</p>
+                    <button data-testid="open-current-assessment-empty" onClick={() => document.getElementById('current-process-assessment')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="mt-5 rounded-xl bg-[#ffbc03] px-5 py-3 text-sm font-black text-[#002C4B] shadow-lg shadow-[#ffbc03]/20">
+                        Open current assessment
+                    </button>
+                </div>
+            ) : null}
 
             {hasCurrentAssessmentAccess && <AssessV2Workspace
                 processId={process.id}
@@ -391,6 +447,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                 processDescription={process.description || ''}
                 v1Assessment={assessment}
                 captureMode={captureMode}
+                onPresentationChange={handleCurrentAssessmentPresentation}
             />}
 
             <section className="premium-surface rounded-3xl p-6">

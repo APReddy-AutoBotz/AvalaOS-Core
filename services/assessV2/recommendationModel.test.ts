@@ -5,13 +5,13 @@ import { buildAssessmentRecommendationModel } from './recommendationModel.ts';
 
 const hybridDecision = evaluateAssessmentV2(AP_INVOICE_EXCEPTION_V2_FIXTURE);
 const hybrid = buildAssessmentRecommendationModel(AP_INVOICE_EXCEPTION_V2_FIXTURE, hybridDecision);
-assert.equal(hybrid.aiUseStatus, 'unproven', 'a viable GenAI alternative must prevent an AI-unnecessary claim');
-assert.match(hybrid.headline, /unproven/i);
+assert.equal(hybrid.aiUseStatus, 'unproven', 'an incompletely evidenced recommended design needs more evidence');
+assert.match(hybrid.headline, /more evidence/i);
 assert.ok(hybrid.steps.some(step => step.humanJudgment && /human|person/i.test(step.humanJudgmentReason ?? '')));
 const validation = hybrid.steps.find(step => step.name === 'PO and GRN validation')!;
 assert.equal(validation.apiStatus, 'ready');
 assert.ok(validation.components.includes('Native API Integration'));
-assert.ok(validation.apiOperations.some(operation => /PO, GRN/.test(operation)));
+assert.ok(validation.apiOperations.some(operation => /PO, GRN/.test(operation.name)));
 assert.ok(validation.alternatives.length > 0);
 
 const apiUnknown = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
@@ -44,7 +44,7 @@ noAi.interactions = noAi.interactions.filter(item => item.primitiveId === noAi.p
 const noAiDecision = evaluateAssessmentV2(noAi);
 const noAiModel = buildAssessmentRecommendationModel(noAi, noAiDecision);
 assert.equal(noAiModel.aiUseStatus, 'unnecessary');
-assert.match(noAiModel.headline, /^AI is unnecessary/);
+assert.match(noAiModel.headline, /^No AI required/);
 assert.ok(noAiModel.steps.every(step => step.components.length > 0));
 assert.ok(noAiModel.steps.every(step => !step.components.some(component => ['GenAI Assistant', 'Bounded Agent'].includes(component))));
 assert.ok(noAiModel.steps.find(step => step.type === 'Approve')?.humanJudgment);
@@ -75,7 +75,15 @@ unknownAiEligibility.candidateEvaluations.push({
   fieldIds: ['agent.irreducibleAmbiguity'],
   evidenceIds: [],
 });
-assert.equal(buildAssessmentRecommendationModel(noAi, unknownAiEligibility).aiUseStatus, 'unproven', 'an unsupported ineligibility assertion cannot prove that AI is unnecessary');
+assert.equal(buildAssessmentRecommendationModel(noAi, unknownAiEligibility).aiUseStatus, 'unnecessary', 'uncertain eligibility of an unused alternative cannot change the evidence for the selected design');
+const optionalAi = structuredClone(noAiDecision);
+optionalAi.candidateEvaluations.push({ ...unknownAiEligibility.candidateEvaluations.at(-1)!, component: 'GenAI Assistant',
+  fit: 'Conditional Fit', confidence: 'Partially Evidenced', rationale: ['Could summarize exceptions for an operator.'] });
+const withOption = buildAssessmentRecommendationModel(noAi, optionalAi);
+assert.equal(withOption.aiUseStatus, 'unnecessary');
+assert.ok(withOption.steps[0].alternatives.some(item => item.optionalAi && item.reason.includes('summarize')));
+optionalAi.composedOperatingModel[0].components.push('GenAI Assistant');
+assert.equal(buildAssessmentRecommendationModel(noAi, optionalAi).aiUseStatus, 'included');
 
 const mixedApi = structuredClone(AP_INVOICE_EXCEPTION_V2_FIXTURE);
 const readyValidationRead = mixedApi.interactions.find(item => item.primitiveId === validation.primitiveId && item.mode === 'read')!;
@@ -89,8 +97,17 @@ mixedApi.interactions.push({
 const mixedApiModel = buildAssessmentRecommendationModel(mixedApi, evaluateAssessmentV2(mixedApi));
 const mixedApiStep = mixedApiModel.steps.find(step => step.primitiveId === validation.primitiveId)!;
 assert.equal(mixedApiStep.apiStatus, 'conditional', 'one Ready operation must not hide a different Conditional operation');
-assert.ok(mixedApiStep.reasons.some(reason => /passed the deterministic readiness gates/.test(reason)));
-assert.ok(mixedApiStep.reasons.some(reason => /conditional interface path/.test(reason)));
-assert.ok(!mixedApiStep.reasons.some(reason => /supplier data has a declared interface that passed/.test(reason)));
+assert.ok(mixedApiStep.apiOperations.some(operation => operation.readiness === 'Ready'));
+assert.ok(mixedApiStep.apiOperations.some(operation => operation.readiness === 'Conditional' && operation.name.includes('supplier')));
+for (const withheld of ['Unknown', 'Prohibited'] as const) {
+  const decision = evaluateAssessmentV2(mixedApi);
+  const supplier = mixedApi.interactions.at(-1)!;
+  decision.interactionDecisions.find(item => item.interactionId === supplier.id)!.readiness.read = withheld;
+  const step = buildAssessmentRecommendationModel(mixedApi, decision).steps.find(item => item.primitiveId === validation.primitiveId)!;
+  assert.equal(step.apiStatus, 'mixed');
+  assert.ok(step.components.includes('Native API Integration'));
+  assert.equal(step.apiOperations.find(item => item.interactionId === readyValidationRead.id)?.readiness, 'Ready');
+  assert.equal(step.apiOperations.find(item => item.interactionId === supplier.id)?.readiness, withheld);
+}
 
 console.log('Assess recommendation presentation model tests passed.');

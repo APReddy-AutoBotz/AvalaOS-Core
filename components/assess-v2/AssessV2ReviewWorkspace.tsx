@@ -17,8 +17,12 @@ import {
 } from '../../services/assessV2ReviewClient';
 import { ASSESS_V2_REVIEW_CAPABILITIES, type EvidenceAttestationOutcome, type ReviewResolution } from '../../services/assessV2ReviewClientContract';
 import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
+import type { CurrentAssessmentReviewPresentation } from '../../services/assessV2/currentAssessmentPresentation';
 
-interface Props { initialCaseId?: string }
+interface Props {
+  initialCaseId?: string;
+  onPresentationChange?: (scopeKey: string, projection: CurrentAssessmentReviewPresentation | null) => void;
+}
 type LoadState = 'loading' | 'ready' | 'empty' | 'failed';
 type CandidateState = 'idle' | 'loading' | 'ready' | 'empty' | 'failed';
 type RequestBinding = Readonly<{ sequence: number; scopeKey: string; caseId: string; decisionId: string }>;
@@ -30,7 +34,7 @@ const statusCopy: Record<AssessV2ReviewProjection['status'], string> = {
 };
 const outcomeCopy: Record<string, string> = { submitted: 'Evidence submitted', accepted: 'Evidence accepted', rejected: 'Evidence rejected', 'needs-more-information': 'Evidence needs information' };
 
-export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
+export default function AssessV2ReviewWorkspace({ initialCaseId, onPresentationChange }: Props) {
   const { tenantContext, sessionState, assessV2OperationalState, handleAssessV2Boundary } = useOrganizationContext();
   const [queue, setQueue] = useState<AssessV2ReviewQueueItem[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState(initialCaseId ?? '');
@@ -155,6 +159,18 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
 
   useEffect(() => { void load(initialCaseId); }, [initialCaseId, tenantContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const committedReview = review && reviewScopeKey === viewKey ? {
+      scopeKey: viewKey,
+      caseId: review.caseId,
+      decisionId: review.decisionId,
+      status: review.status,
+      governStatus: review.governStatus,
+      handoffStatus: review.handoffStatus,
+    } satisfies CurrentAssessmentReviewPresentation : null;
+    onPresentationChange?.(viewKey, committedReview);
+  }, [onPresentationChange, review, reviewScopeKey, viewKey]);
+
   const commit = async (action: () => Promise<AssessV2ReviewProjection>, success: string) => {
     if (!online) { setMessage('Offline. Review changes were not submitted.'); return; }
     const projection = reviewBindingRef.current;
@@ -222,7 +238,7 @@ export default function AssessV2ReviewWorkspace({ initialCaseId }: Props) {
   const evidenceCoverage = useMemo(() => review ? review.requiredClaimIds.map(claimId => ({ claimId, accepted: review.evidence.some(item => item.status === 'accepted' && item.claimIds.includes(claimId)) })) : [], [review]);
   const visibleQueue = queueScopeKey === viewKey ? queue : [];
 
-  return <section className="mt-6 rounded-3xl border-2 border-[#ffbc03]/50 p-3 sm:p-5" aria-labelledby="v2-review-title" data-testid="assess-v2-review-workspace">
+  return <section id="assess-v2-review-workspace" className="mt-6 rounded-3xl border-2 border-[#ffbc03]/50 p-3 sm:p-5" aria-labelledby="v2-review-title" data-testid="assess-v2-review-workspace">
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9a6a00]">Governed enterprise review</p><h3 id="v2-review-title" className="mt-1 text-xl font-black">Review, approval, Govern and Studio handoff</h3><p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">The server authorizes every action. This browser never supplies reviewer identity, approval authority, Govern categories, confidence, or the Studio package.</p></div><button type="button" disabled={busy || !tenantContext} onClick={() => void load()} className="btn-ghost rounded-xl px-3 py-2 text-sm font-black disabled:opacity-50">Reload committed state</button></div>
 
     {!online && <p role="alert" className="mt-4 rounded-xl border border-amber-400 bg-amber-50 p-3 text-sm font-semibold text-amber-950">Offline. Committed information may be viewed, but mutations are blocked.</p>}

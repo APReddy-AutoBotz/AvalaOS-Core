@@ -148,6 +148,19 @@ await test('retains historical Markdown and text compatibility while flowchart o
   );
 });
 
+await test('rejects compound Mermaid statements before a partial graph can be returned', async () => {
+  for (const line of ['A[Start] --> B[Review] --> C[Complete]', 'A[Start] --> B[Review]; B --> C[Complete]',
+    'A{Decision} -->|Yes| B[Review] --> C[Complete]']) {
+    const text = ['flowchart TD', '%% synthetic process', line].join('\n');
+    assert.throws(() => inspectMermaidFlowcharts(text), /ONE_STATEMENT_AND_EDGE_PER_LINE_REQUIRED_LINE_3/);
+    await assert.rejects(extractEvidenceText(new TextEncoder().encode(text), 'text/markdown', 'chain.mmd'),
+      /ONE_STATEMENT_AND_EDGE_PER_LINE_REQUIRED_LINE_3/);
+  }
+  const [chart] = inspectMermaidFlowcharts('flowchart TD;\nA[Start; specified] --> B[Review];\nB --> C[Complete];');
+  assert.deepEqual(chart.nodes.map(node => node.id), ['A', 'B', 'C']);
+  assert.deepEqual(chart.edges.map(edge => [edge.from, edge.to, edge.line]), [['A', 'B', 2], ['B', 'C', 3]]);
+});
+
 await test('rejects branch loss and unsupported Mermaid syntax as malformed source content', async () => {
   const unlabelledBranch = [
     'flowchart TD',

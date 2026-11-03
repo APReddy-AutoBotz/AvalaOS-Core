@@ -9,7 +9,7 @@ import { parseAssessV2DraftPayload } from '../../supabase/functions/_shared/asse
 import { PROCESS_CREATE_CAPABILITY, parseProcessCreateEnvelope } from '../../services/processCreationContract';
 import { ASSESS_V2_RULE_SET_VERSION, ASSESS_V2_SCHEMA_VERSION, type AssessmentCaseV2, createUnknownAgentNecessityFacts } from '../../services/assessV2/types';
 import { ALL_CAPABILITIES, API, ASSESSMENT, ORG, PROCESS, SECONDARY_WS, USER, WS, installEnterpriseFixture, jsonHeaders } from './pr1dNetworkFixture';
-import { assertSyntheticAssessDraftReadback, buildBrowserExecutionCatalog, completeAssessDraft, executePlannedStep, finalizeAssessDraftForReview, runSyntheticObservationPrerequisites } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
+import { assertSyntheticAssessDraftReadback, buildBrowserExecutionCatalog, completeAssessDraft, completeSyntheticAssessFields, createSyntheticAssessDraft, executePlannedStep, finalizeAssessDraftForReview, persistSyntheticAssessDraft, runSyntheticObservationPrerequisites } from '../../scripts/runPrCSyntheticAcceptanceBrowser.mjs';
 
 const expectProcessCatalog = async (page: Page) => {
   const catalog = page.getByTestId('process-catalog-view');
@@ -37,6 +37,53 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror',error => console.error(`PR1C_PAGE_ERROR: ${error.message}`));
   page.on('console',message => { if (message.type()==='error') console.error(`PR1C_CONSOLE_ERROR: ${message.text()}`); });
   page.on('dialog',dialog => dialog.dismiss());
+});
+
+for (const earlier of [
+  { label: 'scored', initialScores: 'scored' as const, expectedHistory: CANONICAL_AP_ASSESSMENT.scores?.recommendation?.category ?? 'Not finalized' },
+  { label: 'unscored', initialScores: 'unscored' as const, expectedHistory: 'Not finalized' },
+]) test(`current assessment summary supersedes an ${earlier.label} earlier V1 record`, async ({ page }) => {
+  test.setTimeout(90_000);
+  const fixture = await installEnterpriseFixture(page, {
+    initialStatus: earlier.label === 'scored' ? 'Approved' : 'Draft',
+    initialScores: earlier.initialScores,
+  });
+  await page.goto('/');
+  await expectProcessCatalog(page);
+  await page.getByRole('button', { name: 'View' }).first().click();
+
+  const summary = page.getByTestId('process-current-summary');
+  await expect(summary).toBeVisible();
+  await expect(summary.getByTestId('process-current-assessment-status')).toContainText('Current assessment · No current assessment');
+  await expect(summary.getByTestId('process-current-operating-model')).toHaveText('Assessment not started');
+  await expect(summary.getByTestId('process-current-readiness')).toHaveText('Not assessed');
+  await expect(summary.getByTestId('current-studio-next-action')).toHaveText('Start and finalize the current assessment first');
+  await expect(page.getByText('Decision pack not generated yet', { exact: true })).toHaveCount(0);
+
+  const history = summary.getByTestId('assessment-compatibility-history');
+  await expect(history).not.toHaveAttribute('open', '');
+  await expect(history.getByTestId('earlier-assessment-summary')).toBeHidden();
+  await history.locator('summary').click();
+  await expect(history.getByTestId('earlier-assessment-summary')).toBeVisible();
+  await expect(history.getByTestId('earlier-assessment-summary')).toContainText(earlier.expectedHistory);
+
+  const interactions: string[] = [];
+  const created = await createSyntheticAssessDraft(page, interactions);
+  await expect(summary.getByTestId('process-current-assessment-status')).toContainText('Current assessment · Working draft');
+  await expect(summary.getByTestId('process-current-operating-model')).toHaveText('Assessment in progress');
+  await expect(summary.getByTestId('process-current-readiness')).toHaveText('Not finalized');
+  await expect(summary.getByTestId('current-studio-next-action')).toHaveText('Finalize the working assessment before Studio handoff');
+
+  const fields = await completeSyntheticAssessFields(page, interactions);
+  await persistSyntheticAssessDraft(page, interactions, { ...created, primitiveId: fields.primitiveId });
+  await finalizeAssessDraftForReview(page, interactions);
+  await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
+  await expect(summary.getByTestId('process-current-assessment-status')).toContainText('Current assessment · Finalized · review status unavailable');
+  await expect(summary.getByTestId('process-current-assessment-summary')).toHaveText(fixture.v2Decision!.outputSnapshot.executiveDecision);
+  await expect(summary.getByTestId('process-current-readiness')).toHaveText(fixture.v2Decision!.outputSnapshot.processReadiness);
+  await expect(summary.getByTestId('current-studio-next-action')).toHaveText('Load committed review status before Studio handoff');
+  await expect(summary.getByTestId('process-current-operating-model')).not.toHaveText(CANONICAL_AP_ASSESSMENT.scores?.recommendation?.category ?? '');
+  await expect(history.getByTestId('earlier-assessment-summary')).toContainText(earlier.expectedHistory);
 });
 
 const assertProcessModalAccess = async (page: Page) => {

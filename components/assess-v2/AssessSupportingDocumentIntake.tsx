@@ -272,7 +272,13 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
           : [];
         next.push({ id: crypto.randomUUID(), name: file.name, mimeType: support.mimeType, size: file.size, contentBase64: bytesToBase64(sourceBytes), note: support.message, flowcharts });
       } catch (cause) {
-        if (isCurrent()) setError(cause instanceof Error ? `${file.name}: ${cause.message}` : `${file.name}: the browser could not read this file.`);
+        if (isCurrent()) {
+          const message = cause instanceof Error ? cause.message : 'The browser could not read this file.';
+          const compound = /^MERMAID_FLOWCHART_ONE_STATEMENT_AND_EDGE_PER_LINE_REQUIRED_LINE_(\d+)$/.exec(message);
+          setError(compound
+            ? `${file.name}: line ${compound[1]} contains more than one statement or edge. Put each edge on its own line and select the file again.`
+            : `${file.name}: ${message}`);
+        }
       }
     }
     if (isCurrent()) setPendingFiles(current => [...current, ...next]);

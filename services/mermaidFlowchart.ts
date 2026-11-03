@@ -53,6 +53,12 @@ const parseMermaidNode = (raw: string, line: number): ParsedMermaidNode => {
 };
 
 const parseMermaidEdge = (lineText: string, line: number) => {
+  // Validate the statement boundary before a permissive node-label match can
+  // consume the rest of a chain as though it were part of the first label.
+  const syntax = lineText.replace(/\[[^\[\]]*\]|\{[^{}]*\}|\([^()]*\)|\|[^|]*\|/g, '');
+  if (syntax.includes(';') || syntax.indexOf('-->') !== syntax.lastIndexOf('-->')) {
+    throw mermaidFailure('ONE_STATEMENT_AND_EDGE_PER_LINE_REQUIRED', line);
+  }
   const pipeLabel = lineText.match(/^(.+?)\s*-->\s*\|([^|\r\n]+)\|\s*(.+)$/);
   if (pipeLabel) return { from: parseMermaidNode(pipeLabel[1], line), to: parseMermaidNode(pipeLabel[3], line), branchLabel: normalizeMermaidLabel(pipeLabel[2], line) };
   const inlineLabel = lineText.match(/^(.+?)\s*--\s+(.+?)\s+-->\s*(.+)$/);

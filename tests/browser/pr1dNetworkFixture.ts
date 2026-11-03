@@ -35,6 +35,7 @@ export type FixtureOptions = {
   v2Offline?: boolean;
   initialStatus?: 'Draft' | 'Ready for Review' | 'Changes Requested' | 'Approved' | 'Handed Off to Docs';
   initialScoreVersion?: string | null;
+  initialScores?: 'scored' | 'unscored';
   trustedApproval?: boolean;
   holdFirstProcessResponse?: boolean;
   failProcessCommand?: BoundaryCode;
@@ -95,7 +96,9 @@ export const installEnterpriseFixture = async (page: Page, options: FixtureOptio
     org_id: ORG,
     workspace_id: WS,
     version: options.initialStatus === 'Handed Off to Docs' ? 3 : 1,
-    score_version: options.initialScoreVersion === undefined
+    score_version: options.initialScores === 'unscored'
+      ? null
+      : options.initialScoreVersion === undefined
       ? CANONICAL_AP_ASSESSMENT.scores?.scoreVersion || ASSESS_V1_SCORE_VERSION
       : options.initialScoreVersion,
     status: options.initialStatus,
@@ -105,7 +108,9 @@ export const installEnterpriseFixture = async (page: Page, options: FixtureOptio
     assumptions: CANONICAL_AP_ASSESSMENT.assumptions,
     completion_by_section: CANONICAL_AP_ASSESSMENT.completionBySection,
     review: CANONICAL_AP_ASSESSMENT.review,
-    scores: options.initialScoreVersion === undefined
+    scores: options.initialScores === 'unscored'
+      ? undefined
+      : options.initialScoreVersion === undefined
       ? CANONICAL_AP_ASSESSMENT.scores
       : { ...CANONICAL_AP_ASSESSMENT.scores, scoreVersion: options.initialScoreVersion },
   } : null;

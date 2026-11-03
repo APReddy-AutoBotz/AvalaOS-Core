@@ -2,6 +2,14 @@ import React from 'react';
 import type { ImmutableDecisionVersionV2 } from '../../services/assessV2/types.ts';
 import { buildAssessmentRecommendationModel } from '../../services/assessV2/recommendationModel.ts';
 
+const operationBoundary = {
+  Ready: 'API use supported',
+  Conditional: 'API use requires the recorded conditions and controls',
+  Unknown: 'API use remains unproven for this operation',
+  Prohibited: 'API use prohibited for this operation',
+  'Not Applicable': 'API use does not apply to this operation',
+};
+
 const list = (items: readonly string[], empty: string) => items.length
   ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{items.map(item => <li key={item}>{item}</li>)}</ul>
   : <p className="mt-2 text-sm text-slate-500">{empty}</p>;
@@ -23,10 +31,16 @@ export const AssessmentRecommendation: React.FC<{ decision: ImmutableDecisionVer
         <p className="mt-3 text-xs font-black uppercase tracking-wide text-slate-500">Recommended combination</p>
         <p className="mt-1 text-sm font-semibold">{step.components.length ? step.components.join(' + ') : 'No automated component established'}</p>
         {list(step.reasons, 'No supporting reason is available.')}
-        {step.apiStatus === 'unproven' && <p className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-300">API use remains unproven for this step.</p>}
+        {step.apiOperations.length > 0 && <div className="mt-3">
+          <p className="text-xs font-black uppercase tracking-wide text-slate-500">API operations</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">{step.apiOperations.map(operation =>
+            <li key={operation.interactionId}><strong>{operation.name} ({operation.mode})</strong> &mdash; {operationBoundary[operation.readiness]}
+              {operation.evidenceGaps.length > 0 && <span> &middot; {operation.evidenceGaps.join(' / ')}</span>}
+            </li>)}</ul>
+        </div>}
         {step.humanJudgment && <div className="mt-3 rounded-lg border border-[#ffbc03]/50 bg-[#ffbc03]/10 p-3"><p className="text-sm font-black">Human judgment required</p><p className="mt-1 text-sm">{step.humanJudgmentReason}</p></div>}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <div><p className="text-xs font-black uppercase tracking-wide text-slate-500">Alternatives</p>{list(step.alternatives.map(item => `${item.component} (${item.fit}) — ${item.reason}`), 'No evidence-supported alternative was identified.')}</div>
+          <div><p className="text-xs font-black uppercase tracking-wide text-slate-500">Alternatives</p>{list(step.alternatives.map(item => `${item.optionalAi ? 'Optional AI alternative: ' : ''}${item.component} (${item.fit}, ${item.confidence}) — ${item.reason}`), 'No evidence-supported alternative was identified.')}</div>
           <div><p className="text-xs font-black uppercase tracking-wide text-slate-500">Step gaps</p>{list(step.evidenceGaps, 'No step-specific gap was recorded.')}</div>
         </div>
       </article>)}

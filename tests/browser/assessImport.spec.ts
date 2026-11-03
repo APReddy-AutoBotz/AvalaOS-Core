@@ -437,3 +437,17 @@ test('fresh request flowchart exposes both source branches before analysis', asy
   await expect(graph.getByText(/Line 5:.*Request supporting evidence.*Is the evidence complete/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Store private source' })).toHaveCount(3);
 });
+
+test('a chained Mermaid source identifies the rejected line without offering a partial graph', async ({ page }) => {
+  const base = await installEnterpriseFixture(page, {
+    capabilities: [...new Set([...ALL_CAPABILITIES, PROCESS_CREATE_CAPABILITY, ...mappingCapabilities])],
+  });
+  await installAssessImportFixture(page, { onCommit: values => base.commitDocumentMapping(values) });
+  await openNativeDraft(page);
+  await page.locator('#assess-supporting-files').setInputFiles({
+    name: 'chain.mmd', mimeType: 'text/plain', buffer: Buffer.from('flowchart TD\nA[Start] --> B[Review] --> C[Complete]'),
+  });
+  await expect(page.getByRole('alert').filter({ hasText: 'chain.mmd: line 2' })).toContainText('Put each edge on its own line');
+  await expect(page.getByRole('region', { name: 'Flowchart 1', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Store private source' })).toHaveCount(0);
+});

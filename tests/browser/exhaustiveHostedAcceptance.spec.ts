@@ -897,9 +897,21 @@ const runScenario = async (
       measurement.target('incomplete-process-create');
       await row.getByRole('button', { name, exact: true }).click();
       await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-      await expect(page.getByText('In discovery', { exact: true })).toBeVisible();
-      await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
-      await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
+      const expectIncompleteProcessSummary = async () => {
+        const current = page.getByTestId('process-current-summary');
+        if (await page.getByTestId('assess-v2-workspace').isVisible().catch(() => false)) {
+          await expect(current.getByTestId('process-current-assessment-status')).toContainText('Current assessment · No current assessment');
+          await expect(current.getByTestId('process-current-operating-model')).toHaveText('Assessment not started');
+          await expect(current.getByTestId('process-current-readiness')).toHaveText('Not assessed');
+          await expect(current.getByTestId('current-studio-next-action')).toHaveText('Start and finalize the current assessment first');
+          await expect(page.getByText('Decision pack not generated yet', { exact: true })).toHaveCount(0);
+        } else {
+          await expect(page.getByText('In discovery', { exact: true })).toBeVisible();
+          await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
+          await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
+        }
+      };
+      await expectIncompleteProcessSummary();
       const compatibility = page.getByTestId('assessment-compatibility-history');
       if (await compatibility.isVisible()) {
         await compatibility.locator('summary').click();
@@ -916,13 +928,11 @@ const runScenario = async (
       measurement.support('draft-save');
       await page.getByRole('button', { name: 'Back to Process', exact: true }).click();
       await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-      await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
-      await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
+      await expectIncompleteProcessSummary();
       await page.getByRole('button', { name: 'Back to Catalog', exact: true }).click();
       await expect(page.getByRole('row').filter({ hasText: name })).toContainText('Draft');
       await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name, exact: true }).click();
-      await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
-      await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
+      await expectIncompleteProcessSummary();
       return;
     }
     case 'delivery-pack':
