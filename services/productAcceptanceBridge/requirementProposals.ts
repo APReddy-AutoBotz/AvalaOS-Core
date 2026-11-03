@@ -13,10 +13,14 @@ const text = (value: unknown) => typeof value === 'string' ? value : null;
 const requirementId = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:REQ|BR|FR|NFR|AC)[-_ ]?\d+)\s*[:.\-]\s*\S/iu;
 const normativeRequirement = /(?:^|\s)(?:must|shall|required to|needs to)(?:\s|$)/iu;
 const markdownHeading = /^#{1,6}\s+/u;
+const speculativeStatement = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:open\s+)?question|assume|assumption|proposal|proposed|speculative)(?:\s|[:.\-]|$)/iu;
+const excludedSectionPurpose = /(?:^|\s)(?:questions?|assumptions?|proposals?|flows?|diagrams?)(?:\s|$)/iu;
+const mermaidFlow = /^\s*(?:flowchart|graph)\s+/imu;
 
 export const isApprovedRequirementLine = (line: string) => {
   const value = line.trim();
   return value.length > 0 && value.length <= 2_000 && !markdownHeading.test(value)
+    && !value.endsWith('?') && !speculativeStatement.test(value)
     && (requirementId.test(value) || normativeRequirement.test(value));
 };
 
@@ -55,7 +59,10 @@ const approvedSections = (content: Record<string, unknown>): ApprovedSection[] =
     const title = text(value.title);
     const body = text(value.body) ?? text(value.content);
     if (!id?.trim() || !title?.trim() || body === null) return [];
-    return [{ id: id.trim(), title: title.trim(), body }];
+    const section = { id: id.trim(), title: title.trim(), body };
+    const purpose = `${section.id.replace(/([a-z])([A-Z])/gu, '$1 $2')} ${section.title}`;
+    if (excludedSectionPurpose.test(purpose) || mermaidFlow.test(section.body)) return [];
+    return [section];
   });
 };
 
@@ -90,7 +97,7 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
   const pairedAcceptance = deliverableLinks.map(link => {
     const identifier = requirementIdentifier(link.requirementText);
     const explicitlyLinked = identifier === null ? [] : acceptanceLinks.filter(candidate =>
-      !usedAcceptance.has(candidate) && explicitlyReferences(candidate.requirementText, identifier));
+      explicitlyReferences(candidate.requirementText, identifier));
     const sameSectionDeliverables = deliverableLinks.filter(candidate => candidate.sectionId === link.sectionId);
     const unambiguousSectionLinks = explicitlyLinked.length === 0 && sameSectionDeliverables.length === 1
       ? acceptanceLinks.filter(candidate => !usedAcceptance.has(candidate) && candidate.sectionId === link.sectionId)

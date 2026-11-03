@@ -29,6 +29,8 @@ const APPROVED_STUDIO_CONTENT = {
   sections: [
     { id: 'summary', title: 'Summary', body: 'BR-1: The delivery owner must record an explicit outcome.', sourceAnchors: [], labels: ['human_authored'], citations: ['fixture-source-summary'] },
     { key: 'controls', title: 'Controls', content: 'NFR-1: Monitor shall read the exact imported-task ancestry.', citations: ['fixture-source-controls'] },
+    { id: 'openQuestionsAndProposals', title: 'Open questions and proposals', body: 'Open question: The design must choose an unspecified API?', citations: [] },
+    { id: 'asIsFlow', title: 'As-Is Flow', body: 'flowchart TD\nA[Operator must review] --> B[Complete]', citations: [] },
   ],
 };
 
@@ -229,6 +231,7 @@ async function run() {
           'studio.approved-artifact.publish', JSON.stringify({ ...publishPayload, projectId: CLONE_PROJECT })],
       )).rows[0].value;
       await fixture.db.query('RESET ROLE');
+      stage = `publish-matching-clone-${matchingClone.ok === true ? 'ok' : errorCode(matchingClone) ?? 'unknown'}`;
       assert.equal(matchingClone.ok, true, 'matching cloned V2 source and score version must publish');
       assert.equal(matchingClone.resource.sourceAssessmentId, ASSESSMENT);
       const cloneBinding = (await fixture.db.query(`SELECT publication.source_case_id,
@@ -283,6 +286,17 @@ async function run() {
     }, `invalid-requirement-${randomUUID()}`);
     assert.equal(errorCode(invalidRequirement), 'INVALID_COMMAND');
     assert.deepEqual(await snapshot(fixture.db), beforeSourceDenials, 'invented requirement links must roll back publication, receipt, generation and audit');
+    for (const excludedLink of [
+      { sectionId: 'openQuestionsAndProposals', sectionTitle: 'Open questions and proposals', requirementText: 'Open question: The design must choose an unspecified API?' },
+      { sectionId: 'asIsFlow', sectionTitle: 'As-Is Flow', requirementText: 'A[Operator must review] --> B[Complete]' },
+    ]) {
+      const excluded = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', {
+        ...publishPayload, workItems: [{ ...WORK_ITEMS[1], requirementLinks: [excludedLink] }],
+      }, `excluded-requirement-${randomUUID()}`);
+      assert.equal(errorCode(excluded), 'INVALID_COMMAND');
+      assert.deepEqual(await snapshot(fixture.db), beforeSourceDenials,
+        'questions, proposals and Mermaid flow text must never materialize as confirmed requirements');
+    }
     const publishKey = `publish-${randomUUID()}`;
     const publishRequestId = randomUUID();
     const published = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', publishPayload, publishKey, publishRequestId);
@@ -311,6 +325,8 @@ async function run() {
     assert.deepEqual(bound.artifacts.brd, { title: APPROVED_STUDIO_CONTENT.title, sections: [
       { key: 'summary', title: 'Summary', content: 'BR-1: The delivery owner must record an explicit outcome.' },
       { key: 'controls', title: 'Controls', content: 'NFR-1: Monitor shall read the exact imported-task ancestry.' },
+      { key: 'openQuestionsAndProposals', title: 'Open questions and proposals', content: 'Open question: The design must choose an unspecified API?' },
+      { key: 'asIsFlow', title: 'As-Is Flow', content: 'flowchart TD\nA[Operator must review] --> B[Complete]' },
     ] }, 'legacy primary document must map exact approved title and ordered section text');
     assert.deepEqual(bound.artifacts.approvedStudioContent, APPROVED_STUDIO_CONTENT, 'exact approved Studio content and citation/source metadata must remain immutable in the generation');
     assert.equal(bound.artifacts.source.artifactVersionId, x.version.id); assert.equal(bound.artifacts.source.caseId, x.caseId);
@@ -333,6 +349,12 @@ async function run() {
       'future revisions of the same artifact and declared requirement retain the same proposal origin');
     assert.notEqual(originDomain.distinct_artifact, originDomain.same_artifact,
       'identical requirement text from a distinct approved artifact must retain a distinct proposal origin');
+    const revisedQuoteOrigin = (await fixture.db.query(`SELECT public.studio_delivery_proposal_origin($1,$2,$3::jsonb) value`, [
+      x.artifactId, WORK_ITEMS[1].type, JSON.stringify([{ sectionId: 'summary', sectionTitle: 'Renamed summary',
+        requirementText: 'BR-1: Revised approved wording keeps the declared requirement identity.' }]),
+    ])).rows[0].value;
+    assert.equal(revisedQuoteOrigin, requirementBindings[1].proposal_origin_id,
+      'section-title or quote edits must not mint a duplicate when the artifact, section and stable requirement ID are unchanged');
     const nativeSource = (await fixture.db.query('SELECT source_v1_assessment_id,source_v1_score_version FROM public.assess_v2_cases WHERE id=$1', [x.caseId])).rows[0];
     assert.deepEqual(nativeSource, { source_v1_assessment_id: null, source_v1_score_version: null }, 'native V2 publication must not manufacture clone ancestry');
     stage = 'publish-bound-immutable';

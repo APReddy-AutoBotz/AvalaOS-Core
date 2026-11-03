@@ -22,13 +22,14 @@ assert.deepEqual(normalizeApprovedWorkItemDraft(draft).acceptanceCriteria, ['Fir
 assert.equal(isApprovedRequirementLine('### Requirements'), false);
 assert.equal(isApprovedRequirementLine('Background information only.'), false);
 assert.equal(isApprovedRequirementLine('FR-1: Reviewer must record a decision.'), true);
+assert.equal(isApprovedRequirementLine('REQ-8: The reviewer must record an approval decision for each proposal.'), true);
 assert.equal(isApprovedRequirementLine('- The workflow shall preserve the approved source link.'), true);
 
 const derived = deriveRequirementProposals({ title: 'Approved BRD', sections: [{ id: 'requirements', title: 'Requirements', body: [
   'Background information only.',
   'FR-1: Reviewer must record a decision.',
   '- The workflow shall preserve the approved source link.',
-  'AC-1: The recorded decision is visible after reload.',
+  'AC-1: For FR-1, the recorded decision is visible after reload.',
 ].join('\n') }] });
 assert.equal(derived.blockedReason, null);
 assert.equal(derived.requirementCount, 3);
@@ -38,7 +39,7 @@ assert.ok(derived.proposals.every(item => item.requirementLinks.every(value => v
 assert.doesNotMatch(derived.proposals[0].title, /Requirements/u, 'epics must not be a renamed document heading');
 assert.match(derived.proposals[0].title, /reviewer: record a decision/i);
 assert.notEqual(derived.proposals[1].title, derived.proposals[1].description, 'story title and body must express distinct delivery information');
-assert.deepEqual(derived.proposals[1].acceptanceCriteria, ['The recorded decision is visible after reload.']);
+assert.deepEqual(derived.proposals[1].acceptanceCriteria, ['For FR-1, the recorded decision is visible after reload.']);
 assert.equal(derived.proposals[1].requirementLinks.length, 2, 'the story retains both its requirement and directly paired acceptance predicate');
 const crossSection = deriveRequirementProposals({ sections: [
   { id: 'functional', title: 'Functional requirements', body: 'FR-2: The board must persist status updates.' },
@@ -46,7 +47,7 @@ const crossSection = deriveRequirementProposals({ sections: [
 ] });
 assert.deepEqual(crossSection.proposals.map(item => item.type), ['Epic', 'Story', 'Task']);
 assert.deepEqual(crossSection.proposals[1].acceptanceCriteria, ['For FR-2, the status update is visible after reload.']);
-assert.equal(crossSection.proposals[1].requirementLinks.length, 2, 'matching stable requirement numbers link acceptance from another section');
+assert.equal(crossSection.proposals[1].requirementLinks.length, 2, 'an explicit requirement-ID reference links acceptance from another section');
 const ambiguousAcceptance = deriveRequirementProposals({ sections: [{ id: 'requirements', title: 'Requirements', body: [
   'FR-1: Reviewer must record a decision.',
   'FR-2: Board must persist the decision.',
@@ -55,6 +56,23 @@ const ambiguousAcceptance = deriveRequirementProposals({ sections: [{ id: 'requi
 assert.deepEqual(ambiguousAcceptance.proposals.map(item => item.type), ['Epic', 'Story', 'Story', 'Task', 'Task']);
 assert.match(ambiguousAcceptance.proposals[3].title, /Review unassigned acceptance criteria/u);
 assert.match(ambiguousAcceptance.proposals[3].description, /human must assign or retain/i);
+const sharedAcceptance = deriveRequirementProposals({ sections: [
+  { id: 'functional', title: 'Functional requirements', body: 'FR-1: Reviewer must decide.\nFR-2: Board must persist the decision.' },
+  { id: 'acceptance', title: 'Acceptance criteria', body: 'AC-1: For FR-1 and FR-2, the persisted decision is visible.' },
+] });
+assert.deepEqual(sharedAcceptance.proposals.map(item => item.type), ['Epic', 'Story', 'Story', 'Task']);
+assert.ok(sharedAcceptance.proposals[1].requirementLinks.some(value => value.requirementText.startsWith('AC-1:')));
+assert.ok(sharedAcceptance.proposals[2].requirementLinks.some(value => value.requirementText.startsWith('AC-1:')),
+  'one acceptance criterion that explicitly references two requirement IDs remains linked to both');
+const excludedSections = deriveRequirementProposals({ sections: [
+  { id: 'requirements', title: 'Requirements', body: 'FR-1: Board must persist status.' },
+  { id: 'openQuestionsAndProposals', title: 'Open questions and proposals', body: 'Open question: The design must choose an unspecified API?' },
+  { id: 'asIsFlow', title: 'As-Is Flow', body: 'flowchart TD\nA[Operator must review] --> B[Complete]' },
+  { id: 'assumptions', title: 'Assumptions', body: 'The solution shall have an unspecified integration.' },
+] });
+assert.equal(excludedSections.requirementCount, 1);
+assert.ok(excludedSections.proposals.every(item => item.requirementLinks.every(value => value.sectionId === 'requirements')),
+  'questions, assumptions, proposals and Mermaid flow text never become confirmed requirements');
 const acceptanceOnly = deriveRequirementProposals({ sections: [{ id: 'acceptance', title: 'Acceptance criteria', body: 'AC-1: The result is visible.' }] });
 assert.equal(acceptanceOnly.proposals.length, 0);
 assert.match(acceptanceOnly.blockedReason ?? '', /no approved deliverable requirement/i);

@@ -34,13 +34,26 @@ CREATE TRIGGER studio_delivery_requirement_binding_immutable
  BEFORE UPDATE OR DELETE ON public.studio_delivery_work_item_requirement_bindings
  FOR EACH ROW EXECUTE FUNCTION public.legacy_delivery_reject_immutable_row();
 
+CREATE OR REPLACE FUNCTION public.studio_delivery_requirement_origin_key(p_link jsonb)
+RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path='' AS $$
+DECLARE stable_id text;
+BEGIN
+ stable_id:=substring(p_link->>'requirementText' from '^[-*+0-9.)[:space:]]*((REQ|BR|FR|NFR|AC)[-_ ]?[0-9]+)[[:space:]]*[:.-]');
+ IF stable_id IS NOT NULL THEN
+  stable_id:=upper(regexp_replace(stable_id,'[-_ ]+','-','g'));
+  RETURN jsonb_build_object('sectionId',p_link->>'sectionId','requirementId',stable_id);
+ END IF;
+ RETURN jsonb_build_object('sectionId',p_link->>'sectionId','requirementText',p_link->>'requirementText');
+END $$;
+
 CREATE OR REPLACE FUNCTION public.studio_delivery_proposal_origin(
  p_studio_artifact_id uuid,p_type text,p_requirement_links jsonb
 ) RETURNS text LANGUAGE sql IMMUTABLE SET search_path='' AS $$
  SELECT public.studio_delivery_hash_jsonb(jsonb_build_object(
   'studioArtifactId',p_studio_artifact_id,'type',p_type,'requirementLinks',
-  COALESCE((SELECT jsonb_agg(link ORDER BY link->>'sectionId',link->>'requirementText',link->>'sectionTitle')
-   FROM jsonb_array_elements(p_requirement_links) source(link)),'[]'::jsonb)))
+  COALESCE((SELECT jsonb_agg(origin_key ORDER BY origin_key->>'sectionId',origin_key->>'requirementId',origin_key->>'requirementText')
+   FROM (SELECT public.studio_delivery_requirement_origin_key(link) origin_key
+    FROM jsonb_array_elements(p_requirement_links) source(link)) identities),'[]'::jsonb)))
 $$;
 
 CREATE OR REPLACE FUNCTION public.studio_delivery_apply_requirement_command(
@@ -94,9 +107,14 @@ BEGIN
    SELECT COALESCE(section->>'body',section->>'content') INTO section_body
    FROM jsonb_array_elements(artifact_version.content->'sections') section
    WHERE COALESCE(section->>'id',section->>'key')=btrim(link->>'sectionId')
-    AND section->>'title'=btrim(link->>'sectionTitle');
+    AND section->>'title'=btrim(link->>'sectionTitle')
+    AND (regexp_replace(COALESCE(section->>'id',section->>'key'),'([a-z])([A-Z])',E'\\1 \\2','g')||' '||(section->>'title'))
+      !~* '(^|[^a-z])(questions?|assumptions?|proposals?|flows?|diagrams?)([^a-z]|$)'
+    AND COALESCE(section->>'body',section->>'content') !~* '(^|\n)[[:space:]]*(flowchart|graph)[[:space:]]+';
    SELECT EXISTS(SELECT 1 FROM regexp_split_to_table(COALESCE(section_body,''),E'\\r?\\n') source_line
     WHERE btrim(source_line)=btrim(link->>'requirementText')
+     AND btrim(source_line)!~'\?$'
+     AND btrim(source_line)!~* '^([-*+][[:space:]]*|[0-9]+[.)][[:space:]]*)?((open[[:space:]]+)?question|assume|assumption|proposal|proposed|speculative)([[:space:]:.-]|$)'
      AND (btrim(source_line)~*'^([-*+][[:space:]]*|[0-9]+[.)][[:space:]]*)?(REQ|BR|FR|NFR|AC)[-_ ]?[0-9]+[[:space:]]*[:.-][[:space:]]*[^[:space:]]'
       OR btrim(source_line)~*'(^|[[:space:]])(must|shall|required to|needs to)([[:space:]]|$)')) INTO line_match;
    IF section_body IS NULL OR line_match IS DISTINCT FROM true THEN RAISE EXCEPTION 'STUDIO_DELIVERY_INVALID_COMMAND'; END IF;
@@ -341,6 +359,7 @@ $$;
 REVOKE ALL ON TABLE public.studio_delivery_work_item_requirement_bindings FROM PUBLIC,anon,authenticated,service_role;
 REVOKE EXECUTE ON FUNCTION public.studio_delivery_apply_requirement_command(uuid,uuid,uuid,bigint,uuid,text,text,jsonb),
  public.legacy_delivery_bind_requirement_source(),public.studio_delivery_proposal_origin(uuid,text,jsonb),
+ public.studio_delivery_requirement_origin_key(jsonb),
  public.legacy_delivery_apply_requirement_command(uuid,uuid,uuid,bigint,uuid,text,text,jsonb),
  public.legacy_delivery_requirement_query(uuid,uuid,uuid,bigint,uuid,integer,uuid,uuid,boolean) FROM PUBLIC,anon,authenticated,service_role;
 REVOKE EXECUTE ON FUNCTION public.studio_delivery_apply_command(uuid,uuid,uuid,bigint,uuid,text,text,jsonb) FROM service_role;

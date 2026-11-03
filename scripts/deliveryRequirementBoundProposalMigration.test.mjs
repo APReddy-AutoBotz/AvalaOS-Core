@@ -23,6 +23,8 @@ assert.match(migration, /EXCEPTION WHEN OTHERS[\s\S]*studio_delivery_error\(SQLE
   'requirement validation failures must return through the accepted error envelope and roll back the subtransaction');
 assert.match(migration, /studio_delivery_proposal_origin\(publication\.studio_artifact_id/u,
   'proposal origin is scoped to the stable artifact aggregate, not display text or source version');
+assert.match(migration, /studio_delivery_requirement_origin_key/u,
+  'explicit requirement IDs provide stable origin identity while exact historical quotes remain in the binding');
 assert.match(migration, /jsonb_agg\(value ORDER BY value->>'sectionId',value->>'requirementText',value->>'sectionTitle'\)/u,
   'exact requirement links are canonicalized before immutable binding');
 assert.match(migration, /'studioArtifactVersionId',binding\.studio_artifact_version_id/u,
@@ -32,10 +34,12 @@ assert.match(migration, /type IN\('Epic','Story','Task','Bug','Subtask'\)/u,
 assert.match(migration, /IF bound_publication_id IS NULL THEN[\s\S]*legacy_delivery_apply_command/u,
   'unbound legacy publications retain their prior grouping-only import behavior');
 assert.match(postgres, /invented requirement links must roll back publication, receipt, generation and audit/u);
+assert.match(postgres, /questions, proposals and Mermaid flow text must never materialize as confirmed requirements/u);
 assert.match(postgres, /every published proposal must retain one immutable server-validated requirement binding/u);
 assert.match(postgres, /normal Delivery task detail must receive exact approved requirement links/u);
 assert.match(postgres, /a regenerated proposal origin must not appear twice on the normal board/u);
 assert.match(postgres, /identical requirement text from a distinct approved artifact must retain a distinct proposal origin/u);
+assert.match(postgres, /section-title or quote edits must not mint a duplicate/u);
 assert.match(postgres, /requirement-link presentation order must not mint a new proposal origin/u);
 assert.match(postgres, /mixed requirement-bound import must materialize its selected Epic/u);
 assert.match(postgres, /sourceItemIndices: \[0\]/u, 'real PostgreSQL proof includes Epic-only confirmation');
