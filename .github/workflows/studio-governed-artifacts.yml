@@ -1,7 +1,7 @@
 name: Studio Governed Artifacts
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main, codex/process-evidence-to-assessment, codex/process-evidence-studio]
   workflow_dispatch:
 jobs:
   studio-private-artifacts-source:
