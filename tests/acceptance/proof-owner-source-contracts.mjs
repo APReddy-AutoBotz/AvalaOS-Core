@@ -83,7 +83,7 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
   {
     "anchorId": "studio-artifact-contracts",
     "sourceReference": "services/studioArtifacts/contracts.ts",
-    "selector": "export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd'] as const;"
+    "selector": "export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd', 'sdd'] as const;"
   },
   {
     "anchorId": "delivery-workflow-policy",

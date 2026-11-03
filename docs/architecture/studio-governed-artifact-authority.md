@@ -1,5 +1,10 @@
 # Studio Governed Artifact Authority
 
+## Process evidence milestone candidate
+
+The governed SDD uses the same exact handoff, immutable document version, review, final approval and rendition boundaries as BRD, PDD and FRD. The system SDD includes editable As-Is and To-Be flow sections. Flow input remains bounded to the supported Mermaid grammar. See the [Studio implementation and verification record](../planning/process-evidence-studio-sdd-and-flows.md) for the source-change and approval boundaries.
+
+
 Status: the foundational Studio aggregate boundary is accepted through PR #216; governed multi-source transcript PR A is accepted through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; governed Delivery and Monitor PR C is the active additive downstream boundary. PR 1G remains accepted. This document is source architecture, not deployment or hosted-readiness evidence.
 
 ## Scope and trust boundary

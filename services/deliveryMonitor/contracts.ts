@@ -83,7 +83,7 @@ export interface DeliveryFeatureFlagsProjection {
 
 export interface DeliverySourceCitationProjection {
   artifactVersion: number;
-  artifactType: 'brd' | 'frd' | 'pdd';
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd' | 'sdd';
   sectionLocator: string;
 }
 
@@ -134,7 +134,7 @@ export interface DeliverySourcePackageProjection {
   lineageClassification: DeliveryLineageClassification;
   planningOnly: boolean;
   studioArtifactVersion?: number;
-  studioArtifactType?: 'brd' | 'frd' | 'pdd';
+  studioArtifactType?: 'brd' | 'frd' | 'pdd' | 'sdd';
   templateKind?: 'system' | 'tenant';
   templateVersion?: string;
 }
@@ -184,7 +184,7 @@ export interface DeliveryHandoffProjection {
   lineageClassification: DeliveryLineageClassification;
   planningOnly: boolean;
   preview: {
-    artifactType: 'brd' | 'frd' | 'pdd';
+    artifactType: 'brd' | 'frd' | 'pdd' | 'sdd' | 'sdd';
     proposedItemCount: number;
     sourceCoverageLabel: string;
     blockers: string[];
@@ -208,7 +208,7 @@ interface ManualDeliveryProjectionItem {
 
 export interface EligibleStudioHandoffCandidateProjection {
   studioArtifactId: string;
-  artifactType: 'brd' | 'frd' | 'pdd';
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd' | 'sdd';
   aggregateVersion: number;
   studioArtifactVersionId: string;
   studioArtifactVersion: number;
@@ -371,7 +371,7 @@ const decodeFlags = (value: unknown): DeliveryFeatureFlagsProjection => {
 const decodeCitation = (value: unknown): DeliverySourceCitationProjection => {
   const row = exact(record(value), ['artifactVersion', 'artifactType', 'sectionLocator']);
   return {
-    artifactVersion: integer(row.artifactVersion), artifactType: literal(row.artifactType, ['brd', 'frd', 'pdd'] as const),
+    artifactVersion: integer(row.artifactVersion), artifactType: literal(row.artifactType, ['brd', 'frd', 'pdd', 'sdd'] as const),
     sectionLocator: string(row.sectionLocator, 1_000),
   };
 };
@@ -428,7 +428,7 @@ const decodeSourcePackage = (value: unknown): DeliverySourcePackageProjection =>
     lineageClassification: sourceLineage.classification,
     planningOnly: sourceLineage.planningOnly,
     ...(row.studioArtifactVersion === undefined || row.studioArtifactVersion === null ? {} : { studioArtifactVersion: integer(row.studioArtifactVersion) }),
-    ...(row.studioArtifactType === undefined || row.studioArtifactType === null ? {} : { studioArtifactType: literal(row.studioArtifactType, ['brd', 'frd', 'pdd'] as const) }),
+    ...(row.studioArtifactType === undefined || row.studioArtifactType === null ? {} : { studioArtifactType: literal(row.studioArtifactType, ['brd', 'frd', 'pdd', 'sdd'] as const) }),
     ...(row.templateKind === undefined || row.templateKind === null ? {} : { templateKind: literal(row.templateKind, ['system', 'tenant'] as const) }),
     ...(row.templateVersion === undefined || row.templateVersion === null ? {} : { templateVersion: string(row.templateVersion, 120) }),
   };
@@ -456,7 +456,7 @@ const decodeHandoff = (value: unknown): DeliveryHandoffProjection => {
     status: literal(row.status, ['requested', 'target_review', 'changes_requested', 'rejected', 'approval_ready', 'approved', 'consumed', 'withdrawn', 'stale'] as const),
     sourceArtifactVersion: integer(source.studioArtifactVersion),
     targetWorkspaceId: id(row.targetWorkspaceId), lineageClassification: sourceLineage.classification, planningOnly: sourceLineage.planningOnly,
-    preview: { artifactType: literal(source.artifactType, ['brd', 'frd', 'pdd'] as const), proposedItemCount: targetItems.length,
+    preview: { artifactType: literal(source.artifactType, ['brd', 'frd', 'pdd', 'sdd'] as const), proposedItemCount: targetItems.length,
       sourceCoverageLabel: `${targetItems.length}/${targetItems.length} exact cited ${String(source.artifactType).toUpperCase()} proposal${targetItems.length === 1 ? '' : 's'}`,
       blockers: strings(row.blockers, 250, 500) },
     actions: actions(row.actions), createdAt: timestamp(row.requestedAt), targetItems, history, reviewHistory, approvalHistory,
@@ -466,7 +466,7 @@ const decodeHandoff = (value: unknown): DeliveryHandoffProjection => {
 
 const decodeEligibleStudioArtifact = (value: unknown): EligibleStudioHandoffCandidateProjection => {
   const row = exact(record(value), ['studioArtifactId', 'artifactType', 'aggregateVersion', 'studioArtifactVersionId', 'studioArtifactVersion', 'lineageClassification', 'planningOnly', 'proposalItems']);
-  const artifactType = literal(row.artifactType, ['brd', 'frd', 'pdd'] as const);
+  const artifactType = literal(row.artifactType, ['brd', 'frd', 'pdd', 'sdd'] as const);
   const candidateLineage = lineage(row.lineageClassification, row.planningOnly);
   const clientKeys = new Set<string>();
   const proposalItems = array(row.proposalItems, 250, 1).map(value => {
@@ -642,7 +642,7 @@ const canonicalHandoff = (value: unknown, direction: 'inbox' | 'outbox') => {
   literal(row.status, ['requested', 'target_review', 'changes_requested', 'rejected', 'approval_ready', 'approved', 'consumed', 'withdrawn', 'stale'] as const);
   lineage(row.lineageClassification, row.planningOnly); timestamp(row.createdAt); actions(row.actions);
   const preview = exact(record(row.preview), ['artifactType', 'proposedItemCount', 'sourceCoverageLabel', 'blockers']);
-  const artifactType = literal(preview.artifactType, ['brd', 'frd', 'pdd'] as const);
+  const artifactType = literal(preview.artifactType, ['brd', 'frd', 'pdd', 'sdd'] as const);
   const count = integer(preview.proposedItemCount, 1, 250);
   const coverage = `${count}/${count} exact cited ${artifactType.toUpperCase()} proposal${count === 1 ? '' : 's'}`;
   if (preview.sourceCoverageLabel !== coverage) throw new DeliveryMonitorContractError('PROJECTION_INVALID');
@@ -721,7 +721,7 @@ export const validateCanonicalDeliveryWorkspaceProjection = (value: unknown): De
   array(row.eligibleStudioArtifacts, 25).forEach(value => {
     const candidate = exact(record(value), ['studioArtifactId', 'artifactType', 'aggregateVersion', 'studioArtifactVersionId', 'studioArtifactVersion', 'lineageClassification', 'planningOnly', 'proposalItems']);
     id(candidate.studioArtifactId); id(candidate.studioArtifactVersionId); integer(candidate.aggregateVersion); integer(candidate.studioArtifactVersion);
-    const artifactType = literal(candidate.artifactType, ['brd', 'frd', 'pdd'] as const);
+    const artifactType = literal(candidate.artifactType, ['brd', 'frd', 'pdd', 'sdd'] as const);
     lineage(candidate.lineageClassification, candidate.planningOnly);
     const keys = new Set<string>();
     array(candidate.proposalItems, 250, 1).forEach(value => {

@@ -1,6 +1,6 @@
 import type { JsonObject } from './studioArtifactCommand.ts';
 
-export const STUDIO_TEMPLATE_ARTIFACT_TYPES = ['brd', 'frd', 'pdd'] as const;
+export const STUDIO_TEMPLATE_ARTIFACT_TYPES = ['brd', 'frd', 'pdd', 'sdd'] as const;
 export const STUDIO_TEMPLATE_FIELD_KINDS = [
   'narrative', 'requirements', 'rules', 'controls', 'risks', 'interfaces', 'acceptance_criteria',
 ] as const;

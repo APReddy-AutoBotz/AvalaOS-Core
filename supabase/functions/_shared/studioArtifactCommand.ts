@@ -12,6 +12,7 @@ import {
   type StudioServerCommandType,
   type StudioTemplateSectionDefinition,
 } from '../../../services/studioArtifacts/contracts.ts';
+import { inspectMermaidFlowcharts } from '../../../services/mermaidFlowchart.ts';
 
 export type JsonObject = Record<string, unknown>;
 export type StudioArtifactAuthority = Readonly<{
@@ -72,6 +73,7 @@ const exact = (value: JsonObject, keys: readonly string[]) => {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const SAFE_KEY = /^[a-z][a-z0-9_.-]{0,79}$/;
+const SELECTED_SECTION_KEY = /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/;
 const uuid = (value: unknown) => typeof value === 'string' && UUID.test(value) ? value : bad();
 const nullableUuid = (value: unknown) => value === null ? null : uuid(value);
 const positiveInteger = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : bad();
@@ -80,6 +82,18 @@ const text = (value: unknown, maximum: number) => typeof value === 'string' && v
 const nullableText = (value: unknown, maximum: number) => value === null ? null : text(value, maximum);
 const artifactType = (value: unknown): StudioArtifactType => STUDIO_ARTIFACT_TYPES.includes(value as StudioArtifactType) ? value as StudioArtifactType : bad();
 const conditions = (value: unknown): StudioConditions => Array.isArray(value) && value.length <= 20 ? value.map(item => text(item, 500)) : bad();
+const selectedSectionIds = (value: unknown): string[] => {
+  if (value === undefined) return [];
+  const items: unknown[] = Array.isArray(value) ? value : bad();
+  if (items.length > 100) bad();
+  const seen = new Set<string>();
+  return items.map(item => {
+    const id = typeof item === 'string' && SELECTED_SECTION_KEY.test(item) ? item : bad();
+    if (seen.has(id)) bad();
+    seen.add(id);
+    return id;
+  });
+};
 
 const safeJson = (value: unknown, depth = 0): unknown => {
   if (depth > 12) bad();
@@ -129,6 +143,23 @@ const resolution = (value: JsonObject, outcomes: readonly string[]) => {
   return { outcome: value.outcome, rationale: text(value.rationale, 4_000), conditions: conditions(value.conditions) };
 };
 
+const validateCanonicalFlowSectionEdits = (content: JsonObject): void => {
+  if (content.contractVersion !== STUDIO_ARTIFACT_CONTRACT_VERSION || !Array.isArray(content.sections)) return;
+  for (const rawSection of content.sections) {
+    if (!rawSection || typeof rawSection !== 'object' || Array.isArray(rawSection)) continue;
+    const section = rawSection as JsonObject;
+    if (section.id !== 'asIsFlow' && section.id !== 'toBeFlow') continue;
+    let valid = false;
+    try {
+      valid = typeof section.body === 'string'
+        && inspectMermaidFlowcharts(section.body, true).length === 1;
+    } catch {
+      valid = false;
+    }
+    if (!valid) bad();
+  }
+};
+
 const parseLegacyPayload = (command: StudioServerCommandType, raw: unknown): JsonObject => {
   const payload = object(raw);
   if (command === 'studio.artifact.generation.request') {
@@ -139,6 +170,7 @@ const parseLegacyPayload = (command: StudioServerCommandType, raw: unknown): Jso
     exact(payload, ['artifactId', 'parentVersionId', 'content']);
     const content = safeJson(payload.content);
     if (!content || typeof content !== 'object' || Array.isArray(content) || JSON.stringify(content).length > 500_000) bad();
+    validateCanonicalFlowSectionEdits(content as JsonObject);
     return { artifactId: uuid(payload.artifactId), parentVersionId: uuid(payload.parentVersionId), content };
   }
   if (command === 'studio.artifact.review.submit') {
@@ -215,12 +247,15 @@ const parseGovernedPayload = (command: StudioServerCommandType, raw: unknown): J
     return { templateId, templateVersionId: uuid(payload.templateVersionId), replacementTemplateId, replacementTemplateVersionId: uuid(payload.replacementTemplateVersionId), rationale: text(payload.rationale, 4_000) };
   }
   if (command === 'studio.generation.request') {
-    exact(payload, ['artifactId', 'sourcePackageId', 'sourcePackageVersion', 'template', 'expectedCurrentVersionId', 'expectedApprovedVersionId']);
+    const keys = ['artifactId', 'sourcePackageId', 'sourcePackageVersion', 'template', 'expectedCurrentVersionId', 'expectedApprovedVersionId'];
+    if ('selectedSectionIds' in payload) keys.push('selectedSectionIds');
+    exact(payload, keys);
     return {
       artifactId: uuid(payload.artifactId), sourcePackageId: uuid(payload.sourcePackageId),
       sourcePackageVersion: positiveInteger(payload.sourcePackageVersion), template: templateSelector(payload.template),
       expectedCurrentVersionId: nullableUuid(payload.expectedCurrentVersionId),
       expectedApprovedVersionId: nullableUuid(payload.expectedApprovedVersionId),
+      ...('selectedSectionIds' in payload ? { selectedSectionIds: selectedSectionIds(payload.selectedSectionIds) } : {}),
     };
   }
   return bad();

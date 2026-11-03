@@ -134,7 +134,7 @@ export interface StudioTemplateSummary {
   templateVersionId: string;
   version: string | number;
   name: string;
-  artifactType: 'brd' | 'frd' | 'pdd' | 'custom';
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd' | 'custom';
   ownership: 'system' | 'tenant';
   lifecycle: StudioTemplateLifecycle;
   templateHash: string | null;
@@ -154,8 +154,8 @@ export interface StudioHandoffSummary {
   status: string | null;
   sourceModule: 'assess';
   targetModule: 'studio';
-  artifactType: 'brd' | 'frd' | 'pdd' | null;
-  artifactTypes: readonly ('brd' | 'frd' | 'pdd')[];
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd' | null;
+  artifactTypes: readonly ('brd' | 'frd' | 'pdd' | 'sdd')[];
   sourceVersion: number | null;
   resourceLabel: string;
   lineageLabel: 'assessed' | 'not_assessed' | 'mixed' | null;
@@ -312,7 +312,7 @@ const decodeTemplate = (value: unknown): StudioTemplateSummary => {
   const immutable = bool(item.immutable);
   if ((lifecycle === 'approved' || lifecycle === 'deprecated' || lifecycle === 'replaced') && !immutable) fail();
   if (ownership === 'system' && (lifecycle !== 'approved' || !immutable)) fail();
-  return { templateId: uuid(item.templateId), templateVersionId: uuid(item.templateVersionId), version, name: text(item.name, 240), artifactType: oneOf(item.artifactType, ['brd','frd','pdd','custom']), ownership, lifecycle, templateHash: item.templateHash === null ? null : hash(item.templateHash), immutable, replacementTemplateVersionId: optionalUuid(item.replacementTemplateVersionId), actions: strings(item.actions, 20) };
+  return { templateId: uuid(item.templateId), templateVersionId: uuid(item.templateVersionId), version, name: text(item.name, 240), artifactType: oneOf(item.artifactType, ['brd','frd','pdd','sdd','custom']), ownership, lifecycle, templateHash: item.templateHash === null ? null : hash(item.templateHash), immutable, replacementTemplateVersionId: optionalUuid(item.replacementTemplateVersionId), actions: strings(item.actions, 20) };
 };
 
 const handoffKeys = ['kind','handoffId','handoffVersionId','upstreamHandoffId','version','direction','state','status','sourceModule','targetModule','artifactType','artifactTypes','sourceVersion','resourceLabel','lineageLabel','planningOnly','hasStudioTranscriptBundle','requestorLabel','targetWorkspaceLabel','requestedAt','updatedAt','handedOffAt','expiresAt','actions'] as const;
@@ -323,8 +323,8 @@ const decodeHandoff = (value: unknown): StudioHandoffSummary => {
   const kind=oneOf(item.kind,['eligible','persisted']);
   const handoffId=item.handoffId===null?null:uuid(item.handoffId),handoffVersionId=item.handoffVersionId===null?null:uuid(item.handoffVersionId),version=item.version===null?null:integer(item.version,1);
   const state=oneOf(item.state,['eligible','reviewer_ready','changes_requested','rejected','approval_ready','approved','accepted','consumed','withdrawn','stale','expired']);
-  const artifactType=item.artifactType===null?null:oneOf(item.artifactType,['brd','frd','pdd']);
-  const artifactTypes=Array.isArray(item.artifactTypes)&&item.artifactTypes.length<=3?item.artifactTypes.map(value=>oneOf(value,['brd','frd','pdd'] as const)):fail();
+  const artifactType=item.artifactType===null?null:oneOf(item.artifactType,['brd','frd','pdd','sdd']);
+  const artifactTypes=Array.isArray(item.artifactTypes)&&item.artifactTypes.length<=4?item.artifactTypes.map(value=>oneOf(value,['brd','frd','pdd','sdd'] as const)):fail();
   const actions=strings(item.actions,10).map(action=>handoffActions.includes(action as typeof handoffActions[number])?action:fail()).sort();
   const lineageLabel=item.lineageLabel===null?null:oneOf(item.lineageLabel,['assessed','not_assessed','mixed']);
   const planningOnly=item.planningOnly===null?null:bool(item.planningOnly),hasStudioTranscriptBundle=item.hasStudioTranscriptBundle===null?null:bool(item.hasStudioTranscriptBundle),sourceVersion=item.sourceVersion===null?null:integer(item.sourceVersion,1);

@@ -112,7 +112,7 @@ const text = (value: unknown, max: number) =>
     ? value
     : bad();
 const artifactType = (value: unknown) =>
-  value === 'brd' || value === 'frd' || value === 'pdd' ? value : bad();
+  value === 'brd' || value === 'frd' || value === 'pdd' || value === 'sdd' ? value : bad();
 const format = (value: unknown): StudioPrivateArtifactFormat =>
   value === 'markdown' || value === 'pdf' || value === 'docx' ? value : bad();
 const date = (value: unknown) => {

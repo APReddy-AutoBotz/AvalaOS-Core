@@ -9,6 +9,7 @@ import {
 import type { JsonObject } from './studioArtifactCommand.ts';
 import { rpc } from './supabase.ts';
 import type { StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
+import { inspectMermaidFlowcharts } from '../../../services/mermaidFlowchart.ts';
 import { normalizeStudioArtifactTemplate } from './studioArtifactTemplateContract.ts';
 import {
   composeStudioBrdSourceFacts,
@@ -78,7 +79,7 @@ export type StudioExecutableGenerationClaim = StudioGenerationExecutionIdentity 
     sessionId: string;
     payloadHash: string;
     expectedVersion: number;
-    artifactType: 'brd' | 'frd' | 'pdd';
+    artifactType: 'brd' | 'frd' | 'pdd' | 'sdd';
   }>;
 }>;
 
@@ -139,6 +140,10 @@ const validTree = (value: unknown, depth = 0): boolean => depth <= 10 && (
   || Array.isArray(value) && value.length <= 200 && value.every(item => validTree(item, depth + 1))
   || object(value) && Object.keys(value).length <= 200 && Object.entries(value).every(([key, item]) => key.length > 0 && key.length <= 120 && validTree(item, depth + 1))
 );
+const FLOW_SECTION_IDS = new Set(['asIsFlow', 'toBeFlow']);
+const validGovernedFlow = (body: string) => {
+  try { return inspectMermaidFlowcharts(body, true).length === 1; } catch { return false; }
+};
 
 const legacyDraft = (value: JsonDraft): JsonObject => {
   if (!exact(value, ['title', 'summary', 'sections']) || typeof value.title !== 'string' || !value.title.trim()
@@ -193,6 +198,7 @@ export const validateStudioDraft = (
       || typeof rawSection.body !== 'string' || rawSection.body.length > 20_000 || !Array.isArray(rawSection.sourceAnchors)) throw new Error('invalid');
     const expectedSection = template?.sections[index];
     if (expectedSection && (rawSection.id !== expectedSection.id || rawSection.title !== expectedSection.title)) throw new Error('invalid');
+    if (FLOW_SECTION_IDS.has(rawSection.id) && !validGovernedFlow(rawSection.body)) throw new Error('invalid');
     if (expectedSection?.required) {
       const normalizedBody = rawSection.body.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
       if (!normalizedBody || requiredBodies.has(normalizedBody)) throw new Error('invalid');
@@ -237,7 +243,9 @@ export const buildAuthenticatedSyntheticStudioDraft = (
   const sections = template.sections.map((section, index) => ({
     id: section.id,
     title: section.title,
-    body: `Authenticated acceptance ${section.title.toLocaleLowerCase('en-US')} derived from authoritative server-selected sources.`,
+    body: FLOW_SECTION_IDS.has(section.id)
+      ? 'flowchart TD\n  A[Source-backed start] --> B[Human review]'
+      : `Authenticated acceptance ${section.title.toLocaleLowerCase('en-US')} derived from authoritative server-selected sources.`,
     sourceAnchors: index === 0 ? sourceAnchors.map(anchor => ({ ...anchor })) : [],
     labels: index === 0 ? [] : [section.required ? 'template_required' : 'assumption'],
   }));

@@ -201,7 +201,7 @@ void test('DOCX generation is byte-for-byte deterministic with correct metadata'
   assert.equal(first.rendererVersion, 'studio-docx-1');
 });
 
-void test('BRD FRD and PDD template-keyed content preserves canonical inventory and nested data', async () => {
+void test('BRD FRD PDD and SDD template-keyed content preserves canonical inventory and nested data', async () => {
   const fixtures = [
     {
       authority: { artifactType: 'brd' as const, templateVersion: 'studio-brd-1' },
@@ -215,6 +215,23 @@ void test('BRD FRD and PDD template-keyed content preserves canonical inventory 
       authority: { artifactType: 'pdd' as const, templateVersion: 'studio-pdd-1' },
       content: { title: 'PDD', summary: 'Summary', process: [{ step: 1, actions: ['review'] }], roles: { approver: ['human'] }, controls: ['retention'], exceptions: { none: null } },
     },
+    {
+      authority: { artifactType: 'sdd' as const, templateVersion: 'studio-sdd-1' },
+      content: {
+        title: 'SDD',
+        summary: 'Summary',
+        architecture: { boundary: 'governed service' },
+        components: ['Studio'],
+        interfaces: [{ name: 'Unknown API', status: 'proposal' }],
+        dataDesign: { sourceBinding: 'immutable' },
+        asIsFlow: 'flowchart TD\n  A[Start] --> B[Review]',
+        toBeFlow: 'flowchart TD\n  A[Start] --> B[API]\n  B --> C[Human review]',
+        securityControls: ['server authorization'],
+        operationalDesign: { owner: 'Unassigned' },
+        designDecisions: ['API-first where supported'],
+        openQuestionsAndProposals: ['Confirm API operation availability'],
+      },
+    },
   ];
   for (const fixtureCase of fixtures) {
     const normalized = normalizeStudioApprovedContent(fixtureCase.content, {
@@ -222,7 +239,7 @@ void test('BRD FRD and PDD template-keyed content preserves canonical inventory 
       contentSchemaVersion: 'studio-artifact-1',
     });
     assert.match(JSON.stringify(normalized), /Summary/u);
-    assert.match(JSON.stringify(normalized), /review|functionalRequirements|objectives|one|F1/u);
+    assert.match(JSON.stringify(normalized), /review|functionalRequirements|objectives|one|F1|architecture/u);
     for (const format of ['markdown', 'pdf', 'docx'] as const) {
       const result = await renderStudioPrivateArtifact(fixtureCase.content, format, {
         ...fixtureCase.authority,

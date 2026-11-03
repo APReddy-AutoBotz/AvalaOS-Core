@@ -87,6 +87,19 @@ const TEMPLATE_SECTION_INVENTORY: Readonly<
     'acceptanceCriteria',
   ],
   pdd: ['summary', 'process', 'roles', 'controls', 'exceptions'],
+  sdd: [
+    'summary',
+    'architecture',
+    'components',
+    'interfaces',
+    'dataDesign',
+    'asIsFlow',
+    'toBeFlow',
+    'securityControls',
+    'operationalDesign',
+    'designDecisions',
+    'openQuestionsAndProposals',
+  ],
 };
 
 const own = (value: object, key: string) =>

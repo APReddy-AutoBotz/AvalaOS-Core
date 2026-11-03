@@ -181,7 +181,7 @@ export interface EnterpriseApplicationProjection {
 export interface EnterpriseStudioDocumentProjection {
   id: string;
   label: string;
-  artifactType: 'brd' | 'frd' | 'pdd';
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd';
   approvedVersionLabel: string;
   lifecycle: 'approved';
   handoffState: 'available' | 'already_handed_off' | 'stale';
@@ -448,7 +448,7 @@ export interface StudioApprovedDocumentRef {
   documentId: string;
   version: number;
   contentHash: string;
-  artifactType: 'brd' | 'frd' | 'pdd';
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd';
   lifecycle: 'approved';
 }
 

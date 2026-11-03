@@ -1,5 +1,10 @@
 # AvalaOS Core: current implementation and verification status
 
+## Governed Studio milestone candidate
+
+The candidate adds the canonical SDD and its two flow sections. PostgreSQL replay executed the additive template, decoder and source-authority migration without replacing existing immutable templates. Actual provider quality remains unverified separately for BRD, PDD, FRD and SDD. [Studio verification and rollback](planning/process-evidence-studio-sdd-and-flows.md)
+
+
 ## 3 November 2026 product milestone
 
 The [capability map and verification record](planning/process-evidence-to-delivery.md) distinguish existing Assess, Studio and Delivery behavior from outstanding fresh-source, generation and board acceptance. The prepared invoice journey is a separate evidence record.

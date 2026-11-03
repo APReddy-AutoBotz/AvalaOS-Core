@@ -253,6 +253,9 @@ const generationRequestRpcCommand = (command: StudioArtifactAtomicCommand) => {
     expectedAggregateVersion: command.expectedAggregateVersion,
     expectedCurrentVersionId: payload.expectedCurrentVersionId,
     expectedApprovedVersionId: payload.expectedApprovedVersionId,
+    ...(Array.isArray(payload.selectedSectionIds) && payload.selectedSectionIds.length > 0
+      ? { selectedSectionIds: payload.selectedSectionIds }
+      : {}),
     ...(command.authenticatedSynthetic ? {
       authenticatedSyntheticPermitId: command.authenticatedSynthetic.permitId,
       authenticatedSyntheticKind: command.authenticatedSynthetic.kind,
@@ -692,7 +695,7 @@ export const claimStudioGeneration = async (
         sessionId: durableUuid(field(plan, 'authenticatedSyntheticSessionId', 'authenticated_synthetic_session_id')),
         payloadHash: string(field(plan, 'authenticatedSyntheticPayloadHash', 'authenticated_synthetic_payload_hash')),
         expectedVersion: integer(field(plan, 'authenticatedSyntheticExpectedVersion', 'authenticated_synthetic_expected_version')),
-        artifactType: field(plan, 'artifactType', 'artifact_type') as 'brd' | 'frd' | 'pdd',
+        artifactType: field(plan, 'artifactType', 'artifact_type') as 'brd' | 'frd' | 'pdd' | 'sdd',
       },
     } : {}),
   };

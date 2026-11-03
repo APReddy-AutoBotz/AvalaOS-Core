@@ -147,6 +147,7 @@ void (async () => {
       artifactId: ids[4], sourcePackageId: ids[5], sourcePackageVersion: 3,
       template: { kind: 'system', versionId: ids[6], version: 'system-brd-v3' },
       expectedCurrentVersionId: ids[7], expectedApprovedVersionId: null,
+      selectedSectionIds: ['requirements', 'scope'],
     },
   } as StudioArtifactAtomicCommand;
   const generationResult = await executeStudioAtomicCommand(generationCommand, async (name, args) => {
@@ -157,15 +158,24 @@ void (async () => {
   const exactGenerationKeys = [
     'actorId', 'organizationId', 'workspaceId', 'requestId', 'idempotencyKey', 'authorizationVersion',
     'artifactId', 'sourcePackageId', 'templateKind', 'templateVersionId', 'expectedAggregateVersion',
-    'expectedCurrentVersionId', 'expectedApprovedVersionId',
+    'expectedCurrentVersionId', 'expectedApprovedVersionId', 'selectedSectionIds',
   ].sort();
   mark(rpcName === STUDIO_RPC.generationRequest
     && JSON.stringify(Object.keys(serverCommand).sort()) === JSON.stringify(exactGenerationKeys)
+    && JSON.stringify(serverCommand.selectedSectionIds) === JSON.stringify(['requirements', 'scope'])
     && !['provider', 'model', 'routeId', 'prompt', 'budget', 'policy', 'payload', 'manualBrief'].some(key => key in serverCommand),
   'PROVIDER-009-B', 'db.generation-request-server-owned-route', 'browser-provider-authority-substitution', { receiptId: ids[8], attemptId: ids[9] });
   mark(!('generationPlan' in generationResult.resource) && !('provider' in generationResult.resource)
     && !('model' in generationResult.resource) && !('manualBrief' in generationResult.resource),
   'STUDIO-TR-009', 'db.generation-plan-absent-from-public-resource', 'safe-generation-receipt-projection', { receiptId: ids[8], attemptId: ids[9] });
+
+  let fullRpcArgs: Record<string, unknown> = {};
+  await executeStudioAtomicCommand({ ...generationCommand, payload: { ...generationCommand.payload, selectedSectionIds: undefined } } as StudioArtifactAtomicCommand, async (_name, args) => {
+    fullRpcArgs = args;
+    return { outcome: 'committed', receiptId: ids[8], resourceId: ids[4], generationPlan: { attemptId: ids[9] } } as never;
+  });
+  mark(!('selectedSectionIds' in ((fullRpcArgs.p_command ?? {}) as Record<string, unknown>)),
+    'STUDIO-REFRESH-003', 'db.full-generation-keeps-compatible-command-shape', 'omitted-selective-refresh');
 
   const handoffCommand = {
     ...base, commandType: 'studio.handoff.request', payload: { upstreamHandoffId: ids[10], artifactType: 'brd', targetInputBundle: null },

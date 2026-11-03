@@ -15,9 +15,9 @@ export type StudioArtifactContractVersion =
   | typeof LEGACY_STUDIO_ARTIFACT_CONTRACT_VERSION;
 
 /** Retained verbatim for accepted PR A clients and proof contracts. */
-export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd'] as const;
+export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd', 'sdd'] as const;
 export type StudioArtifactType = (typeof STUDIO_ARTIFACT_TYPES)[number];
-export const STUDIO_TEMPLATE_ARTIFACT_CLASSES = ['brd', 'frd', 'pdd', 'custom'] as const;
+export const STUDIO_TEMPLATE_ARTIFACT_CLASSES = ['brd', 'frd', 'pdd', 'sdd', 'custom'] as const;
 export type StudioTemplateArtifactClass = (typeof STUDIO_TEMPLATE_ARTIFACT_CLASSES)[number];
 
 export const STUDIO_SOURCE_MODES = [
@@ -121,6 +121,8 @@ export interface StudioGovernedCommandPayloads {
     template: StudioExactTemplateSelector;
     expectedCurrentVersionId: string | null;
     expectedApprovedVersionId: string | null;
+    /** Empty/omitted means a full generation. Non-empty is merged by the server at finalization. */
+    selectedSectionIds?: readonly string[];
   };
 }
 

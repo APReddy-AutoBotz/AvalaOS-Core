@@ -328,7 +328,7 @@ const validateCanonicalResult = (value: unknown, expectedAction: DeliveryMonitor
   switch (expectedAction) {
     case 'delivery.handoff.request': {
       id(row.sourceWorkspaceId); id(row.targetWorkspaceId); id(row.studioArtifactId); id(row.studioArtifactVersionId);
-      literal(row.studioArtifactType, ['brd', 'frd', 'pdd'] as const); canonicalHash(row.studioArtifactHash);
+      literal(row.studioArtifactType, ['brd', 'frd', 'pdd', 'sdd'] as const); canonicalHash(row.studioArtifactHash);
       const classification = literal(row.lineageClassification, ['assessed', 'mixed', 'not_assessed'] as const);
       if (typeof row.planningOnly !== 'boolean' || row.planningOnly !== (classification === 'not_assessed')) throw new DeliveryMonitorCommandError('INVALID_PAYLOAD');
       integer(row.routePolicyVersion); canonicalHash(row.routePolicyHash); canonicalHash(row.targetPackageHash);

@@ -270,6 +270,16 @@ export const buildStudioArtifactTaskInstruction = (
     selectedSourceVersionIds: selected,
   })}`,
   ];
+  if (template.sections.some(section => section.id === 'asIsFlow' || section.id === 'toBeFlow')) instruction.splice(-1, 0,
+    'The asIsFlow and toBeFlow section bodies must each be Mermaid flowchart source beginning with flowchart TD or flowchart LR.',
+    'Put exactly one edge or node statement on each line. Do not use chained arrows or semicolon-separated statements.',
+    'Use only evidence-backed nodes, edges, branches, roles, and labels. Keep missing transitions or decisions as an explicit Unknown node; never invent a connection.',
+    'Do not emit Mermaid directives, click actions, URLs, HTML, styling, scripts, or executable content.',
+  );
+  if (artifactType === 'sdd') instruction.splice(-1, 0,
+    'For SDD technical details not established by supplied evidence, state an explicit open question or clearly labeled proposal; never present a proposal as an implemented fact.',
+    'Do not invent API availability, interface contracts, data classifications, security controls, deployment topology, service levels, costs, or operational readiness.',
+  );
   if (promptVersion !== 'studio-pr-b-1') instruction.splice(-1, 0,
     'For this BRD, preserve every explicit workflow primitive, state, action, event, edge, sequence, branch, loop, and triggering condition in the closest existing template section; never collapse distinct source steps or add a section.',
     'Preserve only source-stated ordering, edges, and conditions; never infer a missing sequence, edge, or condition from array order or proximity.',

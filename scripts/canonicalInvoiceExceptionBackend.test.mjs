@@ -263,7 +263,7 @@ test('canonical AP fixture mounts production Delivery/Monitor and disposable pas
     const digest=character=>`sha256:${character.repeat(64)}`;
     const activation=(await fixture.serviceQuery(`SELECT public.authenticated_synthetic_local_exercise_activate(
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value`,[
-      exerciseId,'a'.repeat(40),digest('b'),'http://127.0.0.1:4173',digest('c'),'20261019161723',
+      exerciseId,'a'.repeat(40),digest('b'),'http://127.0.0.1:4173',digest('c'),'20261103103752',
       digest('d'),digest('e'),'local-real-backend-authenticated-profile-v1',digest('f'),digest('1'),
       fixture.ids.organization,fixture.ids.workspace,new Date(Date.now()+30*60_000),
     ])).rows[0].value;
