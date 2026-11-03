@@ -1,0 +1,2 @@
+Synthetic process interview
+Operator: The intake queue receives a structured reference number. The internal lookup API is authorized for read-only use by our service identity. The approved workflow already calls it. We compare the supplied reference with the returned reference for an exact match. A match routes to the existing completion queue. If no record matches, an operator investigates. We do not interpret prose or predict an outcome at either step.

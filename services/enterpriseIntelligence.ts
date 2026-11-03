@@ -687,6 +687,7 @@ export const classifyEvidenceFile = (name: string, browserMimeType: string, size
     '.txt': 'text/plain',
     '.md': 'text/markdown',
     '.markdown': 'text/markdown',
+    '.mmd': 'text/markdown',
     '.csv': 'text/csv',
     '.vtt': 'text/vtt',
     '.srt': 'application/x-subrip',
@@ -696,7 +697,7 @@ export const classifyEvidenceFile = (name: string, browserMimeType: string, size
   };
   const mimeType = byExtension[extension]
     || (isSupportedEvidenceMimeType(browserMimeType) ? browserMimeType : undefined);
-  if (!mimeType) return { supported: false, state: 'unsupported', message: 'This format is not supported. Use TXT, Markdown, CSV, XLSX, VTT/SRT, a text PDF, or DOCX.' };
+  if (!mimeType) return { supported: false, state: 'unsupported', message: 'This format is not supported. Use TXT, Markdown, Mermaid flowchart (.mmd), CSV, XLSX, VTT/SRT, a text PDF, or DOCX.' };
   if (mimeType === 'application/pdf') {
     return { supported: true, mimeType, state: 'text_pdf_requires_text_layer', message: 'Text PDFs are supported. Scanned PDFs need OCR, which is not available in this vertical.' };
   }
@@ -705,6 +706,9 @@ export const classifyEvidenceFile = (name: string, browserMimeType: string, size
   }
   if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'text/csv') {
     return { supported: true, mimeType, state: 'spreadsheet_grid', message: 'Spreadsheet values are parsed server-side with bounded sheet, row and cell provenance. Formulas are never evaluated.' };
+  }
+  if (extension === '.mmd') {
+    return { supported: true, mimeType, state: 'native_text', message: 'Mermaid flowcharts are validated server-side. Supported steps, directed edges, decision shapes, and branch labels remain source-bound review proposals.' };
   }
   return { supported: true, mimeType, state: 'native_text', message: 'This text-oriented format is supported for bounded server extraction.' };
 };

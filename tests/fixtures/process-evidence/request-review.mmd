@@ -1,0 +1,5 @@
+flowchart TD
+intake[Record request purpose] --> complete{Is the evidence complete?}
+complete -->|Yes|approve[Reviewer decides whether to approve]
+complete -->|No|followup[Request supporting evidence]
+followup --> complete

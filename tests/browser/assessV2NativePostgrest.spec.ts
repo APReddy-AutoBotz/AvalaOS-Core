@@ -240,9 +240,9 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     const createResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
         && response.request().postDataJSON()?.commandType === 'assessment_v2.create');
-    await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
+    await page.getByRole('button', { name: 'Start assessment', exact: true }).click();
     expect((await createResponse).status()).toBe(200);
-    await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Working draft created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
 
     expect((await checkpoints.checkpoint('before-reload')).browser.serverContextObserved).toBe(true);
     const reloadObserver = installV2ReloadReadObserver(page);
@@ -259,8 +259,8 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     expect(afterReload.browser.serverContextObserved).toBe(true);
     expect(afterReload.browser.selectedScopeObserved).toBe(true);
     expect(afterReload.browser.selectedProcessObserved).toBe(true);
-    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
+    await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start assessment', exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
     await page.getByLabel('Primitive 1 name', { exact: true }).fill('Native persisted capture');
@@ -268,12 +268,12 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     const saveResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
         && response.request().postDataJSON()?.commandType === 'assessment_v2.draft.upsert');
-    await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
     expect((await saveResponse).status()).toBe(200);
     await expect(page.getByText('Draft saved as a new immutable authoring version.', { exact: true })).toBeVisible();
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Primitive 1 name', { exact: true })).toHaveValue('Native persisted capture');
 
     const finalizeResponse = page.waitForResponse(response =>
@@ -283,7 +283,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     expect((await finalizeResponse).status()).toBe(200);
     await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current finalized assessment reopened in read-only mode. Review and approval status is shown in Governed review.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
 
     await enterProcess(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
@@ -302,7 +302,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     await page.getByRole('button', { name: 'Start new draft revision', exact: true }).click();
     await expect(page.getByText('New immutable draft revision committed.', { exact: true })).toBeVisible();
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Primitive 1 name', { exact: true })).toHaveValue('Native persisted capture');
   });
 
@@ -313,7 +313,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     const createResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
         && response.request().postDataJSON()?.commandType === 'assessment_v2.create');
-    await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
+    await page.getByRole('button', { name: 'Start assessment', exact: true }).click();
     expect((await createResponse).status()).toBe(200);
     await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
     await page.getByLabel('Primitive 1 name', { exact: true }).fill('Eligible reviewer authority proof');
@@ -321,7 +321,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     const saveResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
         && response.request().postDataJSON()?.commandType === 'assessment_v2.draft.upsert');
-    await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
     expect((await saveResponse).status()).toBe(200);
     const finalizeResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/functions/v1/assess-v2-command'
@@ -476,7 +476,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
 
   test('read observer retains pending headers, held bodies, cancellation and mixed duplicate lifecycle', async ({ page }) => {
     await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
-    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
     const processId = new URL(page.url()).searchParams.get('processId');
     expect(processId).toMatch(/^[0-9a-f-]{36}$/u);
     const stats = () => control<NativeStreamStats>('/control/native-postgrest-stats', { projectName });
@@ -625,7 +625,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
 
   test('denied child read never shows a resumed case or allows duplicate creation', async ({ page }) => {
     await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
-    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
     const before = await control<{
       caseCount: number; decisionCount: number; receipts: number; audits: number; targetHash: string;
     }>('/control/assess-v2-frame', { projectName });
@@ -646,15 +646,15 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
       await expect(page.getByTestId('enterprise-session-boundary')).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Workspace unavailable', exact: true })).toBeVisible();
       await expect(page.getByText('The command could not be completed. No success was recorded.', { exact: true })).toBeVisible();
-      await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
+      await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Start assessment', exact: true })).toHaveCount(0);
       expect(await control('/control/assess-v2-frame', { projectName })).toEqual(before);
     });
   });
 
   test('missing session reload never shows a resumed case or allows duplicate creation', async ({ page }) => {
     await enterProcess(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
-    await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
     const before = await control<{
       caseCount: number; decisionCount: number; receipts: number; audits: number; targetHash: string;
     }>('/control/assess-v2-frame', { projectName });
@@ -672,8 +672,8 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
       expect(completion.observerFailure).toBe(false);
       expect(completion.observation.readStages.every(stage => stage.status === 'not_reached')).toBe(true);
       await expect(page.getByRole('heading', { name: /Evaluate before you automate/u })).toBeVisible();
-      await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
+      await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Start assessment', exact: true })).toHaveCount(0);
       expect(await control('/control/assess-v2-frame', { projectName })).toEqual(before);
     });
   });

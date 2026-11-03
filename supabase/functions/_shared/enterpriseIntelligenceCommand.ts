@@ -1285,7 +1285,7 @@ const commandEvidenceSourceCreate = async (
     }
     let text: string;
     try {
-      text = await extractEvidenceText(bytes, mimeType);
+      text = await extractEvidenceText(bytes, mimeType, filename);
     } catch (parseError) {
       const failureCode = classifyEvidenceExtractionFailure(parseError, mimeType);
       if (!failureCode) throw parseError;
@@ -1645,7 +1645,7 @@ const commandEvidenceExtract = async (
     assertSourceUploadsBucket(version.storage_bucket);
     const bytes = new Uint8Array(await (await downloadStoredFile({ orgId: authority.organizationId, workspaceId: authority.workspaceId, bucket: version.storage_bucket, storagePath: version.storage_path })).arrayBuffer());
     if (await sha256Hex(bytes) !== version.content_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
-    text = await extractEvidenceText(bytes, source.mime_type);
+    text = await extractEvidenceText(bytes, source.mime_type, version.original_filename);
     if (version.extracted_text_hash && await sha256Hex(text) !== version.extracted_text_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
     if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
   } catch (error) {
@@ -2606,7 +2606,7 @@ const commandStudioBundleExtract = async (authority: Authority, payload: JsonObj
       const bytes = new Uint8Array(await (await downloadStoredFile({ orgId: authority.organizationId,
         workspaceId: authority.workspaceId, bucket: version.storage_bucket, storagePath: version.storage_path })).arrayBuffer());
       if (await sha256Hex(bytes) !== version.content_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
-      const extracted = await extractEvidenceText(bytes, source.mime_type);
+      const extracted = await extractEvidenceText(bytes, source.mime_type, version.original_filename);
       if (!extracted || (version.extracted_text_hash && await sha256Hex(extracted) !== version.extracted_text_hash)) {
         throw new EnterpriseCommandError('RESOURCE_STALE');
       }
@@ -3135,7 +3135,7 @@ const loadAssessMappingDraft = async (authority: Authority, caseId: string, expe
   } catch { throw new EnterpriseCommandError('RESOURCE_STALE'); }
 };
 
-type MappingSourceVersionRow = { id: string; source_id: string; content_hash: string; extracted_text_hash: string | null; parser_version: string; storage_bucket: string; storage_path: string };
+type MappingSourceVersionRow = { id: string; source_id: string; original_filename: string; content_hash: string; extracted_text_hash: string | null; parser_version: string; storage_bucket: string; storage_path: string };
 
 export const mapAssessMappingSelectionsSequentially = async <T, R>(items: readonly T[], operation: (item: T, index: number) => Promise<R>): Promise<R[]> => {
   const results: R[] = [];
@@ -3190,7 +3190,7 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
   let cumulativeExtractedBytes = 0;
   const sourceRows = await mapAssessMappingSelectionsSequentially(selections, async selection => {
     const [version, source] = await Promise.all([
-      findOne<MappingSourceVersionRow>('enterprise_evidence_source_versions', `select=id,source_id,content_hash,extracted_text_hash,parser_version,storage_bucket,storage_path&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&source_id=eq.${encodeURIComponent(selection.sourceId)}&id=eq.${encodeURIComponent(selection.sourceVersionId)}&extraction_status=eq.parsed`),
+      findOne<MappingSourceVersionRow>('enterprise_evidence_source_versions', `select=id,source_id,original_filename,content_hash,extracted_text_hash,parser_version,storage_bucket,storage_path&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&source_id=eq.${encodeURIComponent(selection.sourceId)}&id=eq.${encodeURIComponent(selection.sourceVersionId)}&extraction_status=eq.parsed`),
       findOne<{ id: string; mime_type: SupportedEvidenceMimeType }>('enterprise_evidence_sources', `select=id,mime_type&org_id=eq.${encodeURIComponent(authority.organizationId)}&workspace_id=eq.${encodeURIComponent(authority.workspaceId)}&id=eq.${encodeURIComponent(selection.sourceId)}&deleted_at=is.null`),
     ]);
     if (!version || !source || !isSupportedEvidenceMimeType(source.mime_type)) throw new EnterpriseCommandError('RESOURCE_STALE');
@@ -3199,7 +3199,7 @@ const commandAssessDocumentMapAnalyze = async (authority: Authority, payload: Js
     if (await sha256Hex(bytes) !== version.content_hash) throw new EnterpriseCommandError('RESOURCE_STALE');
     const structured = source.mime_type === 'text/csv' || source.mime_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       ? await extractStructuredSpreadsheet(bytes, source.mime_type) : null;
-    const text = structured?.text ?? await extractEvidenceText(bytes, source.mime_type);
+    const text = structured?.text ?? await extractEvidenceText(bytes, source.mime_type, version.original_filename);
     if (!text) throw new EnterpriseCommandError('COMMAND_BLOCKED');
     const parserVersion = structured?.parserVersion ?? version.parser_version; const normalizedHash = await sha256Hex(text); const extractedByteCount = new TextEncoder().encode(text).byteLength;
     if (source.mime_type !== 'text/csv' && (!version.extracted_text_hash || version.extracted_text_hash !== normalizedHash)) throw new EnterpriseCommandError('RESOURCE_STALE');

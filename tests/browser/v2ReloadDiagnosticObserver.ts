@@ -665,7 +665,7 @@ export const classifyV2ReloadRenderOutcome = (input: unknown): V2ReloadRenderOut
 };
 
 export const observeV2ReloadRenderOutcome = async (page: Page): Promise<Exclude<V2ReloadRenderOutcome, 'unresolved'>> => {
-  const resumed = page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true });
+  const resumed = page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true });
   const workspaceError = page.getByRole('heading', { name: 'Workspace unavailable', exact: true });
   const publicScreen = page.getByRole('heading', { name: /Evaluate before you automate/u });
   try {

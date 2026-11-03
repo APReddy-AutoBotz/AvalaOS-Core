@@ -745,7 +745,7 @@ export const authenticatedLifecycleOpenConnectedProcess = async (page: Page, pro
       : 'ENTERPRISE_LIFECYCLE_BROWSER_PROCESS_AMBIGUOUS');
   }
   await row.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: processLabel, exact: true })).toBeVisible();
   return authenticatedLifecycleObserveProcessNavigation(page, undefined, catalogScope);
 };
 
@@ -1371,7 +1371,7 @@ export const authenticatedLifecycleCompleteRequiredAssessmentFacts = async (
 };
 
 export const authenticatedLifecycleFinalizeDecisionPack = async (page: Page) => {
-  const button = page.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true });
+  const button = page.getByRole('button', { name: 'Finalize assessment for review', exact: true });
   await expect(button).toBeEnabled({ timeout: 15_000 });
   await button.click();
 };

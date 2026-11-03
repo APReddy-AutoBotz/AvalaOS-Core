@@ -12,6 +12,8 @@ const MAX_DOCX_ENTRY_BYTES = 20_000_000;
 const MAX_DOCX_TOTAL_EXPANDED_BYTES = 20_000_000;
 const MAX_PDF_STREAM_BYTES = 20_000_000;
 const MAX_PDF_TOTAL_EXPANDED_BYTES = 20_000_000;
+import { inspectMermaidSourceText } from '../../../services/mermaidFlowchart.ts';
+export { inspectMermaidFlowcharts } from '../../../services/mermaidFlowchart.ts';
 
 export type EvidenceExtractionFailureCode = 'OCR_REQUIRED' | 'UNSUPPORTED_FORMAT' | 'MALFORMED_SOURCE';
 
@@ -252,21 +254,27 @@ const stripXml = (value: string) => value
 export const extractEvidenceText = async (
   bytes: Uint8Array,
   mimeType: SupportedEvidenceMimeType,
+  originalFilename?: string,
 ) => {
   if (!isSupportedEvidenceMimeType(mimeType)) throw new Error('EVIDENCE_MIME_UNSUPPORTED');
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_EVIDENCE_BYTES) throw new Error('EVIDENCE_BYTES_INVALID');
   let text: string;
+  let originalTextForMermaid: string | undefined;
   if (mimeType === 'application/pdf') text = await extractPdfText(bytes);
   else if (mimeType === XLSX_MIME) text = (await extractStructuredSpreadsheet(bytes, XLSX_MIME)).text;
   else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') text = stripXml(await extractDocxXml(bytes));
   else {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
       .replace(/^\uFEFF/, '')
-      .replace(/\r\n?/g, '\n')
-      .trim();
+      .replace(/\r\n?/g, '\n');
     if (text.includes('\u0000')) throw new Error('EVIDENCE_TEXT_BINARY');
+    originalTextForMermaid = text;
+    text = text.trim();
   }
   if (!text) throw new Error('EVIDENCE_TEXT_EMPTY');
   if (text.length > MAX_EXTRACTED_EVIDENCE_CHARACTERS) throw new Error('EVIDENCE_TEXT_TOO_LARGE');
+  if (originalFilename?.trim().toLocaleLowerCase().endsWith('.mmd')) {
+    inspectMermaidSourceText(originalTextForMermaid ?? text, originalFilename);
+  }
   return text;
 };

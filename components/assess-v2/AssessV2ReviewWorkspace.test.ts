@@ -41,6 +41,8 @@ assert.match(source, /candidateBindingRef[.]current = null; setEligibleReviewers
   'candidate failure must clear candidate identity labels');
 assert.match(source, /candidateState !== 'ready'/, 'assignment must remain fail closed until candidate discovery succeeds');
 assert.match(source, /reviewScopeKey === viewKey/, 'review labels must remain current actor, tenant and initial-case view only');
+assert.match(source, /onPresentationChange\?\.\(viewKey, committedReview\)/, 'the process summary must reuse the loaded committed review projection');
+assert.match(source, /review && reviewScopeKey === viewKey/, 'a stale review projection must not escape into the process summary');
 assert.match(source, /!isActiveLoad\(request\) \|\| !sameProjection\(reviewBindingRef[.]current, projectionBinding\)/,
   'candidate completions must not publish over a newer committed projection');
 console.log('Assess V2 enterprise review workspace source suite passed.');

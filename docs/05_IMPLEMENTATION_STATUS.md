@@ -1,5 +1,10 @@
 # AvalaOS Core: current implementation and verification status
 
+## 3 November 2026 product milestone
+
+The [capability map and verification record](planning/process-evidence-to-delivery.md) distinguish existing Assess, Studio and Delivery behavior from outstanding fresh-source, generation and board acceptance. The prepared invoice journey is a separate evidence record.
+
+
 ## Active hands-on acceptance — 2026-10-31
 
 PR #346 is merged as `451aa93bc762a3e92a8e81aa00108c10ec4c9f4f`, with the reviewed tree unchanged and all three release workflows verified. PR #347 connects the protected real-auth procedure to the canonical journey, complete synthetic business outputs and separate temporary hands-on access. Its first candidate passed the disposable canonical journey; the corrected candidate exposed one cancelled native project read, so candidate verification remains incomplete. The [active completion plan](planning/hosted-acceptance-completion.md) owns current blockers and verification. AP authorizes normal merge and controlled nonproduction acceptance; temporary accounts and the new protected real-auth run remain pending. The historical 61 PASS / 47 BLOCKED result below is unchanged. Earlier release and authorization snapshots below do not supersede this entry.

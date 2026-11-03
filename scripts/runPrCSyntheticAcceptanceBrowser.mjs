@@ -1374,7 +1374,7 @@ export const SYNTHETIC_ASSESS_REVIEW_CLAIMS = Object.freeze([
 export const createSyntheticAssessDraft = async (page, interactionSequence, { expectedScope } = {}) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
-  const create = workspace.getByRole('button', { name: 'New assessment (V2)', exact: true });
+  const create = workspace.getByRole('button', { name: 'Start assessment', exact: true });
   await create.waitFor({ state: 'visible' });
   assert(await create.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CREATE_DISABLED');
   const command = await captureBrowserCommand(page, {
@@ -1416,7 +1416,7 @@ export const completeSyntheticAssessFields = async (page, interactionSequence) =
   await workspace.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   interactionSequence.push('scaffold:assess-structure');
   const { primitive, id: primitiveId } = await exactSyntheticAssessPrimitive(workspace);
-  await workspace.getByLabel('V2 case description', { exact: true }).fill('Manually reviewed synthetic Assess process and source observations.');
+  await workspace.getByLabel('Assessment description', { exact: true }).fill('Manually reviewed synthetic Assess process and source observations.');
   await primitive.getByLabel(/^Primitive [1-9][0-9]* primitive[.]rulesStable$/u).selectOption('true');
   await workspace.locator('summary').filter({ hasText: '3. Applications and interactions' }).click();
   await workspace.getByLabel('Application 1 accountable owner', { exact: true }).fill('Synthetic Assess owner');
@@ -1439,7 +1439,7 @@ export const assertSyntheticAssessDraftReadback = async (page, primitiveId) => {
     'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_NAME_READBACK_REJECTED');
   assert.equal(await primitive.getByLabel(/^Primitive [1-9][0-9]* type$/u).inputValue(), 'Capture',
     'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_TYPE_READBACK_REJECTED');
-  assert.equal(await workspace.getByLabel('V2 case description', { exact: true }).inputValue(),
+  assert.equal(await workspace.getByLabel('Assessment description', { exact: true }).inputValue(),
     'Manually reviewed synthetic Assess process and source observations.', 'PR_C_SYNTHETIC_BROWSER_ASSESS_DESCRIPTION_READBACK_REJECTED');
   assert.equal(await primitive.getByLabel(/^Primitive [1-9][0-9]* primitive[.]rulesStable$/u).inputValue(), 'true',
     'PR_C_SYNTHETIC_BROWSER_ASSESS_RULE_READBACK_REJECTED');
@@ -1462,7 +1462,7 @@ export const persistSyntheticAssessDraft = async (page, interactionSequence, {
 } = {}) => {
   assert(UUID.test(primitiveId), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_ID_REJECTED');
   const workspace = page.getByTestId('assess-v2-workspace');
-  const save = workspace.getByRole('button', { name: 'Save V2 draft', exact: true });
+  const save = workspace.getByRole('button', { name: 'Save working draft', exact: true });
   assert(await save.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_SAVE_DISABLED');
   const command = await captureBrowserCommand(page, {
     endpoint: '/functions/v1/assess-v2-command', commandType: 'assessment_v2.draft.upsert',
@@ -1484,7 +1484,7 @@ export const persistSyntheticAssessDraft = async (page, interactionSequence, {
   await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('save:assess-v2-draft');
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
-  await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
+  await workspace.getByText('Current immutable draft reloaded.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('reload:assess-v2-draft');
   await assertSyntheticAssessDraftReadback(page, primitiveId);
   return { caseId: exactCaseId, version: priorVersion + 1, command, reloaded: true };
@@ -1494,14 +1494,14 @@ export const completeAssessDraft = async (page, interactionSequence) => {
   const created = await createSyntheticAssessDraft(page, interactionSequence);
   const fields = await completeSyntheticAssessFields(page, interactionSequence);
   await persistSyntheticAssessDraft(page, interactionSequence, { ...created, primitiveId: fields.primitiveId });
-  return { createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true };
+  return { createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save working draft', reloaded: true };
 };
 
 export const finalizeAssessDraftForReview = async (page, interactionSequence, { afterTranscriptApply = false } = {}) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
-  await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
+  await workspace.getByText('Current immutable draft reloaded.', { exact: true }).waitFor({ state: 'visible' });
   if (afterTranscriptApply) {
     const evidencePanel = workspace.locator('details').filter({ has: page.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }) });
     if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
@@ -1515,14 +1515,14 @@ export const finalizeAssessDraftForReview = async (page, interactionSequence, { 
       linkedCount += 1;
     }
     assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
-    await workspace.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    await workspace.getByRole('button', { name: 'Save working draft', exact: true }).click();
     await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
     await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
-    await workspace.getByText('Current immutable draft projection reloaded.', { exact: true }).waitFor({ state: 'visible' });
+    await workspace.getByText('Current immutable draft reloaded.', { exact: true }).waitFor({ state: 'visible' });
     for (const input of await claims.all()) assert((await input.inputValue()).trim(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
     interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   }
-  const finalize = workspace.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true });
+  const finalize = workspace.getByRole('button', { name: 'Finalize assessment for review', exact: true });
   assert(await finalize.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_FINALIZE_DISABLED');
   await finalize.click();
   await workspace.getByTestId('assess-v2-decision-pack').waitFor({ state: 'visible' });

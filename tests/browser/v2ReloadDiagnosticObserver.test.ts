@@ -337,7 +337,7 @@ test('the diagnostic tag reuses the original primary prefix and exits before lat
   assert.match(source, /test\('authors, replays, rejects stale work, requests changes and resubmits through the production UI',\s*\{ tag: \['@v2-primary-prefix-diagnostic', '@govern-studio-diagnostic'\] \}/u);
   const v1 = source.indexOf('runV1AssessmentCompletion');
   const beforeCreate = source.indexOf("checkpoint('before-create'", v1);
-  const create = source.indexOf("name: 'New assessment (V2)'", beforeCreate);
+  const create = source.indexOf("name: 'Start assessment'", beforeCreate);
   const beforeReload = source.indexOf("checkpoint('before-reload'", create);
   const observer = source.indexOf('installV2ReloadReadObserver(page)', beforeReload);
   const reload = source.indexOf("page.reload({ waitUntil: 'domcontentloaded' })", observer);

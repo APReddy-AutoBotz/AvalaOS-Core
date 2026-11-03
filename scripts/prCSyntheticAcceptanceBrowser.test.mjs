@@ -609,8 +609,8 @@ test('post-Apply authoring links new evidence, persists it, and independently re
         <input aria-label="Evidence 1 claim IDs"><input aria-label="Evidence 1 owner" value="Assessment owner">
         <input aria-label="Evidence 2 claim IDs"><input aria-label="Evidence 2 owner">
       </details>
-      <button>Reload current draft</button><button>Save V2 draft</button>
-      <button disabled>Finalize reviewer-ready Decision Pack</button>
+      <button>Reload current draft</button><button>Save working draft</button>
+      <button disabled>Finalize assessment for review</button>
     </section>`);
     await page.evaluate(claims => {
       const inputs = [...document.querySelectorAll('input')];
@@ -622,7 +622,7 @@ test('post-Apply authoring links new evidence, persists it, and independently re
       for (const input of inputs) input.addEventListener('input', ready);
       reload.addEventListener('click', () => {
         inputs.forEach((input, i) => { input.value = saved[i]; });
-        status.textContent = 'Current immutable draft projection reloaded.'; ready();
+        status.textContent = 'Current immutable draft reloaded.'; ready();
       });
       save.addEventListener('click', () => {
         saved = inputs.map(input => input.value);
@@ -646,7 +646,7 @@ test('post-Apply authoring links new evidence, persists it, and independently re
       });
     }, SYNTHETIC_ASSESS_REVIEW_CLAIMS);
     const interactions = [];
-    assert(await page.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true }).isDisabled());
+    assert(await page.getByRole('button', { name: 'Finalize assessment for review', exact: true }).isDisabled());
     await finalizeAssessDraftForReview(page, interactions, { afterTranscriptApply: true });
     assert.equal(await page.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
     assert.equal(await page.getByLabel('Evidence 2 claim IDs', { exact: true }).inputValue(), 'primitive.businessDisposition');

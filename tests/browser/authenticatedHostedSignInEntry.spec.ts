@@ -657,7 +657,7 @@ test('actual application uses the shared real-auth helper for rejected, cold and
       }>).__avalaosProcessDetailGate;
       return gate?.captured?.() ?? false;
     })).toBe(true);
-    await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: setup.aliases.process, exact: true })).toBeVisible();
     expect(openSettled).toBe(false);
     const unsettled = await page.evaluate(() => ({
       search: window.location.search,
