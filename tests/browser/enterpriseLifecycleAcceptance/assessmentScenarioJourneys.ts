@@ -242,7 +242,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     () => page.getByRole('button', { name: 'Final approve', exact: true }).click(),
     'Approved committed.',
   );
-  await studio.getByText('Advanced structured content', { exact: true }).click();
+  await studio.locator('summary').filter({ hasText: /^View source$/u }).click();
   await expect(studio.locator('pre')).toContainText(approvedRequirement);
 };
 
