@@ -26,6 +26,7 @@ export const LEGACY_DELIVERY_ACCEPTANCE_SOURCE_REFERENCES = [
   "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
   "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
   "supabase/migrations/20261103103752_process_evidence_studio_sdd_flows.sql",
+  "supabase/migrations/20261103104435_delivery_requirement_bound_proposals.sql",
 ];
 export const LEGACY_DELIVERY_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   "DELIVERY-007": "DELIVERY-DUPLICATE_IMPORT",

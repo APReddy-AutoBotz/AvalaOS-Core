@@ -28,7 +28,16 @@ const displayRequirement = (line: string) => line
 const isAcceptanceLink = (link: StudioDeliveryRequirementLink) => /^(?:[-*+]\s*|\d+[.)]\s*)?AC[-_ ]?\d+\s*[:.\-]/iu.test(link.requirementText)
   || /acceptance(?:\s+criteria|\s+criterion)?/iu.test(link.sectionTitle);
 
-const requirementOrdinal = (line: string) => line.match(/^(?:[-*+]\s*|\d+[.)]\s*)?(?:REQ|BR|FR|NFR|AC)[-_ ]?(\d+)\s*[:.\-]/iu)?.[1] ?? null;
+const requirementIdentifier = (line: string) => {
+  const match = line.match(/^(?:[-*+]\s*|\d+[.)]\s*)?((?:REQ|BR|FR|NFR|AC)[-_ ]?\d+)\s*[:.\-]/iu)?.[1];
+  return match?.toUpperCase().replace(/[-_ ]+/u, '-') ?? null;
+};
+
+const explicitlyReferences = (line: string, identifier: string) => {
+  const content = line.replace(/^(?:[-*+]\s*|\d+[.)]\s*)?(?:REQ|BR|FR|NFR|AC)[-_ ]?\d+\s*[:.\-]\s*/iu, '');
+  const variants = identifier.replace('-', '[-_ ]?');
+  return new RegExp(`(?:^|[^A-Z0-9])${variants}(?:$|[^A-Z0-9])`, 'iu').test(content);
+};
 
 const deliverable = (line: string) => {
   const value = displayRequirement(line).replace(/[.;:]$/u, '');
@@ -79,13 +88,16 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
 
   const usedAcceptance = new Set<StudioDeliveryRequirementLink>();
   const pairedAcceptance = deliverableLinks.map(link => {
-    const ordinal = requirementOrdinal(link.requirementText);
-    const identifierMatch = ordinal === null ? null : acceptanceLinks.find(candidate =>
-      !usedAcceptance.has(candidate) && requirementOrdinal(candidate.requirementText) === ordinal);
-    const sameSectionMatch = identifierMatch ?? acceptanceLinks.find(candidate =>
-      !usedAcceptance.has(candidate) && candidate.sectionId === link.sectionId);
-    if (sameSectionMatch) usedAcceptance.add(sameSectionMatch);
-    return sameSectionMatch ?? null;
+    const identifier = requirementIdentifier(link.requirementText);
+    const explicitlyLinked = identifier === null ? [] : acceptanceLinks.filter(candidate =>
+      !usedAcceptance.has(candidate) && explicitlyReferences(candidate.requirementText, identifier));
+    const sameSectionDeliverables = deliverableLinks.filter(candidate => candidate.sectionId === link.sectionId);
+    const unambiguousSectionLinks = explicitlyLinked.length === 0 && sameSectionDeliverables.length === 1
+      ? acceptanceLinks.filter(candidate => !usedAcceptance.has(candidate) && candidate.sectionId === link.sectionId)
+      : [];
+    const paired = explicitlyLinked.length > 0 ? explicitlyLinked : unambiguousSectionLinks;
+    paired.forEach(candidate => usedAcceptance.add(candidate));
+    return paired;
   });
 
   const proposals: StudioDeliveryApprovedWorkItem[] = [];
@@ -103,11 +115,19 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
     proposals.push({
       type: 'Story', title: title('Implement — ', requirement),
       description: `Deliver the approved behavior: ${displayRequirement(link.requirementText)}`,
-      acceptanceCriteria: linkedAcceptance
-        ? [displayRequirement(linkedAcceptance.requirementText)]
+      acceptanceCriteria: linkedAcceptance.length > 0
+        ? linkedAcceptance.map(candidate => displayRequirement(candidate.requirementText))
         : [`The delivered behavior satisfies the approved predicate: ${displayRequirement(link.requirementText)}`],
-      requirementLinks: linkedAcceptance ? [link, linkedAcceptance] : [link],
+      requirementLinks: [link, ...linkedAcceptance],
     });
+  });
+  const unassignedAcceptance = acceptanceLinks.filter(link => !usedAcceptance.has(link));
+  if (unassignedAcceptance.length > 0) proposals.push({
+    type: 'Task',
+    title: title('Review unassigned acceptance criteria — ', displayRequirement(unassignedAcceptance[0].requirementText)),
+    description: `${unassignedAcceptance.length} approved acceptance ${unassignedAcceptance.length === 1 ? 'criterion has' : 'criteria have'} no explicit or unambiguous requirement association. A human must assign or retain each criterion before confirmation.`,
+    acceptanceCriteria: unassignedAcceptance.map(link => `Human reviewed association for: ${displayRequirement(link.requirementText)}`),
+    requirementLinks: unassignedAcceptance,
   });
   proposals.push({
     type: 'Task',

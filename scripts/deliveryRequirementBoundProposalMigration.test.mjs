@@ -27,6 +27,10 @@ assert.match(migration, /jsonb_agg\(value ORDER BY value->>'sectionId',value->>'
   'exact requirement links are canonicalized before immutable binding');
 assert.match(migration, /'studioArtifactVersionId',binding\.studio_artifact_version_id/u,
   'normal Delivery lineage receives approved artifact and revision identity for source details');
+assert.match(migration, /type IN\('Epic','Story','Task','Bug','Subtask'\)/u,
+  'authoritative board storage supports a persistent bound Epic while the manual-create RPC remains narrow');
+assert.match(migration, /IF bound_publication_id IS NULL THEN[\s\S]*legacy_delivery_apply_command/u,
+  'unbound legacy publications retain their prior grouping-only import behavior');
 assert.match(postgres, /invented requirement links must roll back publication, receipt, generation and audit/u);
 assert.match(postgres, /every published proposal must retain one immutable server-validated requirement binding/u);
 assert.match(postgres, /normal Delivery task detail must receive exact approved requirement links/u);

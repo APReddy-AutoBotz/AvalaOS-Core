@@ -17,6 +17,12 @@ AvalaOS Core helps an organization decide what to automate, why it is suitable, 
 
 A successful business journey produces a defensible decision, reviewed and approved documentation, an explicitly accepted delivery package, and a traceable monitoring baseline. Every output must retain its source versions, owner, review state, limitations, and permitted next actions. A generated draft is not an approval; an approval is not execution; a passing source test is not production readiness.
 
+## Confirming work for Delivery
+
+Open the exact approved Studio document and review the proposed work. Each proposal cites the specific requirement text that supports it. Edit the title, description or acceptance criteria, and select the work you wish to publish. If the document lacks explicit requirements, revise it and obtain approval on that revision. A document heading alone supplies no work.
+
+Publication makes the selected proposals available to the authorized Delivery user. Open Work Items on the published document and confirm the selection through Import to Backlog. Open the resulting board card to read its approved source details. Status and permitted detail edits use the existing Delivery commands and survive a reload. [Authority, verification and fallback](migrations/authenticated-studio-delivery-outcome-monitor.md)
+
 ## Users and responsibilities
 
 | User | Responsibility |

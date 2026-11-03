@@ -1,5 +1,10 @@
 # AvalaOS Core: current implementation and verification status
 
+## Requirement-derived Delivery candidate
+
+The proposed work comes from approved requirement text and uses the existing selective import and board. Verification must distinguish a synthetic approved Studio input from a fresh provider-generated artifact. The continuous nonproduction run remains pending. [Delivery authority and verification](migrations/authenticated-studio-delivery-outcome-monitor.md)
+
+
 ## Governed Studio milestone candidate
 
 The candidate adds the canonical SDD and its two flow sections. PostgreSQL replay executed the additive template, decoder and source-authority migration without replacing existing immutable templates. Actual provider quality remains unverified separately for BRD, PDD, FRD and SDD. [Studio verification and rollback](planning/process-evidence-studio-sdd-and-flows.md)

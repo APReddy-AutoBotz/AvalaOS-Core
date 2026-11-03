@@ -42,11 +42,19 @@ assert.deepEqual(derived.proposals[1].acceptanceCriteria, ['The recorded decisio
 assert.equal(derived.proposals[1].requirementLinks.length, 2, 'the story retains both its requirement and directly paired acceptance predicate');
 const crossSection = deriveRequirementProposals({ sections: [
   { id: 'functional', title: 'Functional requirements', body: 'FR-2: The board must persist status updates.' },
-  { id: 'acceptance', title: 'Acceptance criteria', body: 'AC-2: The status update is visible after reload.' },
+  { id: 'acceptance', title: 'Acceptance criteria', body: 'AC-2: For FR-2, the status update is visible after reload.' },
 ] });
 assert.deepEqual(crossSection.proposals.map(item => item.type), ['Epic', 'Story', 'Task']);
-assert.deepEqual(crossSection.proposals[1].acceptanceCriteria, ['The status update is visible after reload.']);
+assert.deepEqual(crossSection.proposals[1].acceptanceCriteria, ['For FR-2, the status update is visible after reload.']);
 assert.equal(crossSection.proposals[1].requirementLinks.length, 2, 'matching stable requirement numbers link acceptance from another section');
+const ambiguousAcceptance = deriveRequirementProposals({ sections: [{ id: 'requirements', title: 'Requirements', body: [
+  'FR-1: Reviewer must record a decision.',
+  'FR-2: Board must persist the decision.',
+  'AC-1: The decision is visible after reload.',
+].join('\n') }] });
+assert.deepEqual(ambiguousAcceptance.proposals.map(item => item.type), ['Epic', 'Story', 'Story', 'Task', 'Task']);
+assert.match(ambiguousAcceptance.proposals[3].title, /Review unassigned acceptance criteria/u);
+assert.match(ambiguousAcceptance.proposals[3].description, /human must assign or retain/i);
 const acceptanceOnly = deriveRequirementProposals({ sections: [{ id: 'acceptance', title: 'Acceptance criteria', body: 'AC-1: The result is visible.' }] });
 assert.equal(acceptanceOnly.proposals.length, 0);
 assert.match(acceptanceOnly.blockedReason ?? '', /no approved deliverable requirement/i);

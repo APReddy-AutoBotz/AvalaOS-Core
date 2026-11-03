@@ -365,6 +365,7 @@ async function run() {
     stage = 'import';
     assert.equal(source.items.length, 2);
     assert.equal(source.materializesEpics, true);
+    stage = 'import-epic-only';
     await fixture.db.query('BEGIN');
     try {
       const epicOnly = (await fixture.db.query(
@@ -373,6 +374,7 @@ async function run() {
           projectId: PROJECT, sourceGenerationId: published.resource.documentGenerationId, expectedSourceDigest: source.digest, sourceItemIndices: [0],
         })],
       )).rows[0].value;
+      stage = `import-epic-only-${epicOnly.ok === true ? 'ok' : errorCode(epicOnly) ?? 'unknown'}`;
       assert.equal(epicOnly.ok, true, JSON.stringify(epicOnly));
       assert.equal(epicOnly.resource.itemCount, 1);
       assert.equal(epicOnly.resource.items[0].type, 'Epic');
@@ -382,6 +384,7 @@ async function run() {
       await fixture.db.query('ROLLBACK');
       throw error;
     }
+    stage = 'import-mixed';
     const imported = (await fixture.asRole('service_role', () => fixture.db.query(
       'SELECT public.legacy_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
       [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `import-${randomUUID()}`, 'import', JSON.stringify({
