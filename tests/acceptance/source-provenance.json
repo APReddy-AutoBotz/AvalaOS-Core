@@ -25,7 +25,7 @@
     "components/delivery/WorkspaceView.tsx": "sha256:005a88bff873c615acfdbf18f24b67f58707cdc5fa939dc6e914146f27a588b7",
     "components/docs/GovernedStudioRoute.tsx": "sha256:82d23733c48df4e8ac6250a96d2e8ba092f1a3fb6516f6cc8062fbaa0b4d1be3",
     "components/docs/StudioApprovedArtifactPublish.tsx": "sha256:5fb04c8df1a25966e593045582404176c884b69acdfa05a770c5d3a304e5361e",
-    "components/docs/StudioArtifactWorkspace.tsx": "sha256:64a49e504817cb26ea2c93d12a9cbe0115ec0e537244ecfc23c5298e533337c2",
+    "components/docs/StudioArtifactWorkspace.tsx": "sha256:fe92ffaa326941e8344fe69c15a4d8aac659bd8a5ba4aafad6b274d158f31aaa",
     "components/docs/TemplateEditor.test.ts": "sha256:c6cf631a9a270db0d871cbeb33ae94ac4408704fa26e327622e5d5062c3281da",
     "components/docs/TemplateEditor.tsx": "sha256:49f900e9b4fcb84e804fbf3b949619334fff9d10643eb03ae49c7384c73d693d",
     "components/docs/studioHandoffReadiness.test.ts": "sha256:e7a28c9ec8aa9b590ab9261d8e1f1d2c5c857f3e6fec295ec6211dcc9d6235e5",

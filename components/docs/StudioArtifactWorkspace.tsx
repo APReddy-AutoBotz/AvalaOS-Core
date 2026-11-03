@@ -378,8 +378,8 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         await loadGovernedSummary(summary, ticket, loadIsCurrent);
         return;
       }
-      if (summaryResult.value) {
-        clearArtifactProjection();
+      clearArtifactProjection();
+      if (summaryResult.value && !id) {
         setState('empty');
         setMessage(`No current ${type.toUpperCase()} document exists. Select exact sources and a compatible approved template to generate its first working draft.`);
         return;
