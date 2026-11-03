@@ -283,7 +283,7 @@ test.describe('Assess V2 native PostgREST reload contract', () => {
     expect((await finalizeResponse).status()).toBe(200);
     await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('The current reviewer-ready assessment reopened in read-only mode.', { exact: true })).toBeVisible();
+    await expect(page.getByText('The current finalized assessment reopened in read-only mode. Review and approval status is shown in Governed review.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
 
     await enterProcess(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);

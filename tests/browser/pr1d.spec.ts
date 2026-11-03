@@ -420,7 +420,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Approval-bound actions');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Modernization dispositions');
   await expect(page.getByTestId('assess-immutable-references')).toBeHidden();
-  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Independent review: pending');
+  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Review status: see Governed review');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Source:');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Document Intelligence');
   expect(fixture.v2Decision?.inputSnapshot.primitives).toHaveLength(AP_INVOICE_EXCEPTION_V2_FIXTURE.primitives.length);
@@ -437,7 +437,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expectExactVisible('Deterministic evaluation completed. Review and approval status is recorded in Governed review below.');
   await expectExactVisible('Hard stop: prohibited actions cannot proceed.');
   await expectExactVisible('No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim is made.');
-  await expectExactVisible('V2 approval, Govern resolution, Studio generation, export, and external sharing are not available in this foundation boundary.');
+  await expectExactVisible('Finalizing this decision version does not itself approve it or create a downstream artifact.');
   const finalize=fixture.committedCommands.find(item=>item.commandType==='assessment_v2.finalize');
   expect(finalize?.payload).toEqual({caseId:finalize?.payload.caseId});
   expect(finalize?.payload.decision).toBeUndefined();
@@ -450,7 +450,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
-  await expect(page.getByText('The current reviewer-ready assessment reopened in read-only mode.')).toBeVisible();
+  await expect(page.getByText('The current finalized assessment reopened in read-only mode. Review and approval status is shown in Governed review.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
 });
 
@@ -610,7 +610,7 @@ test('read-only V2 sessions retain discovery across remount while mutations rema
   await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
-  await expect(page.getByText('The current reviewer-ready assessment reopened in read-only mode.')).toBeVisible();
+  await expect(page.getByText('The current finalized assessment reopened in read-only mode. Review and approval status is shown in Governed review.')).toBeVisible();
   await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Import earlier approved facts into a working draft'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Save working draft'})).toHaveCount(0);

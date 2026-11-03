@@ -75,7 +75,7 @@ requireText(workspace, "['ready', 'read_only'].includes(sessionState)", 'read-on
 requireText(workspace, 'disabled={busy || !canRead}', 'read-only sessions retain V2 reload');
 requireText(workspace, "sessionState === 'ready' && discoveryState === 'ready'", 'V2 create and clone remain ready-only');
 forbidText(workspace, "if (sessionState !== 'ready' || !tenantContext)", 'read-only discovery short circuit');
-requireText(workspace, 'Independent review: pending', 'Decision Pack states independent review boundary');
+requireText(workspace, 'Review status: see Governed review', 'Decision Pack states independent review boundary');
 requireText(workspace, 'primitiveFactKeys.map', 'UI exposes primitive fact authoring');
 requireText(workspace, "'primitive.interfaceDependencyKnown'", 'UI exposes Retrieve/Execute interface dependency authoring');
 requireText(browserFixture, 'Retrieve and Execute primitives expose and persist interface dependency knowledge', 'browser proves interface dependency authoring persists');

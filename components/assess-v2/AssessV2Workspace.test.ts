@@ -29,7 +29,11 @@ assert.match(source, />Import earlier approved facts into a working draft<\/butt
 assert.doesNotMatch(source, />New assessment \(V2\)<\/button>/);
 assert.doesNotMatch(source, />Start from approved V1 assessment<\/button>/);
 assert.doesNotMatch(source, /independent evidence and governance review not yet completed/);
+assert.doesNotMatch(source, /Independent review: pending/);
+assert.doesNotMatch(source, /not available in this foundation boundary/);
 assert.match(source, /Review and approval status is recorded in Governed review below/);
+assert.match(source, /Review status: see Governed review/);
+assert.match(source, /Finalizing this decision version does not itself approve it or create a downstream artifact/);
 assert.match(processDetailSource, /const hasCurrentAssessmentAccess = tenantContext\?\.capabilities\.includes\(ASSESS_V2_CAPABILITIES\.read\) \?\? false/);
 assert.match(processDetailSource, /hasCurrentAssessmentAccess \? 'Open current assessment'/);
 assert.match(processDetailSource, /: onStartAssessment\(process\.id\)/);

@@ -529,7 +529,6 @@ const COMPLETE_DECISION_PACK_SECTION_HEADINGS = Object.freeze([
   'Modernization dispositions',
   'Claim-linked evidence',
   'Alternatives considered',
-  'Immutable references',
   'Explicit non-claims',
 ]);
 
@@ -1941,6 +1940,9 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         decisionSections.push({ heading, body });
       }
       expect(decisionSections.map(section => section.heading)).toEqual([...COMPLETE_DECISION_PACK_SECTION_HEADINGS]);
+      const recommendation = decisionPack.getByTestId('assessment-recommendation');
+      await expect(recommendation).toBeVisible();
+      decisionSections.push({ heading: 'Process recommendation', body: await recommendation.innerText() });
       const decisionPackText = approvedBusinessOutputMarkdown({
         title: await header.getByRole('heading').innerText(),
         approvalState: 'The current Decision Pack version was independently reviewed and approved; every required Govern control was resolved before this capture.',
