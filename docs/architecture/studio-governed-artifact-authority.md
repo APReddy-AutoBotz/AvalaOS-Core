@@ -6,6 +6,8 @@ The governed SDD uses the same exact handoff, immutable document version, review
 
 A user-selected refresh never gives the browser merge authority. The generation attempt binds the selected section IDs and exact expected heads; the validated provider response remains a staged candidate. Finalization merges only those sections into the exact expected parent, appends one draft and records immutable per-section source/origin attribution in one database transaction. CAS or selection mismatch cannot expose a full generated intermediate head. The provider-free synthetic route fails closed for this command shape.
 
+An input change does not silently retarget a document. The user explicitly chooses adoption into the displayed document, and the command binds its exact predecessor package/version plus aggregate, current and approved heads. The server creates an immutable successor package, advances only the aggregate's current package binding, and leaves document heads unchanged. A later selected refresh validates each refreshed section against that successor and each carried section against its retained source binding, so old/new attribution is composite and reviewable rather than relabelled.
+
 
 Status: the foundational Studio aggregate boundary is accepted through PR #216; governed multi-source transcript PR A is accepted through PR #255 on `main` at `11e670003a73b0ab5a28650b70afac4b267760f4`; governed multi-source transcript PR B exact head `fe3ebfb900bc163df2e436ec5b11f8751f9b79ea` is merged through `5433cad41721355e3ec5a29bc2f87772540c77b5`; governed Delivery and Monitor PR C is the active additive downstream boundary. PR 1G remains accepted. This document is source architecture, not deployment or hosted-readiness evidence.
 

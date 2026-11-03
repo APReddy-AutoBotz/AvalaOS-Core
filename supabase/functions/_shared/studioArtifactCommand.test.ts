@@ -28,6 +28,13 @@ mark(rejects({ ...base, payload: { ...base.payload, manualBriefHash: '0'.repeat(
   'STUDIO-TR-003', 'command.client-manual-hash-rejected', 'browser-manual-hash-authority');
 mark(rejects({ ...base, payload: { ...base.payload, sourceMode: 'assess_handoff' } }), 'STUDIO-TR-003', 'command.source-mode-exclusive-union', 'fabricated-assess-ancestry');
 mark(rejects({ ...base, payload: { sourceMode: 'manual_brief', artifactType: 'brd', studioInputBundle: null, manualBrief: 'x'.repeat(20_001) } }), 'STUDIO-TR-003', 'command.manual-brief-bound', 'oversized-manual-brief');
+const replaceArtifact = { artifactId: ids[5], sourcePackageId: ids[6], sourcePackageVersion: 2, aggregateVersion: 4, currentVersionId: ids[7], currentApprovedVersionId: ids[8] };
+assert.equal((parseStudioArtifactEnvelope({ ...base, expectedAggregateVersion: 4, payload: { ...base.payload, replaceArtifact } }).payload.replaceArtifact as typeof replaceArtifact).sourcePackageId, ids[6]);
+assert.ok(rejects({ ...base, payload: { ...base.payload, replaceArtifact: { ...replaceArtifact, sourcePackageVersion: 0 } } })
+  && rejects({ ...base, payload: { ...base.payload, replaceArtifact: { ...replaceArtifact, unknown: ids[9] } } }));
+const consumeReplacement = { ...base, commandType: 'studio.handoff.consume', expectedAggregateVersion: 3, expectedArtifactVersion: 3,
+  payload: { handoffId: ids[9], handoffVersion: 3, replaceArtifact } };
+assert.equal((parseStudioArtifactEnvelope(consumeReplacement).payload.replaceArtifact as typeof replaceArtifact).artifactId, ids[5]);
 
 const assessedAncestry = {
   contractVersion: 'studio-artifact-2', organizationId: ids[1], workspaceId: ids[2],

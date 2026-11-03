@@ -111,6 +111,17 @@ const nullableBundleSelector = (value: unknown) => {
   return { id: uuid(item.id), versionId: uuid(item.versionId), version: positiveInteger(item.version) };
 };
 
+const nullableSourcePackageReplacement = (value: unknown) => {
+  if (value === undefined || value === null) return null;
+  const item = object(value);
+  exact(item, ['artifactId', 'sourcePackageId', 'sourcePackageVersion', 'aggregateVersion', 'currentVersionId', 'currentApprovedVersionId']);
+  return {
+    artifactId: uuid(item.artifactId), sourcePackageId: uuid(item.sourcePackageId),
+    sourcePackageVersion: positiveInteger(item.sourcePackageVersion), aggregateVersion: nonNegativeInteger(item.aggregateVersion),
+    currentVersionId: nullableUuid(item.currentVersionId), currentApprovedVersionId: nullableUuid(item.currentApprovedVersionId),
+  };
+};
+
 const templateSelector = (value: unknown): JsonObject => {
   const item = object(value);
   if (item.kind === 'system') {
@@ -194,14 +205,17 @@ const parseLegacyPayload = (command: StudioServerCommandType, raw: unknown): Jso
 const parseGovernedPayload = (command: StudioServerCommandType, raw: unknown): JsonObject => {
   const payload = object(raw);
   if (command === 'studio.source-package.create') {
-    exact(payload, ['sourceMode', 'artifactType', 'studioInputBundle', 'manualBrief']);
+    const keys = ['sourceMode', 'artifactType', 'studioInputBundle', 'manualBrief'];
+    if ('replaceArtifact' in payload) keys.push('replaceArtifact');
+    exact(payload, keys);
     if (payload.sourceMode !== 'direct_transcript_bundle' && payload.sourceMode !== 'manual_brief') bad();
     const studioInputBundle = nullableBundleSelector(payload.studioInputBundle);
     const manualBrief = nullableText(payload.manualBrief, 20_000);
     const valid = payload.sourceMode === 'direct_transcript_bundle' && studioInputBundle && !manualBrief
       || payload.sourceMode === 'manual_brief' && !studioInputBundle && manualBrief;
     if (!valid) bad();
-    return { sourceMode: payload.sourceMode, artifactType: artifactType(payload.artifactType), studioInputBundle, manualBrief };
+    return { sourceMode: payload.sourceMode, artifactType: artifactType(payload.artifactType), studioInputBundle, manualBrief,
+      ...('replaceArtifact' in payload ? { replaceArtifact: nullableSourcePackageReplacement(payload.replaceArtifact) } : {}) };
   }
   if (command === 'studio.handoff.request') {
     exact(payload, ['upstreamHandoffId', 'artifactType', 'targetInputBundle']);
@@ -216,8 +230,11 @@ const parseGovernedPayload = (command: StudioServerCommandType, raw: unknown): J
     return { handoffId: uuid(payload.handoffId), handoffVersion: positiveInteger(payload.handoffVersion), rationale: text(payload.rationale, 4_000) };
   }
   if (command === 'studio.handoff.consume') {
-    exact(payload, ['handoffId', 'handoffVersion']);
-    return { handoffId: uuid(payload.handoffId), handoffVersion: positiveInteger(payload.handoffVersion) };
+    const keys = ['handoffId', 'handoffVersion'];
+    if ('replaceArtifact' in payload) keys.push('replaceArtifact');
+    exact(payload, keys);
+    return { handoffId: uuid(payload.handoffId), handoffVersion: positiveInteger(payload.handoffVersion),
+      ...('replaceArtifact' in payload ? { replaceArtifact: nullableSourcePackageReplacement(payload.replaceArtifact) } : {}) };
   }
   if (command === 'studio.template.create') {
     exact(payload, ['name', 'description', 'artifactClass', 'rendererVersion', 'sections']);

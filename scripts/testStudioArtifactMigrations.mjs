@@ -72,7 +72,7 @@ try{
  console.log(`Membership trigger executable scenarios: ${membershipScenarios.length} passed, 0 failed.`);
  await scenario('runtime control is single-row and enabled',async()=>assert.deepEqual((await authority.query('select enabled,read_only,provider_enabled from public.studio_artifact_runtime_control')).rows,[{enabled:true,read_only:false,provider_enabled:true}]));
  await scenario('legacy document_generations remains non-canonical',async()=>assert.match((await authority.query("select obj_description('public.document_generations'::regclass) comment")).rows[0].comment,/Legacy\/unverified/));
- await scenario('BRD FRD PDD immutable templates are active',async()=>assert.deepEqual((await authority.query('select artifact_type from public.studio_system_template_versions where superseded_at is null order by artifact_type')).rows.map(r=>r.artifact_type),['brd','frd','pdd']));
+ await scenario('BRD FRD PDD SDD immutable templates are active',async()=>assert.deepEqual((await authority.query('select artifact_type from public.studio_system_template_versions where superseded_at is null order by artifact_type')).rows.map(r=>r.artifact_type),['brd','frd','pdd','sdd']));
  await scenario('one active generation attempt relational constraint',async()=>assert.equal((await authority.query("select count(*)::int n from pg_indexes where indexname='studio_one_active_generation_attempt'")).rows[0].n,1));
  await scenario('exact canonical table inventory enables and forces RLS',async()=>{
    const inventory=await authority.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relkind in ('r','p') and relname = any($1::text[]) order by relname",[canonicalStudioTables]);

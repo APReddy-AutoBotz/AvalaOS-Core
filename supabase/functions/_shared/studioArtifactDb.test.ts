@@ -16,7 +16,7 @@ import {
 import { validateStudioDraft } from './studioArtifactGeneration.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 
-const ids = Array.from({ length: 24 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+const ids = Array.from({ length: 32 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
 const sha256 = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))))
   .map(byte => byte.toString(16).padStart(2, '0')).join('');
 const mark = (passed: boolean, testId: string, assertionId: string, fixture: string, lineage: Record<string, string | number | boolean | null> = {}) => prBAssertion({
@@ -140,6 +140,16 @@ void (async () => {
     });
   } catch (error) { changedSourceBindingRejected = error instanceof StudioArtifactError && error.code === 'IDEMPOTENCY_CONFLICT'; }
   mark(changedSourceBindingRejected, 'IDEMP-003', 'db.manual-source-changed-binding-conflict', 'same-key-changed-manual-binding', { sourcePackage: String(firstSourceCommand.sourcePackageId), artifact: String(firstSourceCommand.artifactId) });
+
+  const replaceArtifact = { artifactId: ids[24], sourcePackageId: ids[25], sourcePackageVersion: 2, aggregateVersion: 7, currentVersionId: ids[26], currentApprovedVersionId: ids[27] };
+  let replacementRpc: Record<string, unknown> = {};
+  await executeStudioAtomicCommand({ ...manualCommand, expectedAggregateVersion: 7, idempotencyKey: 'manual-package-replace-001', payload: { ...manualCommand.payload, replaceArtifact } }, async (_name, args) => {
+    replacementRpc = args.p_command as Record<string, unknown>;
+    return { outcome: 'committed', receiptId: ids[28], resourceId: replaceArtifact.artifactId, artifactId: replaceArtifact.artifactId, sourcePackageId: ids[29], sourceMode: 'manual_brief', planningOnly: true } as never;
+  });
+  if (!(replacementRpc.artifactId === replaceArtifact.artifactId
+    && (replacementRpc.payload as Record<string, unknown>).replaceArtifact === replaceArtifact
+    && replacementRpc.sourcePackageId !== replaceArtifact.sourcePackageId)) throw new Error('changed-source RPC did not retain exact predecessor selectors');
 
   let rpcName = ''; let rpcArgs: Record<string, unknown> = {};
   const generationCommand = {

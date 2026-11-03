@@ -27,5 +27,8 @@ assert.ok(editor.includes('server applies selected candidates atomically'), 'edi
 assert.ok(workspace.includes('Selected-section refresh is unavailable in the provider-free synthetic path'), 'synthetic full generation must fail closed for selected refresh');
 assert.ok(workspace.includes("sourcePackage.currentVersionId!==artifact.currentVersion.id"), 'selected refresh must compare the exact viewed head before provider work');
 assert.ok(workspace.includes("artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash"), 'needs-review must compare document and aggregate source bindings');
+assert.ok(workspace.includes('Adopt changed input into current document'), 'changed-source adoption must be an explicit ordinary UI choice');
+assert.ok(workspace.includes('currentVersionId:source.currentVersionId,currentApprovedVersionId:source.currentApprovedVersionId'), 'adoption must bind the exact viewed current and approved heads');
+assert.ok(command.includes("'replaceArtifact' in payload"), 'server command parser must fail closed around the optional predecessor selector');
 
 console.log('process evidence Studio SDD and flow UI contract passed');

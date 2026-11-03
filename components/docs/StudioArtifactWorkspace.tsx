@@ -371,10 +371,17 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         setMessage(workspaceProjection||sourceProjection ? 'Authorized governed Studio projections loaded. Artifact content is not available to this capability set.' : 'No authorized Studio projection is available to this capability set.');
         return;
       }
-      const summary = summaryResult.value?.items.find(item => item.id === selectedArtifactIdRef.current)
-        ?? summaryResult.value?.items[0];
+      const summaryItems=summaryResult.value?.items??[];
+      const summary = summaryItems.find(item => item.id === selectedArtifactIdRef.current && item.artifactType === type)
+        ?? summaryItems.find(item => item.artifactType === type);
       if (summary) {
         await loadGovernedSummary(summary, ticket, loadIsCurrent);
+        return;
+      }
+      if (summaryResult.value) {
+        clearArtifactProjection();
+        setState('empty');
+        setMessage(`No current ${type.toUpperCase()} document exists. Select exact sources and a compatible approved template to generate its first working draft.`);
         return;
       }
       if (!id) {
@@ -548,7 +555,9 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     const ticket=authorityEpoch.current.issue();
     if(!workspace||!governedSelection||blocked||!capabilities.includes('studio.artifacts.generate'))return;
     if(selectedSectionIds.length&&controlledHumanSyntheticGeneration){setState('command_failed');setMessage('Selected-section refresh is unavailable in the provider-free synthetic path. No document content was changed.');return;}
-    const selectedTemplate=workspace.templates.find(item=>item.templateVersionId===selectedTemplateVersionId);
+    const selectedTemplate=selectedSectionIds.length&&artifact?.template
+      ? workspace.templates.find(item=>item.templateVersionId===artifact.template!.templateVersionId&&item.templateHash===artifact.template!.templateHash&&String(item.version)===String(artifact.template!.version))
+      : workspace.templates.find(item=>item.templateVersionId===selectedTemplateVersionId);
     if(!selectedTemplate||selectedTemplate.lifecycle!=='approved'||!selectedTemplate.actions.includes('studio.generation.request')||(selectedTemplate.artifactType!==artifactType&&selectedTemplate.artifactType!=='custom')){
       setState('command_failed');setMessage('Select an available approved exact template version for this artifact type. The prior source package remains committed.');return;
     }
