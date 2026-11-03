@@ -10,6 +10,7 @@ import type {
   StudioDeliveryApprovedWorkItem,
   StudioDeliveryCommandSuccess,
 } from '../../services/productAcceptanceBridge/contracts';
+import { deriveRequirementProposals } from '../../services/productAcceptanceBridge/requirementProposals';
 
 export type ApprovedStudioArtifactSelector = {
   artifactId: string;
@@ -23,6 +24,7 @@ export type StudioApprovedArtifactPublishProps = {
   key?: React.Key;
   scope: StudioDeliveryScope;
   artifact: ApprovedStudioArtifactSelector;
+  approvedContent: Record<string, unknown>;
   projectId: string;
   disabled?: boolean;
   transport?: StudioDeliveryTransport;
@@ -33,36 +35,41 @@ export type StudioApprovedArtifactPublishProps = {
 export type StudioDeliveryApprovedWorkItemDraft = Omit<StudioDeliveryApprovedWorkItem, 'acceptanceCriteria'> & { acceptanceCriteriaText: string };
 export const createApprovedWorkItemDraft = (item: StudioDeliveryApprovedWorkItem): StudioDeliveryApprovedWorkItemDraft => ({
   type: item.type, title: item.title, description: item.description, acceptanceCriteriaText: item.acceptanceCriteria.join('\n'),
+  requirementLinks: item.requirementLinks,
 });
 export const normalizeApprovedWorkItemDraft = (item: StudioDeliveryApprovedWorkItemDraft): StudioDeliveryApprovedWorkItem => ({
   type: item.type, title: item.title, description: item.description,
   acceptanceCriteria: splitApprovedAcceptanceCriteria(item.acceptanceCriteriaText),
+  requirementLinks: item.requirementLinks,
 });
-const blankItem = (): StudioDeliveryApprovedWorkItemDraft => createApprovedWorkItemDraft({ type: 'Task', title: '', description: '', acceptanceCriteria: [] });
 const field = 'mt-1 min-h-10 w-full rounded-xl border border-[var(--av-color-border-strong)] bg-[var(--av-color-bg)] px-3 py-2 text-sm';
 const button = 'inline-flex min-h-10 items-center justify-center rounded-xl border border-[var(--av-color-border-strong)] px-3 py-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50';
 
 export const splitApprovedAcceptanceCriteria = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
 export const isApprovedWorkItemComplete = (item: StudioDeliveryApprovedWorkItem) => Boolean(item.title.trim())
   && item.title.length <= 300 && item.description.length <= 20_000
-  && item.acceptanceCriteria.length <= 100 && item.acceptanceCriteria.every(value => value.length > 0 && value.length <= 2_000);
+  && item.acceptanceCriteria.length <= 100 && item.acceptanceCriteria.every(value => value.length > 0 && value.length <= 2_000)
+  && item.requirementLinks.length > 0 && item.requirementLinks.length <= 100;
 
 export default function StudioApprovedArtifactPublish({
-  scope, artifact, projectId, disabled = false, transport,
-  initialWorkItems = [{ type: 'Task', title: '', description: '', acceptanceCriteria: [] }], onPublished,
+  scope, artifact, approvedContent, projectId, disabled = false, transport, initialWorkItems, onPublished,
 }: StudioApprovedArtifactPublishProps) {
-  const [items, setItems] = useState(() => initialWorkItems.map(createApprovedWorkItemDraft));
+  const derivation = useMemo(() => deriveRequirementProposals(approvedContent), [approvedContent]);
+  const [items, setItems] = useState(() => (initialWorkItems ?? derivation.proposals).map(createApprovedWorkItemDraft));
+  const [selected, setSelected] = useState(() => new Set((initialWorkItems ?? derivation.proposals).map((_, index) => index)));
   const [busy, setBusy] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const normalizedItems = useMemo(() => items.map(normalizeApprovedWorkItemDraft), [items]);
-  const valid = useMemo(() => normalizedItems.length > 0 && normalizedItems.length <= 100 && normalizedItems.every(isApprovedWorkItemComplete), [normalizedItems]);
+  const selectedItems = useMemo(() => normalizedItems.filter((_, index) => selected.has(index)), [normalizedItems, selected]);
+  const valid = useMemo(() => !derivation.blockedReason && selectedItems.length > 0 && selectedItems.length <= 100
+    && selectedItems.every(isApprovedWorkItemComplete), [derivation.blockedReason, selectedItems]);
   const change = (index: number, value: StudioDeliveryApprovedWorkItemDraft) => setItems(current => current.map((item, position) => position === index ? value : item));
   const editingLocked = disabled || busy || committed || Boolean(pendingKey);
   const submit = async () => {
-    if ((!valid && !pendingKey) || disabled || busy || committed) { setError('Complete each human-authored work item before publishing.'); return; }
+    if ((!valid && !pendingKey) || disabled || busy || committed) { setError('Select at least one complete requirement-bound proposal before publishing.'); return; }
     setBusy(true); setError(''); setMessage('');
     try {
       const result = pendingKey
@@ -72,7 +79,7 @@ export default function StudioApprovedArtifactPublish({
           expectedArtifactVersionId: artifact.artifactVersionId,
           expectedAggregateVersion: artifact.aggregateVersion,
           projectId,
-          workItems: normalizedItems,
+          workItems: selectedItems,
         }, {}, transport);
       if (result.action !== 'studio.approved-artifact.publish') throw new StudioDeliveryBoundaryError('INVALID_COMMAND');
       const publicationResult = result as StudioDeliveryCommandSuccess<'studio.approved-artifact.publish'>;
@@ -88,22 +95,24 @@ export default function StudioApprovedArtifactPublish({
   return <section data-testid="studio-approved-artifact-publish" className="av-surface p-5" aria-labelledby="studio-publish-title">
     <h2 id="studio-publish-title" className="text-xl font-black">Publish approved Studio artifact to Delivery</h2>
     <p className="mt-2 text-sm font-semibold text-[var(--av-color-text-muted)]">
-      A human must author and approve this structured work-item list. Publication binds it to the exact approved artifact version; it does not parse BRD prose or generate tasks with AI.
+      Avala deterministically proposes work only from explicit requirements in the exact approved artifact. Review, edit, and select proposals before publication; no provider call is used.
     </p>
     <p className="mt-3 break-all rounded-xl bg-[var(--av-color-bg-subtle)] p-3 text-xs font-bold">{artifact.title} · approved version {artifact.artifactVersionId}</p>
+    {derivation.blockedReason && <p role="alert" className="mt-3 rounded-xl border border-amber-500 p-3 font-bold">{derivation.blockedReason} No Delivery materialization is available.</p>}
     {error && <p role="alert" className="mt-3 rounded-xl border border-red-500 p-3 font-bold">{error}</p>}
     {message && <p role="status" className="mt-3 rounded-xl border border-emerald-500 p-3 font-bold">{message}</p>}
+    <div className="mt-4 flex items-center justify-between rounded-xl bg-[var(--av-color-bg-subtle)] p-3 text-sm font-bold"><span>{derivation.requirementCount} approved requirement{derivation.requirementCount === 1 ? '' : 's'} produced {items.length} proposal{items.length === 1 ? '' : 's'}.</span><span>{selected.size} selected</span></div>
     <div className="mt-4 space-y-4" data-testid="studio-approved-work-items">{items.map((item, index) => <fieldset key={index} className="rounded-xl border border-[var(--av-color-border)] p-4">
-      <legend className="px-2 font-black">Human-approved work item {index + 1}</legend>
+      <legend className="px-2 font-black">Proposal {index + 1}</legend>
+      <label className="mb-3 flex items-center gap-2 text-sm font-black"><input type="checkbox" disabled={editingLocked} checked={selected.has(index)} onChange={() => setSelected(current => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })}/>Select for publication</label>
       <label className="block text-sm font-black">Type<select disabled={editingLocked} className={field} value={item.type} onChange={event => change(index, { ...item, type: event.target.value as StudioDeliveryApprovedWorkItem['type'] })}><option>Epic</option><option>Story</option><option>Task</option></select></label>
       <label className="mt-3 block text-sm font-black">Title<input disabled={editingLocked} className={field} maxLength={300} value={item.title} onChange={event => change(index, { ...item, title: event.target.value })}/></label>
       <label className="mt-3 block text-sm font-black">Description<textarea disabled={editingLocked} className={field} rows={3} maxLength={20_000} value={item.description} onChange={event => change(index, { ...item, description: event.target.value })}/></label>
       <label className="mt-3 block text-sm font-black">Acceptance criteria · one per line<textarea disabled={editingLocked} className={field} rows={3} value={item.acceptanceCriteriaText} onChange={event => change(index, { ...item, acceptanceCriteriaText: event.target.value })}/></label>
-      {items.length > 1 && <button type="button" disabled={editingLocked} className={`${button} mt-3`} onClick={() => setItems(current => current.filter((_, position) => position !== index))}>Remove work item {index + 1}</button>}
+      <details className="mt-3 rounded-xl bg-[var(--av-color-bg-subtle)] p-3"><summary className="cursor-pointer text-sm font-black">Approved requirement links · {item.requirementLinks.length}</summary><ul className="mt-2 space-y-2 text-xs">{item.requirementLinks.map(link => <li key={`${link.sectionId}:${link.requirementText}`}><span className="font-black">{link.sectionTitle} · {link.sectionId}</span><br/>{link.requirementText}</li>)}</ul></details>
     </fieldset>)}</div>
     <div className="mt-4 flex flex-wrap gap-2">
-      <button type="button" className={button} disabled={editingLocked || items.length >= 100} onClick={() => setItems(current => [...current, blankItem()])}>Add human-authored work item</button>
-      <button type="button" data-testid="publish-approved-studio-artifact" className={`${button} bg-[#ffbc03] text-[#002C4B]`} disabled={busy || disabled || committed || (!pendingKey && !valid)} onClick={() => void submit()}>{busy ? 'Publishing…' : committed ? 'Published' : pendingKey ? 'Retry same publication' : 'Publish approved work items'}</button>
+      <button type="button" data-testid="publish-approved-studio-artifact" className={`${button} bg-[#ffbc03] text-[#002C4B]`} disabled={busy || disabled || committed || (!pendingKey && !valid)} onClick={() => void submit()}>{busy ? 'Publishing…' : committed ? 'Published' : pendingKey ? 'Retry same publication' : `Publish ${selected.size} selected proposal${selected.size === 1 ? '' : 's'}`}</button>
     </div>
   </section>;
 }

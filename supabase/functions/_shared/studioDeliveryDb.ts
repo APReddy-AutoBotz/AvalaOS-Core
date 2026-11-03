@@ -34,7 +34,7 @@ const readBoundedJson = async (response: Response): Promise<unknown> => {
 
 export const callStudioDeliveryRpc = async (
   transport: StudioDeliveryRpcTransport,
-  rpcName: 'studio_delivery_apply_command' | 'studio_delivery_outcome_query' | 'studio_delivery_pack_snapshot_query' | 'studio_delivery_assignee_query',
+  rpcName: 'studio_delivery_apply_requirement_command' | 'studio_delivery_outcome_query' | 'studio_delivery_pack_snapshot_query' | 'studio_delivery_assignee_query',
   args: Record<string, unknown>,
 ): Promise<unknown> => {
   const controller = new AbortController();
@@ -58,7 +58,7 @@ export const studioDeliveryDatabaseDependencies = (request: Request) => ({
   authenticate: () => getAuthUser(request),
   authority: (actorId: string, organizationId: string, workspaceId: string, expectedAuthorizationVersion: number) =>
     resolveTenantAuthority(actorId, { organizationId, workspaceId, expectedAuthorizationVersion }, createTenantAuthorityDatabase(request)),
-  apply: (actorId: string, command: StudioDeliveryCommandEnvelope) => callStudioDeliveryRpc(transport(), 'studio_delivery_apply_command', {
+  apply: (actorId: string, command: StudioDeliveryCommandEnvelope) => callStudioDeliveryRpc(transport(), 'studio_delivery_apply_requirement_command', {
     p_actor_id: actorId, p_org_id: command.organizationId, p_workspace_id: command.workspaceId,
     p_expected_authorization_version: command.expectedAuthorizationVersion, p_request_id: command.requestId,
     p_idempotency_key: command.idempotencyKey, p_action: command.action, p_payload: command.payload,

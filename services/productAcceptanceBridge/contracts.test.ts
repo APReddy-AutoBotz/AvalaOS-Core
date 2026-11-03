@@ -17,7 +17,8 @@ const publish: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>
   schemaVersion: 'studio-delivery-command.v1', action: 'studio.approved-artifact.publish', organizationId: U[0], workspaceId: U[1],
   expectedAuthorizationVersion: 7, requestId: U[2], idempotencyKey: 'studio-delivery.publish.contract-1',
   payload: { artifactId: U[3], expectedArtifactVersionId: U[4], expectedAggregateVersion: 5, projectId: U[5],
-    workItems: [{ type: 'Story', title: 'Publish governed work', description: 'Human-approved structured work.', acceptanceCriteria: ['Exact ancestry is retained.'] }] },
+    workItems: [{ type: 'Story', title: 'Publish governed work', description: 'Human-approved structured work.', acceptanceCriteria: ['Exact ancestry is retained.'],
+      requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Publication must retain exact ancestry.' }] }] },
 };
 const publication = { publicationId: U[6], documentGenerationId: U[7], projectId: U[5], artifactId: U[3], artifactVersionId: U[4],
   artifactVersion: 3, artifactContentHash: 'a'.repeat(64), sourceProcessId: U[8], sourceAssessmentId: U[9], governResolutionId: U[10],

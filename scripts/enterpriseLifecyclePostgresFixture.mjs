@@ -743,7 +743,7 @@ export async function createEnterpriseLifecycleFixture({
         return { ...authority, userId: authority.actorId, roleNames: ['Lifecycle authority'] };
       },
       apply: async (actorId, command) => (await serviceQuery(
-        'SELECT public.studio_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        'SELECT public.studio_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
         [actorId,command.organizationId,command.workspaceId,command.expectedAuthorizationVersion,command.requestId,
           command.idempotencyKey,command.action,JSON.stringify(command.payload)],
       )).rows[0]?.value,

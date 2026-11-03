@@ -21,7 +21,7 @@ const historical: LegacyDeliveryTaskProjection = {
 };
 const result = { ok: true, schemaVersion: 'legacy-delivery-query.v1', projectId: ids.project, items: [historical],
   page: { limit: 100, nextCursor: null, hasMore: false },
-  source: { id: ids.source, digest: `sha256:${'b'.repeat(64)}`, items: [{ sourceIndex: 0, type: 'Epic', title: 'Intake', description: '', acceptanceCriteria: [] }] } };
+  source: { id: ids.source, digest: `sha256:${'b'.repeat(64)}`, materializesEpics: false, items: [{ sourceIndex: 0, type: 'Epic', title: 'Intake', description: '', acceptanceCriteria: [] }] } };
 const request = (body: unknown) => new Request('https://example.test/legacy-delivery-query', { method: 'POST', body: JSON.stringify(body) });
 
 const exercise = async (overrides: Partial<LegacyDeliveryQueryDependencies> = {}) => {

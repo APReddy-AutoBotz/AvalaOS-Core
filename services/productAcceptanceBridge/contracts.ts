@@ -9,11 +9,18 @@ export type StudioDeliveryAction = typeof STUDIO_DELIVERY_ACTIONS[number];
 export const STUDIO_DELIVERY_OUTCOME_STATUSES = ['achieved', 'partial', 'not_achieved'] as const;
 export type StudioDeliveryOutcomeStatus = typeof STUDIO_DELIVERY_OUTCOME_STATUSES[number];
 
+export type StudioDeliveryRequirementLink = {
+  sectionId: string;
+  sectionTitle: string;
+  requirementText: string;
+};
+
 export type StudioDeliveryApprovedWorkItem = {
   type: 'Epic' | 'Story' | 'Task';
   title: string;
   description: string;
   acceptanceCriteria: string[];
+  requirementLinks: StudioDeliveryRequirementLink[];
 };
 
 export type StudioApprovedArtifactPublishPayload = {
@@ -208,13 +215,25 @@ const iso = (value: unknown): string => {
 
 const decodeWorkItem = (value: unknown): StudioDeliveryApprovedWorkItem => {
   const row = record(value);
-  exact(row, ['type', 'title', 'description', 'acceptanceCriteria']);
-  if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 100) invalid();
+  exact(row, ['type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks']);
+  if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 100
+    || !Array.isArray(row.requirementLinks) || row.requirementLinks.length < 1 || row.requirementLinks.length > 100) invalid();
+  const requirementLinks = (row.requirementLinks as unknown[]).map(value => {
+    const link = record(value);
+    exact(link, ['sectionId', 'sectionTitle', 'requirementText']);
+    return {
+      sectionId: text(link.sectionId, 80),
+      sectionTitle: text(link.sectionTitle, 300),
+      requirementText: text(link.requirementText, 2_000),
+    };
+  });
+  if (new Set(requirementLinks.map(link => `${link.sectionId}\u0000${link.requirementText}`)).size !== requirementLinks.length) invalid();
   return {
     type: oneOf(row.type, ['Epic', 'Story', 'Task'] as const),
     title: text(row.title, 300),
     description: text(row.description, 20_000, true),
     acceptanceCriteria: (row.acceptanceCriteria as unknown[]).map(item => text(item, 2_000)),
+    requirementLinks,
   };
 };
 

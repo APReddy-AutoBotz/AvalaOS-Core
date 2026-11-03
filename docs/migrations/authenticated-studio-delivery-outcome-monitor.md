@@ -29,6 +29,10 @@ The legacy Delivery adapter explicitly maps the authoritative task lineage's `so
 
 Studio publication requires an active project whose source process matches the approved Studio artifact's exact server-derived V2 case, decision, and Govern ancestry. The project's same-process V1 assessment remains the independently bound legacy Docs/Delivery source anchor. A native V2 case keeps `source_v1_assessment_id` null; publication never fabricates clone ancestry. When the V2 case is an actual V1 clone, its source assessment and score version must exactly match the project anchor. The command creates a new historical `document_generations` row and never changes an earlier generation. Existing legacy import semantics remain unchanged.
 
+Additive migration `20261103104435_delivery_requirement_bound_proposals.sql` keeps that authority and adds exact approved-requirement bindings. The replacement service RPC strips browser-visible links before invoking the accepted publication command, then validates every link against an explicit requirement line in the exact approved artifact and commits immutable binding rows in the same transaction. It rejects invented links and changed-link idempotency replays. The Edge adapter no longer grants the service role direct execution of the older publication RPC.
+
+Newly bound imports copy the stable proposal origin, artifact aggregate identity, exact approved revision and exact section links into immutable task lineage. The origin hashes the stable artifact aggregate, work-item type and canonically sorted links: link reordering is invariant, a future revision of the same declared requirement cannot silently duplicate a confirmed item, and identical text in an unrelated artifact remains distinct. Normal Delivery detail discloses the approved artifact/revision, section and quote without adding Studio access. A second project task with the same origin is rejected. Existing publications have no binding rows, bypass the new binding trigger, and retain their accepted import behavior. Rollback disables new publication writes and retains all bindings and imported tasks for read-only inspection and additive forward repair.
+
 Before materialization, the command requires a bounded approved title and one to 100 ordered sections. Every section must have one stable `id` or `key`, one non-empty title, and one bounded `body` or `content`; duplicate or conflicting keys and bodies are rejected. Malformed approved content fails closed with no publication, generation, receipt, or audit effect.
 
 ## Focused verification
@@ -42,7 +46,7 @@ The disposable PostgreSQL test `node scripts/studioDeliveryAuthorityPostgres.mjs
 - native V2 publication through an exact same-process legacy project anchor without changing the case's null clone source;
 - matching cloned-V2 publication, plus clone source/score mismatch, different-process project anchor, and foreign-tenant project denial with zero effects;
 - exact replay, changed-payload conflict, and second-publication version conflict;
-- unchanged legacy import of the published generation;
+- unchanged legacy import of prior publications, plus requirement-bound import with artifact/revision details, canonical link-order replay, same-artifact origin stability, distinct-artifact separation and once-only board materialization;
 - explicit first and successor outcome versions with stale-version rejection;
 - default-off, exact replay, changed-payload conflict, immutable history, exact ancestry, and read-only latest projection for Delivery Pack snapshots;
 - exact project/task/import/document/Studio lineage and foreign-project non-disclosure;

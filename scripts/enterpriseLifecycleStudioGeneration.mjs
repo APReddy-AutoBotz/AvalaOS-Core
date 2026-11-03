@@ -88,7 +88,7 @@ export function createEnterpriseLifecycleStudioGeneration({
       summary: 'Integration fixture output bound to the approved Assess handoff.',
       sections: contract.sections.map((section, index) => ({
         id: section.id, title: section.title,
-        body: `Synthetic ${section.id} section ${index + 1}; approved source facts are retained by the production composer.`,
+        body: `BR-${index + 1}: Delivery must implement the approved ${section.id} requirement while preserving its source facts.`,
         sourceAnchors: index === 0 ? input.canonicalSourceAnchors.map(anchor => ({ ...anchor })) : [],
         labels: index === 0 ? [] : [section.required ? 'template_required' : 'assumption'],
       })),

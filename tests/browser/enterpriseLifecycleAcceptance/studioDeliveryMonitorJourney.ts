@@ -360,14 +360,15 @@ export const runStudioDeliveryMonitorJourney = async ({
   await expect(publisher).toBeVisible();
   accessibility.push(await scanAffectedSurface(page, 'approved Studio artifact publication', '[data-testid="studio-approved-artifact-publish"]'));
   const workItems = publisher.getByTestId('studio-approved-work-items').getByRole('group');
-  await expect(workItems).toHaveCount(1);
+  const proposalCount = await workItems.count();
+  expect(proposalCount).toBeGreaterThanOrEqual(3);
+  for (let index = 3; index < proposalCount; index += 1) {
+    await workItems.nth(index).getByLabel('Select for publication', { exact: true }).uncheck();
+  }
   await workItems.nth(0).getByRole('combobox', { name: 'Type', exact: true }).selectOption('Epic');
   await workItems.nth(0).getByLabel('Title', { exact: true }).fill(itemTitles.epic);
   await workItems.nth(0).getByLabel('Description', { exact: true }).fill('A human-approved container for the bounded downstream acceptance work.');
   await workItems.nth(0).getByLabel('Acceptance criteria · one per line', { exact: true }).fill('Exact approved Studio ancestry is retained.');
-  await publisher.getByRole('button', { name: 'Add human-authored work item', exact: true }).click();
-  await publisher.getByRole('button', { name: 'Add human-authored work item', exact: true }).click();
-  await expect(workItems).toHaveCount(3);
   for (const [index, title, detail] of [
     [1, itemTitles.assignment, 'Assign one accountable human owner without changing protected source ancestry.'],
     [2, itemTitles.blocker, 'Resolve the bounded downstream dependency and record its human outcome.'],
@@ -471,6 +472,12 @@ export const runStudioDeliveryMonitorJourney = async ({
   observeEvery(observations, 'DELIVERY-002');
 
   let taskDialog = await openTask(page, itemTitles.blocker);
+  const requirementSources = taskDialog.getByTestId('delivery-requirement-source-links');
+  await expect(requirementSources).toBeVisible();
+  await requirementSources.getByText('Open approved source details', { exact: true }).click();
+  await expect(requirementSources.getByText(/Approved artifact/i)).toBeVisible();
+  await expect(requirementSources.getByText(/Revision \d+/i)).toBeVisible();
+  await expect(requirementSources.getByText(/Delivery must implement the approved/i)).toBeVisible();
   await taskDialog.getByRole('button', { name: 'Edit', exact: true }).click();
   await taskDialog.getByLabel('Reviewer', { exact: true }).check();
   const beforeAssignment = (await getFrame(control, projectName)).tasks.find(task => task.id === importedTask!.id)!;

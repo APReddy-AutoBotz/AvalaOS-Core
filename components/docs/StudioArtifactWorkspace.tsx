@@ -735,6 +735,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
           scope={{ actorId: context.userId, organizationId: context.organizationId, workspaceId: context.workspaceId, authorizationVersion: context.authorizationVersion }}
           projectId={publicationProjectId}
           artifact={{ artifactId: artifact.id, artifactVersionId: artifact.currentVersion.id, aggregateVersion: artifact.aggregateVersion, title: artifact.artifactType.toUpperCase(), lifecycle: 'approved' }}
+          approvedContent={artifact.currentApprovedVersion.content}
           disabled={blocked || !['studio.artifacts.publish', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => capabilities.includes(value))}
           onPublished={onPublished}
         />}

@@ -117,6 +117,7 @@ const queryResult = decodeLegacyDeliveryQueryResult({
   source: {
     id: ids.source,
     digest,
+    materializesEpics: false,
     items: [{ sourceIndex: 0, type: 'Epic', title: 'Order intake', description: '', acceptanceCriteria: ['Evidence recorded'] }],
   },
 }, query);

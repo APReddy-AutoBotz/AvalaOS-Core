@@ -15,15 +15,20 @@ const FOREIGN_WORKSPACE = '97000000-0000-4000-8000-000000000077';
 const FOREIGN_TENANT_PROJECT = '97000000-0000-4000-8000-000000000078';
 const CLONE_PROJECT = '97000000-0000-4000-8000-000000000079';
 const WORK_ITEMS = [
-  { type: 'Epic', title: 'Human approved outcome path', description: 'Exact structured grouping.', acceptanceCriteria: [] },
-  { type: 'Task', title: 'Record an explicit outcome', description: 'The delivery owner records the result.', acceptanceCriteria: ['Monitor reads the exact imported-task ancestry'] },
+  { type: 'Epic', title: 'Human approved outcome path', description: 'Exact structured grouping.', acceptanceCriteria: [], requirementLinks: [
+    { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
+    { sectionId: 'controls', sectionTitle: 'Controls', requirementText: 'NFR-1: Monitor shall read the exact imported-task ancestry.' },
+  ] },
+  { type: 'Task', title: 'Record an explicit outcome', description: 'The delivery owner records the result.', acceptanceCriteria: ['Monitor reads the exact imported-task ancestry'], requirementLinks: [
+    { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
+  ] },
 ];
 const APPROVED_STUDIO_CONTENT = {
   title: 'Exact approved fixture BRD',
   summary: 'Approved summary retained only as exact Studio source metadata.',
   sections: [
-    { id: 'summary', title: 'Summary', body: 'Committed exact structured content.', sourceAnchors: [], labels: ['human_authored'], citations: ['fixture-source-summary'] },
-    { key: 'controls', title: 'Controls', content: 'Human-approved controls remain unchanged.', citations: ['fixture-source-controls'] },
+    { id: 'summary', title: 'Summary', body: 'BR-1: The delivery owner must record an explicit outcome.', sourceAnchors: [], labels: ['human_authored'], citations: ['fixture-source-summary'] },
+    { key: 'controls', title: 'Controls', content: 'NFR-1: Monitor shall read the exact imported-task ancestry.', citations: ['fixture-source-controls'] },
   ],
 };
 
@@ -50,7 +55,7 @@ async function verifyDirtyMarkerRollback() {
 }
 const call = async (fixture, actor, org, workspace, authorizationVersion, action, payload, key = `${action}-${randomUUID()}`, requestId = randomUUID()) => (
   await fixture.asRole('service_role', () => fixture.db.query(
-    'SELECT public.studio_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+    'SELECT public.studio_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
     [actor, org, workspace, authorizationVersion, requestId, key, action, JSON.stringify(payload)],
   ))
 ).rows[0].value;
@@ -76,6 +81,7 @@ const queryAssignees = async (fixture, actor, org, workspace, authorizationVersi
 
 const snapshot = async db => (await db.query(`SELECT
   (SELECT count(*)::int FROM public.studio_delivery_publications) publications,
+  (SELECT count(*)::int FROM public.studio_delivery_work_item_requirement_bindings) requirement_bindings,
   (SELECT count(*)::int FROM public.document_generations WHERE studio_delivery_publication_id IS NOT NULL) documents,
   (SELECT count(*)::int FROM public.studio_delivery_command_receipts) receipts,
   (SELECT count(*)::int FROM public.legacy_delivery_outcome_versions) outcome_versions,
@@ -218,7 +224,7 @@ async function run() {
       await fixture.db.query(`UPDATE public.assess_v2_cases SET source_v1_assessment_id=$1,source_v1_score_version='assess-core-2026-05' WHERE id=$2`, [ASSESSMENT, x.caseId]);
       await fixture.db.query('SET LOCAL ROLE service_role');
       const matchingClone = (await fixture.db.query(
-        'SELECT public.studio_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        'SELECT public.studio_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
         [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `matching-clone-${randomUUID()}`,
           'studio.approved-artifact.publish', JSON.stringify({ ...publishPayload, projectId: CLONE_PROJECT })],
       )).rows[0].value;
@@ -259,7 +265,7 @@ async function run() {
       await fixture.db.query('ALTER TABLE public.studio_artifact_versions ENABLE TRIGGER USER');
       await fixture.db.query('SET LOCAL ROLE service_role');
       const malformedResult = (await fixture.db.query(
-        'SELECT public.studio_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        'SELECT public.studio_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
         [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `malformed-content-${randomUUID()}`,
           'studio.approved-artifact.publish', JSON.stringify({ ...publishPayload, projectId: CLONE_PROJECT })],
       )).rows[0].value;
@@ -272,6 +278,11 @@ async function run() {
       throw error;
     }
     stage = 'publish';
+    const invalidRequirement = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', {
+      ...publishPayload, workItems: [{ ...WORK_ITEMS[1], requirementLinks: [{ ...WORK_ITEMS[1].requirementLinks[0], requirementText: 'FR-999: Invented evidence must never be accepted.' }] }],
+    }, `invalid-requirement-${randomUUID()}`);
+    assert.equal(errorCode(invalidRequirement), 'INVALID_COMMAND');
+    assert.deepEqual(await snapshot(fixture.db), beforeSourceDenials, 'invented requirement links must roll back publication, receipt, generation and audit');
     const publishKey = `publish-${randomUUID()}`;
     const publishRequestId = randomUUID();
     const published = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', publishPayload, publishKey, publishRequestId);
@@ -279,10 +290,15 @@ async function run() {
     assert.equal(published.ok, true); assert.equal(published.outcome, 'committed'); assert.equal(published.resource.workItemCount, 2);
     const afterPublish = await snapshot(fixture.db);
     stage = 'publish-counts';
-    assert.deepEqual(afterPublish, { publications: 1, documents: 1, receipts: 1, outcome_versions: 0, pack_snapshots: 0, audits: 1 });
+    assert.deepEqual(afterPublish, { publications: 1, requirement_bindings: 2, documents: 1, receipts: 1, outcome_versions: 0, pack_snapshots: 0, audits: 1 });
     const replay = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', publishPayload, publishKey, publishRequestId);
     stage = 'publish-replay';
     assert.equal(replay.outcome, 'replayed', JSON.stringify(replay)); assert.deepEqual(await snapshot(fixture.db), afterPublish);
+    const reorderedReplay = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', {
+      ...publishPayload, workItems: [{ ...WORK_ITEMS[0], requirementLinks: [...WORK_ITEMS[0].requirementLinks].reverse() }, WORK_ITEMS[1]],
+    }, publishKey, publishRequestId);
+    assert.equal(reorderedReplay.outcome, 'replayed', 'requirement-link presentation order must not mint a new proposal origin');
+    assert.deepEqual(await snapshot(fixture.db), afterPublish);
     const changed = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'studio.approved-artifact.publish', { ...publishPayload, workItems: [{ ...WORK_ITEMS[0], title: 'Changed' }] }, publishKey, publishRequestId);
     stage = 'publish-conflict';
     assert.equal(errorCode(changed), 'IDEMPOTENCY_CONFLICT'); assert.deepEqual(await snapshot(fixture.db), afterPublish);
@@ -293,13 +309,30 @@ async function run() {
     stage = 'publish-bound-values';
     assert.equal(bound.artifacts.schemaVersion, 'studio-approved-work-items.v1'); assert.equal(bound.artifacts.workItems.length, 2);
     assert.deepEqual(bound.artifacts.brd, { title: APPROVED_STUDIO_CONTENT.title, sections: [
-      { key: 'summary', title: 'Summary', content: 'Committed exact structured content.' },
-      { key: 'controls', title: 'Controls', content: 'Human-approved controls remain unchanged.' },
+      { key: 'summary', title: 'Summary', content: 'BR-1: The delivery owner must record an explicit outcome.' },
+      { key: 'controls', title: 'Controls', content: 'NFR-1: Monitor shall read the exact imported-task ancestry.' },
     ] }, 'legacy primary document must map exact approved title and ordered section text');
     assert.deepEqual(bound.artifacts.approvedStudioContent, APPROVED_STUDIO_CONTENT, 'exact approved Studio content and citation/source metadata must remain immutable in the generation');
     assert.equal(bound.artifacts.source.artifactVersionId, x.version.id); assert.equal(bound.artifacts.source.caseId, x.caseId);
     assert.equal(bound.source_assessment_id, ASSESSMENT, 'legacy Docs generation must retain the exact project assessment anchor');
     assert.equal(bound.studio_artifact_version_id, x.version.id); assert.equal(bound.studio_work_item_digest, published.resource.workItemDigest);
+    const requirementBindings = (await fixture.db.query(`SELECT source_item_index,proposal_origin_id,requirement_links,
+      studio_artifact_id,studio_artifact_version_id,studio_artifact_version
+      FROM public.studio_delivery_work_item_requirement_bindings WHERE publication_id=$1 ORDER BY source_item_index`, [published.resource.publicationId])).rows;
+    assert.equal(requirementBindings.length, 2, 'every published proposal must retain one immutable server-validated requirement binding');
+    assert.ok(requirementBindings.every(binding => /^sha256:[0-9a-f]{64}$/u.test(binding.proposal_origin_id)));
+    assert.deepEqual(requirementBindings[1].requirement_links, WORK_ITEMS[1].requirementLinks);
+    assert.equal(requirementBindings[1].studio_artifact_id, x.artifactId);
+    assert.equal(requirementBindings[1].studio_artifact_version_id, x.version.id);
+    assert.equal(Number(requirementBindings[1].studio_artifact_version), Number(x.version.version));
+    const originDomain = (await fixture.db.query(`SELECT
+      public.studio_delivery_proposal_origin($1,$2,$3::jsonb) same_artifact,
+      public.studio_delivery_proposal_origin($4,$2,$3::jsonb) distinct_artifact`,
+    [x.artifactId, WORK_ITEMS[1].type, JSON.stringify(WORK_ITEMS[1].requirementLinks), randomUUID()])).rows[0];
+    assert.equal(originDomain.same_artifact, requirementBindings[1].proposal_origin_id,
+      'future revisions of the same artifact and declared requirement retain the same proposal origin');
+    assert.notEqual(originDomain.distinct_artifact, originDomain.same_artifact,
+      'identical requirement text from a distinct approved artifact must retain a distinct proposal origin');
     const nativeSource = (await fixture.db.query('SELECT source_v1_assessment_id,source_v1_score_version FROM public.assess_v2_cases WHERE id=$1', [x.caseId])).rows[0];
     assert.deepEqual(nativeSource, { source_v1_assessment_id: null, source_v1_score_version: null }, 'native V2 publication must not manufacture clone ancestry');
     stage = 'publish-bound-immutable';
@@ -326,19 +359,55 @@ async function run() {
     )).rows[0].version);
 
     const source = (await fixture.asRole('service_role', () => fixture.db.query(
-      'SELECT public.legacy_delivery_query($1,$2,$3,$4,$5,100,NULL,$6,true) value',
+      'SELECT public.legacy_delivery_requirement_query($1,$2,$3,$4,$5,100,NULL,$6,true) value',
       [x.requester, x.org, x.workspace, authorizationVersion, PROJECT, published.resource.documentGenerationId],
     ))).rows[0].value.source;
     stage = 'import';
     assert.equal(source.items.length, 2);
+    assert.equal(source.materializesEpics, true);
+    await fixture.db.query('BEGIN');
+    try {
+      const epicOnly = (await fixture.db.query(
+        'SELECT public.legacy_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `epic-only-${randomUUID()}`, 'import', JSON.stringify({
+          projectId: PROJECT, sourceGenerationId: published.resource.documentGenerationId, expectedSourceDigest: source.digest, sourceItemIndices: [0],
+        })],
+      )).rows[0].value;
+      assert.equal(epicOnly.ok, true, JSON.stringify(epicOnly));
+      assert.equal(epicOnly.resource.itemCount, 1);
+      assert.equal(epicOnly.resource.items[0].type, 'Epic');
+      assert.equal(epicOnly.resource.items[0].sourceLineage.sourceItemIndex, 0);
+      await fixture.db.query('ROLLBACK');
+    } catch (error) {
+      await fixture.db.query('ROLLBACK');
+      throw error;
+    }
     const imported = (await fixture.asRole('service_role', () => fixture.db.query(
-      'SELECT public.legacy_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+      'SELECT public.legacy_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
       [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `import-${randomUUID()}`, 'import', JSON.stringify({
-        projectId: PROJECT, sourceGenerationId: published.resource.documentGenerationId, expectedSourceDigest: source.digest, sourceItemIndices: [1],
+        projectId: PROJECT, sourceGenerationId: published.resource.documentGenerationId, expectedSourceDigest: source.digest, sourceItemIndices: [0, 1],
       })],
     ))).rows[0].value;
-    assert.equal(imported.ok, true, JSON.stringify(imported)); assert.equal(imported.resource.items.length, 1);
-    const task = imported.resource.items[0];
+    assert.equal(imported.ok, true, JSON.stringify(imported)); assert.equal(imported.resource.items.length, 2);
+    const epic = imported.resource.items.find(item => item.sourceLineage.sourceItemIndex === 0);
+    const task = imported.resource.items.find(item => item.sourceLineage.sourceItemIndex === 1);
+    assert.ok(epic, 'mixed requirement-bound import must materialize its selected Epic');
+    assert.equal(epic.type, 'Epic'); assert.equal(epic.status, 'To Do');
+    assert.equal(epic.sourceLineage.proposalOriginId, requirementBindings[0].proposal_origin_id);
+    assert.ok(task, 'mixed requirement-bound import must materialize its selected task');
+    assert.equal(task.sourceLineage.proposalOriginId, requirementBindings[1].proposal_origin_id);
+    assert.equal(task.sourceLineage.studioArtifactId, x.artifactId);
+    assert.equal(task.sourceLineage.studioArtifactVersionId, x.version.id);
+    assert.equal(Number(task.sourceLineage.studioArtifactVersion), Number(x.version.version));
+    assert.deepEqual(task.sourceLineage.requirementLinks, WORK_ITEMS[1].requirementLinks,
+      'normal Delivery task detail must receive exact approved requirement links');
+    await assert.rejects(() => fixture.db.query(`INSERT INTO public.delivery_work_items(
+      org_id,workspace_id,project_id,document_generation_id,source_process_id,source_assessment_id,created_by,updated_by,owner_id,reporter_id,
+      title,description,status,priority,type,source_lineage,metadata,authority_version,legacy_import_id,source_item_index,retention_state,retention_class)
+      SELECT org_id,workspace_id,project_id,NULL,NULL,NULL,created_by,updated_by,owner_id,reporter_id,
+       title||' duplicate',description,status,priority,type,jsonb_build_object('proposalOriginId',source_lineage->>'proposalOriginId'),metadata,1,NULL,NULL,retention_state,retention_class
+      FROM public.delivery_work_items WHERE id=$1`, [task.id]), /legacy_delivery_one_item_per_proposal_origin/,
+    'a regenerated proposal origin must not appear twice on the normal board');
     stage = 'outcome';
     const outcomePayload = { taskId: task.id, expectedTaskVersion: task.version, expectedOutcomeVersion: null,
       status: 'achieved', label: 'Expected result observed', detail: 'A human confirmed the bounded result for this imported task.' };
@@ -355,7 +424,7 @@ async function run() {
     const packKey = `pack-${randomUUID()}`; const packRequestId = randomUUID();
     const savedPack = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.pack.snapshot', { projectId: PROJECT }, packKey, packRequestId);
     assert.equal(savedPack.ok, true, JSON.stringify(savedPack)); assert.equal(savedPack.resource.version, 1);
-    assert.equal(savedPack.resource.taskCount, 1); assert.equal(savedPack.resource.boundTaskCount, 1);
+    assert.equal(savedPack.resource.taskCount, 2); assert.equal(savedPack.resource.boundTaskCount, 2);
     const packState = await snapshot(fixture.db);
     assert.equal(packState.pack_snapshots, 1); assert.equal(packState.receipts, 4); assert.equal(packState.audits, 4);
     const packReplay = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.pack.snapshot', { projectId: PROJECT }, packKey, packRequestId);
@@ -363,7 +432,7 @@ async function run() {
     const packConflict = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.pack.snapshot', { projectId: FOREIGN_PROJECT }, packKey, packRequestId);
     assert.equal(errorCode(packConflict), 'IDEMPOTENCY_CONFLICT'); assert.deepEqual(await snapshot(fixture.db), packState);
     const storedPack = (await fixture.db.query('SELECT snapshot FROM public.legacy_delivery_pack_snapshots WHERE id=$1', [savedPack.resource.snapshotId])).rows[0].snapshot;
-    assert.equal(storedPack.schemaVersion, 'legacy-delivery-pack-snapshot.v1'); assert.equal(storedPack.tasks.length, 1);
+    assert.equal(storedPack.schemaVersion, 'legacy-delivery-pack-snapshot.v1'); assert.equal(storedPack.tasks.length, 2);
     assert.equal(storedPack.tasks[0].studioAncestry.publicationId, published.resource.publicationId);
     await assert.rejects(() => fixture.db.query("UPDATE public.legacy_delivery_pack_snapshots SET snapshot='{}'::jsonb WHERE id=$1", [savedPack.resource.snapshotId]), /STUDIO_DELIVERY_IMMUTABLE/);
     const latestPack = await queryLatestPack(fixture, x.requester, x.org, x.workspace, authorizationVersion, PROJECT);
@@ -393,7 +462,7 @@ async function run() {
       assert.equal(direct.rows[0].pack_allowed, false, `${role} direct pack reads must remain revoked`);
       assert.equal(direct.rows[0].assignee_query_allowed, false, `${role} direct assignee directory execution must remain revoked`);
     }
-    console.log('STUDIO DELIVERY POSTGRES PASS default-off, exact publish, replay/conflict, immutable binding, scoped assignee directory, legacy import, versioned outcome, immutable pack and zero-write queries');
+    console.log('STUDIO DELIVERY POSTGRES PASS exact approved requirement generation, user-selected confirmation, replay/conflict, stable-origin duplicate prevention, visible board links, persistent task outcome, immutable pack and zero-write queries');
   } finally { await fixture.close(); }
 }
 

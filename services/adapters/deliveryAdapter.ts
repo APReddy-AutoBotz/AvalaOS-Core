@@ -176,6 +176,11 @@ const mapLegacyDeliveryLineage = (projection: LegacyDeliveryTaskProjection): Tas
     sourceAssessmentId: lineage.sourceAssessmentId,
     sourceEpicIndex: lineage.sourceEpicIndex,
     sourceEpicTitle: lineage.sourceEpicTitle,
+    proposalOriginId: lineage.proposalOriginId ?? undefined,
+    studioArtifactId: lineage.studioArtifactId ?? undefined,
+    studioArtifactVersionId: lineage.studioArtifactVersionId ?? undefined,
+    studioArtifactVersion: lineage.studioArtifactVersion ?? undefined,
+    requirementLinks: lineage.requirementLinks,
     processId: lineage.sourceProcessId,
     assessmentId: lineage.sourceAssessmentId,
   };
@@ -240,6 +245,7 @@ export const resolveLegacyDeliveryImportSelection = (
   displayedItems: WorkItem[],
   selectedItems: WorkItem[],
   sourceItems: LegacyDeliverySourceItem[],
+  materializesEpics = false,
 ) => {
   if (displayedItems.length !== sourceItems.length
     || displayedItems.some((item, index) => !sameSourceItem(item, sourceItems[index]))) {
@@ -258,7 +264,7 @@ export const resolveLegacyDeliveryImportSelection = (
   if (unique.length !== selectedItems.length || unique.length === 0) {
     throw new LegacyDeliveryProjectionError('Select at least one distinct governed work item to import.');
   }
-  if (!unique.some(index => sourceItems[index].type !== 'Epic')) {
+  if (!materializesEpics && !unique.some(index => sourceItems[index].type !== 'Epic')) {
     throw new LegacyDeliveryProjectionError('Select at least one Story or Task with the source epic grouping.');
   }
   return unique.map(index => sourceItems[index].sourceIndex);
@@ -296,6 +302,7 @@ const unsupportedUpdateFields: Array<keyof Task> = [
 ];
 export const assertLegacyDeliveryCreateProjectionSupported = (task: Partial<Task>) => {
   const unsupported = [
+    task.type === 'Epic' ? 'manually created epic type' : null,
     task.status && task.status !== 'To Do' ? 'status' : null,
     task.epicId ? 'epic' : null,
     task.sprintId ? 'sprint' : null,
@@ -420,6 +427,7 @@ export const deliveryAdapter = {
   async createAuthoritativeTask(context: TenantContextProjection, task: Partial<Task>) {
     if (!task.projectId) throw new LegacyDeliveryProjectionError('Choose a project before creating Delivery work.');
     assertLegacyDeliveryCreateProjectionSupported(task);
+    if (task.type === 'Epic') throw new LegacyDeliveryProjectionError('Connected Delivery materializes Epics only from requirement-bound approved publications.');
     const result = await executeAuthoritativeCommand(context, 'task.create', {
       projectId: task.projectId,
       task: {
@@ -475,7 +483,7 @@ export const deliveryAdapter = {
     if (!query.source) {
       throw new LegacyDeliveryProjectionError('The governed source document is unavailable. Refresh the document before importing Delivery work.');
     }
-    const sourceItemIndices = resolveLegacyDeliveryImportSelection(input.displayedItems, input.selectedItems, query.source.items);
+    const sourceItemIndices = resolveLegacyDeliveryImportSelection(input.displayedItems, input.selectedItems, query.source.items, query.source.materializesEpics);
     const result = await executeAuthoritativeCommand(context, 'import', {
       projectId: input.projectId,
       sourceGenerationId: input.sourceGenerationId,
@@ -484,7 +492,7 @@ export const deliveryAdapter = {
     });
     return {
       epicCount: sourceItemIndices.filter(index => query.source!.items.find(item => item.sourceIndex === index)?.type === 'Epic').length,
-      taskCount: result.resource.itemCount,
+      taskCount: result.resource.items.filter(item => item.type !== 'Epic').length,
     };
   },
 

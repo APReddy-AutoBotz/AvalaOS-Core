@@ -9,7 +9,8 @@ const command: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>
   schemaVersion: 'studio-delivery-command.v1', action: 'studio.approved-artifact.publish', organizationId: U[0], workspaceId: U[1],
   expectedAuthorizationVersion: 7, requestId: U[2], idempotencyKey: 'studio-delivery.publish.handler-1', payload: {
     artifactId: U[3], expectedArtifactVersionId: U[4], expectedAggregateVersion: 5, projectId: U[5],
-    workItems: [{ type: 'Task', title: 'Verify authority', description: '', acceptanceCriteria: [] }],
+    workItems: [{ type: 'Task', title: 'Verify authority', description: '', acceptanceCriteria: [],
+      requirementLinks: [{ sectionId: 'controls', sectionTitle: 'Controls', requirementText: 'NFR-1: The service must verify current authority.' }] }],
   },
 };
 const context: TenantContext = { userId: U[6], organizationId: U[0], workspaceId: U[1], authorizationVersion: 7, capabilities: ['studio.artifacts.publish'] };

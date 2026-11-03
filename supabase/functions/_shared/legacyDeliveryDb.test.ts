@@ -12,19 +12,19 @@ const main = async () => {
     }) as typeof fetch,
   };
   const args = { p_actor_id: '11111111-1111-4111-8111-111111111111', p_action: 'task.create' };
-  assert.deepEqual(await callLegacyDeliveryRpc(transport, 'legacy_delivery_apply_command', args), { ok: true });
-  assert.equal(requests[0].url, 'https://synthetic.invalid/rest/v1/rpc/legacy_delivery_apply_command');
+  assert.deepEqual(await callLegacyDeliveryRpc(transport, 'legacy_delivery_apply_requirement_command', args), { ok: true });
+  assert.equal(requests[0].url, 'https://synthetic.invalid/rest/v1/rpc/legacy_delivery_apply_requirement_command');
   assert.deepEqual(JSON.parse(requests[0].init?.body as string), args);
   assert.equal((requests[0].init?.headers as Record<string, string>).Authorization, 'Bearer test-only-service-role');
   assert.equal(requests[0].init?.redirect, 'error');
 
   await assert.rejects(callLegacyDeliveryRpc({ ...transport, fetcher: (async () => new Response('{}', { status: 500 })) as typeof fetch },
-    'legacy_delivery_query', {}), LegacyDeliveryPersistenceError);
+    'legacy_delivery_requirement_query', {}), LegacyDeliveryPersistenceError);
   await assert.rejects(callLegacyDeliveryRpc({ ...transport, fetcher: (async () => new Response('[]', {
     status: 200, headers: { 'Content-Length': '12500001' },
-  })) as typeof fetch }, 'legacy_delivery_query', {}), LegacyDeliveryPersistenceError);
+  })) as typeof fetch }, 'legacy_delivery_requirement_query', {}), LegacyDeliveryPersistenceError);
   await assert.rejects(callLegacyDeliveryRpc({ ...transport, fetcher: (async () => { throw new Error('network'); }) as typeof fetch },
-    'legacy_delivery_query', {}), LegacyDeliveryPersistenceError);
+    'legacy_delivery_requirement_query', {}), LegacyDeliveryPersistenceError);
   console.log('legacy delivery database transport: exact RPC path, bounded response and fail-closed errors passed');
 };
 
