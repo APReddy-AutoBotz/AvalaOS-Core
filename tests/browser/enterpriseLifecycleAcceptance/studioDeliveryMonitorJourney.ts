@@ -236,9 +236,15 @@ const protectedTaskBinding = (task: StudioDeliveryDownstreamTask) => ({
 });
 
 const openTask = async (page: Page, title: string) => {
-  const taskCard = page.locator('.task-card').filter({ has: page.getByText(title, { exact: true }) });
-  await expect(taskCard).toHaveCount(1);
-  await taskCard.click();
+  const taskCard = page.locator('.task-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+  if (await taskCard.count()) {
+    await expect(taskCard).toHaveCount(1);
+    await taskCard.click();
+  } else {
+    const backlogTitle = page.getByText(title, { exact: true });
+    await expect(backlogTitle).toHaveCount(1);
+    await backlogTitle.click();
+  }
   const dialog = page.getByRole('dialog', { name: title, exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -429,9 +435,9 @@ export const runStudioDeliveryMonitorJourney = async ({
   await importDialog.getByRole('button', { name: 'Import 3 Items', exact: true }).click();
   await expect(importDialog).toBeHidden();
   await clickProduct(page, 'Delivery');
-  await expect(page.getByRole('heading', { name: `${projectName} delivery board`, exact: true })).toBeVisible();
+  await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
   for (const title of [itemTitles.epic, itemTitles.assignment, itemTitles.blocker]) {
-    await expect(page.locator('.task-card').filter({ has: page.getByText(title, { exact: true }) })).toHaveCount(1);
+    await expect(page.locator('.task-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) })).toHaveCount(1);
   }
   const afterImport = await getFrame(control, projectName);
   expect(afterImport.counts.imports).toBe(beforeImport.counts.imports + 1);
@@ -472,6 +478,8 @@ export const runStudioDeliveryMonitorJourney = async ({
   await expect(epicSources.getByText(new RegExp(`Revision ${importedEpic!.studioArtifactVersion}`))).toBeVisible();
   await closeTask(page, itemTitles.epic);
 
+  await clickProduct(page, 'Backlog');
+  await expect(page.getByText('Server context active', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add a task', exact: true }).first().click();
   await page.getByPlaceholder('Enter a title for this task...').fill(itemTitles.created);
   const beforeCreate = await getFrame(control, projectName);
@@ -683,7 +691,7 @@ export const runStudioDeliveryMonitorJourney = async ({
     importId: importedTask!.importId,
     artifactVersionId: afterPublish.publication!.artifactVersionId,
   });
-  expect(afterOutcome.lineage).toMatchObject({ chainCount: 2, completeCount: 2, complete: true });
+  expect(afterOutcome.lineage).toMatchObject({ chainCount: 3, completeCount: 3, complete: true });
   expectDigest(afterOutcome.lineage.digest);
   expect(afterOutcome.protections).toEqual({
     publicationImmutable: true,

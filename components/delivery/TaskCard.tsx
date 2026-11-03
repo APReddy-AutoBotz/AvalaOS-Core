@@ -32,6 +32,7 @@ const statusKebabCase = (status: TaskStatus) => status.toLowerCase().replace(/ /
 
 const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    if (Number.isNaN(date.valueOf())) return null;
     const adjustedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
     return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(adjustedDate);
 };
@@ -41,6 +42,7 @@ const isOverdue = (task: Task) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const taskDate = new Date(task.dueDate);
+    if (Number.isNaN(taskDate.valueOf())) return false;
     taskDate.setHours(0, 0, 0, 0);
     return taskDate < today;
 };
@@ -68,6 +70,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     const primaryAssignee = visibleAssignees[0];
     const statusBadge = statusBadgeMap[task.status];
     const hasLineage = Boolean(task.sourceLineage);
+    const formattedDueDate = formatDate(task.dueDate);
 
     const handleDelete = (event: React.MouseEvent) => {
         event.stopPropagation();
@@ -118,7 +121,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             </div>
 
             <div>
-                <p className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">{task.title}</p>
+                <h3 className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">{task.title}</h3>
                 {task.description && (
                     <p className="mt-1 line-clamp-2 text-xs font-medium leading-[1.15rem] text-slate-600 dark:text-slate-400">{task.description}</p>
                 )}
@@ -175,7 +178,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 </div>
                 <div className={`flex shrink-0 items-center gap-1 text-[10px] font-bold ${overdue ? 'text-red-700 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}`}>
                     <ClockIcon className="h-3 w-3" />
-                    <span>{overdue ? 'Overdue' : 'Due'} {formatDate(task.dueDate)}</span>
+                    <span>{formattedDueDate ? `${overdue ? 'Overdue' : 'Due'} ${formattedDueDate}` : 'Date unassigned'}</span>
                 </div>
             </div>
         </div>

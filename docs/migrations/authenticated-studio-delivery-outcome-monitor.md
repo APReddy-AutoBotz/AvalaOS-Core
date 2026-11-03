@@ -65,3 +65,7 @@ For operational rollback, set all three workspace controls to `false` or remove 
 If an application release must be reverted, keep the migration installed and remove the new UI entry points and Edge routing from the older release. The database continues to fail closed because writes remain disabled unless the workspace control is explicitly enabled.
 
 Schema removal is forward-only. A corrective migration may remove unused routines and columns only after proving there are no publication, outcome, or pack snapshot rows and after reconciling the hosted marker chain. Any committed history requires retention rather than destructive rollback.
+
+### Project Delivery board verification
+
+On Desktop Chrome and Pixel 7, the connected disposable PostgreSQL journey confirmed one Epic and two Tasks and opened approved source details from the project board. A description and allowed status survived reload. The board displayed an unassigned date without inventing one. The separate Work Items entry remains available for publication and import. The fixture used synthetic approved content. Fresh extraction and provider-generated documents require the bounded nonproduction run.
