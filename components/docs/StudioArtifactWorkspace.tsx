@@ -379,7 +379,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         return;
       }
       clearArtifactProjection();
-      if (summaryResult.value && !id) {
+      if (summaryResult.value && !id && !artifactResult.unavailable) {
         setState('empty');
         setMessage(`No current ${type.toUpperCase()} document exists. Select exact sources and a compatible approved template to generate its first working draft.`);
         return;
