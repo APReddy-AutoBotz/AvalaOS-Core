@@ -10,15 +10,18 @@ import { deriveRequirementProposals, isApprovedRequirementLine } from '../../ser
 const link = { sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Reviewer must record a decision.' };
 
 assert.deepEqual(splitApprovedAcceptanceCriteria(' First criterion \n\nSecond criterion '), ['First criterion', 'Second criterion']);
-assert.equal(isApprovedWorkItemComplete({ type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [], requirementLinks: [link] }), true);
-assert.equal(isApprovedWorkItemComplete({ type: 'Task', title: ' ', description: '', acceptanceCriteria: [], requirementLinks: [link] }), false);
-assert.equal(isApprovedWorkItemComplete({ type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [''], requirementLinks: [link] }), false);
-assert.equal(isApprovedWorkItemComplete({ type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [], requirementLinks: [] }), false);
-assert.equal(isApprovedWorkItemComplete({ type: 'Task', title: 'x'.repeat(301), description: '', acceptanceCriteria: [], requirementLinks: [link] }), false);
-const draft = createApprovedWorkItemDraft({ type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: ['First'], requirementLinks: [link] });
+assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [], requirementLinks: [link] }), true);
+assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: ' ', description: '', acceptanceCriteria: [], requirementLinks: [link] }), false);
+assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [''], requirementLinks: [link] }), false);
+assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [], requirementLinks: [] }), false);
+assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'x'.repeat(301), description: '', acceptanceCriteria: [], requirementLinks: [link] }), false);
+const draft = createApprovedWorkItemDraft({ proposalRole: 'implementation', type: 'Story', title: 'Requirement-bound work', description: '', acceptanceCriteria: ['First'], requirementLinks: [link] });
 draft.acceptanceCriteriaText = 'First\nSecond\n';
 assert.equal(draft.acceptanceCriteriaText, 'First\nSecond\n');
 assert.deepEqual(normalizeApprovedWorkItemDraft(draft).acceptanceCriteria, ['First', 'Second']);
+draft.type = 'Task';
+assert.equal(normalizeApprovedWorkItemDraft(draft).proposalRole, 'implementation',
+  'an allowed Story-to-Task edit preserves immutable implementation identity');
 assert.equal(isApprovedRequirementLine('### Requirements'), false);
 assert.equal(isApprovedRequirementLine('Background information only.'), false);
 assert.equal(isApprovedRequirementLine('FR-1: Reviewer must record a decision.'), true);
@@ -56,6 +59,24 @@ const ambiguousAcceptance = deriveRequirementProposals({ sections: [{ id: 'requi
 assert.deepEqual(ambiguousAcceptance.proposals.map(item => item.type), ['Epic', 'Story', 'Story', 'Task', 'Task']);
 assert.match(ambiguousAcceptance.proposals[3].title, /Review unassigned acceptance criteria/u);
 assert.match(ambiguousAcceptance.proposals[3].description, /human must assign or retain/i);
+for (const proposal of ambiguousAcceptance.proposals.filter(item => item.proposalRole !== 'acceptance-review')) {
+  assert.ok(proposal.requirementLinks.every(link => !link.requirementText.startsWith('AC-1:')),
+    'only the review task can carry the unresolved criterion onto the board');
+}
+const explicitMissingTarget = deriveRequirementProposals({ sections: [{ id: 'requirements', title: 'Requirements', body: [
+  'FR-1: Reviewer must record a decision.',
+  'AC-2: For FR-2, the missing requirement is visible after reload.',
+].join('\n') }] });
+assert.equal(explicitMissingTarget.proposals[1].requirementLinks.length, 1,
+  'an explicit reference to a missing requirement cannot fall back to the only requirement in its section');
+assert.equal(explicitMissingTarget.proposals[2].proposalRole, 'acceptance-review');
+assert.ok(explicitMissingTarget.proposals[2].requirementLinks[0].requirementText.startsWith('AC-2:'));
+const duplicateIdentifier = deriveRequirementProposals({ sections: [
+  { id: 'one', title: 'First requirements', body: 'FR-1: Reviewer must record a decision.' },
+  { id: 'two', title: 'Second requirements', body: 'FR-1: Board must persist the decision.\nAC-1: For FR-1, the decision is visible.' },
+] });
+assert.equal(duplicateIdentifier.proposals.filter(item => item.proposalRole === 'acceptance-review').length, 1,
+  'an explicit reference to a duplicated requirement identifier remains for human review');
 const sharedAcceptance = deriveRequirementProposals({ sections: [
   { id: 'functional', title: 'Functional requirements', body: 'FR-1: Reviewer must decide.\nFR-2: Board must persist the decision.' },
   { id: 'acceptance', title: 'Acceptance criteria', body: 'AC-1: For FR-1 and FR-2, the persisted decision is visible.' },
@@ -64,6 +85,7 @@ assert.deepEqual(sharedAcceptance.proposals.map(item => item.type), ['Epic', 'St
 assert.ok(sharedAcceptance.proposals[1].requirementLinks.some(value => value.requirementText.startsWith('AC-1:')));
 assert.ok(sharedAcceptance.proposals[2].requirementLinks.some(value => value.requirementText.startsWith('AC-1:')),
   'one acceptance criterion that explicitly references two requirement IDs remains linked to both');
+assert.deepEqual(derived.proposals.map(item => item.proposalRole), ['coordination', 'implementation', 'implementation', 'verification']);
 const excludedSections = deriveRequirementProposals({ sections: [
   { id: 'requirements', title: 'Requirements', body: 'FR-1: Board must persist status.' },
   { id: 'openQuestionsAndProposals', title: 'Open questions and proposals', body: 'Open question: The design must choose an unspecified API?' },

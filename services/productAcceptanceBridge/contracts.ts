@@ -16,6 +16,7 @@ export type StudioDeliveryRequirementLink = {
 };
 
 export type StudioDeliveryApprovedWorkItem = {
+  proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification';
   type: 'Epic' | 'Story' | 'Task';
   title: string;
   description: string;
@@ -68,7 +69,9 @@ export type StudioDeliveryPublication = {
   artifactVersion: number;
   artifactContentHash: string;
   sourceProcessId: string;
-  sourceAssessmentId: string;
+  sourceAssessmentId: string | null;
+  sourceAssessmentCaseId?: string;
+  sourceAssessmentDecisionId?: string;
   governResolutionId: string;
   workItemCount: number;
   workItemDigest: string;
@@ -215,7 +218,9 @@ const iso = (value: unknown): string => {
 
 const decodeWorkItem = (value: unknown): StudioDeliveryApprovedWorkItem => {
   const row = record(value);
-  exact(row, ['type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks']);
+  exact(row, row.proposalRole === undefined
+    ? ['type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks']
+    : ['proposalRole', 'type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks']);
   if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 100
     || !Array.isArray(row.requirementLinks) || row.requirementLinks.length < 1 || row.requirementLinks.length > 100) invalid();
   const requirementLinks = (row.requirementLinks as unknown[]).map(value => {
@@ -229,6 +234,9 @@ const decodeWorkItem = (value: unknown): StudioDeliveryApprovedWorkItem => {
   });
   if (new Set(requirementLinks.map(link => `${link.sectionId}\u0000${link.requirementText}`)).size !== requirementLinks.length) invalid();
   return {
+    ...(row.proposalRole === undefined ? {} : {
+      proposalRole: oneOf(row.proposalRole, ['coordination', 'implementation', 'acceptance-review', 'verification'] as const),
+    }),
     type: oneOf(row.type, ['Epic', 'Story', 'Task'] as const),
     title: text(row.title, 300),
     description: text(row.description, 20_000, true),
@@ -308,15 +316,24 @@ export const decodeStudioDeliveryAssigneeQuery = (value: unknown): StudioDeliver
 
 const decodePublication = (value: unknown): StudioDeliveryPublication => {
   const row = record(value);
+  const hasCurrentLineage = Object.hasOwn(row, 'sourceAssessmentCaseId') || Object.hasOwn(row, 'sourceAssessmentDecisionId');
   exact(row, ['publicationId', 'documentGenerationId', 'projectId', 'artifactId', 'artifactVersionId', 'artifactVersion',
-    'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', 'governResolutionId', 'workItemCount', 'workItemDigest', 'publishedAt']);
+    'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineage
+      ? ['sourceAssessmentCaseId', 'sourceAssessmentDecisionId'] : []),
+    'governResolutionId', 'workItemCount', 'workItemDigest', 'publishedAt']);
   if (typeof row.artifactContentHash !== 'string' || !hashPattern.test(row.artifactContentHash)
-    || typeof row.workItemDigest !== 'string' || !digestPattern.test(row.workItemDigest)) invalid();
+    || typeof row.workItemDigest !== 'string' || !digestPattern.test(row.workItemDigest)
+    || row.sourceAssessmentId === null && !hasCurrentLineage) invalid();
+  const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
+  const currentLineage = hasCurrentLineage ? {
+    sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
+    sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
+  } : {};
   return {
     publicationId: id(row.publicationId), documentGenerationId: id(row.documentGenerationId), projectId: id(row.projectId),
     artifactId: id(row.artifactId), artifactVersionId: id(row.artifactVersionId), artifactVersion: positive(row.artifactVersion),
     artifactContentHash: row.artifactContentHash as string, sourceProcessId: id(row.sourceProcessId),
-    sourceAssessmentId: id(row.sourceAssessmentId), governResolutionId: id(row.governResolutionId),
+    sourceAssessmentId, ...currentLineage, governResolutionId: id(row.governResolutionId),
     workItemCount: positive(row.workItemCount, 100), workItemDigest: row.workItemDigest as string, publishedAt: iso(row.publishedAt),
   };
 };

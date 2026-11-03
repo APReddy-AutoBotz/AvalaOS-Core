@@ -177,6 +177,7 @@ const mapLegacyDeliveryLineage = (projection: LegacyDeliveryTaskProjection): Tas
     sourceEpicIndex: lineage.sourceEpicIndex,
     sourceEpicTitle: lineage.sourceEpicTitle,
     proposalOriginId: lineage.proposalOriginId ?? undefined,
+    proposalRole: lineage.proposalRole ?? undefined,
     studioArtifactId: lineage.studioArtifactId ?? undefined,
     studioArtifactVersionId: lineage.studioArtifactVersionId ?? undefined,
     studioArtifactVersion: lineage.studioArtifactVersion ?? undefined,

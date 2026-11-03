@@ -18,6 +18,7 @@ import { FIELD_REGISTRY } from '../../services/assessV2/registry';
 import { createUnknownAgentNecessityFacts, type CaseFact, type InteractionMode, type PrimitiveType } from '../../services/assessV2/types';
 import { ASSESS_V1_SCORE_VERSION } from '../../services/assessV1Compatibility';
 import AssessV2ReviewWorkspace from './AssessV2ReviewWorkspace';
+import type { CurrentAssessmentProject } from '../../services/assessV2/currentAssessmentProjectClient';
 import AssessV2EconomicsWorkspace from './AssessV2EconomicsWorkspace';
 import AssessApplicationPortfolioWorkspace from './AssessApplicationPortfolioWorkspace';
 import AssessSupportingDocumentIntake from './AssessSupportingDocumentIntake';
@@ -37,6 +38,7 @@ interface Props {
   v1Assessment: Assessment | null;
   captureMode?: boolean;
   onPresentationChange?: (presentation: CurrentAssessmentPresentation) => void;
+  onOpenStudio?: (project: CurrentAssessmentProject) => Promise<void>;
 }
 type DiscoveryState = 'waiting' | 'loading' | 'ready' | 'failed';
 
@@ -105,7 +107,7 @@ const sectionClass = 'rounded-2xl border border-slate-200 p-2 sm:p-4 dark:border
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-semibold dark:border-slate-700 dark:bg-slate-950';
 const list = (items: string[]) => items.length ? <ul className="mt-2 list-disc space-y-1 pl-2 text-sm font-semibold sm:pl-5">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="mt-2 text-sm text-slate-500">None recorded.</p>;
 
-export default function AssessV2Workspace({ processId, processName, processDescription, v1Assessment, captureMode = false, onPresentationChange }: Props) {
+export default function AssessV2Workspace({ processId, processName, processDescription, v1Assessment, captureMode = false, onPresentationChange, onOpenStudio }: Props) {
   const {
     tenantContext,
     sessionState,
@@ -346,7 +348,7 @@ export default function AssessV2Workspace({ processId, processName, processDescr
       <section className={sectionClass}><h4 className="font-black">Modernization dispositions</h4>{list(renderModel.modernization.map(item => `${item.assetId}: ${item.dispositions.join(', ')} - ${item.rationale.join(' ')}`))}</section>
       <div className="grid gap-4 lg:grid-cols-2"><section className={sectionClass}><h4 className="font-black">Claim-linked evidence</h4>{renderModel.evidenceAndAssumptions.evidence.length ? <ul className="mt-2 space-y-2 text-sm">{renderModel.evidenceAndAssumptions.evidence.map(item => <li key={item.id} className="rounded-lg bg-slate-50 p-2 dark:bg-slate-900"><p className="font-black">{item.claimIds.join(', ') || 'No claim selected'}</p><p className="mt-1">Source: {item.sourceType} | Submission: {item.status} | Review status: see Governed review | Owner: {item.owner || 'unassigned'}</p></li>)}</ul> : <p className="mt-2 text-sm text-slate-500">No evidence was recorded.</p>}<h4 className="mt-4 font-black">Evidence gaps</h4>{list(renderModel.evidenceAndAssumptions.gaps)}<h4 className="mt-4 font-black">Assumptions</h4>{list(renderModel.evidenceAndAssumptions.assumptions)}</section><section className={sectionClass}><h4 className="font-black">Alternatives considered</h4>{list(renderModel.alternativesConsidered)}<h4 className="mt-4 font-black">Open remediation actions</h4>{list(renderModel.openRemediationActions)}<h4 className="mt-4 font-black">What would change the decision</h4>{list(renderModel.whatWouldChangeDecision)}</section></div>
       <section className={sectionClass}><h4 className="font-black">Explicit non-claims</h4><div className="mt-2 space-y-1 text-sm font-semibold">{renderModel.nonClaims.map(item => { const copy = item === 'No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim' ? 'No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim is made.' : item; return <p key={item}>{copy}</p>; })}</div><p className="mt-4 text-xs font-semibold text-slate-500">Approval and Studio handoff eligibility are shown by Governed review and its action-specific controls below.</p><p className="mt-2 text-xs font-semibold text-slate-500">Finalizing this decision version does not itself approve it or create a downstream artifact.</p></section>
-      <AssessV2ReviewWorkspace initialCaseId={result?.case.id} onPresentationChange={handleReviewPresentationChange} />
+      <AssessV2ReviewWorkspace initialCaseId={result?.case.id} onPresentationChange={handleReviewPresentationChange} onOpenStudio={onOpenStudio} />
       {tenantContext && result?.case.id && result?.decision.id && <AssessV2EconomicsWorkspace tenantContext={tenantContext} caseId={result.case.id} decisionId={result.decision.id} />}
     </div>}
     <AssessApplicationPortfolioWorkspace tenantContext={tenantContext} readOnly={isReadOnly} offline={sessionState === 'offline'} captureMode={captureMode} />

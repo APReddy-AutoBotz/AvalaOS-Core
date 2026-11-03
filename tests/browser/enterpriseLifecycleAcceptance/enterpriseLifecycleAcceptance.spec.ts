@@ -872,7 +872,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (hasBoundaryFailure) throw boundaryFailure;
       return;
     }
-    if (!failed && !v2FullPrefixReproduction) {
+    if (!failed && !v2FullPrefixReproduction && process.env.CURRENT_ASSESSMENT_DELIVERY_FOCUSED !== 'true') {
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });
       expect(finalized).toMatchObject({
         journeyBinding: setup.journeyBinding,

@@ -73,7 +73,7 @@ export type StudioDeliveryDownstreamFrame = Readonly<{
     artifactId: string;
     artifactVersionId: string;
     sourceProcessId: string;
-    sourceAssessmentId: string;
+    sourceAssessmentId: string | null;
     workItemDigest: string;
     workItemCount: number;
   }> | null;

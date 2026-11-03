@@ -34,11 +34,11 @@ export type StudioApprovedArtifactPublishProps = {
 
 export type StudioDeliveryApprovedWorkItemDraft = Omit<StudioDeliveryApprovedWorkItem, 'acceptanceCriteria'> & { acceptanceCriteriaText: string };
 export const createApprovedWorkItemDraft = (item: StudioDeliveryApprovedWorkItem): StudioDeliveryApprovedWorkItemDraft => ({
-  type: item.type, title: item.title, description: item.description, acceptanceCriteriaText: item.acceptanceCriteria.join('\n'),
+  proposalRole: item.proposalRole, type: item.type, title: item.title, description: item.description, acceptanceCriteriaText: item.acceptanceCriteria.join('\n'),
   requirementLinks: item.requirementLinks,
 });
 export const normalizeApprovedWorkItemDraft = (item: StudioDeliveryApprovedWorkItemDraft): StudioDeliveryApprovedWorkItem => ({
-  type: item.type, title: item.title, description: item.description,
+  proposalRole: item.proposalRole, type: item.type, title: item.title, description: item.description,
   acceptanceCriteria: splitApprovedAcceptanceCriteria(item.acceptanceCriteriaText),
   requirementLinks: item.requirementLinks,
 });
@@ -47,6 +47,7 @@ const button = 'inline-flex min-h-10 items-center justify-center rounded-xl bord
 
 export const splitApprovedAcceptanceCriteria = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
 export const isApprovedWorkItemComplete = (item: StudioDeliveryApprovedWorkItem) => Boolean(item.title.trim())
+  && Boolean(item.proposalRole)
   && item.title.length <= 300 && item.description.length <= 20_000
   && item.acceptanceCriteria.length <= 100 && item.acceptanceCriteria.every(value => value.length > 0 && value.length <= 2_000)
   && item.requirementLinks.length > 0 && item.requirementLinks.length <= 100;
@@ -102,7 +103,7 @@ export default function StudioApprovedArtifactPublish({
     {error && <p role="alert" className="mt-3 rounded-xl border border-red-500 p-3 font-bold">{error}</p>}
     {message && <p role="status" className="mt-3 rounded-xl border border-emerald-500 p-3 font-bold">{message}</p>}
     <div className="mt-4 flex items-center justify-between rounded-xl bg-[var(--av-color-bg-subtle)] p-3 text-sm font-bold"><span>{derivation.requirementCount} approved requirement{derivation.requirementCount === 1 ? '' : 's'} produced {items.length} proposal{items.length === 1 ? '' : 's'}.</span><span>{selected.size} selected</span></div>
-    <div className="mt-4 space-y-4" data-testid="studio-approved-work-items">{items.map((item, index) => <fieldset key={index} data-testid="studio-approved-work-item" className="rounded-xl border border-[var(--av-color-border)] p-4">
+    <div className="mt-4 space-y-4" data-testid="studio-approved-work-items">{items.map((item, index) => <fieldset key={(item.proposalRole ?? 'legacy') + ':' + index} data-testid="studio-approved-work-item" className="rounded-xl border border-[var(--av-color-border)] p-4">
       <legend className="px-2 font-black">Proposal {index + 1}</legend>
       <label className="mb-3 flex items-center gap-2 text-sm font-black"><input type="checkbox" disabled={editingLocked} checked={selected.has(index)} onChange={() => setSelected(current => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })}/>Select for publication</label>
       <label className="block text-sm font-black">Type<select data-testid="studio-approved-work-item-type" disabled={editingLocked} className={field} value={item.type} onChange={event => change(index, { ...item, type: event.target.value as StudioDeliveryApprovedWorkItem['type'] })}><option>Epic</option><option>Story</option><option>Task</option></select></label>

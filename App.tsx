@@ -164,6 +164,7 @@ function App() {
     updateTaskSprint: deliveryUpdateTaskSprint,
     reorderTask: deliveryReorderTask,
     deleteTask: deliveryDeleteTask,
+    refresh: deliveryRefresh,
   } = useDelivery();
   const { processes, readState: processReadState } = useProcessService();
   const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, localRuntimeEnabled ? MOCK_TEAMS : [], { enabled: localRuntimeEnabled });
@@ -1286,6 +1287,10 @@ function App() {
         onBack={() => applyGuardedView(View.PROCESS_CATALOG)}
         onStartAssessment={(id) => { setSelectedProcessId(id); applyGuardedView(View.GUIDED_ASSESSMENT); }}
         onGenerateDocs={handleAssessToDocsHandoff}
+        onOpenCurrentStudio={async project => {
+          await deliveryRefresh();
+          applyGuardedView(View.DOCS_FORGE, { type: ScopeType.PROJECT, id: project.projectId, name: project.projectName });
+        }}
         captureMode={applicationPortfolioMarketingCapture}
       />;
     }

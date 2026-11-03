@@ -17,15 +17,23 @@ const publish: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>
   schemaVersion: 'studio-delivery-command.v1', action: 'studio.approved-artifact.publish', organizationId: U[0], workspaceId: U[1],
   expectedAuthorizationVersion: 7, requestId: U[2], idempotencyKey: 'studio-delivery.publish.contract-1',
   payload: { artifactId: U[3], expectedArtifactVersionId: U[4], expectedAggregateVersion: 5, projectId: U[5],
-    workItems: [{ type: 'Story', title: 'Publish governed work', description: 'Human-approved structured work.', acceptanceCriteria: ['Exact ancestry is retained.'],
+    workItems: [{ proposalRole: 'implementation', type: 'Story', title: 'Publish governed work', description: 'Human-approved structured work.', acceptanceCriteria: ['Exact ancestry is retained.'],
       requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Publication must retain exact ancestry.' }] }] },
 };
 const publication = { publicationId: U[6], documentGenerationId: U[7], projectId: U[5], artifactId: U[3], artifactVersionId: U[4],
   artifactVersion: 3, artifactContentHash: 'a'.repeat(64), sourceProcessId: U[8], sourceAssessmentId: U[9], governResolutionId: U[10],
   workItemCount: 1, workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T05:11:00Z' };
 assert.deepEqual(decodeStudioDeliveryCommand(publish), publish);
+const legacyReplay = { ...publish, payload: { ...publish.payload, workItems: publish.payload.workItems.map(({ proposalRole: _role, ...item }) => item) } };
+assert.deepEqual(decodeStudioDeliveryCommand(legacyReplay), legacyReplay,
+  'historical exact replay payloads remain decodable after stable roles are introduced');
 assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
   outcome: 'committed', receiptId: U[11], resource: publication }, publish).resource, publication);
+const nativePublication = { ...publication, sourceAssessmentId: null, sourceAssessmentCaseId: U[12], sourceAssessmentDecisionId: U[13] };
+assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: nativePublication }, publish).resource, nativePublication);
+assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: { ...publication, sourceAssessmentId: null } }, publish), StudioDeliveryContractError);
 assert.throws(() => decodeStudioDeliveryCommand({ ...publish, payload: { ...publish.payload, generatedFromProse: true } }), StudioDeliveryContractError);
 assert.throws(() => decodeStudioDeliveryCommand({ ...publish, payload: { ...publish.payload, workItems: [] } }), StudioDeliveryContractError);
 assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,

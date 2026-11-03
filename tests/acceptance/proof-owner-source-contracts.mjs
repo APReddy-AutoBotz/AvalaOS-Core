@@ -584,6 +584,21 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "process-evidence-delivery-origin",
     "sourceReference": "supabase/migrations/20261103104435_delivery_requirement_bound_proposals.sql",
     "selector": "CREATE OR REPLACE FUNCTION public.studio_delivery_proposal_origin("
+  },
+  {
+    "anchorId": "stable-requirement-proposal-role",
+    "sourceReference": "supabase/migrations/20261103170101_stable_requirement_proposal_identity.sql",
+    "selector": "CREATE FUNCTION public.studio_delivery_stable_proposal_origin("
+  },
+  {
+    "anchorId": "current-assessment-delivery-project",
+    "sourceReference": "supabase/migrations/20261103170102_current_assessment_delivery_project.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.assess_v2_current_delivery_project_ensure("
+  },
+  {
+    "anchorId": "process-evidence-live-permit",
+    "sourceReference": "supabase/migrations/20261103170103_process_evidence_live_permit.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_open_provider_run("
   }
 ]);
 
@@ -1852,7 +1867,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {
@@ -1970,7 +1988,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {
@@ -2495,7 +2516,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {
@@ -2535,7 +2559,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {
@@ -2575,7 +2602,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {
@@ -2615,7 +2645,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {
@@ -2655,7 +2688,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
       "process-evidence-studio-sdd",
-      "process-evidence-delivery-origin"
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit"
     ],
     "ownership": [
       {

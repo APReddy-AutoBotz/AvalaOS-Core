@@ -83,6 +83,7 @@ const projection: LegacyDeliveryTaskProjection = {
     sourceEpicIndex: 0,
     sourceEpicTitle: 'Govern intake',
     proposalOriginId: `sha256:${'b'.repeat(64)}`,
+    proposalRole: 'implementation',
     studioArtifactId: '99999999-9999-4999-8999-999999999991',
     studioArtifactVersionId: '99999999-9999-4999-8999-999999999992',
     studioArtifactVersion: 4,

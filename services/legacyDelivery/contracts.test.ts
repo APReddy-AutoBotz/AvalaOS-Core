@@ -44,6 +44,25 @@ const task: LegacyDeliveryTaskProjection = {
   createdAt: '2026-10-10T00:00:00Z',
   updatedAt: '2026-10-10T00:00:00Z',
 };
+const nativeLineage = {
+  schemaVersion: 'legacy-delivery-lineage.v1' as const,
+  importId: ids.request,
+  documentGenerationId: ids.source,
+  documentSourceDigest: digest,
+  sourceItemIndex: 0,
+  sourceProcessId: ids.source,
+  sourceAssessmentId: null,
+  sourceAssessmentCaseId: ids.project,
+  sourceAssessmentDecisionId: ids.task,
+  sourceEpicIndex: null,
+  sourceEpicTitle: null,
+  proposalOriginId: digest,
+  proposalRole: 'implementation' as const,
+  studioArtifactId: ids.project,
+  studioArtifactVersionId: ids.request,
+  studioArtifactVersion: 1,
+  requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Preserve exact lineage.' }],
+};
 const command: LegacyDeliveryCommandEnvelope<'task.create'> = {
   schemaVersion: 'legacy-delivery-command.v1',
   action: 'task.create',
@@ -96,6 +115,13 @@ const created = decodeLegacyDeliveryCommandSuccess({
   resource: task,
 }, command);
 assert.equal((created.resource as LegacyDeliveryTaskProjection).id, ids.task);
+assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: nativeLineage },
+}, command).resource as LegacyDeliveryTaskProjection).sourceLineage, nativeLineage);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentCaseId: undefined, sourceAssessmentDecisionId: undefined } },
+}, command), LegacyDeliveryContractError);
 const databaseTimestamp = '2026-10-10T04:22:33.123456+00:00';
 assert.equal((decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',

@@ -39,7 +39,7 @@ test('assessment scenario actor switches require and join the same evidence boun
   assert.match(scenarios,
     /await enterAs\(page, actor, settleActorTransitionEvidence\);/u);
   assert.match(scenarios,
-    /await enterAs\(page, setup\.actors\.approver, settleActorTransitionEvidence\);/u);
+    /await enterAs\(page, setup\.actors\.author, settleActorTransitionEvidence\);/u);
   const studioActors = [...scenarios.matchAll(
     /await enterStudioAs\(page, setup\.actors\.(approver|reviewer|author), settleActorTransitionEvidence\);/gu,
   )].map(match => match[1]);
@@ -50,7 +50,7 @@ test('assessment scenario actor switches require and join the same evidence boun
   assert.equal(directEntries.length, 9);
   assert.equal(directEntries.every(call => call.includes('settleActorTransitionEvidence')), true);
   const processEntries = [...scenarios.matchAll(/await enterProcessAs\([^;]+\);/gu)].map(match => match[0]);
-  assert.equal(processEntries.length, 3);
+  assert.equal(processEntries.length, 4);
   assert.equal(processEntries.every(call => call.includes('settleActorTransitionEvidence')), true);
   const invocation = aggregate.slice(
     aggregate.indexOf('const scenarioCases = await runAssessmentScenarioJourneys('),

@@ -78,10 +78,13 @@ export type LegacyDeliveryTaskLineage = {
   documentSourceDigest: string;
   sourceItemIndex: number;
   sourceProcessId: string;
-  sourceAssessmentId: string;
+  sourceAssessmentId: string | null;
+  sourceAssessmentCaseId?: string;
+  sourceAssessmentDecisionId?: string;
   sourceEpicIndex: number | null;
   sourceEpicTitle: string | null;
   proposalOriginId: string | null;
+  proposalRole: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | null;
   studioArtifactId: string | null;
   studioArtifactVersionId: string | null;
   studioArtifactVersion: number | null;
@@ -290,12 +293,16 @@ export const decodeLegacyDeliveryQuery = (value: unknown): LegacyDeliveryQueryRe
 const decodeLineage = (value: unknown): LegacyDeliveryTaskLineage | null => {
   if (value === null) return null;
   const row = record(value);
+  const hasCurrentLineage = Object.hasOwn(row, 'sourceAssessmentCaseId') || Object.hasOwn(row, 'sourceAssessmentDecisionId');
   exact(row, ['schemaVersion', 'importId', 'documentGenerationId', 'documentSourceDigest', 'sourceItemIndex',
-    'sourceProcessId', 'sourceAssessmentId', 'sourceEpicIndex', 'sourceEpicTitle', 'proposalOriginId',
+    'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineage ? ['sourceAssessmentCaseId', 'sourceAssessmentDecisionId'] : []),
+    'sourceEpicIndex', 'sourceEpicTitle', 'proposalOriginId', 'proposalRole',
     'studioArtifactId', 'studioArtifactVersionId', 'studioArtifactVersion', 'requirementLinks']);
   if (row.schemaVersion !== 'legacy-delivery-lineage.v1' || typeof row.documentSourceDigest !== 'string'
     || !digestPattern.test(row.documentSourceDigest) || !Array.isArray(row.requirementLinks) || row.requirementLinks.length > 100
-    || !(row.proposalOriginId === null || typeof row.proposalOriginId === 'string' && digestPattern.test(row.proposalOriginId))) invalid();
+    || !(row.proposalOriginId === null || typeof row.proposalOriginId === 'string' && digestPattern.test(row.proposalOriginId))
+    || !(row.proposalRole === null || ['coordination', 'implementation', 'acceptance-review', 'verification'].includes(String(row.proposalRole)))
+    || row.sourceAssessmentId === null && !hasCurrentLineage) invalid();
   const requirementLinks = (row.requirementLinks as unknown[]).map(value => {
     const link = record(value);
     exact(link, ['sectionId', 'sectionTitle', 'requirementText']);
@@ -311,10 +318,13 @@ const decodeLineage = (value: unknown): LegacyDeliveryTaskLineage | null => {
     || new Set(requirementLinks.map(link => `${link.sectionId}\u0000${link.requirementText}`)).size !== requirementLinks.length) invalid();
   return { schemaVersion: 'legacy-delivery-lineage.v1', importId: id(row.importId), documentGenerationId: id(row.documentGenerationId),
     documentSourceDigest: row.documentSourceDigest as string, sourceItemIndex: nonNegativeInteger(row.sourceItemIndex, 999),
-    sourceProcessId: id(row.sourceProcessId), sourceAssessmentId: id(row.sourceAssessmentId),
+    sourceProcessId: id(row.sourceProcessId), sourceAssessmentId: row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId),
+    ...(hasCurrentLineage ? { sourceAssessmentCaseId: id(row.sourceAssessmentCaseId), sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId) } : {}),
     sourceEpicIndex: row.sourceEpicIndex === null ? null : nonNegativeInteger(row.sourceEpicIndex, 999),
     sourceEpicTitle: nullableText(row.sourceEpicTitle, 300) as string | null,
-    proposalOriginId: row.proposalOriginId as string | null, studioArtifactId, studioArtifactVersionId, studioArtifactVersion, requirementLinks };
+    proposalOriginId: row.proposalOriginId as string | null,
+    proposalRole: row.proposalRole as LegacyDeliveryTaskLineage['proposalRole'],
+    studioArtifactId, studioArtifactVersionId, studioArtifactVersion, requirementLinks };
 };
 export const decodeLegacyDeliveryTaskProjection = (value: unknown): LegacyDeliveryTaskProjection => {
   const row = record(value);

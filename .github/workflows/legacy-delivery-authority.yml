@@ -56,6 +56,12 @@ jobs:
           node scripts/verifyLegacyDeliveryAuthorityEvidence.mjs /tmp/legacy-delivery-results.json
       - name: Persisted role, assignment and transition policy
         run: node scripts/legacyDeliveryRolePolicyPostgres.mjs
+      - name: Verify proposal identity across edits and populated upgrades
+        run: node scripts/stableRequirementProposalIdentityPostgres.mjs
+      - name: Publish from a fresh current assessment project
+        env:
+          CURRENT_ASSESSMENT_DELIVERY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
+        run: node scripts/currentAssessmentDeliveryProjectPostgres.mjs
       - name: Retain sanitized exact-case database evidence
         uses: actions/upload-artifact@v4
         with:
@@ -64,6 +70,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - run: npx playwright install --with-deps chromium
+      - name: Show the evaluated no-AI recommendation and operation boundaries
+        run: npx playwright test --config=playwright.assessment-recommendation-contrast.config.ts
       - name: Actual Delivery browser journey on desktop and Pixel 7
         run: node scripts/runLegacyDeliveryAuthorityBrowser.mjs
       - name: Retain sanitized connected browser evidence

@@ -39,6 +39,9 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20261019161723_local_real_backend_authenticated_acceptance.sql',
   '20261103103752_process_evidence_studio_sdd_flows.sql',
   '20261103104435_delivery_requirement_bound_proposals.sql',
+  '20261103170101_stable_requirement_proposal_identity.sql',
+  '20261103170102_current_assessment_delivery_project.sql',
+  '20261103170103_process_evidence_live_permit.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -57,5 +60,5 @@ export const assertPrCMigrationTail = migrationNames => {
 // spending allowance.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return '20261103104435';
+  return '20261103170103';
 };

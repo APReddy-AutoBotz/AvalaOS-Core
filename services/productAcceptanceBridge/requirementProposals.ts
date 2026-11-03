@@ -43,6 +43,12 @@ const explicitlyReferences = (line: string, identifier: string) => {
   return new RegExp(`(?:^|[^A-Z0-9])${variants}(?:$|[^A-Z0-9])`, 'iu').test(content);
 };
 
+const referencedRequirementIdentifiers = (line: string) => {
+  const content = line.replace(/^(?:[-*+]\s*|\d+[.)]\s*)?(?:REQ|BR|FR|NFR|AC)[-_ ]?\d+\s*[:.\-]\s*/iu, '');
+  return [...content.matchAll(/(?:^|[^A-Z0-9])((?:REQ|BR|FR|NFR)[-_ ]?\d+)(?=$|[^A-Z0-9])/giu)]
+    .map(match => match[1].toUpperCase().replace(/[-_ ]+/u, '-'));
+};
+
 const deliverable = (line: string) => {
   const value = displayRequirement(line).replace(/[.;:]$/u, '');
   const modal = value.match(/^(.*?)\s+(must|shall|required to|needs to)\s+(.+)$/iu);
@@ -94,32 +100,49 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
   };
 
   const usedAcceptance = new Set<StudioDeliveryRequirementLink>();
+  const deliverablesByIdentifier = new Map<string, StudioDeliveryRequirementLink[]>();
+  deliverableLinks.forEach(link => {
+    const identifier = requirementIdentifier(link.requirementText);
+    if (identifier) deliverablesByIdentifier.set(identifier, [...(deliverablesByIdentifier.get(identifier) ?? []), link]);
+  });
+  const explicitReferences = new Map(acceptanceLinks.map(candidate =>
+    [candidate, referencedRequirementIdentifiers(candidate.requirementText)] as const));
+  const explicitlyReferencedAcceptance = new Set(acceptanceLinks.filter(candidate =>
+    (explicitReferences.get(candidate)?.length ?? 0) > 0));
+  const globallyResolvedAcceptance = new Set(acceptanceLinks.filter(candidate => {
+    const references = explicitReferences.get(candidate) ?? [];
+    return references.length > 0 && references.every(reference => deliverablesByIdentifier.get(reference)?.length === 1);
+  }));
   const pairedAcceptance = deliverableLinks.map(link => {
     const identifier = requirementIdentifier(link.requirementText);
     const explicitlyLinked = identifier === null ? [] : acceptanceLinks.filter(candidate =>
-      explicitlyReferences(candidate.requirementText, identifier));
+      globallyResolvedAcceptance.has(candidate) && explicitlyReferences(candidate.requirementText, identifier));
     const sameSectionDeliverables = deliverableLinks.filter(candidate => candidate.sectionId === link.sectionId);
     const unambiguousSectionLinks = explicitlyLinked.length === 0 && sameSectionDeliverables.length === 1
-      ? acceptanceLinks.filter(candidate => !usedAcceptance.has(candidate) && candidate.sectionId === link.sectionId)
+      ? acceptanceLinks.filter(candidate => !usedAcceptance.has(candidate)
+        && !explicitlyReferencedAcceptance.has(candidate) && candidate.sectionId === link.sectionId)
       : [];
     const paired = explicitlyLinked.length > 0 ? explicitlyLinked : unambiguousSectionLinks;
     paired.forEach(candidate => usedAcceptance.add(candidate));
     return paired;
   });
 
+  const resolvedLinks = allLinks.filter(link => !isAcceptanceLink(link) || usedAcceptance.has(link));
   const proposals: StudioDeliveryApprovedWorkItem[] = [];
   const firstDeliverable = deliverable(deliverableLinks[0].requirementText);
   proposals.push({
+    proposalRole: 'coordination',
     type: 'Epic',
     title: title('Deliver outcome — ', firstDeliverable),
     description: `Coordinate ${deliverableLinks.length} approved deliverable${deliverableLinks.length === 1 ? '' : 's'}, beginning with “${firstDeliverable}”. Every included outcome remains linked to its exact approved requirement.`,
     acceptanceCriteria: deliverableLinks.map(link => `Delivered behavior satisfies: ${displayRequirement(link.requirementText)}`),
-    requirementLinks: allLinks,
+    requirementLinks: resolvedLinks,
   });
   deliverableLinks.forEach((link, index) => {
     const requirement = deliverable(link.requirementText);
     const linkedAcceptance = pairedAcceptance[index];
     proposals.push({
+      proposalRole: 'implementation',
       type: 'Story', title: title('Implement — ', requirement),
       description: `Deliver the approved behavior: ${displayRequirement(link.requirementText)}`,
       acceptanceCriteria: linkedAcceptance.length > 0
@@ -130,6 +153,7 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
   });
   const unassignedAcceptance = acceptanceLinks.filter(link => !usedAcceptance.has(link));
   if (unassignedAcceptance.length > 0) proposals.push({
+    proposalRole: 'acceptance-review',
     type: 'Task',
     title: title('Review unassigned acceptance criteria — ', displayRequirement(unassignedAcceptance[0].requirementText)),
     description: `${unassignedAcceptance.length} approved acceptance ${unassignedAcceptance.length === 1 ? 'criterion has' : 'criteria have'} no explicit or unambiguous requirement association. A human must assign or retain each criterion before confirmation.`,
@@ -137,13 +161,13 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
     requirementLinks: unassignedAcceptance,
   });
   proposals.push({
+    proposalRole: 'verification',
     type: 'Task',
     title: title('Verify outcome — ', firstDeliverable),
-    description: `Verify the delivered behavior against ${allLinks.length} exact approved requirement${allLinks.length === 1 ? '' : 's'}; do not infer missing technical design, policy, cost, or ROI.`,
-    acceptanceCriteria: acceptanceLinks.length > 0
-      ? acceptanceLinks.map(link => displayRequirement(link.requirementText))
-      : deliverableLinks.map(link => `Verified against: ${displayRequirement(link.requirementText)}`),
-    requirementLinks: allLinks,
+    description: `Verify the delivered behavior against the ${resolvedLinks.length} approved requirement and acceptance references listed below.`,
+    acceptanceCriteria: [...new Set(proposals.filter(item => item.proposalRole === 'implementation')
+      .flatMap(item => item.acceptanceCriteria))],
+    requirementLinks: resolvedLinks,
   });
 
   if (proposals.length > 100) return {

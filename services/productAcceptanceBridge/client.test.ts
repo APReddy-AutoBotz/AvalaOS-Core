@@ -14,7 +14,7 @@ import {
 const id = (n: number) => `ab000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const scope: StudioDeliveryScope = { actorId: id(1), organizationId: id(2).toUpperCase(), workspaceId: id(3).toUpperCase(), authorizationVersion: 7 };
 const payload = { artifactId: id(4), expectedArtifactVersionId: id(5), expectedAggregateVersion: 5, projectId: id(6),
-  workItems: [{ type: 'Task' as const, title: 'Requirement-bound task', description: 'Exact structured payload.', acceptanceCriteria: ['Bound to approved source'],
+  workItems: [{ proposalRole: 'implementation' as const, type: 'Task' as const, title: 'Requirement-bound task', description: 'Exact structured payload.', acceptanceCriteria: ['Bound to approved source'],
     requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Delivery must remain bound to the approved source.' }] }] };
 const success = (command: ReturnType<typeof buildStudioDeliveryCommand>) => ({ ok: true, schemaVersion: 'studio-delivery-command.v1', action: command.action,
   outcome: 'committed', receiptId: id(7), resource: { publicationId: id(8), documentGenerationId: id(9), projectId: id(6), artifactId: id(4),

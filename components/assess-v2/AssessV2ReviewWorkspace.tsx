@@ -18,10 +18,12 @@ import {
 import { ASSESS_V2_REVIEW_CAPABILITIES, type EvidenceAttestationOutcome, type ReviewResolution } from '../../services/assessV2ReviewClientContract';
 import { ASSESS_V2_CAPABILITIES } from '../../services/assessV2/capabilities';
 import type { CurrentAssessmentReviewPresentation } from '../../services/assessV2/currentAssessmentPresentation';
+import { ensureCurrentAssessmentProject, type CurrentAssessmentProject } from '../../services/assessV2/currentAssessmentProjectClient';
 
 interface Props {
   initialCaseId?: string;
   onPresentationChange?: (scopeKey: string, projection: CurrentAssessmentReviewPresentation | null) => void;
+  onOpenStudio?: (project: CurrentAssessmentProject) => Promise<void>;
 }
 type LoadState = 'loading' | 'ready' | 'empty' | 'failed';
 type CandidateState = 'idle' | 'loading' | 'ready' | 'empty' | 'failed';
@@ -34,7 +36,7 @@ const statusCopy: Record<AssessV2ReviewProjection['status'], string> = {
 };
 const outcomeCopy: Record<string, string> = { submitted: 'Evidence submitted', accepted: 'Evidence accepted', rejected: 'Evidence rejected', 'needs-more-information': 'Evidence needs information' };
 
-export default function AssessV2ReviewWorkspace({ initialCaseId, onPresentationChange }: Props) {
+export default function AssessV2ReviewWorkspace({ initialCaseId, onPresentationChange, onOpenStudio }: Props) {
   const { tenantContext, sessionState, assessV2OperationalState, handleAssessV2Boundary } = useOrganizationContext();
   const [queue, setQueue] = useState<AssessV2ReviewQueueItem[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState(initialCaseId ?? '');
@@ -235,6 +237,25 @@ export default function AssessV2ReviewWorkspace({ initialCaseId, onPresentationC
     if (!tenantContext || !review || !reviewRationale.trim()) { setMessage('Reviewer rationale is required for review resolution.'); return; }
     void commit(() => resolveAssessV2Review(tenantContext, review, resolution, reviewRationale.trim(), conditions.split('\n').map(item => item.trim()).filter(Boolean)), `Review resolution committed: ${statusCopy[resolution]}.`);
   };
+  const openStudio = async () => {
+    if (!tenantContext || !review || review.handoffStatus !== 'committed' || !onOpenStudio) return;
+    const projection = { scopeKey: viewKey, caseId: review.caseId, decisionId: review.decisionId };
+    const request = { sequence: ++actionSequenceRef.current, ...projection };
+    activeActionRef.current = request;
+    setBusy(true);
+    setMessage('Preparing the project for this approved assessment.');
+    try {
+      const project = await ensureCurrentAssessmentProject(tenantContext, review.caseId, review.decisionId);
+      if (!isActiveAction(request)) return;
+      await onOpenStudio(project);
+    } catch (error) {
+      if (!isActiveAction(request)) return;
+      handleAssessV2Boundary(error);
+      setMessage('The project could not be prepared. No compatibility assessment or project was created.');
+    } finally {
+      if (mountedRef.current && (activeActionRef.current === null || sameRequest(activeActionRef.current, request))) setBusy(false);
+    }
+  };
   const evidenceCoverage = useMemo(() => review ? review.requiredClaimIds.map(claimId => ({ claimId, accepted: review.evidence.some(item => item.status === 'accepted' && item.claimIds.includes(claimId)) })) : [], [review]);
   const visibleQueue = queueScopeKey === viewKey ? queue : [];
 
@@ -263,7 +284,7 @@ export default function AssessV2ReviewWorkspace({ initialCaseId, onPresentationC
 
       <section className={panel}><h4 className="font-black">Avala Govern action and control review</h4><p className="mt-1 text-xs text-slate-500">Categories are server-derived. Prohibitions and approval boundaries cannot be relaxed here.</p><div className="mt-3 grid gap-3 md:grid-cols-2"><div><h5 className="font-black">Action boundaries</h5><ul className="mt-2 space-y-1 text-sm">{review.actions.map(action => <li key={action.id}><strong>{action.category}</strong> · {action.label}</li>)}</ul></div><div><h5 className="font-black">Required controls</h5><ul className="mt-2 space-y-2 text-sm">{review.controls.map(control => <li key={control.controlId}><label className="font-semibold">{control.label ?? control.controlId}<select aria-label={`Disposition for ${control.label ?? control.controlId}`} value={controlStatuses[control.controlId] ?? control.status ?? 'unresolved'} onChange={event => setControlStatuses(current => ({ ...current, [control.controlId]: event.target.value as 'resolved' | 'conditionally-resolved' | 'unresolved' }))} className={input}><option value="unresolved">Unresolved</option><option value="resolved">Resolved</option><option value="conditionally-resolved">Conditionally resolved</option></select></label></li>)}</ul></div></div><label className="mt-3 block text-xs font-black">Govern rationale<textarea rows={2} value={governRationale} onChange={event => setGovernRationale(event.target.value)} className={input}/></label><button disabled={busy || review.status !== 'approved' || !governRationale.trim() || review.controls.some(control => (controlStatuses[control.controlId] ?? control.status ?? 'unresolved') !== 'resolved') || !can(ASSESS_V2_REVIEW_CAPABILITIES.governResolve)} onClick={() => tenantContext && void commit(() => resolveAssessV2Govern(tenantContext, review, governRationale.trim(), review.controls.map(control => ({ ...control, status: controlStatuses[control.controlId] ?? control.status ?? 'unresolved' }))), 'Govern resolution committed.' )} className="mt-3 rounded-lg bg-[#002C4B] px-3 py-2 text-sm font-black text-white disabled:opacity-50">Resolve Govern controls</button><p className="mt-2 text-sm font-black">Govern: {review.governStatus === 'resolved' ? 'Govern resolved' : 'Pending'}</p></section>
 
-      <section className={panel}><h4 className="font-black">Durable Avala Studio handoff</h4><p className="mt-1 text-sm">The server composes and atomically persists the governed source package. Browser-supplied handoff content is never accepted.</p><button disabled={busy || review.status !== 'approved' || review.governStatus !== 'resolved' || !can(ASSESS_V2_REVIEW_CAPABILITIES.studioHandoff)} onClick={() => tenantContext && void commit(() => handoffAssessV2Studio(tenantContext, review), 'Studio handoff committed.' )} className="mt-3 rounded-lg bg-[#ffbc03] px-3 py-2 text-sm font-black text-[#002C4B] disabled:opacity-50">Create durable Studio handoff</button><p className="mt-2 text-sm font-black">{review.handoffStatus === 'committed' ? `Handed off to Studio${review.handedOffAt ? ` · ${review.handedOffAt}` : ''}` : review.handoffStatus === 'ready' ? 'Ready for Studio handoff' : 'Studio handoff not ready'}</p></section>
+      <section className={panel}><h4 className="font-black">Durable Avala Studio handoff</h4><p className="mt-1 text-sm">The server composes and atomically persists the governed source package. Browser-supplied handoff content is never accepted.</p><button disabled={busy || review.status !== 'approved' || review.governStatus !== 'resolved' || !can(ASSESS_V2_REVIEW_CAPABILITIES.studioHandoff)} onClick={() => tenantContext && void commit(() => handoffAssessV2Studio(tenantContext, review), 'Studio handoff committed.' )} className="mt-3 rounded-lg bg-[#ffbc03] px-3 py-2 text-sm font-black text-[#002C4B] disabled:opacity-50">Create durable Studio handoff</button><p className="mt-2 text-sm font-black">{review.handoffStatus === 'committed' ? `Handed off to Studio${review.handedOffAt ? ` · ${review.handedOffAt}` : ''}` : review.handoffStatus === 'ready' ? 'Ready for Studio handoff' : 'Studio handoff not ready'}</p>{review.handoffStatus === 'committed' && onOpenStudio ? <button type="button" data-testid="open-current-assessment-studio" disabled={busy || !online || isReadOnly} onClick={() => void openStudio()} className="mt-3 rounded-lg bg-[#002C4B] px-3 py-2 text-sm font-black text-white disabled:opacity-50">Open Studio for this process</button> : null}</section>
     </div>}
   </section>;
 }
