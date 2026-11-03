@@ -50,7 +50,11 @@ async function repositoryClosures(root) {
     }
     closures.set(slug, entries);
   }
-  assert.equal(Object.keys(compared).length, 247);
+  assert.equal(Object.keys(compared).length, 252);
+  for (const slug of ['studio-artifact-command', 'enterprise-intelligence-command',
+    'enterprise-provider-lifecycle', 'enterprise-provider-lifecycle-authority', 'enterprise-provider-lifecycle-recovery']) {
+    assert.ok(closures.get(slug).some(entry => entry.repositoryRelative === 'services/mermaidFlowchart.ts'));
+  }
   assert.ok(closures.get('studio-artifact-command').some(entry =>
     entry.repositoryRelative === 'services/enterpriseIntelligence.ts'));
   assert.ok(closures.get('enterprise-intelligence-query').some(entry =>
@@ -191,7 +195,7 @@ async function main() {
     const success = await downloadAndVerifyAuthenticatedEdgeSources(config, {
       root, managementToken: fakeToken, fetchImpl, deployments,
     });
-    assert.deepEqual(success, { backendDigest, files: 247 });
+    assert.deepEqual(success, { backendDigest, files: 252 });
     for (const [negative, code] of [
       ['stale', 'BACKEND_SOURCE_FILE_MISMATCH'],
       ['missing', 'BACKEND_DEPENDENCY_CLOSURE_MISSING'],
@@ -214,7 +218,7 @@ async function main() {
     assert.deepEqual(await currentSourceSnapshot(root, sourceSnapshot), sourceSnapshot);
     passResult = {
       status: 'PASS', transport: 'multipart/form-data', loopbackDownloads: requests.length,
-      successfulClosures: 247, deepEnterpriseIntelligenceSourceVerified: true,
+      successfulClosures: 252, deepEnterpriseIntelligenceSourceVerified: true,
       deepLegacyContractsSourceVerified: true, staleSourceRejected: true,
       missingDependencyRejected: true, extraDependencyRejected: true,
       repositoryLayoutFunctions: 14, functionsLayoutFunctions: 3,

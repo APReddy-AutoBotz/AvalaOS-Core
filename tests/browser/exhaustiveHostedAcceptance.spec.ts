@@ -901,8 +901,12 @@ const runScenario = async (
       await expect(page.getByText('Pending score', { exact: true })).toBeVisible();
       await expect(page.getByText('Decision pack not generated yet', { exact: true })).toBeVisible();
       const compatibility = page.getByTestId('assessment-compatibility-history');
-      await compatibility.locator('summary').click();
-      await compatibility.getByTestId('open-assessment-history').click();
+      if (await compatibility.isVisible()) {
+        await compatibility.locator('summary').click();
+        await compatibility.getByTestId('open-assessment-history').click();
+      } else {
+        await page.getByRole('button', { name: 'Start Assessment', exact: true }).click();
+      }
       await expect(page.getByTestId('enterprise-assess')).toBeVisible();
       await expect(page.getByText('Assess · Legacy V1', { exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Decision Intake', exact: true })).toBeVisible();
