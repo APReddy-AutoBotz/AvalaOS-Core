@@ -174,7 +174,7 @@
     "scripts/runTranscriptFlowCoverage.mjs": "sha256:c0c50a83f8837f11d471414d227d01f6ef315e6aa55f61d82ac1017a5ad5d076",
     "scripts/runTranscriptFlowEvidence.mjs": "sha256:cbe9e7bd75384ba6cda6a5980a4ae40e93062c6f18f576d7ea83585fee77c8a5",
     "scripts/studioAcceptanceEvidence.mjs": "sha256:26c8357967ea2d5f465b8ca6f6646da00223e04bd7a4ca26aab3f2861f268b83",
-    "scripts/studioArtifactPostgresFixture.mjs": "sha256:355daabc969fb0b5ba31f57fa7d9bd837575240ba1b5a7795c697fcc96e4259e",
+    "scripts/studioArtifactPostgresFixture.mjs": "sha256:d06a964a3a92d2ccc20f54d191cb3136efd6d2f27db1086bda08c0e101418277",
     "scripts/studioHandoffPersonaArtifact.mjs": "sha256:6bb8fd5f82855fb6873c54e0072270a0a078de728013e615b80fa381be56e65d",
     "scripts/studioHandoffPersonaArtifact.test.mjs": "sha256:aff2c493514c743b160b704db44644a473d8a320c433e40d3d824a1468a7db77",
     "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",

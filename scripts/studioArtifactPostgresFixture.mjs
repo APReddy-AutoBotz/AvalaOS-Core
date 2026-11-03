@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import assert from 'node:assert/strict';
 
 const uuid = (n) => `97000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
