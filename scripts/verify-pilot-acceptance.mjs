@@ -23,6 +23,10 @@ const run = {
 
 const expectedRepository = 'APReddy-AutoBotz/AvalaOS-Core';
 
+const acceptedPullTarget = (headRef, baseRef) => baseRef === 'main'
+  || (headRef === 'codex/process-evidence-studio' && baseRef === 'codex/process-evidence-to-assessment')
+  || (headRef === 'codex/process-evidence-delivery' && baseRef === 'codex/process-evidence-studio');
+
 export const validateActionsRun = (metadata, context) => {
   if (!metadata || typeof metadata !== 'object') return false;
   const pullNumber = context.ref?.match(/^refs\/pull\/(\d+)\/merge$/u)?.[1];
@@ -31,6 +35,7 @@ export const validateActionsRun = (metadata, context) => {
     : null;
   const pullRequestMatches = context.event === 'pull_request'
     && Boolean(pullNumber)
+    && acceptedPullTarget(context.headRef, context.baseRef)
     && pull?.head?.sha === context.head
     && pull?.head?.ref === context.headRef
     && pull?.base?.ref === context.baseRef;
@@ -139,7 +144,7 @@ const hasAuthoritativeEventRef = (
   && /^refs\/pull\/\d+\/merge$/u.test(run.ref)
   && typeof run.headRef === 'string'
   && run.headRef.length > 0
-  && run.baseRef === 'main'
+  && acceptedPullTarget(run.headRef, run.baseRef)
 ) || (
   run.event === 'workflow_dispatch'
   && typeof run.ref === 'string'

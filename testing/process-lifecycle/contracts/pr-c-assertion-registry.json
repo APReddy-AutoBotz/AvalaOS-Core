@@ -533,7 +533,7 @@
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
-      "sha256": "af76b7b7c21d3af5a043f79a85fb97deb2c3e56136b1a0eaa1fa38d81e0e3333"
+      "sha256": "f9ae320f2bde66d676e0eaa29f3cd2a99b997ac55c4170b6b64e68c509c4926a"
     }
   },
   "assertions": [

@@ -3,8 +3,6 @@ import { tmpdir } from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 
 const externalServer = process.env.STUDIO_PR_B_EXTERNAL_SERVER === 'true';
-const browserPort = process.env.STUDIO_PR_B_BROWSER_PORT ?? '4197';
-const browserOrigin = `http://127.0.0.1:${browserPort}`;
 
 export default defineConfig({
   captureGitInfo: { commit: false, diff: false },
@@ -17,14 +15,14 @@ export default defineConfig({
   retries: 0,
   timeout: 90_000,
   reporter: 'line',
-  use: { baseURL: browserOrigin, trace: 'off', screenshot: 'off', video: 'off' },
+  use: { baseURL: 'http://127.0.0.1:4197', trace: 'off', screenshot: 'off', video: 'off' },
   projects: [
     { name: 'Desktop Chrome', use: { ...devices['Desktop Chrome'] } },
     { name: 'Pixel 7', use: { ...devices['Pixel 7'] } },
   ],
   webServer: externalServer ? undefined : {
     command: 'node tests/browser/studioPrB/server.mjs',
-    url: `${browserOrigin}/tests/browser/studioPrB/harness.html`,
+    url: 'http://127.0.0.1:4197/tests/browser/studioPrB/harness.html',
     reuseExistingServer: false,
     timeout: 120_000,
   },

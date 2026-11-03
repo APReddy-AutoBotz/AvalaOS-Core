@@ -673,6 +673,9 @@ DECLARE
   labels jsonb;
   current_section_key text;
   content_source_ids jsonb;
+  submitted_selected_source_ids jsonb;
+  submitted_covered_source_ids jsonb;
+  required_source_ids jsonb;
 BEGIN
   SELECT * INTO binding FROM public.studio_generation_section_refreshes WHERE attempt_id=p_attempt;
   SELECT * INTO attempt FROM public.studio_artifact_generation_attempts WHERE id=p_attempt;
@@ -699,8 +702,39 @@ BEGIN
   FROM(SELECT DISTINCT item.value->>'sourceVersionId' source_id
     FROM jsonb_array_elements(p_content->'sections')section_item(value)
     CROSS JOIN LATERAL jsonb_array_elements(section_item.value->'sourceAnchors')item(value))sources;
-  IF p_content#>'{coverage,selectedSourceVersionIds}' IS DISTINCT FROM content_source_ids
-     OR p_content#>'{coverage,coveredSourceVersionIds}' IS DISTINCT FROM content_source_ids THEN RETURN false;END IF;
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements(p_content#>'{coverage,selectedSourceVersionIds}')item(value)
+      WHERE jsonb_typeof(item.value)<>'string' OR(item.value#>>'{}')!~*'^[0-9a-f-]{36}$')
+     OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_content#>'{coverage,coveredSourceVersionIds}')item(value)
+      WHERE jsonb_typeof(item.value)<>'string' OR(item.value#>>'{}')!~*'^[0-9a-f-]{36}$')
+     OR(SELECT count(DISTINCT value) FROM jsonb_array_elements_text(p_content#>'{coverage,selectedSourceVersionIds}'))
+       <>jsonb_array_length(p_content#>'{coverage,selectedSourceVersionIds}')
+     OR(SELECT count(DISTINCT value) FROM jsonb_array_elements_text(p_content#>'{coverage,coveredSourceVersionIds}'))
+       <>jsonb_array_length(p_content#>'{coverage,coveredSourceVersionIds}') THEN RETURN false;END IF;
+  SELECT COALESCE(jsonb_agg(source_id ORDER BY source_id),'[]'::jsonb) INTO submitted_selected_source_ids
+  FROM(SELECT DISTINCT value source_id FROM jsonb_array_elements_text(p_content#>'{coverage,selectedSourceVersionIds}'))submitted;
+  SELECT COALESCE(jsonb_agg(source_id ORDER BY source_id),'[]'::jsonb) INTO submitted_covered_source_ids
+  FROM(SELECT DISTINCT value source_id FROM jsonb_array_elements_text(p_content#>'{coverage,coveredSourceVersionIds}'))submitted;
+  IF submitted_selected_source_ids IS DISTINCT FROM content_source_ids
+     OR submitted_covered_source_ids IS DISTINCT FROM content_source_ids THEN RETURN false;END IF;
+  IF p_attempt IS NULL THEN
+    SELECT COALESCE(jsonb_agg(source_id ORDER BY source_id),'[]'::jsonb) INTO required_source_ids
+    FROM(SELECT DISTINCT value source_id
+      FROM jsonb_array_elements_text(parent.content#>'{coverage,selectedSourceVersionIds}')
+      UNION
+      SELECT DISTINCT value source_id
+      FROM jsonb_array_elements_text(parent.content#>'{coverage,coveredSourceVersionIds}')
+      UNION
+      SELECT DISTINCT allowed.value->>'sourceVersionId' source_id
+      FROM public.studio_artifact_source_packages bound
+      CROSS JOIN LATERAL jsonb_array_elements(bound.anchor_manifest)allowed(value)
+      WHERE bound.id=parent.source_package_id AND bound.artifact_id=parent.artifact_id
+        AND bound.org_id=parent.org_id AND bound.workspace_id=parent.workspace_id
+        AND public.studio_pr_b_anchor_manifest_safe(bound.anchor_manifest)
+        AND bound.anchor_manifest_hash=public.enterprise_sha256_jsonb(bound.anchor_manifest)
+        AND bound.anchor_count=jsonb_array_length(bound.anchor_manifest))required
+    WHERE source_id IS NOT NULL;
+    IF required_source_ids IS DISTINCT FROM content_source_ids THEN RETURN false;END IF;
+  END IF;
   FOR section IN SELECT value FROM jsonb_array_elements(p_content->'sections') LOOP
     current_section_key:=COALESCE(section->>'id',section->>'key');
     IF jsonb_typeof(section)<>'object' OR NOT(section?&ARRAY['id','title','body','sourceAnchors','labels'])
@@ -722,7 +756,9 @@ BEGIN
        WHERE retained.artifact_version_id=parent.id AND retained.section_id=current_section_key;
       SELECT * INTO package FROM public.studio_artifact_source_packages candidate
        WHERE candidate.id=COALESCE(prior.source_package_id,parent.source_package_id)
-         AND candidate.artifact_id=attempt.artifact_id AND candidate.org_id=attempt.org_id AND candidate.workspace_id=attempt.workspace_id;
+         AND candidate.artifact_id=COALESCE(attempt.artifact_id,parent.artifact_id)
+         AND candidate.org_id=COALESCE(attempt.org_id,parent.org_id)
+         AND candidate.workspace_id=COALESCE(attempt.workspace_id,parent.workspace_id);
     END IF;
     IF package.id IS NULL OR NOT public.studio_pr_b_anchor_manifest_safe(package.anchor_manifest)
        OR package.anchor_manifest_hash IS DISTINCT FROM public.enterprise_sha256_jsonb(package.anchor_manifest)

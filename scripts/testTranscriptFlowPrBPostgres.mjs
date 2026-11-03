@@ -700,8 +700,8 @@ try{
   assert.equal(manualReconcileClaim.providerAllowed,false);assert.equal(manualReconcileClaim.reconcileOnly,true);assert.equal((await fresh.query(`SELECT state FROM public.studio_artifact_generation_attempts WHERE id=$1`,[manualGeneration.attemptId])).rows[0].state,'reconciling');
   emit('SOURCEPKG-PRB-001','DIRECT-MANUAL-EXCLUSIVE-UNION-REPLAY','direct-and-manual-planning-packages',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{direct:{id:directPackageId,hash:directPackage.sourcePackageHash,bundleVersionId:studioBundle.inputBundleVersionId,classification:'not_assessed',planningOnly:true},manual:{id:manualPackageId,hash:manualPackage.sourcePackageHash,manualBriefHash,classification:'not_assessed',planningOnly:true,receiptCommandType:manualReceipt.command_type,idempotentReplay:true,idempotencyConflictRejected:true,serverHashDerived:true,rawProjectionDisclosed:false,recoveryAfterClaim:true,artifactV2SelectedSources:0,artifactV2CoveredSources:0,workspaceSelectedSources:0,workspaceCoveredSources:0,workspaceParity:true}},template:{kind:'system',versionId:manualSystemTemplate.id,version:manualSystemTemplate.template_version,hash:manualSystemTemplate.template_hash},handoff:null,artifact:{directId:directArtifactId,manualId:manualArtifactId,manualAttemptId:manualGeneration.attemptId,manualAttemptState:'reconciling',settledReservationTimeoutRejected:true,secondProviderEffectAuthority:false}}));
   const generationArtifactId=generationPackage.artifact_id;
-  const generationRequest=async(templateKind,templateVersionId,label,selectedSectionIds=[])=>{
-    const selectors=(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_source_package_projection($1,$2,$3) projection`,[runtime.org,runtime.workspace,generationArtifactId])).rows[0].projection;
+  const generationRequest=async(templateKind,templateVersionId,label,selectedSectionIds=[],authorizedSelectors=null)=>{
+    const selectors=authorizedSelectors??(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_source_package_projection($1,$2,$3) projection`,[runtime.org,runtime.workspace,generationArtifactId])).rows[0].projection;
     assert.ok(selectors);assert.equal(selectors.artifactId,generationArtifactId);assert.equal(selectors.sourcePackageHash,generationPackage.package_hash);
     const command={actorId:runtime.requester,organizationId:runtime.org,workspaceId:runtime.workspace,requestId:runtime.uuid(7710+commandOrdinal++),idempotencyKey:`pr-b-generation-${label}`,authorizationVersion:runtime.authorizationVersions[runtime.requester],artifactId:selectors.artifactId,sourcePackageId:selectors.sourcePackageId,templateKind,templateVersionId,expectedAggregateVersion:Number(selectors.aggregateVersion),expectedCurrentVersionId:selectors.currentVersionId,expectedApprovedVersionId:selectors.currentApprovedVersionId,...(selectedSectionIds.length?{selectedSectionIds}: {})};
     return{command,selectors,result:(await fresh.query(`SELECT public.studio_artifact_generation_request_v2($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result};
@@ -765,6 +765,18 @@ try{
   assert.equal(Number((await fresh.query(`SELECT count(*) n FROM pr_b_gateway_effect_fixture WHERE provider_effect_key=$1`,[claimA.providerEffectKey])).rows[0].n),1);
   await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-operation-a',$4::jsonb)`,[generationA.result.attemptId,tokenA,claimA.executionFence,JSON.stringify(selectiveBaseContent)]);
   const finalizedA=(await fresh.query(`SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result`,[generationA.result.attemptId,tokenA,claimA.executionFence])).rows[0].result;assert.equal(finalizedA.stale,false);
+  await fresh.query('BEGIN');
+  try{
+    const ordinaryHead=(await fresh.query(`SELECT aggregate.aggregate_version,version.id version_id,version.version FROM public.studio_artifact_aggregates aggregate JOIN public.studio_artifact_versions version ON version.id=aggregate.current_version_id WHERE aggregate.id=$1`,[generationArtifactId])).rows[0];
+    const ordinaryHumanContent={...selectiveBaseContent,summary:'Ordinary human-authored descendant.',sections:selectiveBaseContent.sections.map(section=>section.id==='summary'?{...section,body:'Ordinary human edit of a non-composite generated parent.'}:section)};
+    const ordinaryHumanCommand={commandType:'studio.artifact.draft.revise',actorId:runtime.requester,organizationId:runtime.org,workspaceId:runtime.workspace,expectedAggregateVersion:Number(ordinaryHead.aggregate_version),expectedArtifactVersion:Number(ordinaryHead.version),requestId:runtime.uuid(7848),idempotencyKey:'pr-b-ordinary-generated-human-revision',authorizationVersion:runtime.authorizationVersions[runtime.requester],payload:{artifactId:generationArtifactId,parentVersionId:ordinaryHead.version_id,content:ordinaryHumanContent}};
+    const ordinaryHumanResult=(await fresh.query(`SELECT public.studio_artifact_command_claim($1::jsonb) result`,[JSON.stringify(ordinaryHumanCommand)])).rows[0].result;
+    assert.equal(ordinaryHumanResult.outcome,'committed');
+    const ordinaryHumanRevision=(await fresh.query(`SELECT id,parent_version_id,generation_attempt_id,source_package_id,source_package_hash FROM public.studio_artifact_versions WHERE artifact_id=$1 ORDER BY version DESC LIMIT 1`,[generationArtifactId])).rows[0];
+    assert.equal(ordinaryHumanRevision.parent_version_id,finalizedA.versionId);assert.equal(ordinaryHumanRevision.generation_attempt_id,null);assert.equal(ordinaryHumanRevision.source_package_id,generationPackage.id);assert.equal(ordinaryHumanRevision.source_package_hash,generationPackage.package_hash);
+    const ordinaryHumanBindings=(await fresh.query(`SELECT source_package_id,source_package_hash,generation_attempt_id,disposition FROM public.studio_artifact_section_source_bindings WHERE artifact_version_id=$1`,[ordinaryHumanRevision.id])).rows;
+    assert.equal(ordinaryHumanBindings.length,ordinaryHumanContent.sections.length);assert.ok(ordinaryHumanBindings.every(binding=>binding.source_package_id===generationPackage.id&&binding.source_package_hash===generationPackage.package_hash&&binding.generation_attempt_id===null&&binding.disposition==='human_edited'));
+  }finally{await fresh.query('ROLLBACK')}
   const assessedV2=(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_projection_v2($1,$2,$3) projection`,[runtime.org,runtime.workspace,generationArtifactId])).rows[0].projection;
   assert.deepEqual(Object.keys(assessedV2).sort(),['aggregateVersion','ancestry','approval','artifactType','assessmentLabel','contractVersion','currentApprovedVersion','currentVersion','id','lifecycle','planningLabel','readOnly','review','sections','sourcePackage','template','versions'].sort());
   assert.deepEqual(Object.keys(assessedV2.ancestry).sort(),['assessmentLabel','caseId','contractVersion','decisionId','decisionVersion','governResolutionId','organizationId','planningLabel','reviewResolutionId','reviewSchemaVersion','reviewSequence','ruleSetVersion','sourceCaseVersion','sourceCaseVersionId','sourceMode','sourcePackageHash','sourcePackageId','sourcePackageVersion','sourceSchemaVersion','studioHandoffId','studioInputBundleId','studioInputBundleVersion','studioInputBundleVersionId','workspaceId'].sort());
@@ -805,9 +817,10 @@ try{
     {...selectiveSuccessorContent.sections[2],body:'flowchart TD\nA[Original] --> C[Validated refresh]'},
   ]};
   let droppedSourceAttemptId=null;
+  const droppedSourceSelectors=(await asAuthenticated(fresh,runtime.requester,`SELECT public.studio_artifact_source_package_projection($1,$2,$3) projection`,[runtime.org,runtime.workspace,generationArtifactId])).rows[0].projection;
   await fresh.query('BEGIN');
   try{
-    const droppedSourceGeneration=await generationRequest('tenant',approvedTemplate.id,'selected-dropped-source',['asIsFlow']);
+    const droppedSourceGeneration=await generationRequest('tenant',approvedTemplate.id,'selected-dropped-source',['asIsFlow'],droppedSourceSelectors);
     droppedSourceAttemptId=droppedSourceGeneration.result.attemptId;
     const droppedSourceToken=runtime.uuid(7723),droppedSourceClaim=(await fresh.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[droppedSourceAttemptId,droppedSourceToken])).rows[0].result;
     await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-selective-dropped-source',$4::jsonb)`,[droppedSourceAttemptId,droppedSourceToken,droppedSourceClaim.executionFence,JSON.stringify(selectiveCandidate)]);
@@ -862,9 +875,16 @@ try{
     const command={commandType,actorId:actor,organizationId:runtime.org,workspaceId:runtime.workspace,expectedAggregateVersion:Number(head.aggregate_version),expectedArtifactVersion:Number(head.version),requestId:runtime.uuid(7850+humanCommandOrdinal++),idempotencyKey:`pr-b-selected-human-${label}`,authorizationVersion:runtime.authorizationVersions[actor],payload:{artifactId:generationArtifactId,...payload(head)}};
     return(await fresh.query(`SELECT public.studio_artifact_command_claim($1::jsonb) result`,[JSON.stringify(command)])).rows[0].result;
   };
+  const omittedHumanSourceId=successorSourceIds.find(sourceId=>sourceId!==assessedAnchor.sourceVersionId)??successorSourceIds.at(-1);
+  const droppedHumanSections=selectiveVersion.content.sections.map(section=>({...section,sourceAnchors:section.sourceAnchors.filter(anchor=>anchor.sourceVersionId!==omittedHumanSourceId)}));
+  const droppedHumanSourceIds=[...new Set(droppedHumanSections.flatMap(section=>section.sourceAnchors.map(anchor=>anchor.sourceVersionId)))].sort();
+  const droppedHumanCoverageContent={...selectiveVersion.content,sections:droppedHumanSections,coverage:{selectedSourceVersionIds:droppedHumanSourceIds,coveredSourceVersionIds:droppedHumanSourceIds,complete:true}};
+  const headBeforeDroppedHumanCoverage=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id FROM public.studio_artifact_aggregates WHERE id=$1`,[generationArtifactId])).rows[0];
+  await assert.rejects(humanArtifactCommand('studio.artifact.draft.revise',runtime.requester,head=>({parentVersionId:head.version_id,content:droppedHumanCoverageContent}),'dropped-source-coverage'),/STUDIO_STRUCTURED_CONTENT_INVALID/);
+  assert.deepEqual((await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id FROM public.studio_artifact_aggregates WHERE id=$1`,[generationArtifactId])).rows[0],headBeforeDroppedHumanCoverage);
   const invalidRetargetedHumanContent={...selectiveVersion.content,sections:selectiveVersion.content.sections.map(section=>section.id==='summary'?{...section,sourceAnchors:[successorStudioAnchor]}:section)};
   await assert.rejects(humanArtifactCommand('studio.artifact.draft.revise',runtime.requester,head=>({parentVersionId:head.version_id,content:invalidRetargetedHumanContent}),'invalid-retarget'),/STUDIO_STRUCTURED_CONTENT_INVALID/);
-  const humanRevisionContent={...selectiveVersion.content,summary:'Human-reviewed mixed-source revision.',sections:[
+  const humanRevisionContent={...selectiveVersion.content,summary:'Human-reviewed mixed-source revision.',coverage:{selectedSourceVersionIds:[...selectiveVersion.content.coverage.selectedSourceVersionIds].reverse(),coveredSourceVersionIds:[...selectiveVersion.content.coverage.coveredSourceVersionIds],complete:true},sections:[
     ...selectiveVersion.content.sections.map(section=>section.id==='summary'?{...section,body:'Human edit retaining the original carried source binding.'}:section),
     {id:'decisionNotes',title:'Decision notes',body:'New human-authored section grounded in the current successor package.',sourceAnchors:[successorStudioAnchor],labels:['human_authored']},
   ]};
@@ -887,11 +907,11 @@ try{
   const selectiveFinalizeReplay=(await fresh.query(`SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result`,[selectiveGeneration.result.attemptId,selectiveToken,selectiveClaim.executionFence])).rows[0].result;
   assert.equal(selectiveFinalizeReplay.outcome,'replayed');assert.equal(selectiveFinalizeReplay.versionId,finalizedSelective.versionId);
   assert.equal(Number((await fresh.query(`SELECT count(*) n FROM public.studio_artifact_versions WHERE generation_attempt_id=$1`,[selectiveGeneration.result.attemptId])).rows[0].n),1);
-  console.log('STUDIO_REFRESH_ASSERTION',JSON.stringify({testId:'STUDIO-REFRESH-001',assertionId:'SELECTED-SECTIONS-ATOMIC-CAS-LINEAGE-REPLAY',result:'passed',selectedSectionIds,carriedSectionIds:['summary'],candidateRetained:true,intermediateHeadExposure:false,staleCasHeadUnchanged:true,replayed:true,humanRevisionReloaded:true,humanRevisionApproved:true}));
+  console.log('STUDIO_REFRESH_ASSERTION',JSON.stringify({testId:'STUDIO-REFRESH-001',assertionId:'SELECTED-SECTIONS-ATOMIC-CAS-LINEAGE-REPLAY',result:'passed',selectedSectionIds,carriedSectionIds:['summary'],candidateRetained:true,intermediateHeadExposure:false,staleCasHeadUnchanged:true,replayed:true,droppedHumanCoverageRejected:true,humanRevisionReloaded:true,humanRevisionApproved:true}));
 
   const generationB=await generationRequest('tenant',approvedTemplate.id,'after-stage-loss');const tokenB1=runtime.uuid(7730);
   const claimB1=(await fresh.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[generationB.result.attemptId,tokenB1])).rows[0].result;await gatewayEffect(claimB1.providerEffectKey);
-  await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-operation-b',$4::jsonb)`,[generationB.result.attemptId,tokenB1,claimB1.executionFence,JSON.stringify(structuredContent('Recovered staged response',[assessedAnchor],['template_required']))]);
+  await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-operation-b',$4::jsonb)`,[generationB.result.attemptId,tokenB1,claimB1.executionFence,JSON.stringify(structuredContent('Recovered staged response',successorAnchors,['template_required']))]);
   const postEffectFailureSnapshot=async()=>(await fresh.query(`SELECT jsonb_build_object('state',attempt.state,'failureCode',attempt.failure_code,'executionToken',attempt.execution_token,'executionFence',attempt.execution_fence,'leaseExpiresAt',attempt.execution_lease_expires_at,'responseHash',attempt.response_hash,'completedAt',attempt.completed_at) attempt,
     (SELECT jsonb_build_object('id',staged.id,'executionToken',staged.execution_token,'executionFence',staged.execution_fence,'responseHash',staged.response_hash,'providerOperationId',staged.provider_operation_id) FROM public.studio_generation_staged_responses staged WHERE staged.attempt_id=attempt.id) staged,
     (SELECT count(*)::int FROM public.privileged_audit_events WHERE action='studio.artifact.generation.fail.v2' AND resource_id=attempt.id) audits,
@@ -911,7 +931,7 @@ try{
 
   const generationC=await generationRequest('tenant',approvedTemplate.id,'template-stale');const tokenC=runtime.uuid(7740);
   const claimC=(await fresh.query(`SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result`,[generationC.result.attemptId,tokenC])).rows[0].result;await gatewayEffect(claimC.providerEffectKey);
-  await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-operation-c',$4::jsonb)`,[generationC.result.attemptId,tokenC,claimC.executionFence,JSON.stringify(structuredContent('Must remain stale history',[assessedAnchor],['template_required']))]);
+  await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,'synthetic-operation-c',$4::jsonb)`,[generationC.result.attemptId,tokenC,claimC.executionFence,JSON.stringify(structuredContent('Must remain stale history',successorAnchors,['template_required']))]);
   await templateCommand('studio.template.replace',runtime.approver,1,{templateId:tenantTemplateId,templateVersionId:approvedTemplate.id,replacementTemplateId,replacementTemplateVersionId:replacementTemplate.id,rationale:'Synthetic later approved replacement'},'replace');
   const headsBeforeStale=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id FROM public.studio_artifact_aggregates WHERE id=$1`,[generationArtifactId])).rows[0];
   const finalizedC=(await fresh.query(`SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result`,[generationC.result.attemptId,tokenC,claimC.executionFence])).rows[0].result;assert.equal(finalizedC.stale,true);

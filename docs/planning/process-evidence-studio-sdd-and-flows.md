@@ -27,13 +27,13 @@ Older BRD, FRD, PDD, SDD, and flow-less `studio-artifact-1` content remains read
 
 ## Verification and proof boundary
 
-Focused source-contract tests cover provider instructions, valid Mermaid flow output with one edge per line, unsafe/ambiguous flow rejection, legacy document readability, strict decoding, selected-section command bounds, exact successor-package selectors, compatibility command shape, and removal of browser-side merge authority. The full migration chain and populated legacy Studio/Delivery/Monitor fixture passed on disposable loopback PostgreSQL 16. The atomic selective-finalization and changed-source scenarios, required merge gates and authorized nonproduction provider run remain separately reported controller-owned gates until their commands complete. Mocked and deterministic tests are not evidence that a real provider generated all four document types.
+Focused source-contract tests cover provider instructions, valid Mermaid flow output with one edge per line, unsafe/ambiguous flow rejection, legacy document readability, strict decoding, selected-section command bounds, exact successor-package selectors, compatibility command shape, and removal of browser-side merge authority. The full migration chain and populated legacy Studio/Delivery/Monitor fixture passed on disposable loopback PostgreSQL 16. On disposable PostgreSQL 16, STUDIO-REFRESH-001 exercised the selected refresh, carried source, subsequent human edit, reload and independent approval. STUDIO-REFRESH-002 and STUDIO-REFRESH-003 exercised source adoption and a second independently approved Assess handoff onto the same document. The provider run requires a separately bound workspace and permit. Mocked and deterministic tests are not evidence that a real provider generated all four document types.
 
 ## Review checks for the stacked change
 
 The same nonproduction pull-request checks used for main also run when the base is either milestone branch. Only the pull-request branch filters change. Hosted actions, push triggers, manual activation, protected environments and the established actor separation retain their existing controls.
 
-Executed locally: the 108-migration PostgreSQL 16 source replay and authenticated exercise replay passed on the isolated cluster. The ordinary structured editor persisted edits to SDD text and both flows on Desktop Chrome and Pixel 7 with fixture transport. BRD, PDD and FRD keep their distinct templates. Fresh provider output for each of BRD, PDD, FRD and SDD is still unverified.
+Executed locally: the 108-migration PostgreSQL 16 source replay and authenticated exercise replay passed on the isolated cluster. The ordinary structured editor persisted edits to SDD text and both flows on Desktop Chrome and Pixel 7 with fixture transport. The refresh selector, switching from BRD to PDD, and exact-document reload also passed on both devices. BRD, PDD and FRD keep their distinct templates. Fresh provider output for each of BRD, PDD, FRD and SDD is still unverified.
 
 ## Safe rollback
 

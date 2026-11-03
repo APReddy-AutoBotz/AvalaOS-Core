@@ -132,7 +132,7 @@ export const browserModeByFlag = new Map([
   }],
   ['--studio-pr-b', {
     label: 'Governed multi-source Studio PR B',
-    port: process.env.STUDIO_PR_B_BROWSER_PORT ?? '4197',
+    port: '4197',
     config: 'playwright.studio-pr-b.config.ts',
     readinessPath: '/tests/browser/studioPrB/harness.html',
     serverCommand: 'preview',
@@ -140,7 +140,6 @@ export const browserModeByFlag = new Map([
     viteConfig: 'vite.studio-pr-b.config.ts',
     playwrightEnvironment: {
       STUDIO_PR_B_EXTERNAL_SERVER: 'true',
-      STUDIO_PR_B_BROWSER_PORT: process.env.STUDIO_PR_B_BROWSER_PORT ?? '4197',
     },
   }],
   ['--studio-private-artifacts', {

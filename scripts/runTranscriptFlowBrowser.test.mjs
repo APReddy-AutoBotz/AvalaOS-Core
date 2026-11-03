@@ -820,7 +820,6 @@ test('Studio PR B mode builds its dedicated harness with the retained Vite confi
     viteConfig: 'vite.studio-pr-b.config.ts',
     playwrightEnvironment: {
       STUDIO_PR_B_EXTERNAL_SERVER: 'true',
-      STUDIO_PR_B_BROWSER_PORT: '4197',
     },
   });
 
@@ -869,7 +868,6 @@ test('Studio PR B mode builds its dedicated harness with the retained Vite confi
   assert.ok(calls[1].arguments_.includes('vite.studio-pr-b.config.ts'));
   assert.ok(calls[2].arguments_.includes('--config=playwright.studio-pr-b.config.ts'));
   assert.equal(calls[2].options.env.STUDIO_PR_B_EXTERNAL_SERVER, 'true');
-  assert.equal(calls[2].options.env.STUDIO_PR_B_BROWSER_PORT, '4197');
   assert.equal(calls[2].options.env.HARNESS_SENTINEL, 'preserved');
   assert.equal(server.wasKilled, true);
 });

@@ -74,6 +74,15 @@ const verifiedContext = {
   head,
 };
 assert.equal(validateActionsRun(verifiedRun, verifiedContext), true);
+for (const [headRef, baseRef, accepted] of [
+  ['codex/process-evidence-studio', 'codex/process-evidence-to-assessment', true],
+  ['codex/process-evidence-delivery', 'codex/process-evidence-studio', true],
+  ['unrelated', 'codex/process-evidence-studio', false],
+  ['codex/process-evidence-delivery', 'unrelated', false],
+]) {
+  const metadata = { ...verifiedRun, pull_requests: [{ number: 226, head: { sha: head, ref: headRef }, base: { ref: baseRef } }] };
+  assert.equal(validateActionsRun(metadata, { ...verifiedContext, headRef, baseRef }), accepted);
+}
 const oidcClaims = {
   iss: 'https://token.actions.githubusercontent.com',
   aud: 'avalaos-pilot-acceptance',
