@@ -159,7 +159,9 @@ const createAndFinalizeDecision = async (
 };
 
 const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetup,
+  variant: 'low-suitability' | 'strong-automation',
   settleActorTransitionEvidence: () => Promise<void>) => {
+  const approvedRequirement = `REQ-SCENARIO-${variant === 'low-suitability' ? 'LOW' : 'STRONG'}: Delivery must preserve the finalized scenario policy and exact source lineage in downstream work.`;
   await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
   let review = page.getByTestId('assess-v2-review-workspace');
   await selectReviewer(page, setup.actors.reviewer);
@@ -209,6 +211,11 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await selectExactStudioTemplate(template, setup.studioTemplate);
   await studio.getByRole('button', { name: 'Generate governed package draft', exact: true }).click();
   await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
+  await studio.getByRole('button', { name: 'Add section', exact: true }).click();
+  await studio.getByLabel('Section title', { exact: true }).fill('Delivery requirements');
+  await studio.getByLabel('Section body', { exact: true }).fill(approvedRequirement);
+  await studio.getByRole('button', { name: 'Commit immutable revision', exact: true }).click();
+  await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
   await commitStudioArtifactCommand(
     page,
     'studio.artifact.review.submit',
@@ -239,6 +246,8 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     () => page.getByRole('button', { name: 'Final approve', exact: true }).click(),
     'Approved committed.',
   );
+  await studio.getByText('Advanced structured content', { exact: true }).click();
+  await expect(studio.locator('pre')).toContainText(approvedRequirement);
 };
 
 const countDelta = (before: StudioDeliveryDownstreamFrame, after: StudioDeliveryDownstreamFrame) => Object.fromEntries(
@@ -272,12 +281,16 @@ const runScenario = async (
     expect(writeDecisions[0].approvalBoundActions).toHaveLength(0);
     expect(writeDecisions[0].prohibitedActions).toHaveLength(0);
   }
-  await approveGovernStudio(page, setup, settleActorTransitionEvidence);
-  await control('/control/bind-delivery-project-source', { projectName });
+  await approveGovernStudio(page, setup, variant, settleActorTransitionEvidence);
+  const publicationBinding = await control<Readonly<{ artifact: Readonly<{ id: string; versionId: string }> }>>(
+    '/control/bind-delivery-project-source', { projectName },
+  );
   await enterAs(page, setup.actors.approver, settleActorTransitionEvidence);
   await selectProjectScope(page, setup.deliveryProject.name);
   await clickProduct(page, 'Studio');
+  await page.getByLabel('Governed artifact', { exact: true }).selectOption(publicationBinding.artifact.id);
   const publisher = page.getByTestId('studio-approved-artifact-publish');
+  await expect(publisher.getByText(publicationBinding.artifact.versionId, { exact: false })).toBeVisible();
   const scenarioItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
   const scenarioProposalCount = await scenarioItems.count();
   expect(scenarioProposalCount).toBeGreaterThan(0);

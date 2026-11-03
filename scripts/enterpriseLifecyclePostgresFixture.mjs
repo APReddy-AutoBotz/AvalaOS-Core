@@ -1700,7 +1700,17 @@ export async function createEnterpriseLifecycleFixture({
             WHERE id=$1 AND org_id=$4 AND workspace_id=$5 AND source_process_id=$6 RETURNING id`,
           [setup.projectId,source.assessment_id,ids.author,ids.organization,ids.workspace,setup.processId])).rows[0];
           if (!project) return json({ error: 'PROJECT_SOURCE_MISMATCH' },409,cors);
-          return json({ bound: true,project:{id:project.id},source:{processId:setup.processId,assessmentId:source.assessment_id} },200,cors);
+          const artifacts = (await db.query(`SELECT artifact.id,version.id version_id
+            FROM public.studio_artifact_aggregates artifact
+            JOIN public.assess_v2_cases assessed ON assessed.id=artifact.case_id
+            JOIN public.studio_artifact_versions version
+              ON version.id=artifact.current_version_id AND version.artifact_id=artifact.id
+            WHERE assessed.process_id=$1 AND artifact.org_id=$2 AND artifact.workspace_id=$3
+              AND version.lifecycle='approved'
+            ORDER BY artifact.updated_at DESC,artifact.id`, [setup.processId,ids.organization,ids.workspace])).rows;
+          if (artifacts.length !== 1) return json({ error: artifacts.length ? 'STUDIO_ARTIFACT_AMBIGUOUS' : 'STUDIO_ARTIFACT_NOT_FOUND' },409,cors);
+          return json({ bound: true,project:{id:project.id},source:{processId:setup.processId,assessmentId:source.assessment_id},
+            artifact:{id:artifacts[0].id,versionId:artifacts[0].version_id} },200,cors);
         }
         if (url.pathname === '/control/restricted-delete') {
           const input = await request.json().catch(() => ({}));
