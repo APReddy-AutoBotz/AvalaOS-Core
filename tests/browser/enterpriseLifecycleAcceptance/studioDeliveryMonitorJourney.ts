@@ -365,24 +365,24 @@ export const runStudioDeliveryMonitorJourney = async ({
   const publisher = page.getByTestId('studio-approved-artifact-publish');
   await expect(publisher).toBeVisible();
   accessibility.push(await scanAffectedSurface(page, 'approved Studio artifact publication', '[data-testid="studio-approved-artifact-publish"]'));
-  const workItems = publisher.getByTestId('studio-approved-work-items').getByRole('group');
+  const workItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
   const proposalCount = await workItems.count();
   expect(proposalCount).toBeGreaterThanOrEqual(3);
   for (let index = 3; index < proposalCount; index += 1) {
     await workItems.nth(index).getByLabel('Select for publication', { exact: true }).uncheck();
   }
-  await workItems.nth(0).getByRole('combobox', { name: 'Type', exact: true }).selectOption('Epic');
-  await workItems.nth(0).getByLabel('Title', { exact: true }).fill(itemTitles.epic);
-  await workItems.nth(0).getByLabel('Description', { exact: true }).fill('A human-approved container for the bounded downstream acceptance work.');
-  await workItems.nth(0).getByLabel('Acceptance criteria · one per line', { exact: true }).fill('Exact approved Studio ancestry is retained.');
+  await workItems.nth(0).getByTestId('studio-approved-work-item-type').selectOption('Epic');
+  await workItems.nth(0).getByTestId('studio-approved-work-item-title').fill(itemTitles.epic);
+  await workItems.nth(0).getByTestId('studio-approved-work-item-description').fill('A human-approved container for the bounded downstream acceptance work.');
+  await workItems.nth(0).getByTestId('studio-approved-work-item-acceptance').fill('Exact approved Studio ancestry is retained.');
   for (const [index, title, detail] of [
     [1, itemTitles.assignment, 'Assign one accountable human owner without changing protected source ancestry.'],
     [2, itemTitles.blocker, 'Resolve the bounded downstream dependency and record its human outcome.'],
   ] as const) {
-    await workItems.nth(index).getByRole('combobox', { name: 'Type', exact: true }).selectOption('Task');
-    await workItems.nth(index).getByLabel('Title', { exact: true }).fill(title);
-    await workItems.nth(index).getByLabel('Description', { exact: true }).fill(detail);
-    await workItems.nth(index).getByLabel('Acceptance criteria · one per line', { exact: true }).fill('The committed result remains visible after reload.');
+    await workItems.nth(index).getByTestId('studio-approved-work-item-type').selectOption('Task');
+    await workItems.nth(index).getByTestId('studio-approved-work-item-title').fill(title);
+    await workItems.nth(index).getByTestId('studio-approved-work-item-description').fill(detail);
+    await workItems.nth(index).getByTestId('studio-approved-work-item-acceptance').fill('The committed result remains visible after reload.');
   }
   const beforePublish = await getFrame(control, projectName);
   const publishResponseStart = productionResponses.length;
@@ -428,9 +428,11 @@ export const runStudioDeliveryMonitorJourney = async ({
   const beforeImport = await getFrame(control, projectName);
   await importDialog.getByRole('button', { name: 'Import 3 Items', exact: true }).click();
   await expect(importDialog).toBeHidden();
-  await expect(page.getByText(itemTitles.assignment, { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(itemTitles.blocker, { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(itemTitles.epic, { exact: true }).first()).toBeVisible();
+  await clickProduct(page, 'Delivery');
+  await expect(page.getByRole('heading', { name: `${projectName} delivery board`, exact: true })).toBeVisible();
+  for (const title of [itemTitles.epic, itemTitles.assignment, itemTitles.blocker]) {
+    await expect(page.locator('.task-card').filter({ has: page.getByText(title, { exact: true }) })).toHaveCount(1);
+  }
   const afterImport = await getFrame(control, projectName);
   expect(afterImport.counts.imports).toBe(beforeImport.counts.imports + 1);
   expect(afterImport.counts.activeTasks).toBe(beforeImport.counts.activeTasks + 3);

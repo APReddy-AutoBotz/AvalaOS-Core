@@ -278,17 +278,17 @@ const runScenario = async (
   await selectProjectScope(page, setup.deliveryProject.name);
   await clickProduct(page, 'Studio');
   const publisher = page.getByTestId('studio-approved-artifact-publish');
-  const scenarioItems = publisher.getByTestId('studio-approved-work-items').getByRole('group');
+  const scenarioItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
   const scenarioProposalCount = await scenarioItems.count();
   expect(scenarioProposalCount).toBeGreaterThan(0);
   for (let index = 1; index < scenarioProposalCount; index += 1) {
     await scenarioItems.nth(index).getByLabel('Select for publication', { exact: true }).uncheck();
   }
   const item = scenarioItems.first();
-  await item.getByRole('combobox', { name: 'Type', exact: true }).selectOption('Task');
-  await item.getByLabel('Title', { exact: true }).fill(`${testId} governed scenario work item`);
-  await item.getByLabel('Description', { exact: true }).fill('Human-authored downstream work bound to the exact finalized scenario decision.');
-  await item.getByLabel('Acceptance criteria · one per line', { exact: true }).fill('The exact scenario policy and lineage remain preserved.');
+  await item.getByTestId('studio-approved-work-item-type').selectOption('Task');
+  await item.getByTestId('studio-approved-work-item-title').fill(`${testId} governed scenario work item`);
+  await item.getByTestId('studio-approved-work-item-description').fill('Human-authored downstream work bound to the exact finalized scenario decision.');
+  await item.getByTestId('studio-approved-work-item-acceptance').fill('The exact scenario policy and lineage remain preserved.');
   const before = await control<StudioDeliveryDownstreamFrame>('/control/downstream-frame', { projectName });
   const publicationResponseStart = productionResponses.length;
   await publisher.getByTestId('publish-approved-studio-artifact').click();
