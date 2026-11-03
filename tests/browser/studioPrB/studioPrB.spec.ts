@@ -14,7 +14,6 @@ const workspaceId='00000003-0000-4000-8000-000000000003';
 const sourceJourneyWorkspaceId='00000060-0000-4000-8000-000000000060';
 const lineage={sourcePackageId:'00000016-0000-4000-8000-000000000016',sourcePackageVersionId:'00000017-0000-4000-8000-000000000017',sourcePackageVersion:4,sourcePackageHash:'e'.repeat(64),templateId:'00000012-0000-4000-8000-000000000012',templateVersionId:'00000013-0000-4000-8000-000000000013',templateVersion:'studio-brd-2',templateHash:'c'.repeat(64),handoffId:'00000010-0000-4000-8000-000000000010',handoffVersionId:'00000019-0000-4000-8000-000000000019',handoffVersion:2,artifactId:'00000004-0000-4000-8000-000000000004',artifactVersion:1,authorActorId:'00000021-0000-4000-8000-000000000021',reviewerActorId:'00000022-0000-4000-8000-000000000022',approverActorId:'00000023-0000-4000-8000-000000000023',separationOfDuty:'independent_author_reviewer_approver'};
 const capabilities=['studio.artifacts.approve','studio.artifacts.edit','studio.artifacts.generate','studio.artifacts.read','studio.artifacts.review','studio.handoffs.approve','studio.handoffs.consume','studio.handoffs.read','studio.handoffs.request','studio.handoffs.review','studio.sources.manage','studio.sources.read','studio.templates.approve','studio.templates.manage','studio.templates.read','studio.templates.review'];
-const studioPrBBrowserOrigin=`http://127.0.0.1:${process.env.STUDIO_PR_B_BROWSER_PORT??'4197'}`;
 const manageSourcesPersona={id:'00000061-0000-4000-8000-000000000061',capabilities:['studio.sources.manage'] as const};
 const runtime=(info:TestInfo,extra:Record<string,unknown>={},personaCapabilities:readonly string[]=capabilities)=>({persona:{id:'00000001-0000-4000-8000-000000000001',state:'active',capabilities:[...personaCapabilities].sort()},organizationId,workspaceId,lineage:{profile:info.project.name,...lineage,...extra}});
 const marker=(info:TestInfo,testId:string,assertionId:string,fixture:string,extra:Record<string,unknown>={},personaCapabilities:readonly string[]=capabilities)=>{const profile=info.project.name==='Desktop Chrome'?'desktop-chrome':'pixel-7';console.log(`PR_B_ASSERTION ${JSON.stringify({testId,assertionId:`${assertionId}-${profile}`,fixture,result:'passed',runtimeContext:runtime(info,extra,personaCapabilities)})}`);};
@@ -34,7 +33,7 @@ const installTargetingNetworkGuard=async(page:Page)=>{
   const guard=async(route:import('@playwright/test').Route,request:Request)=>{
     try{
       const url=new URL(request.url());
-      if(url.protocol==='data:'||url.protocol==='blob:'||url.origin===studioPrBBrowserOrigin)return route.continue();
+      if(url.protocol==='data:'||url.protocol==='blob:'||url.origin==='http://127.0.0.1:4197')return route.continue();
     }catch{}
     count+=1;
     await route.abort('blockedbyclient');
