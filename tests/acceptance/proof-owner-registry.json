@@ -196,7 +196,7 @@
     {
       "anchorId": "studio-artifact-contracts",
       "sourceReference": "services/studioArtifacts/contracts.ts",
-      "selector": "export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd'] as const;"
+      "selector": "export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd', 'sdd'] as const;"
     },
     {
       "anchorId": "delivery-workflow-policy",
@@ -687,6 +687,16 @@
       "anchorId": "authenticated-govern-reviewer-denial",
       "sourceReference": "tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts",
       "selector": "export const exerciseReviewerGovernDenial = async"
+    },
+    {
+      "anchorId": "process-evidence-studio-sdd",
+      "sourceReference": "supabase/migrations/20261103103752_process_evidence_studio_sdd_flows.sql",
+      "selector": "'sdd', 'studio-sdd-1', 'studio-artifact-2',"
+    },
+    {
+      "anchorId": "process-evidence-delivery-origin",
+      "sourceReference": "supabase/migrations/20261103104435_delivery_requirement_bound_proposals.sql",
+      "selector": "CREATE OR REPLACE FUNCTION public.studio_delivery_proposal_origin("
     }
   ],
   "contracts": [
@@ -1839,7 +1849,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {
@@ -1955,7 +1967,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {
@@ -2478,7 +2492,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {
@@ -2516,7 +2532,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {
@@ -2554,7 +2572,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {
@@ -2592,7 +2612,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {
@@ -2630,7 +2652,9 @@
         "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
         "authenticated-hosted-migration",
         "authenticated-hosted-native-secret-migration",
-        "local-real-backend-authority"
+        "local-real-backend-authority",
+        "process-evidence-studio-sdd",
+        "process-evidence-delivery-origin"
       ],
       "ownership": [
         {

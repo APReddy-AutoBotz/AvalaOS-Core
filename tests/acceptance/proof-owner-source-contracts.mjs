@@ -574,6 +574,16 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "authenticated-govern-reviewer-denial",
     "sourceReference": "tests/browser/enterpriseLifecycleAcceptance/governReviewerDenial.ts",
     "selector": "export const exerciseReviewerGovernDenial = async"
+  },
+  {
+    "anchorId": "process-evidence-studio-sdd",
+    "sourceReference": "supabase/migrations/20261103103752_process_evidence_studio_sdd_flows.sql",
+    "selector": "'sdd', 'studio-sdd-1', 'studio-artifact-2',"
+  },
+  {
+    "anchorId": "process-evidence-delivery-origin",
+    "sourceReference": "supabase/migrations/20261103104435_delivery_requirement_bound_proposals.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_delivery_proposal_origin("
   }
 ]);
 
@@ -1840,7 +1850,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {
@@ -1956,7 +1968,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {
@@ -2479,7 +2493,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {
@@ -2517,7 +2533,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {
@@ -2555,7 +2573,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {
@@ -2593,7 +2613,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {
@@ -2631,7 +2653,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-supabase-migrations-20261010051413-authenticated-process-update-authority-sql",
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin"
     ],
     "ownership": [
       {

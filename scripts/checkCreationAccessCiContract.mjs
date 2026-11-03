@@ -7,7 +7,7 @@ import { parseWorkflowYaml } from './checkWorkflowYaml.mjs';
 export function checkCreationAccessCiContract(source) {
   const workflow = parseWorkflowYaml(source, 'creation-access.yml');
   assert.deepEqual(Object.keys(workflow.on).sort(), ['pull_request', 'workflow_dispatch']);
-  assert.deepEqual(workflow.on.pull_request, { branches: ['main'] });
+  assert.deepEqual(workflow.on.pull_request, { branches: ['main', 'codex/process-evidence-to-assessment', 'codex/process-evidence-studio'] });
   assert.deepEqual(workflow.permissions, { contents: 'read' });
   assert(!workflow.env && !workflow.defaults, 'CI_AMBIENT_OVERRIDES_REJECTED');
   assert.deepEqual(Object.keys(workflow.jobs), ['isolated-creation-access']);
