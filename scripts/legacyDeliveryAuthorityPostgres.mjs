@@ -142,7 +142,7 @@ export async function runLegacyDeliveryAuthorityPostgres(options = {}) {
     await fixture.db.query('UPDATE public.document_generations SET artifacts=$1::jsonb WHERE id=$2', [JSON.stringify(fixture.artifacts), x.generation]);
     const deniedBefore = await fixture.snapshot();
     const foreign = await fixture.callCommand({ actor: x.denied, version: 1, key: 'foreign-import-0001', action: 'import', payload: importPayload });
-    await assert.rejects(fixture.asRole('authenticated', () => fixture.db.query(`SELECT public.legacy_delivery_apply_command(
+    await assert.rejects(fixture.asRole('authenticated', () => fixture.db.query(`SELECT public.legacy_delivery_apply_requirement_command(
       $1,$2,$3,1,$4,'browser-denied','import',$5::jsonb)`, [x.actor, x.organization, x.workspace, randomUUID(), JSON.stringify(importPayload)])), /permission denied/u);
     const deniedAfter = await fixture.snapshot();
     assert.equal(foreign.errorCode, 'NOT_FOUND');

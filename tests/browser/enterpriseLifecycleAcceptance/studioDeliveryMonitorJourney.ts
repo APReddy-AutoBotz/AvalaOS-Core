@@ -38,6 +38,7 @@ export type StudioDeliveryDownstreamTask = Readonly<{
   title: string;
   description: string;
   status: string;
+  type: string;
   assigneeIds: readonly string[];
   projectId: string;
   documentGenerationId: string | null;
@@ -45,6 +46,9 @@ export type StudioDeliveryDownstreamTask = Readonly<{
   sourceProcessId: string | null;
   sourceAssessmentId: string | null;
   sourceItemIndex: number | null;
+  studioArtifactId: string | null;
+  studioArtifactVersionId: string | null;
+  studioArtifactVersion: number | null;
   retentionState: string;
 }>;
 
@@ -232,7 +236,9 @@ const protectedTaskBinding = (task: StudioDeliveryDownstreamTask) => ({
 });
 
 const openTask = async (page: Page, title: string) => {
-  await page.getByText(title, { exact: true }).first().click();
+  const taskCard = page.locator('.task-card').filter({ has: page.getByText(title, { exact: true }) });
+  await expect(taskCard).toHaveCount(1);
+  await taskCard.click();
   const dialog = page.getByRole('dialog', { name: title, exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -424,9 +430,19 @@ export const runStudioDeliveryMonitorJourney = async ({
   await expect(importDialog).toBeHidden();
   await expect(page.getByText(itemTitles.assignment, { exact: true }).first()).toBeVisible();
   await expect(page.getByText(itemTitles.blocker, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(itemTitles.epic, { exact: true }).first()).toBeVisible();
   const afterImport = await getFrame(control, projectName);
   expect(afterImport.counts.imports).toBe(beforeImport.counts.imports + 1);
-  expect(afterImport.counts.activeTasks).toBe(beforeImport.counts.activeTasks + 2);
+  expect(afterImport.counts.activeTasks).toBe(beforeImport.counts.activeTasks + 3);
+  const importedEpic = afterImport.tasks.find(task => task.title === itemTitles.epic);
+  expect(importedEpic).toMatchObject({
+    type: 'Epic', projectId: setup.deliveryProject.id,
+    documentGenerationId: afterPublish.publication!.documentGenerationId,
+    studioArtifactId: afterPublish.publication!.artifactId,
+    studioArtifactVersionId: afterPublish.publication!.artifactVersionId,
+    status: 'To Do', retentionState: 'active',
+  });
+  expect(importedEpic!.studioArtifactVersion).toBeGreaterThan(0);
   const importedTask = afterImport.tasks.find(task => task.title === itemTitles.blocker);
   expect(importedTask).toBeDefined();
   expect(importedTask).toMatchObject({
@@ -440,11 +456,19 @@ export const runStudioDeliveryMonitorJourney = async ({
   expectUuid(importedTask!.importId!);
   recordCase(cases, 'DELIVERY-001', beforeImport, afterImport,
     ['Opened the published Docs generation', 'Selected its three structured work items', 'Imported the bounded selection to Delivery'],
-    'The server committed one import and two non-Epic authoritative tasks with exact source lineage.',
+    'The server committed one import and all three selected authoritative work items, including the persistent Epic, with exact source lineage.',
     ['/functions/v1/legacy-delivery-query', '/functions/v1/legacy-delivery-command'], measuredResponses(productionResponses, importResponseStart,
       ['/functions/v1/legacy-delivery-query', '/functions/v1/legacy-delivery-command']),
     beforeImport.lineage.digest, afterImport.lineage.digest);
   observeEvery(observations, 'DELIVERY-001');
+
+  const epicDialog = await openTask(page, itemTitles.epic);
+  const epicSources = epicDialog.getByTestId('delivery-requirement-source-links');
+  await expect(epicSources).toBeVisible();
+  await epicSources.getByText('Open approved source details', { exact: true }).click();
+  await expect(epicSources.getByText(afterPublish.publication!.artifactId, { exact: true })).toBeVisible();
+  await expect(epicSources.getByText(new RegExp(`Revision ${importedEpic!.studioArtifactVersion}`))).toBeVisible();
+  await closeTask(page, itemTitles.epic);
 
   await page.getByRole('button', { name: 'Add a task', exact: true }).first().click();
   await page.getByPlaceholder('Enter a title for this task...').fill(itemTitles.created);

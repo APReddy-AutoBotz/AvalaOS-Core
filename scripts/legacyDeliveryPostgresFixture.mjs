@@ -8,6 +8,7 @@ import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTe
 
 const { Client } = pg;
 const AUTHORITY_MIGRATION = '20261010025331_legacy_delivery_authority.sql';
+const REQUIREMENT_BOUNDARY_MIGRATION = '20261103104435_delivery_requirement_bound_proposals.sql';
 const CURRENT_CHAIN_TIP = '20261103104435_delivery_requirement_bound_proposals.sql';
 const DUPLICATE_SAFE_MIGRATIONS = new Set([
   '20260923133000_pr1e_evidence_claim_operator_binding.sql',
@@ -173,7 +174,9 @@ export async function createLegacyDeliveryPostgresFixture(options = {}) {
     databaseCreated = true;
     db = new Client({ connectionString: databaseUrl(resolved.url, database), connectionTimeoutMillis: 10_000 });
     await db.connect();
-    await applyChain(db, options.throughMigration ?? CURRENT_CHAIN_TIP);
+    const throughMigration = options.throughMigration ?? CURRENT_CHAIN_TIP;
+    await applyChain(db, throughMigration);
+    const requirementBoundaryApplied = throughMigration.localeCompare(REQUIREMENT_BOUNDARY_MIGRATION) >= 0;
     const artifacts = options.seed === false ? null : await seed(db);
     const authorizationVersion = async actor => Number((await db.query(
       'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [LEGACY_DELIVERY_FIXTURE_IDS.organization, actor],
@@ -181,14 +184,16 @@ export async function createLegacyDeliveryPostgresFixture(options = {}) {
     const callCommand = async ({ actor = LEGACY_DELIVERY_FIXTURE_IDS.actor, org = LEGACY_DELIVERY_FIXTURE_IDS.organization,
       workspace = LEGACY_DELIVERY_FIXTURE_IDS.workspace, version, requestId = randomUUID(), key, action, payload }) => {
       const authorityVersion = version ?? await authorizationVersion(actor);
-      return (await asRole(db, 'service_role', () => db.query(`SELECT public.legacy_delivery_apply_command(
+      const routine = requirementBoundaryApplied ? 'legacy_delivery_apply_requirement_command' : 'legacy_delivery_apply_command';
+      return (await asRole(db, 'service_role', () => db.query(`SELECT public.${routine}(
         $1,$2,$3,$4,$5,$6,$7,$8::jsonb) value`, [actor, org, workspace, authorityVersion, requestId, key, action, JSON.stringify(payload)]))).rows[0].value;
     };
     const callQuery = async ({ actor = LEGACY_DELIVERY_FIXTURE_IDS.actor, org = LEGACY_DELIVERY_FIXTURE_IDS.organization,
       workspace = LEGACY_DELIVERY_FIXTURE_IDS.workspace, version, projectId = LEGACY_DELIVERY_FIXTURE_IDS.project,
       limit = 100, cursor = null, sourceGenerationId = null, includeRetained = true }) => {
       const authorityVersion = version ?? await authorizationVersion(actor);
-      return (await asRole(db, 'service_role', () => db.query(`SELECT public.legacy_delivery_query(
+      const routine = requirementBoundaryApplied ? 'legacy_delivery_requirement_query' : 'legacy_delivery_query';
+      return (await asRole(db, 'service_role', () => db.query(`SELECT public.${routine}(
         $1,$2,$3,$4,$5,$6,$7,$8,$9) value`, [actor, org, workspace, authorityVersion, projectId, limit, cursor, sourceGenerationId, includeRetained]))).rows[0].value;
     };
     const snapshot = async () => (await db.query(`SELECT

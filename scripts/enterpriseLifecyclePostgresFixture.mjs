@@ -764,12 +764,12 @@ export async function createEnterpriseLifecycleFixture({
       authenticate: async () => ({ id: actorFromRequest(request) }),
       authority: studioDeliveryDependencies(request).authority,
       apply: async (actorId, command) => (await serviceQuery(
-        'SELECT public.legacy_delivery_apply_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+        'SELECT public.legacy_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
         [actorId,command.organizationId,command.workspaceId,command.expectedAuthorizationVersion,command.requestId,
           command.idempotencyKey,command.action,JSON.stringify(command.payload)],
       )).rows[0]?.value,
       query: async (actorId, query) => (await serviceQuery(
-        'SELECT public.legacy_delivery_query($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
+        'SELECT public.legacy_delivery_requirement_query($1,$2,$3,$4,$5,$6,$7,$8,$9) value',
         [actorId,query.organizationId,query.workspaceId,query.expectedAuthorizationVersion,query.projectId,
           query.limit,query.cursor,query.sourceGenerationId,query.includeRetained],
       )).rows[0]?.value,
@@ -947,9 +947,11 @@ export async function createEnterpriseLifecycleFixture({
         WHERE publication.org_id=$1 AND publication.workspace_id=$2 AND publication.project_id=$3
         ORDER BY publication.published_at DESC,publication.id DESC LIMIT 1`,
       [ids.organization,ids.workspace,setup.projectId])).rows[0] ?? null;
-      const tasks = (await db.query(`SELECT item.id,item.authority_version version,item.title,item.description,item.status,item.project_id,
+      const tasks = (await db.query(`SELECT item.id,item.authority_version version,item.title,item.description,item.status,item.type,item.project_id,
           item.document_generation_id,item.legacy_import_id import_id,item.source_process_id,item.source_assessment_id,
-          item.source_item_index,item.retention_state,
+          item.source_item_index,item.retention_state,item.source_lineage->>'studioArtifactId' studio_artifact_id,
+          item.source_lineage->>'studioArtifactVersionId' studio_artifact_version_id,
+          CASE WHEN item.source_lineage?'studioArtifactVersion' THEN (item.source_lineage->>'studioArtifactVersion')::bigint ELSE NULL END studio_artifact_version,
           COALESCE((SELECT jsonb_agg(binding.assignee_id ORDER BY binding.assignee_id)
             FROM public.legacy_delivery_work_item_assignees binding WHERE binding.work_item_id=item.id),'[]'::jsonb) assignee_ids
         FROM public.delivery_work_items item
@@ -1029,10 +1031,12 @@ export async function createEnterpriseLifecycleFixture({
           workItemCount: publication.work_item_count,
         } : null,
         tasks: tasks.map(item => ({
-          id: item.id, version: Number(item.version), title: item.title, description: item.description, status: item.status,
+          id: item.id, version: Number(item.version), title: item.title, description: item.description, status: item.status, type: item.type,
           assigneeIds: item.assignee_ids, projectId: item.project_id, documentGenerationId: item.document_generation_id,
           importId: item.import_id, sourceProcessId: item.source_process_id, sourceAssessmentId: item.source_assessment_id,
           sourceItemIndex: item.source_item_index, retentionState: item.retention_state,
+          studioArtifactId: item.studio_artifact_id, studioArtifactVersionId: item.studio_artifact_version_id,
+          studioArtifactVersion: item.studio_artifact_version === null ? null : Number(item.studio_artifact_version),
         })),
         outcomes: outcomes.map(item => ({
           outcomeId: item.outcome_id, version: Number(item.version), taskId: item.task_id,
