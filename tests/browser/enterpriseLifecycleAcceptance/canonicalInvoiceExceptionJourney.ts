@@ -389,6 +389,16 @@ const canonicalStudioReloadBoundary = (
   }
 };
 
+const openCanonicalStudioAudit = async (preview: Locator, timeoutMs: number) => {
+  const audit = preview.getByTestId('studio-current-document-audit');
+  if (await audit.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_AUDIT_REJECTED');
+  if (!await audit.evaluate(element => element.hasAttribute('open'))) {
+    await audit.getByText('Audit details', { exact: true }).click({ timeout: timeoutMs });
+  }
+  await expect(audit).toHaveAttribute('open', '', { timeout: timeoutMs });
+  return audit;
+};
+
 export const captureCanonicalStudioArtifactReloadTarget = async (
   page: Page,
   contentVersion: number,
@@ -405,8 +415,10 @@ export const captureCanonicalStudioArtifactReloadTarget = async (
   if (await exactOption.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CAPTURE_REJECTED');
   const preview = page.getByTestId('studio-artifact-workspace')
     .getByRole('article', { name: 'Artifact preview', exact: true });
-  if (await preview.getByText(
+  const audit = await openCanonicalStudioAudit(preview, 15_000);
+  if (await audit.getByText(
     new RegExp(`^Aggregate v\\d+ · Content v${contentVersion}$`, 'u'),
+    { exact: true },
   ).count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CAPTURE_REJECTED');
   return Object.freeze(target);
 };
@@ -454,15 +466,17 @@ export const reloadCanonicalStudioArtifact = async (
   await expect(selector).toHaveValue(target.artifactId, { timeout: remaining() });
   await page.locator('[data-testid="studio-artifact-workspace"][data-studio-projection-state="artifact-ready"]')
     .waitFor({ state: 'visible', timeout: remaining() });
-  const version = preview.getByText(
+  const audit = await openCanonicalStudioAudit(preview, remaining());
+  const version = audit.getByText(
     new RegExp(`^Aggregate v\\d+ · Content v${target.contentVersion}$`, 'u'),
+    { exact: true },
   );
   try { await version.waitFor({ state: 'visible', timeout: remaining() }); }
   catch { throw new Error('CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED'); }
   if (await version.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED');
 
   if (options.expectedSectionTitles) {
-    const editor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+    const editor = page.getByRole('region', { name: 'Current document', exact: true });
     await editor.waitFor({ state: 'visible', timeout: remaining() });
     const outline = editor.getByRole('navigation', { name: 'Document outline', exact: true });
     const sectionButtons = outline.getByRole('button').filter({ hasNotText: 'Add section' });

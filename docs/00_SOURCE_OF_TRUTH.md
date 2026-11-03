@@ -1,5 +1,10 @@
 # AvalaOS Core Source Of Truth
 
+## Governed Studio process documentation candidate
+
+The Studio boundary of the [process-evidence milestone](planning/process-evidence-to-delivery.md) introduces a canonical SDD with editable As-Is and To-Be sections. Approved documents remain immutable. The [Studio verification record](planning/process-evidence-studio-sdd-and-flows.md) distinguishes local PostgreSQL and synthetic browser evidence from actual model generation.
+
+
 ## Process evidence to confirmed delivery work — 3 November 2026
 
 The product milestone starts with fresh transcripts, SOPs and flowcharts. A business user corrects the extracted facts, reviews process and step recommendations, selects and edits BRD/PDD/FRD/SDD documents and As-Is/To-Be flows, finalizes them through existing approvals, and selects proposed work for the normal Delivery board. A recommendation to keep human judgment or use existing APIs and rules without AI is a successful outcome. The [milestone plan](planning/process-evidence-to-delivery.md) distinguishes implementation from observed behavior. Earlier accepted evidence retains its original scope.

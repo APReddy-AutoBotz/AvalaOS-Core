@@ -15,9 +15,9 @@ export type StudioArtifactContractVersion =
   | typeof LEGACY_STUDIO_ARTIFACT_CONTRACT_VERSION;
 
 /** Retained verbatim for accepted PR A clients and proof contracts. */
-export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd'] as const;
+export const STUDIO_ARTIFACT_TYPES = ['brd', 'frd', 'pdd', 'sdd'] as const;
 export type StudioArtifactType = (typeof STUDIO_ARTIFACT_TYPES)[number];
-export const STUDIO_TEMPLATE_ARTIFACT_CLASSES = ['brd', 'frd', 'pdd', 'custom'] as const;
+export const STUDIO_TEMPLATE_ARTIFACT_CLASSES = ['brd', 'frd', 'pdd', 'sdd', 'custom'] as const;
 export type StudioTemplateArtifactClass = (typeof STUDIO_TEMPLATE_ARTIFACT_CLASSES)[number];
 
 export const STUDIO_SOURCE_MODES = [
@@ -80,9 +80,18 @@ export type StudioExactTemplateSelector =
   | { kind: 'system'; versionId: string; version: string }
   | { kind: 'tenant'; templateId: string; versionId: string; version: number };
 
+export interface StudioSourcePackageReplacementSelector {
+  artifactId: string;
+  sourcePackageId: string;
+  sourcePackageVersion: number;
+  aggregateVersion: number;
+  currentVersionId: string | null;
+  currentApprovedVersionId: string | null;
+}
+
 export type StudioSourcePackageCreatePayload =
-  | { sourceMode: 'direct_transcript_bundle'; artifactType: StudioArtifactType; studioInputBundle: { id: string; versionId: string; version: number }; manualBrief: null }
-  | { sourceMode: 'manual_brief'; artifactType: StudioArtifactType; studioInputBundle: null; manualBrief: string };
+  | { sourceMode: 'direct_transcript_bundle'; artifactType: StudioArtifactType; studioInputBundle: { id: string; versionId: string; version: number }; manualBrief: null; replaceArtifact?: StudioSourcePackageReplacementSelector | null }
+  | { sourceMode: 'manual_brief'; artifactType: StudioArtifactType; studioInputBundle: null; manualBrief: string; replaceArtifact?: StudioSourcePackageReplacementSelector | null };
 
 export interface StudioTemplateSectionDefinition {
   id: string;
@@ -106,7 +115,7 @@ export interface StudioGovernedCommandPayloads {
   'studio.handoff.review.resolve': { handoffId: string; handoffVersion: number; outcome: StudioReviewOutcome; rationale: string; conditions: StudioConditions };
   'studio.handoff.approval.resolve': { handoffId: string; handoffVersion: number; outcome: StudioApprovalOutcome; rationale: string; conditions: StudioConditions };
   'studio.handoff.withdraw': { handoffId: string; handoffVersion: number; rationale: string };
-  'studio.handoff.consume': { handoffId: string; handoffVersion: number };
+  'studio.handoff.consume': { handoffId: string; handoffVersion: number; replaceArtifact?: StudioSourcePackageReplacementSelector | null };
   'studio.template.create': { name: string; description: string; artifactClass: StudioTemplateArtifactClass; rendererVersion: string; sections: readonly StudioTemplateSectionDefinition[] };
   'studio.template.revise': { templateId: string; parentVersionId: string; name: string; description: string; rendererVersion: string; sections: readonly StudioTemplateSectionDefinition[] };
   'studio.template.review.submit': { templateId: string; templateVersionId: string };
@@ -121,6 +130,8 @@ export interface StudioGovernedCommandPayloads {
     template: StudioExactTemplateSelector;
     expectedCurrentVersionId: string | null;
     expectedApprovedVersionId: string | null;
+    /** Empty/omitted means a full generation. Non-empty is merged by the server at finalization. */
+    selectedSectionIds?: readonly string[];
   };
 }
 

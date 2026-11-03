@@ -767,12 +767,12 @@ const projectStudio = (raw: EnterpriseIntelligenceRawProjection): EnterpriseStud
   const handoffs = latestBy(raw.studioHandoffs, 'studio_document_id');
   return raw.studioAggregates.flatMap(aggregate => {
     const version = versions.get(text(aggregate.current_approved_version_id));
-    if (!version || !includes(['brd', 'frd', 'pdd'] as const, aggregate.artifact_type)) return [];
+    if (!version || !includes(['brd', 'frd', 'pdd', 'sdd'] as const, aggregate.artifact_type)) return [];
     const handoff = handoffs.get(text(aggregate.id));
     const handoffState = !handoff ? 'available' as const : handoff.status === 'stale' ? 'stale' as const : 'already_handed_off' as const;
     const kind = String(aggregate.artifact_type).toUpperCase();
     return [{
-      id: text(aggregate.id), label: `${kind} approved document`, artifactType: aggregate.artifact_type as 'brd' | 'frd' | 'pdd',
+      id: text(aggregate.id), label: `${kind} approved document`, artifactType: aggregate.artifact_type as 'brd' | 'frd' | 'pdd' | 'sdd',
       approvedVersionLabel: `Approved version ${number(version.version, 1)}`, lifecycle: 'approved' as const, handoffState,
     }];
   });

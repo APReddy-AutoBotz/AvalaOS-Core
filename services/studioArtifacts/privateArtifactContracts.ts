@@ -69,7 +69,7 @@ export interface StudioPrivateArtifactCommandPayloads {
     format: StudioPrivateArtifactFormat;
   };
   'studio.retention.policy.publish': {
-    artifactType: 'brd' | 'frd' | 'pdd';
+    artifactType: 'brd' | 'frd' | 'pdd' | 'sdd';
     retentionDays: number | null;
     reason: string;
   };
@@ -147,7 +147,7 @@ export interface StudioPrivateArtifactProjectionDto {
   artifactId: string;
   artifactVersionId: string;
   artifactVersion: number;
-  artifactType: 'brd' | 'frd' | 'pdd';
+  artifactType: 'brd' | 'frd' | 'pdd' | 'sdd';
   approved: true;
   readOnly: boolean;
   renditions: readonly StudioRenditionProjectionDto[];

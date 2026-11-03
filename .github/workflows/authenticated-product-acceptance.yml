@@ -2,7 +2,7 @@ name: Authenticated Product Acceptance Preparation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/process-evidence-to-assessment, codex/process-evidence-studio]
   push:
     branches: [main]
   workflow_dispatch:

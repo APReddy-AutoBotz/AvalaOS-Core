@@ -54,7 +54,7 @@ export const renderGeneratedDocumentMarkdown = (documentRow: Record<string, unkn
     '',
   ];
 
-  for (const artifactName of ['brd', 'frd', 'pdd']) {
+  for (const artifactName of ['brd', 'frd', 'pdd', 'sdd']) {
     lines.push(markdownFromSectionMap(artifactName, artifacts[artifactName]), '');
   }
 

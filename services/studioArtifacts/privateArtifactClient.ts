@@ -235,7 +235,7 @@ export const decodeStudioPrivateArtifactProjection = (
     !uuid(record.artifactId) ||
     !uuid(record.artifactVersionId) ||
     !positive(record.artifactVersion) ||
-    !['brd', 'frd', 'pdd'].includes(record.artifactType as string) ||
+    !['brd', 'frd', 'pdd', 'sdd'].includes(record.artifactType as string) ||
     record.approved !== true ||
     typeof record.readOnly !== 'boolean' ||
     !Array.isArray(record.renditions) ||
@@ -450,7 +450,7 @@ const validatePublicCommandPayload = (
   } else if (commandType === 'studio.retention.policy.publish') {
     if (
       !exact(payload, ['artifactType', 'retentionDays', 'reason']) ||
-      !['brd', 'frd', 'pdd'].includes(payload.artifactType as string) ||
+      !['brd', 'frd', 'pdd', 'sdd'].includes(payload.artifactType as string) ||
       !(
         payload.retentionDays === null ||
         (Number.isSafeInteger(payload.retentionDays) &&

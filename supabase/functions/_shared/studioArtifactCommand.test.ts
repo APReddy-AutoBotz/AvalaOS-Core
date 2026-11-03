@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { parseStudioArtifactEnvelope, requiredStudioCapability, StudioArtifactError } from './studioArtifactCommand.ts';
 import { handleStudioArtifactCommand } from './studioArtifactHandler.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
@@ -27,6 +28,13 @@ mark(rejects({ ...base, payload: { ...base.payload, manualBriefHash: '0'.repeat(
   'STUDIO-TR-003', 'command.client-manual-hash-rejected', 'browser-manual-hash-authority');
 mark(rejects({ ...base, payload: { ...base.payload, sourceMode: 'assess_handoff' } }), 'STUDIO-TR-003', 'command.source-mode-exclusive-union', 'fabricated-assess-ancestry');
 mark(rejects({ ...base, payload: { sourceMode: 'manual_brief', artifactType: 'brd', studioInputBundle: null, manualBrief: 'x'.repeat(20_001) } }), 'STUDIO-TR-003', 'command.manual-brief-bound', 'oversized-manual-brief');
+const replaceArtifact = { artifactId: ids[5], sourcePackageId: ids[6], sourcePackageVersion: 2, aggregateVersion: 4, currentVersionId: ids[7], currentApprovedVersionId: ids[8] };
+assert.equal((parseStudioArtifactEnvelope({ ...base, expectedAggregateVersion: 4, payload: { ...base.payload, replaceArtifact } }).payload.replaceArtifact as typeof replaceArtifact).sourcePackageId, ids[6]);
+assert.ok(rejects({ ...base, payload: { ...base.payload, replaceArtifact: { ...replaceArtifact, sourcePackageVersion: 0 } } })
+  && rejects({ ...base, payload: { ...base.payload, replaceArtifact: { ...replaceArtifact, unknown: ids[9] } } }));
+const consumeReplacement = { ...base, commandType: 'studio.handoff.consume', expectedAggregateVersion: 3, expectedArtifactVersion: 3,
+  payload: { handoffId: ids[9], handoffVersion: 3, replaceArtifact } };
+assert.equal((parseStudioArtifactEnvelope(consumeReplacement).payload.replaceArtifact as typeof replaceArtifact).artifactId, ids[5]);
 
 const assessedAncestry = {
   contractVersion: 'studio-artifact-2', organizationId: ids[1], workspaceId: ids[2],
@@ -79,6 +87,12 @@ mark(rejects({ ...generation, payload: { ...generation.payload, template: { ...g
 mark(rejects({ ...generation, payload: { ...generation.payload, routeId: ids[8] } }), 'PROVIDER-009-B', 'command.client-route-rejected', 'browser-route-substitution');
 mark(rejects({ ...generation, payload: { ...generation.payload, manualBrief: 'client retry material' } }),
   'STUDIO-TR-003', 'command.generation-manual-material-rejected', 'browser-manual-recovery-substitution');
+const selectiveGeneration = { ...generation, payload: { ...generation.payload, selectedSectionIds: ['functionalRequirements', 'asIsFlow'] } };
+mark(JSON.stringify(parseStudioArtifactEnvelope(selectiveGeneration).payload.selectedSectionIds) === JSON.stringify(['functionalRequirements', 'asIsFlow']),
+  'STUDIO-REFRESH-001', 'command.selected-section-set-bounded', 'server-authoritative-selective-refresh');
+mark(rejects({ ...selectiveGeneration, payload: { ...selectiveGeneration.payload, selectedSectionIds: ['asIsFlow', 'asIsFlow'] } })
+  && rejects({ ...selectiveGeneration, payload: { ...selectiveGeneration.payload, selectedSectionIds: ['unsafe section'] } }),
+  'STUDIO-REFRESH-002', 'command.selected-section-set-invalid-rejected', 'duplicate-or-unsafe-selection');
 
 const template = {
   ...base, requestId: ids[8], commandType: 'studio.template.create', payload: {
@@ -120,6 +134,54 @@ const validLegacyCommands = [
   { ...legacyBase, commandType: 'studio.artifact.review.resolve', payload: { artifactId: ids[3], artifactVersionId: ids[4], outcome: 'approve', rationale: 'Reviewed.', conditions: [] } },
   { ...legacyBase, commandType: 'studio.artifact.approval.resolve', payload: { artifactId: ids[3], artifactVersionId: ids[4], outcome: 'reject', rationale: 'Rejected.', conditions: ['Synthetic condition.'] } },
 ] as const;
+const validFlowRevision = {
+  ...legacyBase,
+  commandType: 'studio.artifact.draft.revise',
+  payload: {
+    artifactId: ids[3],
+    parentVersionId: ids[4],
+    content: {
+      contractVersion: 'studio-artifact-2',
+      title: 'SDD',
+      summary: 'Synthetic provider-free fixture.',
+      sections: [
+        { id: 'asIsFlow', title: 'As is flow', body: 'flowchart TD\n  A[Start] --> B[Review]\n  B --> C[Complete]', sourceAnchors: [], labels: ['template_required'] },
+        { id: 'toBeFlow', title: 'To be flow', body: 'flowchart TD\n  A[Start] --> B[API]\n  B --> C[Human review]', sourceAnchors: [], labels: ['template_required'] },
+      ],
+      coverage: { selectedSourceVersionIds: [], coveredSourceVersionIds: [], complete: true },
+    },
+  },
+};
+assert.equal(parseStudioArtifactEnvelope(validFlowRevision).commandType, 'studio.artifact.draft.revise');
+for (const body of [
+  'flowchart TD\n  A[Start] --> B[Review] --> C[Complete]',
+  'flowchart TD; A[Start] --> B[Review];',
+  'flowchart TD\n  A[Start] --> B[Review]\n  click B "https://unsafe.example"',
+]) {
+  assert.equal(rejects({
+    ...validFlowRevision,
+    payload: {
+      ...validFlowRevision.payload,
+      content: {
+        ...validFlowRevision.payload.content,
+        sections: [
+          { ...validFlowRevision.payload.content.sections[0], body },
+          validFlowRevision.payload.content.sections[1],
+        ],
+      },
+    },
+  }), true, 'raw canonical flow edits must reject ambiguous or active Mermaid syntax');
+}
+assert.equal(rejects({
+  ...validFlowRevision,
+  payload: {
+    ...validFlowRevision.payload,
+    content: {
+      ...validFlowRevision.payload.content,
+      sections: [{ id: 'customNarrative', title: 'Custom', body: 'A --> B is retained as narrative.' }],
+    },
+  },
+}), false, 'unknown template sections must retain non-flow narrative content');
 const validGovernedCommands = [
   { ...base, requestId: ids[3], payload: { sourceMode: 'manual_brief', artifactType: 'brd', studioInputBundle: null, manualBrief: 'Synthetic planning brief.' } },
   { ...handoffRequest, requestId: ids[4], payload: { ...handoffRequest.payload, targetInputBundle: { id: ids[3], versionId: ids[4], version: 1 } } },
@@ -181,6 +243,36 @@ void (async () => {
   const ok = await handleStudioArtifactCommand(requestFor(), deps);
   mark(ok.status === 201 && effects === 1 && authorityLoads === 2
     && ok.headers.get('Access-Control-Allow-Origin') === '*', 'IDEMP-001', 'handler-authority-before-effect-and-disclosure', 'new-generation-receipt');
+
+  let invalidFlowEffects = 0;
+  const invalidRawFlow = {
+    ...validFlowRevision,
+    payload: {
+      ...validFlowRevision.payload,
+      content: {
+        ...validFlowRevision.payload.content,
+        sections: [
+          {
+            ...validFlowRevision.payload.content.sections[0],
+            body: 'flowchart TD\n  A[Start] --> B[Review] --> C[Complete]',
+          },
+          validFlowRevision.payload.content.sections[1],
+        ],
+      },
+    },
+  };
+  const invalidFlowResponse = await handleStudioArtifactCommand(requestFor(invalidRawFlow), {
+    authenticate: async () => ({ id: ids[11] }),
+    loadFreshAuthority: async () => ({
+      actorId: ids[11], authorizationVersion: 3, capabilities: ['studio.artifacts.edit'],
+    }),
+    executeAtomicCommand: async () => {
+      invalidFlowEffects += 1;
+      return committed;
+    },
+  });
+  assert.equal(invalidFlowResponse.status, 400);
+  assert.equal(invalidFlowEffects, 0, 'invalid raw flow must be rejected before the atomic command');
 
   const syntheticOrder: string[] = [];
   const synthetic = await handleStudioArtifactCommand(requestFor(), {

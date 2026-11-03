@@ -320,4 +320,5 @@ export const legacyDeliveryBrowserFixtureSources = [
   'supabase/migrations/20261010144356_authenticated_hosted_exercise_authority.sql',
   'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql',
   'supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql',
+  'supabase/migrations/20261103103752_process_evidence_studio_sdd_flows.sql',
 ];

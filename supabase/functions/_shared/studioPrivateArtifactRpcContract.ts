@@ -15,7 +15,7 @@ export type StudioPrivateArtifactFormat =
   keyof typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS;
 export type StudioPrivateArtifactRendererVersion =
   (typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS)[StudioPrivateArtifactFormat];
-export type StudioPrivateArtifactType = 'brd' | 'frd' | 'pdd';
+export type StudioPrivateArtifactType = 'brd' | 'frd' | 'pdd' | 'sdd';
 export type StudioPrivateArtifactMimeType =
   | 'text/markdown; charset=utf-8'
   | 'application/pdf'
@@ -197,7 +197,7 @@ const boundedText = (value: unknown, maximum = 200) =>
 const outcome = (value: unknown) =>
   value === 'committed' || value === 'replayed' ? value : unavailable();
 const artifactType = (value: unknown): StudioPrivateArtifactType =>
-  value === 'brd' || value === 'frd' || value === 'pdd'
+  value === 'brd' || value === 'frd' || value === 'pdd' || value === 'sdd'
     ? value
     : unavailable();
 const format = (value: unknown): StudioPrivateArtifactFormat =>

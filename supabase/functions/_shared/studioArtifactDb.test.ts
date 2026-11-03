@@ -16,7 +16,7 @@ import {
 import { validateStudioDraft } from './studioArtifactGeneration.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 
-const ids = Array.from({ length: 24 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+const ids = Array.from({ length: 32 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
 const sha256 = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))))
   .map(byte => byte.toString(16).padStart(2, '0')).join('');
 const mark = (passed: boolean, testId: string, assertionId: string, fixture: string, lineage: Record<string, string | number | boolean | null> = {}) => prBAssertion({
@@ -141,12 +141,23 @@ void (async () => {
   } catch (error) { changedSourceBindingRejected = error instanceof StudioArtifactError && error.code === 'IDEMPOTENCY_CONFLICT'; }
   mark(changedSourceBindingRejected, 'IDEMP-003', 'db.manual-source-changed-binding-conflict', 'same-key-changed-manual-binding', { sourcePackage: String(firstSourceCommand.sourcePackageId), artifact: String(firstSourceCommand.artifactId) });
 
+  const replaceArtifact = { artifactId: ids[24], sourcePackageId: ids[25], sourcePackageVersion: 2, aggregateVersion: 7, currentVersionId: ids[26], currentApprovedVersionId: ids[27] };
+  let replacementRpc: Record<string, unknown> = {};
+  await executeStudioAtomicCommand({ ...manualCommand, expectedAggregateVersion: 7, idempotencyKey: 'manual-package-replace-001', payload: { ...manualCommand.payload, replaceArtifact } }, async (_name, args) => {
+    replacementRpc = args.p_command as Record<string, unknown>;
+    return { outcome: 'committed', receiptId: ids[28], resourceId: replaceArtifact.artifactId, artifactId: replaceArtifact.artifactId, sourcePackageId: ids[29], sourceMode: 'manual_brief', planningOnly: true } as never;
+  });
+  if (!(replacementRpc.artifactId === replaceArtifact.artifactId
+    && (replacementRpc.payload as Record<string, unknown>).replaceArtifact === replaceArtifact
+    && replacementRpc.sourcePackageId !== replaceArtifact.sourcePackageId)) throw new Error('changed-source RPC did not retain exact predecessor selectors');
+
   let rpcName = ''; let rpcArgs: Record<string, unknown> = {};
   const generationCommand = {
     ...base, commandType: 'studio.generation.request', payload: {
       artifactId: ids[4], sourcePackageId: ids[5], sourcePackageVersion: 3,
       template: { kind: 'system', versionId: ids[6], version: 'system-brd-v3' },
       expectedCurrentVersionId: ids[7], expectedApprovedVersionId: null,
+      selectedSectionIds: ['requirements', 'scope'],
     },
   } as StudioArtifactAtomicCommand;
   const generationResult = await executeStudioAtomicCommand(generationCommand, async (name, args) => {
@@ -157,15 +168,24 @@ void (async () => {
   const exactGenerationKeys = [
     'actorId', 'organizationId', 'workspaceId', 'requestId', 'idempotencyKey', 'authorizationVersion',
     'artifactId', 'sourcePackageId', 'templateKind', 'templateVersionId', 'expectedAggregateVersion',
-    'expectedCurrentVersionId', 'expectedApprovedVersionId',
+    'expectedCurrentVersionId', 'expectedApprovedVersionId', 'selectedSectionIds',
   ].sort();
   mark(rpcName === STUDIO_RPC.generationRequest
     && JSON.stringify(Object.keys(serverCommand).sort()) === JSON.stringify(exactGenerationKeys)
+    && JSON.stringify(serverCommand.selectedSectionIds) === JSON.stringify(['requirements', 'scope'])
     && !['provider', 'model', 'routeId', 'prompt', 'budget', 'policy', 'payload', 'manualBrief'].some(key => key in serverCommand),
   'PROVIDER-009-B', 'db.generation-request-server-owned-route', 'browser-provider-authority-substitution', { receiptId: ids[8], attemptId: ids[9] });
   mark(!('generationPlan' in generationResult.resource) && !('provider' in generationResult.resource)
     && !('model' in generationResult.resource) && !('manualBrief' in generationResult.resource),
   'STUDIO-TR-009', 'db.generation-plan-absent-from-public-resource', 'safe-generation-receipt-projection', { receiptId: ids[8], attemptId: ids[9] });
+
+  let fullRpcArgs: Record<string, unknown> = {};
+  await executeStudioAtomicCommand({ ...generationCommand, payload: { ...generationCommand.payload, selectedSectionIds: undefined } } as StudioArtifactAtomicCommand, async (_name, args) => {
+    fullRpcArgs = args;
+    return { outcome: 'committed', receiptId: ids[8], resourceId: ids[4], generationPlan: { attemptId: ids[9] } } as never;
+  });
+  mark(!('selectedSectionIds' in ((fullRpcArgs.p_command ?? {}) as Record<string, unknown>)),
+    'STUDIO-REFRESH-003', 'db.full-generation-keeps-compatible-command-shape', 'omitted-selective-refresh');
 
   const handoffCommand = {
     ...base, commandType: 'studio.handoff.request', payload: { upstreamHandoffId: ids[10], artifactType: 'brd', targetInputBundle: null },

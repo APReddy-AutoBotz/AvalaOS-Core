@@ -182,6 +182,8 @@ const isDeterministicBrowserAuthFixtureWrite = (relativePath, lineText) => {
   const syntheticFixtureKey = ['sb', 'synthetic', 'auth', token.toLowerCase()].join('-');
   return (deterministicBrowserAuthFixturePaths.has(relativePath)
     && lineText.includes(`${storageGlobal}.setItem('${fixtureKey}'`))
+    || (relativePath === 'tests/browser/studioPrB/canonicalSddExport.spec.ts'
+      && lineText.includes(`${storageGlobal}.setItem('sb-placeholder-auth-${token.toLowerCase()}'`))
     || (['scripts/prCSyntheticAcceptanceBrowser.test.mjs', 'scripts/prCSyntheticBrowserApi.test.mjs'].includes(relativePath)
       && lineText.includes(`${storageGlobal}.setItem('${syntheticFixtureKey}'`));
 };

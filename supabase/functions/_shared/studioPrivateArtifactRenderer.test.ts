@@ -145,6 +145,73 @@ void test('PDF generation is byte-for-byte deterministic with correct metadata',
   assert.equal(first.mimeType, 'application/pdf');
   assert.equal(first.filename, 'studio-artifact-rendition.pdf');
   assert.equal(first.rendererVersion, 'studio-pdf-1');
+  assert.equal(first.sha256, '2e1fa0766956d060e057bb4af85d9304e80b42560b6a05e9bfaac1df68d7fff7');
+});
+void test('canonical SDD schema v2 renders As-Is and To-Be as bounded vector diagrams', async () => {
+  const anchor = { sourceVersionId: '11111111-1111-4111-8111-111111111111', locator: 'page:1', anchorHash: 'a'.repeat(64) };
+  const flow = (id: string, title: string, body: string) => ({ id, title, body, sourceAnchors: [anchor], labels: [] });
+  const content = {
+    contractVersion: 'studio-artifact-2', title: 'Synthetic SDD export', summary: 'Synthetic renderer verification.',
+    coverage: { selectedSourceVersionIds: [anchor.sourceVersionId], coveredSourceVersionIds: [anchor.sourceVersionId], complete: true },
+    sections: [
+      flow('summary', 'Summary', 'A source-bound synthetic design.'),
+      flow('asIsFlow', 'As-Is flow', 'flowchart TD\n  A[Request] --> B{Evidence complete}\n  B -->|Yes| C[Human approval]\n  B -->|No| D[Request evidence]'),
+      flow('toBeFlow', 'To-Be flow', 'flowchart LR\n  A[Request] --> B[API validation]\n  B --> C{Exception}\n  C -->|Yes| D[Human judgment]\n  C -->|No| E[Workflow completion]'),
+    ],
+  };
+  const result = await renderStudioPrivateArtifact(content, 'pdf', {
+    artifactType: 'sdd', contentSchemaVersion: 'studio-artifact-2', templateVersion: 'studio-sdd-1', rendererVersion: 'studio-pdf-1',
+  });
+  const pdf = new TextDecoder('latin1').decode(result.bytes);
+  assert.match(pdf, /Synthetic SDD export/u);
+  assert.match(pdf, /As-Is flow/u);
+  assert.match(pdf, /To-Be flow/u);
+  assert.match(pdf, /\d+ \d+ \d+ \d+ re B/u);
+  assert.doesNotMatch(pdf, /flowchart (?:TD|LR)/u);
+});
+void test('schema v2 PDF preserves cycles, cross-page transitions, and full clipped labels', async () => {
+  const body = [
+    'flowchart TD',
+    '  A0[Start] --> A1[Collect detailed request evidence]',
+    '  A1 --> A2[Validate source package]',
+    '  A2 --> A3[Check policy]',
+    '  A3 --> A4[Route work]',
+    '  A4 --> A5[Inspect exception]',
+    '  A5 --> A6[Request review]',
+    '  A6 --> A7[Record decision]',
+    '  A7 --> A8[Prepare handoff]',
+    '  A8 --> A9[Independent approval]',
+    '  A9 --> A10[Publish package]',
+    '  A10 --> A11[Complete]',
+    '  A6 -->|Follow up| A4',
+    '  A11 -->|Reopen| A2',
+  ].join('\n');
+  const content = {
+    contractVersion: 'studio-artifact-2', title: 'Large loop SDD', summary: 'Synthetic export boundary test.',
+    coverage: { selectedSourceVersionIds: [], coveredSourceVersionIds: [], complete: true },
+    sections: [{ id: 'asIsFlow', title: 'As-Is flow', body, sourceAnchors: [], labels: ['template_required'] }],
+  };
+  const result = await renderStudioPrivateArtifact(content, 'pdf', {
+    artifactType: 'sdd', contentSchemaVersion: 'studio-artifact-2', templateVersion: 'studio-sdd-1', rendererVersion: 'studio-pdf-1',
+  });
+  const pdf = new TextDecoder('latin1').decode(result.bytes);
+  assert.match(pdf, /Diagram part 1 of 2/u);
+  assert.match(pdf, /Diagram part 2 of 2/u);
+  assert.match(pdf, /Transitions from diagram part 1/u);
+  assert.match(pdf, /cycle\/back transition/u);
+  assert.match(pdf, /continues in part 2/u);
+  assert.match(pdf, /continues in part 1/u);
+  assert.match(pdf, /\[A1\] Collect detailed request evidence/u);
+  assert.doesNotMatch(pdf, /flowchart TD/u);
+});
+void test('canonical SDD schema v2 rejects unsupported Mermaid before export', async () => {
+  const content = {
+    contractVersion: 'studio-artifact-2', title: 'SDD', summary: '', coverage: { selectedSourceVersionIds: [], coveredSourceVersionIds: [], complete: true },
+    sections: [{ id: 'asIsFlow', title: 'As-Is flow', body: 'flowchart TD\nA --> B --> C', sourceAnchors: [], labels: ['template_required'] }],
+  };
+  await assert.rejects(() => renderStudioPrivateArtifact(content, 'pdf', {
+    artifactType: 'sdd', contentSchemaVersion: 'studio-artifact-2', templateVersion: 'studio-sdd-1', rendererVersion: 'studio-pdf-1',
+  }), errorCode('INVALID_CONTENT'));
 });
 
 void test('DOCX is a valid deterministic ZIP with required OOXML package entries', async () => {
@@ -201,7 +268,7 @@ void test('DOCX generation is byte-for-byte deterministic with correct metadata'
   assert.equal(first.rendererVersion, 'studio-docx-1');
 });
 
-void test('BRD FRD and PDD template-keyed content preserves canonical inventory and nested data', async () => {
+void test('BRD FRD PDD and SDD template-keyed content preserves canonical inventory and nested data', async () => {
   const fixtures = [
     {
       authority: { artifactType: 'brd' as const, templateVersion: 'studio-brd-1' },
@@ -215,6 +282,23 @@ void test('BRD FRD and PDD template-keyed content preserves canonical inventory 
       authority: { artifactType: 'pdd' as const, templateVersion: 'studio-pdd-1' },
       content: { title: 'PDD', summary: 'Summary', process: [{ step: 1, actions: ['review'] }], roles: { approver: ['human'] }, controls: ['retention'], exceptions: { none: null } },
     },
+    {
+      authority: { artifactType: 'sdd' as const, templateVersion: 'studio-sdd-1' },
+      content: {
+        title: 'SDD',
+        summary: 'Summary',
+        architecture: { boundary: 'governed service' },
+        components: ['Studio'],
+        interfaces: [{ name: 'Unknown API', status: 'proposal' }],
+        dataDesign: { sourceBinding: 'immutable' },
+        asIsFlow: 'flowchart TD\n  A[Start] --> B[Review]',
+        toBeFlow: 'flowchart TD\n  A[Start] --> B[API]\n  B --> C[Human review]',
+        securityControls: ['server authorization'],
+        operationalDesign: { owner: 'Unassigned' },
+        designDecisions: ['API-first where supported'],
+        openQuestionsAndProposals: ['Confirm API operation availability'],
+      },
+    },
   ];
   for (const fixtureCase of fixtures) {
     const normalized = normalizeStudioApprovedContent(fixtureCase.content, {
@@ -222,7 +306,7 @@ void test('BRD FRD and PDD template-keyed content preserves canonical inventory 
       contentSchemaVersion: 'studio-artifact-1',
     });
     assert.match(JSON.stringify(normalized), /Summary/u);
-    assert.match(JSON.stringify(normalized), /review|functionalRequirements|objectives|one|F1/u);
+    assert.match(JSON.stringify(normalized), /review|functionalRequirements|objectives|one|F1|architecture/u);
     for (const format of ['markdown', 'pdf', 'docx'] as const) {
       const result = await renderStudioPrivateArtifact(fixtureCase.content, format, {
         ...fixtureCase.authority,

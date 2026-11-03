@@ -63,7 +63,7 @@ Completion never automatically creates the next module's resource. Each handoff 
 
 - Source Library supports bounded text-oriented inputs including TXT, Markdown, CSV, VTT, SRT, meeting-note text and supported text PDF/DOCX extraction. Assess also accepts the bounded Mermaid flowchart subset documented in the [intake plan](planning/assess-supporting-document-mapping.md). Native Assess separately supports bounded structured CSV/XLSX field mapping; this does not imply Studio XLSX mapping.
 - Audio/video transcription, OCR, URL/cloud-drive retrieval and archive expansion are outside the described ingestion scope.
-- BRD/FRD/PDD are the canonical Studio aggregate types. Canonical SDD and editable As-Is/To-Be diagram revisions are required milestone outputs and remain open implementation work. Approved tenant custom template/output design is governed by the multi-source architecture, not implied by the canonical aggregate union.
+- Studio has four canonical document types: BRD, PDD, FRD and SDD. The system SDD template includes editable As-Is and To-Be Mermaid flows. Unknown interfaces, data design and control decisions belong in its open questions or proposals. Approved tenant custom template/output design is governed by the multi-source architecture, not implied by the canonical aggregate union.
 - Manual Studio sources retain their manual/not-assessed truth. Reusing a transcript between Assess and Studio does not share a mutable source set or silently create a handoff.
 
 ## Worked example: invoice exception handling

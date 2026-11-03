@@ -440,6 +440,29 @@ for (const absolute of await walk(root)) {
 }
 
 const workflow = await readFile('.github/workflows/studio-governed-artifacts.yml', 'utf8');
+const postgresHarness = await readFile('scripts/testStudioPrivateArtifactMigrations.mjs', 'utf8');
+const sddCrossLayerRunner = await readFile('scripts/runProcessEvidenceSddPrivateCrossLayer.mjs', 'utf8');
+const crossLayerEvidence = await readFile('scripts/studioPrivateArtifactCrossLayerPostgres.mjs', 'utf8');
+for (const retainedDefault of ['artifactType = "brd"', 'format = "markdown"']) {
+  assert(
+    crossLayerEvidence.includes(retainedDefault),
+    `Historical cross-layer default missing: ${retainedDefault}`,
+  );
+}
+assert(
+  postgresHarness.includes("execFileSync(process.execPath,['scripts/runProcessEvidenceSddPrivateCrossLayer.mjs']"),
+  'Studio PostgreSQL full-chain harness must execute the SDD/PDF cross-layer runner',
+);
+for (const boundary of [
+  'STUDIO_PRIVATE_ARTIFACT_DISPOSABLE_DATABASE',
+  '127.0.0.1',
+  'brokerFixturePath: "tests/fixtures/process-evidence/synthetic-sdd-export.pdf"',
+]) {
+  assert(
+    sddCrossLayerRunner.includes(boundary),
+    `SDD/PDF cross-layer runner boundary missing: ${boundary}`,
+  );
+}
 for (const job of [
   'studio-private-artifacts-source:',
   'studio-private-artifacts-renderers:',
@@ -451,6 +474,7 @@ for (const job of [
 for (const evidence of [
   'tee studio-private-renderers.log',
   'tee studio-private-postgresql-16.log',
+  'npm run test:browser:studio-process-evidence-export',
   'if: always()',
   'actions/upload-artifact@v4',
 ]) {

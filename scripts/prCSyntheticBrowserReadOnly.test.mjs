@@ -130,8 +130,21 @@ const buildFixture = () => fixturePromise ??= (async () => {
       await window.__recordPrCReadOnlyRequest({ method, pathname: url.pathname, personaKey: persona?.personaKey || null });
       if (url.origin !== config.loopbackOrigin) throw new Error('FIXTURE_EXTERNAL_REQUEST_REJECTED');
       if (url.pathname === '/rest/v1/rpc/pr_c_controlled_human_public_attestation') return json(config.attestation);
-      const readTables = new Set(['/rest/v1/assess_processes', '/rest/v1/epics', '/rest/v1/handoff_ledger_entries',
-        '/rest/v1/projects', '/rest/v1/sprints', '/rest/v1/tasks', '/rest/v1/timesheet_entries']);
+      const readTables = new Set(['/rest/v1/assess_processes', '/rest/v1/document_generations', '/rest/v1/epics',
+        '/rest/v1/handoff_ledger_entries', '/rest/v1/projects', '/rest/v1/sprints', '/rest/v1/tasks', '/rest/v1/timesheet_entries']);
+      if (url.pathname === '/rest/v1/document_generations') {
+        const expectedQueryKeys = ['archived_at', 'deleted_at', 'order', 'org_id', 'select', 'status', 'workspace_id'];
+        const actualQueryKeys = [...new Set(url.searchParams.keys())].sort();
+        const exactProjection = JSON.stringify(actualQueryKeys) === JSON.stringify(expectedQueryKeys)
+          && url.searchParams.get('select') === '*'
+          && url.searchParams.get('org_id') === 'eq.' + config.organizationId
+          && url.searchParams.get('workspace_id') === 'eq.' + config.workspaceId
+          && url.searchParams.get('status') === 'in.(generated,draft)'
+          && url.searchParams.get('archived_at') === 'is.null'
+          && url.searchParams.get('deleted_at') === 'is.null'
+          && url.searchParams.get('order') === 'generated_at.desc';
+        if (!exactProjection) throw new Error('FIXTURE_DOCUMENT_GENERATIONS_SCOPE_REJECTED');
+      }
       if (readTables.has(url.pathname) && ['GET', 'HEAD'].includes(method)) return json([]);
       if (url.pathname === '/auth/v1/user') return persona ? json({ id: persona.actorId, email: persona.email, role: 'authenticated', aud: 'authenticated', user_metadata: { full_name: persona.personaKey } }) : json({});
       if (url.pathname === '/auth/v1/logout') {
@@ -355,11 +368,22 @@ test('final read-only phase restores the real app, proves retained Monitor histo
     const requests = createdBrowser.requests;
     assert.equal(requests.filter(record => record.pathname === '/auth/v1/logout').length, 12);
     assert.deepEqual(requests.filter(record => record.pathname === '/auth/v1/logout').map(record => record.personaKey), SYNTHETIC_PERSONA_ORDER);
-    const allowedReads = new Set(['/rest/v1/assess_processes', '/rest/v1/epics', '/rest/v1/handoff_ledger_entries',
-      '/rest/v1/projects', '/rest/v1/sprints', '/rest/v1/tasks', '/rest/v1/timesheet_entries']);
-    assert.equal(requests.some(record => !(allowedReads.has(record.pathname)
-      || record.pathname === '/rest/v1/rpc/pr_c_controlled_human_public_attestation'
-      || ['/auth/v1/user', '/auth/v1/logout', '/functions/v1/tenant-session', '/functions/v1/enterprise-intelligence-query'].includes(record.pathname))), false);
+    const allowedReads = new Set(['/rest/v1/assess_processes', '/rest/v1/document_generations', '/rest/v1/epics',
+      '/rest/v1/handoff_ledger_entries', '/rest/v1/projects', '/rest/v1/sprints', '/rest/v1/tasks', '/rest/v1/timesheet_entries']);
+    const allowedPaths = new Set([
+      ...allowedReads,
+      '/rest/v1/rpc/pr_c_controlled_human_public_attestation',
+      '/auth/v1/user',
+      '/auth/v1/logout',
+      '/functions/v1/tenant-session',
+      '/functions/v1/enterprise-intelligence-query',
+    ]);
+    const unexpectedPathCategories = [...new Set(requests
+      .map(record => record.pathname)
+      .filter(pathname => !allowedPaths.has(pathname)))].sort();
+    assert.deepEqual(unexpectedPathCategories, []);
+    assert.equal(requests.some(record => allowedReads.has(record.pathname)
+      && !['GET', 'HEAD'].includes(record.method)), false);
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(() => undefined);
   }

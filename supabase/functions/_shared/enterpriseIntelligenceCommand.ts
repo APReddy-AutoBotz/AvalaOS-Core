@@ -2845,7 +2845,7 @@ const commandApprovalRecord = async (authority: Authority, payload: JsonObject, 
 
 type StudioAggregateRow = {
   id: string;
-  artifact_type: 'brd' | 'frd' | 'pdd';
+  artifact_type: 'brd' | 'frd' | 'pdd' | 'sdd';
   current_approved_version_id: string | null;
   lifecycle: string;
   source_mode: 'assess_handoff' | 'direct_transcript_bundle' | 'assess_plus_transcript_bundle' | 'manual_brief';
@@ -2981,7 +2981,7 @@ type PackageVersionRow = {
   id: string;
   work_package_id: string;
   studio_document_id: string;
-  artifact_type: 'brd' | 'frd' | 'pdd';
+  artifact_type: 'brd' | 'frd' | 'pdd' | 'sdd';
   studio_version: number;
   studio_content_hash: string;
   content: JsonObject;

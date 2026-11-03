@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
 import { buildAuthenticatedSyntheticStudioDraft, executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
@@ -32,6 +33,29 @@ const tenantTemplatePayload = {
 mark(validateStudioDraft(valid, [ids[0]], canonicalAnchors) === valid, 'STUDIO-TR-008', 'generation.section-provenance-complete', 'source-backed-and-template-required-sections');
 mark(validateStudioDraft(valid, [ids[0]], canonicalAnchors, tenantTemplatePayload) === valid,
   'STUDIO-TR-008', 'generation.exact-tenant-template-sections-complete', 'tenant-template-exact-sections');
+const flowTemplatePayload = { artifactType: 'sdd', sections: ['asIsFlow', 'toBeFlow'] };
+const validFlows = {
+  ...valid,
+  sections: [
+    { id: 'asIsFlow', title: 'As is flow', body: 'flowchart TD\n  A[Start] --> B[Review]\n  B --> C[Complete]', sourceAnchors: valid.sections[0].sourceAnchors, labels: [] },
+    { id: 'toBeFlow', title: 'To be flow', body: 'flowchart LR\n  A[Start] --> B[API]\n  B --> C[Human judgment]', sourceAnchors: [], labels: ['template_required'] },
+  ],
+};
+assert.equal(
+  validateStudioDraft(validFlows, [ids[0]], canonicalAnchors, flowTemplatePayload),
+  validFlows,
+  'SDD validation must accept bounded As-Is and To-Be Mermaid flows',
+);
+for (const body of ['A --> B', 'flowchart TD\n  A --> B\n  click A "https://unsafe.example"', 'flowchart TD\n  A[<script>alert(1)</script>] --> B']) {
+  assert.throws(
+    () => validateStudioDraft(
+      { ...validFlows, sections: [{ ...validFlows.sections[0], body }, validFlows.sections[1]] },
+      [ids[0]], canonicalAnchors, flowTemplatePayload,
+    ),
+    undefined,
+    'SDD validation must reject unsafe or non-flowchart Mermaid source',
+  );
+}
 mark(Boolean(validateStudioDraft({ title: 'Legacy', summary: 'Readable', sections: [{ title: 'Scope', content: 'Accepted history' }] })), 'STUDIO-TR-005', 'generation.legacy-studio-artifact-1-readable', 'accepted-assess-derived-artifact');
 let legacyProviderOutputRejected = false;
 try {

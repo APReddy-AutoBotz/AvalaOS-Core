@@ -21,6 +21,10 @@ One milestone has three review boundaries. Intake and Assess own reviewed facts 
 | Delivery proposals and board | Partial. StudioApprovedArtifactPublish accepts manually authored work. Board import supports item selection, server-side unique source indices and persistent task changes. Requirement-derived proposal generation and the full fresh-source confirmation journey remain open. |
 | Fresh end-to-end proof | Blocked for provider execution. The accepted preview is provider-off. A diagnostic ping or synthetic approval replay cannot exercise extraction and generation. |
 
+## Studio implementation candidate
+
+The [Studio PR](process-evidence-studio-sdd-and-flows.md) adds SDD to the governed document types. Its canonical SDD includes the editable As-Is and To-Be flows in the same generation request. Real output quality for BRD, PDD, FRD and SDD must still be checked separately on the proposed run below.
+
 ## Bounded acceptance run after implementation
 
 Use an isolated nonproduction workspace and synthetic files. Obtain a server-authorized extraction route and Studio generation route for the exact candidate, model and spending ceiling. Preflight the existing reservation and replay controls and stop on an unknown outcome. Do not transfer an earlier exercise's allowance. Keep current actor timeouts. Allocate at most two Assess extraction requests (one per case) and one generation per selected document type, plus separate flow/proposal calls only if the implemented design requires them and the run budget explicitly includes them. Never auto-retry a billed or ambiguous operation.

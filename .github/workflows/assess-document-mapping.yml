@@ -2,7 +2,7 @@ name: Native Assess document mapping
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/process-evidence-to-assessment, codex/process-evidence-studio]
   workflow_dispatch:
 
 permissions:

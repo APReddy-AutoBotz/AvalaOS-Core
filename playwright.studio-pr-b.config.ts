@@ -7,7 +7,7 @@ const externalServer = process.env.STUDIO_PR_B_EXTERNAL_SERVER === 'true';
 export default defineConfig({
   captureGitInfo: { commit: false, diff: false },
   testDir: './tests/browser/studioPrB',
-  testMatch: 'studioPrB.spec.ts',
+  testMatch: ['studioPrB.spec.ts', 'unsavedRegeneration.spec.ts', 'canonicalSddExport.spec.ts'],
   globalTeardown: externalServer ? undefined : './tests/browser/studioPrB/globalTeardown.mjs',
   outputDir: path.join(tmpdir(), 'avalaos-studio-pr-b-playwright', String(process.pid)),
   workers: 1,

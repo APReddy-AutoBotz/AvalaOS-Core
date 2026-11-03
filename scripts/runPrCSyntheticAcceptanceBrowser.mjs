@@ -622,13 +622,13 @@ export const selectSyntheticStudioDraft = async (page, interactionSequence, titl
     const bodyMatches = [];
     for (const value of candidates) {
       await selectLoadedStudioArtifact(page, select, value);
-      const bodies = await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').evaluateAll(nodes => nodes.map(node => node.value));
+      const bodies = await workspace.getByRole('region', { name: 'Current document', exact: true }).locator('textarea').evaluateAll(nodes => nodes.map(node => node.value));
       if (bodies.some(body => [SYNTHETIC_STUDIO_DRAFT_INITIAL_BODY, SYNTHETIC_STUDIO_DRAFT_SECTION_BODY].includes(body))) bodyMatches.push(value);
     }
     assert.equal(bodyMatches.length, 1, `PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_COUNT:${bodyMatches.length}`);
     await selectLoadedStudioArtifact(page, select, bodyMatches[0]);
   }
-  await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').first().waitFor({ state: 'visible' });
+  await workspace.getByRole('region', { name: 'Current document', exact: true }).locator('textarea').first().waitFor({ state: 'visible' });
   assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready', 'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
   interactionSequence.push('select:synthetic-studio-transcript-draft');
   return workspace;
@@ -643,7 +643,7 @@ export const selectSyntheticHybridStudioDraft = async (page, interactionSequence
   const matches = [];
   for (const value of candidates.filter(value => !artifactId || value === artifactId)) {
     await selectLoadedStudioArtifact(page, select, value);
-    const bodies = await workspace.locator('section[aria-labelledby="structured-editor-title"] textarea').evaluateAll(nodes => nodes.map(node => node.value));
+    const bodies = await workspace.getByRole('region', { name: 'Current document', exact: true }).locator('textarea').evaluateAll(nodes => nodes.map(node => node.value));
     if (bodies.includes(sectionBody)) matches.push(value);
   }
   assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_HYBRID_STUDIO_DRAFT_COUNT:${matches.length}`);
@@ -657,7 +657,7 @@ export const editSyntheticStudioDraft = async (page, interactionSequence) => {
   const workspace = page.getByTestId('studio-artifact-workspace');
   assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready',
     'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
-  const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
+  const editor = workspace.getByRole('region', { name: 'Current document', exact: true });
   await editor.waitFor({ state: 'visible' });
   const body = editor.locator('label').filter({ hasText: 'Section body' }).locator('textarea');
   assert.equal(await body.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STRUCTURED_EDITOR_COUNT');
@@ -674,7 +674,7 @@ export const assertSyntheticStudioDraftReadback = async (page, expectedBody) => 
   assert(typeof expectedBody === 'string' && expectedBody.endsWith('Synthetic acceptance edit.'),
     'PR_C_SYNTHETIC_BROWSER_STUDIO_EXPECTED_BODY_REJECTED');
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
+  const editor = workspace.getByRole('region', { name: 'Current document', exact: true });
   const body = editor.locator('label').filter({ hasText: 'Section body' }).locator('textarea');
   assert.equal(await body.inputValue(), expectedBody, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVISION_READBACK_REJECTED');
   return { bodyDigest: digest(expectedBody) };
@@ -691,13 +691,17 @@ export const persistAndSubmitSyntheticStudioDraft = async (page, interactionSequ
   const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
   assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(artifactId),
     'PR_C_SYNTHETIC_BROWSER_STUDIO_ARTIFACT_ID_INVALID');
-  const editor = workspace.locator('section[aria-labelledby="structured-editor-title"]');
+  const editor = workspace.getByRole('region', { name: 'Current document', exact: true });
   const body = editor.locator('label').filter({ hasText: 'Section body' }).locator('textarea');
   const expectedBody = await body.inputValue();
-  const priorVersionText = await workspace.getByText(/^Aggregate v[1-9][0-9]* · Content v[1-9][0-9]*$/u).innerText();
+  const audit = workspace.getByTestId('studio-current-document-audit');
+  if (!await audit.evaluate(element => element.hasAttribute('open'))) {
+    await audit.getByText('Audit details', { exact: true }).click();
+  }
+  const priorVersionText = await audit.getByText(/^Aggregate v[1-9][0-9]* · Content v[1-9][0-9]*$/u).innerText();
   const priorContentVersion = Number(/Content v([1-9][0-9]*)$/u.exec(priorVersionText)?.[1]);
   assert(Number.isSafeInteger(priorContentVersion), 'PR_C_SYNTHETIC_BROWSER_STUDIO_PRIOR_VERSION_REJECTED');
-  const commit = editor.getByRole('button', { name: 'Commit immutable revision', exact: true });
+  const commit = editor.getByRole('button', { name: 'Save changes', exact: true });
   assert(await commit.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_STRUCTURED_COMMIT_DISABLED');
   const revision = await captureCommand(page, {
     endpoint: '/functions/v1/studio-artifact-command', commandType: 'studio.artifact.draft.revise',
@@ -705,7 +709,7 @@ export const persistAndSubmitSyntheticStudioDraft = async (page, interactionSequ
   assertCapturedCommand(revision, { commandType: 'studio.artifact.draft.revise', expectedScope, expectedResourceId: artifactId });
   assert.equal(revision.body.payload?.artifactId, artifactId, 'PR_C_SYNTHETIC_BROWSER_STUDIO_REVISION_ARTIFACT_REJECTED');
   await workspace.getByText('Draft committed.', { exact: true }).waitFor({ state: 'visible' });
-  await workspace.getByText(new RegExp(`^Aggregate v[1-9][0-9]* · Content v${priorContentVersion + 1}$`, 'u')).waitFor({ state: 'visible' });
+  await audit.getByText(new RegExp(`^Aggregate v[1-9][0-9]* · Content v${priorContentVersion + 1}$`, 'u')).waitFor({ state: 'visible' });
   await assertSyntheticStudioDraftReadback(page, expectedBody);
   interactionSequence.push('commit:immutable-structured-studio-revision');
   const submit = workspace.getByRole('button', { name: 'Submit for review', exact: true });

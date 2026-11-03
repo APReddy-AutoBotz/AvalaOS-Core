@@ -84,7 +84,7 @@ try {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;`);
   for (const name of migrations) {
     if (name === '20261019161723_local_real_backend_authenticated_acceptance.sql') {
-      assert.equal(name, migrations.at(-1), 'local acceptance authority must be the final migration');
+      assert.equal(migrations.at(-1), '20261103103752_process_evidence_studio_sdd_flows.sql', 'full-chain replay must include the exact product successor');
       assert.equal((await db.query(
         'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
       '20261011053000');
@@ -180,10 +180,10 @@ try {
   }
 
   assert.equal((await db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
-    '20261019161723');
+    '20261103103752');
   assert.deepEqual((await authority(db,
     'SELECT public.enterprise_provider_secret_backend_capability() value')).rows[0].value, {
-    backendKind: 'supabase_vault', available: false, migrationTip: '20261019161723',
+    backendKind: 'supabase_vault', available: false, migrationTip: '20261103103752',
     exerciseActive: false, providerCallsAuthorized: false,
   });
 
@@ -221,12 +221,12 @@ try {
   await assert.rejects(() => authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://foreign.invalid', `sha256:${hash('b')}`,
-      '20261019161723', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
+      '20261103103752', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]));
   const activated = await authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://avalaos-pilot.netlify.app', `sha256:${hash('b')}`,
-      '20261019161723', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
+      '20261103103752', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]);
   assert.equal(activated.rows[0].value.lifecycle, 'active');
   await authority(db, 'SELECT public.authenticated_synthetic_bind_session($1,$2,$3,$4)',
@@ -405,7 +405,7 @@ try {
   const localActivationSql =
     'SELECT public.authenticated_synthetic_local_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value';
   const localActivation = [ids.localExercise, hash('2').slice(0, 40), `sha256:${hash('3')}`,
-    'http://127.0.0.1:4173', `sha256:${hash('4')}`, '20261019161723', `sha256:${hash('5')}`,
+    'http://127.0.0.1:4173', `sha256:${hash('4')}`, '20261103103752', `sha256:${hash('5')}`,
     `sha256:${hash('6')}`, 'local-real-backend-authenticated-profile-v1', `sha256:${hash('7')}`,
     `sha256:${hash('8')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)];
   assert.deepEqual((await db.query(`SELECT

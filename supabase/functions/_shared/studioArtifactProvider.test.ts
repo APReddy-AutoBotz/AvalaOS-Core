@@ -118,6 +118,24 @@ void (async () => {
   'STUDIO-TR-008', 'provider.trusted-template-and-coverage-output-contract-explicit',
   'pdd-system-template-trusted-prompt-contract', 'openai');
 
+  const flowInstruction = buildStudioArtifactTaskInstruction({
+    kind: 'system', artifactType: 'sdd', sections: [
+      { id: 'asIsFlow', title: 'As Is Flow', required: true, fieldKind: 'system' },
+      { id: 'toBeFlow', title: 'To Be Flow', required: true, fieldKind: 'system' },
+    ],
+  }, [ids[0]], 'studio-pr-b-1', 'sdd');
+  const sddInstruction = buildStudioArtifactTaskInstruction({
+    kind: 'system', artifactType: 'sdd', sections: [
+      { id: 'openQuestionsAndProposals', title: 'Open Questions And Proposals', required: true, fieldKind: 'system' },
+    ],
+  }, [ids[0]], 'studio-pr-b-1', 'sdd');
+  mark(flowInstruction.includes('must each be Mermaid flowchart source')
+    && flowInstruction.includes('never invent a connection')
+    && sddInstruction.includes('explicit open question or clearly labeled proposal')
+    && sddInstruction.includes('Do not invent API availability'),
+  'STUDIO-TR-008', 'provider.sdd-flow-and-unknown-design-contract-explicit',
+  'sdd-v1-flow-and-trusted-design-prompt', 'openai');
+
   const semanticInstruction = buildStudioArtifactTaskInstruction({
     kind: 'system', artifactType: 'pdd', sections: [
       { id: 'summary', title: 'Summary', required: true, fieldKind: 'system' },
