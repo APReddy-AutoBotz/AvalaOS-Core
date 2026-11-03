@@ -19,14 +19,14 @@ test('invalid structured JSON is field-scoped and immediately correctable', asyn
   await expect(workspace).toContainText('Current committed artifact loaded');
   const draft = workspace.getByLabel('Draft revision (strict structured JSON)');
   await draft.fill('{invalid');
-  await workspace.getByRole('button', { name: 'Commit revision' }).click();
+  await workspace.getByRole('button', { name: 'Save changes' }).click();
   await expect(draft).toHaveAttribute('aria-invalid', 'true');
   await expect(workspace.getByRole('alert')).toContainText('No command was submitted; the committed artifact remains unchanged.');
   await expect(workspace).toContainText('Aggregate v1 · Content v1');
-  await expect(workspace.getByRole('button', { name: 'Commit revision' })).toBeEnabled();
+  await expect(workspace.getByRole('button', { name: 'Save changes' })).toBeEnabled();
   await draft.fill('{"title":"Corrected governed draft"}');
   await expect(draft).toHaveAttribute('aria-invalid', 'false');
-  await workspace.getByRole('button', { name: 'Commit revision' }).click();
+  await workspace.getByRole('button', { name: 'Save changes' }).click();
   await expect(workspace.getByRole('status')).toHaveText('Draft committed.');
 });
 

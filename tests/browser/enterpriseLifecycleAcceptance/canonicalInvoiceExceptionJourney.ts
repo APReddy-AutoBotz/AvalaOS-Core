@@ -462,7 +462,7 @@ export const reloadCanonicalStudioArtifact = async (
   if (await version.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CONTENT_VERSION_REJECTED');
 
   if (options.expectedSectionTitles) {
-    const editor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+    const editor = page.getByRole('region', { name: 'Current document', exact: true });
     await editor.waitFor({ state: 'visible', timeout: remaining() });
     const outline = editor.getByRole('navigation', { name: 'Document outline', exact: true });
     const sectionButtons = outline.getByRole('button').filter({ hasNotText: 'Add section' });

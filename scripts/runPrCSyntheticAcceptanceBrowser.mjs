@@ -697,7 +697,7 @@ export const persistAndSubmitSyntheticStudioDraft = async (page, interactionSequ
   const priorVersionText = await workspace.getByText(/^Aggregate v[1-9][0-9]* · Content v[1-9][0-9]*$/u).innerText();
   const priorContentVersion = Number(/Content v([1-9][0-9]*)$/u.exec(priorVersionText)?.[1]);
   assert(Number.isSafeInteger(priorContentVersion), 'PR_C_SYNTHETIC_BROWSER_STUDIO_PRIOR_VERSION_REJECTED');
-  const commit = editor.getByRole('button', { name: 'Commit immutable revision', exact: true });
+  const commit = editor.getByRole('button', { name: 'Save changes', exact: true });
   assert(await commit.isEnabled(), 'PR_C_SYNTHETIC_BROWSER_STRUCTURED_COMMIT_DISABLED');
   const revision = await captureCommand(page, {
     endpoint: '/functions/v1/studio-artifact-command', commandType: 'studio.artifact.draft.revise',
