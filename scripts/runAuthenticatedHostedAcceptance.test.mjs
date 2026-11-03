@@ -21,7 +21,7 @@ import { AUTHENTICATED_V2_RELOAD_CHECKPOINT_SCHEMA, AUTHENTICATED_V2_RELOAD_COUN
 const emptyTransportFailures = () => ({ aborted: 0, timeout: 0, connection: 0, protocol: 0, blocked: 0, other: 0 });
 
 const functions = ['tenant-session','process-command','assess-command','assess-v2-command',
-  'studio-artifact-command','studio-artifact-download','studio-delivery-authority-command',
+  'studio-artifact-command','studio-private-artifact-command','studio-artifact-download','studio-delivery-authority-command',
   'legacy-delivery-command','legacy-delivery-query','studio-delivery-outcome-query',
   'enterprise-intelligence-command','enterprise-intelligence-query','synthetic-admin','pilot-operations-query',
   'enterprise-provider-lifecycle','enterprise-provider-lifecycle-authority','enterprise-provider-lifecycle-recovery'];

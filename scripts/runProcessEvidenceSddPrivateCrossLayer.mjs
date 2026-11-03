@@ -13,6 +13,14 @@ const crossLayerScenarioNames = [
 const databaseUrl = process.env.STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL;
 if (!databaseUrl)
   throw new Error("STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL is required");
+if (process.env.STUDIO_PRIVATE_ARTIFACT_DISPOSABLE_DATABASE !== "true")
+  throw new Error("STUDIO_PRIVATE_ARTIFACT_DISPOSABLE_DATABASE=true is required");
+const target = new URL(databaseUrl);
+if (
+  !["postgres:", "postgresql:"].includes(target.protocol) ||
+  !["127.0.0.1", "localhost", "::1", "[::1]"].includes(target.hostname.toLowerCase())
+)
+  throw new Error("SDD cross-layer evidence requires a disposable loopback PostgreSQL URL");
 
 const database = new pg.Client({ connectionString: databaseUrl });
 const passed = [];
@@ -40,6 +48,9 @@ try {
     scenario,
     names: crossLayerScenarioNames,
     contractParityPassed: true,
+    artifactType: "sdd",
+    format: "pdf",
+    brokerFixturePath: "tests/fixtures/process-evidence/synthetic-sdd-export.pdf",
   });
   assert.equal(passed.length, crossLayerScenarioNames.length);
   console.log(

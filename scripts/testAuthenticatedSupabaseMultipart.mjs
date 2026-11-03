@@ -17,13 +17,13 @@ const fakeDeploymentId = '00000000-0000-4000-8000-000000000001';
 const fakeVersion = 17;
 const functions = Object.freeze([
   'tenant-session', 'process-command', 'assess-command', 'assess-v2-command',
-  'studio-artifact-command', 'studio-artifact-download', 'studio-delivery-authority-command',
+  'studio-artifact-command', 'studio-private-artifact-command', 'studio-artifact-download', 'studio-delivery-authority-command',
   'legacy-delivery-command', 'legacy-delivery-query', 'studio-delivery-outcome-query',
   'enterprise-intelligence-command', 'enterprise-intelligence-query', 'synthetic-admin', 'pilot-operations-query',
   'enterprise-provider-lifecycle', 'enterprise-provider-lifecycle-authority',
   'enterprise-provider-lifecycle-recovery',
 ]);
-const functionsLayout = new Set(['tenant-session', 'studio-artifact-download', 'pilot-operations-query']);
+const functionsLayout = new Set(['tenant-session', 'pilot-operations-query']);
 const sha = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const normalize = value => value.toString('utf8').replace(/\r\n/gu, '\n');
 const deployments = new Map(functions.map(slug => [slug, {
@@ -50,8 +50,8 @@ async function repositoryClosures(root) {
     }
     closures.set(slug, entries);
   }
-  assert.equal(Object.keys(compared).length, 252);
-  for (const slug of ['studio-artifact-command', 'enterprise-intelligence-command',
+  assert.equal(Object.keys(compared).length, 265);
+  for (const slug of ['studio-artifact-command', 'studio-private-artifact-command', 'studio-artifact-download', 'enterprise-intelligence-command',
     'enterprise-provider-lifecycle', 'enterprise-provider-lifecycle-authority', 'enterprise-provider-lifecycle-recovery']) {
     assert.ok(closures.get(slug).some(entry => entry.repositoryRelative === 'services/mermaidFlowchart.ts'));
   }
@@ -195,7 +195,7 @@ async function main() {
     const success = await downloadAndVerifyAuthenticatedEdgeSources(config, {
       root, managementToken: fakeToken, fetchImpl, deployments,
     });
-    assert.deepEqual(success, { backendDigest, files: 252 });
+    assert.deepEqual(success, { backendDigest, files: 265 });
     for (const [negative, code] of [
       ['stale', 'BACKEND_SOURCE_FILE_MISMATCH'],
       ['missing', 'BACKEND_DEPENDENCY_CLOSURE_MISSING'],
@@ -218,10 +218,10 @@ async function main() {
     assert.deepEqual(await currentSourceSnapshot(root, sourceSnapshot), sourceSnapshot);
     passResult = {
       status: 'PASS', transport: 'multipart/form-data', loopbackDownloads: requests.length,
-      successfulClosures: 252, deepEnterpriseIntelligenceSourceVerified: true,
+      successfulClosures: 265, deepEnterpriseIntelligenceSourceVerified: true,
       deepLegacyContractsSourceVerified: true, staleSourceRejected: true,
       missingDependencyRejected: true, extraDependencyRejected: true,
-      repositoryLayoutFunctions: 14, functionsLayoutFunctions: 3,
+      repositoryLayoutFunctions: 16, functionsLayoutFunctions: 2,
       repositorySourcesUnchanged: true, temporaryOutputs: 0, childProcesses: 0, hostedRequests: 0,
     };
   } finally {

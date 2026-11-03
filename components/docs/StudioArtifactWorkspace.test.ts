@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 const source=readFileSync('components/docs/StudioArtifactWorkspace.tsx','utf8');
+const structuredEditor=readFileSync('components/docs/StructuredArtifactEditor.tsx','utf8');
 const governedRoute=readFileSync('components/docs/GovernedStudioRoute.tsx','utf8');
 const docsView=readFileSync('components/docs/DocsView.tsx','utf8');
 for(const token of [
@@ -48,6 +49,16 @@ for(const token of [
   "data-studio-artifact-mutations={blocked?'blocked':'available'}",
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
+assert.ok(source.includes('Business users can review the current document, save changes, view its source, and open its history.'), 'normal Studio introduction must use business wording');
+assert.ok(source.includes('data-testid="studio-current-document-audit"'), 'current technical revision details must remain available under audit');
+assert.ok(source.includes('Aggregate v{artifact.aggregateVersion} · Content v{artifact.currentVersion.version}'), 'audit retains exact aggregate/content revision identity');
+assert.ok(source.includes('data-testid="studio-canonical-json-audit"'), 'canonical JSON import must have a scoped audit disclosure');
+assert.ok(source.includes('Canonical JSON import')&&source.includes('Save canonical JSON'), 'raw schema editing must use audit-specific wording');
+assert.ok(!source.includes('open={legacyProjection'), 'legacy projection must not force raw schema audit details open');
+assert.ok(!source.includes('Last committed receipt {receipt.receiptId}') || source.indexOf('Last committed receipt {receipt.receiptId}')>source.indexOf('data-testid="studio-current-document-audit"'), 'receipt identity must remain inside audit details');
+const ordinaryEditorActions=structuredEditor.slice(structuredEditor.indexOf('<div className="mt-4 flex justify-end">'));
+assert.equal(ordinaryEditorActions.match(/Save changes/gu)?.length,1,'the ordinary structured editor exposes one Save changes action');
+assert.equal(source.match(/>Save changes<\/button>/gu)?.length??0,0,'technical JSON import must not add another Save changes action');
 const offlineBranch=source.indexOf("if (offline)"), ordinaryClearBranch=source.indexOf('if (!preserveProjection)');
 assert.ok(offlineBranch < ordinaryClearBranch&&ordinaryClearBranch < source.indexOf('clearProjection();',ordinaryClearBranch),'offline state must preserve the committed projection for read-only inspection');
 assert.equal(source.match(/clearProjection\(\);/g)?.length, 2, 'only a genuine source/type identity load or rejected cross-authority load may clear the projection');

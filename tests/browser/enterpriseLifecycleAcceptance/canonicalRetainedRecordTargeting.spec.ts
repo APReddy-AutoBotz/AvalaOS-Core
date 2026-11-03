@@ -75,9 +75,9 @@ const studioReloadFixture = ({ missing = false, duplicate = false, targetVersion
       <label>Governed artifact<select aria-label="Governed artifact">
         <option value="${competingArtifactId}" data-version="3">Newer retained legacy BRD</option>${target}
       </select></label>
-      <article aria-label="Artifact preview"><p role="status"></p><p data-version></p></article>
+      <article aria-label="Artifact preview"><p role="status"></p><details data-testid="studio-current-document-audit"><summary>Audit details</summary><p data-version></p></details></article>
     </section>
-    <section role="region" aria-labelledby="editor-heading"><h2 id="editor-heading">Structured section editor</h2>
+    <section role="region" aria-label="Current document"><h2>Current document</h2>
       <nav aria-label="Document outline"><ol>${reloadSectionTitles.map((title, index) =>
         `<li><button>${index + 1}. ${wrongSection && index === 4 ? 'Unrelated retained section' : title}</button></li>`).join('')}</ol><button>Add section</button></nav>
     </section>
@@ -185,14 +185,15 @@ test('canonical Studio reload reselects the exact committed artifact instead of 
   const selector = page.getByLabel('Governed artifact', { exact: true });
   await expect(selector).toHaveValue(competingArtifactId);
   await selector.selectOption(targetArtifactId);
-  await expect(page.getByRole('article', { name: 'Artifact preview', exact: true })
-    .getByText('Aggregate v7 · Content v2', { exact: true })).toBeVisible();
+  const audit = page.getByTestId('studio-current-document-audit');
+  await expect(audit).not.toHaveAttribute('open', '');
   const target = await captureCanonicalStudioArtifactReloadTarget(page, 2);
+  await expect(audit.getByText('Aggregate v7 · Content v2', { exact: true })).toBeVisible();
 
   // The old generic-heading boundary succeeds while the remount has selected
   // the first unrelated summary. This observation is the focused red control.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'Structured section editor', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Current document', exact: true })).toBeVisible();
   await expect(selector).toHaveValue(competingArtifactId);
 
   await reloadCanonicalStudioArtifact(page, target, {
@@ -200,7 +201,7 @@ test('canonical Studio reload reselects the exact committed artifact instead of 
     expectedSectionTitles: reloadSectionTitles,
   });
   await expect(selector).toHaveValue(targetArtifactId);
-  await expect(page.getByRole('article', { name: 'Artifact preview', exact: true })
+  await expect(page.getByTestId('studio-current-document-audit')
     .getByText('Aggregate v7 · Content v2', { exact: true })).toBeVisible();
   expect(businessCommands).toBe(0);
 });

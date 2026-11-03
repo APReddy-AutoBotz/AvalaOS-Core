@@ -11,8 +11,17 @@ import {
 
 export async function runStudioPrivateArtifactCrossLayerEvidence(
   db,
-  { scenario, names, contractParityPassed },
+  {
+    scenario,
+    names,
+    contractParityPassed,
+    artifactType = "brd",
+    format = "markdown",
+    brokerFixturePath = null,
+  },
 ) {
+  assert.ok(["brd", "frd", "pdd", "sdd"].includes(artifactType));
+  assert.ok(["markdown", "pdf", "docx"].includes(format));
   const directory = await mkdtemp(
     join(tmpdir(), "studio-private-cross-layer-"),
   );
@@ -44,7 +53,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
   };
 
   try {
-    const fixture = await createApprovedStudioFixture(db, "sdd");
+    const fixture = await createApprovedStudioFixture(db, artifactType);
     const actor = fixture.requester;
     const approver = fixture.approver;
     const organizationId = fixture.org;
@@ -59,7 +68,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       idempotencyKey: "cross-retention-zero",
       authorizationVersion: fixture.authorizationVersions[actor],
       payload: {
-        artifactType: "sdd",
+        artifactType,
         indefinite: false,
         retentionDays: 0,
         rationale: "disposable cross-layer evidence",
@@ -72,11 +81,11 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       organizationId,
       workspaceId,
       requestId: "51000000-0000-4000-8000-000000000002",
-      idempotencyKey: "cross-render-sdd-pdf",
+      idempotencyKey: `cross-render-${artifactType}-${format}`,
       authorizationVersion: fixture.authorizationVersions[actor],
       payload: {
         artifactVersionId: fixture.artifactVersionId,
-        format: "pdf",
+        format,
       },
     };
     const generation = await privateCommand(db, generationCommand);
@@ -142,6 +151,10 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       replayClaim: downloadReplay.downloadClaim,
       bytesBase64: renderEvidence.bytesBase64,
     });
+    const brokerBytes = Buffer.from(renderEvidence.bytesBase64, "base64");
+    const brokerFixtureVerified = brokerFixturePath === null
+      ? null
+      : brokerBytes.equals(await readFile(resolve(brokerFixturePath)));
     if (process.env.STUDIO_PRIVATE_CROSS_LAYER_PDF_OUTPUT) {
       const outputPath = resolve(
         process.env.STUDIO_PRIVATE_CROSS_LAYER_PDF_OUTPUT,
@@ -149,7 +162,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(
         outputPath,
-        Buffer.from(renderEvidence.bytesBase64, "base64"),
+        brokerBytes,
       );
       console.log(`CROSS-LAYER BROKER PDF ${outputPath}`);
     }
@@ -276,7 +289,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       assert.equal(work.templateVersion, rendition.template_version);
       assert.equal(work.contentSchemaVersion, rendition.content_schema_version);
     });
-    await scenario(names[3], async () =>
+    await scenario(names[3], async () => {
       assert.deepEqual(
         {
           outcome: downloadReplay.outcome,
@@ -290,8 +303,9 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
           bytes: work.byteLength,
           hash: work.sha256,
         },
-      ),
-    );
+      );
+      if (brokerFixturePath !== null) assert.equal(brokerFixtureVerified, true);
+    });
     await scenario(names[4], async () =>
       assert.deepEqual(
         {
