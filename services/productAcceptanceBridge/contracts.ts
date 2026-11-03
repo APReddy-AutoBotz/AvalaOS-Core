@@ -330,14 +330,16 @@ const decodePublication = (value: unknown): StudioDeliveryPublication => {
   const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
   let currentLineage: Pick<StudioDeliveryPublication, 'sourceAssessmentCaseId' | 'sourceAssessmentDecisionId'> | undefined;
   if (hasCurrentLineageFields) {
-    if (sourceAssessmentId === null) {
+    const caseIsNull = row.sourceAssessmentCaseId === null;
+    const decisionIsNull = row.sourceAssessmentDecisionId === null;
+    if (caseIsNull !== decisionIsNull || sourceAssessmentId === null && caseIsNull) invalid();
+    if (caseIsNull) {
+      currentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
+    } else {
       currentLineage = {
         sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
         sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
       };
-    } else {
-      if (row.sourceAssessmentCaseId !== null || row.sourceAssessmentDecisionId !== null) invalid();
-      currentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
     }
   }
   return {

@@ -309,14 +309,16 @@ const decodeLineage = (value: unknown): LegacyDeliveryTaskLineage | null => {
   const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
   let currentAssessmentLineage: Pick<LegacyDeliveryTaskLineage, 'sourceAssessmentCaseId' | 'sourceAssessmentDecisionId'> | undefined;
   if (hasCurrentLineageFields) {
-    if (sourceAssessmentId === null) {
+    const caseIsNull = row.sourceAssessmentCaseId === null;
+    const decisionIsNull = row.sourceAssessmentDecisionId === null;
+    if (caseIsNull !== decisionIsNull || sourceAssessmentId === null && caseIsNull) invalid();
+    if (caseIsNull) {
+      currentAssessmentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
+    } else {
       currentAssessmentLineage = {
         sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
         sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
       };
-    } else {
-      if (row.sourceAssessmentCaseId !== null || row.sourceAssessmentDecisionId !== null) invalid();
-      currentAssessmentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
     }
   }
   const requirementLinks = (row.requirementLinks as unknown[]).map(value => {

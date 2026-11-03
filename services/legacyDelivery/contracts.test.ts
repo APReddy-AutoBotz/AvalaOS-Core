@@ -69,6 +69,10 @@ const projectedLegacyLineage = {
   sourceAssessmentCaseId: null,
   sourceAssessmentDecisionId: null,
 };
+const dualLineage = {
+  ...nativeLineage,
+  sourceAssessmentId: ids.source,
+};
 const command: LegacyDeliveryCommandEnvelope<'task.create'> = {
   schemaVersion: 'legacy-delivery-command.v1',
   action: 'task.create',
@@ -128,6 +132,10 @@ assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: projectedLegacyLineage },
 }, command).resource as LegacyDeliveryTaskProjection).sourceLineage, projectedLegacyLineage,
 'the current projection keeps nullable V2 fields on exact V1 lineage');
+assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: dualLineage },
+}, command).resource as LegacyDeliveryTaskProjection).sourceLineage, dualLineage,
+'a governed artifact can retain its V1 assessment while exposing its complete V2 case and decision lineage');
 assert.throws(() => decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
   resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentCaseId: undefined, sourceAssessmentDecisionId: undefined } },
@@ -139,6 +147,10 @@ assert.throws(() => decodeLegacyDeliveryCommandSuccess({
 assert.throws(() => decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
   resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentDecisionId: null } },
+}, command), LegacyDeliveryContractError);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...dualLineage, sourceAssessmentDecisionId: null } },
 }, command), LegacyDeliveryContractError);
 const databaseTimestamp = '2026-10-10T04:22:33.123456+00:00';
 assert.equal((decodeLegacyDeliveryCommandSuccess({
