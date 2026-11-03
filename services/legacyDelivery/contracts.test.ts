@@ -63,6 +63,12 @@ const nativeLineage = {
   studioArtifactVersion: 1,
   requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Preserve exact lineage.' }],
 };
+const projectedLegacyLineage = {
+  ...nativeLineage,
+  sourceAssessmentId: ids.source,
+  sourceAssessmentCaseId: null,
+  sourceAssessmentDecisionId: null,
+};
 const command: LegacyDeliveryCommandEnvelope<'task.create'> = {
   schemaVersion: 'legacy-delivery-command.v1',
   action: 'task.create',
@@ -118,9 +124,21 @@ assert.equal((created.resource as LegacyDeliveryTaskProjection).id, ids.task);
 assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: nativeLineage },
 }, command).resource as LegacyDeliveryTaskProjection).sourceLineage, nativeLineage);
+assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: projectedLegacyLineage },
+}, command).resource as LegacyDeliveryTaskProjection).sourceLineage, projectedLegacyLineage,
+'the current projection keeps nullable V2 fields on exact V1 lineage');
 assert.throws(() => decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
   resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentCaseId: undefined, sourceAssessmentDecisionId: undefined } },
+}, command), LegacyDeliveryContractError);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...projectedLegacyLineage, sourceAssessmentDecisionId: ids.task } },
+}, command), LegacyDeliveryContractError);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentDecisionId: null } },
 }, command), LegacyDeliveryContractError);
 const databaseTimestamp = '2026-10-10T04:22:33.123456+00:00';
 assert.equal((decodeLegacyDeliveryCommandSuccess({

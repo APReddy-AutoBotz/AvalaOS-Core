@@ -70,8 +70,8 @@ export type StudioDeliveryPublication = {
   artifactContentHash: string;
   sourceProcessId: string;
   sourceAssessmentId: string | null;
-  sourceAssessmentCaseId?: string;
-  sourceAssessmentDecisionId?: string;
+  sourceAssessmentCaseId?: string | null;
+  sourceAssessmentDecisionId?: string | null;
   governResolutionId: string;
   workItemCount: number;
   workItemDigest: string;
@@ -316,24 +316,35 @@ export const decodeStudioDeliveryAssigneeQuery = (value: unknown): StudioDeliver
 
 const decodePublication = (value: unknown): StudioDeliveryPublication => {
   const row = record(value);
-  const hasCurrentLineage = Object.hasOwn(row, 'sourceAssessmentCaseId') || Object.hasOwn(row, 'sourceAssessmentDecisionId');
+  const hasAssessmentCase = Object.hasOwn(row, 'sourceAssessmentCaseId');
+  const hasAssessmentDecision = Object.hasOwn(row, 'sourceAssessmentDecisionId');
+  if (hasAssessmentCase !== hasAssessmentDecision) invalid();
+  const hasCurrentLineageFields = hasAssessmentCase && hasAssessmentDecision;
   exact(row, ['publicationId', 'documentGenerationId', 'projectId', 'artifactId', 'artifactVersionId', 'artifactVersion',
-    'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineage
+    'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineageFields
       ? ['sourceAssessmentCaseId', 'sourceAssessmentDecisionId'] : []),
     'governResolutionId', 'workItemCount', 'workItemDigest', 'publishedAt']);
   if (typeof row.artifactContentHash !== 'string' || !hashPattern.test(row.artifactContentHash)
     || typeof row.workItemDigest !== 'string' || !digestPattern.test(row.workItemDigest)
-    || row.sourceAssessmentId === null && !hasCurrentLineage) invalid();
+    || row.sourceAssessmentId === null && !hasCurrentLineageFields) invalid();
   const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
-  const currentLineage = hasCurrentLineage ? {
-    sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
-    sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
-  } : {};
+  let currentLineage: Pick<StudioDeliveryPublication, 'sourceAssessmentCaseId' | 'sourceAssessmentDecisionId'> | undefined;
+  if (hasCurrentLineageFields) {
+    if (sourceAssessmentId === null) {
+      currentLineage = {
+        sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
+        sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
+      };
+    } else {
+      if (row.sourceAssessmentCaseId !== null || row.sourceAssessmentDecisionId !== null) invalid();
+      currentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
+    }
+  }
   return {
     publicationId: id(row.publicationId), documentGenerationId: id(row.documentGenerationId), projectId: id(row.projectId),
     artifactId: id(row.artifactId), artifactVersionId: id(row.artifactVersionId), artifactVersion: positive(row.artifactVersion),
     artifactContentHash: row.artifactContentHash as string, sourceProcessId: id(row.sourceProcessId),
-    sourceAssessmentId, ...currentLineage, governResolutionId: id(row.governResolutionId),
+    sourceAssessmentId, ...(currentLineage ?? {}), governResolutionId: id(row.governResolutionId),
     workItemCount: positive(row.workItemCount, 100), workItemDigest: row.workItemDigest as string, publishedAt: iso(row.publishedAt),
   };
 };

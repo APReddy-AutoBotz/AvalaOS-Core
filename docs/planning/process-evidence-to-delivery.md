@@ -82,6 +82,8 @@ Board import attaches the approved artifact aggregate, exact approved revision, 
 
 Focused verification covers heading rejection, deterministic Epic/Story/Task output, paired acceptance predicates, strict command decoding, adapter lineage, invented-link rollback, atomic publication/replay, link-order invariance, same-artifact/different-artifact origin domains, Epic-only and mixed selective board import, accessible source details and duplicate-origin rejection. The disposable PostgreSQL test is executed separately according to the recorded command result; this document does not promote a static or type check into database proof.
 
+The V2 projection fields are additive to the legacy Delivery response contract. A V1 publication retains its exact assessment id and projects both V2 case/decision fields as null; a native V2 publication has a null V1 assessment id and requires both exact V2 identifiers. Partial or mixed lineage is rejected. This preserves unknown-response replay for historical imports without treating a null field as inferred authority.
+
 Rollback disables publication writes and points the server adapter back only after the old RPC grant is explicitly restored. Existing requirement bindings, publications, generations, imported tasks, approvals and source links remain immutable/readable for forward repair. Dropping bindings or board records is not a rollback path.
 
 ### Run-control prerequisite

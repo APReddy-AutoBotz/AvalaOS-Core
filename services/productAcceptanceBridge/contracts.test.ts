@@ -32,8 +32,16 @@ assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: p
 const nativePublication = { ...publication, sourceAssessmentId: null, sourceAssessmentCaseId: U[12], sourceAssessmentDecisionId: U[13] };
 assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
   outcome: 'committed', receiptId: U[11], resource: nativePublication }, publish).resource, nativePublication);
+const projectedLegacyPublication = { ...publication, sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
+assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: projectedLegacyPublication }, publish).resource, projectedLegacyPublication,
+'the current projection keeps nullable V2 fields on exact V1 publication lineage');
 assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
   outcome: 'committed', receiptId: U[11], resource: { ...publication, sourceAssessmentId: null } }, publish), StudioDeliveryContractError);
+assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: { ...projectedLegacyPublication, sourceAssessmentDecisionId: U[13] } }, publish), StudioDeliveryContractError);
+assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: { ...nativePublication, sourceAssessmentDecisionId: null } }, publish), StudioDeliveryContractError);
 assert.throws(() => decodeStudioDeliveryCommand({ ...publish, payload: { ...publish.payload, generatedFromProse: true } }), StudioDeliveryContractError);
 assert.throws(() => decodeStudioDeliveryCommand({ ...publish, payload: { ...publish.payload, workItems: [] } }), StudioDeliveryContractError);
 assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,

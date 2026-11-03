@@ -244,7 +244,7 @@
     "services/processUpdateClient.ts": "sha256:6c989c03d3cd886fee3d6a2a894ec798c8513a404df7675c445350ba59431c9f",
     "services/processUpdateContract.ts": "sha256:0e2e02671baf31f0ef7834ce2addcfed9fd835231b52c3e876bbe815cd265ab7",
     "services/productAcceptanceBridge/client.ts": "sha256:886169ead9ce28c149f8b6d17f8c07b31910f18c8e531982760ddad02eefebd2",
-    "services/productAcceptanceBridge/contracts.ts": "sha256:fb64404ebb2bc3527472c562e40b1ad7a14c5b44f44659333b29f580b2d2c8ff",
+    "services/productAcceptanceBridge/contracts.ts": "sha256:af001dc020857941678e691e303f9233a1c30a37a9e3151e54e266867c20f69a",
     "services/productAcceptanceBridge/outcomePaging.ts": "sha256:c75d1c81ae91cf7d80efaf534044f2a19d7b25318ca02ece421c56cf8f7ef942",
     "services/productNavigationController.test.ts": "sha256:8edee3f4b9c01968e81c34fa98c6e84c982eeedd3842fb537610122159acf95b",
     "services/productNavigationState.ts": "sha256:c27dcb6d8edd7240ce3c3cfa8473da238cd31cb64bfdeeda6ac2b625b042f0e1",
