@@ -115,6 +115,10 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     renditions: generated ? [rendition] : [],
   });
 
+  // More specific routes below fulfill synthetic server requests inside the browser.
+  // Only the test server may receive real HTTP traffic.
+  await page.route('**/*', route => new URL(route.request().url()).origin === 'http://127.0.0.1:4197'
+    ? route.continue() : route.abort('blockedbyclient'));
   await page.route('https://placeholder.supabase.co/rest/v1/rpc/studio_private_artifact_projection', async route => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: corsHeaders });
