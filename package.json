@@ -187,6 +187,7 @@
     "test:studio-artifacts-coverage": "node scripts/runStudioArtifactCoverage.mjs",
     "test:migrations:studio-artifacts": "node scripts/testStudioArtifactMigrations.mjs",
     "test:browser:studio-artifacts": "node scripts/runTranscriptFlowBrowser.mjs --studio-artifacts",
+    "test:browser:studio-process-evidence-export": "node scripts/runTranscriptFlowBrowser.mjs --studio-pr-b --grep \"ordinary SDD Generate PDF\"",
     "lint:studio-private-artifacts": "node scripts/checkStudioPrivateArtifactBoundaries.mjs && node scripts/checkStudioPrivateArtifactMigrationContract.mjs",
     "test:studio-private-artifacts-renderers": "node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/deno.d.ts supabase/functions/_shared/studioPrivateArtifactRenderer.test.ts",
     "test:studio-private-artifacts-storage": "node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/deno.d.ts supabase/functions/_shared/storageBoundary.test.ts && node scripts/runEdgeTypeScriptTest.mjs types.ts supabase/functions/deno.d.ts supabase/functions/_shared/studioPrivateArtifactStorage.test.ts",

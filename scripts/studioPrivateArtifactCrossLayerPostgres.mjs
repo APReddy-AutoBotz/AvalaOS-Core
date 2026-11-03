@@ -1,35 +1,46 @@
-import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import {
   createApprovedStudioFixture,
   downloadCommand,
   privateCommand,
-} from './studioPrivateArtifactPostgresFixture.mjs';
+} from "./studioPrivateArtifactPostgresFixture.mjs";
 
 export async function runStudioPrivateArtifactCrossLayerEvidence(
   db,
-  { scenario, names, contractParityPassed },
+  {
+    scenario,
+    names,
+    contractParityPassed,
+    artifactType = "brd",
+    format = "markdown",
+    brokerFixturePath = null,
+  },
 ) {
-  const directory = await mkdtemp(join(tmpdir(), 'studio-private-cross-layer-'));
+  assert.ok(["brd", "frd", "pdd", "sdd"].includes(artifactType));
+  assert.ok(["markdown", "pdf", "docx"].includes(format));
+  const directory = await mkdtemp(
+    join(tmpdir(), "studio-private-cross-layer-"),
+  );
   let ordinal = 0;
   const consume = async (mode, input) => {
     ordinal += 1;
     const inputPath = join(directory, `${ordinal}-${mode}-input.json`);
     const outputPath = join(directory, `${ordinal}-${mode}-output.json`);
-    await writeFile(inputPath, `${JSON.stringify(input)}\n`, 'utf8');
+    await writeFile(inputPath, `${JSON.stringify(input)}\n`, "utf8");
     execFileSync(
       process.execPath,
       [
-        'scripts/runEdgeTypeScriptTest.mjs',
-        'types.ts',
-        'supabase/functions/deno.d.ts',
-        'supabase/functions/_shared/studioPrivateArtifactCrossLayerConsumer.test.ts',
+        "scripts/runEdgeTypeScriptTest.mjs",
+        "types.ts",
+        "supabase/functions/deno.d.ts",
+        "supabase/functions/_shared/studioPrivateArtifactCrossLayerConsumer.test.ts",
       ],
       {
-        stdio: 'inherit',
+        stdio: "inherit",
         env: {
           ...process.env,
           STUDIO_PRIVATE_CROSS_LAYER_MODE: mode,
@@ -38,59 +49,58 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
         },
       },
     );
-    return JSON.parse(await readFile(outputPath, 'utf8'));
+    return JSON.parse(await readFile(outputPath, "utf8"));
   };
 
   try {
-    const fixture = await createApprovedStudioFixture(db);
+    const fixture = await createApprovedStudioFixture(db, artifactType);
     const actor = fixture.requester;
     const approver = fixture.approver;
     const organizationId = fixture.org;
     const workspaceId = fixture.workspace;
 
     await privateCommand(db, {
-      commandType: 'studio.retention.policy.publish',
+      commandType: "studio.retention.policy.publish",
       actorId: actor,
       organizationId,
       workspaceId,
-      requestId: '51000000-0000-4000-8000-000000000001',
-      idempotencyKey: 'cross-retention-zero',
+      requestId: "51000000-0000-4000-8000-000000000001",
+      idempotencyKey: "cross-retention-zero",
       authorizationVersion: fixture.authorizationVersions[actor],
       payload: {
-        artifactType: 'brd',
+        artifactType,
         indefinite: false,
         retentionDays: 0,
-        rationale: 'disposable cross-layer evidence',
+        rationale: "disposable cross-layer evidence",
       },
     });
 
     const generationCommand = {
-      commandType: 'studio.rendition.generate',
+      commandType: "studio.rendition.generate",
       actorId: actor,
       organizationId,
       workspaceId,
-      requestId: '51000000-0000-4000-8000-000000000002',
-      idempotencyKey: 'cross-render-markdown',
+      requestId: "51000000-0000-4000-8000-000000000002",
+      idempotencyKey: `cross-render-${artifactType}-${format}`,
       authorizationVersion: fixture.authorizationVersions[actor],
       payload: {
         artifactVersionId: fixture.artifactVersionId,
-        format: 'markdown',
+        format,
       },
     };
     const generation = await privateCommand(db, generationCommand);
-    assert.equal(generation.outcome, 'committed');
+    assert.equal(generation.outcome, "committed");
     assert.ok(generation.renditionClaim);
-    const renderEvidence = await consume('rendition', {
+    const renderEvidence = await consume("rendition", {
       claim: generation.renditionClaim,
     });
     const work = renderEvidence.persisted;
 
+    await db.query("SELECT public.studio_rendition_attempt_start($1::uuid)", [
+      work.attemptId,
+    ]);
     await db.query(
-      'SELECT public.studio_rendition_attempt_start($1::uuid)',
-      [work.attemptId],
-    );
-    await db.query(
-      'SELECT public.studio_rendition_attempt_rendered($1::uuid,$2::text,$3::text,$4::bigint,$5::text,$6::text,$7::text,$8::text,$9::text)',
+      "SELECT public.studio_rendition_attempt_rendered($1::uuid,$2::text,$3::text,$4::bigint,$5::text,$6::text,$7::text,$8::text,$9::text)",
       [
         work.attemptId,
         work.objectKey,
@@ -105,20 +115,21 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
     );
     const completion = (
       await db.query(
-        'SELECT public.studio_rendition_attempt_complete($1::uuid) result',
+        "SELECT public.studio_rendition_attempt_complete($1::uuid) result",
         [work.attemptId],
       )
     ).rows[0].result;
     assert.equal(completion.renditionId, generation.renditionClaim.renditionId);
 
     const rendition = (
-      await db.query('SELECT * FROM public.studio_renditions WHERE id=$1::uuid', [
-        completion.renditionId,
-      ])
+      await db.query(
+        "SELECT * FROM public.studio_renditions WHERE id=$1::uuid",
+        [completion.renditionId],
+      )
     ).rows[0];
     const attempt = (
       await db.query(
-        'SELECT * FROM public.studio_rendition_attempts WHERE id=$1::uuid',
+        "SELECT * FROM public.studio_rendition_attempts WHERE id=$1::uuid",
         [work.attemptId],
       )
     ).rows[0];
@@ -128,69 +139,84 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       organizationId,
       workspaceId,
       renditionId: rendition.id,
-      requestId: '51000000-0000-4000-8000-000000000003',
-      idempotencyKey: 'cross-download',
+      requestId: "51000000-0000-4000-8000-000000000003",
+      idempotencyKey: "cross-download",
       authorizationVersion: fixture.authorizationVersions[actor],
     };
     const download = await downloadCommand(db, downloadRequest);
     const downloadReplay = await downloadCommand(db, downloadRequest);
-    assert.equal(downloadReplay.outcome, 'replayed');
-    const downloadEvidence = await consume('download', {
+    assert.equal(downloadReplay.outcome, "replayed");
+    const downloadEvidence = await consume("download", {
       claim: download.downloadClaim,
       replayClaim: downloadReplay.downloadClaim,
       bytesBase64: renderEvidence.bytesBase64,
     });
+    const brokerBytes = Buffer.from(renderEvidence.bytesBase64, "base64");
+    const brokerFixtureVerified = brokerFixturePath === null
+      ? null
+      : brokerBytes.equals(await readFile(resolve(brokerFixturePath)));
+    if (process.env.STUDIO_PRIVATE_CROSS_LAYER_PDF_OUTPUT) {
+      const outputPath = resolve(
+        process.env.STUDIO_PRIVATE_CROSS_LAYER_PDF_OUTPUT,
+      );
+      await mkdir(dirname(outputPath), { recursive: true });
+      await writeFile(
+        outputPath,
+        brokerBytes,
+      );
+      console.log(`CROSS-LAYER BROKER PDF ${outputPath}`);
+    }
     await db.query(
-      'SELECT public.studio_artifact_download_complete($1::uuid)',
+      "SELECT public.studio_artifact_download_complete($1::uuid)",
       [download.receiptId],
     );
 
     const deletionRequest = await privateCommand(db, {
-      commandType: 'studio.rendition.deletion.request',
+      commandType: "studio.rendition.deletion.request",
       actorId: actor,
       organizationId,
       workspaceId,
-      requestId: '51000000-0000-4000-8000-000000000004',
-      idempotencyKey: 'cross-delete-request',
+      requestId: "51000000-0000-4000-8000-000000000004",
+      idempotencyKey: "cross-delete-request",
       authorizationVersion: fixture.authorizationVersions[actor],
       payload: {
         renditionId: rendition.id,
-        rationale: 'cross-layer eligible deletion',
+        rationale: "cross-layer eligible deletion",
       },
     });
     const deletionVersion = (
       await db.query(
-        'SELECT artifact_version,lifecycle_version FROM studio_renditions WHERE id=$1::uuid',
+        "SELECT artifact_version,lifecycle_version FROM studio_renditions WHERE id=$1::uuid",
         [rendition.id],
       )
     ).rows[0];
     const deletionApprovalCommand = {
-      commandType: 'studio.rendition.deletion.resolve',
+      commandType: "studio.rendition.deletion.resolve",
       actorId: approver,
       organizationId,
       workspaceId,
-      requestId: '51000000-0000-4000-8000-000000000005',
-      idempotencyKey: 'cross-delete-approve',
+      requestId: "51000000-0000-4000-8000-000000000005",
+      idempotencyKey: "cross-delete-approve",
       authorizationVersion: fixture.authorizationVersions[approver],
       expectedArtifactVersion: Number(deletionVersion.artifact_version),
       expectedRenditionVersion: Number(deletionVersion.lifecycle_version),
       payload: {
         renditionId: rendition.id,
         deletionRequestId: deletionRequest.resource.deletionRequestId,
-        outcome: 'approve',
-        rationale: 'independent cross-layer approval',
+        outcome: "approve",
+        rationale: "independent cross-layer approval",
       },
     };
     const deletion = await privateCommand(db, deletionApprovalCommand);
     assert.ok(deletion.deletionClaim);
     const deletionExecution = (
       await db.query(
-        'SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim',
+        "SELECT public.studio_rendition_deletion_execution_claim($1::uuid) claim",
         [deletion.deletionClaim.deletionAttemptId],
       )
     ).rows[0].claim;
     assert.ok(deletionExecution);
-    const deletionEvidence = await consume('deletion', {
+    const deletionEvidence = await consume("deletion", {
       claim: deletion.deletionClaim,
       execution: deletionExecution,
       expectation: {
@@ -208,23 +234,24 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       [deletion.deletionClaim.deletionAttemptId, deletionExecution.fence],
     );
     const deletionReplay = await privateCommand(db, deletionApprovalCommand);
-    assert.equal(deletionReplay.outcome, 'replayed');
-    assert.equal('deletionClaim' in deletionReplay, false);
+    assert.equal(deletionReplay.outcome, "replayed");
+    assert.equal("deletionClaim" in deletionReplay, false);
 
     const finalRendition = (
-      await db.query('SELECT * FROM public.studio_renditions WHERE id=$1::uuid', [
-        rendition.id,
-      ])
+      await db.query(
+        "SELECT * FROM public.studio_renditions WHERE id=$1::uuid",
+        [rendition.id],
+      )
     ).rows[0];
     const attemptCount = (
       await db.query(
-        'SELECT count(*)::int n FROM studio_rendition_attempts WHERE request_id=$1::uuid',
+        "SELECT count(*)::int n FROM studio_rendition_attempts WHERE request_id=$1::uuid",
         [generationCommand.requestId],
       )
     ).rows[0].n;
     const renditionCount = (
       await db.query(
-        'SELECT count(*)::int n FROM studio_renditions WHERE id=$1::uuid',
+        "SELECT count(*)::int n FROM studio_renditions WHERE id=$1::uuid",
         [rendition.id],
       )
     ).rows[0].n;
@@ -246,15 +273,15 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
           uploads: 1,
           objects: 1,
           renditions: 1,
-          lifecycle: 'available',
+          lifecycle: "available",
         },
       ),
     );
     await scenario(names[2], async () => {
       for (const field of [
-        'renderer_version',
-        'template_version',
-        'content_schema_version',
+        "renderer_version",
+        "template_version",
+        "content_schema_version",
       ]) {
         assert.equal(attempt[field], rendition[field]);
       }
@@ -262,7 +289,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       assert.equal(work.templateVersion, rendition.template_version);
       assert.equal(work.contentSchemaVersion, rendition.content_schema_version);
     });
-    await scenario(names[3], async () =>
+    await scenario(names[3], async () => {
       assert.deepEqual(
         {
           outcome: downloadReplay.outcome,
@@ -271,13 +298,14 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
           hash: downloadEvidence.sha256,
         },
         {
-          outcome: 'replayed',
+          outcome: "replayed",
           downloads: 2,
           bytes: work.byteLength,
           hash: work.sha256,
         },
-      ),
-    );
+      );
+      if (brokerFixturePath !== null) assert.equal(brokerFixtureVerified, true);
+    });
     await scenario(names[4], async () =>
       assert.deepEqual(
         {
@@ -290,7 +318,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
           providerDeletes: 1,
           tombstones: 1,
           objects: 0,
-          lifecycle: 'deleted',
+          lifecycle: "deleted",
         },
       ),
     );
@@ -302,7 +330,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
           uploads: renderEvidence.uploadCount,
           providerDeletes: deletionEvidence.providerDeleteCount,
           downloadRetrievals: downloadEvidence.downloadCount,
-          replayHasDeletionClaim: 'deletionClaim' in deletionReplay,
+          replayHasDeletionClaim: "deletionClaim" in deletionReplay,
         },
         {
           attempts: 1,

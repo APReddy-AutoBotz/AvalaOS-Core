@@ -14,7 +14,7 @@ assert.match(contracts, /STUDIO_ARTIFACT_TYPES = \['brd', 'frd', 'pdd', 'sdd'\]/
 assert.ok(workspace.includes('STUDIO_ARTIFACT_TYPES.map'), 'ordinary artifact selector must derive all four types');
 assert.ok(manager.includes('<option value="sdd">SDD</option>'), 'governed template selector must expose SDD');
 assert.ok(editor.includes('MermaidRenderer'), 'flow sections require sanitized Mermaid preview');
-assert.ok(editor.includes("selected.id === 'asIsFlow' || selected.id === 'toBeFlow'"), 'only canonical flow sections render as diagrams');
+assert.match(editor, /selected\.id === ["']asIsFlow["'] \|\| selected\.id === ["']toBeFlow["']/u, 'only canonical flow sections render as diagrams');
 assert.ok(generation.includes("inspectMermaidFlowcharts(body, true).length === 1"), 'generated flows use the shared bounded parser');
 assert.ok(editor.includes('inspectMermaidFlowcharts(section.body, true)'), 'edited flows use the same shared bounded parser');
 assert.ok(command.includes('validateCanonicalFlowSectionEdits(content as JsonObject)'), 'raw canonical flow revisions use the shared server parser');
@@ -23,7 +23,7 @@ assert.ok(provider.includes('never invent a connection'), 'flow prompt prohibits
 assert.ok(workspace.includes('...(selectedSectionIds.length?{selectedSectionIds}: {})'), 'selected section IDs must cross the governed generation command');
 assert.equal(workspace.includes('if(selectedSectionIds.length&&artifact){'), false, 'browser must not merge or save generated sections');
 assert.equal(workspace.includes('contentToStructuredSections'), false, 'browser must not act as selective-refresh content authority');
-assert.ok(editor.includes('server applies selected candidates atomically'), 'editor must explain the atomic server boundary');
+assert.match(editor, /server applies selected candidates\s+atomically/iu, 'editor must explain the atomic server boundary');
 assert.ok(workspace.includes('Selected-section refresh is unavailable in the provider-free synthetic path'), 'synthetic full generation must fail closed for selected refresh');
 assert.ok(workspace.includes("sourcePackage.currentVersionId!==artifact.currentVersion.id"), 'selected refresh must compare the exact viewed head before provider work');
 assert.ok(workspace.includes("artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash"), 'needs-review must compare document and aggregate source bindings');

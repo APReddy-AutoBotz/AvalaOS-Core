@@ -2021,7 +2021,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       commitEligibleStudioHandoffRequest(page));
     const studioRequestApi = observeStudioHandoffResponse(studioRequestResponse);
     const requestedHandoffTarget = await persistedHandoffTargetFromResponse(studioRequestResponse, 'requested');
-    await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+    await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
 
     await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
     const studioReviewResponse = await test.step('hosted:govern-studio:studio-review', () =>
@@ -2037,7 +2037,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       'approval_ready',
       requestedHandoffTarget,
     );
-    await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+    await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
 
     await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
     const studioFinalAcceptResponse = await test.step('hosted:govern-studio:studio-final-accept', () =>
@@ -2053,14 +2053,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       'approved',
       reviewedHandoffTarget,
     );
-    await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+    await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
 
     const sourcePackageResponse = await test.step('hosted:govern-studio:source-consume', () =>
       consumeApprovedStudioHandoff(page, acceptedHandoffTarget));
     const sourcePackageApi = observeStudioHandoffResponse(sourcePackageResponse);
     await persistedHandoffTargetFromResponse(sourcePackageResponse, 'consumed', acceptedHandoffTarget);
     expect(sourcePackageApi.status).toBe(201);
-    await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\./u)).toBeVisible();
+    await expect(page.getByText('Handoff consumed and exact source package verified. Approval alone did not create a document.', { exact: true })).toBeVisible();
     observe('studio-consume', 'ui.studio-lineage-consumed');
     if (authenticatedProductAcceptance && beforeStudioConsume) {
       const afterStudioConsume = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
@@ -2139,7 +2139,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     }
     expect(generationApi.status).toBe(201);
     await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
-    await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Current document', exact: true })).toBeVisible();
     if (canonicalInvoiceExceptionJourney) {
       canonicalStudioArtifactReloadTarget = await captureCanonicalStudioArtifactReloadTarget(page, 1);
     }
@@ -2170,10 +2170,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await reloadCanonicalStudioArtifact(page, canonicalStudioArtifactReloadTarget);
     } else await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('studio-artifact-workspace')).toBeVisible();
-    await expect(page.getByText('Current committed preview', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Current document', exact: true })).toBeVisible();
 
     if (canonicalInvoiceExceptionJourney) {
-      const structuredEditor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+      const structuredEditor = page.getByRole('region', { name: 'Current document', exact: true });
       await expect(structuredEditor).toBeVisible();
       const outline = structuredEditor.getByRole('navigation', { name: 'Document outline', exact: true });
       await expect(outline.getByRole('button').filter({ hasNotText: 'Add section' }))
@@ -2190,7 +2190,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           return (response.request().postDataJSON() as { commandType?: unknown }).commandType === 'studio.artifact.draft.revise';
         } catch { return false; }
       }, { timeout: 15_000 });
-      await structuredEditor.getByRole('button', { name: 'Commit immutable revision', exact: true }).click();
+      await structuredEditor.getByRole('button', { name: 'Save changes', exact: true }).click();
       expect((await revisionResponse).status()).toBe(201);
       await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
       await expect(page.getByText('v2', { exact: true }).first()).toBeVisible();
@@ -2248,8 +2248,13 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         const artifactPreview = page.getByRole('article', { name: 'Artifact preview', exact: true });
         await expect(artifactPreview).toContainText('Approved');
         await expect(artifactPreview).toContainText('Approved version');
-        await expect(artifactPreview.getByText(/Aggregate v\d+ · Content v2/u)).toBeVisible();
-        const approvedEditor = page.getByRole('region', { name: 'Structured section editor', exact: true });
+        const documentAudit = artifactPreview.getByTestId('studio-current-document-audit');
+        if (!await documentAudit.evaluate(element => element.hasAttribute('open'))) {
+          await documentAudit.getByText('Audit details', { exact: true }).click();
+        }
+        await expect(documentAudit).toHaveAttribute('open', '');
+        const artifactRevision = await documentAudit.getByText(/^Aggregate v\d+ · Content v2$/u, { exact: true }).innerText();
+        const approvedEditor = page.getByRole('region', { name: 'Current document', exact: true });
         const approvedOutline = approvedEditor.getByRole('navigation', { name: 'Document outline', exact: true });
         const approvedSections: { heading: string; body: string }[] = [];
         for (let index = 0; index < AP_INVOICE_EXCEPTION_BRD_SECTIONS.length; index += 1) {
@@ -2267,7 +2272,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         }
         const studioText = approvedBusinessOutputMarkdown({
           title: 'AP Invoice Exception Handling BRD',
-          approvalState: `Independent Studio review and final approval committed for ${await artifactPreview.getByText(/Aggregate v\d+ · Content v2/u).innerText()}.`,
+          approvalState: `Independent Studio review and final approval committed for ${artifactRevision}.`,
           contentOrigin: 'Providers were OFF. The base five-section structure came from deterministic synthetic test-provider output; all retained business sections were then test-authored through the normal UI and approved by separate synthetic test personas. This is not live AI generation or human UAT sign-off.',
           sections: approvedSections,
           remainingGaps: [
@@ -2328,7 +2333,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       }
       expect(failedGenerationApi.status).toBe(200);
       await expect(page.getByRole('alert').getByText(
-        /Generation attempt committed \(receipt .+\) and failed\. No artifact version was created\./u,
+        /Generation attempt was committed and failed\. No artifact version was created\./u,
       )).toBeVisible();
       await expect(page.getByText(/committed from exact Studio Source Package/u)).toHaveCount(0);
       const afterFailure = await control<StudioFailureFrame>('/control/studio-failure-frame', { projectName });

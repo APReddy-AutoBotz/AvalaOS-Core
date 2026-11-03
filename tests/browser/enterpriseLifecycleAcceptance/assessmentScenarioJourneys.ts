@@ -179,7 +179,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
   const requestedResponse = await commitEligibleHandoff(page);
   const requestedTarget = await persistedHandoffTargetFromResponse(requestedResponse, 'requested');
-  await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+  await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
   await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
   const reviewedResponse = await commitPersistedHandoff(
     page,
@@ -188,7 +188,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     'Independent scenario handoff review approved.',
   );
   const reviewedTarget = await persistedHandoffTargetFromResponse(reviewedResponse, 'approval_ready', requestedTarget);
-  await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+  await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
   await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
   const acceptedResponse = await commitPersistedHandoff(
     page,
@@ -197,11 +197,11 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     'Independent final acceptance for the scenario.',
   );
   const acceptedTarget = await persistedHandoffTargetFromResponse(acceptedResponse, 'approved', reviewedTarget);
-  await expect(page.getByText(/Handoff decision committed \(receipt .+\)\./u)).toBeVisible();
+  await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
   await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
   const consumedResponse = await commitPersistedHandoff(page, acceptedTarget, 'Start Studio draft', undefined, 'Outbox');
   await persistedHandoffTargetFromResponse(consumedResponse, 'consumed', acceptedTarget);
-  await expect(page.getByText(/Handoff consumed and exact source package verified \(receipt .+\)\. Approval alone did not create a document\./u)).toBeVisible();
+  await expect(page.getByText('Handoff consumed and exact source package verified. Approval alone did not create a document.', { exact: true })).toBeVisible();
   const studio = page.getByTestId('studio-artifact-workspace');
   const template = studio.getByLabel('Exact approved Studio template', { exact: true });
   await selectExactStudioTemplate(template, setup.studioTemplate);
@@ -210,7 +210,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await studio.getByRole('button', { name: 'Add section', exact: true }).click();
   await studio.getByLabel('Section title', { exact: true }).fill('Delivery requirements');
   await studio.getByLabel('Section body', { exact: true }).fill(approvedRequirement);
-  await studio.getByRole('button', { name: 'Commit immutable revision', exact: true }).click();
+  await studio.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
   await commitStudioArtifactCommand(
     page,

@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   cacheDir: path.join(tmpdir(), 'avalaos-studio-pr-b-vite-cache'),
+  define: {
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://placeholder.supabase.co'),
+  },
   plugins: [{
     name: 'studio-pr-b-controlled-evidence-transport',
     enforce: 'pre',

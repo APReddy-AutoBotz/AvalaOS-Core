@@ -105,6 +105,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser:studio-private-artifacts
       - run: npm run test:browser:studio-artifacts
+      - run: npm run test:browser:studio-process-evidence-export
       - run: npm run test:browser:pr1d
       - run: npm run test:browser:pr1e
       - run: npm run test:browser:pr1g

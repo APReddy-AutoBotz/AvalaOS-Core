@@ -77,6 +77,29 @@ void test('rendition saga follows durable render metadata, upload, verification,
   assert.equal(storage.operationCounts.upload, 1);
   assert.equal(database.availableCalls, 1);
 });
+void test('rendition saga stores canonical SDD schema v2 PDF with rendered flow diagrams', async () => {
+  const database = new FakeRenditionDb();
+  const anchor = { sourceVersionId: '44444444-4444-4444-8444-444444444444', locator: 'line:1', anchorHash: 'b'.repeat(64) };
+  database.claimValue = {
+    ...executeClaim, artifactType: 'sdd', format: 'pdf', contentSchemaVersion: 'studio-artifact-2',
+    rendererVersion: 'studio-pdf-1', templateVersion: 'studio-sdd-1',
+    approvedContent: {
+      contractVersion: 'studio-artifact-2', title: 'Synthetic SDD', summary: 'Synthetic export-path verification.',
+      coverage: { selectedSourceVersionIds: [anchor.sourceVersionId], coveredSourceVersionIds: [anchor.sourceVersionId], complete: true },
+      sections: [
+        { id: 'summary', title: 'Summary', body: 'Source-bound design.', sourceAnchors: [anchor], labels: [] },
+        { id: 'asIsFlow', title: 'As-Is flow', body: 'flowchart TD\nA[Start] --> B[Human review]', sourceAnchors: [anchor], labels: [] },
+        { id: 'toBeFlow', title: 'To-Be flow', body: 'flowchart TD\nA[Start] --> B[API]\nB --> C[Human judgment]', sourceAnchors: [anchor], labels: [] },
+      ],
+    },
+  };
+  const storage = new DeterministicFakeStudioPrivateArtifactStorage();
+  const result = await executeStudioRenditionSaga('request-1', { database, storage });
+  assert.equal(result.outcome, 'available');
+  assert.equal(database.work.mimeType, 'application/pdf');
+  assert.equal(database.work.rendererVersion, 'studio-pdf-1');
+  assert.equal(storage.operationCounts.upload, 1);
+});
 void test('rendition exact replay returns committed receipt with no render or storage claim', async () => {
   const database = new FakeRenditionDb();
   database.claimValue = { disposition: 'replay', receipt: receipt('available') };
