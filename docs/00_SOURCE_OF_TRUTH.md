@@ -1,5 +1,10 @@
 # AvalaOS Core Source Of Truth
 
+## Process evidence to confirmed delivery work — 3 November 2026
+
+The product milestone starts with fresh transcripts, SOPs and flowcharts. A business user corrects the extracted facts, reviews process and step recommendations, selects and edits BRD/PDD/FRD/SDD documents and As-Is/To-Be flows, finalizes them through existing approvals, and selects proposed work for the normal Delivery board. A recommendation to keep human judgment or use existing APIs and rules without AI is a successful outcome. The [milestone plan](planning/process-evidence-to-delivery.md) distinguishes implementation from observed behavior. Earlier accepted evidence retains its original scope.
+
+
 ## Canonical Studio reload identity and retained-record continuation — 2026-11-01
 
 PR #351 is merged as `a2ade47647379ec7b4bcccf53da4e5a682dcb57a`, with the verified candidate tree unchanged. All applicable candidate and merged-release checks and independent archive verification passed. Approved real-auth run `41291228077/1` then persisted the canonical AP process, Assess/Govern lineage and edited Studio draft content v2, but stopped at the editor visibility check after reload. Independent reconstruction remains **61 PASS / 47 BLOCKED**. Cleanup revoked five automated identities, quiesced the exercise, retained providers OFF and verified unchanged non-exercise data.

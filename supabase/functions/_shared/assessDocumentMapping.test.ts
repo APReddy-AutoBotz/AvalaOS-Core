@@ -43,7 +43,7 @@ const source = async (overrides: Partial<AssessMappingDecodedSource> = {}): Prom
 
 test('prompt requests grounded mappings while retaining legitimate empty output', async () => {
   const instruction = buildAssessDocumentMappingTaskInstruction([target]);
-  for (const required of ['empty array only when', 'case.description', '0 to 1', 'neutral, supporting, or contradictory', 'verbatim', 'valueType']) assert.ok(instruction.includes(required));
+  for (const required of ['empty array only when', 'case.description', '0 to 1', 'neutral, supporting, or contradictory', 'verbatim', 'valueType', 'preserve every explicit decision-branch label', 'Never collapse, rename, or infer a branch']) assert.ok(instruction.includes(required));
   assert.ok(!instruction.includes(target.selectorId)); assert.ok(!instruction.includes(target.contextLabel));
   const grounded = await source({ text: 'Review invoice exceptions against purchase orders.' });
   const decoded = await decodeGroundedAssessMappingProposalResult({ value: { proposals: [{ targetSelectorId: target.selectorId, sourceVersionId: grounded.sourceVersionId, proposedValue: grounded.text, confidence: 0.9, rationale: 'Explicit description', safeExcerpt: grounded.text, locator: 'text', relationship: 'supporting' }] }, targets: [target], sources: [grounded], createProposalId: () => id(80) });

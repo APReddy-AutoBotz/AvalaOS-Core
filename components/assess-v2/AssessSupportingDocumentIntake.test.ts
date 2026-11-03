@@ -76,6 +76,18 @@ test('document analysis is one native governed effect and cannot mutate determin
   assert.match(source, /commitAssessDocumentMapping/);
 });
 
+test('native intake declares branch-aware Mermaid flowchart support without implying OCR', () => {
+  assert.match(source, /\.mmd/);
+  assert.match(source, /Mermaid support covers flowchart\/graph direction, steps, directed edges, decision shapes, and explicit branch labels/);
+  assert.match(source, /image flowcharts/);
+  assert.match(source, /other Mermaid diagram types/);
+  assert.match(source, /inspectMermaidSourceText/);
+  assert.match(source, /Read-only flowchart source preview/);
+  assert.match(source, /Compare every source path and branch with the later suggestions/);
+  assert.match(source, /Line \{edge\.line\}/);
+  assert.match(source, /Branch: \$\{edge\.branchLabel\}/);
+});
+
 test('resolved conflicts disclose the authoritative final value before apply', () => {
   assert.match(source, /Final resolved value/);
   assert.match(source, /formatValue\(conflict\.resolvedValue\)/);

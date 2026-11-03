@@ -24,7 +24,7 @@ const openNativeDraft = async (page: Parameters<typeof installEnterpriseFixture>
   await expect(page.getByTestId('process-catalog-view')).toBeVisible({timeout:15_000});
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await expect(page.getByTestId('assess-supporting-document-intake')).toBeVisible();
   if (expectEnabled) await expect(page.locator('#assess-supporting-files')).toBeEnabled();
 };
@@ -182,8 +182,8 @@ test('actual Assess route uploads multiple sources, reviews typed AI suggestions
   await expect(applyButton).toBeEnabled();
   await applyButton.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('V2 case name')).toHaveValue('Human-reviewed invoice resolution');
-  await expect(page.getByLabel('V2 case description')).toHaveValue('V2 case');
+  await expect(page.getByLabel('Assessment name')).toHaveValue('Human-reviewed invoice resolution');
+  await expect(page.getByLabel('Assessment description')).toHaveValue('V2 case');
   expect(mapping.operations.filter(operation => operation === 'assess.document-map.analyze')).toHaveLength(1);
   expect(mapping.operations).not.toContain('transcript.assess.extract');
 
@@ -191,8 +191,8 @@ test('actual Assess route uploads multiple sources, reviews typed AI suggestions
   expect(errors.filter(item => !item.includes('Failed to load resource'))).toEqual([]);
 
   await page.reload();
-  await expect(page.getByLabel('V2 case name')).toHaveValue('Human-reviewed invoice resolution');
-  await expect(page.getByLabel('V2 case description')).toHaveValue('V2 case');
+  await expect(page.getByLabel('Assessment name')).toHaveValue('Human-reviewed invoice resolution');
+  await expect(page.getByLabel('Assessment description')).toHaveValue('V2 case');
 });
 
 for (const resolution of [
@@ -223,9 +223,9 @@ for (const resolution of [
     const applyButton = applyStep.getByRole('button',{name:'Apply reviewed batch to Assess'});
     await expect(applyButton).toBeEnabled();
     await applyButton.click();
-    await expect(page.getByLabel('V2 case description')).toHaveValue(resolution.value);
+    await expect(page.getByLabel('Assessment description')).toHaveValue(resolution.value);
     await page.reload();
-    await expect(page.getByLabel('V2 case description')).toHaveValue(resolution.value);
+    await expect(page.getByLabel('Assessment description')).toHaveValue(resolution.value);
   });
 }
 
@@ -233,7 +233,7 @@ test('native mapping blocks document actions while manual Assess changes are uns
   const base = await installEnterpriseFixture(page, { capabilities:[...new Set([...ALL_CAPABILITIES, ...mappingCapabilities])] });
   await installAssessImportFixture(page, { onCommit: values => base.commitDocumentMapping(values) });
   await openNativeDraft(page);
-  await page.getByLabel('V2 case name').fill('Unsaved manual name');
+  await page.getByLabel('Assessment name').fill('Unsaved manual name');
   const intake = page.getByTestId('assess-supporting-document-intake');
   await expect(intake).toContainText('Save or reload the current manual Assess changes');
   await expect(intake.locator('#assess-supporting-files')).toBeDisabled();
@@ -380,7 +380,7 @@ test('analyze completion from an older case head cannot surface in the reloaded 
   await mapping.waitForAnalyzeStart();
   base.commitDocumentMapping({ name:'Externally advanced case head' });
   await page.getByRole('button',{name:'Reload current draft'}).first().click();
-  await expect(page.getByLabel('V2 case name')).toHaveValue('Externally advanced case head');
+  await expect(page.getByLabel('Assessment name')).toHaveValue('Externally advanced case head');
   await mapping.waitForAnalyzeComplete();
   const intake = page.getByTestId('assess-supporting-document-intake');
   await expect(intake).not.toContainText('AI mapped invoice resolution');
@@ -397,10 +397,10 @@ test('stale apply fails without optimistic Assess changes', async ({ page }) => 
   const intake = page.getByTestId('assess-supporting-document-intake');
   await expect(intake).toContainText('Apply was not confirmed. No success state is shown.');
   await expect(intake).toContainText('selected resource changed on the server');
-  await expect(page.getByLabel('V2 case name')).toHaveValue('Invoice exception handling');
+  await expect(page.getByLabel('Assessment name')).toHaveValue('Invoice exception handling');
   expect(mapping.operations.filter(operation => operation === 'assess.document-map.commit')).toHaveLength(1);
   await page.reload();
-  await expect(page.getByLabel('V2 case name')).toHaveValue('Invoice exception handling');
+  await expect(page.getByLabel('Assessment name')).toHaveValue('Invoice exception handling');
 });
 
 test('lost apply response requires authoritative reload and never shows optimistic success', async ({ page }) => {
@@ -413,8 +413,27 @@ test('lost apply response requires authoritative reload and never shows optimist
   const intake = page.getByTestId('assess-supporting-document-intake');
   await expect(intake).toContainText('Apply outcome is unknown. Reload authoritative Assess state before retrying.');
   await expect(intake.getByRole('button',{name:'Apply reviewed batch to Assess'})).toBeDisabled();
-  await expect(page.getByLabel('V2 case name')).toHaveValue('Invoice exception handling');
+  await expect(page.getByLabel('Assessment name')).toHaveValue('Invoice exception handling');
   expect(mapping.operations.filter(operation => operation === 'assess.document-map.commit')).toHaveLength(2);
   expect(new Set(mapping.commitAttemptBindings.map(attempt => attempt.idempotencyKey)).size).toBe(1);
   expect(new Set(mapping.commitAttemptBindings.map(attempt => attempt.requestId)).size).toBe(1);
+});
+
+test('fresh request flowchart exposes both source branches before analysis', async ({ page }) => {
+  const base = await installEnterpriseFixture(page, {
+    capabilities: [...new Set([...ALL_CAPABILITIES, PROCESS_CREATE_CAPABILITY, ...mappingCapabilities])],
+  });
+  await installAssessImportFixture(page, { onCommit: values => base.commitDocumentMapping(values) });
+  await openNativeDraft(page);
+  await page.locator('#assess-supporting-files').setInputFiles([
+    'tests/fixtures/process-evidence/support-meeting.txt',
+    'tests/fixtures/process-evidence/request-sop.md',
+    'tests/fixtures/process-evidence/request-review.mmd',
+  ]);
+  const graph = page.getByRole('region', { name: 'Flowchart 1', exact: true });
+  await expect(graph.getByRole('listitem')).toHaveCount(4);
+  await expect(graph.getByText(/Line 3:.*Reviewer decides whether to approve.*Branch: Yes/)).toBeVisible();
+  await expect(graph.getByText(/Line 4:.*Request supporting evidence.*Branch: No/)).toBeVisible();
+  await expect(graph.getByText(/Line 5:.*Request supporting evidence.*Is the evidence complete/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Store private source' })).toHaveCount(3);
 });

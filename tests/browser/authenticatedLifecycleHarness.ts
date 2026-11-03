@@ -1371,7 +1371,7 @@ export const authenticatedLifecycleCompleteRequiredAssessmentFacts = async (
 };
 
 export const authenticatedLifecycleFinalizeDecisionPack = async (page: Page) => {
-  const button = page.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true });
+  const button = page.getByRole('button', { name: 'Finalize assessment for review', exact: true });
   await expect(button).toBeEnabled({ timeout: 15_000 });
   await button.click();
 };

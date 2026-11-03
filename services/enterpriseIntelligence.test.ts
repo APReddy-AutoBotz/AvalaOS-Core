@@ -218,6 +218,10 @@ test('selector-only payloads omit authoritative hashes, versions, and item ident
 
 test('file support is truthful about native text, DOCX, and scanned PDF OCR limits', () => {
   assert.deepEqual(classifyEvidenceFile('notes.md', '', 20).mimeType, 'text/markdown');
+  const flowchart = classifyEvidenceFile('approval-flow.mmd', 'application/octet-stream', 20);
+  assert.equal(flowchart.supported, true);
+  assert.equal(flowchart.mimeType, 'text/markdown');
+  assert.match(flowchart.message, /decision shapes.*branch labels/);
   assert.equal(classifyEvidenceFile('meeting.srt', '', 20).supported, true);
   assert.equal(classifyEvidenceFile('source.docx', 'application/octet-stream', 20).state, 'docx_text');
   const pdf = classifyEvidenceFile('scan.pdf', 'application/pdf', 20);

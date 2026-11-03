@@ -227,7 +227,13 @@ const openAssessment = async (page: Page) => {
   await expect(page.getByRole('heading',{ name:'Process Catalog' })).toBeVisible({ timeout:15_000 });
   await page.getByRole('button',{ name:'View' }).first().click();
   await expect(page.getByRole('heading',{ name:'Invoice exception handling' })).toBeVisible();
-  await page.getByRole('button',{ name:/Start Assessment|Open Decision Pack/ }).click();
+  const compatibility = page.getByTestId('assessment-compatibility-history');
+  if (await compatibility.isVisible().catch(() => false)) {
+    await compatibility.locator('summary').click();
+    await compatibility.getByTestId('open-assessment-history').click();
+  } else {
+    await page.getByRole('button',{ name:/Start Assessment|Resume Assessment|Open Decision Pack/ }).click();
+  }
   await expect(page.getByTestId('enterprise-assess')).toBeVisible();
 };
 

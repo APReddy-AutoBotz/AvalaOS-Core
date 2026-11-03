@@ -4,6 +4,7 @@ import {
   classifyEvidenceExtractionFailure,
   decodeBase64,
   extractEvidenceText,
+  inspectMermaidFlowcharts,
   readBoundedStream,
   readPdfExpandedStream,
   sha256Hex,
@@ -87,6 +88,85 @@ await test('decodes supported source bytes without exposing a storage path', asy
 await test('extracts transcript formats as text', async () => {
   const bytes = new TextEncoder().encode('\uFEFFWEBVTT\r\n\r\n00:00.000 --> 00:01.000\r\nA governed note');
   assert.equal(await extractEvidenceText(bytes, 'text/vtt'), 'WEBVTT\n\n00:00.000 --> 00:01.000\nA governed note');
+});
+
+await test('validates a branch-aware Mermaid flowchart while retaining exact source text', async () => {
+  const text = [
+    'flowchart TD',
+    '  start([Request received]) --> decision{Information complete?}',
+    '  decision -->|Use API| api[Submit through available API]',
+    '  decision -- Needs judgment --> review[Human reviews the exception]',
+    '  api --> done([Complete])',
+    '  review --> done',
+  ].join('\n');
+  const [flowchart] = inspectMermaidFlowcharts(text);
+  assert.equal(flowchart.direction, 'TD');
+  assert.equal(flowchart.nodes.length, 5);
+  assert.deepEqual(
+    flowchart.edges.filter(edge => edge.from === 'decision').map(edge => ({ to: edge.to, branchLabel: edge.branchLabel, line: edge.line })),
+    [
+      { to: 'api', branchLabel: 'Use API', line: 3 },
+      { to: 'review', branchLabel: 'Needs judgment', line: 4 },
+    ],
+  );
+  assert.equal(await extractEvidenceText(new TextEncoder().encode(text), 'text/markdown', 'approval-flow.mmd'), text);
+});
+
+await test('validates fenced Mermaid with absolute source line references', async () => {
+  const markdown = [
+    '# Returns SOP',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  request[Request] --> eligible{Eligible?}',
+    '  eligible -->|Yes| approve[Approve]',
+    '  eligible -->|No| reject[Reject]',
+    '```',
+  ].join('\n');
+  const [flowchart] = inspectMermaidFlowcharts(markdown, false);
+  assert.equal(flowchart.headerLine, 4);
+  assert.deepEqual(flowchart.edges.slice(1).map(edge => edge.line), [6, 7]);
+  assert.equal(await extractEvidenceText(new TextEncoder().encode(markdown), 'text/markdown', 'returns.md'), markdown);
+});
+
+await test('retains historical Markdown and text compatibility while flowchart opt-in keeps original line references', async () => {
+  const historicalMarkdown = '```mermaid\nsequenceDiagram\n  A->>B: retained historical source\n```';
+  assert.equal(
+    await extractEvidenceText(new TextEncoder().encode(historicalMarkdown), 'text/markdown', 'historical.md'),
+    historicalMarkdown,
+  );
+  const ordinaryText = 'flowchart TD\nsubgraph Historical free text\nend';
+  assert.equal(await extractEvidenceText(new TextEncoder().encode(ordinaryText), 'text/plain', 'notes.txt'), ordinaryText);
+
+  const withLeadingLines = '\n\nflowchart LR\n  start[Start] --> done[Done]\n';
+  const [flowchart] = inspectMermaidFlowcharts(withLeadingLines);
+  assert.equal(flowchart.headerLine, 3);
+  assert.equal(flowchart.edges[0].line, 4);
+  assert.equal(
+    await extractEvidenceText(new TextEncoder().encode(withLeadingLines), 'text/markdown', 'leading-lines.mmd'),
+    withLeadingLines.trim(),
+  );
+});
+
+await test('rejects branch loss and unsupported Mermaid syntax as malformed source content', async () => {
+  const unlabelledBranch = [
+    'flowchart TD',
+    '  check{Complete?} -->|Yes| accept[Accept]',
+    '  check --> reject[Reject]',
+  ].join('\n');
+  await assert.rejects(
+    extractEvidenceText(new TextEncoder().encode(unlabelledBranch), 'text/markdown', 'incomplete.mmd'),
+    /MERMAID_FLOWCHART_DECISION_BRANCH_LABEL_REQUIRED/,
+  );
+  const unsupported = 'flowchart TD\nsubgraph Internal\n  a[One] --> b[Two]\nend';
+  await assert.rejects(
+    extractEvidenceText(new TextEncoder().encode(unsupported), 'text/markdown', 'unsupported.mmd'),
+    /MERMAID_FLOWCHART_NODE_SHAPE_UNSUPPORTED|MERMAID_FLOWCHART_NODE_INVALID/,
+  );
+  await assert.rejects(
+    extractEvidenceText(new TextEncoder().encode('sequenceDiagram\nA->>B: Hello'), 'text/markdown', 'wrong-kind.mmd'),
+    /MERMAID_FLOWCHART_HEADER_INVALID/,
+  );
 });
 
 await test('extracts text PDF literals without treating embedded content as instructions', async () => {

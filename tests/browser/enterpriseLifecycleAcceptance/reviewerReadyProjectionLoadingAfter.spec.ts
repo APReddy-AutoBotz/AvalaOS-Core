@@ -70,11 +70,11 @@ const prepareReviewerReady = async (context: BrowserContext, page: Page, project
   );
   await enterProcess(page, setup.actors.author, setup.aliases.process, settleBoundary);
   expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-    page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click())).status()).toBe(200);
+    page.getByRole('button', { name: 'Start assessment', exact: true }).click())).status()).toBe(200);
   await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   await completeRequiredAssessmentFacts(page, 'hitl');
   expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-    page.getByRole('button', { name: 'Save V2 draft', exact: true }).click())).status()).toBe(200);
+    page.getByRole('button', { name: 'Save working draft', exact: true }).click())).status()).toBe(200);
   expect((await observe(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page))).status()).toBe(200);
   return { setup, settleBoundary, fixtureSessionPrimed };
 };
@@ -101,11 +101,11 @@ test('committed reviewer-ready projection remains visible while candidates fail 
   await checkpoint('author-finalize');
   await enterProcess(page, setup.actors.author, setup.aliases.process, settleBoundary);
   expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-    page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click())).status()).toBe(200);
+    page.getByRole('button', { name: 'Start assessment', exact: true }).click())).status()).toBe(200);
   await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   await completeRequiredAssessmentFacts(page, 'hitl');
   expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-    page.getByRole('button', { name: 'Save V2 draft', exact: true }).click())).status()).toBe(200);
+    page.getByRole('button', { name: 'Save working draft', exact: true }).click())).status()).toBe(200);
   expect((await observe(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page))).status()).toBe(200);
 
   const before = await control<MutationSnapshot>('/control/snapshot', { projectName: setup.projectName });

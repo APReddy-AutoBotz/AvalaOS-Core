@@ -491,7 +491,7 @@ const completeRequiredAssessmentFacts = async (page: Page) => {
 };
 
 const finalizeDecisionPack = async (page: Page) => {
-  const button = page.getByRole('button', { name: 'Finalize reviewer-ready Decision Pack', exact: true });
+  const button = page.getByRole('button', { name: 'Finalize assessment for review', exact: true });
   await expect(button).toBeEnabled({ timeout: 15_000 });
   await button.click();
 };
@@ -913,11 +913,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
     { tag: '@reviewer-selection-diagnostic' }, async ({ page, context }) => {
     await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
     const created = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-      page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
+      page.getByRole('button', { name: 'Start assessment', exact: true }).click());
     expect(created.status).toBe(200);
     await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
     await completeRequiredAssessmentFacts(page);
-    await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+    await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
     await expect(page.getByText('Draft saved as a new immutable authoring version.', { exact: true })).toBeVisible();
     const finalized = await observeApiResponse(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page));
     expect(finalized.status).toBe(200);
@@ -1262,17 +1262,17 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         const beforeDisabled = await control<AssessV2Frame>('/control/assess-v2-frame', { projectName });
         try {
           const disabledApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-            page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
+            page.getByRole('button', { name: 'Start assessment', exact: true }).click());
           expect(disabledApi.status).toBe(503);
           await expect(page.getByText('Avala Assess V2 is disabled. Existing V2 decisions remain available in read-only mode; changes are blocked.', { exact: true })).toBeVisible();
-          await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toHaveCount(0);
+          await expect(page.getByText('Working draft created. Add the minimum assessment structure before finalization.', { exact: true })).toHaveCount(0);
           const afterDisabled = await control<AssessV2Frame>('/control/assess-v2-frame', { projectName });
           expect(afterDisabled).toEqual(beforeDisabled);
           bindObservedCase('ASSESS-020',disabledApi.actionId);
           authenticatedCases.push({
             testId: 'ASSESS-020', status: 'passed', proofMode: 'actual-ui',
             observations: {
-              browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }],
+              browser: { actions: [{ action: 'click', target: 'Start assessment' }],
                 result: { disabledBoundaryVisible: true, successAbsent: true } },
               api: { productionRoutes: ['/functions/v1/assess-v2-command'],
                 responses: [{ classification: 'FEATURE_DISABLED', status: disabledApi.status }] },
@@ -1357,7 +1357,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       let createV2Api: ApiResponseObservation;
       try {
         createV2Api = await observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-          page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click());
+          page.getByRole('button', { name: 'Start assessment', exact: true }).click());
       } catch (error) {
         if (deliveryTaskBodyArmed) {
           await control('/control/native-postgrest-stream-release', { projectName }).catch(() => undefined);
@@ -1366,7 +1366,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         throw error;
       }
       expect(createV2Api.status).toBe(200);
-      await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
+      await expect(page.getByText('Working draft created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
       observe('assess-create', 'ui.assess-created');
       if (authenticatedProductAcceptance && beforeV2Create) {
         if (v2FullPrefixReproductionVariant && reproductionReadObserver) {
@@ -1424,7 +1424,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
                 await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
                 processVisibleWhileDeliveryPending = true;
                 await expect(page.getByText(
-                  'Existing V2 draft resumed from the current immutable authoring version.', { exact: true },
+                  'The current working draft resumed from its latest immutable authoring version.', { exact: true },
                 )).toBeVisible();
                 v2VisibleWhileDeliveryPending = true;
                 renderOutcome = await observeV2ReloadRenderOutcome(page);
@@ -1453,8 +1453,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             expect(renderOutcome).toBe('resumed');
             expect(readCompletion?.observation.readStages).toHaveLength(11);
             expect(readCompletion?.observation.readStages.every(stage => stage.status === 'passed')).toBe(true);
-            await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'New assessment (V2)', exact: true })).toHaveCount(0);
+            await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Start assessment', exact: true })).toHaveCount(0);
             expect(afterV2Create?.cases).toBe(beforeV2Create.cases + 1);
             expect(afterV2Create?.caseVersions).toBe(beforeV2Create.caseVersions + 1);
             expect(deliveryPendingFrame).not.toBeNull();
@@ -1464,7 +1464,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
             authenticatedCases.push({
               testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
               observations: {
-                browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
+                browser: { actions: [{ action: 'click', target: 'Start assessment' }, { action: 'reload', target: 'Assess V2 draft' }],
                   result: { createVisible: true, currentDraftReloaded: true } },
                 api: { productionRoutes: ['/functions/v1/assess-v2-command'],
                   responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
@@ -1545,14 +1545,14 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           return;
         } else {
           await page.reload({ waitUntil: 'domcontentloaded' });
-          await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+          await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
           const afterV2Create = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName });
           expect(afterV2Create.cases).toBe(beforeV2Create.cases + 1);
           bindObservedCase('ASSESS-018',createV2Api.actionId);
           authenticatedCases.push({
             testId: 'ASSESS-018', status: 'passed', proofMode: 'actual-ui',
             observations: {
-              browser: { actions: [{ action: 'click', target: 'New assessment (V2)' }, { action: 'reload', target: 'Assess V2 draft' }],
+              browser: { actions: [{ action: 'click', target: 'Start assessment' }, { action: 'reload', target: 'Assess V2 draft' }],
                 result: { createVisible: true, currentDraftReloaded: true } },
               api: { productionRoutes: ['/functions/v1/assess-v2-command'],
                 responses: [{ classification: 'ASSESSMENT_V2_CREATED', status: createV2Api.status }] },
@@ -1570,7 +1570,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await test.step('hosted:primary:v2-finalization-and-review', async () => {
       await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
       await completeRequiredAssessmentFacts(page);
-      await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+      await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
       await expect(page.getByText('Draft saved as a new immutable authoring version.', { exact: true })).toBeVisible();
       const beforeV2Finalize = authenticatedProductAcceptance
         ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
@@ -1585,7 +1585,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         authenticatedCases.push({
           testId: 'ASSESS-019', status: 'passed', proofMode: 'actual-ui',
           observations: {
-            browser: { actions: [{ action: 'click', target: 'Finalize reviewer-ready Decision Pack' }],
+            browser: { actions: [{ action: 'click', target: 'Finalize assessment for review' }],
               result: { finalizedCurrentInputs: true, immutableDecisionVisible: true } },
             api: { productionRoutes: ['/functions/v1/assess-v2-command'],
               responses: [{ classification: 'ASSESSMENT_V2_FINALIZED', status: finalizeV2Api.status }] },
@@ -1764,10 +1764,10 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: setup.aliases.process, exact: true })).toBeVisible();
       await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
-      await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.', { exact: true })).toBeVisible();
+      await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.', { exact: true })).toBeVisible();
       observe('reload-committed-state', 'ui.reload-committed-truth', { reload: true });
-      await page.getByLabel('V2 case description', { exact: true }).fill('Connected lifecycle revised after independent review.');
-      await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+      await page.getByLabel('Assessment description', { exact: true }).fill('Connected lifecycle revised after independent review.');
+      await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
       await expect(page.getByText('Draft saved as a new immutable authoring version.', { exact: true })).toBeVisible();
       const reworkFinalizeApi = await observeApiResponse(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page));
       expect(reworkFinalizeApi.status).toBe(200);
@@ -1785,8 +1785,8 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
           observations: {
             browser: { actions: [
               { action: 'click', target: 'Start new draft revision' },
-              { action: 'fill', target: 'V2 case description' },
-              { action: 'click', target: 'Finalize reviewer-ready Decision Pack' },
+              { action: 'fill', target: 'Assessment description' },
+              { action: 'click', target: 'Finalize assessment for review' },
             ], result: { priorHistoryRetained: true, newVersionResubmitted: true } },
             api: { productionRoutes: ['/functions/v1/assess-v2-command'], responses: [
               { classification: 'REVISION_COMMITTED', status: revisionApi.status },
@@ -2396,11 +2396,11 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       const rejection = await control<FixtureSetup>('/control/setup', { projectName: rejectionProjectName });
       validateSetupLabels(rejection, rejectionProjectName, hostedAuthenticatedAcceptance);
       await enterProcessAs(page,rejection.actors.author,rejection.aliases.process,settleActorTransitionEvidence);
-      await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
-      await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Start assessment', exact: true }).click();
+      await expect(page.getByText('Working draft created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
       await completeRequiredAssessmentFacts(page);
-      await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+      await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
       await finalizeDecisionPack(page);
       await expect(page.getByText('Reviewer-ready Decision Pack finalized. It is read-only.', { exact: true })).toBeVisible();
       await enterProcessAs(page,rejection.actors.reviewer,rejection.aliases.process,settleActorTransitionEvidence);

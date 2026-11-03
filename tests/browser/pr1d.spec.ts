@@ -23,7 +23,13 @@ const openAssessment = async (page: Page) => {
   await expectProcessCatalog(page);
   await page.getByRole('button',{ name:'View' }).first().click();
   await expect(page.getByRole('heading',{ name:'Invoice exception handling' }).first()).toBeVisible();
-  await page.getByRole('button',{ name:/Start Assessment|Open Decision Pack/ }).click();
+  const compatibility = page.getByTestId('assessment-compatibility-history');
+  if (await compatibility.isVisible().catch(() => false)) {
+    await compatibility.locator('summary').click();
+    await compatibility.getByTestId('open-assessment-history').click();
+  } else {
+    await page.getByRole('button',{ name:/Start Assessment|Resume Assessment|Open Decision Pack/ }).click();
+  }
   await expect(page.getByTestId('enterprise-assess')).toBeVisible();
 };
 
@@ -47,7 +53,7 @@ test('PR C synthetic runner manually completes and reloads the real Assess V2 dr
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
   const interactions: string[] = [];
   const observed = await completeAssessDraft(page, interactions);
-  expect(observed).toEqual({ createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save V2 draft', reloaded: true });
+  expect(observed).toEqual({ createdCase: true, manuallyCompletedFactCount: 7, savedWithControl: 'Save working draft', reloaded: true });
   expect(interactions).toContain('save:assess-v2-draft');
   await expect(page.getByLabel('Application 1 accountable owner')).toHaveValue('Synthetic Assess owner');
 });
@@ -231,7 +237,9 @@ test('authorized process creation opens a real V1 draft and reopens its saved se
   expect(fixture.processRows.find(row => row.id === committed.payload.processId)?.creation_receipt_id).toMatch(/^[0-9a-f-]{36}$/i);
   await createdRow.getByRole('button',{name:'View'}).click();
   await expect(page.getByRole('heading',{name:'Synthetic payment approval'}).first()).toBeVisible();
-  await page.getByRole('button',{name:'Start Assessment'}).click();
+  const compatibility = page.getByTestId('assessment-compatibility-history');
+  await compatibility.locator('summary').click();
+  await compatibility.getByTestId('open-assessment-history').click();
   await expect(page.getByTestId('enterprise-assess')).toBeVisible();
   const standardization = page.getByText('Process Standardization',{exact:true}).locator('..');
   await standardization.getByRole('button',{name:/^4\b/}).click();
@@ -353,8 +361,8 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-workspace')).toBeVisible();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
-  await page.getByLabel('V2 case description').fill('Controlled exception assessment with explicit evidence gaps.');
+  await page.getByRole('button',{name:'Start assessment'}).click();
+  await page.getByLabel('Assessment description').fill('Controlled exception assessment with explicit evidence gaps.');
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Capture invoice request');
   await page.getByRole('button',{name:'Add primitive'}).click();
@@ -374,7 +382,7 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await page.getByRole('button',{name:'Add linked evidence'}).click();
   await page.getByLabel('Evidence 2 claim IDs').fill('assessment.scope, primitive.type');
   await page.getByLabel('Evidence 2 submission status').selectOption('submitted');
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await page.getByRole('button',{name:'Reload current draft'}).click();
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Capture invoice request');
   const canonicalApDraft = {
@@ -405,13 +413,13 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await page.getByRole('button',{name:'Reload current draft'}).click();
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Invoice intake');
   const decisionStarted=performance.now();
-  await page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'}).click();
+  await page.getByRole('button',{name:'Finalize assessment for review'}).click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Composed operating model');
   expect(performance.now()-decisionStarted).toBeLessThan(5000);
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Executive decision');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Approval-bound actions');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Modernization dispositions');
-  await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Immutable references');
+  await expect(page.getByTestId('assess-immutable-references')).toBeHidden();
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Independent review: pending');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Source:');
   await expect(page.getByTestId('assess-v2-decision-pack')).toContainText('Document Intelligence');
@@ -422,9 +430,11 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
     if (!await locator.isVisible()) console.log('PR1D_VISIBILITY_DIAGNOSTIC', text, await locator.evaluate(element => { const style = getComputedStyle(element); const rect = element.getBoundingClientRect(); return { display:style.display, visibility:style.visibility, opacity:style.opacity, contentVisibility:style.contentVisibility, rect:{ x:rect.x, y:rect.y, width:rect.width, height:rect.height }, scrollY, documentHeight:document.documentElement.scrollHeight, ancestors:Array.from(function*(){ let current:Element|null=element; while(current){ const computed=getComputedStyle(current); yield { tag:current.tagName, className:current.className, display:computed.display, visibility:computed.visibility, opacity:computed.opacity, overflow:computed.overflow, height:current.getBoundingClientRect().height }; current=current.parentElement; } }()) }; }));
     await expect(locator).toBeVisible();
   };
-  await expectExactVisible('Legacy V1 | assess-core-2026-05.');
-  await expectExactVisible('Read-only | reviewer-ready');
-  await expectExactVisible('Deterministic evaluation completed; independent evidence and governance review not yet completed.');
+  await page.getByTestId('assess-history-audit').locator('summary').click();
+  await expectExactVisible('Earlier assessment · assess-core-2026-05.');
+  await expect(page.getByTestId('assess-immutable-references')).toBeVisible();
+  await expectExactVisible('Finalized decision version');
+  await expectExactVisible('Deterministic evaluation completed. Review and approval status is recorded in Governed review below.');
   await expectExactVisible('Hard stop: prohibited actions cannot proceed.');
   await expectExactVisible('No deployment, pilot, production, security, compliance, or buyer-acceptance readiness claim is made.');
   await expectExactVisible('V2 approval, Govern resolution, Studio generation, export, and external sharing are not available in this foundation boundary.');
@@ -440,8 +450,8 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
-  await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
+  await expect(page.getByText('The current reviewer-ready assessment reopened in read-only mode.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
 });
 
 
@@ -451,7 +461,8 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
 test('V1 clone reports real counts, exposes imported suggestions, and persists claim-linked submitted evidence', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Approved' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'Start from approved V1 assessment'}).click();
+  await page.getByTestId('assess-history-audit').locator('summary').click();
+  await page.getByRole('button',{name:'Import earlier approved facts into a working draft'}).click();
   const expectedClone = cloneV1AssessmentToV2({
     ...structuredClone(CANONICAL_AP_ASSESSMENT), id:ASSESSMENT, processId:PROCESS, orgId:ORG, workspaceId:WS,
     status:'Approved', scoreVersion:ASSESS_V1_SCORE_VERSION,
@@ -462,9 +473,9 @@ test('V1 clone reports real counts, exposes imported suggestions, and persists c
   await expect(importedStatus).toContainText(expectedClone.importedFacts![0].fieldId);
   await page.getByRole('button',{name:'Add review evidence'}).first().evaluate(element => (element as HTMLElement).click());
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await page.getByRole('button',{name:'Reload current draft'}).click();
-  await expect(page.getByText('Current immutable draft projection reloaded.')).toBeVisible();
+  await expect(page.getByText('Current immutable draft reloaded.')).toBeVisible();
   expect(fixture.v2Case?.importedFacts?.map(fact => fact.fieldId)).toEqual(expectedClone.importedFacts?.map(fact => fact.fieldId));
   for (const importedEvidence of expectedClone.evidence) expect(fixture.v2Case?.evidence).toContainEqual(importedEvidence);
   expect(fixture.v2Case?.evidence.every(item => /^[0-9a-f-]{36}$/.test(item.id))).toBe(true);
@@ -474,7 +485,7 @@ test('V1 clone reports real counts, exposes imported suggestions, and persists c
     caseId:`eq.${fixture.v2Case!.id}`,orgId:`eq.${ORG}`,workspaceId:`eq.${WS}`,version:'eq.1',sourceKind:'eq.v1_clone',
   });
   expect(fixture.cloneEvidenceVersionReads.length).toBeGreaterThanOrEqual(2);
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
   const draftSaves = fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert');
   expect(draftSaves).toHaveLength(2);
@@ -497,14 +508,15 @@ for (const source of [
   test(`V1 clone stays locally unavailable for ${source.label} without clearing tenant context`, async ({ page }) => {
     const fixture = await installEnterpriseFixture(page, source);
     await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-    const cloneButton = page.getByRole('button',{name:'Start from approved V1 assessment'});
-    await expect(cloneButton).toBeDisabled();
+    await page.getByTestId('assess-history-audit').locator('summary').click();
+    const cloneButton = page.getByRole('button',{name:'Import earlier approved facts into a working draft'});
+    await expect(cloneButton).toHaveCount(0);
     await expect(page.getByTestId('assess-v2-clone-unavailable')).toContainText(
       `Clone requires an Approved or Handed Off to Docs assessment finalized with ${ASSESS_V1_SCORE_VERSION}.`,
     );
-    await expect(page.getByRole('button',{name:'New assessment (V2)'})).toBeEnabled();
-    await cloneButton.evaluate(element => (element as HTMLButtonElement).click());
-    await expect(page.getByRole('button',{name:'New assessment (V2)'})).toBeEnabled();
+    await expect(page.getByRole('button',{name:'Start assessment'})).toBeEnabled();
+
+    await expect(page.getByRole('button',{name:'Start assessment'})).toBeEnabled();
     expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.clone_from_v1')).toHaveLength(0);
   });
 }
@@ -512,29 +524,29 @@ for (const source of [
 test('displayed primitive and lifecycle controls allow a scaffolded V2 case to finalize', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 primitive.rulesStable').selectOption('true');
   await page.getByText('3. Applications and interactions').evaluate(element => (element as HTMLElement).click());
   await page.getByLabel('Application 1 strategic lifespan').selectOption('long');
   await page.getByLabel('Application 1 accountable owner').fill('process-owner');
   await page.getByLabel('Interaction 1 data classification').selectOption('Internal');
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await expect(page.getByRole('status').filter({hasText:'a classified interaction with the required facts for its declared mode'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Finalize assessment for review'})).toBeDisabled();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(0);
   for (const fact of ['interfaceAvailable','operationCovered','apiDocumented','errorContract']) {
     await page.getByLabel(`Interaction 1 ${fact}`).selectOption('true');
   }
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
-  await page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
+  await page.getByRole('button',{name:'Finalize assessment for review'}).click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toHaveLength(1);
 });
 test('Retrieve and Execute primitives expose and persist interface dependency knowledge', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 type').selectOption('Retrieve');
   await page.getByLabel('Primitive 2 type').selectOption('Execute');
@@ -542,7 +554,7 @@ test('Retrieve and Execute primitives expose and persist interface dependency kn
   await expect(page.getByLabel('Primitive 2 primitive.interfaceDependencyKnown')).toBeVisible();
   await page.getByLabel('Primitive 1 primitive.interfaceDependencyKnown').selectOption('true');
   await page.getByLabel('Primitive 2 primitive.interfaceDependencyKnown').selectOption('false');
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
 
   const saved = fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert').at(-1);
@@ -557,40 +569,40 @@ test('Retrieve and Execute primitives expose and persist interface dependency kn
 test('persisted V2 draft is resumed after remount without duplicate creation', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Persisted restore primitive');
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`view=process_detail.*scope=my_work.*processId=${PROCESS}`));
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Persisted restore primitive');
-  await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
+  await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toHaveLength(1);
 });
 
 test('read-only V2 sessions retain discovery across remount while mutations remain unavailable', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await page.getByRole('button',{name:'Add minimum working structure'}).click();
   await page.getByLabel('Primitive 1 name').fill('Read-only discovery primitive');
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toBeVisible();
   const committedBeforeReadOnly = fixture.committedCommands.length;
 
   fixture.setV2CommandFailure({ type:'assessment_v2.draft.upsert', code:'READ_ONLY' });
   await page.getByLabel('Primitive 1 name').fill('Unsaved read-only mutation');
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
 
-  await expect(page.getByText('Existing V2 draft resumed from the current immutable authoring version.')).toBeVisible();
+  await expect(page.getByText('The current working draft resumed from its latest immutable authoring version.')).toBeVisible();
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Read-only discovery primitive');
-  await expect(page.getByRole('button',{name:'Save V2 draft'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Save working draft'})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Reload current draft'})).toBeEnabled();
-  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Start from approved V1 assessment'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Finalize assessment for review'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Import earlier approved facts into a working draft'})).toHaveCount(0);
   expect(fixture.committedCommands).toHaveLength(committedBeforeReadOnly);
 
   await fixture.seedReviewerReadyV2Decision();
@@ -598,27 +610,27 @@ test('read-only V2 sessions retain discovery across remount while mutations rema
   await expectProcessCatalog(page);
   await page.getByRole('button',{name:'View'}).first().click();
   await expect(page.getByTestId('assess-v2-decision-pack')).toBeVisible();
-  await expect(page.getByText('Existing reviewer-ready Decision Pack reopened in read-only mode.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Start from approved V1 assessment'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Save V2 draft'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toHaveCount(0);
+  await expect(page.getByText('The current reviewer-ready assessment reopened in read-only mode.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Import earlier approved facts into a working draft'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Save working draft'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Finalize assessment for review'})).toHaveCount(0);
   expect(fixture.committedCommands).toHaveLength(committedBeforeReadOnly);
 });
 
 test('incomplete V2 authoring cannot finalize or send a finalization command', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { initialStatus:'Ready for Review' });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await expect(page.getByText('Before finalization, add: at least two process primitives', { exact: false })).toBeVisible();
-  await expect(page.getByRole('button',{name:'Finalize reviewer-ready Decision Pack'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Finalize assessment for review'})).toBeDisabled();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.finalize')).toEqual([]);
 });
 
 test('V2 mutation capability denial is visible and no command is sent', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { capabilities:['assess.read', ASSESS_V2_CAPABILITIES.read] });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Start assessment'})).toBeDisabled();
   await expect(page.getByRole('status').filter({ hasText: 'Create a V2 case' })).toContainText('Create a V2 case');
   expect(fixture.committedCommands.filter(item => String(item.commandType).startsWith('assessment_v2.'))).toEqual([]);
 });
@@ -626,7 +638,7 @@ test('V2 mutation capability denial is visible and no command is sent', async ({
 test('stale V2 authority surfaces an error without false success', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { failV2Command:{type:'assessment_v2.create',code:'AUTHORITY_STALE'} });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await expect(page.getByRole('heading',{name:'Access context changed'})).toBeVisible();
   await expect(page.getByText(/Your access changed/)).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toEqual([]);
@@ -635,10 +647,10 @@ test('stale V2 authority surfaces an error without false success', async ({ page
 test('V2 version conflict prevents save success and returns to a safe reload state', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { failV2Command:{type:'assessment_v2.draft.upsert',code:'VERSION_CONFLICT'} });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click(); await page.getByRole('button',{name:'Add minimum working structure'}).click();
-  await page.getByRole('button',{name:'Save V2 draft'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click(); await page.getByRole('button',{name:'Add minimum working structure'}).click();
+  await page.getByRole('button',{name:'Save working draft'}).click();
   await expect(page.getByText(/changed on the server/i)).toBeVisible();
-  await expect(page.getByRole('button',{name:'New assessment (V2)'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Start assessment'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Add minimum working structure'})).toBeVisible();
   await expect(page.getByText('Draft saved as a new immutable authoring version.')).toHaveCount(0);
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.draft.upsert')).toEqual([]);
@@ -647,7 +659,7 @@ test('V2 version conflict prevents save success and returns to a safe reload sta
 test('offline V2 create reports failure and never claims success', async ({ page }) => {
   const fixture = await installEnterpriseFixture(page, { v2Offline:true });
   await page.goto('/'); await page.getByRole('button',{name:'View'}).first().click();
-  await page.getByRole('button',{name:'New assessment (V2)'}).click();
+  await page.getByRole('button',{name:'Start assessment'}).click();
   await expect(page.getByRole('heading',{name:'Workspace unavailable'})).toBeVisible();
   await expect(page.getByText('The command could not be completed. No success was recorded.')).toBeVisible();
   expect(fixture.committedCommands.filter(item => item.commandType === 'assessment_v2.create')).toEqual([]);

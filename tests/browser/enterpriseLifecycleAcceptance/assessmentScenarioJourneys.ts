@@ -144,11 +144,11 @@ const createAndFinalizeDecision = async (
     runStep: (title, operation) => test.step(title, operation),
   });
   await page.getByRole('button', { name: 'Back to Process', exact: true }).click();
-  await page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click();
-  await expect(page.getByText('V2 case created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Start assessment', exact: true }).click();
+  await expect(page.getByText('Working draft created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   await completeFacts(page, variant);
-  await page.getByRole('button', { name: 'Save V2 draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Save working draft', exact: true }).click();
   await expect(page.getByText('Draft saved as a new immutable authoring version.', { exact: true })).toBeVisible();
   const before = await control<LifecycleFrame>('/control/lifecycle-frame', { projectName: setup.projectName });
   await finalizeDecision(page);

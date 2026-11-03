@@ -131,11 +131,11 @@ test('exact Studio handoff personas preserve three-party authority in production
     await enterProcess(page, target.actors.author, target.aliases.process, settleBoundary);
     await checkpoint(`${prefix}-author-entered`);
     expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-      page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click())).status()).toBe(200);
+      page.getByRole('button', { name: 'Start assessment', exact: true }).click())).status()).toBe(200);
     await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
     await completeRequiredAssessmentFacts(page, 'hitl');
     expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-      page.getByRole('button', { name: 'Save V2 draft', exact: true }).click())).status()).toBe(200);
+      page.getByRole('button', { name: 'Save working draft', exact: true }).click())).status()).toBe(200);
     expect((await observe(page, '/functions/v1/assess-v2-command', () => finalizeDecisionPack(page))).status()).toBe(200);
     await checkpoint(`${prefix}-decision-finalized`);
 

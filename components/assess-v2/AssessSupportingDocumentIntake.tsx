@@ -15,6 +15,7 @@ import type {
   AssessMappingJsonValue,
   AssessMappingTargetDescriptor,
 } from '../../services/assessImport/contracts';
+import { inspectMermaidSourceText, type MermaidFlowchart } from '../../services/mermaidFlowchart';
 
 type PendingFile = {
   id: string;
@@ -23,6 +24,7 @@ type PendingFile = {
   size: number;
   contentBase64: string;
   note: string;
+  flowcharts: MermaidFlowchart[];
 };
 
 type Props = {
@@ -42,7 +44,7 @@ const SOURCE_SET_CAPABILITIES = [...CONTEXT_CAPABILITIES, 'transcript.sources.ma
 const ANALYZE_CAPABILITIES = [...CONTEXT_CAPABILITIES, 'evidence.write'] as const;
 const REVIEW_CAPABILITIES = [...CONTEXT_CAPABILITIES, 'evidence.review'] as const;
 const APPLY_CAPABILITIES = [...CONTEXT_CAPABILITIES, 'transcript.assess.apply'] as const;
-const fileAccept = '.txt,.md,.markdown,.csv,.vtt,.srt,.pdf,.docx,.xlsx';
+const fileAccept = '.txt,.md,.markdown,.mmd,.csv,.vtt,.srt,.pdf,.docx,.xlsx';
 const focusRing = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#005ea8]';
 const inputClass = `mt-1 min-h-10 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 dark:border-slate-700 dark:bg-slate-950 dark:text-white ${focusRing}`;
 const primaryClass = `inline-flex min-h-10 items-center justify-center rounded-xl bg-[#ffbc03] px-4 text-sm font-black text-[#002C4B] disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`;
@@ -58,6 +60,21 @@ const formatValue = (value: AssessMappingJsonValue | undefined): string => {
 
 const asRecord = (value: AssessMappingJsonValue): Record<string, AssessMappingJsonValue> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+
+function FlowchartUploadPreview({ flowcharts }: { flowcharts: MermaidFlowchart[] }) {
+  if (!flowcharts.length) return null;
+  return <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950" aria-label="Read-only flowchart source preview">
+    <p className="font-black">Read-only flowchart source preview</p>
+    <p className="mt-1 font-semibold">Compare every source path and branch with the later suggestions. This preview does not create or change assessment steps.</p>
+    <div className="mt-2 grid gap-2">{flowcharts.map((flowchart, flowchartIndex) => {
+      const labels = new Map(flowchart.nodes.map(node => [node.id, node.label]));
+      return <section key={`${flowchart.headerLine}:${flowchartIndex}`} aria-label={`Flowchart ${flowchartIndex + 1}`} className="rounded-md bg-white p-2">
+        <p className="font-black">Flowchart {flowchartIndex + 1} · {flowchart.direction} · {flowchart.nodes.length} steps · {flowchart.edges.length} paths</p>
+        <ul className="mt-1 list-disc space-y-1 pl-5 font-semibold">{flowchart.edges.map(edge => <li key={`${edge.line}:${edge.from}:${edge.to}`}>Line {edge.line}: {labels.get(edge.from) || edge.from} → {labels.get(edge.to) || edge.to}{edge.branchLabel ? ` · Branch: ${edge.branchLabel}` : ' · Unlabelled path'}</li>)}</ul>
+      </section>;
+    })}</div>
+  </div>;
+}
 
 function MappingValueEditor({ descriptor, value, onChange, idPrefix }: {
   descriptor: AssessMappingTargetDescriptor;
@@ -249,7 +266,11 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
       try {
         const bytes = await file.arrayBuffer();
         if (!isCurrent()) return;
-        next.push({ id: crypto.randomUUID(), name: file.name, mimeType: support.mimeType, size: file.size, contentBase64: bytesToBase64(new Uint8Array(bytes)), note: support.message });
+        const sourceBytes = new Uint8Array(bytes);
+        const flowcharts = support.mimeType === 'text/markdown'
+          ? inspectMermaidSourceText(new TextDecoder('utf-8', { fatal: true }).decode(sourceBytes).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'), file.name)
+          : [];
+        next.push({ id: crypto.randomUUID(), name: file.name, mimeType: support.mimeType, size: file.size, contentBase64: bytesToBase64(sourceBytes), note: support.message, flowcharts });
       } catch (cause) {
         if (isCurrent()) setError(cause instanceof Error ? `${file.name}: ${cause.message}` : `${file.name}: the browser could not read this file.`);
       }
@@ -380,7 +401,7 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
 
   return <section className="rounded-2xl border border-slate-200 p-3 sm:p-5 dark:border-slate-700" data-testid="assess-supporting-document-intake" aria-labelledby="assess-supporting-document-title">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9a6a00] dark:text-[#ffcf45]">Human-reviewed AI assistance</p><h3 id="assess-supporting-document-title" className="mt-1 text-lg font-black">Map supporting documents into this assessment</h3><p className="mt-2 max-w-4xl text-sm font-semibold text-slate-600 dark:text-slate-300">Upload private source documents, choose the exact source set, then review grounded suggestions. Nothing changes the assessment until you explicitly apply a reviewed preview.</p></div><button type="button" className={secondaryClass} disabled={busy} onClick={() => void reloadManually()}>Reload committed state</button></div>
-    <p className="mt-3 text-xs font-semibold text-slate-500">Supported: TXT, Markdown, CSV, VTT/SRT, DOCX main-document text, text-layer PDF, and bounded non-macro XLSX. OCR, audio/video, old DOC/XLS, formulas, macros, external workbook data, and hidden sheets are not imported.</p>
+    <p className="mt-3 text-xs font-semibold text-slate-500">Supported: TXT, Markdown, bounded Mermaid flowcharts (.mmd or fenced in Markdown), CSV, VTT/SRT, DOCX main-document text, text-layer PDF, and bounded non-macro XLSX. Mermaid support covers flowchart/graph direction, steps, directed edges, decision shapes, and explicit branch labels. OCR, image flowcharts, audio/video, old DOC/XLS, formulas, macros, external workbook data, hidden sheets, and other Mermaid diagram types are not imported.</p>
     <p className="mt-2 text-xs font-semibold text-slate-500">Queue up to 20 documents and 12,000,000 bytes total at a time. Store queued sources before adding more. Large extracted source sets may exceed the analysis limit; nothing is silently truncated.</p>
     <p className="mt-3 text-sm font-semibold" role="status" aria-live="polite">{status}</p>
     {error ? <p className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm font-bold text-rose-800" role="alert">{error}</p> : null}
@@ -394,7 +415,7 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
     {applyMissing.length ? <p className="mt-2 text-xs font-semibold text-slate-500" role="status">Preview, conflict resolution, and apply are unavailable: {applyMissing.join(', ')}.</p> : null}
     {projection && [uploadMissing, sourceSetMissing, analyzeMissing, reviewMissing, applyMissing].some(missing => missing.length) ? <p className="mt-2 text-xs font-semibold text-slate-500">Fresh server capabilities control each stage independently.</p> : null}
 
-    <details open className="mt-5 rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><summary className="cursor-pointer font-black">1. Upload private supporting documents</summary><label className="mt-3 block text-xs font-black" htmlFor="assess-supporting-files">Supporting documents<input id="assess-supporting-files" className="mt-2 block w-full text-sm" type="file" multiple accept={fileAccept} disabled={uploadLocked} onChange={event => void onFiles(event.target.files)} /></label><div className="mt-3 grid gap-2">{pendingFiles.map(file => <article key={file.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950"><p className="break-all text-sm font-black">{file.name} · {Math.ceil(file.size / 1024)} KB</p><p className="mt-1 text-xs font-semibold text-slate-500">{file.note}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" className={primaryClass} disabled={uploadLocked} onClick={async () => { const stored = await mutate(() => enterpriseIntelligenceClient.createEvidenceSource({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, displayName: file.name, filename: file.name, mimeType: file.mimeType, contentBase64: file.contentBase64 }), `${file.name} was stored as a private immutable source.`); if (stored) setPendingFiles(current => current.filter(item => item.id !== file.id)); }}>Store private source</button><button type="button" className={secondaryClass} disabled={busy} onClick={() => setPendingFiles(current => current.filter(item => item.id !== file.id))}>Remove from this browser</button></div></article>)}</div></details>
+    <details open className="mt-5 rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><summary className="cursor-pointer font-black">1. Upload private supporting documents</summary><label className="mt-3 block text-xs font-black" htmlFor="assess-supporting-files">Supporting documents<input id="assess-supporting-files" className="mt-2 block w-full text-sm" type="file" multiple accept={fileAccept} disabled={uploadLocked} onChange={event => void onFiles(event.target.files)} /></label><div className="mt-3 grid gap-2">{pendingFiles.map(file => <article key={file.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950"><p className="break-all text-sm font-black">{file.name} · {Math.ceil(file.size / 1024)} KB</p><p className="mt-1 text-xs font-semibold text-slate-500">{file.note}</p><FlowchartUploadPreview flowcharts={file.flowcharts} /><div className="mt-2 flex flex-wrap gap-2"><button type="button" className={primaryClass} disabled={uploadLocked} onClick={async () => { const stored = await mutate(() => enterpriseIntelligenceClient.createEvidenceSource({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, displayName: file.name, filename: file.name, mimeType: file.mimeType, contentBase64: file.contentBase64 }), `${file.name} was stored as a private immutable source.`); if (stored) setPendingFiles(current => current.filter(item => item.id !== file.id)); }}>Store private source</button><button type="button" className={secondaryClass} disabled={busy} onClick={() => setPendingFiles(current => current.filter(item => item.id !== file.id))}>Remove from this browser</button></div></article>)}</div></details>
 
     <details open className="mt-4 rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><summary className="cursor-pointer font-black">2. Select exact sources</summary><p className="mt-2 text-xs font-semibold text-slate-500">Only successfully decoded immutable versions can be selected. Files from Studio are not selected automatically.</p><fieldset className="mt-3"><legend className="sr-only">Ready supporting-document versions</legend><div className="grid gap-2 sm:grid-cols-2">{sourceVersions.map(source => <label key={source.versionSelector} className="flex min-h-11 items-start gap-2 rounded-lg border border-slate-200 bg-white p-2 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950"><input className="mt-1" type="checkbox" disabled={sourceSetLocked} checked={selectedSourceVersions.includes(source.versionSelector)} onChange={() => setSelectedSourceVersions(current => current.includes(source.versionSelector) ? current.filter(id => id !== source.versionSelector) : [...current, source.versionSelector])} /><span>{source.displayName}<span className="block text-xs text-slate-500">{source.versionLabel} · {source.extractedCharacterCount.toLocaleString()} extracted characters</span></span></label>)}</div></fieldset><div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><label className="text-xs font-black" htmlFor="assess-source-set-label">Source-set label<input id="assess-source-set-label" className={inputClass} disabled={sourceSetLocked} value={sourceSetLabel} onChange={event => setSourceSetLabel(event.target.value)} /></label><button type="button" className={`${primaryClass} self-end`} disabled={sourceSetLocked || !sourceSetLabel.trim() || !selectedSourceVersions.length} onClick={() => void mutate(() => enterpriseIntelligenceClient.commitTranscriptSourceSet({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, label: sourceSetLabel, description: `Supporting documents selected for ${processId}`, members: selectedSourceVersions.map((versionSelector, index) => { const source = sourceVersions.find(item => item.versionSelector === versionSelector)!; return { sourceId: source.sourceId, versionSelector, role: index === 0 ? 'primary' as const : 'supporting' as const }; }) }), 'Immutable Assess source set committed. Select it below to create a locked analysis bundle.')}>Commit source set</button></div>
       <fieldset className="mt-4"><legend className="text-xs font-black">Committed Assess source sets</legend><div className="mt-2 grid gap-2">{sourceSets.map(set => <label key={set.versionSelector} className="flex min-h-11 items-start gap-2 rounded-lg border border-slate-200 bg-white p-2 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950"><input className="mt-1" type="checkbox" disabled={sourceSetLocked} checked={selectedSourceSets.includes(set.versionSelector)} onChange={() => setSelectedSourceSets(current => current.includes(set.versionSelector) ? current.filter(id => id !== set.versionSelector) : [...current, set.versionSelector])} /><span>{set.label} · {set.versionLabel}<span className="block text-xs text-slate-500">{set.sourceCount} sources · {set.extractedCharacterCount.toLocaleString()} characters</span></span></label>)}</div></fieldset><div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><label className="text-xs font-black" htmlFor="assess-bundle-label">Analysis bundle label<input id="assess-bundle-label" className={inputClass} disabled={sourceSetLocked} value={bundleLabel} onChange={event => setBundleLabel(event.target.value)} /></label><button type="button" className={`${primaryClass} self-end`} disabled={sourceSetLocked || !bundleLabel.trim() || !selectedSourceSets.length} onClick={() => void mutate(() => enterpriseIntelligenceClient.lockTranscriptInputBundle({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, sourceSetVersionSelectors: selectedSourceSets, label: bundleLabel }), 'Exact supporting-document bundle locked. It can now be analyzed.')}>Lock analysis bundle</button></div>

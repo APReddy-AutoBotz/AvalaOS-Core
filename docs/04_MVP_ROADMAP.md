@@ -1,5 +1,10 @@
 # AvalaOS Core: remaining delivery plan
 
+## Process evidence to confirmed delivery work
+
+One [product milestone](planning/process-evidence-to-delivery.md) connects intake and assessment, governed design documents and diagrams, and requirement-linked board proposals. Its acceptance requires a fresh ordinary-UI journey and a contrasting assessment. No provider budget or environment activation follows from the roadmap.
+
+
 ## Active hands-on acceptance — 2026-10-31
 
 AP now authorizes normal merge, narrow blocker fixes and real-auth acceptance in the existing controlled nonproduction environment. PR #346 and its fresh release verification are complete; PR #347 must pass its current candidate gates before normal merge and release verification. Next are the protected real-auth procedure, separate temporary hands-on access, and a normal-navigation walkthrough of retained approved outputs. Existing human environment review stays intact. The [active completion plan](planning/hosted-acceptance-completion.md) owns that sequence and current blockers; earlier approval holds below are historical. Providers remain OFF, the actor boundary remains 15,000 ms, and production and paid providers remain excluded.

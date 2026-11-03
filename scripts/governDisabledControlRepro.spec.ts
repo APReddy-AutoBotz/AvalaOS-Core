@@ -128,11 +128,11 @@ test('verifies disabled reviewer UI, authenticated denial and independent resolu
     throw error;
   }
   expect((await observeCommand(page, () =>
-    page.getByRole('button', { name: 'New assessment (V2)', exact: true }).click())).status()).toBe(200);
+    page.getByRole('button', { name: 'Start assessment', exact: true }).click())).status()).toBe(200);
   await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
   await completeRequiredAssessmentFacts(page, 'hitl');
   expect((await observeCommand(page, () =>
-    page.getByRole('button', { name: 'Save V2 draft', exact: true }).click())).status()).toBe(200);
+    page.getByRole('button', { name: 'Save working draft', exact: true }).click())).status()).toBe(200);
   expect((await observeCommand(page, () => finalizeDecisionPack(page))).status()).toBe(200);
 
   await enterProcessWithBoundary(page, setup.actors.reviewer, setup.aliases.process, settleBoundary);

@@ -1,5 +1,12 @@
 # AvalaOS Core: end-to-end product guide
 
+## Current product direction
+
+For a process owner, the starting point is the process and its current assessment. Supply evidence, review what the sources actually say, correct the process steps and record what is still unknown. The recommendation should explain where simpler changes suffice, where a confirmed interface can replace manual work, and where someone needs to make a judgment. Approved history stays available alongside a clearly identified working draft.
+
+The requested Studio outputs are selected BRD, PDD, FRD and SDD documents plus editable As-Is and To-Be flows. Finalized requirements should yield editable proposals that the owner can select for the ordinary Delivery board. Current implementation and verification differ by output. The [milestone plan](planning/process-evidence-to-delivery.md) tracks those differences.
+
+
 This guide explains the product goal, users, inputs, module behavior, outputs, and handoffs. It summarizes existing scope; it does not authorize new functionality. [Implementation status](05_IMPLEMENTATION_STATUS.md) owns the dated verification snapshot and [delivery roadmap](04_MVP_ROADMAP.md) lists the remaining gates. Detailed domain contracts remain authoritative through the [authority map](architecture/document-authority-map.md).
 
 ## Goal and success criteria
@@ -54,9 +61,9 @@ Completion never automatically creates the next module's resource. Each handoff 
 
 ## Input and artifact scope
 
-- Source Library supports bounded text-oriented inputs including TXT, Markdown, CSV, VTT, SRT, meeting-note text and supported text PDF/DOCX extraction. Native Assess separately supports bounded structured CSV/XLSX field mapping; this does not imply Studio XLSX mapping.
+- Source Library supports bounded text-oriented inputs including TXT, Markdown, CSV, VTT, SRT, meeting-note text and supported text PDF/DOCX extraction. Assess also accepts the bounded Mermaid flowchart subset documented in the [intake plan](planning/assess-supporting-document-mapping.md). Native Assess separately supports bounded structured CSV/XLSX field mapping; this does not imply Studio XLSX mapping.
 - Audio/video transcription, OCR, URL/cloud-drive retrieval and archive expansion are outside the described ingestion scope.
-- BRD/FRD/PDD are the canonical Studio aggregate types. Broader PRD/SDD-oriented content and diagram aspirations are not a claim of independently accepted artifact types. Approved tenant custom template/output design is governed by the multi-source architecture, not implied by the canonical aggregate union.
+- BRD/FRD/PDD are the canonical Studio aggregate types. Canonical SDD and editable As-Is/To-Be diagram revisions are required milestone outputs and remain open implementation work. Approved tenant custom template/output design is governed by the multi-source architecture, not implied by the canonical aggregate union.
 - Manual Studio sources retain their manual/not-assessed truth. Reusing a transcript between Assess and Studio does not share a mutable source set or silently create a handoff.
 
 ## Worked example: invoice exception handling

@@ -315,12 +315,18 @@ const runInner = async (options: CompletionOptions, deadline: CompletionDeadline
   try {
     await runStep('v1-assessment:open-and-complete-discovery', async () => {
       deadline.assertActive();
-      const resume = options.page.getByRole('button', { name: 'Resume Assessment', exact: true });
-      const start = options.page.getByRole('button', { name: /^Start (?:New )?Assessment$/u });
-      if (await resume.isVisible().catch(() => false)) {
-        await resume.click({ timeout: deadline.remaining() });
+      const compatibility = options.page.getByTestId('assessment-compatibility-history');
+      if (await compatibility.isVisible().catch(() => false)) {
+        await compatibility.locator('summary').click({ timeout: deadline.remaining() });
+        await compatibility.getByTestId('open-assessment-history').click({ timeout: deadline.remaining() });
       } else {
-        await start.click({ timeout: deadline.remaining() });
+        const resume = options.page.getByRole('button', { name: 'Resume Assessment', exact: true });
+        const start = options.page.getByRole('button', { name: /^Start (?:New )?Assessment$/u });
+        if (await resume.isVisible().catch(() => false)) {
+          await resume.click({ timeout: deadline.remaining() });
+        } else {
+          await start.click({ timeout: deadline.remaining() });
+        }
       }
       deadline.assertActive();
       if (options.discoveryVisibilityTimeoutMs === undefined) {
