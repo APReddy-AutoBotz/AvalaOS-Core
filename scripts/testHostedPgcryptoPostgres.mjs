@@ -84,6 +84,7 @@ try {
     await verify();
   }
   await db.query('revoke execute on function public.digest(text,text) from service_role');
+  assert.equal((await inventory()).classification.mutationAllowed,false,'Missing required service access must reject inventory');
   await ensureHostedPgcryptoCompatibility(db);await verify();
   await db.query('grant execute on function public.digest(text,text) to authenticated');
   const failedRevoke={query:(sql,...args)=>String(sql).startsWith('revoke all on function public.digest') && String(sql).endsWith('from authenticated')

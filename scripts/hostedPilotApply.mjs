@@ -16,7 +16,7 @@ export async function runHostedPilotApply({
   if (expectedReleaseSha !== checkoutReleaseSha) throw new Error('RELEASE_IDENTITY_MISMATCH');
   canonical ??= loadCanonicalMigrationInventoryFromGit(checkoutReleaseSha);
   const classification = classifyHostedTarget(inventory, canonical);
-  const expected = { expectedReleaseSha, environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, migrationTip: canonical.tip, nonce };
+  const expected = { expectedReleaseSha, environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, migrationTip: canonical.tip, routineContractDigest: canonical.routineContract?.digest ?? null, nonce };
   if (!verifyPreflightToken({ token, signingKey, expected })) throw new Error('PREFLIGHT_BINDING_MISMATCH');
   const plan = buildAdditiveMigrationPlan(classification, canonical);
   await client.query(`select pg_advisory_lock(hashtextextended('avalaos:hosted-pilot:migrations', 0))`);

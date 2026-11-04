@@ -2,6 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { ROUTINE_CONTRACT_PATH, parseRoutineContract, matchRoutineContract } from './hostedPilotRoutineContract.mjs';
 
 const MIGRATION_NAME = /^\d{14}_[a-z0-9_]+\.sql$/;
 const SAFE_SCHEMAS = new Set(['auth', 'avalaos_migrations', 'extensions', 'graphql', 'graphql_public', 'information_schema', 'pg_catalog', 'pgsodium', 'pgsodium_masks', 'public', 'realtime', 'storage', 'supabase_migrations', 'vault']);
@@ -282,12 +283,17 @@ export async function loadCanonicalMigrationInventory(root = process.cwd()) {
     migrations.push({ name, sha256: sha256(bytes), bytes: bytes.length, sql, objectOperations, creates: extractCreatedRelations(sql), routines: extractCreatedRoutines(sql) });
   }
   const finalObjects=canonicalObjectsAtPrefix(migrations);
+  const contractBytes = await readFile(path.join(root, ROUTINE_CONTRACT_PATH)).catch(error => {
+    if (error.code === 'ENOENT') return undefined;
+    throw error;
+  });
   return Object.freeze({
     algorithm: 'sha256',
     count: migrations.length,
     tip: names.at(-1),
     digest: sha256(migrations.map(({ name, sha256: digest }) => `${name}\0${digest}\n`).join('')),
     migrations, relations:normalized(finalObjects.relations), routines:normalized(finalObjects.routines),
+    routineContract: parseRoutineContract(contractBytes, migrations),
   });
 }
 
@@ -302,9 +308,12 @@ export function loadCanonicalMigrationInventoryFromGit(commit, root = process.cw
     return { name, sha256: sha256(bytes), bytes: bytes.length, sql, objectOperations, creates: extractCreatedRelations(sql), routines: extractCreatedRoutines(sql) };
   });
   const finalObjects=canonicalObjectsAtPrefix(migrations);
+  const contractPath = execFileSync('git', ['ls-tree', '--name-only', commit, ROUTINE_CONTRACT_PATH], { cwd: root, encoding: 'utf8' }).trim();
+  const contractBytes = contractPath ? execFileSync('git', ['show', `${commit}:${ROUTINE_CONTRACT_PATH}`], { cwd: root, maxBuffer: 4_000_000 }) : undefined;
   return Object.freeze({ algorithm: 'sha256', count: migrations.length, tip: names.at(-1),
     digest: sha256(migrations.map(({ name, sha256: digest }) => `${name}\0${digest}\n`).join('')), migrations,
-    relations:normalized(finalObjects.relations),routines:normalized(finalObjects.routines) });
+    relations:normalized(finalObjects.relations),routines:normalized(finalObjects.routines),
+    routineContract: parseRoutineContract(contractBytes, migrations) });
 }
 
 export function extractCreatedRelations(sql) {
@@ -315,7 +324,7 @@ export function extractCreatedRoutines(sql) {
   return normalized(extractObjectOperations(sql).filter(op=>op.kind==='routine'&&op.action==='create').map(op=>op.identity));
 }
 
-export function sanitizeStructuralInventory(raw) {
+export function sanitizeStructuralInventory(raw, exactRoutineContract = false) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('inventory must be an object');
   const schemas = normalized(assertIdentifiers(raw.schemas ?? [], 'schemas'));
   const tables = normalized((raw.tables ?? []).map((entry, index) => {
@@ -331,7 +340,7 @@ export function sanitizeStructuralInventory(raw) {
   for (const [field, entries] of [['tables', raw.tables ?? []], ['routines', raw.routines ?? []]]) entries.forEach((entry,index) => {
     if (String(entry.schema??'').toLowerCase() !== 'public') return;
     const owner=String(entry.owner??'postgres').toLowerCase(), acl=String(entry.acl??'');
-    if (owner !== 'postgres' || (field==='routines' && /(?:^|,)(?:|anon|authenticated)=X/i.test(acl))) unsafeObjectAuthority.push(`${field}[${index}]`);
+    if (owner !== 'postgres' || (field==='routines' && !exactRoutineContract && /(?:^|,)(?:|anon|authenticated)=X/i.test(acl))) unsafeObjectAuthority.push(`${field}[${index}]`);
   });
   const routines = normalized((raw.routines ?? []).map((entry, index) => {
     if (!entry || typeof entry !== 'object') throw new Error(`routines[${index}] must be an object`);
@@ -361,7 +370,8 @@ function assertIdentifiers(values, field) {
 }
 
 export function classifyHostedTarget(raw, canonical) {
-  const inventory = sanitizeStructuralInventory(raw);
+  const routineProfile = matchRoutineContract(raw, canonical);
+  const inventory = sanitizeStructuralInventory(raw, typeof routineProfile === 'string');
   const canonicalNames = canonical.migrations.map(item => item.name);
   const finalObjects=canonicalObjectsAtPrefix(canonical.migrations);
   const expectedRelations = finalObjects.relations;
@@ -382,6 +392,7 @@ export function classifyHostedTarget(raw, canonical) {
   const routinesAheadOfLedger = appRoutines.filter(routine => expectedRoutines.has(routine) && !expectedRoutinesAtState.has(routine));
   const empty = appTables.length === 0 && appRoutines.length === 0 && inventory.appliedMigrations.length === 0 && inventory.authUserCount === 0;
   const reasons = [];
+  if (routineProfile === false) reasons.push('canonical_routine_contract_mismatch');
   if (inventory.authUserCount > 0 && inventory.appliedMigrations.length === 0) reasons.push('auth_users_on_uninitialized_target');
   if (foreignSchemas.length) reasons.push('foreign_schema');
   if (foreignTables.length) reasons.push(FOREIGN_MARKERS.test(foreignTables.map(x => x.slice(7)).join('|')) ? 'known_foreign_product_schema' : 'foreign_table');
@@ -393,7 +404,7 @@ export function classifyHostedTarget(raw, canonical) {
   if (relationsAheadOfLedger.length) reasons.push('relations_ahead_of_migration_ledger');
   if (routinesAheadOfLedger.length) reasons.push('routines_ahead_of_migration_ledger');
   const classification = reasons.length ? 'rejected' : empty ? 'dedicated_empty' : 'avalaos_compatible';
-  return Object.freeze({ classification, mutationAllowed: classification !== 'rejected', reasons: normalized(reasons), foreignSchemas, foreignTables, foreignRoutines, missingRelations, missingRoutines, relationsAheadOfLedger, routinesAheadOfLedger, inventoryDigest: sha256(canonicalJson(inventory)), inventory });
+  return Object.freeze({ classification, mutationAllowed: classification !== 'rejected', reasons: normalized(reasons), foreignSchemas, foreignTables, foreignRoutines, missingRelations, missingRoutines, relationsAheadOfLedger, routinesAheadOfLedger, inventoryDigest: sha256(canonicalJson({ inventory, routineProfile, routineAuthority: (raw.routines ?? []).map(row => row.authority ?? null) })), inventory });
 }
 
 export function buildAdditiveMigrationPlan(classification, canonical) {
@@ -408,7 +419,7 @@ export function createPreflightToken({ classification, canonical, expectedReleas
   for (const [name, value] of Object.entries({ expectedReleaseSha, environmentFingerprint, nonce, signingKey })) if (typeof value !== 'string' || !value) throw new Error(`${name} is required`);
   if (!/^[0-9a-f]{40}$/.test(expectedReleaseSha)) throw new Error('expectedReleaseSha must be a full lowercase Git SHA');
   if (!/^sha256:[0-9a-f]{64}$/.test(environmentFingerprint)) throw new Error('environmentFingerprint must use the canonical sha256:<digest> representation');
-  const payload = { schemaVersion: 'hosted-pilot-preflight-v1', expectedReleaseSha, environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, migrationTip: canonical.tip, nonce };
+  const payload = { schemaVersion: 'hosted-pilot-preflight-v1', expectedReleaseSha, environmentFingerprint, inventoryDigest: classification.inventoryDigest, migrationDigest: canonical.digest, migrationTip: canonical.tip, routineContractDigest: canonical.routineContract?.digest ?? null, nonce };
   const encoded = Buffer.from(canonicalJson(payload)).toString('base64url');
   const signature = createHmac('sha256', signingKey).update(encoded).digest('base64url');
   return `${encoded}.${signature}`;

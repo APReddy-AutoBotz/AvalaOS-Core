@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { fingerprintRoutine } from './hostedPilotRoutineContract.mjs';
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 export const CATALOG_LIMITS = Object.freeze({ schemas: 64, relations: 512, routines: 1024, payloadBytes: 2_000_000, statementTimeoutMs: 15_000 });
@@ -36,16 +37,43 @@ export async function inventoryConnectedHostedTarget(client) {
   const routines = (await client.query(`select n.nspname as schema,p.proname as name,
       pg_get_function_identity_arguments(p.oid) as arguments,owner.rolname as owner,
       coalesce(array_to_string(p.proacl,','),'') as acl,p.prokind as kind,
+      pg_catalog.oidvectortypes(p.proargtypes) as argument_types,
+      (select ext.extname from pg_depend dep join pg_extension ext on ext.oid=dep.refobjid
+        where dep.classid='pg_proc'::regclass and dep.objid=p.oid and dep.deptype='e') as extension_name,
+      case when n.nspname='public' then jsonb_build_object(
+        'source',p.prosrc,'binary',p.probin,'language',l.lanname,'kind',p.prokind,
+        'arguments',pg_get_function_arguments(p.oid),'result',pg_get_function_result(p.oid),
+        'securityDefiner',p.prosecdef,'leakproof',p.proleakproof,'volatility',p.provolatile,
+        'strict',p.proisstrict,'parallel',p.proparallel,'configuration',p.proconfig,
+        'cost',p.procost,'rows',p.prorows,'support',p.prosupport::regproc::text,
+        'setReturning',p.proretset,'argumentModes',p.proargmodes,'argumentNames',p.proargnames) end as authority_metadata,
+      coalesce((select jsonb_agg(jsonb_build_object('grantee',case when a.grantee=0 then 'PUBLIC' else grantee.rolname end,
+        'grantor',grantor.rolname,'privilege',a.privilege_type,'grantable',a.is_grantable))
+        from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+        left join pg_roles grantee on grantee.oid=a.grantee join pg_roles grantor on grantor.oid=a.grantor),'[]'::jsonb) as authority_acl,
+      (select jsonb_object_agg(role_name,jsonb_build_object(
+        'execute',has_function_privilege(role_name,p.oid,'EXECUTE'),
+        'grantable',has_function_privilege(role_name,p.oid,'EXECUTE WITH GRANT OPTION')))
+        from unnest(array['anon','authenticated','service_role']) role_name
+        where to_regrole(role_name) is not null) as authority_effective,
       (n.nspname='public' and p.proname='digest' and pg_catalog.oidvectortypes(p.proargtypes) in ('text, text','bytea, text')
        and l.lanname='sql' and trim(trailing ';' from btrim(p.prosrc))='select extensions.digest($1,$2)'
        and p.provolatile='i' and p.proisstrict and p.proparallel='s' and owner.rolname=current_user
        and p.proconfig=ARRAY['search_path=pg_catalog, extensions']::text[]
        and not has_function_privilege('public',p.oid,'EXECUTE')
        and (to_regrole('anon') is null or not has_function_privilege('anon',p.oid,'EXECUTE'))
-       and (to_regrole('authenticated') is null or not has_function_privilege('authenticated',p.oid,'EXECUTE'))) as approved_compatibility
+       and (to_regrole('authenticated') is null or not has_function_privilege('authenticated',p.oid,'EXECUTE'))
+       and (to_regrole('service_role') is null or has_function_privilege('service_role',p.oid,'EXECUTE'))) as approved_compatibility
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles owner on owner.oid=p.proowner join pg_language l on l.oid=p.prolang
     where n.nspname not like 'pg_%' and n.nspname <> 'information_schema'
     order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)`)).rows;
+  for (const routine of routines) {
+    const authority = fingerprintRoutine(routine);
+    if (authority) routine.authority = authority;
+    delete routine.authority_metadata;
+    delete routine.authority_acl;
+    delete routine.authority_effective;
+  }
   const authUserCount = Number((await client.query(`select case when to_regclass('auth.users') is null then 0
     else (select count(*)::integer from auth.users) end as count`)).rows[0]?.count ?? 0);
   const ledgerExists = (await client.query(`select to_regclass('avalaos_migrations.applied') is not null as present`)).rows[0]?.present === true;
