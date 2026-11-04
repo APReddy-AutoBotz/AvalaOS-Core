@@ -3,7 +3,7 @@
   "inventoryId": "avalaos-hosted-acceptance-2026-08",
   "proofOwnerRegistrySource": "tests/acceptance/proof-owner-registry.json",
   "sourceDigests": {
-    ".github/workflows/authenticated-product-acceptance.yml": "sha256:3b39636c25543950a17f3416d7c3463b776c158948522f04b7957c76f9857d83",
+    ".github/workflows/authenticated-product-acceptance.yml": "sha256:2fe668b550f69d695e788cee52cfe1298f99f37f57f8c9773df5b52ab8fd5e59",
     ".github/workflows/canonical-hands-on-access.yml": "sha256:66a97f8fe082385b312e9bb853b4e7a3556e8949e19a75097b8ba4d7d8538993",
     ".github/workflows/transcript-flow-pr-a.yml": "sha256:66b9d26fd35177b43540a37284cbb498ae5328d65dadd3fa5564cd23fa33d8ad",
     "App.tsx": "sha256:498b81aa5d95dce71e951cf4ec078ec0d6843bc85f63bf7b0fd2556f53b13de2",
@@ -162,7 +162,7 @@
     "scripts/projectionRpcPostgrestContract.mjs": "sha256:f497dce9e350d124e49a8c1f5e5cf961d9c38327057c7236582431295f659938",
     "scripts/reproduceGovernDisabledControl.mjs": "sha256:bac319a6552e9ef13b3680a41ec6547787f4578cefaa460c82b32fa97c8c6903",
     "scripts/reproduceStudioHandoffPersonaContract.mjs": "sha256:53ef6102cd8aabe428e7cdbe9cebfcb6dd633fc2849b8b8a847f6a823b8245d3",
-    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:87ae0700b526f918d62e4331f82c85a090fbd6465affa9b82340fa9b703f7d8e",
+    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:508f854990b66c1cdd2b609a50e657e42bd7143d05a95251aefaca5374d92c1b",
     "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:959c8644290383a9a65cf070e5f7884f3cfb0232e47497ff85c112d74e0cb6cd",
     "scripts/runEligibleReviewerRequestDiagnosticsBrowser.mjs": "sha256:ca1e3b06d839df4d704ddfa2d830af728c3b33621ad352e78b99d987e03fe133",
     "scripts/runEligibleReviewerRequestDiagnosticsBrowser.test.mjs": "sha256:c0aa7228695f3f424a8e01aa96e23e28b186d35779c83097e57f050e587b2159",
