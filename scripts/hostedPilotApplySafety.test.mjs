@@ -60,7 +60,7 @@ class BridgeClient {
   }
 }
 
-const baseRow = (schema, args) => ({ schema_name: schema, identity_arguments: args, language_name: 'c', source: 'digest', provolatile: 'i', proisstrict: true, proparallel: 's', configuration: [], owner_name: 'postgres', current_user_name: 'postgres', extension_name: 'pgcrypto', extension_owner: 'postgres', public_execute: true, anon_execute: true, authenticated_execute: true, service_execute: true });
+const baseRow = (schema, args) => ({ schema_name: schema, identity_arguments: `data ${args.replace(", ", ", algorithm ")}`, argument_types: args, language_name: 'c', source: 'digest', provolatile: 'i', proisstrict: true, proparallel: 's', configuration: [], owner_name: 'postgres', current_user_name: 'postgres', extension_name: 'pgcrypto', extension_owner: 'postgres', public_execute: true, anon_execute: true, authenticated_execute: true, service_execute: true });
 const nativeRows = schema => ['bytea, text', 'text, text'].map(args => baseRow(schema, args));
 const bridgeRows = () => ['bytea, text', 'text, text'].map(args => ({ ...baseRow('public', args), language_name: 'sql', source: 'select extensions.digest($1,$2)', configuration: ['search_path=pg_catalog, extensions'], extension_name: null, extension_owner: null }));
 
@@ -111,6 +111,10 @@ test('pgcrypto initially absent is installed and ACL-repaired atomically while u
     nativeRows('public').map(row => ({ ...row, extension_name: null, extension_owner: null, language_name: 'sql', source: 'select evil.digest($1,$2)' })),
     [...bridgeRows().map(row => ({ ...row, owner_name: 'attacker' })), ...nativeRows('extensions')],
     [...bridgeRows(), ...nativeRows('extensions').map(row => ({ ...row, extension_name: 'other_extension' }))],
+    ...[
+      {language_name:'plpgsql'}, {provolatile:'v'}, {proisstrict:false}, {proparallel:'u'},
+      {configuration:['search_path=public, extensions']}, {extension_name:'other_extension'},
+    ].map(drift => [...bridgeRows().map(row => ({...row,...drift})), ...nativeRows('extensions')]),
   ];
   for (const rows of hostileCases) {
     const client = new BridgeClient(-1, rows);

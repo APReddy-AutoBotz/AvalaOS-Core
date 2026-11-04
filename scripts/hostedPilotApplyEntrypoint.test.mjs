@@ -22,7 +22,7 @@ test('canonical apply entrypoint reaches locked live re-inventory without a miss
     if (String(sql).includes('from pg_namespace')) return { rows: [{ nspname: 'auth' }, { nspname: 'public' }] };
     if (String(sql).includes('from pg_class')) return { rows: [] };
     if (String(sql).includes('p.prokind as kind')) return { rows: [] };
-    if (String(sql).includes('from pg_proc p')) return { rows: ['bytea, text','text, text'].map(identity_arguments=>({schema_name:'public',identity_arguments,language_name:'c',source:'digest',provolatile:'i',proisstrict:true,proparallel:'s',configuration:[],owner_name:'postgres',current_user_name:'postgres',extension_name:'pgcrypto',extension_owner:'postgres',public_execute:false,anon_execute:false,authenticated_execute:false,service_execute:true})) };
+    if (String(sql).includes('from pg_proc p')) return { rows: ['bytea, text','text, text'].map(identity_arguments=>({schema_name:'public',argument_types:identity_arguments,language_name:'c',source:'digest',provolatile:'i',proisstrict:true,proparallel:'s',configuration:[],owner_name:'postgres',current_user_name:'postgres',extension_name:'pgcrypto',extension_owner:'postgres',public_execute:false,anon_execute:false,authenticated_execute:false,service_execute:true})) };
     if (String(sql).includes("to_regclass('auth.users')")) return { rows: [{ count: 0 }] };
     if (String(sql).includes("to_regclass('avalaos_migrations.applied')")) return { rows: [{ present: false }] };
     if (String(sql).includes('to_regprocedure')) return { rows: [{ public_text_digest: false, public_bytea_digest: false, extensions_text_digest: false, extensions_bytea_digest: false }] };

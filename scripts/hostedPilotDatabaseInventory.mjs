@@ -36,11 +36,11 @@ export async function inventoryConnectedHostedTarget(client) {
   const routines = (await client.query(`select n.nspname as schema,p.proname as name,
       pg_get_function_identity_arguments(p.oid) as arguments,owner.rolname as owner,
       coalesce(array_to_string(p.proacl,','),'') as acl,p.prokind as kind,
-      (n.nspname='public' and p.proname='digest' and pg_get_function_identity_arguments(p.oid) in ('text, text','bytea, text')
+      (n.nspname='public' and p.proname='digest' and pg_catalog.oidvectortypes(p.proargtypes) in ('text, text','bytea, text')
        and l.lanname='sql' and trim(trailing ';' from btrim(p.prosrc))='select extensions.digest($1,$2)'
        and p.provolatile='i' and p.proisstrict and p.proparallel='s' and owner.rolname=current_user
        and p.proconfig=ARRAY['search_path=pg_catalog, extensions']::text[]
-       and not has_function_privilege('PUBLIC',p.oid,'EXECUTE')
+       and not has_function_privilege('public',p.oid,'EXECUTE')
        and (to_regrole('anon') is null or not has_function_privilege('anon',p.oid,'EXECUTE'))
        and (to_regrole('authenticated') is null or not has_function_privilege('authenticated',p.oid,'EXECUTE'))) as approved_compatibility
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles owner on owner.oid=p.proowner join pg_language l on l.oid=p.prolang
