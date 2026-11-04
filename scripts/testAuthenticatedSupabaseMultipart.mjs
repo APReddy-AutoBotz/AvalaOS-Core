@@ -4,8 +4,10 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 
 import { canonicalDigest } from './assessV1OracleEvidence.mjs';
+import { authenticatedEdgeEszipMetadataSuffix } from './authenticatedEdgeEszip.mjs';
 import {
   collectAuthenticatedEdgeRuntimeClosure,
   downloadAndVerifyAuthenticatedEdgeSources,
@@ -30,6 +32,7 @@ const deployments = new Map(functions.map(slug => [slug, {
   id: fakeDeploymentId,
   version: fakeVersion,
   status: 'ACTIVE',
+  entrypointPath: `file:///tmp/user_fn_${project}_${fakeDeploymentId}_${fakeVersion}/source/supabase/functions/${slug}/index.ts`,
 }]));
 let failureStage = 'STARTUP';
 
@@ -115,15 +118,50 @@ async function multipartPayload(slug, entries, expectedModuleCount, layout) {
   return { body, contentType };
 }
 
+const u32 = value => { const bytes = Buffer.alloc(4); bytes.writeUInt32BE(value); return bytes; };
+const section = bytes => Buffer.concat([u32(bytes.length), bytes]);
+const eszipMap = (specifier, source) => Buffer.from(JSON.stringify({
+  version: 3, sources: [specifier], sourcesContent: [normalize(source)], names: [], mappings: 'AAAA',
+}));
+
+function eszipPayload(slug, entries, layout) {
+  const entrypoint = layout === 'functions'
+    ? `functions/${slug}/index.ts` : `source/supabase/functions/${slug}/index.ts`;
+  const modules = entries.map(entry => {
+    const specifier = layout === 'functions'
+      ? `functions/${entry.normalizedRelative}` : `source/${entry.repositoryRelative}`;
+    return { specifier, source: Buffer.from('export {};\n'), sourceMap: eszipMap(specifier, entry.bytes), kind: 0 };
+  });
+  modules.push({specifier:'---SUPABASE-ESZIP-VERSION-ESZIP---',source:Buffer.from('2.0'),sourceMap:Buffer.alloc(0),kind:3});
+  const metadataJson=JSON.stringify({import_map:null,jsr_pkgs:[],package_jsons:{},pkg_json_resolution:'Enabled'});
+  const runtimeIdentity=layout==='functions'?'supabase':`user_fn_${project}_${fakeDeploymentId}_${fakeVersion}`;
+  const opaqueSuffix=authenticatedEdgeEszipMetadataSuffix(entrypoint,runtimeIdentity);assert.ok(opaqueSuffix);
+  modules.push({specifier:'---EDGE-RUNTIME-METADATA---',
+    source:Buffer.concat([Buffer.from(`${entrypoint}${metadataJson}`),opaqueSuffix]),sourceMap:Buffer.alloc(0),kind:3});
+  const sources=[];const maps=[];const header=[];let sourceOffset=0;let mapOffset=0;
+  for(const module of modules){
+    const specifier=Buffer.from(module.specifier);header.push(u32(specifier.length),specifier,Buffer.from([0]),
+      u32(module.source.length?sourceOffset:0),u32(module.source.length),u32(module.sourceMap.length?mapOffset:0),
+      u32(module.sourceMap.length),Buffer.from([module.kind]));
+    sources.push(module.source);maps.push(module.sourceMap);sourceOffset+=module.source.length;mapOffset+=module.sourceMap.length;
+  }
+  const expanded=Buffer.concat([Buffer.from('ESZIP2.3'),section(Buffer.from([0,0,1,0])),section(Buffer.concat(header)),
+    section(Buffer.alloc(0)),section(Buffer.concat(sources)),section(Buffer.concat(maps))]);
+  const body=brotliCompressSync(expanded,{params:{[zlibConstants.BROTLI_PARAM_QUALITY]:1}});
+  return {body,contentType:'application/octet-stream'};
+}
+
 async function buildPayloads(closures) {
   const payloads = new Map();
   for (const slug of functions) {
-    payloads.set(`success:${slug}`, await multipartPayload(
+    const layout=functionsLayout.has(slug)?'functions':'repository';
+    payloads.set(`multipart:success:${slug}`, await multipartPayload(
       slug, variantEntries(closures.get(slug), 'success'), closures.get(slug).length,
-      functionsLayout.has(slug) ? 'functions' : 'repository'));
+      layout));
+    payloads.set(`eszip:success:${slug}`,eszipPayload(slug,variantEntries(closures.get(slug),'success'),layout));
   }
   for (const scenario of ['stale', 'missing', 'extra']) {
-    payloads.set(`${scenario}:${functions[0]}`,
+    payloads.set(`multipart:${scenario}:${functions[0]}`,
       await multipartPayload(functions[0], variantEntries(closures.get(functions[0]), scenario),
         closures.get(functions[0]).length, 'functions'));
   }
@@ -147,23 +185,22 @@ async function main() {
     failureStage = 'MULTIPART_BUILD';
     const payloads = await buildPayloads(closures);
 
-    let scenario = 'success';
+    let transport='multipart';let scenario = 'success';
     failureStage = 'LOOPBACK_START';
     server = createServer((request, response) => {
-      const match = /^\/multipart\/(success|stale|missing|extra)\/([^/]+)$/u.exec(request.url ?? '');
-      const requestScenario = match?.[1];
-      const slug = match?.[2];
-      const payload = payloads.get(`${requestScenario}:${slug}`);
-      if (request.method !== 'GET' || requestScenario !== scenario || !payload
+      const match = /^\/(multipart|eszip)\/(success|stale|missing|extra)\/([^/]+)$/u.exec(request.url ?? '');
+      const requestTransport=match?.[1];const requestScenario = match?.[2];const slug = match?.[3];
+      const payload = payloads.get(`${requestTransport}:${requestScenario}:${slug}`);
+      if (request.method !== 'GET' || requestTransport!==transport || requestScenario !== scenario || !payload
         || request.headers.authorization !== `Bearer ${fakeToken}`
-        || request.headers.accept !== 'multipart/form-data'
+        || request.headers.accept !== 'application/octet-stream, multipart/form-data'
         || request.headers['user-agent'] !== 'avalaos-authenticated-acceptance') {
-        requests.push({ scenario, rejected: true });
+        requests.push({transport, scenario, rejected: true });
         response.writeHead(503, { 'content-type': 'text/plain' });
         response.end('offline fixture');
         return;
       }
-      requests.push({ scenario, slug, authorized: true });
+      requests.push({transport, scenario, slug, authorized: true });
       response.writeHead(200, {
         'content-type': payload.contentType,
         'content-length': payload.body.length,
@@ -177,17 +214,19 @@ async function main() {
     serverClosed = false;
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const origin = `http://127.0.0.1:${server.address().port}`;
+    const scenarioCounts=new Map();
     const fetchImpl = async (input, init) => {
-      const slug = scenario === 'success' ? functions[requests.length] : functions[0];
+      const key=`${transport}:${scenario}`;const count=scenarioCounts.get(key)??0;scenarioCounts.set(key,count+1);
+      const slug = scenario === 'success' ? functions[count] : functions[0];
       assert.equal(String(input), `https://api.supabase.com/v1/projects/${project}/functions/${slug}/body`);
       assert.equal(init?.method, 'GET');
       assert.equal(init?.redirect, 'error');
       const headers = new Headers(init?.headers);
       assert.equal(headers.get('authorization'), `Bearer ${fakeToken}`);
-      assert.equal(headers.get('accept'), 'multipart/form-data');
+      assert.equal(headers.get('accept'), 'application/octet-stream, multipart/form-data');
       assert.equal(headers.get('user-agent'), 'avalaos-authenticated-acceptance');
       assert.ok(init?.signal instanceof AbortSignal);
-      return fetch(`${origin}/multipart/${scenario}/${slug}`, { ...init, redirect: 'error' });
+      return fetch(`${origin}/${transport}/${scenario}/${slug}`, { ...init, redirect: 'error' });
     };
     const config = { projectRef: project, backendDigest };
 
@@ -208,17 +247,24 @@ async function main() {
       }), new RegExp(`^Error: AUTHENTICATED_HOSTED_RUNNER_${code}$`, 'u'));
     }
 
+    failureStage='ESZIP_SUCCESS_VERIFY';transport='eszip';scenario='success';
+    const eszipSuccess=await downloadAndVerifyAuthenticatedEdgeSources(config,{
+      root,managementToken:fakeToken,fetchImpl,deployments,
+    });
+    assert.deepEqual(eszipSuccess,{backendDigest,files:265});
+
     failureStage = 'FINAL_ASSERTIONS';
     assert.equal(requests.some(request => request.rejected), false);
-    assert.deepEqual(requests.map(request => `${request.scenario}:${request.slug}`), [
-      ...functions.map(slug => `success:${slug}`),
-      'stale:tenant-session', 'missing:tenant-session', 'extra:tenant-session',
+    assert.deepEqual(requests.map(request => `${request.transport}:${request.scenario}:${request.slug}`), [
+      ...functions.map(slug => `multipart:success:${slug}`),
+      'multipart:stale:tenant-session', 'multipart:missing:tenant-session', 'multipart:extra:tenant-session',
+      ...functions.map(slug=>`eszip:success:${slug}`),
     ]);
     assert.ok(requests.every(request => request.authorized === true));
     assert.deepEqual(await currentSourceSnapshot(root, sourceSnapshot), sourceSnapshot);
     passResult = {
-      status: 'PASS', transport: 'multipart/form-data', loopbackDownloads: requests.length,
-      successfulClosures: 265, deepEnterpriseIntelligenceSourceVerified: true,
+      status: 'PASS', transports: ['multipart/form-data','application/octet-stream+brotli+eszip2.3'],
+      loopbackDownloads: requests.length,successfulClosuresPerTransport:265,deepEnterpriseIntelligenceSourceVerified: true,
       deepLegacyContractsSourceVerified: true, staleSourceRejected: true,
       missingDependencyRejected: true, extraDependencyRejected: true,
       repositoryLayoutFunctions: 16, functionsLayoutFunctions: 2,

@@ -10,6 +10,7 @@ import pg from 'pg';
 import ts from 'typescript';
 
 import { canonicalDigest, canonicalFileDigest } from './assessV1OracleEvidence.mjs';
+import { decodeAuthenticatedEdgeEszip, parseAuthenticatedEdgeEszip } from './authenticatedEdgeEszip.mjs';
 import {
   AUTHENTICATED_HOSTED_OPERATION_TIMEOUT_MS,
   AUTHENTICATED_HOSTED_OUTPUT_PATHS,
@@ -41,6 +42,7 @@ const AUTHENTICATED_EDGE_FUNCTIONS=Object.freeze(['tenant-session','process-comm
   'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-command','enterprise-intelligence-query','synthetic-admin',
   'pilot-operations-query','enterprise-provider-lifecycle','enterprise-provider-lifecycle-authority',
   'enterprise-provider-lifecycle-recovery']);
+const AUTHENTICATED_EDGE_VERIFY_JWT_FALSE=new Set(['legacy-delivery-command','legacy-delivery-query']);
 const MAX_EDGE_SOURCE_RESPONSE_BYTES=32*1024*1024;
 const MAX_EDGE_SOURCE_FILES=2048;
 const sha = value => `sha256:${createHash('sha256').update(value).digest('hex')}`;
@@ -200,8 +202,30 @@ const boundedMultipartBody=async response=>{
       if(received>MAX_EDGE_SOURCE_RESPONSE_BYTES)fail('BACKEND_SOURCE_SIZE_REJECTED');chunks.push(chunk);}
     if(received===0)fail('BACKEND_SOURCE_BODY_REJECTED');
   }catch(error){await reader.cancel().catch(()=>undefined);throw error;}finally{reader.releaseLock();}
+  if(declared!==''&&Number(declared)!==received)fail('BACKEND_SOURCE_SIZE_REJECTED');
   const bounded=new Response(Buffer.concat(chunks,received),{headers:{'content-type':contentType}});
   try{return await bounded.formData();}catch{fail('BACKEND_SOURCE_MULTIPART_REJECTED');}
+};
+
+const boundedOctetBody=async response=>{
+  const reject=async code=>{await response?.body?.cancel?.().catch(()=>undefined);fail(code);};
+  if(response?.redirected===true)await reject('BACKEND_SOURCE_REDIRECT_REJECTED');
+  if(response?.status!==200)await reject('BACKEND_SOURCE_STATUS_REJECTED');
+  if(String(response.headers?.get?.('content-type')??'').trim()!=='application/octet-stream'){
+    await reject('BACKEND_SOURCE_CONTENT_TYPE_REJECTED');
+  }
+  const declared=String(response.headers?.get?.('content-length')??'');
+  if(declared!==''&&(!/^\d+$/u.test(declared)||Number(declared)<1||Number(declared)>MAX_EDGE_SOURCE_RESPONSE_BYTES)){
+    await reject('BACKEND_SOURCE_SIZE_REJECTED');
+  }
+  if(!response.body?.getReader)await reject('BACKEND_SOURCE_BODY_REJECTED');
+  const chunks=[];let received=0;const reader=response.body.getReader();
+  try{for(;;){const {done,value}=await reader.read();if(done)break;const chunk=Buffer.from(value);received+=chunk.length;
+      if(received>MAX_EDGE_SOURCE_RESPONSE_BYTES)fail('BACKEND_SOURCE_SIZE_REJECTED');chunks.push(chunk);}
+    if(received===0)fail('BACKEND_SOURCE_BODY_REJECTED');
+  }catch(error){await reader.cancel().catch(()=>undefined);throw error;}finally{reader.releaseLock();}
+  if(declared!==''&&Number(declared)!==received)fail('BACKEND_SOURCE_SIZE_REJECTED');
+  return Buffer.concat(chunks,received);
 };
 
 const canonicalRemoteSourcePath=value=>typeof value==='string'&&(value.startsWith('source/')||value.startsWith('functions/'))
@@ -215,6 +239,58 @@ export async function verifyAuthenticatedEdgeSourceResponse(response,{root=proce
   }
   const closure=expected??await collectAuthenticatedEdgeRuntimeClosure(root,slug);
   if(!(closure instanceof Map)||closure.size<1||closure.size>MAX_EDGE_SOURCE_FILES)fail('BACKEND_SOURCE_INPUT_REJECTED');
+  const contentType=String(response?.headers?.get?.('content-type')??'').trim();
+  if(contentType==='application/octet-stream'){
+    const repositorySources=new Map();const functionsSources=new Map();const expectedMetadata=new Map();
+    const localFunctionsRoot=path.join(root,'supabase','functions');const canonicalFunctionsRoot=await realpath(localFunctionsRoot);
+    let functionsLayout=true;
+    for(const [normalizedRelative,local] of closure){
+      const repositoryRelative=path.relative(root,local).replaceAll('\\','/');
+      if(repositoryRelative===''||repositoryRelative.startsWith('../')||path.isAbsolute(repositoryRelative)){
+        fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+      }
+      const localBytes=normalizeCrlfBytes(await readFile(local));const repositorySpecifier=`source/${repositoryRelative}`;
+      if(!canonicalRemoteSourcePath(repositorySpecifier)||repositorySources.has(repositorySpecifier)){
+        fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+      }
+      repositorySources.set(repositorySpecifier,{bytes:localBytes,normalizedRelative});
+      expectedMetadata.set(repositorySpecifier,{normalizedRelative});
+      const functionsRelative=path.relative(localFunctionsRoot,local).replaceAll('\\','/');
+      const canonicalFunctionsRelative=path.relative(canonicalFunctionsRoot,await realpath(local)).replaceAll('\\','/');
+      if(functionsRelative===''||functionsRelative.startsWith('../')||path.isAbsolute(functionsRelative)
+        ||canonicalFunctionsRelative===''||canonicalFunctionsRelative.startsWith('../')
+        ||path.isAbsolute(canonicalFunctionsRelative)){
+        functionsLayout=false;continue;
+      }
+      const functionsSpecifier=`functions/${functionsRelative}`;
+      if(!canonicalRemoteSourcePath(functionsSpecifier)||functionsSources.has(functionsSpecifier)){
+        fail('BACKEND_LOCAL_DEPENDENCY_ESCAPE');
+      }
+      functionsSources.set(functionsSpecifier,{bytes:localBytes,normalizedRelative});
+      expectedMetadata.set(functionsSpecifier,{normalizedRelative});
+    }
+    let entrypointUrl;try{entrypointUrl=new URL(deployment.entrypointPath);}catch{fail('BACKEND_DEPLOYMENT_BINDING_REJECTED');}
+    const runtimeIdentity=`user_fn_${projectRef}_${deployment.id}_${deployment.version}`;
+    const expectedEntrypointPath=`file:///tmp/${runtimeIdentity}/source/supabase/functions/${slug}/index.ts`;
+    if(entrypointUrl.href!==expectedEntrypointPath)fail('BACKEND_DEPLOYMENT_BINDING_REJECTED');
+    const layouts=[{expectedSources:repositorySources,entrypoint:`source/supabase/functions/${slug}/index.ts`,
+      opaqueStrings:[runtimeIdentity]}];
+    if(functionsLayout&&functionsSources.size===closure.size)layouts.push({expectedSources:functionsSources,
+      entrypoint:`functions/${slug}/index.ts`,opaqueStrings:['supabase']});
+    let originals;
+    try{const compressed=await boundedOctetBody(response);const expanded=await decodeAuthenticatedEdgeEszip(compressed);
+      originals=parseAuthenticatedEdgeEszip(expanded,{layouts});
+    }catch(error){
+      if(/^BACKEND_SOURCE_ESZIP_[A-Z_]+$/u.test(error?.message??''))fail(error.message);
+      throw error;
+    }
+    const compared={};
+    for(const [specifier,bytes] of originals){
+      const metadata=expectedMetadata.get(specifier);if(!metadata)fail('BACKEND_DEPENDENCY_CLOSURE_EXTRA');
+      compared[`${slug}:${metadata.normalizedRelative}`]=sha(normalizeCrlfBytes(bytes));
+    }
+    return compared;
+  }
   const form=await boundedMultipartBody(response);
   let metadataText=null;const files=new Map();
   for(const [field,value] of form.entries()){
@@ -284,7 +360,8 @@ export async function downloadAndVerifyAuthenticatedEdgeSources(config,{root=pro
     const timeout=AbortSignal.timeout(30_000);const requestSignal=signal?AbortSignal.any([signal,timeout]):timeout;
     const response=await withAuthenticatedHostedDiagnostic('SOURCE_DOWNLOAD',()=>fetchImpl(
       `https://api.supabase.com/v1/projects/${config.projectRef}/functions/${slug}/body`,{method:'GET',redirect:'error',
-        signal:requestSignal,headers:{authorization:`Bearer ${managementToken}`,accept:'multipart/form-data',
+        signal:requestSignal,headers:{authorization:`Bearer ${managementToken}`,
+          accept:'application/octet-stream, multipart/form-data',
           'user-agent':'avalaos-authenticated-acceptance'}}));
     Object.assign(compared,await withAuthenticatedHostedDiagnostic('SOURCE_COMPARE',()=>
       verifyAuthenticatedEdgeSourceResponse(response,{root,slug,projectRef:config.projectRef,deployment,expected})));
@@ -299,7 +376,17 @@ const authenticatedDeployments=rows=>{
   for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){
     const matches=rows.filter(item=>(item?.slug??item?.name)===slug);
     if(matches.length!==1)fail(matches.length===0?'BACKEND_FUNCTION_MISSING':'BACKEND_INVENTORY_REJECTED');
-    const item=matches[0];const deployment={id:item.id,version:item.version,status:item.status};
+    const item=matches[0];
+    if(!['verify_jwt','entrypoint_path','import_map','name','slug'].every(key=>Object.hasOwn(item,key))){
+      fail('BACKEND_INVENTORY_REJECTED');
+    }
+    const deployment={id:item.id,version:item.version,status:item.status,
+      verifyJwt:item.verify_jwt,entrypointPath:item.entrypoint_path,importMap:item.import_map,
+      name:item.name,slug:item.slug};
+    if(deployment.verifyJwt!==!AUTHENTICATED_EDGE_VERIFY_JWT_FALSE.has(slug)||typeof deployment.entrypointPath!=='string'
+      ||deployment.entrypointPath.length<1||deployment.entrypointPath.length>4096
+      ||deployment.importMap!==false
+      ||deployment.name!==slug||deployment.slug!==slug)fail('BACKEND_INVENTORY_REJECTED');
     if(!validDeployment(deployment))fail('BACKEND_INVENTORY_REJECTED');deployments.set(slug,deployment);
   }
   return deployments;
@@ -343,7 +430,7 @@ export async function verifyAuthenticatedHostedDeployment(config, { fetchImpl = 
   const finalRows=Array.isArray(finalInventory)?finalInventory:finalInventory?.functions;
   const finalDeployments=authenticatedDeployments(finalRows);
   for(const slug of AUTHENTICATED_EDGE_FUNCTIONS){const before=deployments.get(slug);const after=finalDeployments.get(slug);
-    if(before.id!==after.id||before.version!==after.version||before.status!==after.status)fail('BACKEND_INVENTORY_DRIFT');}
+    if(JSON.stringify(before)!==JSON.stringify(after))fail('BACKEND_INVENTORY_DRIFT');}
   return { syntheticTarget: true, production: false, releaseSha: identity.release,
     deploymentId: identity.deployId, executionKind: config.executionKind, buildDigest: config.buildDigest,
     backendDigest: config.backendDigest, publicTargetDigest: config.targetPublicDigest };

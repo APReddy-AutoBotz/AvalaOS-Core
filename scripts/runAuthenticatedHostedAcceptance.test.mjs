@@ -191,7 +191,8 @@ async function fixture(t, mode = 'exact') {
   }
   const deployments={};let fetchCount=0;
   for(const [index,slug] of functions.entries())deployments[slug]={
-    id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,version:index+1,status:'ACTIVE'};
+    id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,version:index+1,status:'ACTIVE',
+    entrypointPath:`file:///tmp/user_fn_${fixtureProjectRef}_00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}_${index+1}/source/supabase/functions/${slug}/index.ts`};
   const multipart=slug=>{
     const form=new FormData();const deployment=deployments[slug];
     const metadata={deployment_id:`${fixtureProjectRef}_${deployment.id}_${deployment.version}`,
@@ -224,7 +225,7 @@ async function fixture(t, mode = 'exact') {
     assert.equal(url,`https://api.supabase.com/v1/projects/${fixtureProjectRef}/functions/${slug}/body`);
     assert.equal(options.method,'GET');assert.equal(options.redirect,'error');
     assert.equal(options.headers.authorization,'Bearer fake-management-token-only');
-    assert.equal(options.headers.accept,'multipart/form-data');
+    assert.equal(options.headers.accept,'application/octet-stream, multipart/form-data');
     return multipart(slug);
   };
   return { root,deployments,fetchImpl,multipart,
@@ -483,7 +484,7 @@ test('offline multipart verifier returns only the selected function digest map',
 for(const [label,response,code] of [
   ['status',new Response(null,{status:403,headers:{'content-type':'multipart/form-data; boundary=abc'}}),
     'BACKEND_SOURCE_STATUS_REJECTED'],
-  ['media type',new Response('no',{status:200,headers:{'content-type':'application/octet-stream'}}),
+  ['media type',new Response('no',{status:200,headers:{'content-type':'text/plain'}}),
     'BACKEND_SOURCE_CONTENT_TYPE_REJECTED'],
   ['missing boundary',new Response('no',{status:200,headers:{'content-type':'multipart/form-data'}}),
     'BACKEND_SOURCE_CONTENT_TYPE_REJECTED'],
@@ -541,7 +542,10 @@ test('protected backend binding rejects a missing canonical Delivery command dep
 const deploymentVerificationFixture=sample=>{
   const config={origin:'https://avalaos-pilot.netlify.app',releaseSha:'a'.repeat(40),deploymentId:'b'.repeat(24),
     projectRef:fixtureProjectRef,backendDigest:sample.config.backendDigest,targetPublicDigest:sha('target')};
-  const rows=functions.map(slug=>({slug,...sample.deployments[slug]}));
+  const rows=functions.map(slug=>({slug,name:slug,id:sample.deployments[slug].id,
+    version:sample.deployments[slug].version,status:sample.deployments[slug].status,
+    verify_jwt:!['legacy-delivery-command','legacy-delivery-query'].includes(slug),import_map:false,
+    entrypoint_path:sample.deployments[slug].entrypointPath}));
   const frontend=()=>new Response('<div id="root"></div>',{status:200,headers:{
     'x-avalaos-release':config.releaseSha,'x-avalaos-environment':'hosted_nonproduction_pilot',
     'x-avalaos-netlify-deploy-id':config.deploymentId}});
@@ -599,6 +603,34 @@ test('deployment verification rejects version drift after source verification',a
   await assert.rejects(verifyAuthenticatedHostedDeployment(setup.config,{fetchImpl,
     managementToken:'fake-management-token-only',verifyDownloadedSources:async()=>{sourceCalled=true;}}),
   /BACKEND_INVENTORY_DRIFT/u);assert.equal(sourceCalled,true);assert.equal(inventories,2);
+});
+
+test('deployment verification rejects entrypoint configuration drift after source verification',async t=>{
+  const sample=await fixture(t);const setup=deploymentVerificationFixture(sample);let inventories=0;let sourceCalled=false;
+  const fetchImpl=async url=>{if(url===setup.config.origin)return setup.frontend();inventories+=1;
+    const rows=inventories===1?setup.rows:setup.rows.map((row,index)=>index===0
+      ?{...row,entrypoint_path:`${row.entrypoint_path}.changed`}:row);
+    return new Response(JSON.stringify(rows),{status:200,headers:{'content-type':'application/json'}});};
+  await assert.rejects(verifyAuthenticatedHostedDeployment(setup.config,{fetchImpl,
+    managementToken:'fake-management-token-only',verifyDownloadedSources:async()=>{sourceCalled=true;}}),
+  /BACKEND_INVENTORY_DRIFT/u);assert.equal(sourceCalled,true);assert.equal(inventories,2);
+});
+
+test('deployment verification rejects candidate JWT configuration drift before source verification',async t=>{
+  const sample=await fixture(t);const setup=deploymentVerificationFixture(sample);let sourceCalled=false;
+  const rows=setup.rows.map((row,index)=>index===0?{...row,verify_jwt:!row.verify_jwt}:row);
+  const fetchImpl=async url=>url===setup.config.origin?setup.frontend():new Response(JSON.stringify(rows),{
+    status:200,headers:{'content-type':'application/json'}});
+  await assert.rejects(verifyAuthenticatedHostedDeployment(setup.config,{fetchImpl,
+    managementToken:'fake-management-token-only',verifyDownloadedSources:async()=>{sourceCalled=true;}}),
+  /BACKEND_INVENTORY_REJECTED/u);assert.equal(sourceCalled,false);
+});
+
+test('deployment inventory JWT expectations remain bound to the candidate Supabase configuration',async()=>{
+  const config=await readFile(path.join(process.cwd(),'supabase/config.toml'),'utf8');
+  const explicitFalse=[...config.matchAll(/^\[functions\.([^\]]+)\]\r?\nverify_jwt = false$/gmu)]
+    .map(match=>match[1]).filter(slug=>functions.includes(slug)).toSorted();
+  assert.deepEqual(explicitFalse,['legacy-delivery-command','legacy-delivery-query']);
 });
 
 test('database connection diagnostics are sanitized and the failed owned client is closed', async () => {

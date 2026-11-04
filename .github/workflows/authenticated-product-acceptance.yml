@@ -112,6 +112,7 @@ jobs:
       - name: Feature contracts and evidence rejection
         run: |
           npm run test:authenticated-product:source
+          node scripts/testAuthenticatedSupabaseMultipart.mjs
           node --test scripts/runEnterpriseLifecycleAcceptanceBrowser.test.mjs scripts/connectedBrowserDiagnostics.test.mjs
           node --test scripts/preactivationSignInDiagnostics.test.mjs scripts/preactivationSignInRequestCorrelation.test.mjs
           npm run test:provider-secret-backend
