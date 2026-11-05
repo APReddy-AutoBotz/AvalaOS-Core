@@ -28,6 +28,9 @@ test('RPC discards raw SQL error and maps only fixed domain signal', async () =>
   const known = transport(async () => new Response(JSON.stringify({ message: 'SYNTHETIC_ADMIN_QUOTA_EXCEEDED', detail: 'raw sql' }),
     { status: 409 }));
   await assert.rejects(() => known('synthetic_admin_reserve', {}), failure('QUOTA_EXCEEDED'));
+  const unsafeVariant = transport(async () => new Response(JSON.stringify({ message: 'SYNTHETIC_ADMIN_STUDIO_VARIANT_UNSAFE' }),
+    { status: 409 }));
+  await assert.rejects(() => unsafeVariant('synthetic_admin_assign_studio_variant', {}), failure('RECONCILIATION_REQUIRED'));
   const unknown = transport(async () => new Response(JSON.stringify({ message: 'raw sql with identifiers' }), { status: 500 }));
   await assert.rejects(() => unknown('synthetic_admin_reserve', {}), failure('TEMPORARY_FAILURE'));
   const malformed = transport(async () => new Response('not json', { status: 500 }));

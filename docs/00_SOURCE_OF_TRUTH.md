@@ -1,5 +1,11 @@
 # AvalaOS Core Source Of Truth
 
+## Dedicated Studio acceptance actors — 6 November 2026
+
+AP authorized account-specific Studio handoff permissions and private rendition generation/download in the dedicated acceptance workspace. The provider operator, Assess route, actor identities and cumulative allowance stay unchanged. Only the existing Studio generation route may be rebound to the same Studio author's exclusive workspace role. Normal Admin assignment, independent document approvals and the existing Delivery board remain required.
+
+The predecessor `1f0d4f6be7ff2b6be5e73c2d13198f67d2365ea1` passed all 17 required CI workflows. The hosted supplier assessment was still in review, with no generated Studio versions, publications or board items. Disposable regressions do not establish hosted generation.
+
 ## Independent approval for documentation and planning
 
 On 5 November 2026 AP authorized an assigned independent reviewer to approve a finalized assessment for documentation and planning with explicit evidence gaps. Studio documents, their content approvals, requirement proposals and selected project-board items must carry this purpose and the actual assessed source. The Verified standard and Govern action authority remain separate decisions. The [milestone scope and field diagnosis](planning/process-evidence-to-delivery.md) records what the supplier's 21 unresolved claims affect.

@@ -295,6 +295,44 @@ test('operator access response cannot disclose role, capability or actor details
   assert.deepEqual(await response.json(), { errorCode: 'TEMPORARY_FAILURE' });
 });
 
+test('assign_role dispatches every bounded Studio activation and restore through the guarded variant RPC', async () => {
+  for (const [rolePreset,studioVariantActive] of [['studio-author',true],['author',false]] as const) {
+    let calls=0;
+    const response=await handleSyntheticAdminRequest(request({ ...base, operation:'assign_role',
+      payload:{reservationId:reservation,expectedVersion:4,rolePreset} }),{
+      targetConfig:config,getUser:async()=>({id:actor}),
+      rpc:async(name:string,args:Record<string,unknown>)=>{
+        calls++;
+        assert.equal(name,'synthetic_admin_assign_studio_variant');
+        assert.deepEqual(args,{
+          p_actor:actor,p_org:org,p_workspace:workspace,p_version:3,p_fingerprint:fingerprint,
+          p_request_id:actor,p_key:base.idempotencyKey,p_reservation_id:reservation,
+          p_expected_version:4,p_preset:rolePreset,
+        });
+        return{status:'active',reservationId:reservation,version:5,rolePreset,
+          baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive};
+      },
+    } as any);
+    assert.equal(calls,1);
+    assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),{status:'active',reservationId:reservation,version:5,
+      rolePreset,baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive});
+  }
+});
+
+test('assign_role rejects a role projection that adds arbitrary capability or actor authority', async () => {
+  for(const extra of [{capabilities:['studio.artifacts.generate']},{actorId:authId},{rolePreset:'studio-admin'}]){
+    const response=await handleSyntheticAdminRequest(request({ ...base, operation:'assign_role',
+      payload:{reservationId:reservation,expectedVersion:4,rolePreset:'studio-author'} }),{
+      targetConfig:config,getUser:async()=>({id:actor}),
+      rpc:async()=>({status:'active',reservationId:reservation,version:5,rolePreset:'studio-author',
+        baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive:true,...extra}),
+    } as any);
+    assert.equal(response.status,503);
+    assert.deepEqual(await response.json(),{errorCode:'TEMPORARY_FAILURE'});
+  }
+});
+
 test('a forged roster row cannot disclose an Auth UUID or arbitrary SQL fields', async () => {
   const response = await handleSyntheticAdminRequest(request({ organizationId: org, workspaceId: workspace,
     expectedAuthorizationVersion: 3, operation: 'list', payload: { limit: 20 } }), {

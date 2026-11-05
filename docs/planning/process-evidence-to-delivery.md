@@ -1,5 +1,15 @@
 # Process evidence to confirmed delivery work
 
+## Isolated Studio roles on the dedicated preview
+
+The Studio author may read, request and consume a handoff, read templates, generate a private rendition and download it. The Studio reviewer may read and review a handoff; the Studio approver may read and approve it. Each increment belongs to one prebound synthetic account. Editing the three shared presets would also affect the Assess, Govern and Delivery actors and is outside the authorization.
+
+The private binding is installed only after an ordinary unbound campaign has been disabled. A bound Studio actor cannot open a fresh shared-author campaign. Grant and restore use the existing service-only role administration command; in the same transaction they switch both the exact actor membership and the exact retained disabled Studio route. The Assess route, other actors, unrelated or future routes and unbound targets keep their existing behavior. Resume and post-use renewal resolve the exact immutable account/actor/variant-role binding and reject a shared, substituted or split-role assignment before enabling the route. Internal binding helpers are not browser- or service-role RPCs.
+
+Executed real PostgreSQL verification installed the full chain through `20261106012002`. The scoped regression rejected the historical member/route mismatch, rejected a fresh open for a prebound actor, admitted the exact Studio actor through the production generation, token-budget and campaign-currency boundaries without provider egress, denied the Assess actor and a second assignee, preserved an unrelated disabled route, and restored the member and retained route together. The retained permit regression separately executed the real post-use renewal chain over one validation and two settled extractions, including a zero-use renewal and cumulative 13-call/USD 6.1289696 enforcement. Both disposable runs reported zero provider effects.
+
+Rollback first disables both provider runtimes and the campaign and waits for every reservation to settle. It then uses the normal service-only role command to restore the exact prebound actor and retained Studio route to the recorded base role while both remain disabled. Preserve the immutable binding, command receipts, audits, ledgers, generated evidence, documents, approvals and board records. If the exact binding or safe disabled state cannot be established, leave provider execution off and the route disabled for a forward repair; deleting the binding or rewriting history is not a rollback path.
+
 ## Documentation and planning approval, 5 November 2026
 
 The independently assigned supplier reviewer accepted three source records covering seven of the 28 traced fields. The remaining 21 fields had no linked evidence. A planning approval must preserve those gaps with the frozen decision and accepted attestations. It authorizes document content and selected work planning. Verified assessment approval, operational controls and implementation readiness retain their own gates.

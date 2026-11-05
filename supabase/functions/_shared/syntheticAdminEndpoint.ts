@@ -1,6 +1,8 @@
 import {
   parseSyntheticAdminEnvelope, SyntheticAdminError, SYNTHETIC_ADMIN_ROLE_PRESETS,
-  type SyntheticAdminEnvelope, type SyntheticAdminResult,
+  SYNTHETIC_ADMIN_STUDIO_VARIANTS, type SyntheticAdminAssignableRolePreset,
+  type SyntheticAdminEnvelope, type SyntheticAdminOperation, type SyntheticAdminResult,
+  type SyntheticAdminRolePreset, type SyntheticAdminStudioVariant,
 } from '../../../services/syntheticAdminContract.ts';
 import { handleOptions, jsonResponse } from './http.ts';
 import { getAuthUser } from './supabase.ts';
@@ -18,6 +20,28 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).every(key => keys.includes(key));
+const basePreset = (value: unknown): value is SyntheticAdminRolePreset =>
+  typeof value === 'string' && (SYNTHETIC_ADMIN_ROLE_PRESETS as readonly string[]).includes(value);
+const studioVariant = (value: unknown): value is SyntheticAdminStudioVariant =>
+  typeof value === 'string' && (SYNTHETIC_ADMIN_STUDIO_VARIANTS as readonly string[]).includes(value);
+const assignablePreset = (value: unknown): value is SyntheticAdminAssignableRolePreset =>
+  basePreset(value) || studioVariant(value);
+const expectedBaseByVariant: Record<SyntheticAdminStudioVariant,SyntheticAdminRolePreset> = {
+  'studio-author':'author', 'studio-reviewer':'reviewer', 'studio-approver':'approver',
+};
+const exactRoleList = (value: unknown, expected: readonly string[]) =>
+  Array.isArray(value) && value.length === expected.length && value.every((item,index) => item === expected[index]);
+const validEffectiveRole = (value: Record<string, unknown>) => {
+  const variant = value.studioVariant;
+  if (!assignablePreset(value.rolePreset) || !basePreset(value.baseRolePreset)
+    || typeof value.studioVariantActive !== 'boolean') return false;
+  if (variant === null)
+    return value.studioVariantActive === false && value.rolePreset === value.baseRolePreset;
+  if (!studioVariant(variant)) return false;
+  return expectedBaseByVariant[variant] === value.baseRolePreset
+    && value.studioVariantActive === (value.rolePreset === variant)
+    && (value.rolePreset === value.baseRolePreset || value.rolePreset === variant);
+};
 
 type InternalClaim = SyntheticAdminResult & {
   externalCreateAllowed?: boolean; externalBanAllowed?: boolean;
@@ -42,7 +66,7 @@ const defaultDeps: EndpointDeps = {
   }),
 };
 
-const safeResult = (value: InternalClaim): SyntheticAdminResult => {
+const safeResult = (value: InternalClaim, operation: SyntheticAdminOperation): SyntheticAdminResult => {
   if (!isRecord(value) || typeof value.status !== 'string' || !STATES.has(value.status)
     || (value.reservationId !== undefined && (typeof value.reservationId !== 'string' || !UUID.test(value.reservationId)))
     || (value.version !== undefined && (!Number.isSafeInteger(value.version) || Number(value.version) < 1))
@@ -63,11 +87,14 @@ const safeResult = (value: InternalClaim): SyntheticAdminResult => {
     if (value.status !== 'listed' || !Array.isArray(value.roster) || value.roster.length > 20)
       throw new SyntheticAdminError('TEMPORARY_FAILURE');
     roster = value.roster.map(item => {
-      if (!isRecord(item) || !exactKeys(item, ['reservationId','label','loginId','rolePreset','state','version'])
+      if (!isRecord(item) || !exactKeys(item, ['reservationId','label','loginId','rolePreset','baseRolePreset','studioVariant',
+        'studioVariantActive','assignableRolePresets','state','version'])
         || typeof item.reservationId !== 'string' || !UUID.test(item.reservationId)
         || typeof item.label !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/.test(item.label)
         || typeof item.loginId !== 'string' || !LOGIN_ID.test(item.loginId)
-        || typeof item.rolePreset !== 'string' || !(SYNTHETIC_ADMIN_ROLE_PRESETS as readonly string[]).includes(item.rolePreset)
+        || !validEffectiveRole(item)
+        || !exactRoleList(item.assignableRolePresets, item.studioVariant === null
+          ? SYNTHETIC_ADMIN_ROLE_PRESETS : [String(item.baseRolePreset),String(item.studioVariant)])
         || typeof item.state !== 'string' || !STATES.has(item.state)
         || !Number.isSafeInteger(item.version) || Number(item.version) < 1)
         throw new SyntheticAdminError('TEMPORARY_FAILURE');
@@ -75,6 +102,11 @@ const safeResult = (value: InternalClaim): SyntheticAdminResult => {
     });
   }
   if (value.status === 'listed' && !roster) throw new SyntheticAdminError('TEMPORARY_FAILURE');
+  const hasRoleProjection = ['rolePreset','baseRolePreset','studioVariant','studioVariantActive']
+    .some(key => key in value);
+  if (hasRoleProjection && (operation !== 'assign_role'
+    || !exactKeys(value, ['status','reservationId','version','rolePreset','baseRolePreset','studioVariant','studioVariantActive'])
+    || !validEffectiveRole(value))) throw new SyntheticAdminError('TEMPORARY_FAILURE');
   return {
     status: value.status as SyntheticAdminResult['status'],
     ...(value.reservationId ? { reservationId: value.reservationId } : {}),
@@ -82,6 +114,12 @@ const safeResult = (value: InternalClaim): SyntheticAdminResult => {
     ...(value.loginId ? { loginId: value.loginId } : {}),
     ...(roster ? { roster } : {}),
     ...(value.nextCursor !== undefined ? { nextCursor: value.nextCursor } : {}),
+    ...(hasRoleProjection ? {
+      rolePreset:value.rolePreset as SyntheticAdminAssignableRolePreset,
+      baseRolePreset:value.baseRolePreset as SyntheticAdminRolePreset,
+      studioVariant:value.studioVariant as SyntheticAdminStudioVariant | null,
+      studioVariantActive:value.studioVariantActive as boolean,
+    } : {}),
   };
 };
 
@@ -162,7 +200,7 @@ const executeOperation = async (deps: EndpointDeps, actorId: string, envelope: S
       return completeBanAttempt(deps, args, claim, reservationId, envelope.requestId as string, fingerprint);
     }
     case 'assign_role':
-      return deps.rpc<InternalClaim>('synthetic_admin_assign_role', { ...args,
+      return deps.rpc<InternalClaim>('synthetic_admin_assign_studio_variant', { ...args,
         p_request_id: envelope.requestId, p_key: envelope.idempotencyKey,
         p_reservation_id: payload.reservationId, p_expected_version: payload.expectedVersion,
         p_preset: payload.rolePreset,
@@ -228,7 +266,7 @@ export const handleSyntheticAdminRequest = async (request: Request, injected?: P
     try { user = await deps.getUser(request); }
     catch { throw new SyntheticAdminError('PERMISSION_DENIED'); }
     const result = await executeOperation(deps, user.id, envelope, config.fingerprint);
-    return jsonResponse(safeResult(result));
+    return jsonResponse(safeResult(result, envelope.operation));
   } catch (error) {
     const code = error instanceof SyntheticAdminError ? error.errorCode : 'TEMPORARY_FAILURE';
     const status = code === 'FEATURE_DISABLED' || code === 'PERMISSION_DENIED' ? 403

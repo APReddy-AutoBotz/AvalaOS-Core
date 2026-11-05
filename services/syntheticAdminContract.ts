@@ -5,6 +5,9 @@ export const SYNTHETIC_ADMIN_CAPABILITY = 'admin.synthetic.users.manage' as cons
 export const SYNTHETIC_ADMIN_PASSWORD_MAX_LENGTH = 72;
 export const SYNTHETIC_ADMIN_ROLE_PRESETS = ['author', 'reviewer', 'approver', 'viewer'] as const;
 export type SyntheticAdminRolePreset = typeof SYNTHETIC_ADMIN_ROLE_PRESETS[number];
+export const SYNTHETIC_ADMIN_STUDIO_VARIANTS = ['studio-author', 'studio-reviewer', 'studio-approver'] as const;
+export type SyntheticAdminStudioVariant = typeof SYNTHETIC_ADMIN_STUDIO_VARIANTS[number];
+export type SyntheticAdminAssignableRolePreset = SyntheticAdminRolePreset | SyntheticAdminStudioVariant;
 export const SYNTHETIC_ADMIN_OPERATIONS = [
   'reserve', 'execute', 'reconcile', 'list', 'assign_role', 'revoke',
   'grant_operator_assess_read', 'remove_operator_assess_read',
@@ -16,7 +19,11 @@ export type SyntheticAdminRosterItem = {
   reservationId: string;
   label: string;
   loginId: string;
-  rolePreset: SyntheticAdminRolePreset;
+  rolePreset: SyntheticAdminAssignableRolePreset;
+  baseRolePreset: SyntheticAdminRolePreset;
+  studioVariant: SyntheticAdminStudioVariant | null;
+  studioVariantActive: boolean;
+  assignableRolePresets: SyntheticAdminAssignableRolePreset[];
   state: SyntheticAdminState;
   version: number;
 };
@@ -28,6 +35,10 @@ export type SyntheticAdminResult = {
   version?: number;
   roster?: SyntheticAdminRosterItem[];
   nextCursor?: string | null;
+  rolePreset?: SyntheticAdminAssignableRolePreset;
+  baseRolePreset?: SyntheticAdminRolePreset;
+  studioVariant?: SyntheticAdminStudioVariant | null;
+  studioVariantActive?: boolean;
 };
 
 export type SyntheticAdminEnvelope = {
@@ -65,6 +76,9 @@ const exact = (value: Record<string, unknown>, keys: readonly string[]) =>
 const validUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
 const validPreset = (value: unknown): value is SyntheticAdminRolePreset =>
   typeof value === 'string' && (SYNTHETIC_ADMIN_ROLE_PRESETS as readonly string[]).includes(value);
+const validAssignablePreset = (value: unknown): value is SyntheticAdminAssignableRolePreset =>
+  validPreset(value) || typeof value === 'string'
+    && (SYNTHETIC_ADMIN_STUDIO_VARIANTS as readonly string[]).includes(value);
 
 export const parseSyntheticAdminEnvelope = (input: unknown): SyntheticAdminEnvelope => {
   if (!own(input) || !exact(input, ['operation', 'organizationId', 'workspaceId',
@@ -101,7 +115,7 @@ export const parseSyntheticAdminEnvelope = (input: unknown): SyntheticAdminEnvel
     || !/[a-z]/.test(payload.password) || !/[0-9]/.test(payload.password)
     || !/[^A-Za-z0-9\s]/.test(payload.password) || !/^[\x21-\x7e]+$/.test(payload.password)))
     throw new SyntheticAdminError('INVALID_REQUEST');
-  if (operation === 'assign_role' && !validPreset(payload.rolePreset)) throw new SyntheticAdminError('INVALID_REQUEST');
+  if (operation === 'assign_role' && !validAssignablePreset(payload.rolePreset)) throw new SyntheticAdminError('INVALID_REQUEST');
   if (['assign_role', 'revoke'].includes(operation) && (!Number.isSafeInteger(payload.expectedVersion)
     || Number(payload.expectedVersion) < 1)) throw new SyntheticAdminError('INVALID_REQUEST');
   if (operation === 'list' && ((payload.limit !== undefined && (!Number.isSafeInteger(payload.limit)

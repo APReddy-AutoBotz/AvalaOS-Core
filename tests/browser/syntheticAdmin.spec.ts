@@ -5,7 +5,7 @@ const open = async (page: Page, mode = 'ready') => {
   await page.goto(`/tests/browser/syntheticAdminHarness.html?mode=${mode}`);
   return page.getByTestId('synthetic-user-management');
 };
-const operations = (page: Page) => page.evaluate(() => (window as any).__syntheticAdminEvents as Array<{operation:string;workspaceId:string;requestId?:string;idempotencyKey?:string;passwordSubmitted?:boolean}>);
+const operations = (page: Page) => page.evaluate(() => (window as any).__syntheticAdminEvents as Array<{operation:string;workspaceId:string;requestId?:string;idempotencyKey?:string;passwordSubmitted?:boolean;rolePreset?:unknown;payloadKeys:string[]}>);
 const reserve = async (page: Page, label = 'Finance author') => {
   const panel = page.getByTestId('synthetic-user-management');
   await panel.getByLabel('Account label').fill(label);
@@ -44,6 +44,35 @@ test('Admin can reserve, activate, change role and revoke one scoped synthetic a
   expect(events.every(event=>event.workspaceId==='33333333-3333-4333-8333-333333333333')).toBe(true);
   expect(JSON.stringify(events)).not.toContain('SyntheticOnly!129834');
   await assertAdminAccess(page);
+});
+
+test('only verified prebound accounts expose their exact Studio assignment and restore role', async ({page}) => {
+  for (const [mode,baseRole,variant] of [
+    ['studio_author','author','studio-author'],
+    ['studio_reviewer','reviewer','studio-reviewer'],
+    ['studio_approver','approver','studio-approver'],
+  ] as const) {
+    const panel=await open(page,mode);
+    await expect(panel.getByText('Prebound Studio actor',{exact:true})).toBeVisible();
+    await expect(panel.getByText(`Studio assignment: ${variant} · available`,{exact:true})).toBeVisible();
+    expect(await panel.getByLabel('Workspace role').locator('option').allTextContents())
+      .toEqual(['author','reviewer','approver','viewer']);
+    const role=panel.getByLabel('New role');
+    expect(await role.locator('option').allTextContents()).toEqual([baseRole,variant]);
+    await role.selectOption(variant);
+    await panel.getByRole('button',{name:'Apply role'}).click();
+    await expect(panel.getByText(`Role: ${variant}`,{exact:false})).toBeVisible();
+    await expect(panel.getByText(`Studio assignment: ${variant} · active`,{exact:true})).toBeVisible();
+    await role.selectOption(baseRole);
+    await panel.getByRole('button',{name:'Apply role'}).click();
+    await expect(panel.getByText(`Role: ${baseRole}`,{exact:false})).toBeVisible();
+    await expect(panel.getByText(`Studio assignment: ${variant} · available`,{exact:true})).toBeVisible();
+    const assignments=(await operations(page)).filter(event=>event.operation==='assign_role');
+    expect(assignments.map(event=>event.rolePreset)).toEqual([variant,baseRole]);
+    expect(assignments.every(event=>JSON.stringify(event.payloadKeys)===JSON.stringify(['expectedVersion','reservationId','rolePreset']))).toBe(true);
+    expect(JSON.stringify(assignments)).not.toMatch(/capabilit|actorId|userId/i);
+    await assertAdminAccess(page);
+  }
 });
 
 test('Admin grants and removes only provider-operator Assess read access with refreshed authority', async ({page}) => {

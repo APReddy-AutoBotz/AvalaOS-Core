@@ -29,6 +29,8 @@ export async function applySyntheticAiTerminalJournalMigrationForTest(client, mi
     '20261105140002_assessed_planning_studio.sql',
     '20261105140003_assessed_planning_delivery.sql',
     '20261105140004_assessed_planning_govern_projection.sql',
+    '20261106012001_scoped_studio_actor_roles.sql',
+    '20261106012002_scoped_studio_route_admission.sql',
   ].includes(migrationName);
   if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION
     || migrationName === '20261105110657_govern_mixed_snapshot_normalization.sql'

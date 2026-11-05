@@ -477,7 +477,7 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "3bd8be7048956bc35c49520990832af9f087e10e9eebd568bf445c6bd8651820"
+      "sha256": "62ca9502189992196d4e104285f49b89f1237d3354b23ef6126d10df1cfd661a"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
@@ -529,7 +529,7 @@
     },
     "studio-source-postgres": {
       "path": "scripts/testStudioSourceIntegrationPostgres.mjs",
-      "sha256": "e56823f8c38c0ed858269145086d09be5bff51981547396c1c8ab8e037cdc0a4"
+      "sha256": "21873528aeb1bda5861db1ff20adf31a3f89de9ef8f34c544fc8c9e66a522db4"
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
@@ -2181,7 +2181,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20261105140004",
+        "migrationTip": "20261106012002",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -2257,7 +2257,7 @@
         },
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
-        "migrationTip": "20261105140004",
+        "migrationTip": "20261106012002",
         "roleBoundary": {
           "executionRole": "service_role",
           "directSourceSelect": false,

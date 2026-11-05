@@ -47,6 +47,8 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20261105140002_assessed_planning_studio.sql',
   'supabase/migrations/20261105140003_assessed_planning_delivery.sql',
   'supabase/migrations/20261105140004_assessed_planning_govern_projection.sql',
+  'supabase/migrations/20261106012001_scoped_studio_actor_roles.sql',
+  'supabase/migrations/20261106012002_scoped_studio_route_admission.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',
