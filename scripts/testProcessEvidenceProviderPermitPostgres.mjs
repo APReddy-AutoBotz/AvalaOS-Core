@@ -40,14 +40,18 @@ async function install(db) {
     await applySyntheticAiTerminalJournalMigrationForTest(db,filename,async () => {
       await db.query('BEGIN');
       try { await db.query(sql); await db.query('COMMIT'); }
-      catch (error) { await db.query('ROLLBACK'); throw new Error(filename+': '+error.message); }
+      catch (error) {
+        await db.query('ROLLBACK');
+        throw new Error(filename+': '+error.message+(error.position?' at SQL position '+error.position:''));
+      }
     });
   }
 }
 async function claim(db, actor, type) {
   const request = randomUUID(), token = randomUUID(), hash = 'd'.repeat(64);
-  return result(db,`SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,NULL,$8)).*`,
+  const receipt=await result(db,`SELECT (public.enterprise_ai_claim_command($1,$2,$3,$4,$5,$6,$7,NULL,$8)).*`,
     [actor,id.org,id.workspace,type,'test-'+request,request,hash,token]);
+  return {...receipt,request_id:request,request_hash:hash};
 }
 await admin.connect();
 let created = false;
@@ -301,13 +305,24 @@ try {
   await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true WHERE singleton');
   await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
 
+  // Prove the original profile first, then roll it back so the retained
+  // post-use fixture can model the actual 1 validation + 2 extraction history.
+  await db.query('BEGIN');
+  let savepointNumber=0;
+  async function rejectedAtSavepoint(action,pattern) {
+    const savepoint='expected_failure_'+(++savepointNumber);
+    await db.query('SAVEPOINT '+savepoint);
+    await assert.rejects(action(),pattern);
+    await db.query('ROLLBACK TO SAVEPOINT '+savepoint);
+    await db.query('RELEASE SAVEPOINT '+savepoint);
+  }
   const receipt=await claim(db,id.operator,'provider.validate');
   const reserveArgs=[id.operator,id.org,id.workspace,authVersion,fingerprint,project,receipt.id,receipt.id,
     receipt.execution_token,receipt.execution_fence,null,id.config,id.key,'openai',endpoint,model,'provider.validate','f'.repeat(64),32768];
   const rpc='SELECT public.synthetic_ai_campaign_reserve_effect('+reserveArgs.map((_,i)=>'$'+(i+1)).join(',')+') permit';
   for (const [index,invalid] of [[1,randomUUID()],[2,randomUUID()],[10,randomUUID()],[11,randomUUID()],[15,'foreign-model']]) {
     const values=[...reserveArgs]; values[index]=invalid;
-    await assert.rejects(db.query(rpc,values),/CAMPAIGN|AUTHORITY|BINDING/);
+    await rejectedAtSavepoint(()=>db.query(rpc,values),/CAMPAIGN|AUTHORITY|BINDING/);
   }
   const reservation=(await result(db,rpc,reserveArgs)).permit;
   assert.ok(reservation.ownsProviderEffect);
@@ -315,7 +330,7 @@ try {
   // No provider dispatch or refund. Even this unconsumed reservation occupies its slot.
   const next=await claim(db,id.operator,'provider.validate');
   const second=[...reserveArgs];second.splice(6,4,next.id,next.id,next.execution_token,next.execution_fence);
-  await assert.rejects(db.query(rpc,second),/PERMIT_EXHAUSTED/);
+  await rejectedAtSavepoint(()=>db.query(rpc,second),/PERMIT_EXHAUSTED/);
 
   // Exercise the insert guard directly on the same durable relation. The
   // domain-specific RPC admission and fencing suites exercise production callers.
@@ -329,22 +344,250 @@ try {
       [permit.campaignId,source.id,randomUUID(),actor,id.org,id.workspace,source.execution_token,'d'.repeat(64),operation,
        operation==='assess.evidence.extract'?id.assessRoute:id.studioRoute,id.config,id.key,endpoint,model]);
   }
-  await assert.rejects(debit(db,'studio.document.generate',id.assess),/ACTOR_DENIED/);
+  await rejectedAtSavepoint(()=>debit(db,'studio.document.generate',id.assess),/ACTOR_DENIED/);
   await debit(db,'assess.evidence.extract',id.assess);
-  const other=await connect();
-  const race=await Promise.allSettled([db,other].map(c=>debit(c,'assess.evidence.extract',id.assess)));
-  assert.equal(race.filter(r=>r.status==='fulfilled').length,1);
-  assert.match(race.find(r=>r.status==='rejected').reason.message,/PERMIT_EXHAUSTED/);
+  await debit(db,'assess.evidence.extract',id.assess);
+  await rejectedAtSavepoint(()=>debit(db,'assess.evidence.extract',id.assess),/PERMIT_EXHAUSTED/);
   for(let i=0;i<5;i++)await debit(db,'studio.document.generate',id.studio);
-  await assert.rejects(debit(db,'studio.document.generate',id.studio),/PERMIT_EXHAUSTED/);
+  await rejectedAtSavepoint(()=>debit(db,'studio.document.generate',id.studio),/PERMIT_EXHAUSTED/);
   const slots=(await db.query(`SELECT operation,array_agg(process_run_slot::int ORDER BY process_run_slot) slots
     FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1 GROUP BY operation ORDER BY operation`,[permit.campaignId])).rows;
   assert.deepEqual(slots.map(row=>row.slots),[[1,2],[1],[1,2,3,4,5]]);
   assert.deepEqual(await result(db,`SELECT count(*)::int n,sum(debit_usd_nanos)::bigint::text reserved
     FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`,[permit.campaignId]),{n:8,reserved:'3771673600'});
-  await db.query("UPDATE public.synthetic_ai_campaign_authorities SET created_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' WHERE id=$1",[permit.campaignId]);
-  await assert.rejects(db.query('UPDATE public.synthetic_ai_campaign_effect_debits SET consumed_at=now() WHERE id=$1',[reservation.reservationId]),/PERMIT_INACTIVE/);
-  console.log('Process-evidence permit passed: retained zero-use campaign resumed once with exact bindings and provider runtimes off; IDs, roles, ledger, USD 4/eight-effect and 1/2/5 controls persisted; concurrent resume/admission, replay, expiry and immutable audit passed. Provider effects: zero.');
+  await db.query('ROLLBACK');
+
+  const rightsBeforeRenewal=await result(db,`SELECT role.permissions,
+    (SELECT count(*)::int FROM public.organization_members member WHERE member.org_id=$2) organization_members,
+    (SELECT count(*)::int FROM public.workspace_memberships member
+      WHERE member.org_id=$2 AND member.workspace_id=$3) workspace_members
+    FROM public.roles role WHERE role.id=$1`,[roles.operator_role,id.org,id.workspace]);
+
+  // Build the retained real-use baseline with production reserve paths: one
+  // validated provider and two settled extractions, all on the original ledger.
+  const baselineValidationReceipt=await claim(db,id.operator,'provider.validate');
+  const baselineValidationArgs=[id.operator,id.org,id.workspace,authVersion,fingerprint,project,
+    baselineValidationReceipt.id,baselineValidationReceipt.id,baselineValidationReceipt.execution_token,
+    baselineValidationReceipt.execution_fence,null,id.config,id.key,'openai',endpoint,model,
+    'provider.validate','1'.repeat(64),32768];
+  const baselineValidation=(await result(db,rpc,baselineValidationArgs)).permit;
+  await db.query('UPDATE public.synthetic_ai_campaign_effect_debits SET consumed_at=now() WHERE id=$1',
+    [baselineValidation.reservationId]);
+  await db.query("UPDATE public.ai_provider_key_refs SET status='active' WHERE id=$1",[id.key]);
+  await db.query('UPDATE public.ai_provider_configs SET last_validated_at=now() WHERE id=$1',[id.config]);
+  const validatedAt=(await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at;
+
+  async function extraction(label) {
+    const executionAuthVersion=Number((await result(db,`SELECT version FROM public.authorization_versions
+      WHERE org_id=$1 AND user_id=$2`,[id.org,id.assess])).version);
+    const source=await claim(db,id.assess,'transcript.assess.extract');
+    const job=randomUUID();
+    const effectHash=(label.charCodeAt(0).toString(16).padStart(2,'0')).repeat(32);
+    await db.query(`INSERT INTO public.enterprise_ai_job_ledger(
+      id,org_id,workspace_id,capability,provider_config_id,provider,model,prompt_key,prompt_version,actor_id,
+      request_id,idempotency_key,status,approval_state,receipt_id,request_hash,execution_token,execution_fence,route_id)
+      VALUES($1,$2,$3,'assess.evidence.extract',$4,'openai',$5,'assess.evidence.extract','process-evidence-v1',$6,
+      $7,$8,'running','review_required',$9,$10,$11,$12,$13)`,[
+      job,id.org,id.workspace,id.config,model,id.assess,source.request_id,`process-evidence-${label}`,
+      source.id,source.request_hash,source.execution_token,source.execution_fence,id.assessRoute,
+    ]);
+    const budget=(await result(db,`SELECT public.enterprise_ai_reserve_provider_budget(
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'openai','assess.evidence.extract',$11,100,4096) value`,[
+      id.assess,id.org,id.workspace,executionAuthVersion,source.id,job,source.execution_token,source.execution_fence,
+      id.assessRoute,id.config,model,
+    ])).value;
+    assert.equal(budget.state,'reserved',JSON.stringify(budget));
+    const campaignReservation=await result(db,`INSERT INTO public.synthetic_ai_campaign_effect_debits(
+      campaign_id,receipt_id,effect_id,actor_id,org_id,workspace_id,authorization_version,
+      execution_token,execution_fence,command_request_hash,effect_request_hash,maximum_output_tokens,
+      operation,route_id,provider_config_id,key_ref_id,provider,endpoint,model,debit_usd_nanos,consumed_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,4096,'assess.evidence.extract',$12,$13,$14,
+        'openai',$15,$16,471459200,now()) RETURNING id reservation_id`,[
+      permit.campaignId,source.id,job,id.assess,id.org,id.workspace,executionAuthVersion,
+      source.execution_token,source.execution_fence,source.request_hash,effectHash,id.assessRoute,
+      id.config,id.key,endpoint,model,
+    ]);
+    const settled=(await result(db,`SELECT public.enterprise_ai_settle_provider_budget_v2(
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'openai','assess.evidence.extract',$11,$12,80,20,100) value`,[
+      id.assess,id.org,id.workspace,executionAuthVersion,source.id,job,source.execution_token,source.execution_fence,
+      id.assessRoute,id.config,model,budget.reservationId,
+    ])).value;
+    assert.equal(settled.state,'settled');
+    return {source,job,budget,campaignReservation};
+  }
+  await extraction('baseline-one');
+  await extraction('baseline-two');
+  assert.deepEqual(await result(db,`SELECT count(*)::int calls,
+    count(*) FILTER(WHERE consumed_at IS NOT NULL)::int consumed,
+    sum(debit_usd_nanos)::bigint::text reserved FROM public.synthetic_ai_campaign_effect_debits
+    WHERE campaign_id=$1`,[permit.campaignId]),{calls:3,consumed:3,reserved:'1414377600'});
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('SELECT public.synthetic_ai_campaign_disable($1,$2,$3,$4,$5,$6)',
+    [id.operator,id.org,id.workspace,authVersion,fingerprint,project]);
+
+  const renewalCommit='9'.repeat(40);
+  const renewalExpiry=new Date(Date.now()+3600000);
+  const bindingAttestedAt=new Date();
+  const creditAttestedAt=new Date();
+  const creditExpiry=new Date(Date.now()+3*86400000);
+  const renewalRequest=randomUUID();
+  const renewalArgs=[id.operator,id.org,id.workspace,authVersion,fingerprint,project,permit.campaignId,
+    secretReference,'sha256:'+'2'.repeat(24),id.config,id.key,id.assessRoute,id.studioRoute,id.assess,id.studio,
+    renewalCommit,renewalExpiry,renewalRequest,'post-use-window-1','sha256:'+'3'.repeat(64),bindingAttestedAt,
+    'sha256:'+'4'.repeat(64),creditAttestedAt,creditExpiry,53_000_000_000];
+  const renewSql='SELECT public.process_evidence_renew_provider_run_after_use('
+    +renewalArgs.map((_,index)=>'$'+(index+1)).join(',')+') renewal';
+
+  await db.query('SET ROLE authenticated');
+  await assert.rejects(db.query(renewSql,renewalArgs),/permission denied/);
+  await db.query('RESET ROLE');
+  const staleRenewal=[...renewalArgs]; staleRenewal[3]=authVersion-1;
+  await assert.rejects(db.query(renewSql,staleRenewal),/AUTHORIZATION_STALE/);
+  const shortCredit=[...renewalArgs]; shortCredit[24]=4_000_000_000;
+  await assert.rejects(db.query(renewSql,shortCredit),/POST_USE_HISTORY_UNSAFE/);
+  const expiredCredit=[...renewalArgs]; expiredCredit[23]=new Date(Date.now()+1000);
+  await assert.rejects(db.query(renewSql,expiredCredit),/POST_USE_BINDING_INVALID/);
+  const badDigest=[...renewalArgs]; badDigest[19]='sha256:bad';
+  await assert.rejects(db.query(renewSql,badDigest),/POST_USE_BINDING_INVALID/);
+  await db.query('BEGIN');
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations SET state='released',release_reason=NULL,
+    actual_input_tokens=NULL,actual_output_tokens=NULL,actual_total_tokens=NULL WHERE id=$1`,
+    [(await result(db,`SELECT id FROM public.enterprise_ai_budget_reservations ORDER BY reserved_at LIMIT 1`)).id]);
+  await assert.rejects(db.query(renewSql,renewalArgs),/POST_USE_HISTORY_UNSAFE/);
+  await db.query('ROLLBACK');
+  await db.query('BEGIN');
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations SET state='uncertain',failure_class='provider_request_failed',
+    actual_input_tokens=NULL,actual_output_tokens=NULL,actual_total_tokens=NULL,settled_at=NULL WHERE id=$1`,
+    [(await result(db,`SELECT id FROM public.enterprise_ai_budget_reservations ORDER BY reserved_at LIMIT 1`)).id]);
+  await assert.rejects(db.query(renewSql,renewalArgs),/POST_USE_HISTORY_UNSAFE/);
+  await db.query('ROLLBACK');
+
+  const otherRenew=await connect();
+  const renewalRace=await Promise.all([db,otherRenew].map(client=>result(client,renewSql,renewalArgs)));
+  assert.deepEqual(renewalRace.map(value=>value.renewal.replayed).sort(),[false,true]);
+  assert.equal(renewalRace[0].renewal.windowId,renewalRace[1].renewal.windowId);
+  assert.equal(renewalRace[0].renewal.baselineCalls,3);
+  assert.equal(renewalRace[0].renewal.maxCalls,13);
+  assert.equal(renewalRace[0].renewal.maximumReservedUsdNanos,6128969600);
+  assert.equal((await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at.getTime(),validatedAt.getTime());
+  assert.deepEqual(await result(db,`SELECT campaign.enabled,campaign.campaign_cap_usd_nanos::text cap,
+    config.status,key_ref.status key_status,key_ref.safe_fingerprint,
+    enterprise.provider_enabled enterprise_provider,studio.provider_enabled studio_provider
+    FROM public.synthetic_ai_campaign_authorities campaign
+    JOIN public.ai_provider_configs config ON config.id=campaign.provider_config_id
+    JOIN public.ai_provider_key_refs key_ref ON key_ref.id=campaign.key_ref_id
+    CROSS JOIN public.enterprise_intelligence_runtime_control enterprise
+    CROSS JOIN public.studio_artifact_runtime_control studio WHERE campaign.id=$1`,[permit.campaignId]),{
+    enabled:true,cap:'6128969600',status:'active',key_status:'active',safe_fingerprint:null,
+    enterprise_provider:false,studio_provider:false,
+  });
+  assert.deepEqual(await result(db,`SELECT relation.relrowsecurity rls,relation.relforcerowsecurity force_rls,
+    has_table_privilege('service_role',relation.oid,'SELECT') service_select,
+    has_table_privilege('service_role',relation.oid,'INSERT') service_insert,
+    has_table_privilege('authenticated',relation.oid,'SELECT') authenticated_select,
+    has_table_privilege('anon',relation.oid,'SELECT') anon_select
+    FROM pg_class relation JOIN pg_namespace namespace ON namespace.oid=relation.relnamespace
+    WHERE namespace.nspname='public' AND relation.relname='process_evidence_provider_post_use_windows'`),
+    {rls:true,force_rls:true,service_select:true,service_insert:false,authenticated_select:false,anon_select:false});
+  await assert.rejects(db.query(`UPDATE public.process_evidence_provider_post_use_windows
+    SET expires_at=expires_at WHERE id=$1`,[renewalRace[0].renewal.windowId]),/POST_USE_WINDOW_IMMUTABLE/);
+  const replayMismatch=[...renewalArgs]; replayMismatch[24]=52_000_000_000;
+  await assert.rejects(db.query(renewSql,replayMismatch),/POST_USE_REPLAY_MISMATCH/);
+
+  // Cleanup can disable an otherwise healthy window before it spends another
+  // slot. A fresh attested window may chain the same cumulative baseline; the
+  // hard sequence ceiling still prevents unbounded renewal.
+  await db.query('SELECT public.synthetic_ai_campaign_disable($1,$2,$3,$4,$5,$6)',
+    [id.operator,id.org,id.workspace,authVersion,fingerprint,project]);
+  const zeroUseAttestedAt=new Date();
+  const zeroUseRenewalArgs=[...renewalArgs];
+  zeroUseRenewalArgs[16]=new Date(Date.now()+3600000);
+  zeroUseRenewalArgs[17]=randomUUID();
+  zeroUseRenewalArgs[18]='post-use-window-2-zero-use';
+  zeroUseRenewalArgs[19]='sha256:'+'8'.repeat(64);
+  zeroUseRenewalArgs[20]=zeroUseAttestedAt;
+  zeroUseRenewalArgs[21]='sha256:'+'9'.repeat(64);
+  zeroUseRenewalArgs[22]=zeroUseAttestedAt;
+  const zeroUseRenewal=(await result(db,renewSql,zeroUseRenewalArgs)).renewal;
+  assert.equal(zeroUseRenewal.sequence,2);
+  assert.equal(zeroUseRenewal.baselineCalls,3);
+
+  // A still-fresh validation permits extraction immediately; no paid
+  // validation is forced merely because a new window was chained.
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
+  await extraction('post-use-three');
+  assert.equal((await result(db,`SELECT count(*)::int n FROM public.synthetic_ai_campaign_effect_debits
+    WHERE operation='provider.validate'`)).n,1);
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('SELECT public.synthetic_ai_campaign_disable($1,$2,$3,$4,$5,$6)',
+    [id.operator,id.org,id.workspace,authVersion,fingerprint,project]);
+
+  const secondAttestedAt=new Date();
+  const secondRenewalArgs=[...renewalArgs];
+  secondRenewalArgs[16]=new Date(Date.now()+3600000);
+  secondRenewalArgs[17]=randomUUID();
+  secondRenewalArgs[18]='post-use-window-3';
+  secondRenewalArgs[19]='sha256:'+'5'.repeat(64);
+  secondRenewalArgs[20]=secondAttestedAt;
+  secondRenewalArgs[21]='sha256:'+'6'.repeat(64);
+  secondRenewalArgs[22]=secondAttestedAt;
+  const secondRenewal=(await result(db,renewSql,secondRenewalArgs)).renewal;
+  assert.equal(secondRenewal.sequence,3);
+  assert.equal(secondRenewal.baselineCalls,4);
+  assert.equal(secondRenewal.remainingValidation,1);
+  assert.equal(secondRenewal.remainingExtractions,1);
+  assert.deepEqual(await result(db,`SELECT count(*)::int windows,min(sequence_number)::int first,
+    max(sequence_number)::int last,count(prior_resume_window_id)::int resume_links,
+    count(prior_post_use_window_id)::int chain_links
+    FROM public.process_evidence_provider_post_use_windows WHERE campaign_id=$1`,[permit.campaignId]),
+    {windows:3,first:1,last:3,resume_links:1,chain_links:2});
+
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
+  const secondValidationReceipt=await claim(db,id.operator,'provider.validate');
+  const secondValidationArgs=[...baselineValidationArgs];
+  secondValidationArgs.splice(6,4,secondValidationReceipt.id,secondValidationReceipt.id,
+    secondValidationReceipt.execution_token,secondValidationReceipt.execution_fence);
+  secondValidationArgs[17]='7'.repeat(64);
+  const secondValidation=(await result(db,rpc,secondValidationArgs)).permit;
+  await db.query('UPDATE public.synthetic_ai_campaign_effect_debits SET consumed_at=now() WHERE id=$1',
+    [secondValidation.reservationId]);
+  await db.query('UPDATE public.ai_provider_configs SET last_validated_at=now() WHERE id=$1',[id.config]);
+  await db.query('BEGIN');
+  const thirdValidationReceipt=await claim(db,id.operator,'provider.validate');
+  const thirdValidationArgs=[...secondValidationArgs];
+  thirdValidationArgs.splice(6,4,thirdValidationReceipt.id,thirdValidationReceipt.id,
+    thirdValidationReceipt.execution_token,thirdValidationReceipt.execution_fence);
+  await assert.rejects(db.query(rpc,thirdValidationArgs),/PERMIT_EXHAUSTED/);
+  await db.query('ROLLBACK');
+  await extraction('post-use-four');
+  await db.query('BEGIN');
+  await assert.rejects(extraction('post-use-five'),/PERMIT_EXHAUSTED/);
+  await db.query('ROLLBACK');
+  for(let index=0;index<7;index++) await debit(db,'studio.document.generate',id.studio);
+  await db.query('BEGIN');
+  await assert.rejects(debit(db,'studio.document.generate',id.studio),/PERMIT_EXHAUSTED/);
+  await db.query('ROLLBACK');
+  assert.deepEqual(await result(db,`SELECT count(*)::int calls,sum(debit_usd_nanos)::bigint::text reserved
+    FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`,[permit.campaignId]),
+    {calls:13,reserved:'6128969600'});
+  const finalSlots=(await db.query(`SELECT operation,array_agg(process_run_slot::int ORDER BY process_run_slot) slots
+    FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1 GROUP BY operation ORDER BY operation`,
+    [permit.campaignId])).rows;
+  assert.deepEqual(finalSlots.map(row=>row.slots),[[1,2,3,4],[1,2],[1,2,3,4,5,6,7]]);
+  assert.deepEqual(await result(db,`SELECT role.permissions,
+    (SELECT count(*)::int FROM public.organization_members member WHERE member.org_id=$2) organization_members,
+    (SELECT count(*)::int FROM public.workspace_memberships member
+      WHERE member.org_id=$2 AND member.workspace_id=$3) workspace_members
+    FROM public.roles role WHERE role.id=$1`,[roles.operator_role,id.org,id.workspace]),rightsBeforeRenewal);
+  await db.query("UPDATE public.synthetic_ai_campaign_authorities SET expires_at=now()-interval '1 second' WHERE id=$1",[permit.campaignId]);
+  await db.query('BEGIN');
+  await assert.rejects(debit(db,'studio.document.generate',id.studio),/PERMIT_INACTIVE/);
+  await db.query('ROLLBACK');
+  console.log('Process-evidence permit passed: original 1/2/5 profile, retained 1-validation/2-settled-extraction baseline, immutable three-window chain including zero-use renewal, fresh validation reuse, generic reserve compatibility, cumulative 2/4/7 and 13-call/USD 6.1289696 enforcement, replay/concurrency/expiry, and unchanged rights. Provider effects: zero.');
 } finally {
   for(const db of clients) await db.end();
   if(created) await admin.query('DROP DATABASE '+name+' WITH (FORCE)');

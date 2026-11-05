@@ -61,6 +61,42 @@ const formatValue = (value: AssessMappingJsonValue | undefined): string => {
 const asRecord = (value: AssessMappingJsonValue): Record<string, AssessMappingJsonValue> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 
+type MappingRun = EnterpriseIntelligenceProjection['documentMapping']['runs'][number];
+type MappingOutcome = { kind: 'accepted' | 'all_rejected' | 'clean_zero' | 'provider_failure'; message: string };
+
+const rejectedProposalCount = (warnings: readonly string[]) => warnings.reduce((total, warning) => {
+  const match = /^PROVIDER_PROPOSAL_REJECTED_[A-Z0-9_]+:(\d+)$/.exec(warning);
+  return total + (match ? Number(match[1]) : 0);
+}, 0);
+
+const mappingWarningCopy = (warning: string) => {
+  const parsed = /^PROVIDER_PROPOSAL_REJECTED_([A-Z0-9_]+):(\d+)$/.exec(warning);
+  if (!parsed) return 'Analysis completed with a source-validation disclosure. Audit details contain the technical code.';
+  const count = Number(parsed[2]); const noun = count === 1 ? 'suggestion' : 'suggestions';
+  const messages: Record<string, string> = {
+    TEXT_ANCHOR_AMBIGUOUS: `${count} ${noun} cited a repeated phrase without enough context to identify one source passage.`,
+    TEXT_ANCHOR_NOT_FOUND: `${count} ${noun} cited text that was not found in the bound source version.`,
+    CELL_ANCHOR_MISMATCH: `${count} ${noun} did not match the cited spreadsheet cell.`,
+    SELECTOR_OR_SOURCE_INVALID: `${count} ${noun} did not match a current field and bound source version.`,
+    VALUE_INVALID: `${count} ${noun} did not match the field's allowed value shape.`,
+    EXCERPT_TOO_LARGE: `${count} ${noun} used a source excerpt above the evidence limit.`,
+    OUTPUT_SHAPE_INVALID: `${count} ${noun} did not use the required response structure.`,
+  };
+  return messages[parsed[1]] || `${count} ${noun} did not pass evidence validation.`;
+};
+
+const mappingOutcome = (run: MappingRun): MappingOutcome => {
+  if (run.failureCode) return { kind: 'provider_failure', message: 'Analysis stopped before a reviewable result was committed. No Assess field was changed.' };
+  if (run.proposalCount > 0) return { kind: 'accepted', message: `${run.proposalCount} source-grounded suggestion${run.proposalCount === 1 ? ' is' : 's are'} ready for human review. No Assess field was changed.` };
+  if (rejectedProposalCount(run.warnings || []) > 0) return { kind: 'all_rejected', message: 'Analysis completed, but no source-grounded suggestions passed evidence validation. No Assess field was changed.' };
+  return { kind: 'clean_zero', message: 'Analysis completed with no supported suggestions in this exact source bundle. No Assess field was changed.' };
+};
+
+const newestExactMappingRun = (next: EnterpriseIntelligenceProjection, caseId: string, caseVersion: number, inputBundleId: string, inputBundleVersionId: string) =>
+  next.documentMapping.runs
+    .filter(item => item.caseId === caseId && item.caseVersion === caseVersion && item.inputBundleId === inputBundleId && item.inputBundleVersionId === inputBundleVersionId)
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
+
 function FlowchartUploadPreview({ flowcharts }: { flowcharts: MermaidFlowchart[] }) {
   if (!flowcharts.length) return null;
   return <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950" aria-label="Read-only flowchart source preview">
@@ -188,26 +224,26 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
     return () => { requestEpoch.current += 1; fileEpoch.current += 1; };
   }, [load, scopeKey]);
 
-  const mutate = async (action: () => Promise<unknown>, success: string): Promise<boolean> => {
-    if (!projection || reloadRequired) return false;
+  const mutate = async (action: () => Promise<unknown>, success: string | ((next: EnterpriseIntelligenceProjection) => string)): Promise<EnterpriseIntelligenceProjection | null> => {
+    if (!projection || reloadRequired) return null;
     const epoch = ++requestEpoch.current;
     const expectedScope = scopeKey;
     const isCurrent = () => epoch === requestEpoch.current && expectedScope === activeScope.current;
     setBusy(true); setError(''); setStatus('Submitting one server-authorized command.');
     try {
       await action();
-      if (!isCurrent()) return false;
-      await load(isCurrent, bundleToken);
-      if (!isCurrent()) return false;
-      setStatus(success);
-      return true;
+      if (!isCurrent()) return null;
+      const next = await load(isCurrent, bundleToken);
+      if (!next || !isCurrent()) return null;
+      setStatus(typeof success === 'function' ? success(next) : success);
+      return next;
     } catch (cause) {
-      if (!isCurrent()) return false;
+      if (!isCurrent()) return null;
       const uncertain = cause instanceof EnterpriseIntelligenceClientError && cause.code === 'COMMAND_OUTCOME_UNKNOWN';
       setReloadRequired(uncertain);
       setStatus(uncertain ? 'Command outcome is unknown. Reload committed state before retrying.' : 'The command was not confirmed. No success state is shown.');
       setError(cause instanceof Error ? cause.message : 'The governed command failed.');
-      return false;
+      return null;
     } finally { if (isCurrent()) setBusy(false); }
   };
 
@@ -308,6 +344,8 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
   const latestRun = projection?.documentMapping.runs
     .filter(item => item.caseId === caseId && item.caseVersion === caseVersion && item.inputBundleId === selectedBundle?.id && item.inputBundleVersionId === selectedBundle?.versionSelector)
     .toSorted((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
+  const latestOutcome = latestRun ? mappingOutcome(latestRun) : undefined;
+  const allRejected = latestOutcome?.kind === 'all_rejected';
   const mappingProjectionComplete = latestRun?.projectionComplete === true;
   const catalog = projection?.documentMapping.catalogs.find(item => item.id === latestRun?.catalogId)
     ?? projection?.documentMapping.catalogs.find(item => item.caseId === caseId && item.caseVersion === caseVersion && item.status === 'current');
@@ -350,7 +388,10 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
       caseId, expectedCaseVersion: caseVersion, inputBundleId: selectedBundle.id,
       inputBundleVersionId: selectedBundle.versionSelector, expectedInputBundleVersion: selectedBundle.version,
       selections: sourceSelections,
-    }), 'AI suggestions are ready for human review. No Assess field was changed.');
+    }), next => {
+      const run = newestExactMappingRun(next, caseId, caseVersion, selectedBundle.id, selectedBundle.versionSelector);
+      return run ? mappingOutcome(run).message : 'Analysis returned without an authoritative result. Reload committed state before retrying.';
+    });
   };
 
   const resolveConflict = async (conflict: AssessMappingConflictProjection, resolution: 'choose_candidate' | 'retain_manual' | 'authored_resolution') => {
@@ -428,10 +469,10 @@ export default function AssessSupportingDocumentIntake({ tenantContext, processI
     </details>
 
     <details open className="mt-4 rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><summary className="cursor-pointer font-black">3. Analyze and review AI suggestions</summary><div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><label className="text-xs font-black" htmlFor="assess-document-bundle">Locked source bundle<select id="assess-document-bundle" className={inputClass} value={bundleToken} disabled={analyzeLocked} onChange={event => void selectBundle(event.target.value)}><option value="">Select one exact bundle</option>{bundles.map(bundle => <option key={bundle.versionSelector} value={`${bundle.id}:${bundle.versionSelector}`}>{bundle.label} · {bundle.versionLabel} · {bundle.sourceCount} sources</option>)}</select></label><button type="button" className={`${primaryClass} self-end`} disabled={analyzeLocked || !providerReady || !selectedBundle} onClick={() => void analyze()}>Analyze selected documents</button></div>{projection && !providerReady ? <p className="mt-2 text-sm font-bold text-amber-800" role="status">No authorized, active Assess evidence route is ready. An administrator must validate and enable a governed provider route; browser keys are never accepted.</p> : null}<p className="mt-2 text-xs font-semibold text-slate-500">Analysis makes one governed provider request over the exact locked bundle. AI only proposes server-issued typed fields; it cannot calculate scores, approve, or change deterministic decisions.</p>
-      {latestRun ? <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950"><p className="font-black" role="status">Analysis {latestRun.state.replaceAll('_', ' ')} · {latestRun.proposalCount} grounded suggestions · {latestRun.extractionJobIds.length} exact source jobs</p>{latestRun.failureCode ? <p className="mt-2 font-bold text-rose-700" role="alert">Analysis stopped: {latestRun.failureCode.replaceAll('_', ' ').toLocaleLowerCase()}. No Assess values were changed.</p> : null}{latestRun.warnings?.length ? <div className="mt-2"><p className="text-xs font-black">Analysis disclosures</p><ul className="mt-1 list-disc space-y-1 pl-5 text-xs font-semibold text-amber-900">{latestRun.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div> : null}{latestRun.analyzedSources?.length ? <div className="mt-3 grid gap-2"><p className="text-xs font-black">Source-specific parser disclosures</p>{latestRun.analyzedSources.map(source => { const sourceLabel = sourceVersions.find(item => item.sourceId === source.sourceId && item.versionSelector === source.sourceVersionId)?.displayName || 'Bound source version'; return <article key={source.sourceVersionId} className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-900"><p className="font-black">{sourceLabel}</p><p className="mt-1 font-semibold text-slate-500">{source.parserVersion} · {source.extractedByteCount.toLocaleString()} extracted bytes · {source.sheetCount} sheets · {source.cellCount} cells</p>{source.warnings.length ? <ul className="mt-1 list-disc space-y-1 pl-5 font-semibold text-amber-900">{source.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul> : <p className="mt-1 font-semibold text-slate-500">No parser exclusions were reported.</p>}</article>; })}</div> : null}</div> : null}
+      {latestRun && latestOutcome ? <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950"><p className="font-black" role="status">Analysis {latestRun.failureCode ? 'stopped' : 'completed'} · {latestRun.proposalCount} grounded suggestions · {latestRun.extractionJobIds.length} exact source jobs</p><p className={`mt-2 font-bold ${latestOutcome.kind === 'provider_failure' ? 'text-rose-700' : allRejected ? 'text-amber-900' : ''}`} role={latestOutcome.kind === 'provider_failure' || allRejected ? 'alert' : 'status'}>{latestOutcome.message}</p>{latestRun.warnings?.length ? <div className="mt-2"><p className="text-xs font-black">Analysis disclosures</p><ul className="mt-1 list-disc space-y-1 pl-5 text-xs font-semibold text-amber-900">{latestRun.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{mappingWarningCopy(warning)}</li>)}</ul><details className="mt-2 text-xs text-slate-500"><summary className="cursor-pointer font-bold">Audit details</summary><ul className="mt-1 list-disc pl-5 font-mono">{latestRun.warnings.map((warning, index) => <li key={`audit-${warning}-${index}`}>{warning}</li>)}</ul></details></div> : null}{latestRun.failureCode ? <details className="mt-2 text-xs text-slate-500"><summary className="cursor-pointer font-bold">Audit details</summary><p className="mt-1 font-mono">{latestRun.failureCode}</p></details> : null}{latestRun.analyzedSources?.length ? <div className="mt-3 grid gap-2"><p className="text-xs font-black">Source-specific parser disclosures</p>{latestRun.analyzedSources.map(source => { const sourceLabel = sourceVersions.find(item => item.sourceId === source.sourceId && item.versionSelector === source.sourceVersionId)?.displayName || 'Bound source version'; return <article key={source.sourceVersionId} className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-900"><p className="font-black">{sourceLabel}</p><p className="mt-1 font-semibold text-slate-500">{source.parserVersion} · {source.extractedByteCount.toLocaleString()} extracted bytes · {source.sheetCount} sheets · {source.cellCount} cells</p>{source.warnings.length ? <details className="mt-1"><summary className="cursor-pointer font-bold text-amber-900">Parser audit details</summary><ul className="mt-1 list-disc space-y-1 pl-5 font-mono text-slate-500">{source.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></details> : <p className="mt-1 font-semibold text-slate-500">No parser exclusions were reported.</p>}</article>; })}</div> : null}</div> : null}
       {latestRun && !mappingProjectionComplete ? <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950" role="alert">The latest analysis projection is incomplete. Reload committed state; suggestions, preview, conflicts, and apply remain unavailable.</p> : null}
       <div className="mt-4 grid gap-3">{proposals.map(proposal => { const descriptor = descriptors.get(proposal.targetSelectorId); if (!descriptor) return null; const editing = editingProposalId === proposal.id; const selected = selectedProposalIds.includes(proposal.id); return <article key={`${proposal.id}:${proposal.version}`} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950" aria-labelledby={`proposal-${proposal.id}`}><div className="flex flex-wrap items-start justify-between gap-2"><div><h4 id={`proposal-${proposal.id}`} className="font-black">{descriptor.label}</h4><p className="text-xs font-semibold text-slate-500">{descriptor.contextLabel} · {Math.round(proposal.confidence * 100)}% AI confidence · {proposal.status.replaceAll('_', ' ')}</p></div><span className="rounded-full border px-2 py-1 text-[10px] font-black uppercase">{proposal.relationship}</span></div><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt className="text-xs font-black text-slate-500">Current manual value</dt><dd className="break-words font-semibold">{formatValue(descriptor.currentValue)}</dd></div><div><dt className="text-xs font-black text-slate-500">AI suggestion</dt><dd className="break-words font-semibold">{formatValue(proposal.effectiveValue)}</dd></div></dl><blockquote className="mt-3 border-l-2 border-slate-300 pl-3 text-xs font-semibold text-slate-600 dark:text-slate-300" aria-label={`Source citation for ${descriptor.label}`}>{proposal.sourceAnchor.safeExcerpt || 'No browser-safe excerpt supplied.'}<span className="mt-1 block">Location: {proposal.sourceAnchor.locator}</span></blockquote>{editing ? <div ref={editRegionRef} role="group" aria-label={`Edit ${descriptor.label}`} className="mt-3 grid gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><MappingValueEditor descriptor={descriptor} value={editedValue} onChange={setEditedValue} idPrefix={`proposal-edit-${proposal.id}`} /><label className="text-xs font-black" htmlFor={`proposal-reason-${proposal.id}`}>Reason for edit<input id={`proposal-reason-${proposal.id}`} className={inputClass} value={editReason} onChange={event => setEditReason(event.target.value)} /></label><div className="flex flex-wrap gap-2"><button type="button" className={primaryClass} disabled={reviewLocked || editReason.trim().length < 4} onClick={async () => { const saved = await mutate(() => enterpriseIntelligenceClient.reviewAssessDocumentProposal({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, proposalId: proposal.id, proposalVersion: proposal.version, catalogId: catalog!.id, targetSelectorId: descriptor.selectorId, caseId, expectedCaseVersion: caseVersion, status: 'edited', editedValue, reason: editReason.trim() }), 'Edited suggestion and rationale committed as immutable review history.'); if (saved) closeEditor(proposal.id); }}>Save reviewed edit</button><button type="button" className={secondaryClass} disabled={busy} onClick={() => closeEditor(proposal.id)}>Cancel</button></div></div> : <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={primaryClass} disabled={reviewLocked || proposal.status === 'accepted'} onClick={() => void mutate(() => enterpriseIntelligenceClient.reviewAssessDocumentProposal({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, proposalId: proposal.id, proposalVersion: proposal.version, catalogId: catalog!.id, targetSelectorId: descriptor.selectorId, caseId, expectedCaseVersion: caseVersion, status: 'accepted' }), 'Suggestion accepted for preview; the Assess draft is unchanged.')}>Accept</button><button ref={node => { if (node) editButtonRefs.current.set(proposal.id, node); else editButtonRefs.current.delete(proposal.id); }} type="button" className={secondaryClass} disabled={reviewLocked} onClick={() => { setRestoreEditFocusId(''); setEditingProposalId(proposal.id); setEditedValue(proposal.effectiveValue); setEditReason(''); }}>Edit</button><button type="button" className={secondaryClass} disabled={reviewLocked || proposal.status === 'rejected'} onClick={() => void mutate(() => enterpriseIntelligenceClient.reviewAssessDocumentProposal({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, proposalId: proposal.id, proposalVersion: proposal.version, catalogId: catalog!.id, targetSelectorId: descriptor.selectorId, caseId, expectedCaseVersion: caseVersion, status: 'rejected' }), 'Suggestion rejected; the Assess draft is unchanged.')}>Reject</button>{['accepted','edited'].includes(proposal.status) ? <label className="flex min-h-10 items-center gap-2 text-sm font-black"><input type="checkbox" disabled={applyLocked} checked={selected} onChange={() => setSelectedProposalIds(current => selected ? current.filter(id => id !== proposal.id) : [...current, proposal.id])} />Include in preview</label> : null}</div>}</article>; })}</div>
-      {selectedBundle && proposals.length === 0 ? <p className="mt-3 text-sm font-semibold text-slate-500" role="status">No grounded suggestions are available for this case and exact bundle version. Run analysis or review the reported failure state.</p> : null}
+      {selectedBundle && !latestRun ? <p className="mt-3 text-sm font-semibold text-slate-500" role="status">No analysis has been run for this exact bundle version.</p> : null}
       <button type="button" className={`${primaryClass} mt-4`} disabled={applyLocked || !catalog || !selectedBundle || selectedProposals.length === 0 || selectedProposals.length > 100} onClick={() => catalog && selectedBundle && void mutate(() => enterpriseIntelligenceClient.previewAssessDocumentMapping({ organizationId: tenantContext.organizationId, workspaceId: tenantContext.workspaceId, catalogId: catalog.id, catalogHash: catalog.catalogHash, caseId, expectedCaseVersion: caseVersion, inputBundleId: selectedBundle.id, inputBundleVersionId: selectedBundle.versionSelector, selections: selectedProposals.map(proposal => ({ proposalId: proposal.id, proposalVersion: proposal.version, targetSelectorId: proposal.targetSelectorId, effectiveValue: proposal.effectiveValue })) }), 'Exact Assess changes previewed. The draft is still unchanged.')}>Preview {selectedProposals.length || ''} reviewed suggestion{selectedProposals.length === 1 ? '' : 's'}</button>
     </details>
 

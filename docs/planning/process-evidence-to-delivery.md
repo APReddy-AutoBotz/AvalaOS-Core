@@ -1,5 +1,21 @@
 # Process evidence to confirmed delivery work
 
+## Assess mapping zero-result repair — 5 November 2026
+
+Executed evidence on the prior exact candidate used the bounded validation allowance and both Assess extraction operations. Each extraction committed one rejected proposal with `TEXT_ANCHOR_AMBIGUOUS` and zero accepted proposals. This proves that the provider path ran and that the server rejected ambiguous source binding. It does not prove the content or shape of the unretained raw provider response, so the cause is recorded as a scoped framing/prompt hypothesis rather than a raw-response finding.
+
+The repair reuses Studio's bounded, length-framed JSON-string encoding only for governed `assess.evidence.extract` document mapping. Other Assess extraction and non-Studio capabilities retain their existing Base64URL framing. The mapping instruction contains no concrete business answer, requests coverage of every explicitly supported process step and eligible field, and requires a unique contiguous verbatim passage with enough adjacent context to disambiguate repeated phrases. Server validation remains authoritative for exact source version, selector, value type and locator. A missing excerpt is now distinguished from a repeated excerpt, with neither receiving a permissive fallback.
+
+After every successful mapping command the client reloads committed state before showing an outcome. Normal UI copy distinguishes reviewable suggestions, a clean supported zero, all proposals rejected by evidence validation, and a stopped provider operation. Technical warning and failure codes remain available only in optional audit details. Focused mapping, AI-gateway and component checks are required before the next provider attempt. No hosted retry or fresh generated business output is claimed by this repair.
+
+Rollback disables provider execution and revokes its server-side key binding before reverting the mapping framing, prompt, UI, tests and this note together. Preserve the source versions, mapping runs, rejection warnings, reservations and immutable audit history for review. The legacy provider framing and strict server-side rejection behavior remain the safe read-only fallback.
+
+## Continuing the same campaign after settled requests
+
+The dedicated backend retains three debits from the validated supplier and order-status run. The continuation permits up to two validations, four extractions and seven Studio requests across the entire campaign, with a maximum of 13 calls or USD 6.1289696 cumulative reserved exposure. The initial three debits count toward every limit. Each window expires within two hours and before the observed credit expiry. The controller verifies the exact deployed candidate, the same external key binding, current promotional credits and the authorized actor session before activation. The server binds those attestations and the remaining credit to the window. Pending or uncertain outcomes prevent a retry until reconciled. The provider dashboard and returned token usage supply separate cost evidence.
+
+Real PostgreSQL 16 verification exercised the original 1/2/5 profile, the three-effect upgrade, concurrent renewal and replay, fresh validation reuse, chained windows and enforcement of the final cumulative slots. Disposable standard and Supabase ACL profiles cover the 112-, 113- and 114-migration checkpoints. Rollback disables the campaign, runtimes and routes, revokes the external key binding and retains all sources, committed reviews and debit history.
+
 ## Authorized continuation and retained permit repair - 5 November 2026
 
 AP authorizes completion of this same milestone from `602fbeb88a30dc8c2e9ae37c177355e38b55e451`, including necessary focused repairs, additive migrations, exact-candidate preview/backend redeployment and short-lived permit renewal. Merge, production, additional hosting charges, credit purchases, recharge and cash-funded overage remain excluded. The earlier eight-call/USD 4 restriction and stop-after-every-failure rule are superseded: retries must be bounded, ambiguous outcomes reconciled before repetition, and their reservations retained while unresolved.

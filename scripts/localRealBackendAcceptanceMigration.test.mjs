@@ -95,7 +95,7 @@ const activation = overrides => ({
   deploymentId: null,
   origin: 'http://127.0.0.1:4173',
   backendDigest: digest('c'),
-  migrationVersion: '20261105024717',
+  migrationVersion: '20261105041249',
   migrationDigest: digest('d'),
   exerciseDigest: digest('e'),
   profileVersion: 'local-real-backend-authenticated-profile-v1',
@@ -149,7 +149,7 @@ test('PostgreSQL adapter preserves the hosted activation RPC', async () => {
   await adapter.activate(activation({
     deploymentId: '2'.repeat(24),
     origin: 'https://avalaos-pilot.netlify.app',
-    migrationVersion: '20261105024717',
+    migrationVersion: '20261105041249',
     profileVersion: 'hosted-authenticated-synthetic-profile-v3',
   }));
   assert.match(calls[0].statement, /public\.authenticated_synthetic_exercise_activate\(/u);

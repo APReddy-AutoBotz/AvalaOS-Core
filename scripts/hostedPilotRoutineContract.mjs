@@ -35,7 +35,7 @@ export function parseRoutineContract(bytes, migrations) {
   if (!bytes) return undefined;
   if (Buffer.byteLength(bytes) > 4_000_000) throw new Error('ROUTINE_CONTRACT_SIZE_REJECTED');
   const value = JSON.parse(bytes.toString());
-  if (value.schemaVersion !== 1 || value.runtimeMigrationTip !== '20261105024717'
+  if (value.schemaVersion !== 1 || value.runtimeMigrationTip !== '20261105041249'
     || !Array.isArray(value.checkpoints) || !value.checkpoints.length || value.checkpoints.length > 4) {
     throw new Error('ROUTINE_CONTRACT_SCHEMA_REJECTED');
   }

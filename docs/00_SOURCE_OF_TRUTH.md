@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## First retained-source provider run — 5 November 2026
+
+Candidate `f100547a3b1acd12fe05a4a46887ab785b440754` passed all 17 required workflows, including the immutable preview gate. Its dedicated backend verified 113 migrations, 18 functions and 265 source inputs. The operator received only `assess.read` through Users / Roles and validated the configured provider. The separate Assess author analyzed both retained source bundles. Each real request produced one proposed field whose source passage failed the exact-match check, leaving zero accepted facts. The UI incorrectly reported that suggestions were ready. The extractions consumed 25,092 input and 325 output tokens. The ledger retained three cumulative fixed debits totaling USD 1.4143776. Provider execution is disabled and the run key binding was revoked. Generated business documents, independent approvals and live board publication remain pending. The [milestone plan](planning/process-evidence-to-delivery.md) owns the extraction and post-use renewal repair.
+
 ## Retained process-evidence acceptance continuation - 5 November 2026
 
 The process-evidence milestone continues in the existing PR stack. The verified `602fbeb8` candidate passed all 17 required workflows and exact hosted source/migration checks; its ordinary UI retained two fresh processes and four source files. Provider calls, generated documents and live board publication remain unverified. AP now authorizes the focused operator-read and retained-permit repairs, bounded recovery and candidate redeployment needed to finish the journey. The [active milestone plan](planning/process-evidence-to-delivery.md#authorized-continuation-and-retained-permit-repair---5-november-2026) records the verified-credit ceiling, independent actors, cumulative-accounting requirements and cleanup. No merge, production, credit purchase or additional hosting cost is authorized.

@@ -16,7 +16,8 @@ import {
 } from './pilotOperationsPostgresSupport.mjs';
 
 const BASELINE_COUNT=112;
-const CURRENT_COUNT=113;
+const RETAINED_COUNT=113;
+const CURRENT_COUNT=114;
 const RELEASE_BEFORE_CONTRACT='ecc740bfbd8296b5b94b71e433fff7464838393f';
 const adminUrl=new URL(process.env.PILOT_OPERATIONS_DATABASE_URL??'');
 if(process.argv.includes('--write-contract')&&process.env.CI)throw new Error('ROUTINE_CONTRACT_WRITE_FORBIDDEN_IN_CI');
@@ -67,7 +68,7 @@ const mutateAndReject=async(db,label,sql,{setup,expected=/foreign_object_authori
 
 try{
   admin=await connect(adminUrl.href);clients.push(admin);await ensureClusterRoles(admin);
-  const snapshots={},baselineSnapshots={},inventories={};
+  const snapshots={},baselineSnapshots={},retainedSnapshots={},inventories={};
   for(const profile of profiles){
     const db=await createDatabase(admin,adminUrl.href,names[profile]);clients.push(db);
     await bootstrapAuth(db);
@@ -77,7 +78,9 @@ try{
     await ensureHostedPgcryptoCompatibility(db);
     await applyMigrations(db,migrationNames.slice(0,BASELINE_COUNT));
     baselineSnapshots[profile]=await catalog(db);
-    await applyMigrations(db,migrationNames.slice(BASELINE_COUNT));
+    await applyMigrations(db,migrationNames.slice(BASELINE_COUNT,RETAINED_COUNT));
+    retainedSnapshots[profile]=await catalog(db);
+    await applyMigrations(db,migrationNames.slice(RETAINED_COUNT));
     const connected=await inventory(db);
     assert.equal(legacy.classifyHostedTarget(connected.inventory,canonical).mutationAllowed,false,
       'original classifier must reproduce the installed-catalog rejection');
@@ -87,8 +90,9 @@ try{
     inventories[profile]=connected.inventory;
   }
 
-  const generated={schemaVersion:1,runtimeMigrationTip:'20261105024717',checkpoints:[
+  const generated={schemaVersion:1,runtimeMigrationTip:'20261105041249',checkpoints:[
     checkpoint(BASELINE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,baselineSnapshots[profile]]))),
+    checkpoint(RETAINED_COUNT,Object.fromEntries(profiles.map(profile=>[profile,retainedSnapshots[profile]]))),
     checkpoint(CURRENT_COUNT,Object.fromEntries(profiles.map(profile=>[profile,snapshots[profile]]))),
   ]};
   if(process.argv.includes('--write-contract')){

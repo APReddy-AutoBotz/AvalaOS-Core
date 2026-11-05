@@ -604,6 +604,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "process-evidence-operator-access-resume",
     "sourceReference": "supabase/migrations/20261105024717_process_evidence_operator_access_resume.sql",
     "selector": "CREATE FUNCTION public.process_evidence_resume_provider_run("
+  },
+  {
+    "anchorId": "process-evidence-post-use-renewal",
+    "sourceReference": "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_renew_provider_run_after_use("
   }
 ]);
 
@@ -1876,7 +1881,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {
@@ -1998,7 +2004,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {
@@ -2527,7 +2534,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {
@@ -2571,7 +2579,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {
@@ -2615,7 +2624,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {
@@ -2659,7 +2669,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {
@@ -2703,7 +2714,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
-      "process-evidence-operator-access-resume"
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal"
     ],
     "ownership": [
       {

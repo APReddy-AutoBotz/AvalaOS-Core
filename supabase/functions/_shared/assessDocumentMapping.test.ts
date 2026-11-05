@@ -43,7 +43,8 @@ const source = async (overrides: Partial<AssessMappingDecodedSource> = {}): Prom
 
 test('prompt requests grounded mappings while retaining legitimate empty output', async () => {
   const instruction = buildAssessDocumentMappingTaskInstruction([target]);
-  for (const required of ['empty array only when', 'case.description', '0 to 1', 'neutral, supporting, or contradictory', 'verbatim', 'valueType', 'preserve every explicit decision-branch label', 'Never collapse, rename, or infer a branch']) assert.ok(instruction.includes(required));
+  for (const required of ['Cover every process step and eligible field', 'empty array only when', 'case.description', '0 to 1', 'neutral, supporting, or contradictory', 'contiguous verbatim source passage', 'enough adjacent source context', 'valueType', 'preserve every explicit decision-branch label', 'Never collapse, rename, or infer a branch']) assert.ok(instruction.includes(required));
+  assert.ok(!instruction.includes('Review order exceptions'));
   assert.ok(!instruction.includes(target.selectorId)); assert.ok(!instruction.includes(target.contextLabel));
   const grounded = await source({ text: 'Review invoice exceptions against purchase orders.' });
   const decoded = await decodeGroundedAssessMappingProposalResult({ value: { proposals: [{ targetSelectorId: target.selectorId, sourceVersionId: grounded.sourceVersionId, proposedValue: grounded.text, confidence: 0.9, rationale: 'Explicit description', safeExcerpt: grounded.text, locator: 'text', relationship: 'supporting' }] }, targets: [target], sources: [grounded], createProposalId: () => id(80) });
@@ -89,12 +90,20 @@ test('exact unique text and exact spreadsheet cell anchors are server-issued', a
     proposedValue: '12 minutes', confidence: 0.8, rationale: 'Cell value', safeExcerpt: '12', locator: 'sheet:"Process";cell:B2', relationship: 'supporting' }] },
     targets: [target], sources: [sheetSource], createProposalId: () => id(8) });
   assert.equal(cell.proposals.length, 1); assert.equal(cell.proposals[0].sourceAnchor.locator, 'sheet:"Process";cell:B2');
+
+  const contextual = await source({ text: 'The first team says same. The second team says same after review.' });
+  const contextualResult = await decodeGroundedAssessMappingProposalResult({ value: { proposals: [{ targetSelectorId: target.selectorId, sourceVersionId: contextual.sourceVersionId,
+    proposedValue: 'second team', confidence: 0.9, rationale: 'Context disambiguates the repeated word.', safeExcerpt: 'The second team says same after review.', locator: 'text', relationship: 'supporting' }] },
+    targets: [target], sources: [contextual], createProposalId: () => id(9) });
+  assert.equal(contextualResult.proposals.length, 1);
+  assert.equal(contextualResult.proposals[0].sourceAnchor.locator, `text:${contextual.text.indexOf('The second team')}-${contextual.text.length}`);
 });
 
 test('ambiguous, oversized, substituted and malformed provider proposals are omitted with explicit warnings', async () => {
   const repeated = await source({ text: 'same and same' });
   const proposals = [
     { targetSelectorId: target.selectorId, sourceVersionId: repeated.sourceVersionId, proposedValue: 'mapped', confidence: 0.9, rationale: 'Repeated', safeExcerpt: 'same', locator: 'x', relationship: 'neutral' },
+    { targetSelectorId: target.selectorId, sourceVersionId: repeated.sourceVersionId, proposedValue: 'mapped', confidence: 0.9, rationale: 'Absent', safeExcerpt: 'not in the source', locator: 'x', relationship: 'neutral' },
     { targetSelectorId: target.selectorId, sourceVersionId: repeated.sourceVersionId, proposedValue: 'mapped', confidence: 0.9, rationale: 'Large', safeExcerpt: 'x'.repeat(1001), locator: 'x', relationship: 'neutral' },
     { targetSelectorId: id(99), sourceVersionId: repeated.sourceVersionId, proposedValue: 'mapped', confidence: 0.9, rationale: 'Wrong target', safeExcerpt: 'and', locator: 'x', relationship: 'neutral' },
     { targetSelectorId: target.selectorId, sourceVersionId: repeated.sourceVersionId, proposedValue: 4, confidence: 0.9, rationale: 'Wrong type', safeExcerpt: 'and', locator: 'x', relationship: 'neutral' },
@@ -103,7 +112,8 @@ test('ambiguous, oversized, substituted and malformed provider proposals are omi
   const result = await decodeGroundedAssessMappingProposalResult({ value: { proposals }, targets: [target], sources: [repeated], createProposalId: () => id(20) });
   assert.equal(result.proposals.length, 0);
   assert.deepEqual(result.warnings, ['PROVIDER_PROPOSAL_REJECTED_EXCERPT_TOO_LARGE:1', 'PROVIDER_PROPOSAL_REJECTED_OUTPUT_SHAPE_INVALID:1',
-    'PROVIDER_PROPOSAL_REJECTED_SELECTOR_OR_SOURCE_INVALID:1', 'PROVIDER_PROPOSAL_REJECTED_TEXT_ANCHOR_AMBIGUOUS:1', 'PROVIDER_PROPOSAL_REJECTED_VALUE_INVALID:1']);
+    'PROVIDER_PROPOSAL_REJECTED_SELECTOR_OR_SOURCE_INVALID:1', 'PROVIDER_PROPOSAL_REJECTED_TEXT_ANCHOR_AMBIGUOUS:1',
+    'PROVIDER_PROPOSAL_REJECTED_TEXT_ANCHOR_NOT_FOUND:1', 'PROVIDER_PROPOSAL_REJECTED_VALUE_INVALID:1']);
 });
 
 test('provider response requires exact bounded top-level schema', async () => {
