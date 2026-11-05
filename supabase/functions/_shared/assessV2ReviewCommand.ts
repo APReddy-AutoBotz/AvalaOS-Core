@@ -4,6 +4,7 @@ export const ASSESS_V2_REVIEW_COMMANDS = [
   'assessment_v2.review.assign', 'assessment_v2.evidence.attest',
   'assessment_v2.review.resolve', 'assessment_v2.revision.start',
   'assessment_v2.govern.resolve', 'assessment_v2.studio.handoff',
+  'assessment_v2.review.plan', 'assessment_v2.studio.plan_handoff',
 ] as const;
 export type AssessV2ReviewCommandType = typeof ASSESS_V2_REVIEW_COMMANDS[number];
 export const ASSESS_V2_REVIEW_CAPABILITY: Record<AssessV2ReviewCommandType, string> = {
@@ -13,6 +14,8 @@ export const ASSESS_V2_REVIEW_CAPABILITY: Record<AssessV2ReviewCommandType, stri
   'assessment_v2.revision.start': 'assess.v2.draft.write',
   'assessment_v2.govern.resolve': 'assess.v2.govern.resolve',
   'assessment_v2.studio.handoff': 'assess.v2.studio.handoff',
+  'assessment_v2.review.plan': 'assess.v2.approve',
+  'assessment_v2.studio.plan_handoff': 'assess.v2.studio.handoff',
 };
 
 export type ReviewPayload = Record<string, unknown> & { caseId: string; decisionId: string };
@@ -41,8 +44,10 @@ const parsePayload=(type:AssessV2ReviewCommandType,value:unknown):ReviewPayload=
   if(type==='assessment_v2.review.assign') { exact(p,[...baseKeys,'reviewerId']); out={...common,reviewerId:uuid(p.reviewerId)}; }
   else if(type==='assessment_v2.evidence.attest') { exact(p,[...baseKeys,'evidenceId','claimIds','outcome','rationale']); out={...common,evidenceId:uuid(p.evidenceId),claimIds:array(p.claimIds,100).map(x=>text(x,300)),outcome:enumValue(p.outcome,['accepted','rejected','needs-more-information'] as const),rationale:text(p.rationale,4000)}; if(new Set(out.claimIds as string[]).size!==(out.claimIds as string[]).length)bad(); }
   else if(type==='assessment_v2.review.resolve') { exact(p,[...baseKeys,'resolution','rationale','conditions']); out={...common,resolution:enumValue(p.resolution,['approved','changes_requested','rejected'] as const),rationale:text(p.rationale,4000),conditions:Array.isArray(p.conditions)&&p.conditions.length<=100?p.conditions.map(x=>text(x,500)):bad()}; }
+  else if(type==='assessment_v2.review.plan') { exact(p,[...baseKeys,'resolution','rationale','conditions']); out={...common,resolution:enumValue(p.resolution,['planning_approved'] as const),rationale:text(p.rationale,4000),conditions:Array.isArray(p.conditions)&&p.conditions.length<=100?p.conditions.map(x=>text(x,500)):bad()}; }
   else if(type==='assessment_v2.revision.start') { exact(p,[...baseKeys,'rationale']); out={...common,rationale:text(p.rationale,4000)}; }
   else if(type==='assessment_v2.govern.resolve') { exact(p,[...baseKeys,'rationale','controlDispositions']); out={...common,rationale:text(p.rationale,4000),controlDispositions:array(p.controlDispositions,100).map(value=>{const control=object(value);exact(control,['controlId','status','condition','owner','dueDate','conditionSatisfied']);return{controlId:text(control.controlId,500),status:enumValue(control.status,['resolved','conditionally-resolved','unresolved'] as const),condition:typeof control.condition==='string'?control.condition.trim():bad(),owner:typeof control.owner==='string'?control.owner.trim():bad(),dueDate:typeof control.dueDate==='string'?control.dueDate.trim():bad(),conditionSatisfied:typeof control.conditionSatisfied==='boolean'?control.conditionSatisfied:bad()}})}; }
+  else if(type==='assessment_v2.studio.plan_handoff') { exact(p,[...baseKeys,'approvalPurpose']); out={...common,approvalPurpose:enumValue(p.approvalPurpose,['documentation_planning'] as const)}; }
   else { exact(p,baseKeys); out=common; }
   if(JSON.stringify(out).length>200000)bad(); return out;
 };

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync('services/assessV2ReviewClient.ts', 'utf8');
 const contract = readFileSync('services/assessV2ReviewClientContract.ts', 'utf8');
 for (const capability of ['assess.v2.review', 'assess.v2.evidence.attest', 'assess.v2.approve', 'assess.v2.govern.resolve', 'assess.v2.studio.handoff']) assert.ok(contract.includes(capability));
-for (const command of ['assessment_v2.review.assign', 'assessment_v2.evidence.attest', 'assessment_v2.review.resolve', 'assessment_v2.revision.start', 'assessment_v2.govern.resolve', 'assessment_v2.studio.handoff']) assert.ok(source.includes(command));
+for (const command of ['assessment_v2.review.assign', 'assessment_v2.evidence.attest', 'assessment_v2.review.resolve', 'assessment_v2.review.plan', 'assessment_v2.revision.start', 'assessment_v2.govern.resolve', 'assessment_v2.studio.handoff', 'assessment_v2.studio.plan_handoff']) assert.ok(source.includes(command));
 assert.match(source, /assess_v2_review_queue/);
 assert.match(source, /p_org_id: context\.organizationId, p_workspace_id: context\.workspaceId/);
 assert.match(source, /assess_v2_review_workspace/);
@@ -15,6 +15,7 @@ assert.match(source, /value\.outcome !== 'committed' && value\.outcome !== 'repl
 assert.match(source, /reviewerId: reviewer\.actorId/,'browser may select only an actor returned by the eligible-reviewer projection');
 assert.doesNotMatch(source, /reviewerId[^\n]*(input|trim|target\.value)/i,'reviewer identity must never come from free text');
 assert.doesNotMatch(source, /approved\s*:/, 'browser must not supply an approval flag');
-assert.match(source, /execute\(context, 'assessment_v2\.studio\.handoff', projection, \{\}/, 'browser must not supply a Studio package');
+assert.doesNotMatch(source, /package\s*:/, 'browser must not supply a Studio package');
+assert.match(source, /approvalPurpose: 'documentation_planning'/, 'planning handoff supplies only its bounded purpose');
 assert.match(source, /actor-scoped|const idempotencyKey = `\$\{operation\}:\$\{projection\.caseId\}:\$\{projection\.decisionId\}:\$\{projection\.reviewSequence\}`/);
 console.log('Assess V2 review client contract suite passed.');

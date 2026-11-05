@@ -46,6 +46,10 @@ assert.equal(withReview({ status: 'changes_requested' }).statusLabel, 'Changes r
 assert.equal(withReview({ status: 'rejected' }).statusLabel, 'Rejected · revision required');
 assert.equal(withReview({ status: 'approved' }).studioAction, 'Resolve Govern controls before Studio handoff');
 assert.equal(withReview({ status: 'approved', governStatus: 'resolved', handoffStatus: 'ready' }).studioAction, 'Create durable Studio handoff');
+assert.equal(withReview({ status: 'planning_approved', handoffStatus: 'ready' }).statusLabel, 'Approved for documentation and planning · questions remain');
+assert.equal(withReview({ status: 'planning_approved', handoffStatus: 'ready' }).studioAction, 'Create Studio handoff for documentation and planning');
+assert.equal(withReview({ status: 'planning_approved', handoffStatus: 'committed' }).statusLabel, 'Approved for documentation and planning · Studio handoff committed');
+assert.equal(withReview({ status: 'planning_approved', handoffStatus: 'committed' }).studioAction, 'View committed Studio handoff status');
 const handedOff = withReview({ status: 'approved', governStatus: 'resolved', handoffStatus: 'committed' });
 assert.equal(handedOff.statusLabel, 'Studio handoff committed');
 assert.equal(handedOff.studioAction, 'View committed Studio handoff status');

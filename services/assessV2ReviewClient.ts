@@ -4,7 +4,8 @@ import { EnterpriseBoundaryError } from './enterpriseAssess';
 import { isEnterpriseObject, readEnterpriseErrorCode } from './enterpriseAssessContract';
 import { buildAssessV2ReviewEnvelope, type EvidenceAttestationOutcome, type ReviewResolution } from './assessV2ReviewClientContract';
 
-export type ReviewLifecycle = 'reviewer_ready' | 'in_review' | 'approved' | 'changes_requested' | 'rejected';
+export type ReviewLifecycle = 'reviewer_ready' | 'in_review' | 'approved' | 'planning_approved' | 'changes_requested' | 'rejected';
+export type ReviewApprovalPurpose = 'implementation_readiness' | 'documentation_planning';
 
 export interface ReviewEvidenceProjection {
   id: string;
@@ -30,10 +31,13 @@ export interface AssessV2ReviewProjection {
   reviewSchemaVersion: string;
   reviewSequence: number;
   status: ReviewLifecycle;
+  approvalPurpose: ReviewApprovalPurpose;
   authorLabel: string;
   reviewerLabel: string;
   evidence: ReviewEvidenceProjection[];
   requiredClaimIds: string[];
+  acceptedEvidence: { claimId: string; evidenceIds: string[] }[];
+  unresolvedQuestions: { claimId: string }[];
   confidence: 'Verified' | 'Partially Evidenced' | 'Assumption-Led' | 'Insufficient Evidence';
   conditions: string[];
   actions: GovernActionProjection[];
@@ -87,7 +91,17 @@ const parseQueueItem = (value: unknown): AssessV2ReviewQueueItem => {
   return value as unknown as AssessV2ReviewQueueItem;
 };
 const parseProjection = (value: unknown): AssessV2ReviewProjection => {
-  if (!isEnterpriseObject(value) || typeof value.caseId !== 'string' || typeof value.decisionId !== 'string' || !Number.isSafeInteger(value.caseVersion) || typeof value.reviewSchemaVersion !== 'string' || !Number.isSafeInteger(value.reviewSequence) || !Array.isArray(value.evidence) || !Array.isArray(value.actions) || !Array.isArray(value.controls)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  if (!isEnterpriseObject(value) || typeof value.caseId !== 'string' || typeof value.decisionId !== 'string'
+    || !Number.isSafeInteger(value.caseVersion) || typeof value.reviewSchemaVersion !== 'string'
+    || !Number.isSafeInteger(value.reviewSequence) || !Array.isArray(value.evidence)
+    || !Array.isArray(value.actions) || !Array.isArray(value.controls)
+    || !['implementation_readiness','documentation_planning'].includes(String(value.approvalPurpose))
+    || !Array.isArray(value.acceptedEvidence) || !Array.isArray(value.unresolvedQuestions)
+    || value.acceptedEvidence.some(item => !isEnterpriseObject(item) || typeof item.claimId !== 'string'
+      || !Array.isArray(item.evidenceIds) || item.evidenceIds.some(id => typeof id !== 'string'))
+    || value.unresolvedQuestions.some(item => !isEnterpriseObject(item) || typeof item.claimId !== 'string')) {
+    throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+  }
   return value as unknown as AssessV2ReviewProjection;
 };
 const parseEligibleReviewer = (value: unknown): EligibleAssessV2Reviewer => {
@@ -141,10 +155,10 @@ const execute = async (context: TenantContextProjection, commandType: string, pr
 
 export const attestAssessV2Evidence = (context: TenantContextProjection, projection: AssessV2ReviewProjection, evidenceId: string, claimIds: string[], outcome: EvidenceAttestationOutcome, rationale: string, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.evidence.attest', projection, { evidenceId, claimIds, outcome, rationale }, `attest:${evidenceId}:${outcome}`, transport);
 export const assignAssessV2Review = (context: TenantContextProjection, projection: AssessV2ReviewProjection, reviewer: EligibleAssessV2Reviewer, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.review.assign', projection, { reviewerId: reviewer.actorId }, `assign:${reviewer.actorId}`, transport);
-export const resolveAssessV2Review = (context: TenantContextProjection, projection: AssessV2ReviewProjection, resolution: ReviewResolution, rationale: string, conditions: string[], transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.review.resolve', projection, { resolution, rationale, conditions }, `review:${resolution}`, transport);
+export const resolveAssessV2Review = (context: TenantContextProjection, projection: AssessV2ReviewProjection, resolution: ReviewResolution, rationale: string, conditions: string[], transport: AssessV2ReviewTransport = defaultTransport) => execute(context, resolution === 'planning_approved' ? 'assessment_v2.review.plan' : 'assessment_v2.review.resolve', projection, { resolution, rationale, conditions }, `review:${resolution}`, transport);
 export const startAssessV2Revision = (context: TenantContextProjection, projection: AssessV2ReviewProjection, rationale: string, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.revision.start', projection, { rationale }, 'revision', transport);
 export const resolveAssessV2Govern = (context: TenantContextProjection, projection: AssessV2ReviewProjection, rationale: string, controlDispositions: GovernControlProjection[], transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.govern.resolve', projection, { rationale, controlDispositions: controlDispositions.map(control => ({ controlId: control.controlId, status: control.status, condition: control.condition ?? '', owner: control.owner ?? '', dueDate: control.dueDate ?? '', conditionSatisfied: control.conditionSatisfied ?? false })) }, 'govern', transport);
-export const handoffAssessV2Studio = (context: TenantContextProjection, projection: AssessV2ReviewProjection, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, 'assessment_v2.studio.handoff', projection, {}, 'handoff', transport);
+export const handoffAssessV2Studio = (context: TenantContextProjection, projection: AssessV2ReviewProjection, transport: AssessV2ReviewTransport = defaultTransport) => execute(context, projection.approvalPurpose === 'documentation_planning' ? 'assessment_v2.studio.plan_handoff' : 'assessment_v2.studio.handoff', projection, projection.approvalPurpose === 'documentation_planning' ? { approvalPurpose: 'documentation_planning' } : {}, 'handoff', transport);
 
 export const describeReviewError = (error: unknown, online: boolean): string => {
   if (!online) return 'Offline. Review changes were not submitted.';

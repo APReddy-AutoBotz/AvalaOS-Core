@@ -10,7 +10,7 @@ export const ASSESS_V2_REVIEW_CAPABILITIES = {
 } as const;
 
 export type EvidenceAttestationOutcome = 'accepted' | 'rejected' | 'needs-more-information';
-export type ReviewResolution = 'approved' | 'changes_requested' | 'rejected';
+export type ReviewResolution = 'approved' | 'planning_approved' | 'changes_requested' | 'rejected';
 
 export const buildAssessV2ReviewEnvelope = (
   context: TenantContextProjection,

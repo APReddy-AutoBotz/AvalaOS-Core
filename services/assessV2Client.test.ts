@@ -130,6 +130,8 @@ assert.equal(shouldReadAssessV2DraftHead({ status: 'draft', head_version_id: 're
 assert.equal(shouldReadAssessV2DraftHead({ status: 'draft', head_version_id: 'revision-v2' }, { source_version_id: 'revision-v2' }), true);
 assert.equal(shouldReadAssessV2DraftHead({ status: 'reviewer_ready', head_version_id: 'revision-v2' }, { source_version_id: 'decision-v1' }), true);
 assert.equal(shouldReadAssessV2DraftHead({ status: 'approved', head_version_id: 'decision-v1' }, { source_version_id: 'decision-v1' }), false);
+assert.equal(shouldReadAssessV2DraftHead({ status: 'planning_approved', head_version_id: 'decision-v1' }, { source_version_id: 'decision-v1' }), false);
+assert.equal(shouldReadAssessV2DraftHead({ status: 'handed_off', head_version_id: 'decision-v1' }, { source_version_id: 'decision-v1' }), false);
 assert.equal(shouldReadAssessV2DraftHead({ status: 'draft', head_version_id: 'revision-v1' }, null), true);
 
 assert.match(clientSource, /readEnterpriseErrorCode\(payload,/);
