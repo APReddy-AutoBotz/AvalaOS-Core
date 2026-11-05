@@ -9,7 +9,7 @@ import {
 } from './enterpriseIntelligenceAi.ts';
 import type { AllowedEnterpriseProviderResolverDecision } from './providerResolver.ts';
 import type { JsonObject } from './studioArtifactCommand.ts';
-import type { StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
+import type { StudioApprovalPurpose, StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
 import {
   normalizeStudioArtifactTemplate,
   STUDIO_TEMPLATE_ARTIFACT_TYPES,
@@ -234,6 +234,7 @@ export const buildStudioArtifactTaskInstruction = (
   selectedSourceVersionIds: readonly string[],
   promptVersion: StudioProviderPromptVersion,
   artifactType: StudioProviderArtifactType,
+  approvalPurpose: StudioApprovalPurpose = 'implementation_readiness',
 ) => {
   const selected = [...selectedSourceVersionIds];
   if (selected.length > 20 || selected.some(id => typeof id !== 'string' || !UUID.test(id))
@@ -280,6 +281,11 @@ export const buildStudioArtifactTaskInstruction = (
     'For SDD technical details not established by supplied evidence, state an explicit open question or clearly labeled proposal; never present a proposal as an implemented fact.',
     'Do not invent API availability, interface contracts, data classifications, security controls, deployment topology, service levels, costs, or operational readiness.',
   );
+  if (approvalPurpose === 'documentation_planning') instruction.splice(-1, 0,
+    'This assessed source is independently approved only for documentation and planning. Preserve that purpose in the document and never describe it as Verified, Govern-approved, implementation-ready, or execution-authorized.',
+    'Keep supported facts, proposed design choices, optional alternatives, and unresolved questions visibly distinct. Preserve each supplied unresolved question and state the design or delivery action it blocks without inventing evidence.',
+    'Document approval approves the content for planning. It does not certify unresolved facts or implementation readiness.',
+  );
   if (promptVersion !== 'studio-pr-b-1') instruction.splice(-1, 0,
     'For this BRD, preserve every explicit workflow primitive, state, action, event, edge, sequence, branch, loop, and triggering condition in the closest existing template section; never collapse distinct source steps or add a section.',
     'Preserve only source-stated ordering, edges, and conditions; never infer a missing sequence, edge, or condition from array order or proximity.',
@@ -292,6 +298,13 @@ export const buildStudioArtifactTaskInstruction = (
     'For this BRD v3 request, a server-controlled post-validation step appends a bounded accepted-Assessment source-facts block for human review; that block is not model-generated reasoning and is outside this response schema.',
   );
   return instruction.join(' ');
+};
+
+const studioApprovalPurpose = (sourcePackage: JsonObject): StudioApprovalPurpose => {
+  const assessPackage = sourcePackage.assessPackage;
+  return object(assessPackage) && assessPackage.approvalPurpose === 'documentation_planning'
+    ? 'documentation_planning'
+    : 'implementation_readiness';
 };
 
 export const buildStudioResponseSchema = (template: StudioArtifactTemplateContract) => {
@@ -320,6 +333,7 @@ export const estimateStudioProviderInputTokens = (
     capability: STUDIO_PROVIDER_CAPABILITY,
     taskInstruction: buildStudioArtifactTaskInstruction(
       template, input.selectedSourceVersionIds, input.plan.promptVersion, input.plan.artifactType,
+      studioApprovalPurpose(input.sourcePackage),
     ),
     untrustedSource: buildUntrustedStudioInput(input, bindings),
     // Reserve schema overhead conservatively for every provider; only OpenAI sends it.
@@ -355,6 +369,7 @@ export const callStudioArtifactProvider = async (
     template = normalizeStudioArtifactTemplate(input.templatePayload);
     instruction = buildStudioArtifactTaskInstruction(
       template, input.selectedSourceVersionIds, input.plan.promptVersion, input.plan.artifactType,
+      studioApprovalPurpose(input.sourcePackage),
     );
     const bindings = buildStudioProviderAnchorBindings(input.selectedSourceVersionIds, input.canonicalSourceAnchors);
     untrustedSource = buildUntrustedStudioInput(input, bindings);

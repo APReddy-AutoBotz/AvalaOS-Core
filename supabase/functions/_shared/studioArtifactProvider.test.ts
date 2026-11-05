@@ -150,6 +150,51 @@ void (async () => {
   'STUDIO-TR-008', 'provider.semantic-prohibition-scope-threshold-actor-and-no-assurance-contract-explicit',
   'retained-pdd-semantic-fidelity-failure', 'openai');
 
+  const planningInstruction = buildStudioArtifactTaskInstruction({
+    kind: 'system', artifactType: 'sdd', sections: [
+      { id: 'openQuestionsAndProposals', title: 'Open questions and proposals', required: true, fieldKind: 'system' },
+    ],
+  }, [ids[0]], 'studio-pr-b-1', 'sdd', 'documentation_planning');
+  const planningTypeInstructions = (['brd', 'pdd', 'frd', 'sdd'] as const).map(artifactType => buildStudioArtifactTaskInstruction({
+    kind: 'system', artifactType, sections: [
+      { id: `${artifactType}PlanningContent`, title: `${artifactType.toUpperCase()} planning content`, required: true, fieldKind: 'system' },
+    ],
+  }, [ids[0]], 'studio-pr-b-1', artifactType, 'documentation_planning'));
+  mark(planningInstruction.includes('independently approved only for documentation and planning')
+    && planningInstruction.includes('never describe it as Verified, Govern-approved, implementation-ready, or execution-authorized')
+    && planningInstruction.includes('supported facts, proposed design choices, optional alternatives, and unresolved questions visibly distinct')
+    && planningInstruction.includes('Document approval approves the content for planning')
+    && planningTypeInstructions.every(instruction => instruction.includes('approved only for documentation and planning')),
+  'STUDIO-PLANNING-001', 'provider.four-distinct-reviewed-planning-types-and-unknowns-explicit',
+  'assessed-planning-brd-pdd-frd-sdd-prompts', 'openai');
+
+  let reviewedPlanningRequest: EnterpriseProviderRequest | undefined;
+  const reviewedPlanningInput = input('openai');
+  await callStudioArtifactProvider({
+    ...reviewedPlanningInput,
+    canonicalSourceAnchors: [{ ...canonicalAnchor, locator: 'assess:accepted-handoff' }],
+    sourcePackage: {
+      ...reviewedPlanningInput.sourcePackage,
+      assessPackage: {
+        approvalPurpose: 'documentation_planning',
+        reviewedConfidence: 'medium',
+        acceptedEvidence: [{ claimId: ids[0], evidenceIds: [ids[1]] }],
+        unresolvedQuestions: [{ claimId: ids[2] }],
+      },
+    },
+  }, {
+    runGateway: async request => {
+      reviewedPlanningRequest = request;
+      return { provider: 'openai', model: 'governed-model', output, usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }, latencyMs: 1 };
+    },
+  });
+  mark(reviewedPlanningRequest?.taskInstruction.includes('independently approved only for documentation and planning') === true
+    && reviewedPlanningRequest.untrustedSource.includes('"approvalPurpose":"documentation_planning"')
+    && reviewedPlanningRequest.untrustedSource.includes('"reviewedConfidence":"medium"')
+    && reviewedPlanningRequest.untrustedSource.includes('"unresolvedQuestions"'),
+  'STUDIO-PLANNING-002', 'provider.server-loaded-planning-package-grounds-real-call',
+  'assessed-planning-source-package', 'openai');
+
   const frozenV1Instruction = buildStudioArtifactTaskInstruction({
     kind: 'system', artifactType: 'brd', sections: [
       { id: 'summary', title: 'Summary', required: true, fieldKind: 'system' },
