@@ -4,6 +4,8 @@
 
 The independently assigned supplier reviewer accepted three source records covering seven of the 28 traced fields. The remaining 21 fields had no linked evidence. A planning approval must preserve those gaps with the frozen decision and accepted attestations. It authorizes document content and selected work planning. Verified assessment approval, operational controls and implementation readiness retain their own gates.
 
+The committed-patch check retains one explicitly approved formatting exception: the final blank line of the installed `20261105140002_assessed_planning_studio.sql`. The check verifies the original installation commit, both committed blobs, their SHA-256 and the sole diagnostic at line 367. Any other whitespace finding or change to the file still fails. The exception leaves the migration ledger and installed SQL unchanged.
+
 | Unresolved fields in the retained supplier review | Decision affected |
 | --- | --- |
 | Adaptive next step, controllability, incremental value, irreducible ambiguity, tool or path selection | Blocks recommending autonomous agent behavior. The proposed human check and read-only lookup do not require an agent. |
