@@ -187,6 +187,7 @@ const authenticatedLifecycleControlStepTitles = Object.freeze<Record<string, str
   '/control/browser-action': 'hosted:control:action-finish',
   '/control/browser-case': 'hosted:control:case-submit',
   '/control/arm-browser-fault': 'hosted:control:permit-arm',
+  '/control/project-studio-handoff-target': 'hosted:control:observe',
   '/control/process-frame': 'hosted:control:observe',
   '/control/lifecycle-frame': 'hosted:control:observe',
   '/control/studio-failure-frame': 'hosted:control:observe',

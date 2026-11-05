@@ -14,6 +14,7 @@ const EXPECTED_PRIMARY_CASES = V2_FULL_PRIMARY_EXPECTED_CASES;
 const DIRECT_FIXTURE_CONTROLS = new Set([
   '/control/setup',
   '/control/canonical-created-process',
+  '/control/project-studio-handoff-target',
   '/control/arm-browser-fault',
   '/control/assess-v2-runtime',
   '/control/native-postgrest-stream',

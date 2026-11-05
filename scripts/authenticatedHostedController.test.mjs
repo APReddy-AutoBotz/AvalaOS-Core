@@ -128,6 +128,28 @@ test('canonical hosted process adoption verifies durable creation before rebindi
     /AUTHENTICATED_HOSTED_CANONICAL_PROCESS_REJECTED/u);
 });
 
+test('hosted Studio handoff targeting resolves one exact current process handoff and fails closed otherwise', async () => {
+  const organizationId=id();const workspaceId=id();const processId=id();const handoffId=id();
+  const project={processId};
+  const adapterFor=rows=>createAuthenticatedHostedPostgresAdapter({
+    config:{scope:{organizationId,workspaceId}},
+    db:{query:async(sql,params)=>{
+      assert.match(sql,/FROM public[.]assess_v2_studio_handoffs handoff/u);
+      assert.match(sql,/public[.]studio_pr_b_upstream_handoff_is_current\(handoff[.]id,\$2,\$3\)/u);
+      assert.deepEqual(params,[processId,organizationId,workspaceId]);
+      return {rows};
+    }},
+  });
+  assert.deepEqual(await adapterFor([{id:handoffId}]).control('/control/project-studio-handoff-target',{project}),
+    {upstreamHandoffId:handoffId});
+  for(const rows of [[],[{id:handoffId},{id:id()}],[{id:'not-a-uuid'}]]){
+    await assert.rejects(adapterFor(rows).control('/control/project-studio-handoff-target',{project}),
+      /AUTHENTICATED_HOSTED_STUDIO_HANDOFF_TARGET_REJECTED/u);
+  }
+  await assert.rejects(adapterFor([{id:handoffId}]).control('/control/project-studio-handoff-target',{}),
+    /AUTHENTICATED_HOSTED_STUDIO_HANDOFF_TARGET_REJECTED/u);
+});
+
 test('hosted controller and adapter strictly bind one active system BRD template identity', () => {
   const templateVersionId=id();
   const expected={kind:'system',artifactType:'brd',templateVersionId,version:'studio-brd-2'};
