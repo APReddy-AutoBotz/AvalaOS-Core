@@ -167,8 +167,14 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await review.getByLabel('Govern rationale', { exact: true }).fill('Independent resolver confirmed every required scenario control.');
   await review.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click();
   await expect(page.getByText('Govern resolution committed.', { exact: true })).toBeVisible();
-  await review.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click();
+  await review.getByRole('button', { name: 'Create Studio handoff', exact: true }).click();
   await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
+  const studioHandoffTarget = await control<{ upstreamHandoffId: string }>(
+    '/control/project-studio-handoff-target',
+    { projectName: setup.projectName },
+  );
+  expect(studioHandoffTarget.upstreamHandoffId)
+    .toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
   await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
   review = page.getByTestId('assess-v2-review-workspace');
   const projectResponse = page.waitForResponse(response => new URL(response.url()).pathname
@@ -177,7 +183,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   expect((await projectResponse).status()).toBe(200);
 
   await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
-  const requestedResponse = await commitEligibleHandoff(page);
+  const requestedResponse = await commitEligibleHandoff(page, studioHandoffTarget.upstreamHandoffId);
   const requestedTarget = await persistedHandoffTargetFromResponse(requestedResponse, 'requested');
   await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
   await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);

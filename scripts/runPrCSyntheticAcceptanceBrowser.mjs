@@ -136,7 +136,7 @@ const ACTION_LABEL_OVERRIDES = Object.freeze({
 const BROWSER_ASSERTION_PLANS = Object.freeze({
   'select-two-assess-transcripts': { kind: 'assess-source-selection' },
   'complete-remaining-assess-fields-manually': { kind: 'complete-assess-fields' },
-  'decline-studio-handoff': { kind: 'disabled-control', role: 'button', names: ['Create durable Studio handoff'] },
+  'decline-studio-handoff': { kind: 'disabled-control', role: 'button', names: ['Create Studio handoff'] },
   'verify-no-studio-resource': { kind: 'text', values: ['Studio handoff not ready'], all: true },
   'select-two-different-studio-transcripts': { kind: 'studio-source-selection' },
   'select-custom-template': { kind: 'select', labels: ['Exact approved Studio template'], option: 'Synthetic controlled-human requirements template' },

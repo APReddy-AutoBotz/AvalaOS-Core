@@ -2042,14 +2042,20 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
     const studioHandoffApi = await test.step('hosted:govern-studio:assess-handoff', () =>
       observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-        reviewWorkspace.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click()));
+        reviewWorkspace.getByRole('button', { name: 'Create Studio handoff', exact: true }).click()));
     expect(studioHandoffApi.status).toBe(200);
     await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Handed off to Studio');
+    const studioHandoffTarget = await control<{ upstreamHandoffId: string }>(
+      '/control/project-studio-handoff-target',
+      { projectName },
+    );
+    expect(studioHandoffTarget.upstreamHandoffId)
+      .toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
 
     await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
     const studioRequestResponse = await test.step('hosted:govern-studio:studio-request', () =>
-      commitEligibleStudioHandoffRequest(page));
+      commitEligibleStudioHandoffRequest(page, studioHandoffTarget.upstreamHandoffId));
     const studioRequestApi = observeStudioHandoffResponse(studioRequestResponse);
     const requestedHandoffTarget = await persistedHandoffTargetFromResponse(studioRequestResponse, 'requested');
     await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
@@ -2103,7 +2109,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         testId: 'STUDIO-001', status: 'passed', proofMode: 'actual-ui',
         observations: {
           browser: { actions: [
-            { action: 'click', target: 'Create durable Studio handoff' },
+            { action: 'click', target: 'Create Studio handoff' },
             { action: 'click', target: 'Start Studio draft' },
           ], result: { approvedHandoffConsumed: true, exactSourceAncestryVisible: true } },
           api: { productionRoutes: ['/functions/v1/assess-v2-command','/functions/v1/studio-artifact-command'], responses: [

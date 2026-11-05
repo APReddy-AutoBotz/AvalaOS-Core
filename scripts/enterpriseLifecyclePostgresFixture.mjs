@@ -1926,6 +1926,21 @@ export async function createEnterpriseLifecycleFixture({
           return json({denied:true,status:403,errorCode:'PERMISSION_DENIED',zeroEffects:true,
             projectionReadRefused:false},200,cors);
         }
+        if (url.pathname === '/control/project-studio-handoff-target') {
+          const input = await request.json().catch(() => ({}));
+          const setup = projectSetups.get(input.projectName);
+          if (!setup) return json({ error: 'CONTROL_REJECTED' },409,cors);
+          const rows = (await db.query(`SELECT handoff.id
+            FROM public.assess_v2_studio_handoffs handoff
+            JOIN public.assess_v2_cases assessed
+              ON assessed.id=handoff.case_id AND assessed.org_id=handoff.org_id
+             AND assessed.workspace_id=handoff.workspace_id
+            WHERE assessed.process_id=$1 AND handoff.org_id=$2 AND handoff.workspace_id=$3
+              AND public.studio_pr_b_upstream_handoff_is_current(handoff.id,$2,$3)`,
+          [setup.processId,ids.organization,ids.workspace])).rows;
+          if (rows.length!==1) return json({ error: 'CONTROL_REJECTED' },409,cors);
+          return json({ upstreamHandoffId: rows[0].id },200,cors);
+        }
         if (url.pathname === '/control/snapshot') {
           const snapshot = (await db.query(`SELECT
             (SELECT count(*) FROM assess_v2_review_assignments)::int review_assignments,

@@ -47,7 +47,7 @@ const studioActionForReview = (review?: CurrentAssessmentReviewPresentation): st
   if (review.status !== 'approved') return 'Complete independent review before Studio handoff';
   if (review.governStatus !== 'resolved') return 'Resolve Govern controls before Studio handoff';
   return review.handoffStatus === 'ready'
-    ? 'Create durable Studio handoff'
+    ? 'Create Studio handoff'
     : 'Reload committed review state before Studio handoff';
 };
 

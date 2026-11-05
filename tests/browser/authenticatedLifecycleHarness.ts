@@ -1207,9 +1207,19 @@ const authenticatedLifecycleSelectStudioMailbox = async (
   return tabpanel;
 };
 
-export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (page: Page) => {
+export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (
+  page: Page,
+  expectedUpstreamHandoffId?: string,
+) => {
+  if (expectedUpstreamHandoffId !== undefined && !persistedHandoffId.test(expectedUpstreamHandoffId)) {
+    throw persistedHandoffTargetRejected();
+  }
   const tabpanel = await authenticatedLifecycleSelectStudioMailbox(page, 'Inbox');
-  const action = tabpanel.getByRole('button', { name: 'Request handoff', exact: true });
+  const eligibleCard = expectedUpstreamHandoffId === undefined
+    ? tabpanel.locator('li').filter({ has: tabpanel.getByRole('button', { name: 'Request handoff', exact: true }) })
+    : tabpanel.locator(`li[data-upstream-handoff-id="${expectedUpstreamHandoffId}"]`);
+  await expect(eligibleCard).toHaveCount(1);
+  const action = eligibleCard.getByRole('button', { name: 'Request handoff', exact: true });
   await expect(action).toHaveCount(1);
   await expect(action).toBeVisible();
   await expect(action).toBeEnabled();
@@ -1223,8 +1233,14 @@ export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (pag
   return { dialog, upstreamHandoffId };
 };
 
-export const authenticatedLifecycleCommitEligibleStudioHandoffRequest = async (page: Page) => {
-  const { dialog, upstreamHandoffId } = await authenticatedLifecycleOpenEligibleStudioHandoffRequest(page);
+export const authenticatedLifecycleCommitEligibleStudioHandoffRequest = async (
+  page: Page,
+  expectedUpstreamHandoffId?: string,
+) => {
+  const { dialog, upstreamHandoffId } = await authenticatedLifecycleOpenEligibleStudioHandoffRequest(
+    page,
+    expectedUpstreamHandoffId,
+  );
   const responsePromise = page.waitForResponse(response => (
     response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/functions/v1/studio-artifact-command'
