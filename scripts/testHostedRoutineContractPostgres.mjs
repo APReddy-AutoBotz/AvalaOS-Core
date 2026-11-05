@@ -18,7 +18,8 @@ import {
 const BASELINE_COUNT=112;
 const RETAINED_COUNT=113;
 const POST_USE_COUNT=114;
-const CURRENT_COUNT=115;
+const PLANNING_PREDECESSOR=115;
+const CURRENT_COUNT=118;
 const RELEASE_BEFORE_CONTRACT='ecc740bfbd8296b5b94b71e433fff7464838393f';
 const adminUrl=new URL(process.env.PILOT_OPERATIONS_DATABASE_URL??'');
 if(process.argv.includes('--write-contract')&&process.env.CI)throw new Error('ROUTINE_CONTRACT_WRITE_FORBIDDEN_IN_CI');
@@ -69,7 +70,7 @@ const mutateAndReject=async(db,label,sql,{setup,expected=/foreign_object_authori
 
 try{
   admin=await connect(adminUrl.href);clients.push(admin);await ensureClusterRoles(admin);
-  const snapshots={},baselineSnapshots={},retainedSnapshots={},postUseSnapshots={},inventories={};
+  const snapshots={},baselineSnapshots={},retainedSnapshots={},postUseSnapshots={},planningSnapshots=new Map(),inventories={};
   for(const profile of profiles){
     const db=await createDatabase(admin,adminUrl.href,names[profile]);clients.push(db);
     await bootstrapAuth(db);
@@ -83,7 +84,12 @@ try{
     retainedSnapshots[profile]=await catalog(db);
     await applyMigrations(db,migrationNames.slice(RETAINED_COUNT,POST_USE_COUNT));
     postUseSnapshots[profile]=await catalog(db);
-    await applyMigrations(db,migrationNames.slice(POST_USE_COUNT));
+    for (let count = PLANNING_PREDECESSOR; count < CURRENT_COUNT; count++) {
+      await applyMigrations(db, migrationNames.slice(count - 1, count));
+      if (!planningSnapshots.has(count)) planningSnapshots.set(count, {});
+      planningSnapshots.get(count)[profile] = await catalog(db);
+    }
+    await applyMigrations(db, migrationNames.slice(CURRENT_COUNT - 1));
     const connected=await inventory(db);
     assert.equal(legacy.classifyHostedTarget(connected.inventory,canonical).mutationAllowed,false,
       'original classifier must reproduce the installed-catalog rejection');
@@ -93,10 +99,11 @@ try{
     inventories[profile]=connected.inventory;
   }
 
-  const generated={schemaVersion:1,runtimeMigrationTip:'20261105110657',checkpoints:[
+  const generated={schemaVersion:1,runtimeMigrationTip:'20261105140003',checkpoints:[
     checkpoint(BASELINE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,baselineSnapshots[profile]]))),
     checkpoint(RETAINED_COUNT,Object.fromEntries(profiles.map(profile=>[profile,retainedSnapshots[profile]]))),
     checkpoint(POST_USE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,postUseSnapshots[profile]]))),
+    ...Array.from(planningSnapshots, ([count, snapshot]) => checkpoint(count, snapshot)),
     checkpoint(CURRENT_COUNT,Object.fromEntries(profiles.map(profile=>[profile,snapshots[profile]]))),
   ]};
   if(process.argv.includes('--write-contract')){

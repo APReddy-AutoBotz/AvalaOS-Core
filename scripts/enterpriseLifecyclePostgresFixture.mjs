@@ -659,9 +659,11 @@ export async function createEnterpriseLifecycleFixture({
       'assessment_v2.review.assign': 'pr1e_assign_assess_v2_review',
       'assessment_v2.evidence.attest': 'pr1e_attest_assess_v2_evidence',
       'assessment_v2.review.resolve': 'pr1e_resolve_assess_v2_review',
+      'assessment_v2.review.plan': 'pr1e_resolve_assess_v2_planning',
       'assessment_v2.revision.start': 'pr1e_start_assess_v2_revision',
       'assessment_v2.govern.resolve': 'pr1e_resolve_assess_v2_govern',
       'assessment_v2.studio.handoff': 'pr1e_handoff_assess_v2_studio',
+      'assessment_v2.studio.plan_handoff': 'pr1e_handoff_assess_v2_planning',
     };
     const reviewDependencies = {
       authenticate: assessDependencies.authenticate,
@@ -783,7 +785,7 @@ export async function createEnterpriseLifecycleFixture({
     const executeAssess = async (body, token = 'enterprise-author-token') => {
       const request = new Request('http://fixture/functions/v1/assess-v2-command', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
       try {
-        const raw = body.commandType.startsWith('assessment_v2.review.') || body.commandType === 'assessment_v2.evidence.attest' || body.commandType === 'assessment_v2.revision.start' || body.commandType === 'assessment_v2.govern.resolve' || body.commandType === 'assessment_v2.studio.handoff'
+        const raw = body.commandType.startsWith('assessment_v2.review.') || body.commandType === 'assessment_v2.evidence.attest' || body.commandType === 'assessment_v2.revision.start' || body.commandType === 'assessment_v2.govern.resolve' || body.commandType.startsWith('assessment_v2.studio.')
           ? await reviewHandlerModule.executeAssessV2ReviewCommand(request, reviewCommandModule.parseAssessV2ReviewEnvelope(body), reviewDependencies)
           : await handlerModule.executeAssessV2Command(request, commandModule.parseAssessV2Envelope(body), assessDependencies);
         return { status: 200, body: { ok: true, ...raw } };

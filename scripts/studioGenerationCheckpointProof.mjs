@@ -32,6 +32,9 @@ export const STUDIO_GENERATION_CHECKPOINT_SOURCE_PATHS = Object.freeze([
   'supabase/migrations/20261105024717_process_evidence_operator_access_resume.sql',
   'supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql',
   'supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql',
+  'supabase/migrations/20261105140001_assessed_planning_review.sql',
+  'supabase/migrations/20261105140002_assessed_planning_studio.sql',
+  'supabase/migrations/20261105140003_assessed_planning_delivery.sql',
 ]);
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;

@@ -24,7 +24,7 @@ const syntheticStudioFixtureMigrationName = '20260926053818_pr_c_synthetic_studi
 const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
 const featureMigrationIndex = migrations.indexOf(migrationName);
 assert.ok(featureMigrationIndex > 0);
-assert.equal(approvedFullChainTip(migrations), '20261105110657');
+assert.equal(approvedFullChainTip(migrations), '20261105140003');
 const databaseName = `studio_source_${process.pid}_${Date.now()}`;
 assert.match(databaseName, /^[a-z0-9_]+$/);
 const urlFor = name => { const value = new URL(adminUrl); value.pathname = `/${name}`; return value.toString(); };
@@ -98,6 +98,17 @@ try {
   const fixture = await createEnterpriseIntelligenceFixture(db);
   assert.equal(fixture.org, fixed(10));
   assert.equal(fixture.workspace, fixed(11));
+  const retainedModuleHandoff = fixed(319);
+  const retainedRouteSnapshot = { policy: 'retained-implementation-readiness', version: 1 };
+  const retainedUpstreamPackageHash = (await one(db, `SELECT package_hash FROM public.assess_v2_studio_handoffs WHERE id=$1`,
+    [fixture.handoff])).package_hash;
+  await db.query(`INSERT INTO public.enterprise_module_handoffs(
+    id,org_id,workspace_id,from_module,to_module,upstream_handoff_id,upstream_package_hash,artifact_type,
+    lineage_classification,planning_only,route_policy_version,route_policy_snapshot,route_policy_hash,target_package_hash,
+    status,current_version,requested_by,expires_at)
+    VALUES($1,$2,$3,'assess','studio',$4,$5,'brd','assessed',false,1,$6::jsonb,$7,$8,'approved',1,$9,statement_timestamp()+interval '1 day')`,
+  [retainedModuleHandoff, fixture.org, fixture.workspace, fixture.handoff, retainedUpstreamPackageHash,
+    JSON.stringify(retainedRouteSnapshot), sha(JSON.stringify(retainedRouteSnapshot)), sha('retained-module-handoff'), fixture.requester]);
   const legacyShared = fixture.sources.find(item => item.parsed);
   assert.ok(legacyShared);
   const legacySharedRow = await one(db, `SELECT content_hash,extracted_text_hash,extracted_character_count
@@ -148,6 +159,33 @@ try {
     await applySyntheticAiTerminalJournalMigrationForTest(db, migration,
       async () => transaction(db, migration, await readFile(join('supabase/migrations', migration), 'utf8')));
   }
+  assert.equal((await one(db, `SELECT approval_purpose FROM public.enterprise_module_handoffs WHERE id=$1`,
+    [retainedModuleHandoff])).approval_purpose, 'implementation_readiness');
+  const retainedStudioPurpose = await one(db, `SELECT artifact.approval_purpose artifact_purpose,package.approval_purpose package_purpose
+    FROM public.studio_artifact_aggregates artifact JOIN public.studio_artifact_source_packages package
+      ON package.id=artifact.source_package_id AND package.artifact_id=artifact.id WHERE artifact.id=$1`, [fixture.artifactId]);
+  assert.deepEqual(retainedStudioPurpose, { artifact_purpose: 'implementation_readiness', package_purpose: 'implementation_readiness' });
+  const retainedApprovalPurpose = await one(db, `SELECT count(*)::int retained_count,
+    count(*) FILTER(WHERE approval_purpose IS NULL)::int null_purpose_count
+    FROM public.studio_artifact_approval_resolutions WHERE artifact_id=$1`, [fixture.artifactId]);
+  assert.ok(retainedApprovalPurpose.retained_count > 0);
+  assert.equal(retainedApprovalPurpose.null_purpose_count, retainedApprovalPurpose.retained_count);
+  const ancestryPurposeConstraint = (await one(db, `SELECT pg_get_constraintdef(oid) definition FROM pg_constraint
+    WHERE conrelid='public.studio_artifact_aggregates'::regclass AND conname='studio_artifact_ancestry_purpose_check'`)).definition;
+  const packagePurposeConstraint = (await one(db, `SELECT pg_get_constraintdef(oid) definition FROM pg_constraint
+    WHERE conrelid='public.studio_artifact_source_packages'::regclass AND conname='studio_source_package_purpose_union_check'`)).definition;
+  assert.match(ancestryPurposeConstraint, /approval_purpose IS NOT NULL/u);
+  assert.match(packagePurposeConstraint, /approval_purpose IS NOT NULL/u);
+  assert.equal((await one(db, `SELECT (
+    'assess_handoff'=ANY(ARRAY['assess_handoff','assess_plus_transcript_bundle'])
+    AND NULL::text IS NOT NULL AND NULL::text='documentation_planning' AND true
+  ) IS TRUE accepted`)).accepted, false);
+  const retainedGovernResolutionId = (await one(db, `SELECT govern_resolution_id FROM public.studio_artifact_aggregates WHERE id=$1`,
+    [fixture.artifactId])).govern_resolution_id;
+  assert.ok(retainedGovernResolutionId);
+  assert.equal((await one(db, `SELECT (
+    'documentation_planning'='documentation_planning' AND $1::uuid IS NULL AND true
+  ) IS TRUE accepted`, [retainedGovernResolutionId])).accepted, false);
   assert.equal(await count(db, 'public.enterprise_source_set_version_items', 'WHERE source_set_version_id=$1', [legacySetVersion]), 1);
   assert.equal(await count(db, 'public.studio_legacy_extraction_binding_compatibility', 'WHERE binding_id=$1 AND job_id=$2', [legacyBinding, fixture.job]), 1);
   await expectedFailure(() => db.query(`INSERT INTO public.enterprise_transcript_extraction_bindings(id,org_id,workspace_id,job_id,receipt_id,
@@ -160,10 +198,10 @@ try {
     WHERE org_id=$1 AND workspace_id=$2`, [fixture.org, fixture.workspace])).studio_source_integration_enabled, false);
 
   const identity = await one(db, `SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`);
-  assert.equal(identity.migration_tip, '20261105110657');
+  assert.equal(identity.migration_tip, '20261105140003');
   const identityConstraint = await one(db, `SELECT pg_get_expr(conbin,conrelid,false) expression FROM pg_constraint
     WHERE conrelid='public.hosted_pilot_environment_identity'::regclass AND conname='hosted_pilot_environment_identity_migration_tip_check'`);
-  assert.equal(identityConstraint.expression, "(migration_tip = '20261105110657'::text)");
+  assert.equal(identityConstraint.expression, "(migration_tip = '20261105140003'::text)");
   const role = fixed(331);
   const orgRole = fixed(332);
   const packageActor = fixed(333);

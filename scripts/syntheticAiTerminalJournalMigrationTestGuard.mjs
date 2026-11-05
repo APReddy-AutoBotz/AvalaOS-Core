@@ -24,20 +24,30 @@ const PROVIDER_OFF_MIGRATIONS = new Set([
 ]);
 
 export async function applySyntheticAiTerminalJournalMigrationForTest(client, migrationName, applyMigration) {
+  const planning = [
+    '20261105140001_assessed_planning_review.sql',
+    '20261105140002_assessed_planning_studio.sql',
+    '20261105140003_assessed_planning_delivery.sql',
+  ].includes(migrationName);
   if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION
-    || migrationName === '20261105110657_govern_mixed_snapshot_normalization.sql') {
+    || migrationName === '20261105110657_govern_mixed_snapshot_normalization.sql'
+    || planning) {
     // Disposable runners establish the committed read-only installation window.
     // Production migration never changes runtime controls itself.
     const state = await client.query('SELECT read_only FROM public.assess_v2_runtime_control WHERE singleton');
     if (state.rowCount !== 1) throw new Error('GOVERN_ACTION_AUTHORITY_TEST_RUNTIME_STATE_MISSING');
     await client.query('UPDATE public.assess_v2_runtime_control SET read_only=true WHERE singleton');
     try {
-      return await applyMigration();
+      return await (planning ? withProviderRoutesOff(client, applyMigration) : applyMigration());
     } finally {
       await client.query('UPDATE public.assess_v2_runtime_control SET read_only=$1 WHERE singleton', [state.rows[0].read_only]);
     }
   }
   if (!PROVIDER_OFF_MIGRATIONS.has(migrationName)) return applyMigration();
+  return withProviderRoutesOff(client, applyMigration);
+}
+
+async function withProviderRoutesOff(client, applyMigration) {
 
   const state = await client.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
     FROM public.enterprise_intelligence_runtime_control enterprise

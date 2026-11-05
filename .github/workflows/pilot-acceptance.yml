@@ -67,6 +67,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
+      - name: Assessed planning from independent review through selected board import
+        env:
+          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+          PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
+        run: |
+          node --test scripts/assessedPlanningReviewContract.test.mjs
+          node scripts/testAssessedPlanningReviewPostgres.mjs
+          node scripts/assessedPlanningDeliveryPostgres.mjs
       - name: Fresh, accepted-main upgrade, RLS, receipt/effect, and recovery contracts
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic

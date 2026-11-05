@@ -1,5 +1,12 @@
 # AvalaOS Core Source Of Truth
 
+## Independent approval for documentation and planning
+
+On 5 November 2026 AP authorized an assigned independent reviewer to approve a finalized assessment for documentation and planning with explicit evidence gaps. Studio documents, their content approvals, requirement proposals and selected project-board items must carry this purpose and the actual assessed source. The Verified standard and Govern action authority remain separate decisions. The [milestone scope and field diagnosis](planning/process-evidence-to-delivery.md) records what the supplier's 21 unresolved claims affect.
+
+Candidate `99db2d15917c9578b80c08f625c4ee5c1305514b` passed the 17 required workflows with 115 verified nonproduction migrations. The independent supplier reviewer accepted three submitted evidence records. Full assessment approval remained blocked by uncovered fields. Generation, document approval and board import using the new planning purpose require end-to-end evidence.
+
+
 ## Finalized source-bound decisions and Govern compatibility — 5 November 2026
 
 All 17 required workflows passed on `ee9f72239b24dab544d3c988995765833ca2c72d`. The dedicated preview and backend matched that commit and all 114 migrations. The repaired extraction produced two grounded suggestions for the supplier case and one for order status. A business author corrected the source-linked description and decision step, saved the seven-step supplier flow, and recorded the two-step order lookup. AP provided a separate dated fictional API supplement. Its own stored version and locked source set accompany the retained original bundles. Both Assess decisions are finalized: supplier source version 5 and order-status source version 4. The latter selects workflow and native API integration but still reports insufficient evidence to conclude AI necessity; no score or recommendation was overridden.

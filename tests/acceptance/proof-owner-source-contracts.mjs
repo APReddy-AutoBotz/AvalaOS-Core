@@ -614,6 +614,21 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "govern-mixed-snapshot-normalization",
     "sourceReference": "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
     "selector": "DO $govern_mixed_snapshot_normalization$"
+  },
+  {
+    "anchorId": "assessed-planning-review",
+    "sourceReference": "supabase/migrations/20261105140001_assessed_planning_review.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.pr1e_resolve_assess_v2_planning("
+  },
+  {
+    "anchorId": "assessed-planning-studio",
+    "sourceReference": "supabase/migrations/20261105140002_assessed_planning_studio.sql",
+    "selector": "DO $planning_studio_preflight$"
+  },
+  {
+    "anchorId": "assessed-planning-delivery",
+    "sourceReference": "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+    "selector": "ALTER TABLE public.projects DROP CONSTRAINT projects_current_assessment_binding_check;"
   }
 ]);
 
@@ -1888,7 +1903,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {
@@ -2012,7 +2030,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {
@@ -2543,7 +2564,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {
@@ -2589,7 +2613,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {
@@ -2635,7 +2662,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {
@@ -2681,7 +2711,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {
@@ -2727,7 +2760,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
       "process-evidence-post-use-renewal",
-      "govern-mixed-snapshot-normalization"
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-studio",
+      "assessed-planning-delivery"
     ],
     "ownership": [
       {

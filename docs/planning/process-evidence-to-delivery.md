@@ -1,5 +1,25 @@
 # Process evidence to confirmed delivery work
 
+## Documentation and planning approval, 5 November 2026
+
+The independently assigned supplier reviewer accepted three source records covering seven of the 28 traced fields. The remaining 21 fields had no linked evidence. A planning approval must preserve those gaps with the frozen decision and accepted attestations. It authorizes document content and selected work planning. Verified assessment approval, operational controls and implementation readiness retain their own gates.
+
+| Unresolved fields in the retained supplier review | Decision affected |
+| --- | --- |
+| Adaptive next step, controllability, incremental value, irreducible ambiguity, tool or path selection | Blocks recommending autonomous agent behavior. The proposed human check and read-only lookup do not require an agent. |
+| Application business criticality, ownership model, strategic lifespan, technical health, vendor roadmap | Blocks conclusions about replacing, retiring or investing in the application. The supplement identifies an accountable owner and stable operation but does not establish these five lifecycle facts. |
+| API documentation, interface availability, least privilege, machine identity, operation mode, operation coverage | Blocks certifying implementation access and permissions. The synthetic catalogue supports planning the invoice-status GET only. PATCH stays unknown and bank-details POST prohibited. |
+| Interface dependency, rule stability | Blocks claiming a verified integration and rules implementation. Discovery should confirm these before dependent build work. |
+| Characterized ambiguity, representative document quality, available exception samples | Blocks choosing or validating optional AI for variable email and exceptional cases. Human review and final reply remain explicit. |
+
+The order-status decision selected workflow and native API integration. Both candidates scored Strong Fit, both had Insufficient Evidence, the read was Ready, and process readiness was Provisional. The author confirmed the step facts for the exact lookup and routing but attached no evidence IDs to them. The confidence test in the presentation therefore reported uncertainty about AI. The planning presentation distinguishes whether the proposed design requires AI from whether the recorded facts have been verified for implementation.
+
+Preview usability follow-up: on the deployed predecessor, both retained processes still showed **Not Started** in the process list after assessment finalization. Opening the supplier process showed its actual **In review / Assumption-Led** state. The list badge is not evidence of assessment status.
+
+
+
+The current acceptance run reuses the dedicated PR #355 preview, backend, workspace and two retained processes. The candidate adds migrations through `20261105140003` (118 files). The operator must verify the installed inventory, exact frontend and backend, actor sessions, passing CI and current credits before enabling provider execution. At the last readback the campaign had five settled debits and no outstanding reservation. The active campaign limits below continue across renewals and candidate changes. The earlier eight-call launch proposal is recorded for history.
+
 ## Govern review of a mixed operation boundary - 5 November 2026
 
 The supplier decision finalized from source version 5 after AP supplied a separate human-authored synthetic API contract. It contains a Ready GET, a Prohibited POST, and an Unknown PATCH with three empty action arrays. The independent Assess reviewer could open the order-status decision, but the supplier review RPC returned `PR1E_GOVERN_ACTION_AUTHORITY_INVALID`. An unknown operation grants no action. The additive repair allows its canonical declared-mode Unknown representation to contribute zero authority while preserving the other operations. Injected allowed or approval-bound actions on an Unknown operation are rejected. Existing resolutions and handoff histories are checked under maintenance locks before the migration commits. The evaluator, decision snapshots and historical approvals retain their identities.
@@ -183,7 +203,7 @@ The separate recommendation component used an evaluated synthetic case to show *
 
 The SDD export fixture follows a separate database-issued rendition and download claim. Page 1 shows the As-Is completeness check and the two outcomes. Page 2 shows the To-Be API check, human exception path and an unresolved technical question. The normal editor changes Mermaid text and previews the diagram. The PDF contains rendered graphics. [Inspect the synthetic SDD PDF](../../tests/fixtures/process-evidence/synthetic-sdd-export.pdf)
 
-### Exact integrated acceptance target
+### Original integrated acceptance target (superseded run limits)
 
 Use the head of PR #355. Record its full Git SHA in the approval, deployment receipt and new permit. Recheck the head before applying migrations or starting the run. The concrete proposed target is the PR #355 preview on the Netlify site `avalaos-pilot` backed exclusively by a new empty Supabase nonproduction project named `avalaos-process-evidence-pr355`. Use the logical workspace `process-evidence-acceptance-2026-11-03` on that project. Use existing nonproduction capacity. A paid hosting change needs its own quoted amount and approval. The server binder must privately record the actual project reference, workspace UUID, server route IDs, actor/session bindings and approval digest. An existing shared preview or prior funded campaign is ineligible.
 
@@ -196,3 +216,13 @@ Use the head of PR #355. Record its full Git SHA in the approval, deployment rec
 The entire run uses at most one validation, two extractions and five Studio calls on the previously specified server routes. After quiescing, read the provider usage rows and immutable debit counts separately. Report actual billed usage if available and conservative reservations separately; an ambiguous attempt retains its slot and reservation. Delivery publication and board mutations use zero provider calls. Image and graphical PDF flowchart interpretation remain outstanding. The pinned model is listed for retirement on January 14, 2027. [OpenAI model and lifecycle](https://developers.openai.com/api/docs/deprecations)
 
 Rollback: disable the campaign, close the run and revoke the server-side key binding. Preserve immutable approvals, reservations, published versions and board lineage. Disable new project creation/publication or use Studio read-only while investigating a failed proof.
+
+## Assessed planning publication and Delivery dependencies — 5 November 2026
+
+An independently reviewed assessment can authorize documentation and planning without claiming Verified evidence or Govern execution authority. Its one native project binds the exact case, decision, review resolution, planning handoff and approval purpose. Approved Studio content may publish requirement proposals and explicit discovery tasks from unanswered-question sections. An implementation dependency is preselected only when the unanswered question explicitly identifies one unique requirement; otherwise the reviewer may assign or remove discovery dependencies before publication. Confirmed dependencies remain immutable through selective board import. The server rejects invented question links, missing selected dependencies, cross-project dependencies, stale lineage, altered replay and duplicate proposal origins.
+
+Studio records this path as `reviewed_planning`: the source package and artifact keep their real assessment, decision, review and handoff ancestry, actual reviewed confidence, accepted-evidence bindings and unresolved questions, while the Govern resolution remains null. The generation instruction applies to BRD, PDD, FRD and SDD without substituting a prewritten document. It keeps facts, proposed design choices, optional alternatives and unanswered questions distinct. Independent document approval means the exact document content is approved for planning; it does not close those questions or certify implementation readiness. Normal Studio copy shows that purpose, with hashes and schema detail retained in optional audit details.
+
+Rollback disables documentation-planning project creation, Studio publication and Delivery import writes. Preserve review and handoff history, approved documents, publication bindings, imports and board items for forward repair. The implementation-readiness path and its Verified and Govern checks remain active.
+
+Executed locally on a fresh PostgreSQL 16 cluster: `npm run test:assessed-planning-delivery:postgres` generated BRD, FRD, PDD and SDD in sequence with the disposable provider. After each document, the remaining types stayed eligible. The test saved revised SDD requirements and a question, obtained independent document review and approval, created the current assessment's native project, then published and imported four selected proposals. The implementation Task and verification Task remained distinct. The Story retained its dependency on the discovery Task. Exact source links persisted; command replay returned the same import and a fresh duplicate was rejected. These are integration checks, not hosted provider outputs. Hosted evidence must separately establish business content, the rendered export, selective refresh and ordinary board updates.

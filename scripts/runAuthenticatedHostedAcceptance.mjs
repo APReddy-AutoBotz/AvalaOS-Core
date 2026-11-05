@@ -36,7 +36,7 @@ import { createControlledHumanPostgresClientConfig,
 import { LOCAL_AUTHENTICATED_EXECUTION_KIND, verifyLocalAcceptanceServer } from './localAcceptanceBuild.mjs';
 
 const execFileAsync = promisify(execFile);
-const AUTHENTICATED_MIGRATION_VERSION = '20261105110657';
+const AUTHENTICATED_MIGRATION_VERSION = '20261105140003';
 const AUTHENTICATED_EDGE_FUNCTIONS=Object.freeze(['tenant-session','process-command','assess-command','assess-v2-command',
   'studio-artifact-command','studio-private-artifact-command','studio-artifact-download','studio-delivery-authority-command','legacy-delivery-command',
   'legacy-delivery-query','studio-delivery-outcome-query','enterprise-intelligence-command','enterprise-intelligence-query','synthetic-admin',
