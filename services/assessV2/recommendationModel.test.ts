@@ -64,6 +64,31 @@ const weakStepEvidence = structuredClone(noAiDecision);
 weakStepEvidence.candidateEvaluations = weakStepEvidence.candidateEvaluations.map(item => ({ ...item, confidence: 'Assumption-Led' }));
 assert.equal(buildAssessmentRecommendationModel(noAi, weakStepEvidence).aiUseStatus, 'unproven', 'assumption-led step recommendations cannot prove that AI is unnecessary');
 
+// Model the retained lookup: user-confirmed workflow facts, a ready read, and no step evidence links.
+const lookup = structuredClone(noAi);
+const read = lookup.primitives.find(step => step.type === 'Validate')!;
+const route = lookup.primitives.find(step => step.type === 'Route')!;
+read.type = 'Retrieve';
+lookup.primitives = [read, route];
+lookup.edges = [{ id: noAi.edges[0].id, fromPrimitiveId: read.id, toPrimitiveId: route.id }];
+lookup.exceptionPaths = [{ ...noAi.exceptionPaths[0], fromPrimitiveId: read.id, resolutionPrimitiveIds: [route.id] }];
+lookup.decisionPoints = [{ ...noAi.decisionPoints[0], primitiveId: read.id, ruleDescription: "Exact match or human exception", outcomeLabels: ["Matched", "Exception"] }];
+for (const step of lookup.primitives) {
+  step.evidenceIds = [];
+  delete step.businessDisposition;
+  step.facts = Object.fromEntries(['primitive.rulesStable', 'primitive.workflowPatternKnown',
+    'primitive.controlRequirementsKnown', 'primitive.interfaceDependencyKnown'].map(fieldId =>
+    [fieldId, { fieldId, value: true, status: 'known', source: 'user', evidenceIds: [] }]));
+}
+const lookupDecision = evaluateAssessmentV2(lookup);
+const lookupModel = buildAssessmentRecommendationModel(lookup, lookupDecision);
+assert.equal(lookupModel.aiUseStatus, 'unnecessary');
+assert.match(lookupModel.explanation, /Link supporting evidence/);
+assert.ok(lookupModel.steps.every(step => step.evidenceGaps.some(gap => /step fact has no linked evidence/.test(gap))));
+assert.ok(lookupModel.steps.every(step => step.evidenceConfidence === 'Insufficient Evidence'));
+route.facts['primitive.rulesStable'].status = 'unknown';
+assert.equal(buildAssessmentRecommendationModel(lookup, evaluateAssessmentV2(lookup)).aiUseStatus, 'unproven');
+
 const unknownAiEligibility = structuredClone(noAiDecision);
 unknownAiEligibility.candidateEvaluations.push({
   primitiveId: noAi.primitives[0].id,
