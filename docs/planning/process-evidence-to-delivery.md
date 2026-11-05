@@ -1,6 +1,6 @@
 # Process evidence to confirmed delivery work
 
-## Authorized ESZIP source-verification repair — 5 November 2026
+## Authorized ESZIP source-verification repair - 5 November 2026
 
 The ACL replacement `07fe4da5175fe91f91f53e02d5ae5d5576857fc3` passed all 17 required source/preview workflows; the paid/live workflow remained skipped. The dedicated backend matches all 112 migrations and the source-derived routine contract. The isolated preview is installed, but the actual Management API function response is Brotli-compressed ESZIP2.3 rather than the multipart format accepted by the source verifier and official CLI. AP authorizes a bounded transport-verifier repair in this existing stack and continuation of the same run after its gates pass.
 
