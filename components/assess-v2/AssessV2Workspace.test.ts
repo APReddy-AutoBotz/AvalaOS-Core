@@ -82,6 +82,18 @@ assert.match(source, /if \(hasUnsavedChanges\) throw new Error\('Save the curren
 assert.match(source, /disabled=\{busy \|\| isReadOnly \|\| hasUnsavedChanges \|\| structuralGaps\.length > 0/);
 assert.match(source, /Unsaved authoring changes are visible\. Save the working draft before finalizing\./);
 
+assert.match(source, /\.\.\.importedEvidenceClaimIds/);
+assert.match(source, /item\.claimIds\.some\(claimId => !claimOptions\.includes\(claimId\)\)/);
+assert.match(source, /only registered or imported claims for every evidence item/);
+assert.match(source, /Select one or more registered decision claims or claims imported with this assessment/);
+assert.match(source, /claimIds: \[\], sourceType: 'document', status: 'suggested', validated: false/);
+assert.doesNotMatch(source, /claimIds: \['assessment\.scope'\]/);
+assert.doesNotMatch(source, /Evidence \$\{index \+ 1\} claim IDs/);
+assert.match(source, /updateEvidenceAttachment\(item\.id, 'primitive', primitiveIndex, event\.target\.checked\)/);
+assert.match(source, /updateEvidenceAttachment\(item\.id, 'interaction', interactionIndex, event\.target\.checked\)/);
+assert.match(source, /Author submission does not verify or independently approve this evidence\./);
+assert.match(source, /validated: false/);
+
 const saveAction = source.match(/const save = \(\) => run\(async \(\) => \{([\s\S]*?)\}\);\r?\n  const reloadCommitted/)?.[1] ?? '';
 assert.match(saveAction, /await saveAssessV2Draft/);
 assert.match(saveAction, /setSavedDraftFingerprint\(authorDraftFingerprint\(authorDraft\)\)/);

@@ -609,6 +609,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "process-evidence-post-use-renewal",
     "sourceReference": "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
     "selector": "CREATE FUNCTION public.process_evidence_renew_provider_run_after_use("
+  },
+  {
+    "anchorId": "govern-mixed-snapshot-normalization",
+    "sourceReference": "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
+    "selector": "DO $govern_mixed_snapshot_normalization$"
   }
 ]);
 
@@ -1882,7 +1887,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {
@@ -2005,7 +2011,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {
@@ -2535,7 +2542,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {
@@ -2580,7 +2588,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {
@@ -2625,7 +2634,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {
@@ -2670,7 +2680,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {
@@ -2715,7 +2726,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "current-assessment-delivery-project",
       "process-evidence-live-permit",
       "process-evidence-operator-access-resume",
-      "process-evidence-post-use-renewal"
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization"
     ],
     "ownership": [
       {

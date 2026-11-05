@@ -24,7 +24,8 @@ const PROVIDER_OFF_MIGRATIONS = new Set([
 ]);
 
 export async function applySyntheticAiTerminalJournalMigrationForTest(client, migrationName, applyMigration) {
-  if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION) {
+  if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION
+    || migrationName === '20261105110657_govern_mixed_snapshot_normalization.sql') {
     // Disposable runners establish the committed read-only installation window.
     // Production migration never changes runtime controls itself.
     const state = await client.query('SELECT read_only FROM public.assess_v2_runtime_control WHERE singleton');

@@ -1,5 +1,21 @@
 # Process evidence to confirmed delivery work
 
+## Govern review of a mixed operation boundary � 5 November 2026
+
+The supplier decision finalized from source version 5 after AP supplied a separate human-authored synthetic API contract. It contains a Ready GET, a Prohibited POST, and an Unknown PATCH with three empty action arrays. The independent Assess reviewer could open the order-status decision, but the supplier review RPC returned `PR1E_GOVERN_ACTION_AUTHORITY_INVALID`. An unknown operation grants no action. The additive repair allows its canonical declared-mode Unknown representation to contribute zero authority while preserving the other operations. Injected allowed or approval-bound actions on an Unknown operation are rejected. Existing resolutions and handoff histories are checked under maintenance locks before the migration commits. The evaluator, decision snapshots and historical approvals retain their identities.
+
+Real PostgreSQL 16 verification exercised mixed operations through normal Govern resolution and Studio handoff, immutable history preflight and rollback, replay, private ownership and ACLs, malformed input rejection, and legacy action compatibility. The complete routine contract retains checkpoints 112, 113, 114 and 115 under a shared 5 MB read bound. Required CI runs the new regression. The safe fallback is read-only assessment review and disabled provider execution. Preserve the installed migration, immutable decisions, source records and provider ledger. Hosted verification must use the exact replacement candidate before Studio generation.
+
+## Assess human-evidence attachment correction — 5 November 2026
+
+The normal Assess editor now creates a human evidence supplement with no preselected claim and `suggested` / unvalidated status. The author must select at least one exact field-registry claim or a claim carried by the case's known V1 import. Free-text claims are not accepted. Empty or unsupported claims keep finalization disabled, while a repair action removes unsupported claim identifiers from a resumed draft. This does not create an independent attestation, change a deterministic score or modify a finalized decision.
+
+An author can attach the supplement to the existing process primitives and application interactions it actually supports. Those exact `evidenceIds` are saved through the existing immutable draft-version command and restored on reload. The browser regression checks registered claims, author/submission state, primitive and interaction attachment, reload persistence, the absence of client-authored scores and the existing read-only finalized presentation. The two already-finalized acceptance decisions are not migrated or changed.
+
+Executed local verification: the focused component regression passes, the production typecheck passes, the PR 1D source/fixture/migration/import/CI composition gate passes, and the ordinary authoring/finalization browser journey passes 2/2 on Desktop Chrome and Pixel 7. These are fixture-backed non-provider checks; no hosted request or generated output is claimed.
+
+Rollback reverts the editor, focused component/browser regression and this section together. Existing draft versions, imported claims, finalized decisions and independent review history remain readable and immutable; do not delete evidence or rewrite finalized records as rollback.
+
 ## Assess mapping zero-result repair — 5 November 2026
 
 Executed evidence on the prior exact candidate used the bounded validation allowance and both Assess extraction operations. Each extraction committed one rejected proposal with `TEXT_ANCHOR_AMBIGUOUS` and zero accepted proposals. This proves that the provider path ran and that the server rejected ambiguous source binding. It does not prove the content or shape of the unretained raw provider response, so the cause is recorded as a scoped framing/prompt hypothesis rather than a raw-response finding.

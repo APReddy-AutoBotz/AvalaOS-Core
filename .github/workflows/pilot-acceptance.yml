@@ -92,6 +92,10 @@ jobs:
         env:
           GOVERN_ACTION_AUTHORITY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
         run: node scripts/testGovernImmutableActionAuthorityPostgres.mjs
+      - name: Mixed immutable Govern snapshot compatibility
+        env:
+          GOVERN_MIXED_SNAPSHOT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: node scripts/testGovernMixedSnapshotNormalizationPostgres.mjs
       - name: Connected Assess Govern Studio lifecycle evidence
         env:
           ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic

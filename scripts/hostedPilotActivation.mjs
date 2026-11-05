@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { ROUTINE_CONTRACT_PATH, parseRoutineContract, matchRoutineContract } from './hostedPilotRoutineContract.mjs';
+import { MAX_ROUTINE_CONTRACT_BYTES, ROUTINE_CONTRACT_PATH, parseRoutineContract, matchRoutineContract } from './hostedPilotRoutineContract.mjs';
 
 const MIGRATION_NAME = /^\d{14}_[a-z0-9_]+\.sql$/;
 const SAFE_SCHEMAS = new Set(['auth', 'avalaos_migrations', 'extensions', 'graphql', 'graphql_public', 'information_schema', 'pg_catalog', 'pgsodium', 'pgsodium_masks', 'public', 'realtime', 'storage', 'supabase_migrations', 'vault']);
@@ -309,7 +309,7 @@ export function loadCanonicalMigrationInventoryFromGit(commit, root = process.cw
   });
   const finalObjects=canonicalObjectsAtPrefix(migrations);
   const contractPath = execFileSync('git', ['ls-tree', '--name-only', commit, ROUTINE_CONTRACT_PATH], { cwd: root, encoding: 'utf8' }).trim();
-  const contractBytes = contractPath ? execFileSync('git', ['show', `${commit}:${ROUTINE_CONTRACT_PATH}`], { cwd: root, maxBuffer: 4_000_000 }) : undefined;
+  const contractBytes = contractPath ? execFileSync('git', ['show', `${commit}:${ROUTINE_CONTRACT_PATH}`], { cwd: root, maxBuffer: MAX_ROUTINE_CONTRACT_BYTES }) : undefined;
   return Object.freeze({ algorithm: 'sha256', count: migrations.length, tip: names.at(-1),
     digest: sha256(migrations.map(({ name, sha256: digest }) => `${name}\0${digest}\n`).join('')), migrations,
     relations:normalized(finalObjects.relations),routines:normalized(finalObjects.routines),

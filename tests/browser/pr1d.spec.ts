@@ -427,11 +427,29 @@ test('V2 capability-controlled authoring finalizes server-only decision data and
   await page.getByLabel('Interaction 1 operationCovered').selectOption('true');
   await page.getByText('4. Agent necessity and evidence').evaluate(element => (element as HTMLElement).click());
   await page.getByRole('button',{name:'Add linked evidence'}).click();
-  await page.getByLabel('Evidence 2 claim IDs').fill('assessment.scope, primitive.type');
+  await expect(page.getByText(/an exact claim for every evidence item/)).toBeVisible();
+  await page.getByLabel('Evidence 2 claim primitive.businessDisposition').check();
+  await page.getByLabel('Evidence 2 claim interaction.interfaceAvailable').check();
+  await page.getByLabel('Evidence 2 attach to primitive 1').check();
+  await page.getByLabel('Evidence 2 attach to interaction 1').check();
+  await page.getByLabel('Evidence 2 owner').fill('AP process owner');
   await page.getByLabel('Evidence 2 submission status').selectOption('submitted');
   await page.getByRole('button',{name:'Save working draft'}).click();
   await page.getByRole('button',{name:'Reload current draft'}).click();
   await expect(page.getByLabel('Primitive 1 name')).toHaveValue('Capture invoice request');
+  await expect(page.getByLabel('Evidence 2 claim primitive.businessDisposition')).toBeChecked();
+  await expect(page.getByLabel('Evidence 2 claim interaction.interfaceAvailable')).toBeChecked();
+  await expect(page.getByLabel('Evidence 2 attach to primitive 1')).toBeChecked();
+  await expect(page.getByLabel('Evidence 2 attach to interaction 1')).toBeChecked();
+  const humanSupplementSave = fixture.committedCommands.find(item => item.commandType === 'assessment_v2.draft.upsert');
+  const savedSupplement = humanSupplementSave?.payload.evidenceLinks.find((item: { owner?: string }) => item.owner === 'AP process owner');
+  expect(savedSupplement).toMatchObject({
+    claimIds:['primitive.businessDisposition','interaction.interfaceAvailable'],
+    sourceType:'document', status:'submitted', validated:false, owner:'AP process owner',
+  });
+  expect(humanSupplementSave?.payload.primitives[0].evidenceIds).toContain(savedSupplement.id);
+  expect(humanSupplementSave?.payload.interactions[0].evidenceIds).toContain(savedSupplement.id);
+  expect(humanSupplementSave?.payload.scores).toBeUndefined();
   const canonicalApDraft = {
     caseId: fixture.v2Case!.id,
     name: 'Invoice exception handling',

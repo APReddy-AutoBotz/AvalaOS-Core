@@ -722,6 +722,11 @@
       "anchorId": "process-evidence-post-use-renewal",
       "sourceReference": "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
       "selector": "CREATE FUNCTION public.process_evidence_renew_provider_run_after_use("
+    },
+    {
+      "anchorId": "govern-mixed-snapshot-normalization",
+      "sourceReference": "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
+      "selector": "DO $govern_mixed_snapshot_normalization$"
     }
   ],
   "contracts": [
@@ -1881,7 +1886,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
@@ -2004,7 +2010,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
@@ -2534,7 +2541,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
@@ -2579,7 +2587,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
@@ -2624,7 +2633,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
@@ -2669,7 +2679,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
@@ -2714,7 +2725,8 @@
         "current-assessment-delivery-project",
         "process-evidence-live-permit",
         "process-evidence-operator-access-resume",
-        "process-evidence-post-use-renewal"
+        "process-evidence-post-use-renewal",
+        "govern-mixed-snapshot-normalization"
       ],
       "ownership": [
         {
