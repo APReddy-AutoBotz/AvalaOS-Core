@@ -330,5 +330,5 @@ export const legacyDeliveryBrowserFixtureSources = [
   'supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql',
   'supabase/migrations/20261105140001_assessed_planning_review.sql',
   'supabase/migrations/20261105140002_assessed_planning_studio.sql',
-  'supabase/migrations/20261105140003_assessed_planning_delivery.sql',
+  'supabase/migrations/20261105140004_assessed_planning_govern_projection.sql',
 ];

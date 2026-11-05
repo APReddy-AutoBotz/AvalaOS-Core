@@ -621,6 +621,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "selector": "CREATE OR REPLACE FUNCTION public.pr1e_resolve_assess_v2_planning("
   },
   {
+    "anchorId": "assessed-planning-govern-projection",
+    "sourceReference": "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
+    "selector": "DO $assessed_planning_govern_projection_predecessor$"
+  },
+  {
     "anchorId": "assessed-planning-studio",
     "sourceReference": "supabase/migrations/20261105140002_assessed_planning_studio.sql",
     "selector": "DO $planning_studio_preflight$"
@@ -1905,6 +1910,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],
@@ -2032,6 +2038,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],
@@ -2566,6 +2573,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],
@@ -2615,6 +2623,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],
@@ -2664,6 +2673,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],
@@ -2713,6 +2723,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],
@@ -2762,6 +2773,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-post-use-renewal",
       "govern-mixed-snapshot-normalization",
       "assessed-planning-review",
+      "assessed-planning-govern-projection",
       "assessed-planning-studio",
       "assessed-planning-delivery"
     ],

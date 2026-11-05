@@ -37,10 +37,16 @@ Executed focused verification on 5 November 2026:
   preservation, planning resolution and handoff replay, stale version and
   authorization rejection, changed-replay rejection, author/handoff separation,
   explicit Govern rejection, null-Govern package persistence, source-context
-  equality and reopening the committed planning projection.
+  equality and reopening the committed planning projection. It also verified
+  that the review projection uses the established action-normalization helper,
+  exposes the complete operation boundaries, and rejects a substituted
+  predecessor before the forward repair can run.
 - `node --test scripts/assessedPlanningReviewContract.test.mjs` — 4/4 passed.
 - `npm run test:pr1e-workspace`, `npm run test:assess-v2-presentation`,
   `npm run test:pr1e-domain` and `npm run test:pr1e-command` — passed.
+- `npm run test:browser:pr1e` — 6/6 passed across desktop and mobile with the
+  full strict review-projection decoder, including the planning purpose,
+  accepted evidence and unresolved-question fields.
 - `npm run typecheck` — passed on the integrated working tree. The exact
   candidate must still rerun the normal required merge gates.
 

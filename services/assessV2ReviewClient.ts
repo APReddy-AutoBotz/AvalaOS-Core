@@ -2,7 +2,7 @@ import type { TenantContextProjection } from '../types';
 import { beginControlledHumanCommand, completeControlledHumanCommand, isControlledHumanRuntimeEnabled, supabase } from './supabaseClient';
 import { EnterpriseBoundaryError } from './enterpriseAssess';
 import { isEnterpriseObject, readEnterpriseErrorCode } from './enterpriseAssessContract';
-import { buildAssessV2ReviewEnvelope, type EvidenceAttestationOutcome, type ReviewResolution } from './assessV2ReviewClientContract';
+import { buildAssessV2ReviewEnvelope, isAssessV2ReviewProjectionContract, type EvidenceAttestationOutcome, type ReviewResolution } from './assessV2ReviewClientContract';
 
 export type ReviewLifecycle = 'reviewer_ready' | 'in_review' | 'approved' | 'planning_approved' | 'changes_requested' | 'rejected';
 export type ReviewApprovalPurpose = 'implementation_readiness' | 'documentation_planning';
@@ -90,16 +90,8 @@ const parseQueueItem = (value: unknown): AssessV2ReviewQueueItem => {
   if (!isEnterpriseObject(value) || typeof value.assignmentId !== 'string' || typeof value.caseId !== 'string' || typeof value.caseName !== 'string' || typeof value.status !== 'string') throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
   return value as unknown as AssessV2ReviewQueueItem;
 };
-const parseProjection = (value: unknown): AssessV2ReviewProjection => {
-  if (!isEnterpriseObject(value) || typeof value.caseId !== 'string' || typeof value.decisionId !== 'string'
-    || !Number.isSafeInteger(value.caseVersion) || typeof value.reviewSchemaVersion !== 'string'
-    || !Number.isSafeInteger(value.reviewSequence) || !Array.isArray(value.evidence)
-    || !Array.isArray(value.actions) || !Array.isArray(value.controls)
-    || !['implementation_readiness','documentation_planning'].includes(String(value.approvalPurpose))
-    || !Array.isArray(value.acceptedEvidence) || !Array.isArray(value.unresolvedQuestions)
-    || value.acceptedEvidence.some(item => !isEnterpriseObject(item) || typeof item.claimId !== 'string'
-      || !Array.isArray(item.evidenceIds) || item.evidenceIds.some(id => typeof id !== 'string'))
-    || value.unresolvedQuestions.some(item => !isEnterpriseObject(item) || typeof item.claimId !== 'string')) {
+export const decodeAssessV2ReviewProjection = (value: unknown): AssessV2ReviewProjection => {
+  if (!isAssessV2ReviewProjectionContract(value)) {
     throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
   }
   return value as unknown as AssessV2ReviewProjection;
@@ -111,7 +103,7 @@ const parseEligibleReviewer = (value: unknown): EligibleAssessV2Reviewer => {
 
 const committedProjection = (value: unknown): AssessV2ReviewProjection => {
   if (!isEnterpriseObject(value) || value.ok !== true || (value.outcome !== 'committed' && value.outcome !== 'replayed') || !isEnterpriseObject(value.resource)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
-  return parseProjection(value.resource);
+  return decodeAssessV2ReviewProjection(value.resource);
 };
 
 const controlledDigest = async (value: unknown) => {
@@ -129,7 +121,7 @@ export const readAssessV2ReviewQueue = async (context: TenantContextProjection, 
   if (!Array.isArray(value)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
   return value.map(parseQueueItem);
 };
-export const readAssessV2ReviewWorkspace = async (context: TenantContextProjection, caseId: string, transport: AssessV2ReviewTransport = defaultTransport) => parseProjection(await transport.readWorkspace(context, caseId));
+export const readAssessV2ReviewWorkspace = async (context: TenantContextProjection, caseId: string, transport: AssessV2ReviewTransport = defaultTransport) => decodeAssessV2ReviewProjection(await transport.readWorkspace(context, caseId));
 export const readEligibleAssessV2Reviewers = async (context: TenantContextProjection, caseId: string, decisionId: string, transport: AssessV2ReviewTransport = defaultTransport) => {
   const value = await transport.readEligibleReviewers(context, caseId, decisionId);
   if (!Array.isArray(value)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');

@@ -25,7 +25,9 @@ const installGovernedReviewFixture=async(page:Page,options:{capabilities?:string
   let projection:any={
     assignmentId:'',caseId:CASE,caseName:'Invoice exception handling',caseVersion:3,sourceCaseVersion:2,sourceVersionId:VERSION,
     decisionId:DECISION,decisionVersion:decision.decisionVersion,reviewSchemaVersion:'assess-v2-review-2026-07',reviewSequence:1,status:'reviewer_ready',
-    authorLabel:'Assessment Author',reviewerLabel:'',confidence:'Partially Evidenced',conditions:[],requiredClaimIds:['claim.invoice-source','claim.approval-control'],
+    authorLabel:'Assessment Author',reviewerLabel:'',confidence:'Partially Evidenced',conditions:[],approvalPurpose:'implementation_readiness',
+    requiredClaimIds:['claim.invoice-source','claim.approval-control'],acceptedEvidence:[],
+    unresolvedQuestions:[{claimId:'claim.invoice-source'},{claimId:'claim.approval-control'}],
     evidence:[
       {id:EVIDENCE[0],claimIds:['claim.invoice-source'],sourceType:'system-record',submitterLabel:'Assessment Author',capturedAt:'2026-07-20T10:00:00.000Z',status:'submitted'},
       {id:EVIDENCE[1],claimIds:['claim.approval-control'],sourceType:'test',submitterLabel:'Assessment Author',capturedAt:'2026-07-20T10:05:00.000Z',status:'submitted'},
@@ -58,10 +60,13 @@ const installGovernedReviewFixture=async(page:Page,options:{capabilities?:string
         projection={...projection,assignmentId:ASSIGNMENT,caseVersion:4,status:'in_review',reviewerLabel:'Independent Reviewer'};
       }else if(type==='assessment_v2.evidence.attest'){
         if(failNextAttestation){failNextAttestation=false;rejected.push(type);return fail(route,'VERSION_CONFLICT');}
-        projection={...projection,evidence:projection.evidence.map((item:any)=>item.id===body.payload.evidenceId?{...item,status:'accepted',rationale:body.payload.rationale}:item)};
+        const evidence=projection.evidence.map((item:any)=>item.id===body.payload.evidenceId?{...item,status:'accepted',rationale:body.payload.rationale}:item);
+        const acceptedEvidence=projection.requiredClaimIds.flatMap((claimId:string)=>{const evidenceIds=evidence.filter((item:any)=>item.status==='accepted'&&item.claimIds.includes(claimId)).map((item:any)=>item.id);return evidenceIds.length?[{claimId,evidenceIds}]:[];});
+        const acceptedClaims=new Set(acceptedEvidence.map((item:any)=>item.claimId));
+        projection={...projection,evidence,acceptedEvidence,unresolvedQuestions:projection.requiredClaimIds.filter((claimId:string)=>!acceptedClaims.has(claimId)).map((claimId:string)=>({claimId}))};
       }else if(type==='assessment_v2.review.resolve'){
         if(projection.evidence.some((item:any)=>item.status!=='accepted')){rejected.push(type);return fail(route,'VERSION_CONFLICT');}
-        projection={...projection,caseVersion:5,status:'approved',confidence:'Verified'};
+        projection={...projection,caseVersion:5,status:'approved',approvalPurpose:'implementation_readiness',confidence:'Verified',unresolvedQuestions:[]};
       }else if(type==='assessment_v2.govern.resolve'){
         if(body.payload.controlDispositions.some((control:any)=>control.status!=='resolved')){rejected.push(type);return fail(route);}
         projection={...projection,caseVersion:6,governStatus:'resolved',handoffStatus:'ready',controls:body.payload.controlDispositions};
@@ -102,7 +107,7 @@ test('governed reviewer assignment through durable Studio handoff',async({page})
   const unresolvedAttempt=await page.evaluate(async({endpoint,org,workspace,caseId,decisionId})=>{const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer browser-fixture-token'},body:JSON.stringify({requestId:crypto.randomUUID(),idempotencyKey:'unresolved-control-attempt',commandType:'assessment_v2.govern.resolve',organizationId:org,workspaceId:workspace,authorizationVersion:9,expectedVersion:5,payload:{caseId,decisionId,reviewSequence:1,rationale:'Must fail',controlDispositions:[{controlId:'human-approval',status:'unresolved',condition:'',owner:'',dueDate:'',conditionSatisfied:false},{controlId:'audit',status:'resolved',condition:'',owner:'',dueDate:'',conditionSatisfied:false}]}})});return response.status;},{endpoint:`${API}/functions/v1/assess-v2-command`,org:ORG,workspace:WS,caseId:CASE,decisionId:DECISION});
   expect(unresolvedAttempt).toBe(409);expect(fixture.committed.filter(type=>type==='assessment_v2.govern.resolve')).toHaveLength(0);
   for(const select of await page.getByLabel(/^Disposition for /).all())await select.selectOption('resolved');await expect(govern).toBeEnabled();await govern.click();await expect(page.getByText('Govern resolution committed.')).toBeVisible();
-  await page.getByRole('button',{name:'Create durable Studio handoff'}).click();await expect(page.getByText('Studio handoff committed.')).toBeVisible();await expect(workspace).toContainText('Handed off to Studio');
+  await page.getByRole('button',{name:'Create Studio handoff',exact:true}).click();await expect(page.getByText('Studio handoff committed.')).toBeVisible();await expect(workspace).toContainText('Handed off to Studio');
   await page.getByRole('button',{name:'Reload committed state'}).click();await expect(workspace).toContainText('Handed off to Studio');expect(fixture.projection.handoffStatus).toBe('committed');
   expect(fixture.committed).toEqual(['assessment_v2.review.assign','assessment_v2.evidence.attest','assessment_v2.evidence.attest','assessment_v2.review.resolve','assessment_v2.govern.resolve','assessment_v2.studio.handoff']);
   const axe=await new AxeBuilder({page}).include('[data-testid="assess-v2-review-workspace"]').analyze();expect(axe.violations.filter(item=>item.impact==='serious'||item.impact==='critical')).toEqual([]);
@@ -131,5 +136,5 @@ for(const personaKey of ['requester','studio_reviewer']) test(`PR C synthetic ${
   await expect(review.getByText('Review resolution committed: Approved.',{exact:true})).toBeVisible();
   expect(fixture.committed).toEqual(['assessment_v2.review.assign','assessment_v2.evidence.attest','assessment_v2.evidence.attest','assessment_v2.review.resolve']);
   expect(fixture.rejected).toEqual([]);
-  await expect(review.getByRole('button',{name:'Create durable Studio handoff',exact:true})).toBeDisabled();
+  await expect(review.getByRole('button',{name:'Create Studio handoff',exact:true})).toBeDisabled();
 });

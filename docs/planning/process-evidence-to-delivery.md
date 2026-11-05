@@ -18,7 +18,7 @@ Preview usability follow-up: on the deployed predecessor, both retained processe
 
 
 
-The current acceptance run reuses the dedicated PR #355 preview, backend, workspace and two retained processes. The candidate adds migrations through `20261105140003` (118 files). The operator must verify the installed inventory, exact frontend and backend, actor sessions, passing CI and current credits before enabling provider execution. At the last readback the campaign had five settled debits and no outstanding reservation. The active campaign limits below continue across renewals and candidate changes. The earlier eight-call launch proposal is recorded for history.
+The current acceptance run reuses the dedicated PR #355 preview, backend, workspace and two retained processes. The candidate adds migrations through `20261105140004` (119 files). The forward correction restores the original immutable Govern action projection for the Verified path and keeps the planning fields. The operator must verify the installed inventory, exact frontend and backend, actor sessions, passing CI and current credits before enabling provider execution. At the last readback the campaign had five settled debits and no outstanding reservation. The active campaign limits below continue across renewals and candidate changes. The earlier eight-call launch proposal is recorded for history.
 
 ## Govern review of a mixed operation boundary - 5 November 2026
 

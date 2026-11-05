@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createEnterpriseLifecycleFixture } from './enterpriseLifecyclePostgresFixture.mjs';
 
@@ -7,7 +8,7 @@ let activeFixture;
 let activeStage = 'fixture-create';
 let activeResponseCode = 'NONE';
 
-export const createAssessedPlanningReviewScenario = async fixture => {
+export const createAssessedPlanningReviewScenario = async (fixture, { verifyMigrationGuard = false } = {}) => {
   let ordinal = 1;
   const { db, ids } = fixture;
   const authority = async actor => ({
@@ -168,6 +169,12 @@ export const createAssessedPlanningReviewScenario = async fixture => {
     'planning approval must preserve the actual assessment confidence with exact casing');
   assert.ok(planningProjection.acceptedEvidence.length > 0);
   assert.ok(planningProjection.unresolvedQuestions.length > 0);
+  const normalizedActions = (await db.query(`SELECT public.pr1e_normalize_govern_actions(
+    input_snapshot,output_snapshot) actions FROM assess_v2_decision_versions WHERE id=$1`,
+  [decisionId])).rows[0].actions;
+  assert.ok(normalizedActions.length > 0, 'the verified path must expose normalized action boundaries');
+  assert.deepEqual(planningProjection.actions, normalizedActions,
+    'review projection must retain immutable normalized application/operation boundaries');
   const acceptedIds = new Set(planningProjection.acceptedEvidence.flatMap(item => item.evidenceIds));
   assert.deepEqual([...acceptedIds], [evidenceIds[0]], 'unaccepted evidence must not be projected as accepted');
 
@@ -279,6 +286,36 @@ export const createAssessedPlanningReviewScenario = async fixture => {
     payload: { decisionId, reviewSequence: 1, approvalPurpose: 'documentation_planning' },
   }), 'IDEMPOTENCY_CONFLICT');
 
+  if (verifyMigrationGuard) {
+    activeStage = 'projection-substitution-rejected';
+    const migration = readFileSync(
+      'supabase/migrations/20261105140004_assessed_planning_govern_projection.sql', 'utf8');
+    const before = (await db.query(`SELECT pg_get_functiondef(
+      'public.pr1e_review_projection(uuid,uuid,uuid,uuid)'::regprocedure) definition`)).rows[0].definition;
+    await db.query('BEGIN');
+    try {
+      await db.query('UPDATE public.assess_v2_runtime_control SET read_only=true WHERE singleton');
+      await db.query(`ALTER TABLE public.hosted_pilot_environment_identity
+        DROP CONSTRAINT hosted_pilot_environment_identity_migration_tip_check`);
+      await db.query(`UPDATE public.hosted_pilot_environment_identity
+        SET migration_tip='20261105140003' WHERE singleton`);
+      await db.query(`ALTER TABLE public.hosted_pilot_environment_identity
+        ADD CONSTRAINT hosted_pilot_environment_identity_migration_tip_check
+        CHECK(migration_tip='20261105140003')`);
+      await db.query(`CREATE OR REPLACE FUNCTION public.pr1e_review_projection(
+        p_org uuid,p_workspace uuid,p_case uuid,p_decision uuid)
+        RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog
+        AS $substituted$ SELECT '{}'::jsonb $substituted$`);
+      await assert.rejects(db.query(migration),
+        /ASSESSED_PLANNING_GOVERN_PROJECTION_PREDECESSOR_MISMATCH/u);
+    } finally {
+      await db.query('ROLLBACK');
+    }
+    const after = (await db.query(`SELECT pg_get_functiondef(
+      'public.pr1e_review_projection(uuid,uuid,uuid,uuid)'::regprocedure) definition`)).rows[0].definition;
+    assert.equal(after, before, 'negative predecessor test must leave the installed function unchanged');
+  }
+
   return Object.freeze({
     processId: ids.process,
     caseId: ids.case,
@@ -299,7 +336,7 @@ const main = async () => {
     headSha: process.env.PILOT_ACCEPTANCE_HEAD ?? process.env.GITHUB_SHA ?? 'local-working-tree',
     providersEnabled: false,
   });
-  await createAssessedPlanningReviewScenario(activeFixture);
+  await createAssessedPlanningReviewScenario(activeFixture, { verifyMigrationGuard: true });
   await activeFixture.close();
   activeFixture = null;
   console.log('ASSESSED PLANNING REVIEW POSTGRES PASS');
