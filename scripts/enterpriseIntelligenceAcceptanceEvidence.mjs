@@ -40,6 +40,7 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20261103170101_stable_requirement_proposal_identity.sql',
   'supabase/migrations/20261103170102_current_assessment_delivery_project.sql',
   'supabase/migrations/20261103170103_process_evidence_live_permit.sql',
+  'supabase/migrations/20261105024717_process_evidence_operator_access_resume.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',

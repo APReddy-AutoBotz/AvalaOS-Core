@@ -47,6 +47,16 @@ for(const hostile of [
 ]) assert.throws(()=>decodeSyntheticAdminResult({status:'listed',roster:[hostile],nextCursor:null},'list'),SyntheticAdminError);
 assert.throws(()=>decodeSyntheticAdminResult({status:'active',reservationId:RESERVATION,version:2,password:'should-not-appear'},'execute'),SyntheticAdminError);
 assert.throws(()=>decodeSyntheticAdminResult({status:'active',reservationId:RESERVATION,version:2,loginId:`synthetic-${ACTOR}@avalaos.example`},'execute'),SyntheticAdminError);
+assert.deepEqual(decodeSyntheticAdminResult({status:'operator_access_granted',version:8},'grant_operator_assess_read'),
+  {status:'operator_access_granted',version:8});
+assert.deepEqual(decodeSyntheticAdminResult({status:'operator_access_removed',version:9},'remove_operator_assess_read'),
+  {status:'operator_access_removed',version:9});
+for(const hostile of [
+  {status:'operator_access_granted',version:8,capability:'assess.read'},
+  {status:'operator_access_granted',version:8,reservationId:RESERVATION},
+  {status:'operator_access_removed',version:0},
+]) assert.throws(()=>decodeSyntheticAdminResult(hostile,
+  String(hostile.status).endsWith('granted')?'grant_operator_assess_read':'remove_operator_assess_read'),SyntheticAdminError);
 assert.doesNotMatch(syntheticAdminErrorCopy(new SyntheticAdminOutcomeUnknown()),/password|email|token/i);
 assert.doesNotMatch(syntheticAdminErrorCopy(new SyntheticAdminError('PERMISSION_DENIED')),/PERMISSION_DENIED/);
 console.log('Synthetic Admin client binding and non-disclosure tests passed.');

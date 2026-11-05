@@ -327,7 +327,7 @@ const main = async () => {
     const expiry = new Date(Date.now() + 30 * 60 * 1000);
     const activation = (await fixture.serviceQuery(`SELECT public.authenticated_synthetic_local_exercise_activate(
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value`, [exerciseId, baseHead, fixed,
-      'http://127.0.0.1:4173', fixed, '20261103170103', sources.migrationChain.digest, fixed,
+      'http://127.0.0.1:4173', fixed, '20261105024717', sources.migrationChain.digest, fixed,
       'local-real-backend-authenticated-profile-v1', fixed, fixed, ids.organization, ids.workspace, expiry])).rows[0].value;
     assert.equal(activation.lifecycle, 'active');
     await fixture.serviceQuery('SELECT public.authenticated_synthetic_bind_session($1,$2,$3,$4)',

@@ -25,6 +25,18 @@ test('synthetic Admin contract accepts an exact reserve and list envelope', () =
   assert.equal(list.operation, 'list');
 });
 
+test('operator Assess read access is an exact operation with no caller-selected capability', () => {
+  for (const operation of ['grant_operator_assess_read','remove_operator_assess_read'] as const) {
+    const parsed = parseSyntheticAdminEnvelope({ ...write, operation, payload: {} });
+    assert.equal(parsed.operation, operation);
+    assert.deepEqual(parsed.payload, {});
+    for (const payload of [{ capability:'assess.read' }, { capability:'org.admin' }, { role:'author' }]) {
+      assert.throws(() => parseSyntheticAdminEnvelope({ ...write, operation, payload }),
+        (error: unknown) => error instanceof SyntheticAdminError && error.errorCode === 'INVALID_REQUEST');
+    }
+  }
+});
+
 test('synthetic Admin contract rejects extra authority, arbitrary roles, and malformed secrets', () => {
   const variants = [
     { ...write, operation: 'reserve', payload: { label: 'A', rolePreset: 'admin' } },

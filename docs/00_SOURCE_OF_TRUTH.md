@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Retained process-evidence acceptance continuation - 5 November 2026
+
+The process-evidence milestone continues in the existing PR stack. The verified `602fbeb8` candidate passed all 17 required workflows and exact hosted source/migration checks; its ordinary UI retained two fresh processes and four source files. Provider calls, generated documents and live board publication remain unverified. AP now authorizes the focused operator-read and retained-permit repairs, bounded recovery and candidate redeployment needed to finish the journey. The [active milestone plan](planning/process-evidence-to-delivery.md#authorized-continuation-and-retained-permit-repair---5-november-2026) records the verified-credit ceiling, independent actors, cumulative-accounting requirements and cleanup. No merge, production, credit purchase or additional hosting cost is authorized.
+
 ## Governed Studio process documentation candidate
 
 The Studio boundary of the [process-evidence milestone](planning/process-evidence-to-delivery.md) introduces a canonical SDD with editable As-Is and To-Be sections. Approved documents remain immutable. The [Studio verification record](planning/process-evidence-studio-sdd-and-flows.md) distinguishes local PostgreSQL and synthetic browser evidence from actual model generation.

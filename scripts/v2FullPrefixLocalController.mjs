@@ -145,7 +145,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
   const migrationVersion = (await fixture.db.query(
     'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton',
   )).rows[0]?.migration_tip;
-  if (migrationVersion !== '20261103170103') {
+  if (migrationVersion !== '20261105024717') {
     throw new Error('V2_FULL_PREFIX_LOCAL_MIGRATION_REJECTED');
   }
 

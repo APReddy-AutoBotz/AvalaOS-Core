@@ -57,6 +57,13 @@ export const decodeSyntheticAdminResult = (input: unknown, operation: SyntheticA
     if (new Set(roster.map(item => item.reservationId)).size !== roster.length) throw new SyntheticAdminError('TEMPORARY_FAILURE');
     return { status:'listed', roster, nextCursor: input.nextCursor as string | null | undefined };
   }
+  if (operation === 'grant_operator_assess_read' || operation === 'remove_operator_assess_read') {
+    const expected = operation === 'grant_operator_assess_read' ? 'operator_access_granted' : 'operator_access_removed';
+    if (input.status !== expected || !positiveVersion(input.version)
+      || 'reservationId' in input || 'loginId' in input || 'roster' in input || 'nextCursor' in input)
+      throw new SyntheticAdminError('TEMPORARY_FAILURE');
+    return { status: expected, version: input.version };
+  }
   if (!(states as readonly string[]).includes(input.status)
     || !uuid(input.reservationId) || !positiveVersion(input.version)
     || (input.loginId !== undefined && (typeof input.loginId !== 'string' || !LOGIN.test(input.loginId) || LOGIN.exec(input.loginId)?.[1] !== input.reservationId))

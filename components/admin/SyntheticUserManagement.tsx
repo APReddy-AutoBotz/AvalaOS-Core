@@ -32,10 +32,11 @@ const strongPassword = (value: string) => value.length >= 12 && value.length <= 
   && /^[\x21-\x7e]+$/.test(value) && /[A-Z]/.test(value) && /[a-z]/.test(value)
   && /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value);
 
-export default function SyntheticUserManagement({ tenantContext, sessionState, transport }: {
+export default function SyntheticUserManagement({ tenantContext, sessionState, transport, onAuthorityChanged }: {
   tenantContext: TenantContextProjection | null;
   sessionState: EnterpriseSessionState;
   transport?: SyntheticAdminTransport;
+  onAuthorityChanged?: () => Promise<void>;
 }) {
   const scope = `${tenantContext?.organizationId ?? ''}:${tenantContext?.workspaceId ?? ''}:${tenantContext?.userId ?? ''}:${tenantContext?.authorizationVersion ?? ''}:${(tenantContext?.capabilities ?? []).slice().sort().join(',')}:${sessionState}`;
   const scopeRef = useRef(scope);
@@ -59,6 +60,7 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [displayScope, setDisplayScope] = useState(scope);
+  const operatorHasAssessRead = tenantContext?.capabilities.includes('assess.read') ?? false;
 
   useEffect(() => {
     if (busy) busyStatus.current?.focus();
@@ -184,6 +186,29 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
     } finally { if (scopeRef.current === atScope) setBusy(false); }
   };
 
+  const changeOperatorAssessRead = async (grant: boolean) => {
+    if (!enabled || !tenantContext || busy || reserveAttempt || executeUncertain || unknownRosterOperation) return;
+    const atScope = scope;
+    const operation = grant ? 'grant_operator_assess_read' : 'remove_operator_assess_read';
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const result = await syntheticAdminRequest(tenantContext, operation, {}, transport,
+        newBinding(operation, tenantContext.userId));
+      if (scopeRef.current !== atScope) return;
+      const expected = grant ? 'operator_access_granted' : 'operator_access_removed';
+      if (result.status !== expected) throw new Error('UNCONFIRMED_OPERATOR_ACCESS');
+      setMessage(grant
+        ? 'Assess read access was granted to this provider operator. Refreshing server authority.'
+        : 'Assess read access was removed from this provider operator. Refreshing server authority.');
+      if (onAuthorityChanged) {
+        try { await onAuthorityChanged(); }
+        catch { if (scopeRef.current === atScope) setError('The access change was committed, but the refreshed workspace authority could not be loaded. Reload before continuing.'); }
+      }
+    } catch (cause) {
+      if (scopeRef.current === atScope) setError(syntheticAdminErrorCopy(cause));
+    } finally { if (scopeRef.current === atScope) setBusy(false); }
+  };
+
   if (displayScope !== scope) return <section className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800" data-testid="synthetic-user-management">
     <h2 className="text-lg font-semibold">Synthetic test accounts</h2>
     <p role="status" className="mt-2 text-sm">Checking the selected workspace and account authority.</p>
@@ -201,6 +226,16 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
     {message && <p role="status" className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950">{message}</p>}
     {error && <p ref={errorAlert} role="alert" tabIndex={-1} className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {busy && <p ref={busyStatus} role="status" tabIndex={0} className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950 focus:outline-none focus:ring-2 focus:ring-indigo-600">Verifying account operation. Wait for the server result.</p>}
+    <div className="mt-4 rounded-xl border p-3" data-testid="provider-operator-assess-read">
+      <h3 className="text-sm font-bold">Provider operator access</h3>
+      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">This fixed control changes only Assess read access for the existing provider operator. It does not grant authoring, review, approval, Studio, Govern, or Delivery permissions.</p>
+      <p className="mt-2 text-sm font-semibold">Assess read access: {operatorHasAssessRead ? 'Granted' : 'Not granted'}</p>
+      <button type="button" className="mt-2 rounded-lg border px-3 py-1.5 text-sm font-bold disabled:opacity-50"
+        disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation}
+        onClick={() => void changeOperatorAssessRead(!operatorHasAssessRead)}>
+        {operatorHasAssessRead ? 'Remove Assess read access' : 'Grant Assess read access'}
+      </button>
+    </div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm font-semibold">Account label<input className="mt-1 w-full rounded-lg border p-2" maxLength={40} value={label} disabled={busy || !!reserveAttempt || executeUncertain || !!reservation} onChange={event => setLabel(event.target.value)} /></label>
       <label className="text-sm font-semibold">Workspace role<select className="mt-1 w-full rounded-lg border p-2" value={rolePreset} disabled={busy || !!reserveAttempt || executeUncertain || !!reservation} onChange={event => setRolePreset(event.target.value as SyntheticAdminRolePreset)}>{SYNTHETIC_ADMIN_ROLE_PRESETS.map(role => <option key={role} value={role}>{role}</option>)}</select></label>

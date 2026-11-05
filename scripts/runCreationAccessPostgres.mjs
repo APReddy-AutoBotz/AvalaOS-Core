@@ -62,8 +62,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20261103170103');
-  assert.equal(migrations.length, 112);
+  assert.equal(approvedFullChainTip(migrations), '20261105024717');
+  assert.equal(migrations.length, 113);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -109,7 +109,8 @@ try {
   assert.equal(migrations[renewalIndex + 28], '20261103170101_stable_requirement_proposal_identity.sql');
   assert.equal(migrations[renewalIndex + 29], '20261103170102_current_assessment_delivery_project.sql');
   assert.equal(migrations[renewalIndex + 30], '20261103170103_process_evidence_live_permit.sql');
-  assert.equal(renewalIndex, migrations.length - 31);
+  assert.equal(migrations[renewalIndex + 31], '20261105024717_process_evidence_operator_access_resume.sql');
+  assert.equal(renewalIndex, migrations.length - 32);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
@@ -142,7 +143,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20261103170103') => {
+  const assertFinalIdentity = async (db, expectedTip = '20261105024717') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {

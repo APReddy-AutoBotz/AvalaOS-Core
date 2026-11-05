@@ -12,7 +12,8 @@ declare const Deno: { env: { get(key: string): string | undefined } };
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOGIN_ID = /^synthetic-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}@avalaos\.invalid$/;
-const STATES = new Set(['reserved','execution_claimed','reconciliation_required','active','revoked','ban_required','ban_uncertain','listed']);
+const STATES = new Set(['reserved','execution_claimed','reconciliation_required','active','revoked','ban_required','ban_uncertain','listed',
+  'operator_access_granted','operator_access_removed']);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
@@ -49,6 +50,14 @@ const safeResult = (value: InternalClaim): SyntheticAdminResult => {
     || (value.nextCursor !== undefined && value.nextCursor !== null
       && (typeof value.nextCursor !== 'string' || !UUID.test(value.nextCursor))))
     throw new SyntheticAdminError('TEMPORARY_FAILURE');
+  if (value.status === 'operator_access_granted' || value.status === 'operator_access_removed') {
+    if (!exactKeys(value, ['status','version'])
+      || !Number.isSafeInteger(value.version) || Number(value.version) < 1
+      || value.reservationId !== undefined || value.loginId !== undefined
+      || value.roster !== undefined || value.nextCursor !== undefined)
+      throw new SyntheticAdminError('TEMPORARY_FAILURE');
+    return { status: value.status, version: value.version };
+  }
   let roster: SyntheticAdminResult['roster'];
   if (value.roster !== undefined) {
     if (value.status !== 'listed' || !Array.isArray(value.roster) || value.roster.length > 20)
@@ -157,6 +166,11 @@ const executeOperation = async (deps: EndpointDeps, actorId: string, envelope: S
         p_request_id: envelope.requestId, p_key: envelope.idempotencyKey,
         p_reservation_id: payload.reservationId, p_expected_version: payload.expectedVersion,
         p_preset: payload.rolePreset,
+      });
+    case 'grant_operator_assess_read':
+    case 'remove_operator_assess_read':
+      return deps.rpc<InternalClaim>(`synthetic_admin_${envelope.operation}`, { ...args,
+        p_request_id: envelope.requestId, p_key: envelope.idempotencyKey,
       });
     case 'execute': {
       const claim = await deps.rpc<InternalClaim>('synthetic_admin_claim_execution', { ...args,

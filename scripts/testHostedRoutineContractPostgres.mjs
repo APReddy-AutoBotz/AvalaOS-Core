@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {cp,mkdtemp,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import pg from 'pg';
 import {ensureHostedPgcryptoCompatibility} from './hostedPilotApplySafety.mjs';
 import {inventoryConnectedHostedTarget} from './hostedPilotDatabaseInventory.mjs';
@@ -14,13 +16,21 @@ import {
 } from './pilotOperationsPostgresSupport.mjs';
 
 const BASELINE_COUNT=112;
+const CURRENT_COUNT=113;
 const RELEASE_BEFORE_CONTRACT='ecc740bfbd8296b5b94b71e433fff7464838393f';
 const adminUrl=new URL(process.env.PILOT_OPERATIONS_DATABASE_URL??'');
 if(process.argv.includes('--write-contract')&&process.env.CI)throw new Error('ROUTINE_CONTRACT_WRITE_FORBIDDEN_IN_CI');
 assert.ok(['postgres:','postgresql:'].includes(adminUrl.protocol)
   && ['127.0.0.1','[::1]'].includes(adminUrl.hostname),'Disposable loopback PostgreSQL required');
-assert.equal(migrationNames.length,BASELINE_COUNT,'Routine contract must preserve the exact candidate migration chain');
-let canonical=await loadCanonicalMigrationInventory();
+assert.equal(migrationNames.length,CURRENT_COUNT,'Routine contract must preserve the exact candidate migration chain');
+// Regenerate only from a fresh disposable replay. A temporary source-only copy
+// avoids treating the previous committed contract as the new tip's authority.
+let inventoryRoot=process.cwd();
+if(process.argv.includes('--write-contract')){
+  inventoryRoot=await mkdtemp(join(tmpdir(),'avalaos-routine-source-'));
+  await cp('supabase/migrations',join(inventoryRoot,'supabase/migrations'),{recursive:true});
+}
+let canonical=await loadCanonicalMigrationInventory(inventoryRoot);
 assert.equal(canonical.count,migrationNames.length);
 
 const normalize=value=>JSON.stringify(value,null,2)+'\n';
@@ -57,7 +67,7 @@ const mutateAndReject=async(db,label,sql,{setup,expected=/foreign_object_authori
 
 try{
   admin=await connect(adminUrl.href);clients.push(admin);await ensureClusterRoles(admin);
-  const snapshots={},inventories={};
+  const snapshots={},baselineSnapshots={},inventories={};
   for(const profile of profiles){
     const db=await createDatabase(admin,adminUrl.href,names[profile]);clients.push(db);
     await bootstrapAuth(db);
@@ -65,7 +75,9 @@ try{
     if(profile==='supabase')await db.query(`alter default privileges for role postgres in schema public
       grant execute on functions to anon,authenticated,service_role`);
     await ensureHostedPgcryptoCompatibility(db);
-    await applyMigrations(db,migrationNames);
+    await applyMigrations(db,migrationNames.slice(0,BASELINE_COUNT));
+    baselineSnapshots[profile]=await catalog(db);
+    await applyMigrations(db,migrationNames.slice(BASELINE_COUNT));
     const connected=await inventory(db);
     assert.equal(legacy.classifyHostedTarget(connected.inventory,canonical).mutationAllowed,false,
       'original classifier must reproduce the installed-catalog rejection');
@@ -75,8 +87,9 @@ try{
     inventories[profile]=connected.inventory;
   }
 
-  const generated={schemaVersion:1,runtimeMigrationTip:'20261103170103',checkpoints:[
-    checkpoint(BASELINE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,snapshots[profile]]))),
+  const generated={schemaVersion:1,runtimeMigrationTip:'20261105024717',checkpoints:[
+    checkpoint(BASELINE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,baselineSnapshots[profile]]))),
+    checkpoint(CURRENT_COUNT,Object.fromEntries(profiles.map(profile=>[profile,snapshots[profile]]))),
   ]};
   if(process.argv.includes('--write-contract')){
     await writeFile(ROUTINE_CONTRACT_PATH,normalize(generated),{encoding:'utf8'});

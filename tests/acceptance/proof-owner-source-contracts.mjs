@@ -599,6 +599,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "process-evidence-live-permit",
     "sourceReference": "supabase/migrations/20261103170103_process_evidence_live_permit.sql",
     "selector": "CREATE FUNCTION public.process_evidence_open_provider_run("
+  },
+  {
+    "anchorId": "process-evidence-operator-access-resume",
+    "sourceReference": "supabase/migrations/20261105024717_process_evidence_operator_access_resume.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_resume_provider_run("
   }
 ]);
 
@@ -1870,7 +1875,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {
@@ -1991,7 +1997,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {
@@ -2519,7 +2526,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {
@@ -2562,7 +2570,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {
@@ -2605,7 +2614,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {
@@ -2648,7 +2658,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {
@@ -2691,7 +2702,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-delivery-origin",
       "stable-requirement-proposal-role",
       "current-assessment-delivery-project",
-      "process-evidence-live-permit"
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume"
     ],
     "ownership": [
       {

@@ -257,6 +257,44 @@ test('disabled server target rejects before reading identity or hitting SQL/Auth
   assert.deepEqual(await response.json(), { errorCode: 'FEATURE_DISABLED' });
 });
 
+test('operator access operations dispatch only the exact fixed Assess read RPC', async () => {
+  for (const [operation, rpcName, status, version] of [
+    ['grant_operator_assess_read','synthetic_admin_grant_operator_assess_read','operator_access_granted',8],
+    ['remove_operator_assess_read','synthetic_admin_remove_operator_assess_read','operator_access_removed',9],
+  ] as const) {
+    let calls = 0;
+    const response = await handleSyntheticAdminRequest(request({ ...base, operation, payload: {} }), {
+      targetConfig: config, getUser: async () => ({ id: actor }),
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        calls++;
+        assert.equal(name, rpcName);
+        assert.equal(args.p_actor, actor);
+        assert.equal(args.p_org, org);
+        assert.equal(args.p_workspace, workspace);
+        assert.equal(args.p_version, 3);
+        assert.equal(args.p_fingerprint, fingerprint);
+        assert.equal(args.p_request_id, actor);
+        assert.equal(args.p_key, base.idempotencyKey);
+        assert.deepEqual(Object.keys(args).sort(), ['p_actor','p_fingerprint','p_key','p_org','p_request_id','p_version','p_workspace'].sort());
+        return { status, version };
+      },
+    } as any);
+    assert.equal(calls, 1);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status, version });
+  }
+});
+
+test('operator access response cannot disclose role, capability or actor details', async () => {
+  const response = await handleSyntheticAdminRequest(request({ ...base,
+    operation: 'grant_operator_assess_read', payload: {} }), {
+    targetConfig: config, getUser: async () => ({ id: actor }),
+    rpc: async () => ({ status: 'operator_access_granted', version: 8, capability: 'assess.read' }),
+  } as any);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { errorCode: 'TEMPORARY_FAILURE' });
+});
+
 test('a forged roster row cannot disclose an Auth UUID or arbitrary SQL fields', async () => {
   const response = await handleSyntheticAdminRequest(request({ organizationId: org, workspaceId: workspace,
     expectedAuthorizationVersion: 3, operation: 'list', payload: { limit: 20 } }), {

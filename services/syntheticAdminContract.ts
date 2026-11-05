@@ -5,7 +5,10 @@ export const SYNTHETIC_ADMIN_CAPABILITY = 'admin.synthetic.users.manage' as cons
 export const SYNTHETIC_ADMIN_PASSWORD_MAX_LENGTH = 72;
 export const SYNTHETIC_ADMIN_ROLE_PRESETS = ['author', 'reviewer', 'approver', 'viewer'] as const;
 export type SyntheticAdminRolePreset = typeof SYNTHETIC_ADMIN_ROLE_PRESETS[number];
-export const SYNTHETIC_ADMIN_OPERATIONS = ['reserve', 'execute', 'reconcile', 'list', 'assign_role', 'revoke'] as const;
+export const SYNTHETIC_ADMIN_OPERATIONS = [
+  'reserve', 'execute', 'reconcile', 'list', 'assign_role', 'revoke',
+  'grant_operator_assess_read', 'remove_operator_assess_read',
+] as const;
 export type SyntheticAdminOperation = typeof SYNTHETIC_ADMIN_OPERATIONS[number];
 export type SyntheticAdminState = 'reserved' | 'execution_claimed' | 'reconciliation_required' | 'active' | 'revoked' | 'ban_required' | 'ban_uncertain';
 
@@ -19,7 +22,7 @@ export type SyntheticAdminRosterItem = {
 };
 
 export type SyntheticAdminResult = {
-  status: SyntheticAdminState | 'listed';
+  status: SyntheticAdminState | 'listed' | 'operator_access_granted' | 'operator_access_removed';
   reservationId?: string;
   loginId?: string;
   version?: number;
@@ -85,6 +88,7 @@ export const parseSyntheticAdminEnvelope = (input: unknown): SyntheticAdminEnvel
     reconcile: ['reservationId'], list: ['cursor', 'limit'],
     assign_role: ['reservationId', 'expectedVersion', 'rolePreset'],
     revoke: ['reservationId', 'expectedVersion'],
+    grant_operator_assess_read: [], remove_operator_assess_read: [],
   };
   if (!exact(payload, fields[operation])) throw new SyntheticAdminError('INVALID_REQUEST');
   const label = payload.label;

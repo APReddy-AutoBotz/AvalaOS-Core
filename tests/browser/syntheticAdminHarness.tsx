@@ -20,6 +20,7 @@ let label=mode==='late'||mode==='ban_pending'?'Existing synthetic actor':'';
 let executeCalls=0;
 let reserveCalls=0;
 let reconcileCalls=0;
+let operatorAssessRead=mode==='operator_access_granted';
 let heldList=false;
 let releaseHeldList=()=>{};
 const events:Array<{operation:string;workspaceId:string;requestId?:string;idempotencyKey?:string;passwordSubmitted?:boolean}>=[];
@@ -38,6 +39,14 @@ const transport:SyntheticAdminTransport=async(body:SyntheticAdminEnvelope)=>{
     return{status:'listed',roster:body.workspaceId===WS&&label?[item()]:[],nextCursor:null};
   }
   if(body.workspaceId!==WS) throw new Error('WRONG_WORKSPACE');
+  if(body.operation==='grant_operator_assess_read'){
+    operatorAssessRead=true;
+    return{status:'operator_access_granted',version:version+1};
+  }
+  if(body.operation==='remove_operator_assess_read'){
+    operatorAssessRead=false;
+    return{status:'operator_access_removed',version:version+1};
+  }
   if(body.operation==='reserve'){
     reserveCalls++;
     if(mode==='reserve_error'&&reserveCalls===1) throw new SyntheticAdminError('PERMISSION_DENIED');
@@ -78,12 +87,16 @@ const transport:SyntheticAdminTransport=async(body:SyntheticAdminEnvelope)=>{
 function Harness(){
   const [workspaceId,setWorkspaceId]=useState(WS);
   const [authorizationVersion,setAuthorizationVersion]=useState(7);
-  const capabilities=mode==='denied'?['org.admin']:['org.admin','admin.synthetic.users.manage'];
+  const [authorityRefresh,setAuthorityRefresh]=useState(0);
+  const capabilities=mode==='denied'?['org.admin']:[
+    'org.admin','admin.synthetic.users.manage',...(operatorAssessRead?['assess.read']:[]),
+  ];
   const tenant={userId:ACTOR,organizationId:ORG,organizationName:'Synthetic CI org',workspaceId,
     workspaceName:workspaceId===WS?'Exploratory workspace':'Other workspace',authorizationVersion,capabilities};
   return <main className="mx-auto max-w-5xl p-4 sm:p-8"><h1 className="mb-5 text-2xl font-bold">Synthetic Admin browser contract</h1>
     <div className="mb-5 flex flex-wrap gap-2"><button type="button" className="rounded-lg border p-2" onClick={()=>{setWorkspaceId(OTHER_WS);setAuthorizationVersion(version=>version+1)}}>Switch workspace and authority</button><button type="button" className="rounded-lg border p-2" onClick={()=>releaseHeldList()}>Release delayed response</button></div>
-    <SyntheticUserManagement tenantContext={tenant} sessionState="ready" transport={transport}/>
+    <SyntheticUserManagement tenantContext={{...tenant,authorizationVersion:authorizationVersion+authorityRefresh}}
+      sessionState="ready" transport={transport} onAuthorityChanged={async()=>setAuthorityRefresh(value=>value+1)}/>
     <p className="mt-4 text-xs">Mocked synthetic browser contract; no hosted account is created.</p>
   </main>;
 }

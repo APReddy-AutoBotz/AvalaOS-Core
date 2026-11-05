@@ -46,6 +46,21 @@ test('Admin can reserve, activate, change role and revoke one scoped synthetic a
   await assertAdminAccess(page);
 });
 
+test('Admin grants and removes only provider-operator Assess read access with refreshed authority', async ({page}) => {
+  const panel=await open(page);
+  const access=panel.getByTestId('provider-operator-assess-read');
+  await expect(access.getByText('Assess read access: Not granted',{exact:true})).toBeVisible();
+  await access.getByRole('button',{name:'Grant Assess read access',exact:true}).click();
+  await expect(access.getByText('Assess read access: Granted',{exact:true})).toBeVisible();
+  await expect(access.getByText(/does not grant authoring, review, approval, Studio, Govern, or Delivery permissions/)).toBeVisible();
+  await access.getByRole('button',{name:'Remove Assess read access',exact:true}).click();
+  await expect(access.getByText('Assess read access: Not granted',{exact:true})).toBeVisible();
+  const events=(await operations(page)).filter(event=>event.operation!=='list');
+  expect(events.map(event=>event.operation)).toEqual(['grant_operator_assess_read','remove_operator_assess_read']);
+  expect(events.every(event=>event.workspaceId==='33333333-3333-4333-8333-333333333333')).toBe(true);
+  await assertAdminAccess(page);
+});
+
 test('Admin pending reservation announces busy state and keeps a single operation in flight', async ({page}) => {
   const panel=await open(page,'reserve_busy');
   await reserve(page);
