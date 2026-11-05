@@ -25,9 +25,7 @@ const installGovernedReviewFixture=async(page:Page,options:{capabilities?:string
   let projection:any={
     assignmentId:'',caseId:CASE,caseName:'Invoice exception handling',caseVersion:3,sourceCaseVersion:2,sourceVersionId:VERSION,
     decisionId:DECISION,decisionVersion:decision.decisionVersion,reviewSchemaVersion:'assess-v2-review-2026-07',reviewSequence:1,status:'reviewer_ready',
-    authorLabel:'Assessment Author',reviewerLabel:'',confidence:'Partially Evidenced',conditions:[],approvalPurpose:'implementation_readiness',
-    requiredClaimIds:['claim.invoice-source','claim.approval-control'],acceptedEvidence:[],
-    unresolvedQuestions:[{claimId:'claim.invoice-source'},{claimId:'claim.approval-control'}],
+    authorLabel:'Assessment Author',reviewerLabel:'',confidence:'Partially Evidenced',conditions:[],...reviewProjectionEvidence(),
     evidence:[
       {id:EVIDENCE[0],claimIds:['claim.invoice-source'],sourceType:'system-record',submitterLabel:'Assessment Author',capturedAt:'2026-07-20T10:00:00.000Z',status:'submitted'},
       {id:EVIDENCE[1],claimIds:['claim.approval-control'],sourceType:'test',submitterLabel:'Assessment Author',capturedAt:'2026-07-20T10:05:00.000Z',status:'submitted'},
@@ -138,3 +136,9 @@ for(const personaKey of ['requester','studio_reviewer']) test(`PR C synthetic ${
   expect(fixture.rejected).toEqual([]);
   await expect(review.getByRole('button',{name:'Create Studio handoff',exact:true})).toBeDisabled();
 });
+
+function reviewProjectionEvidence() {
+  const requiredClaimIds = ['claim.invoice-source', 'claim.approval-control'];
+  return { approvalPurpose: 'implementation_readiness', requiredClaimIds, acceptedEvidence: [],
+    unresolvedQuestions: requiredClaimIds.map(claimId => ({ claimId })) };
+}
