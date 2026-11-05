@@ -599,7 +599,7 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
 });
 
 test('post-Apply authoring links new evidence, persists it, and independently reviews both items', async () => {
-  const { finalizeAssessDraftForReview, prepareAssessReviewApproval, readSelectedAssessEvidenceClaims, SYNTHETIC_ASSESS_REVIEW_CLAIMS } = await import('./runPrCSyntheticAcceptanceBrowser.mjs');
+  const { finalizeAssessDraftForReview, findAssessEvidenceNumberByOwner, prepareAssessReviewApproval, readSelectedAssessEvidenceClaims, SYNTHETIC_ASSESS_REVIEW_CLAIMS } = await import('./runPrCSyntheticAcceptanceBrowser.mjs');
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
@@ -622,15 +622,31 @@ test('post-Apply authoring links new evidence, persists it, and independently re
       const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
       const owners = [...document.querySelectorAll('input:not([type="checkbox"])')];
       let saved = { checked: checkboxes.map(input => input.checked), owners: owners.map(input => input.value) };
+      let reloadCount = 0;
       const [reload, save, finalize] = document.querySelectorAll('button');
       const status = document.querySelector('#author-status');
       const dirty = () => checkboxes.some((input, i) => input.checked !== saved.checked[i]) || owners.some((input, i) => input.value !== saved.owners[i]);
       const evidenceHasClaim = number => [...document.querySelectorAll(`input[aria-label^="Evidence ${number} claim "]`)].some(input => input.checked);
       const ready = () => { finalize.disabled = !evidenceHasClaim(1) || !evidenceHasClaim(2) || dirty(); };
+      const renumberEvidenceGroups = () => {
+        [...document.querySelectorAll('details > fieldset')].forEach((group, index) => {
+          const number = index + 1;
+          group.querySelector('legend').textContent = `Evidence ${number}`;
+          for (const input of group.querySelectorAll('input[aria-label]')) input.setAttribute('aria-label', input.getAttribute('aria-label').replace(/^Evidence \d+ /u, `Evidence ${number} `));
+        });
+      };
       for (const input of [...checkboxes, ...owners]) { input.addEventListener('input', ready); input.addEventListener('change', ready); }
       reload.addEventListener('click', () => {
         checkboxes.forEach((input, i) => { input.checked = saved.checked[i]; });
         owners.forEach((input, i) => { input.value = saved.owners[i]; });
+        reloadCount += 1;
+        if (reloadCount === 2) {
+          const details = document.querySelector('details');
+          const groups = [...details.querySelectorAll(':scope > fieldset')];
+          details.insertBefore(groups[1], groups[0]);
+          renumberEvidenceGroups();
+          document.body.dataset.evidenceOrderReversed = 'true';
+        }
         status.textContent = 'Current immutable draft reloaded.'; ready();
       });
       save.addEventListener('click', () => {
@@ -657,13 +673,21 @@ test('post-Apply authoring links new evidence, persists it, and independently re
     const interactions = [];
     assert(await page.getByRole('button', { name: 'Finalize assessment for review', exact: true }).isDisabled());
     await finalizeAssessDraftForReview(page, interactions, { afterTranscriptApply: true });
-    assert.deepEqual(await readSelectedAssessEvidenceClaims(page, 1), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort());
-    assert.deepEqual(await readSelectedAssessEvidenceClaims(page, 2), ['primitive.businessDisposition']);
+    assert.equal(await page.locator('body').getAttribute('data-evidence-order-reversed'), 'true');
+    const manualEvidenceNumber = await findAssessEvidenceNumberByOwner(page, 'Assessment owner');
+    const transcriptEvidenceNumber = await findAssessEvidenceNumberByOwner(page, 'Synthetic transcript evidence owner');
+    assert.equal(manualEvidenceNumber, 2);
+    assert.equal(transcriptEvidenceNumber, 1);
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(page, manualEvidenceNumber), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort());
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(page, transcriptEvidenceNumber), ['primitive.businessDisposition']);
     assert.equal(await page.locator('body').getAttribute('data-saves'), '1');
     await prepareAssessReviewApproval(page, interactions);
     assert.equal(await page.locator('body').getAttribute('data-attestations'), '2');
     assert.equal(await page.getByRole('button', { name: 'Accept evidence', exact: true }).count(), 0);
     assert(await page.getByRole('button', { name: 'Approve reviewed decision', exact: true }).isEnabled());
+    await page.getByLabel(`Evidence ${manualEvidenceNumber} owner`, { exact: true }).fill('Synthetic transcript evidence owner');
+    await assert.rejects(findAssessEvidenceNumberByOwner(page, 'Synthetic transcript evidence owner'), /PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_AMBIGUOUS/u);
+    await assert.rejects(findAssessEvidenceNumberByOwner(page, 'Missing owner'), /PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_AMBIGUOUS/u);
   } finally { await browser.close(); }
 });
 

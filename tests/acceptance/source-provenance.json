@@ -450,7 +450,7 @@
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:a0fbcc5b2f4751a6887bb58f6d6a54f28fbc5ef1967c636df7cd8bca56b281af",
     "tests/browser/authenticatedHostedSignInEntry.spec.ts": "sha256:b48797e21bf6c5f2a707b2fd5003e20f7bff12c6c0cafb94ee06aa7df64c4366",
     "tests/browser/authenticatedLifecycleHarness.test.ts": "sha256:39357b900fb79b9cc848ab919beeba9f1ca0f8fb2d1b142d5d9b2dfbcd28d7ba",
-    "tests/browser/authenticatedLifecycleHarness.ts": "sha256:eb309a163ec359402bf279dd6d5837b360ea199877f5f03b593a4f05517ed77c",
+    "tests/browser/authenticatedLifecycleHarness.ts": "sha256:f9b1455aa2012885aef7f9a66380e9a3455174ebff020d02a076f5bd94488b58",
     "tests/browser/eligibleReviewerRequestDiagnostics.browser.ts": "sha256:454488586cb8accb6724c66cfe3a0129fc164f085f6a07a71054bd575149adef",
     "tests/browser/eligibleReviewerRequestDiagnostics.test.ts": "sha256:4850a0924fc1e5ab7515198b1df78e64381c5613b932a2060235fccbe175ed5e",
     "tests/browser/eligibleReviewerRequestDiagnostics.ts": "sha256:fc8cb072b6af0530755cc734663dbd52a7e3ce367788fb83b81d509eafbe1f4e",

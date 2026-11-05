@@ -1389,6 +1389,44 @@ export const readSelectedAssessEvidenceClaims = async (scope, evidenceNumber) =>
   return labels.map(label => label.slice(prefix.length)).sort();
 };
 
+export const findAssessEvidenceNumberByOwner = async (scope, expectedOwner) => {
+  assert(typeof expectedOwner === 'string' && expectedOwner.trim() === expectedOwner && expectedOwner.length > 0,
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_OWNER_REJECTED');
+  const groups = scope.getByRole('group', { name: /^Evidence \d+$/u });
+  const matches = [];
+  for (let index = 0; index < await groups.count(); index += 1) {
+    const group = groups.nth(index);
+    const owner = group.getByLabel(/^Evidence \d+ owner$/u);
+    assert.equal(await owner.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    if (await owner.inputValue() !== expectedOwner) continue;
+    const label = await owner.getAttribute('aria-label');
+    const parsed = /^Evidence (\d+) owner$/u.exec(label ?? '');
+    assert(parsed, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    matches.push(Number(parsed[1]));
+  }
+  assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_AMBIGUOUS:${expectedOwner}`);
+  return matches[0];
+};
+
+export const findAssessEvidenceNumberByExactClaims = async (scope, expectedClaims) => {
+  assert(Array.isArray(expectedClaims), 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CLAIMS_REJECTED');
+  const expected = [...new Set(expectedClaims)].sort();
+  assert.equal(expected.length, expectedClaims.length, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CLAIMS_REJECTED');
+  const groups = scope.getByRole('group', { name: /^Evidence \d+$/u });
+  const matches = [];
+  for (let index = 0; index < await groups.count(); index += 1) {
+    const owner = groups.nth(index).getByLabel(/^Evidence \d+ owner$/u);
+    assert.equal(await owner.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    const label = await owner.getAttribute('aria-label');
+    const parsed = /^Evidence (\d+) owner$/u.exec(label ?? '');
+    assert(parsed, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    const evidenceNumber = Number(parsed[1]);
+    if (JSON.stringify(await readSelectedAssessEvidenceClaims(scope, evidenceNumber)) === JSON.stringify(expected)) matches.push(evidenceNumber);
+  }
+  assert.equal(matches.length, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_CLAIM_PROVENANCE_AMBIGUOUS');
+  return matches[0];
+};
+
 export const selectExactAssessEvidenceClaims = async (scope, evidenceNumber, claims) => {
   assert(Array.isArray(claims) && claims.length > 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EMPTY_CLAIM_SELECTION_REJECTED');
   const expected = new Set(claims);
@@ -1562,22 +1600,31 @@ export const finalizeAssessDraftForReview = async (page, interactionSequence, { 
     if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
     const evidenceGroups = evidencePanel.getByRole('group', { name: /^Evidence \d+$/u });
     assert.equal(await evidenceGroups.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
-    let linkedCount = 0;
-    for (let index = 0; index < await evidenceGroups.count(); index += 1) {
-      const evidenceNumber = index + 1;
-      if ((await readSelectedAssessEvidenceClaims(evidencePanel, evidenceNumber)).length > 0) continue;
-      await selectExactAssessEvidenceClaims(evidencePanel, evidenceNumber, ['primitive.businessDisposition']);
-      await evidencePanel.getByLabel(`Evidence ${evidenceNumber} owner`, { exact: true }).fill('Synthetic Assess owner');
-      linkedCount += 1;
+    const manualEvidenceNumber = await findAssessEvidenceNumberByOwner(evidencePanel, 'Assessment owner');
+    const transcriptEvidenceNumber = await findAssessEvidenceNumberByExactClaims(evidencePanel, []);
+    assert.notEqual(manualEvidenceNumber, transcriptEvidenceNumber, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_COLLISION');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, manualEvidenceNumber), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_MANUAL_CLAIM_CONTEXT_REJECTED');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, transcriptEvidenceNumber), [],
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
+    const transcriptOwnerControl = evidencePanel.getByLabel(`Evidence ${transcriptEvidenceNumber} owner`, { exact: true });
+    let transcriptEvidenceOwner = (await transcriptOwnerControl.inputValue()).trim();
+    if (!transcriptEvidenceOwner) {
+      transcriptEvidenceOwner = 'Synthetic transcript evidence owner';
+      await transcriptOwnerControl.fill(transcriptEvidenceOwner);
     }
-    assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
+    assert.notEqual(transcriptEvidenceOwner, 'Assessment owner', 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_COLLISION');
+    await selectExactAssessEvidenceClaims(evidencePanel, transcriptEvidenceNumber, ['primitive.businessDisposition']);
     await workspace.getByRole('button', { name: 'Save working draft', exact: true }).click();
     await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
     await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
     await workspace.getByText('Current immutable draft reloaded.', { exact: true }).waitFor({ state: 'visible' });
-    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, 1), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+    const reloadedManualEvidenceNumber = await findAssessEvidenceNumberByOwner(evidencePanel, 'Assessment owner');
+    const reloadedTranscriptEvidenceNumber = await findAssessEvidenceNumberByOwner(evidencePanel, transcriptEvidenceOwner);
+    assert.notEqual(reloadedManualEvidenceNumber, reloadedTranscriptEvidenceNumber, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_COLLISION');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, reloadedManualEvidenceNumber), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
       'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
-    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, 2), ['primitive.businessDisposition'],
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, reloadedTranscriptEvidenceNumber), ['primitive.businessDisposition'],
       'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
     interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   }
