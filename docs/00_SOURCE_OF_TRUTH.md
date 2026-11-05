@@ -4,6 +4,8 @@
 
 AP authorized account-specific Studio handoff permissions and private rendition generation/download in the dedicated acceptance workspace. The provider operator, Assess route, actor identities and cumulative allowance stay unchanged. Only the existing Studio generation route may be rebound to the same Studio author's exclusive workspace role. Normal Admin assignment, independent document approvals and the existing Delivery board remain required.
 
+The dedicated backend installed both role migrations at `08532f50` while provider execution was disabled. The replacement preview at `04561c63` verified all 18 Edge functions, 265 source files and eight separate actor sessions. Its required CI exposed an ambiguous roster lookup for ordinary accounts. The additive correction `20261106012003` keeps the two installed migrations immutable. The three configured Studio roles are unassigned at this checkpoint; there is no hosted document or Delivery publication from this repair.
+
 The predecessor `1f0d4f6be7ff2b6be5e73c2d13198f67d2365ea1` passed all 17 required CI workflows. The hosted supplier assessment was still in review, with no generated Studio versions, publications or board items. Disposable regressions do not establish hosted generation.
 
 ## Independent approval for documentation and planning

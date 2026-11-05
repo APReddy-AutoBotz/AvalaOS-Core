@@ -60,7 +60,7 @@ async function install(client) {
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
   const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
-  assert.equal(migrations.at(-1), '20261106012002_scoped_studio_route_admission.sql');
+  assert.equal(migrations.at(-1), '20261106012003_scoped_studio_role_lookup.sql');
   for (const filename of migrations) {
     const sql = (await readFile(`supabase/migrations/${filename}`, 'utf8')).replaceAll('\r\n', '\n');
     await applySyntheticAiTerminalJournalMigrationForTest(client, filename, async () => {
@@ -206,6 +206,29 @@ try {
     target_id,account_id,actor_id,base_preset,base_role_id,variant,variant_role_id,configured_by
   ) VALUES($1,$2,$3,'author',$4,'studio-author',$5,$6)`,
   [target.targetId,ids.studioAccount,ids.studio,roles.author_role,ids.variantRole,ids.operator]);
+  const readRoster = async () => (await one(db, `SELECT public.synthetic_admin_list(
+    $1,$2,$3,$4,$5,NULL,20) result`, [
+    ids.operator,ids.organization,ids.workspace,operatorVersion,fingerprint,
+  ])).result.roster;
+  const rosterBefore = await readRoster();
+  const studioBefore = rosterBefore.find(row => row.reservationId===ids.studioAccount);
+  const assessBefore = rosterBefore.find(row => row.reservationId===ids.assessAccount);
+  assert.deepEqual({
+    rolePreset:studioBefore.rolePreset,baseRolePreset:studioBefore.baseRolePreset,
+    studioVariant:studioBefore.studioVariant,studioVariantActive:studioBefore.studioVariantActive,
+    assignableRolePresets:studioBefore.assignableRolePresets,
+  }, {
+    rolePreset:'author',baseRolePreset:'author',studioVariant:'studio-author',
+    studioVariantActive:false,assignableRolePresets:['author','studio-author'],
+  });
+  assert.deepEqual({
+    rolePreset:assessBefore.rolePreset,baseRolePreset:assessBefore.baseRolePreset,
+    studioVariant:assessBefore.studioVariant,studioVariantActive:assessBefore.studioVariantActive,
+    assignableRolePresets:assessBefore.assignableRolePresets,
+  }, {
+    rolePreset:'author',baseRolePreset:'author',studioVariant:null,studioVariantActive:false,
+    assignableRolePresets:['author','reviewer','approver','viewer'],
+  });
   await expectFailure(() => one(db, `SELECT public.process_evidence_open_provider_run(
     ${openArgs.map((_, index) => `$${index+1}`).join(',')}) result`, openArgs),
   /PROCESS_EVIDENCE_STUDIO_ACTOR_PREBOUND/);
@@ -239,6 +262,15 @@ try {
     'scoped-studio-assign',ids.studioAccount,1,'studio-author',
   ])).result;
   assert.equal(assigned.studioVariantActive,true);
+  const studioAssigned = (await readRoster()).find(row => row.reservationId===ids.studioAccount);
+  assert.deepEqual({
+    rolePreset:studioAssigned.rolePreset,baseRolePreset:studioAssigned.baseRolePreset,
+    studioVariant:studioAssigned.studioVariant,studioVariantActive:studioAssigned.studioVariantActive,
+    version:Number(studioAssigned.version),
+  }, {
+    rolePreset:'studio-author',baseRolePreset:'author',studioVariant:'studio-author',
+    studioVariantActive:true,version:Number(assigned.version),
+  });
   assert.ok(Number((await one(db, `SELECT version FROM public.authorization_versions
     WHERE org_id=$1 AND user_id=$2`, [ids.organization,ids.studio])).version)>studioVersion);
   assert.deepEqual(await one(db, `SELECT
@@ -317,11 +349,29 @@ try {
 
   const assessAccountBefore = await one(db, 'SELECT version FROM public.synthetic_admin_accounts WHERE id=$1', [ids.assessAccount]);
   const routeBeforeOtherActor = await one(db, 'SELECT allowed_roles,version FROM public.enterprise_ai_capability_routes WHERE id=$1', [ids.studioRoute]);
-  await one(db, `SELECT public.synthetic_admin_assign_studio_variant(
-    $1,$2,$3,$4,$5,$6,$7,$8,$9,'author') result`, [
+  const unboundAssigned = (await one(db, `SELECT public.synthetic_admin_assign_studio_variant(
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,'reviewer') result`, [
     ids.operator,ids.organization,ids.workspace,operatorVersion,fingerprint,randomUUID(),
     'scoped-assess-legacy',ids.assessAccount,Number(assessAccountBefore.version),
-  ]);
+  ])).result;
+  const assessAssigned = (await readRoster()).find(row => row.reservationId===ids.assessAccount);
+  assert.deepEqual({
+    rolePreset:assessAssigned.rolePreset,baseRolePreset:assessAssigned.baseRolePreset,
+    studioVariant:assessAssigned.studioVariant,studioVariantActive:assessAssigned.studioVariantActive,
+    assignableRolePresets:assessAssigned.assignableRolePresets,version:Number(assessAssigned.version),
+  }, {
+    rolePreset:'reviewer',baseRolePreset:'reviewer',studioVariant:null,studioVariantActive:false,
+    assignableRolePresets:['author','reviewer','approver','viewer'],version:Number(unboundAssigned.version),
+  });
+  const unboundRestored = (await one(db, `SELECT public.synthetic_admin_assign_studio_variant(
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,'author') result`, [
+    ids.operator,ids.organization,ids.workspace,operatorVersion,fingerprint,randomUUID(),
+    'scoped-assess-legacy-restore',ids.assessAccount,Number(unboundAssigned.version),
+  ])).result;
+  const assessRestored = (await readRoster()).find(row => row.reservationId===ids.assessAccount);
+  assert.equal(assessRestored.rolePreset,'author');
+  assert.equal(assessRestored.baseRolePreset,'author');
+  assert.equal(Number(assessRestored.version),Number(unboundRestored.version));
   assert.deepEqual(await one(db, 'SELECT allowed_roles,version FROM public.enterprise_ai_capability_routes WHERE id=$1', [ids.studioRoute]),routeBeforeOtherActor);
 
   await expectFailure(() => one(db, `SELECT public.synthetic_admin_assign_studio_variant(
@@ -350,6 +400,15 @@ try {
     'scoped-studio-restore',ids.studioAccount,Number(assigned.version),
   ])).result;
   assert.equal(restored.studioVariantActive,false);
+  const studioRestored = (await readRoster()).find(row => row.reservationId===ids.studioAccount);
+  assert.deepEqual({
+    rolePreset:studioRestored.rolePreset,baseRolePreset:studioRestored.baseRolePreset,
+    studioVariant:studioRestored.studioVariant,studioVariantActive:studioRestored.studioVariantActive,
+    version:Number(studioRestored.version),
+  }, {
+    rolePreset:'author',baseRolePreset:'author',studioVariant:'studio-author',
+    studioVariantActive:false,version:Number(restored.version),
+  });
   assert.deepEqual(await one(db, `SELECT
       (SELECT role_id FROM public.workspace_memberships WHERE org_id=$1 AND workspace_id=$2 AND user_id=$3) studio_role,
       (SELECT allowed_roles FROM public.enterprise_ai_capability_routes WHERE id=$4) studio_route_roles,
@@ -367,10 +426,17 @@ try {
       has_function_privilege('service_role','public.process_evidence_studio_actor_route_role(uuid,uuid,uuid)','EXECUTE') service_helper,
       has_function_privilege('authenticated','public.process_evidence_studio_actor_route_role(uuid,uuid,uuid)','EXECUTE') authenticated_helper,
       has_function_privilege('service_role','public.synthetic_admin_assign_studio_variant(uuid,uuid,uuid,bigint,text,uuid,text,uuid,bigint,text)','EXECUTE') service_assign,
-      has_function_privilege('authenticated','public.synthetic_admin_assign_studio_variant(uuid,uuid,uuid,bigint,text,uuid,text,uuid,bigint,text)','EXECUTE') authenticated_assign`), {
+      has_function_privilege('authenticated','public.synthetic_admin_assign_studio_variant(uuid,uuid,uuid,bigint,text,uuid,text,uuid,bigint,text)','EXECUTE') authenticated_assign,
+      has_function_privilege('service_role','public.synthetic_admin_list(uuid,uuid,uuid,bigint,text,uuid,integer)','EXECUTE') service_list,
+      has_function_privilege('authenticated','public.synthetic_admin_list(uuid,uuid,uuid,bigint,text,uuid,integer)','EXECUTE') authenticated_list,
+      has_function_privilege('anon','public.synthetic_admin_list(uuid,uuid,uuid,bigint,text,uuid,integer)','EXECUTE') anon_list,
+      (SELECT prosecdef FROM pg_proc WHERE oid='public.synthetic_admin_list(uuid,uuid,uuid,bigint,text,uuid,integer)'::regprocedure) list_security_definer,
+      (SELECT proconfig FROM pg_proc WHERE oid='public.synthetic_admin_list(uuid,uuid,uuid,bigint,text,uuid,integer)'::regprocedure) list_config`), {
     service_helper:false,authenticated_helper:false,service_assign:true,authenticated_assign:false,
+    service_list:true,authenticated_list:false,anon_list:false,list_security_definer:true,
+    list_config:['search_path=pg_catalog'],
   });
-  console.log('Scoped Studio roles PostgreSQL passed: exact prebinding, atomic disabled-route grant/restore, real prior mismatch rejection, zero-use permit resume, production Studio generation/token/currency admission without provider use, unchanged Assess/unbound actors, split-role and unsupported-variant denial, unrelated-route preservation, and revoked internal helpers.');
+  console.log('Scoped Studio roles PostgreSQL passed: exact prebinding, unbound and bound roster currentness, legacy assignment, atomic disabled-route grant/restore, real prior mismatch rejection, zero-use permit resume, production Studio generation/token/currency admission without provider use, split-role and unsupported-variant denial, unrelated-route preservation, and revoked internal helpers.');
 } finally {
   for (const client of clients) await client.end().catch(() => undefined);
   if (created) await admin.query(`DROP DATABASE ${databaseName} WITH (FORCE)`).catch(() => undefined);

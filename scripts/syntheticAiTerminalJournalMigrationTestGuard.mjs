@@ -31,6 +31,7 @@ export async function applySyntheticAiTerminalJournalMigrationForTest(client, mi
     '20261105140004_assessed_planning_govern_projection.sql',
     '20261106012001_scoped_studio_actor_roles.sql',
     '20261106012002_scoped_studio_route_admission.sql',
+    '20261106012003_scoped_studio_role_lookup.sql',
   ].includes(migrationName);
   if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION
     || migrationName === '20261105110657_govern_mixed_snapshot_normalization.sql'
@@ -61,18 +62,28 @@ async function withProviderRoutesOff(client, applyMigration) {
   // before replay reaches the later provider-off migrations. Production must
   // already be quiescent; this controller-only transition creates that same
   // installation window in a disposable database and restores the fixture
-  // exactly afterwards. Routes, campaigns, reservations, permits and exercise
-  // history are untouched, so every other unsafe state still fails preflight.
+  // exactly afterwards. The Studio-source upgrade fixture also retains an
+  // enabled historical route, so that exact row is quiesced with the config.
+  // Campaigns, reservations, permits and exercise history remain untouched,
+  // so every other unsafe state still fails preflight.
   const activeConfigs = await client.query(
     "SELECT id FROM public.ai_provider_configs WHERE status='active' ORDER BY id FOR UPDATE",
+  );
+  const enabledRoutes = await client.query(
+    'SELECT id FROM public.enterprise_ai_capability_routes WHERE enabled ORDER BY id FOR UPDATE',
   );
 
   await client.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
   await client.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
   await client.query("UPDATE public.ai_provider_configs SET status='disabled' WHERE status='active'");
+  await client.query('UPDATE public.enterprise_ai_capability_routes SET enabled=false WHERE enabled');
   try {
     return await applyMigration();
   } finally {
+    if (enabledRoutes.rowCount) {
+      await client.query('UPDATE public.enterprise_ai_capability_routes SET enabled=true WHERE id=ANY($1::uuid[])',
+        [enabledRoutes.rows.map(row => row.id)]);
+    }
     if (activeConfigs.rowCount) {
       await client.query("UPDATE public.ai_provider_configs SET status='active' WHERE id=ANY($1::uuid[])",
         [activeConfigs.rows.map(row => row.id)]);

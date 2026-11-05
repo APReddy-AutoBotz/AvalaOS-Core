@@ -122,6 +122,24 @@ the safety checks. The roster always returns `baseRolePreset`, nullable
 `studioVariant`, boolean `studioVariantActive`, and the exact
 `assignableRolePresets` allowlist.
 
+## Installed roster lookup correction
+
+Migration `20261106012003_scoped_studio_role_lookup.sql` is the forward-only
+correction for the installed roster routine. The original routine used
+`binding` as both a PL/pgSQL record and a SQL join alias. PostgreSQL rejected
+the normal roster query with SQLSTATE `42702` because `binding.target_id` was
+ambiguous. The correction replaces only `public.synthetic_admin_list(...)`,
+renames the record to `binding_row` and the join alias to `role_binding`, and
+keeps the response, target authority, validation loop, ACL and fixed search path
+unchanged. Its predecessor and postcondition guards reject substituted sources.
+
+Focused disposable PostgreSQL verification must exercise an unbound account
+through legacy assignment and current roster reload, plus a prebound account
+before activation, after variant activation and after base restoration. Each
+reload must show the exact effective role, base role, variant state, allowlist
+and current account version. The route, audit, idempotency and provider-off
+checks remain owned by the original role and route migrations.
+
 ## Safe fallback and rollback
 
 Before disabling this capability, restore each bound actor through the normal
