@@ -4154,7 +4154,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "DELIVERY-DUPLICATE_IMPORT"
@@ -4229,7 +4231,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "DELIVERY-RETAINED_LINEAGE"
@@ -5799,7 +5803,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -5884,7 +5890,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -5969,7 +5977,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "EI-QUERY_TENANT_ISOLATION"
@@ -6054,7 +6064,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -6139,7 +6151,9 @@
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
         "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
-        "supabase/migrations/20261105140003_assessed_planning_delivery.sql"
+        "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"

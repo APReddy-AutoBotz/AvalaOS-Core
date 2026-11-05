@@ -51,18 +51,32 @@ export async function applySyntheticAiTerminalJournalMigrationForTest(client, mi
 }
 
 async function withProviderRoutesOff(client, applyMigration) {
-
   const state = await client.query(`SELECT enterprise.provider_enabled enterprise,studio.provider_enabled studio
     FROM public.enterprise_intelligence_runtime_control enterprise
     CROSS JOIN public.studio_artifact_runtime_control studio
     WHERE enterprise.singleton AND studio.singleton`);
   if (state.rowCount !== 1) throw new Error('SYNTHETIC_AI_TERMINAL_JOURNAL_TEST_RUNTIME_STATE_MISSING');
 
+  // Some upgrade fixtures deliberately create an active provider config long
+  // before replay reaches the later provider-off migrations. Production must
+  // already be quiescent; this controller-only transition creates that same
+  // installation window in a disposable database and restores the fixture
+  // exactly afterwards. Routes, campaigns, reservations, permits and exercise
+  // history are untouched, so every other unsafe state still fails preflight.
+  const activeConfigs = await client.query(
+    "SELECT id FROM public.ai_provider_configs WHERE status='active' ORDER BY id FOR UPDATE",
+  );
+
   await client.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
   await client.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+  await client.query("UPDATE public.ai_provider_configs SET status='disabled' WHERE status='active'");
   try {
     return await applyMigration();
   } finally {
+    if (activeConfigs.rowCount) {
+      await client.query("UPDATE public.ai_provider_configs SET status='active' WHERE id=ANY($1::uuid[])",
+        [activeConfigs.rows.map(row => row.id)]);
+    }
     await client.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=$1 WHERE singleton', [state.rows[0].enterprise]);
     await client.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=$1 WHERE singleton', [state.rows[0].studio]);
   }

@@ -178,7 +178,7 @@
     "scripts/studioHandoffPersonaArtifact.mjs": "sha256:6bb8fd5f82855fb6873c54e0072270a0a078de728013e615b80fa381be56e65d",
     "scripts/studioHandoffPersonaArtifact.test.mjs": "sha256:aff2c493514c743b160b704db44644a473d8a320c433e40d3d824a1468a7db77",
     "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",
-    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:7f7aad5f0188e972a1f099dce1971c87655651a07b8cf58f7aa445f83b1238e3",
+    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:0abb82de9821cffc667fe21ab299924a8d2952844df1b6d8255338f6ac24a35b",
     "scripts/testAssessV2NativePostgrest.mjs": "sha256:8a4897485027a5b7273d5db86826796be49796e41dabee64cd5c815948dd1c63",
     "scripts/testAuthenticatedGovernStudioLineagePostgres.mjs": "sha256:933823a55b54f4c0c76c220d4c0b4eb4471eeb955b2db44a643c999ba0bdb8ee",
     "scripts/testAuthenticatedHostedBootstrap.mjs": "sha256:1eec7ce25e86f9ccc09e92386afa3aaebdfa613f0649ec316c140e07f976a17a",
@@ -433,6 +433,8 @@
     "supabase/migrations/20261105140002_assessed_planning_studio.sql": "sha256:e8aba680891ee38eb1094b80dee4cb53d116487596efca73b64af91e1419047f",
     "supabase/migrations/20261105140003_assessed_planning_delivery.sql": "sha256:d2b503f6c29db690f1ae8927f6ac6e6ce000610ff90c28ff9a43b5d83bfceef3",
     "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql": "sha256:ca2f994e11fa98525b29fa4056e8e5ac3af8f31896b020470b1e7545ce224cec",
+    "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql": "sha256:9a819264b0040d9496d23533aa2cca9bc09aa38bc8fbdc403a17024a9748b915",
+    "supabase/migrations/20261106012002_scoped_studio_route_admission.sql": "sha256:d1bab38f020032d909b0e9e1dd43284576e90ccdc3cdeb9dff34664996de467d",
     "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
     "testing/process-lifecycle/contracts/pr-a-assertion-registry.json": "sha256:8dca3fc1d04349863dfac862695a492f3fcee7846ecea5f1198df1f2784feac8",
     "testing/process-lifecycle/contracts/pr-a-evidence.schema.json": "sha256:6cbe7858cc86d49a993c9c7259dfa5c6db0089af5bc51260bc23701a3137adf3",
@@ -446,9 +448,9 @@
     "testing/process-lifecycle/fixtures/sources/assess/PROMPT-INJECTION-01.vtt": "sha256:4c5c2d62f52fb7dabd7e16db842d4d74c24e55e1972b57a1645970d8052164e4",
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/acceptance/catalog/schema.json": "sha256:96cf00e298b79ca4a8c4bdc36e2d970dfb6b6537cea46755e178ae93fc8d981f",
-    "tests/acceptance/catalog/test-catalog.json": "sha256:09e9f33ec07e4e92a15db842516fea9e436ec948e11edd06ac1bd14117fee789",
-    "tests/acceptance/proof-owner-registry.json": "sha256:1f125bbae7b6e4d33ada61d329aecf463893aa5a8b01a479289a195dad97e875",
-    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:66105e974d03a61173cbc9d8a2bc893f936a6eb645a66c36c2de92a7b1b77419",
+    "tests/acceptance/catalog/test-catalog.json": "sha256:2701d28a1a95fdf8f64c53bd7293089475f5352c07aaa7dd4a53162c74c6d975",
+    "tests/acceptance/proof-owner-registry.json": "sha256:df186e72d81696bb7037ea2f6ac90c1b676bebdc18b8268fbebb512c83c99aa6",
+    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:eb8a454aeaf27b548115600a04c6636ed9a868766de12accdc0c193dcb460d6d",
     "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:f55f0d860b9a94067cd1934d3798b25b3a5d14479299244d344d9989dccdd044",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:a0fbcc5b2f4751a6887bb58f6d6a54f28fbc5ef1967c636df7cd8bca56b281af",
@@ -1860,9 +1862,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {
@@ -2006,9 +2010,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {
@@ -2613,9 +2619,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {
@@ -2669,9 +2677,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {
@@ -2725,9 +2735,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {
@@ -2781,9 +2793,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {
@@ -2837,9 +2851,11 @@
         "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
         "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
         "supabase/migrations/20261105140001_assessed_planning_review.sql",
+        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
         "supabase/migrations/20261105140002_assessed_planning_studio.sql",
         "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
-        "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql"
+        "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+        "supabase/migrations/20261106012002_scoped_studio_route_admission.sql"
       ],
       "ownership": [
         {

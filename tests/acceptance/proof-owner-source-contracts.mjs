@@ -634,6 +634,16 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "assessed-planning-delivery",
     "sourceReference": "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
     "selector": "ALTER TABLE public.projects DROP CONSTRAINT projects_current_assessment_binding_check;"
+  },
+  {
+    "anchorId": "scoped-studio-actor-roles",
+    "sourceReference": "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.synthetic_admin_assign_studio_variant("
+  },
+  {
+    "anchorId": "scoped-studio-route-admission",
+    "sourceReference": "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_studio_actor_route_role("
   }
 ]);
 
@@ -1912,7 +1922,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
@@ -2040,7 +2052,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
@@ -2575,7 +2589,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
@@ -2625,7 +2641,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
@@ -2675,7 +2693,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
@@ -2725,7 +2745,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
@@ -2775,7 +2797,9 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-review",
       "assessed-planning-govern-projection",
       "assessed-planning-studio",
-      "assessed-planning-delivery"
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission"
     ],
     "ownership": [
       {
