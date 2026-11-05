@@ -455,6 +455,37 @@ const connectedEvidenceClaims = [
   'asset.accountableOwner',
 ] as const;
 
+const checkedEvidenceLabels = async (page: Page, evidenceNumber: number, kind: 'claim' | 'attach to'): Promise<string[]> => page
+  .getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true })
+  .getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} ${kind} `, 'u') })
+  .evaluateAll(nodes => nodes
+    .filter(node => (node as HTMLInputElement).checked)
+    .map(node => node.getAttribute('aria-label') ?? '')
+    .filter(Boolean)
+    .sort());
+
+const selectExactConnectedEvidenceClaims = async (page: Page, evidenceNumber: number, claims: readonly string[]) => {
+  const group = page.getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true });
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const checkboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') });
+  const availableLabels = await checkboxes.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? ''));
+  const availableClaims = new Set(availableLabels.map(label => label.slice(prefix.length)));
+  const expectedClaims = new Set<string>(claims);
+  expect(expectedClaims.size).toBe(claims.length);
+  for (const claim of claims) expect(availableClaims.has(claim), `Registered evidence claim ${claim} must be selectable.`).toBe(true);
+
+  const attachedBefore = await checkedEvidenceLabels(page, evidenceNumber, 'attach to');
+  expect(attachedBefore.length).toBeGreaterThan(0);
+  for (const label of availableLabels) {
+    const checkbox = group.getByLabel(label, { exact: true });
+    if (expectedClaims.has(label.slice(prefix.length))) await checkbox.check();
+    else await checkbox.uncheck();
+  }
+  const selected = (await checkedEvidenceLabels(page, evidenceNumber, 'claim')).map(label => label.slice(prefix.length)).sort();
+  expect(selected).toEqual([...claims].sort());
+  expect(await checkedEvidenceLabels(page, evidenceNumber, 'attach to')).toEqual(attachedBefore);
+};
+
 const completeRequiredAssessmentFacts = async (page: Page) => {
   if (canonicalInvoiceExceptionJourney) {
     await page.getByLabel('Primitive 1 name', { exact: true }).fill('Resolve AP invoice exception');
@@ -486,7 +517,7 @@ const completeRequiredAssessmentFacts = async (page: Page) => {
   await interaction.getByLabel('highImpact', { exact: true }).check();
   await interaction.getByLabel('financialAction', { exact: true }).check();
   await page.getByText('4. Agent necessity and evidence', { exact: true }).click();
-  await page.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(connectedEvidenceClaims.join(', '));
+  await selectExactConnectedEvidenceClaims(page, 1, connectedEvidenceClaims);
   await expect(page.getByText(/Before finalization, add:/u)).toHaveCount(0);
 };
 

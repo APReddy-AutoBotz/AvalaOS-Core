@@ -1,6 +1,6 @@
 # Process evidence to confirmed delivery work
 
-## Govern review of a mixed operation boundary — 5 November 2026
+## Govern review of a mixed operation boundary - 5 November 2026
 
 The supplier decision finalized from source version 5 after AP supplied a separate human-authored synthetic API contract. It contains a Ready GET, a Prohibited POST, and an Unknown PATCH with three empty action arrays. The independent Assess reviewer could open the order-status decision, but the supplier review RPC returned `PR1E_GOVERN_ACTION_AUTHORITY_INVALID`. An unknown operation grants no action. The additive repair allows its canonical declared-mode Unknown representation to contribute zero authority while preserving the other operations. Injected allowed or approval-bound actions on an Unknown operation are rejected. Existing resolutions and handoff histories are checked under maintenance locks before the migration commits. The evaluator, decision snapshots and historical approvals retain their identities.
 

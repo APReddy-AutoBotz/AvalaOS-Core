@@ -1375,6 +1375,39 @@ export const SYNTHETIC_ASSESS_REVIEW_CLAIMS = Object.freeze([
   'asset.strategicLifespan', 'asset.technicalHealth', 'asset.businessCriticality', 'asset.ownershipModel', 'asset.vendorRoadmap', 'asset.operatingStability', 'asset.accountableOwner',
 ]);
 
+const checkedAriaLabels = locator => locator.evaluateAll(nodes => nodes
+  .filter(node => node.checked)
+  .map(node => node.getAttribute('aria-label') ?? '')
+  .filter(Boolean)
+  .sort());
+
+export const readSelectedAssessEvidenceClaims = async (scope, evidenceNumber) => {
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const labels = await checkedAriaLabels(scope
+    .getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true })
+    .getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') }));
+  return labels.map(label => label.slice(prefix.length)).sort();
+};
+
+export const selectExactAssessEvidenceClaims = async (scope, evidenceNumber, claims) => {
+  assert(Array.isArray(claims) && claims.length > 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EMPTY_CLAIM_SELECTION_REJECTED');
+  const expected = new Set(claims);
+  assert.equal(expected.size, claims.length, 'PR_C_SYNTHETIC_BROWSER_ASSESS_DUPLICATE_CLAIM_SELECTION_REJECTED');
+  const group = scope.getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true });
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const checkboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') });
+  const labels = await checkboxes.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? ''));
+  const available = new Set(labels.map(label => label.slice(prefix.length)));
+  for (const claim of expected) assert(available.has(claim), `PR_C_SYNTHETIC_BROWSER_ASSESS_UNREGISTERED_CLAIM:${claim}`);
+  for (const label of labels) {
+    const checkbox = group.getByLabel(label, { exact: true });
+    if (expected.has(label.slice(prefix.length))) await checkbox.check();
+    else await checkbox.uncheck();
+  }
+  assert.deepEqual(await readSelectedAssessEvidenceClaims(scope, evidenceNumber), [...expected].sort(),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EXACT_CLAIM_SET_REJECTED');
+};
+
 export const createSyntheticAssessDraft = async (page, interactionSequence, { expectedScope } = {}) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
@@ -1429,7 +1462,13 @@ export const completeSyntheticAssessFields = async (page, interactionSequence) =
   for (const fact of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'])
     await workspace.getByLabel(`Interaction 1 ${fact}`, { exact: true }).selectOption('true');
   await workspace.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }).click();
-  await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
+  const evidenceOne = workspace.getByRole('group', { name: 'Evidence 1', exact: true });
+  const attachments = evidenceOne.getByRole('checkbox', { name: /^Evidence 1 attach to /u });
+  const attachedBefore = await checkedAriaLabels(attachments);
+  assert(attachedBefore.length > 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_ENTITY_EVIDENCE_ATTACHMENT_MISSING');
+  await selectExactAssessEvidenceClaims(workspace, 1, SYNTHETIC_ASSESS_REVIEW_CLAIMS);
+  assert.deepEqual(await checkedAriaLabels(attachments), attachedBefore,
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_ENTITY_EVIDENCE_ATTACHMENT_CHANGED');
   interactionSequence.push('link:manual-synthetic-decision-claims');
   interactionSequence.push('fill:manual-assess-facts');
   return { manuallyCompletedFactCount: 7, owner: 'Synthetic Assess owner', primitiveId };
@@ -1456,7 +1495,7 @@ export const assertSyntheticAssessDraftReadback = async (page, primitiveId) => {
   for (const fact of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'])
     assert.equal(await workspace.getByLabel(`Interaction 1 ${fact}`, { exact: true }).inputValue(), 'true',
       `PR_C_SYNTHETIC_BROWSER_ASSESS_INTERACTION_READBACK_REJECTED:${fact}`);
-  assert.equal(await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '),
+  assert.deepEqual(await readSelectedAssessEvidenceClaims(workspace, 1), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
     'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIMS_READBACK_REJECTED');
   return { exactFieldCount: 10 };
 };
@@ -1485,6 +1524,18 @@ export const persistSyntheticAssessDraft = async (page, interactionSequence, {
   assert(target.name === 'Capture request' && target.type === 'Capture'
     && rule?.fieldId === 'primitive.rulesStable' && rule?.value === true && rule?.status === 'known' && rule?.source === 'user',
   'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_COMMAND_REJECTED');
+  const evidenceLinks = command.body?.payload?.evidenceLinks;
+  assert(Array.isArray(evidenceLinks) && evidenceLinks.length === 1,
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_COMMAND_REJECTED');
+  const evidenceId = evidenceLinks[0]?.id;
+  assert(typeof evidenceId === 'string' && UUID.test(evidenceId),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_COMMAND_REJECTED');
+  assert.deepEqual([...(evidenceLinks[0]?.claimIds ?? [])].sort(), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_CLAIM_SET_REJECTED');
+  assert(target.evidenceIds?.includes(evidenceId), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_EVIDENCE_ATTACHMENT_REJECTED');
+  const interactions = command.body?.payload?.interactions;
+  assert(Array.isArray(interactions) && interactions.some(interaction => interaction?.primitiveId === primitiveId && interaction?.evidenceIds?.includes(evidenceId)),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_INTERACTION_EVIDENCE_ATTACHMENT_REJECTED');
   await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('save:assess-v2-draft');
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
@@ -1509,13 +1560,14 @@ export const finalizeAssessDraftForReview = async (page, interactionSequence, { 
   if (afterTranscriptApply) {
     const evidencePanel = workspace.locator('details').filter({ has: page.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }) });
     if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
-    const claims = evidencePanel.getByRole('textbox', { name: /^Evidence \d+ claim IDs$/u });
-    assert.equal(await claims.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
+    const evidenceGroups = evidencePanel.getByRole('group', { name: /^Evidence \d+$/u });
+    assert.equal(await evidenceGroups.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
     let linkedCount = 0;
-    for (let index = 0; index < await claims.count(); index += 1) {
-      if ((await claims.nth(index).inputValue()).trim()) continue;
-      await claims.nth(index).fill('primitive.businessDisposition');
-      await evidencePanel.getByLabel(`Evidence ${index + 1} owner`, { exact: true }).fill('Synthetic Assess owner');
+    for (let index = 0; index < await evidenceGroups.count(); index += 1) {
+      const evidenceNumber = index + 1;
+      if ((await readSelectedAssessEvidenceClaims(evidencePanel, evidenceNumber)).length > 0) continue;
+      await selectExactAssessEvidenceClaims(evidencePanel, evidenceNumber, ['primitive.businessDisposition']);
+      await evidencePanel.getByLabel(`Evidence ${evidenceNumber} owner`, { exact: true }).fill('Synthetic Assess owner');
       linkedCount += 1;
     }
     assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
@@ -1523,7 +1575,10 @@ export const finalizeAssessDraftForReview = async (page, interactionSequence, { 
     await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
     await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
     await workspace.getByText('Current immutable draft reloaded.', { exact: true }).waitFor({ state: 'visible' });
-    for (const input of await claims.all()) assert((await input.inputValue()).trim(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, 1), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, 2), ['primitive.businessDisposition'],
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
     interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   }
   const finalize = workspace.getByRole('button', { name: 'Finalize assessment for review', exact: true });

@@ -586,6 +586,36 @@ const connectedEvidenceClaims = [
   'asset.accountableOwner',
 ] as const;
 
+const checkedEvidenceLabels = async (locator: Locator): Promise<string[]> => locator.evaluateAll(nodes => nodes
+  .filter(node => (node as HTMLInputElement).checked)
+  .map(node => node.getAttribute('aria-label') ?? '')
+  .filter(Boolean)
+  .sort());
+
+const selectExactConnectedEvidenceClaims = async (page: Page, evidenceNumber: number, claims: readonly string[]) => {
+  const group = page.getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true });
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const checkboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') });
+  const availableLabels = await checkboxes.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? ''));
+  const availableClaims = new Set(availableLabels.map(label => label.slice(prefix.length)));
+  const expectedClaims = new Set<string>(claims);
+  expect([...expectedClaims].sort()).toEqual([...claims].sort());
+  for (const claim of claims) expect(availableClaims.has(claim), `Registered evidence claim ${claim} must be selectable.`).toBe(true);
+
+  const attachmentCheckboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} attach to `, 'u') });
+  const attachedBefore = await checkedEvidenceLabels(attachmentCheckboxes);
+  expect(attachedBefore.length).toBeGreaterThan(0);
+  for (const label of availableLabels) {
+    const claim = label.slice(prefix.length);
+    const checkbox = group.getByLabel(label, { exact: true });
+    if (expectedClaims.has(claim)) await checkbox.check();
+    else await checkbox.uncheck();
+  }
+  const selected = (await checkedEvidenceLabels(checkboxes)).map(label => label.slice(prefix.length)).sort();
+  expect(selected).toEqual([...claims].sort());
+  expect(await checkedEvidenceLabels(attachmentCheckboxes)).toEqual(attachedBefore);
+};
+
 export type AuthenticatedLifecycleProcessNavigation = Readonly<{
   search: string;
   persistedView: unknown;
@@ -1366,7 +1396,7 @@ export const authenticatedLifecycleCompleteRequiredAssessmentFacts = async (
     await interaction.getByLabel('financialAction', { exact: true }).check();
   }
   await page.getByText('4. Agent necessity and evidence', { exact: true }).click();
-  await page.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(connectedEvidenceClaims.join(', '));
+  await selectExactConnectedEvidenceClaims(page, 1, connectedEvidenceClaims);
   await expect(page.getByText(/Before finalization, add:/u)).toHaveCount(0);
 };
 

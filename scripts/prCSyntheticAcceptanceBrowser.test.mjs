@@ -599,33 +599,42 @@ test('completed evidence leaves workspace actions clickable in the fixed-height 
 });
 
 test('post-Apply authoring links new evidence, persists it, and independently reviews both items', async () => {
-  const { finalizeAssessDraftForReview, prepareAssessReviewApproval, SYNTHETIC_ASSESS_REVIEW_CLAIMS } = await import('./runPrCSyntheticAcceptanceBrowser.mjs');
+  const { finalizeAssessDraftForReview, prepareAssessReviewApproval, readSelectedAssessEvidenceClaims, SYNTHETIC_ASSESS_REVIEW_CLAIMS } = await import('./runPrCSyntheticAcceptanceBrowser.mjs');
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
     await page.setContent(`<section data-testid="assess-v2-workspace">
       <p role="status" id="author-status"></p>
       <details><summary>4. Agent necessity and evidence</summary>
-        <input aria-label="Evidence 1 claim IDs"><input aria-label="Evidence 1 owner" value="Assessment owner">
-        <input aria-label="Evidence 2 claim IDs"><input aria-label="Evidence 2 owner">
+        <fieldset><legend>Evidence 1</legend>
+          ${SYNTHETIC_ASSESS_REVIEW_CLAIMS.map(claim => `<input type="checkbox" aria-label="Evidence 1 claim ${claim}" checked>`).join('')}
+          <input aria-label="Evidence 1 owner" value="Assessment owner">
+        </fieldset>
+        <fieldset><legend>Evidence 2</legend>
+          ${SYNTHETIC_ASSESS_REVIEW_CLAIMS.map(claim => `<input type="checkbox" aria-label="Evidence 2 claim ${claim}">`).join('')}
+          <input aria-label="Evidence 2 owner">
+        </fieldset>
       </details>
       <button>Reload current draft</button><button>Save working draft</button>
       <button disabled>Finalize assessment for review</button>
     </section>`);
-    await page.evaluate(claims => {
-      const inputs = [...document.querySelectorAll('input')];
-      inputs[0].value = claims.join(', ');
-      let saved = inputs.map(input => input.value);
+    await page.evaluate(() => {
+      const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
+      const owners = [...document.querySelectorAll('input:not([type="checkbox"])')];
+      let saved = { checked: checkboxes.map(input => input.checked), owners: owners.map(input => input.value) };
       const [reload, save, finalize] = document.querySelectorAll('button');
       const status = document.querySelector('#author-status');
-      const ready = () => { finalize.disabled = !saved[0] || !saved[2] || inputs.some((input, i) => input.value !== saved[i]); };
-      for (const input of inputs) input.addEventListener('input', ready);
+      const dirty = () => checkboxes.some((input, i) => input.checked !== saved.checked[i]) || owners.some((input, i) => input.value !== saved.owners[i]);
+      const evidenceHasClaim = number => [...document.querySelectorAll(`input[aria-label^="Evidence ${number} claim "]`)].some(input => input.checked);
+      const ready = () => { finalize.disabled = !evidenceHasClaim(1) || !evidenceHasClaim(2) || dirty(); };
+      for (const input of [...checkboxes, ...owners]) { input.addEventListener('input', ready); input.addEventListener('change', ready); }
       reload.addEventListener('click', () => {
-        inputs.forEach((input, i) => { input.value = saved[i]; });
+        checkboxes.forEach((input, i) => { input.checked = saved.checked[i]; });
+        owners.forEach((input, i) => { input.value = saved.owners[i]; });
         status.textContent = 'Current immutable draft reloaded.'; ready();
       });
       save.addEventListener('click', () => {
-        saved = inputs.map(input => input.value);
+        saved = { checked: checkboxes.map(input => input.checked), owners: owners.map(input => input.value) };
         document.body.dataset.saves = String(Number(document.body.dataset.saves || 0) + 1);
         status.textContent = 'Draft saved as a new immutable authoring version.'; ready();
       });
@@ -644,18 +653,35 @@ test('post-Apply authoring links new evidence, persists it, and independently re
           }, 50);
         });
       });
-    }, SYNTHETIC_ASSESS_REVIEW_CLAIMS);
+    });
     const interactions = [];
     assert(await page.getByRole('button', { name: 'Finalize assessment for review', exact: true }).isDisabled());
     await finalizeAssessDraftForReview(page, interactions, { afterTranscriptApply: true });
-    assert.equal(await page.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
-    assert.equal(await page.getByLabel('Evidence 2 claim IDs', { exact: true }).inputValue(), 'primitive.businessDisposition');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(page, 1), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort());
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(page, 2), ['primitive.businessDisposition']);
     assert.equal(await page.locator('body').getAttribute('data-saves'), '1');
     await prepareAssessReviewApproval(page, interactions);
     assert.equal(await page.locator('body').getAttribute('data-attestations'), '2');
     assert.equal(await page.getByRole('button', { name: 'Accept evidence', exact: true }).count(), 0);
     assert(await page.getByRole('button', { name: 'Approve reviewed decision', exact: true }).isEnabled());
   } finally { await browser.close(); }
+});
+
+test('connected Assess automation uses only registered claim checkboxes and exact selected sets', async () => {
+  const consumers = await Promise.all([
+    '../tests/browser/authenticatedLifecycleHarness.ts',
+    '../tests/browser/enterpriseLifecycleAcceptance/enterpriseLifecycleAcceptance.spec.ts',
+    './runPrCSyntheticAcceptanceBrowser.mjs',
+    './prCSyntheticAcceptanceBrowser.test.mjs',
+  ].map(async relativePath => ({ relativePath, source: await readFile(new URL(relativePath, import.meta.url), 'utf8') })));
+  for (const { relativePath, source } of consumers) {
+    assert.doesNotMatch(source, /getByLabel\(['"]Evidence \d+ claim IDs/u, `${relativePath} must not depend on the removed arbitrary claim textbox.`);
+    assert.doesNotMatch(source, /getByRole\(['"]textbox['"],\s*\{\s*name:\s*\/\^Evidence/u, `${relativePath} must not discover arbitrary claim textboxes.`);
+  }
+  assert.match(consumers[0].source, /selectExactConnectedEvidenceClaims\(page, 1, connectedEvidenceClaims\)/u);
+  assert.match(consumers[1].source, /selectExactConnectedEvidenceClaims\(page, 1, connectedEvidenceClaims\)/u);
+  assert.match(consumers[2].source, /assert\.deepEqual\(await readSelectedAssessEvidenceClaims/u);
+  assert.match(consumers[2].source, /PR_C_SYNTHETIC_BROWSER_ASSESS_INTERACTION_EVIDENCE_ATTACHMENT_REJECTED/u);
 });
 
 test('synthetic authored claims cover the actual scaffold decision trace without promoting unknown facts', async () => {
