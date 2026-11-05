@@ -583,7 +583,7 @@ try {
     (SELECT count(*)::int FROM public.workspace_memberships member
       WHERE member.org_id=$2 AND member.workspace_id=$3) workspace_members
     FROM public.roles role WHERE role.id=$1`,[roles.operator_role,id.org,id.workspace]),rightsBeforeRenewal);
-  await db.query("UPDATE public.synthetic_ai_campaign_authorities SET expires_at=now()-interval '1 second' WHERE id=$1",[permit.campaignId]);
+  await db.query("UPDATE public.synthetic_ai_campaign_authorities SET expires_at=clock_timestamp() WHERE id=$1",[permit.campaignId]);
   await db.query('BEGIN');
   await assert.rejects(debit(db,'studio.document.generate',id.studio),/PERMIT_INACTIVE/);
   await db.query('ROLLBACK');

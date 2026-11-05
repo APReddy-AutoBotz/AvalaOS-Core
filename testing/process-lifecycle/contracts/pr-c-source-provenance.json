@@ -574,7 +574,7 @@
     "scripts/testPr1gMigrations.mjs": "sha256:d1caa7e6868dafaac5aa1e94eaa78a9fc6bc556af7451cfff550196975d97bb1",
     "scripts/testPreactivationSignInDiagnostics.mjs": "sha256:b5d862a1de3c66aed7106d0fd41318fe0590404a3542418154486b661ca3897d",
     "scripts/testProcessCreationPostgres.mjs": "sha256:3f87ae9546d883f2be114ff9cd71822647593761ef2420f64d98b590ff4b3684",
-    "scripts/testProcessEvidenceProviderPermitPostgres.mjs": "sha256:586db54f023c1cc418f75d8c47b33e4db8bbabf639ff796d5ca11d93a8d4dbfd",
+    "scripts/testProcessEvidenceProviderPermitPostgres.mjs": "sha256:6fe283e0975a79301f502922e64114a4758996beadfc2d7ddf0c7330ca86cebd",
     "scripts/testProjectionRpcPostgrest.mjs": "sha256:3c22a262b1b96ab232ead942b409bee0f4259e4375e3c06f71f1d38b971382f8",
     "scripts/testStudioAcceptancePostgres.mjs": "sha256:6e6979a3b2e6c99daba6fe9525da119269a4faecc547a058db335531767d870d",
     "scripts/testStudioArtifactMigrations.mjs": "sha256:c9ff656d84aade63dbe739dabf3b4e336d48f7aa1205f723d6a5acc2c72c6e32",
