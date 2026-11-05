@@ -21,9 +21,25 @@ const publish: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>
       requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Publication must retain exact ancestry.' }] }] },
 };
 const publication = { publicationId: U[6], documentGenerationId: U[7], projectId: U[5], artifactId: U[3], artifactVersionId: U[4],
-  artifactVersion: 3, artifactContentHash: 'a'.repeat(64), sourceProcessId: U[8], sourceAssessmentId: U[9], governResolutionId: U[10],
+  artifactVersion: 3, artifactContentHash: 'a'.repeat(64), sourceProcessId: U[8], sourceAssessmentId: U[9],
+  reviewResolutionId: U[10], governResolutionId: U[11], studioHandoffId: U[12], approvalPurpose: 'implementation_readiness',
   workItemCount: 1, workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T05:11:00Z' };
 assert.deepEqual(decodeStudioDeliveryCommand(publish), publish);
+const planningWorkItems = [
+  { proposalRole: 'discovery' as const, type: 'Task' as const, title: 'Resolve API authentication', description: '', acceptanceCriteria: [],
+    requirementLinks: [{ sectionId: 'unknowns', sectionTitle: 'Unknowns', requirementText: 'Open question: Which authentication scheme is approved?' }] },
+  { ...publish.payload.workItems[0], dependencyProposalIndices: [0] },
+];
+const planningCommand: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'> = {
+  ...publish, payload: { ...publish.payload, workItems: planningWorkItems },
+};
+const decodedPlanningCommand = decodeStudioDeliveryCommand(planningCommand);
+assert.equal(decodedPlanningCommand.action, 'studio.approved-artifact.publish');
+if (decodedPlanningCommand.action !== 'studio.approved-artifact.publish') throw new Error('planning publish command was not retained');
+assert.deepEqual((decodedPlanningCommand as StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>).payload.workItems, planningWorkItems);
+assert.throws(() => decodeStudioDeliveryCommand({ ...publish, payload: { ...publish.payload,
+  workItems: [{ ...publish.payload.workItems[0], dependencyProposalIndices: [0] }] } }), StudioDeliveryContractError,
+'implementation dependencies must resolve to a discovery proposal in the same reviewed selection');
 const legacyReplay = { ...publish, payload: { ...publish.payload, workItems: publish.payload.workItems.map(({ proposalRole: _role, ...item }) => item) } };
 assert.deepEqual(decodeStudioDeliveryCommand(legacyReplay), legacyReplay,
   'historical exact replay payloads remain decodable after stable roles are introduced');
@@ -36,6 +52,11 @@ const projectedLegacyPublication = { ...publication, sourceAssessmentCaseId: nul
 assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
   outcome: 'committed', receiptId: U[11], resource: projectedLegacyPublication }, publish).resource, projectedLegacyPublication,
 'the current projection keeps nullable V2 fields on exact V1 publication lineage');
+const planningPublication = { ...nativePublication, governResolutionId: null, approvalPurpose: 'documentation_planning' };
+assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: planningPublication }, publish).resource, planningPublication);
+assert.throws(() => decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
+  outcome: 'committed', receiptId: U[11], resource: { ...planningPublication, governResolutionId: U[11] } }, publish), StudioDeliveryContractError);
 const dualLineagePublication = { ...publication, sourceAssessmentCaseId: U[12], sourceAssessmentDecisionId: U[13] };
 assert.deepEqual(decodeStudioDeliveryCommandSuccess({ ok: true, schemaVersion: publish.schemaVersion, action: publish.action,
   outcome: 'committed', receiptId: U[11], resource: dualLineagePublication }, publish).resource, dualLineagePublication,

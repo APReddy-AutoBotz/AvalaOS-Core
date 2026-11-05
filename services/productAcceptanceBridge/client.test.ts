@@ -19,7 +19,8 @@ const payload = { artifactId: id(4), expectedArtifactVersionId: id(5), expectedA
 const success = (command: ReturnType<typeof buildStudioDeliveryCommand>) => ({ ok: true, schemaVersion: 'studio-delivery-command.v1', action: command.action,
   outcome: 'committed', receiptId: id(7), resource: { publicationId: id(8), documentGenerationId: id(9), projectId: id(6), artifactId: id(4),
     artifactVersionId: id(5), artifactVersion: 1, artifactContentHash: 'a'.repeat(64), sourceProcessId: id(10), sourceAssessmentId: id(11),
-    governResolutionId: id(12), workItemCount: 1, workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T00:00:00.000Z' } });
+    reviewResolutionId: id(12), governResolutionId: id(13), studioHandoffId: id(14), approvalPurpose: 'implementation_readiness',
+    workItemCount: 1, workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T00:00:00.000Z' } });
 
 async function main() {
   const identity = { requestId: id(20), idempotencyKey: 'studio-delivery.client-retry' };

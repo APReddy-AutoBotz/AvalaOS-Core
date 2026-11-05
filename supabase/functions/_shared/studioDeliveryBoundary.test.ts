@@ -16,7 +16,8 @@ const command: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>
 const context: TenantContext = { userId: U[6], organizationId: U[0], workspaceId: U[1], authorizationVersion: 7, capabilities: ['studio.artifacts.publish'] };
 const success = { ok: true, schemaVersion: command.schemaVersion, action: command.action, outcome: 'committed', receiptId: U[7], resource: {
   publicationId: U[8], documentGenerationId: U[9], projectId: U[5], artifactId: U[3], artifactVersionId: U[4], artifactVersion: 3,
-  artifactContentHash: 'a'.repeat(64), sourceProcessId: U[10], sourceAssessmentId: U[11], governResolutionId: U[12], workItemCount: 1,
+  artifactContentHash: 'a'.repeat(64), sourceProcessId: U[10], sourceAssessmentId: U[11], reviewResolutionId: U[12],
+  governResolutionId: U[13], studioHandoffId: U[14], approvalPurpose: 'implementation_readiness', workItemCount: 1,
   workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T05:11:00Z',
 } };
 const request = (body: unknown, target = 'command') => new Request(`https://example.test/${target}`, { method: 'POST', body: JSON.stringify(body) });

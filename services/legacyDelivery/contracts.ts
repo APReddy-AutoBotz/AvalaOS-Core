@@ -84,7 +84,7 @@ export type LegacyDeliveryTaskLineage = {
   sourceEpicIndex: number | null;
   sourceEpicTitle: string | null;
   proposalOriginId: string | null;
-  proposalRole: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | null;
+  proposalRole: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | 'discovery' | null;
   studioArtifactId: string | null;
   studioArtifactVersionId: string | null;
   studioArtifactVersion: number | null;
@@ -304,7 +304,7 @@ const decodeLineage = (value: unknown): LegacyDeliveryTaskLineage | null => {
   if (row.schemaVersion !== 'legacy-delivery-lineage.v1' || typeof row.documentSourceDigest !== 'string'
     || !digestPattern.test(row.documentSourceDigest) || !Array.isArray(row.requirementLinks) || row.requirementLinks.length > 100
     || !(row.proposalOriginId === null || typeof row.proposalOriginId === 'string' && digestPattern.test(row.proposalOriginId))
-    || !(row.proposalRole === null || ['coordination', 'implementation', 'acceptance-review', 'verification'].includes(String(row.proposalRole)))
+    || !(row.proposalRole === null || ['coordination', 'implementation', 'acceptance-review', 'verification', 'discovery'].includes(String(row.proposalRole)))
     || row.sourceAssessmentId === null && !hasCurrentLineageFields) invalid();
   const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
   let currentAssessmentLineage: Pick<LegacyDeliveryTaskLineage, 'sourceAssessmentCaseId' | 'sourceAssessmentDecisionId'> | undefined;

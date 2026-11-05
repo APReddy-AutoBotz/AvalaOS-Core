@@ -16,12 +16,13 @@ export type StudioDeliveryRequirementLink = {
 };
 
 export type StudioDeliveryApprovedWorkItem = {
-  proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification';
+  proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | 'discovery';
   type: 'Epic' | 'Story' | 'Task';
   title: string;
   description: string;
   acceptanceCriteria: string[];
   requirementLinks: StudioDeliveryRequirementLink[];
+  dependencyProposalIndices?: number[];
 };
 
 export type StudioApprovedArtifactPublishPayload = {
@@ -72,7 +73,10 @@ export type StudioDeliveryPublication = {
   sourceAssessmentId: string | null;
   sourceAssessmentCaseId?: string | null;
   sourceAssessmentDecisionId?: string | null;
-  governResolutionId: string;
+  reviewResolutionId: string;
+  governResolutionId: string | null;
+  studioHandoffId: string;
+  approvalPurpose: 'implementation_readiness' | 'documentation_planning';
   workItemCount: number;
   workItemDigest: string;
   publishedAt: string;
@@ -218,9 +222,12 @@ const iso = (value: unknown): string => {
 
 const decodeWorkItem = (value: unknown): StudioDeliveryApprovedWorkItem => {
   const row = record(value);
-  exact(row, row.proposalRole === undefined
-    ? ['type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks']
-    : ['proposalRole', 'type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks']);
+  const hasDependencies = row.dependencyProposalIndices !== undefined;
+  exact(row, [
+    ...(row.proposalRole === undefined ? [] : ['proposalRole']),
+    'type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks',
+    ...(hasDependencies ? ['dependencyProposalIndices'] : []),
+  ]);
   if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 100
     || !Array.isArray(row.requirementLinks) || row.requirementLinks.length < 1 || row.requirementLinks.length > 100) invalid();
   const requirementLinks = (row.requirementLinks as unknown[]).map(value => {
@@ -233,15 +240,23 @@ const decodeWorkItem = (value: unknown): StudioDeliveryApprovedWorkItem => {
     };
   });
   if (new Set(requirementLinks.map(link => `${link.sectionId}\u0000${link.requirementText}`)).size !== requirementLinks.length) invalid();
+  const dependencyProposalIndices = hasDependencies
+    ? (Array.isArray(row.dependencyProposalIndices) ? (row.dependencyProposalIndices as unknown[]).map(value => {
+      if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 99) invalid();
+      return Number(value);
+    }) : invalid())
+    : undefined;
+  if (dependencyProposalIndices && new Set(dependencyProposalIndices).size !== dependencyProposalIndices.length) invalid();
   return {
     ...(row.proposalRole === undefined ? {} : {
-      proposalRole: oneOf(row.proposalRole, ['coordination', 'implementation', 'acceptance-review', 'verification'] as const),
+      proposalRole: oneOf(row.proposalRole, ['coordination', 'implementation', 'acceptance-review', 'verification', 'discovery'] as const),
     }),
     type: oneOf(row.type, ['Epic', 'Story', 'Task'] as const),
     title: text(row.title, 300),
     description: text(row.description, 20_000, true),
     acceptanceCriteria: (row.acceptanceCriteria as unknown[]).map(item => text(item, 2_000)),
     requirementLinks,
+    ...(dependencyProposalIndices === undefined ? {} : { dependencyProposalIndices }),
   };
 };
 
@@ -250,10 +265,13 @@ const decodePayload = <A extends StudioDeliveryAction>(action: A, value: unknown
   if (action === 'studio.approved-artifact.publish') {
     exact(row, ['artifactId', 'expectedArtifactVersionId', 'expectedAggregateVersion', 'projectId', 'workItems']);
     if (!Array.isArray(row.workItems) || row.workItems.length < 1 || row.workItems.length > 100) invalid();
+    const workItems = (row.workItems as unknown[]).map(decodeWorkItem);
+    if (workItems.some((item, index) => (item.dependencyProposalIndices ?? []).some(dependency =>
+      item.proposalRole !== 'implementation' || dependency === index || workItems[dependency]?.proposalRole !== 'discovery'))) invalid();
     return {
       artifactId: id(row.artifactId), expectedArtifactVersionId: id(row.expectedArtifactVersionId),
       expectedAggregateVersion: positive(row.expectedAggregateVersion), projectId: id(row.projectId),
-      workItems: (row.workItems as unknown[]).map(decodeWorkItem),
+      workItems,
     } as StudioDeliveryPayloadByAction[A];
   }
   if (action === 'delivery.pack.snapshot') {
@@ -323,7 +341,8 @@ const decodePublication = (value: unknown): StudioDeliveryPublication => {
   exact(row, ['publicationId', 'documentGenerationId', 'projectId', 'artifactId', 'artifactVersionId', 'artifactVersion',
     'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineageFields
       ? ['sourceAssessmentCaseId', 'sourceAssessmentDecisionId'] : []),
-    'governResolutionId', 'workItemCount', 'workItemDigest', 'publishedAt']);
+    'reviewResolutionId', 'governResolutionId', 'studioHandoffId', 'approvalPurpose',
+    'workItemCount', 'workItemDigest', 'publishedAt']);
   if (typeof row.artifactContentHash !== 'string' || !hashPattern.test(row.artifactContentHash)
     || typeof row.workItemDigest !== 'string' || !digestPattern.test(row.workItemDigest)
     || row.sourceAssessmentId === null && !hasCurrentLineageFields) invalid();
@@ -342,11 +361,17 @@ const decodePublication = (value: unknown): StudioDeliveryPublication => {
       };
     }
   }
+  const approvalPurpose = oneOf(row.approvalPurpose, ['implementation_readiness', 'documentation_planning'] as const);
+  const governResolutionId = row.governResolutionId === null ? null : id(row.governResolutionId);
+  if ((approvalPurpose === 'implementation_readiness') !== (governResolutionId !== null)) invalid();
   return {
     publicationId: id(row.publicationId), documentGenerationId: id(row.documentGenerationId), projectId: id(row.projectId),
     artifactId: id(row.artifactId), artifactVersionId: id(row.artifactVersionId), artifactVersion: positive(row.artifactVersion),
     artifactContentHash: row.artifactContentHash as string, sourceProcessId: id(row.sourceProcessId),
-    sourceAssessmentId, ...(currentLineage ?? {}), governResolutionId: id(row.governResolutionId),
+    sourceAssessmentId, ...(currentLineage ?? {}), reviewResolutionId: id(row.reviewResolutionId),
+    governResolutionId,
+    studioHandoffId: id(row.studioHandoffId),
+    approvalPurpose,
     workItemCount: positive(row.workItemCount, 100), workItemDigest: row.workItemDigest as string, publishedAt: iso(row.publishedAt),
   };
 };

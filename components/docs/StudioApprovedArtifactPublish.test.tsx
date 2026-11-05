@@ -4,6 +4,7 @@ import {
   isApprovedWorkItemComplete,
   normalizeApprovedWorkItemDraft,
   splitApprovedAcceptanceCriteria,
+  updateApprovedWorkItemDependency,
 } from './StudioApprovedArtifactPublish';
 import { deriveRequirementProposals, isApprovedRequirementLine } from '../../services/productAcceptanceBridge/requirementProposals';
 
@@ -11,6 +12,7 @@ const link = { sectionId: 'requirements', sectionTitle: 'Requirements', requirem
 
 assert.deepEqual(splitApprovedAcceptanceCriteria(' First criterion \n\nSecond criterion '), ['First criterion', 'Second criterion']);
 assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [], requirementLinks: [link] }), true);
+assert.equal(isApprovedWorkItemComplete({ proposalRole: 'discovery', type: 'Task', title: 'Resolve ownership', description: '', acceptanceCriteria: [], requirementLinks: [link] }), true);
 assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: ' ', description: '', acceptanceCriteria: [], requirementLinks: [link] }), false);
 assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [''], requirementLinks: [link] }), false);
 assert.equal(isApprovedWorkItemComplete({ proposalRole: 'implementation', type: 'Task', title: 'Requirement-bound work', description: '', acceptanceCriteria: [], requirementLinks: [] }), false);
@@ -22,6 +24,10 @@ assert.deepEqual(normalizeApprovedWorkItemDraft(draft).acceptanceCriteria, ['Fir
 draft.type = 'Task';
 assert.equal(normalizeApprovedWorkItemDraft(draft).proposalRole, 'implementation',
   'an allowed Story-to-Task edit preserves immutable implementation identity');
+const withDependency = updateApprovedWorkItemDependency(draft, 4, true);
+assert.deepEqual(withDependency.dependencyProposalIndices, [4]);
+assert.deepEqual(updateApprovedWorkItemDependency(withDependency, 4, false).dependencyProposalIndices, [],
+  'the reviewer can explicitly add and remove a discovery dependency before publication');
 assert.equal(isApprovedRequirementLine('### Requirements'), false);
 assert.equal(isApprovedRequirementLine('Background information only.'), false);
 assert.equal(isApprovedRequirementLine('FR-1: Reviewer must record a decision.'), true);
@@ -93,8 +99,30 @@ const excludedSections = deriveRequirementProposals({ sections: [
   { id: 'assumptions', title: 'Assumptions', body: 'The solution shall have an unspecified integration.' },
 ] });
 assert.equal(excludedSections.requirementCount, 1);
-assert.ok(excludedSections.proposals.every(item => item.requirementLinks.every(value => value.sectionId === 'requirements')),
-  'questions, assumptions, proposals and Mermaid flow text never become confirmed requirements');
+const discovery = excludedSections.proposals.find(item => item.proposalRole === 'discovery');
+assert.ok(discovery, 'an approved unanswered question becomes an explicit discovery task');
+assert.equal(discovery?.requirementLinks[0].sectionId, 'openQuestionsAndProposals');
+assert.ok(excludedSections.proposals.filter(item => item.proposalRole === 'implementation')
+  .every(item => item.dependencyProposalIndices === undefined),
+  'an unanswered question without an explicit requirement reference does not manufacture an implementation dependency');
+assert.ok(excludedSections.proposals.filter(item => item.proposalRole !== 'discovery')
+  .flatMap(item => item.requirementLinks).every(value => value.sectionId === 'requirements'),
+  'questions never become implementation requirements');
+const explicitDiscoveryDependency = deriveRequirementProposals({ sections: [
+  { id: 'requirements', title: 'Requirements', body: 'FR-1: Board must persist status.\nFR-2: Reviewer must acknowledge exceptions.' },
+  { id: 'openQuestions', title: 'Open questions', body: 'Open question: Which API contract must FR-1 use?\nOpen question: Is the vendor roadmap known?' },
+] });
+const explicitDiscovery = explicitDiscoveryDependency.proposals.findIndex(item => item.proposalRole === 'discovery'
+  && item.requirementLinks[0].requirementText.includes('FR-1'));
+const unrelatedDiscovery = explicitDiscoveryDependency.proposals.findIndex(item => item.proposalRole === 'discovery'
+  && item.requirementLinks[0].requirementText.includes('vendor roadmap'));
+assert.ok(explicitDiscovery >= 0 && unrelatedDiscovery >= 0);
+assert.deepEqual(explicitDiscoveryDependency.proposals.find(item => item.proposalRole === 'implementation'
+  && item.requirementLinks[0].requirementText.startsWith('FR-1:'))?.dependencyProposalIndices, [explicitDiscovery],
+  'an explicit unique requirement reference derives only the matching discovery dependency');
+assert.equal(explicitDiscoveryDependency.proposals.find(item => item.proposalRole === 'implementation'
+  && item.requirementLinks[0].requirementText.startsWith('FR-2:'))?.dependencyProposalIndices, undefined,
+  'an unrelated implementation proposal does not inherit an open question dependency');
 const acceptanceOnly = deriveRequirementProposals({ sections: [{ id: 'acceptance', title: 'Acceptance criteria', body: 'AC-1: The result is visible.' }] });
 assert.equal(acceptanceOnly.proposals.length, 0);
 assert.match(acceptanceOnly.blockedReason ?? '', /no approved deliverable requirement/i);

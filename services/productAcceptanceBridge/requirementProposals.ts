@@ -16,6 +16,8 @@ const markdownHeading = /^#{1,6}\s+/u;
 const speculativeStatement = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:open\s+)?question|assume|assumption|proposal|proposed|speculative)(?:\s|[:.\-]|$)/iu;
 const excludedSectionPurpose = /(?:^|\s)(?:questions?|assumptions?|proposals?|flows?|diagrams?)(?:\s|$)/iu;
 const mermaidFlow = /^\s*(?:flowchart|graph)\s+/imu;
+const unresolvedSectionPurpose = /(?:^|\s)(?:open\s+)?(?:questions?|unknowns?|unresolved)(?:\s|$)/iu;
+const unresolvedQuestion = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:open\s+)?question|unknown|unresolved)(?:\s*[:.\-]\s*|\s+)/iu;
 
 export const isApprovedRequirementLine = (line: string) => {
   const value = line.trim();
@@ -69,6 +71,23 @@ const approvedSections = (content: Record<string, unknown>): ApprovedSection[] =
     const purpose = `${section.id.replace(/([a-z])([A-Z])/gu, '$1 $2')} ${section.title}`;
     if (excludedSectionPurpose.test(purpose) || mermaidFlow.test(section.body)) return [];
     return [section];
+  });
+};
+
+const unresolvedQuestionLinks = (content: Record<string, unknown>): StudioDeliveryRequirementLink[] => {
+  if (!Array.isArray(content.sections)) return [];
+  return content.sections.flatMap(value => {
+    if (!record(value)) return [];
+    const id = text(value.id) ?? text(value.key);
+    const title = text(value.title);
+    const body = text(value.body) ?? text(value.content);
+    if (!id?.trim() || !title?.trim() || body === null || mermaidFlow.test(body)) return [];
+    const purpose = `${id.replace(/([a-z])([A-Z])/gu, '$1 $2')} ${title}`;
+    if (!unresolvedSectionPurpose.test(purpose)) return [];
+    return body.split(/\r?\n/u).map(line => line.trim()).filter(line => line.length > 0 && line.length <= 2_000
+      && (unresolvedQuestion.test(line) || line.endsWith('?'))).map(requirementText => ({
+      sectionId: id.trim(), sectionTitle: title.trim(), requirementText,
+    }));
   });
 };
 
@@ -129,6 +148,7 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
 
   const resolvedLinks = allLinks.filter(link => !isAcceptanceLink(link) || usedAcceptance.has(link));
   const proposals: StudioDeliveryApprovedWorkItem[] = [];
+  const implementationIndexByIdentifier = new Map<string, number>();
   const firstDeliverable = deliverable(deliverableLinks[0].requirementText);
   proposals.push({
     proposalRole: 'coordination',
@@ -141,6 +161,7 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
   deliverableLinks.forEach((link, index) => {
     const requirement = deliverable(link.requirementText);
     const linkedAcceptance = pairedAcceptance[index];
+    const proposalIndex = proposals.length;
     proposals.push({
       proposalRole: 'implementation',
       type: 'Story', title: title('Implement — ', requirement),
@@ -150,6 +171,10 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
         : [`The delivered behavior satisfies the approved predicate: ${displayRequirement(link.requirementText)}`],
       requirementLinks: [link, ...linkedAcceptance],
     });
+    const identifier = requirementIdentifier(link.requirementText);
+    if (identifier && deliverablesByIdentifier.get(identifier)?.length === 1) {
+      implementationIndexByIdentifier.set(identifier, proposalIndex);
+    }
   });
   const unassignedAcceptance = acceptanceLinks.filter(link => !usedAcceptance.has(link));
   if (unassignedAcceptance.length > 0) proposals.push({
@@ -159,6 +184,23 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
     description: `${unassignedAcceptance.length} approved acceptance ${unassignedAcceptance.length === 1 ? 'criterion has' : 'criteria have'} no explicit or unambiguous requirement association. A human must assign or retain each criterion before confirmation.`,
     acceptanceCriteria: unassignedAcceptance.map(link => `Human reviewed association for: ${displayRequirement(link.requirementText)}`),
     requirementLinks: unassignedAcceptance,
+  });
+  const questionLinks = unresolvedQuestionLinks(content);
+  questionLinks.forEach(link => {
+    const discoveryIndex = proposals.length;
+    const question = displayRequirement(link.requirementText.replace(unresolvedQuestion, ''));
+    proposals.push({
+      proposalRole: 'discovery', type: 'Task', title: title('Resolve — ', question),
+      description: `Resolve the approved unanswered question before dependent implementation is treated as ready: ${question}`,
+      acceptanceCriteria: [`A human records a source-backed answer or explicitly retains the question as unresolved: ${question}`],
+      requirementLinks: [link],
+    });
+    referencedRequirementIdentifiers(link.requirementText).forEach(identifier => {
+      const implementationIndex = implementationIndexByIdentifier.get(identifier);
+      if (implementationIndex === undefined) return;
+      const implementation = proposals[implementationIndex];
+      implementation.dependencyProposalIndices = [...(implementation.dependencyProposalIndices ?? []), discoveryIndex];
+    });
   });
   proposals.push({
     proposalRole: 'verification',

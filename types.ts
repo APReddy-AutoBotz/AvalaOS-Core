@@ -625,7 +625,7 @@ export interface TaskSourceLineageMetadata {
     sourceEpicIndex?: number | null;
     sourceEpicTitle?: string | null;
     proposalOriginId?: string;
-    proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification';
+    proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | 'discovery';
     studioArtifactId?: string;
     studioArtifactVersionId?: string;
     studioArtifactVersion?: number;
