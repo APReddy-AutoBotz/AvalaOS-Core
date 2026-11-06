@@ -52,6 +52,7 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20261106012003_scoped_studio_role_lookup.sql',
   'supabase/migrations/20261106020001_studio_response_reconciliation.sql',
   'supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql',
+  'supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',

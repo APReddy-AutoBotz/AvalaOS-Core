@@ -100,7 +100,7 @@
     "scripts/authenticatedHostedPageClose.test.mjs": "sha256:7a2860a9ddfe9e2e5ca2f8bdb9fa4ae8a4744a7c259345f48ee6761dce0c8f11",
     "scripts/authenticatedHostedPlaywrightReporter.mjs": "sha256:043802a1217689ff93be5b1bd8be225ced2cf9cdcdd5c73cb9f0b371cc7f3147",
     "scripts/authenticatedHostedPlaywrightReporter.test.mjs": "sha256:dad7b62e1be2a03f32e7d16ee54185c52b2d30e8c2709be96952eafdad8842b6",
-    "scripts/authenticatedHostedWorkflowContract.test.mjs": "sha256:a7fed372b1902d1940912c6e97b12736a823fe4ea46627aef4aa5876ecd54c4c",
+    "scripts/authenticatedHostedWorkflowContract.test.mjs": "sha256:d098428a3675c73c61186ab4697720d4b04619f8e2751875fe5f09b41e98e9f9",
     "scripts/authenticatedObservationBrowserProof.mjs": "sha256:f723cfefccd98543f7cab8d903c3cfbb30cf4619f082e443b81a5d21d9f46e2d",
     "scripts/authenticatedObservationFinishProof.mjs": "sha256:10f81b9cd63ddf5a69d3cf7f17dc12d49cb39da669c3484a02e87218612c8687",
     "scripts/authenticatedObservationQueryProof.mjs": "sha256:167f2534336983176884871ad25145a27b6a67fa31d299209c852a288e2bd69f",
@@ -117,7 +117,7 @@
     "scripts/authenticatedV2ReloadDiagnostic.mjs": "sha256:01f1d2edf7bf8c8842d39a884752ab7037402e2f7f8753935acfeeb3cd253c6e",
     "scripts/authenticatedV2ReloadDiagnostic.test.mjs": "sha256:5c9d861cdb841293b72eb1088d7190fcf54cd4403cb26170ada7b46a2c413532",
     "scripts/canonicalHandsOnAccess.mjs": "sha256:d00b9b9dc9564d5c2e0880aa894c9c16505743009e39cf831f0d5f1bdb08a97c",
-    "scripts/canonicalHandsOnAccess.test.mjs": "sha256:fad944e03325bbe800e998e10dc4d8bfed985cd2f524ee968c101989a650e486",
+    "scripts/canonicalHandsOnAccess.test.mjs": "sha256:6d3bee871b3eec28e5f46419416f9e481730fed923e4cffcb140f3c34ce3060a",
     "scripts/canonicalInvoiceExceptionDatabaseEvidence.mjs": "sha256:68832fd877ff4712dba8adf8a231707c70958a65bc0d6838cba86bf2583f4645",
     "scripts/canonicalInvoiceExceptionDatabaseEvidence.test.mjs": "sha256:50036ef45bf607557f1b1899479d64719c081d5751cca347d5b4fce8ad6d74ee",
     "scripts/checkEnterpriseIntelligenceBoundaries.mjs": "sha256:373fe00e83cf2974fc9404d6b885bf8b8b0e2d210457151b823c78a12b684a1c",
@@ -129,7 +129,7 @@
     "scripts/eligibleReviewerRequestDiagnostic.test.mjs": "sha256:7b2c3a405f6e37b19153e81cd25ba06ba04516f1bc25f5620f47ea6f7888c778",
     "scripts/eligibleReviewerRequestDiagnosticsArtifact.mjs": "sha256:5638e1d172737a32750e5e841164598cd44fe20fe650d55dccf00a9042f32239",
     "scripts/eligibleReviewerRequestDiagnosticsArtifact.test.mjs": "sha256:26485fa1072eac6d2641e06aa21397c3dd6a594fde41fad509c93343c1935d19",
-    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:705745339292890b679ca8abce2ebc12c08ef1d637ea567c9bd23f0f69ecdb3a",
+    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:fe2e029ec47eba5d58e9b1e4e0af27fd32a881573c3bee8471fdeaeec723c132",
     "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
     "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
     "scripts/enterpriseLifecycleDatabaseBoundary.test.mjs": "sha256:92fdb587df47e0d2ed60d011da43a105120d1349df68ef5568106bf7c7fc63e9",
@@ -143,12 +143,12 @@
     "scripts/governPreparationIdentity.mjs": "sha256:7c96e58bda3243adbc2afeca1dccccc3801284d46b7cdc639b9ab093f89d8876",
     "scripts/hostedPilotActivation.mjs": "sha256:f8fbf4b48015f3da113692c4cba11b11f6c1ebb72610252ee4cd25e2d86d4cc3",
     "scripts/hostedPilotActivation.test.mjs": "sha256:ed6856426b58472beb3a0488f3f85da8f139627d97ebd4ff6a61f34481c2f9b9",
-    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:863b6f55fa5e8253aef79f182ae5f48e4a25c3a700abb6ebac1512c1a512942b",
-    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:0f317f5346c1d6cf10e02b52885ba26d4dd964b8ca5642ffebf2f329877e1bd4",
-    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:7edd37a827b3b208d32df1dd22e036ea5d17467cb3edce54821c77bc863fb09b",
+    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:97b7bf585a54d3c58a3667b6747c82c7c8e91aa5e9f45a891a01b2efd423d036",
+    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:e82a8cbb1beb89af55e44662e3f48ebb500127c76ef7a2c388f133fc26148edd",
+    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:5b963875f1bc17bb787bae83f15b50722546d560e1b51fc73707e8c0b362f4c7",
     "scripts/localAcceptanceBuild.mjs": "sha256:cc5321560ca36474522ea68d65405eac9997bdf97544d82a02922bda6e635fe4",
     "scripts/localAcceptanceBuild.test.mjs": "sha256:b76f18e27b39ef827816ba030c32293b72dc0d57d26e50955c17328b1069c20a",
-    "scripts/localRealBackendAcceptanceMigration.test.mjs": "sha256:810a7c7694f67c8177d9c3df1c96296378583a3cd01915a8d50d0aaf32841666",
+    "scripts/localRealBackendAcceptanceMigration.test.mjs": "sha256:bf9875d8567ab0f478f1f586ce4b0dd710e5520603c9e763dc13c7ca8c8650c9",
     "scripts/playwright.govern-disabled-control-repro.config.ts": "sha256:4337338b3bf35a4ca1498a5a0485918a784e250f33f49b807bf1cf4f1973d334",
     "scripts/playwright.studio-handoff-persona-contract.config.ts": "sha256:2f047003253dfedd0d883a9dffb905ef4967d9cc5e9bffd29b64fc5497f54915",
     "scripts/preactivationSignInDiagnostics.mjs": "sha256:ea8f3f2e0d942cc34e25a5a4a09a37807295449ab336fa7c6e06f0b440bb0351",
@@ -162,8 +162,8 @@
     "scripts/projectionRpcPostgrestContract.mjs": "sha256:f497dce9e350d124e49a8c1f5e5cf961d9c38327057c7236582431295f659938",
     "scripts/reproduceGovernDisabledControl.mjs": "sha256:bac319a6552e9ef13b3680a41ec6547787f4578cefaa460c82b32fa97c8c6903",
     "scripts/reproduceStudioHandoffPersonaContract.mjs": "sha256:53ef6102cd8aabe428e7cdbe9cebfcb6dd633fc2849b8b8a847f6a823b8245d3",
-    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:7c8d41230f8bcc9559cab6f580f8581798d1f5e8f035a40545b09a2576931c20",
-    "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:87746d2a011dd49bd362964b983083d5d9e6e7b34c0ca0187566cec0ca427fc0",
+    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:ba6b0f22f09dee82eeeb9b7d05f0447516cff2d75868d3acd5b40b0776b39e63",
+    "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:4c9b954c5b52db2323fff2b52363a852ac11aecf5b2d36743d5233cece36171b",
     "scripts/runEligibleReviewerRequestDiagnosticsBrowser.mjs": "sha256:ca1e3b06d839df4d704ddfa2d830af728c3b33621ad352e78b99d987e03fe133",
     "scripts/runEligibleReviewerRequestDiagnosticsBrowser.test.mjs": "sha256:c0aa7228695f3f424a8e01aa96e23e28b186d35779c83097e57f050e587b2159",
     "scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs": "sha256:50a73957605a43af044a5ca31f3460b547e78768f4ae2de2b98308c9841d2962",
@@ -178,18 +178,18 @@
     "scripts/studioHandoffPersonaArtifact.mjs": "sha256:6bb8fd5f82855fb6873c54e0072270a0a078de728013e615b80fa381be56e65d",
     "scripts/studioHandoffPersonaArtifact.test.mjs": "sha256:aff2c493514c743b160b704db44644a473d8a320c433e40d3d824a1468a7db77",
     "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",
-    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:3719e1c26ed4932e6bbd1c2c0c109924d57b27840445f9d297d37896d1d28c64",
+    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:3b3ebcfbfa4ada99d2d77f17b743ec60606a66ad5e9f548fc753fd6e548c5a0d",
     "scripts/testAssessV2NativePostgrest.mjs": "sha256:8a4897485027a5b7273d5db86826796be49796e41dabee64cd5c815948dd1c63",
     "scripts/testAuthenticatedGovernStudioLineagePostgres.mjs": "sha256:933823a55b54f4c0c76c220d4c0b4eb4471eeb955b2db44a643c999ba0bdb8ee",
-    "scripts/testAuthenticatedHostedBootstrap.mjs": "sha256:a11babc4bce36125c8d2547ebca0f97d2eb2da6511d77ef2e343e0417f699f6e",
-    "scripts/testAuthenticatedHostedControllerPostgres.mjs": "sha256:dad22674c61aa0f5c77e3d3b262d5fc2c92b00690cc0148e8a6a140617c9f891",
+    "scripts/testAuthenticatedHostedBootstrap.mjs": "sha256:36f5ef58b5df3a878fd98831992eb42f0b7d9f8b26c30f8c29aca3f2095e7e52",
+    "scripts/testAuthenticatedHostedControllerPostgres.mjs": "sha256:fad848f74ba3abbb588fbd238089aa40eb1aaa0cd318268aecc84eeee1152fc5",
     "scripts/testAuthenticatedHostedPreauthTracking.mjs": "sha256:076abfc3e6e53fe33f8aff7fb368d77ab27c9ccaf8fba957f4c48f556b36e1a9",
-    "scripts/testAuthenticatedHostedSignInEntry.mjs": "sha256:75a40fcb79bc97fa38f9f26e4a600bba9f39a84a61ed19d339cdc929f941d830",
+    "scripts/testAuthenticatedHostedSignInEntry.mjs": "sha256:bc9f3cea1b9a9567a5dfb0989e915d9b33a2f6e72af8078a9b65e27306481612",
     "scripts/testAuthenticatedHostedSignInEntry.test.mjs": "sha256:6c3272de4d48112bc73a2178bfd5f0256194d73a356e8835b700af2b8b95bd27",
     "scripts/testAuthenticatedReviewerSelectionPostgres.mjs": "sha256:4cced2684cf8c4a06b58e46cff4250ba88bf91775d88c7662203da2e7c911d79",
     "scripts/testAuthenticatedSupabaseMultipart.mjs": "sha256:6568ab2f310bff711d6cc93071283ecb5a5d898cf0ed7c446681b25297000261",
     "scripts/testConnectedBrowserDiagnostics.mjs": "sha256:5cc5f0456707e1a29e0e6402336969af35ce00912e18c4f47f8da1768ffffc59",
-    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:670f9f91a9ff29c960175e88f69f2d25beb88d318797b230bc6513c63300b45e",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:deb3355a92014f90f0e54e45344302468727f390758ba442384913a684d8cb01",
     "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
     "scripts/testGovernAcceptancePostgres.mjs": "sha256:20f8d9d76ebe72985ab7c95ea5fc1e3450ef767339d6df57809825c94c05f844",
     "scripts/testPilotOperationsMigration.mjs": "sha256:59622919796a25646d76707d8cd29258300036ca1a501fe1a3c8bdbb6a942f61",
@@ -204,7 +204,7 @@
     "scripts/transcriptFlowEvidenceContract.test.mjs": "sha256:198306d83d32724bcf4840bf50d8df8865a8cbd51ca9a9e09cd34bcf30c63d44",
     "scripts/transcriptFlowEvidenceScope.mjs": "sha256:36525be958a8e448c7248ce79dd6b66de082be013335442d1dee5b94bb279f9c",
     "scripts/trustAcceptanceEvidence.mjs": "sha256:73ad241675694a42075e3acc73df6bd3b0735a075fc97525910408652edf91d5",
-    "scripts/v2FullPrefixLocalController.mjs": "sha256:183a4fc6f9e0f9323e170b5f6b950f421ab578ff01be8a4d8a6bf5c1fac69a6d",
+    "scripts/v2FullPrefixLocalController.mjs": "sha256:f5c722c3f52ddc26b7727fa99a9c75ea8e4731fd7e16f0b03a9c0e94b6d2d809",
     "scripts/v2FullPrefixReproduction.d.mts": "sha256:a7a53033e9235630ee93f59a69a7d48b3e2532ea45c0f3cf808aa65ed27bbc8b",
     "scripts/v2FullPrefixReproduction.mjs": "sha256:0515835a52a065e363dcc43d3c41676040e22a628d5c209dc8cba848ee199097",
     "scripts/v2FullPrefixReproduction.test.mjs": "sha256:bd595e3e7e9b5a8aaf097e65cb0552eb7ebab3972445cffd4767bb7a8a528d4c",
@@ -438,6 +438,7 @@
     "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql": "sha256:f5fefebad8fa04279945cb98943dc4783168f24999332001253af4c569d53bfe",
     "supabase/migrations/20261106020001_studio_response_reconciliation.sql": "sha256:2b4d03e805a9d2504adc98302f8fc73e514a8754e84082ab720fb549d216cc50",
     "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql": "sha256:72a678e270212ea3d87bbe538202b66b77a0e86478b63a3bccda39669a8143d5",
+    "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql": "sha256:ef70ed1d45051b4d21315fe93a0e927ae9a04b927c05a4ed05c958961a96cea8",
     "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
     "testing/process-lifecycle/contracts/pr-a-assertion-registry.json": "sha256:8dca3fc1d04349863dfac862695a492f3fcee7846ecea5f1198df1f2784feac8",
     "testing/process-lifecycle/contracts/pr-a-evidence.schema.json": "sha256:6cbe7858cc86d49a993c9c7259dfa5c6db0089af5bc51260bc23701a3137adf3",
@@ -451,9 +452,9 @@
     "testing/process-lifecycle/fixtures/sources/assess/PROMPT-INJECTION-01.vtt": "sha256:4c5c2d62f52fb7dabd7e16db842d4d74c24e55e1972b57a1645970d8052164e4",
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/acceptance/catalog/schema.json": "sha256:96cf00e298b79ca4a8c4bdc36e2d970dfb6b6537cea46755e178ae93fc8d981f",
-    "tests/acceptance/catalog/test-catalog.json": "sha256:2c28c891f2268421ab8515a8c64dd95bfee95011f9a4e9a2df4bd498195b0d0d",
-    "tests/acceptance/proof-owner-registry.json": "sha256:fe292e20c26378788d79f779abc4f2c3052185017e0e5e4635ffd76d8a5da3ac",
-    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:f9c0e3e1009df89bacf89c4d33d74d4bce73ed80a5b0e380053bbf48b71823bb",
+    "tests/acceptance/catalog/test-catalog.json": "sha256:8324aad9cb17d572d61c174fd77ba29a57c268b15fe944119495af5e52d91555",
+    "tests/acceptance/proof-owner-registry.json": "sha256:b2ace3f56e5370c9d2e358f804b236219792e7e6e6b8d2219c65c8ffd9f4a4c6",
+    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:43f0c873e8a9e0e4eed7d9a0b0a961ffe455297c9493d64d59865c0bec402d7c",
     "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:f55f0d860b9a94067cd1934d3798b25b3a5d14479299244d344d9989dccdd044",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:a0fbcc5b2f4751a6887bb58f6d6a54f28fbc5ef1967c636df7cd8bca56b281af",
@@ -1871,7 +1872,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -2021,7 +2024,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -2632,7 +2637,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -2692,7 +2699,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -2752,7 +2761,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -2812,7 +2823,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -2872,7 +2885,9 @@
         "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
         "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
-        "supabase/migrations/20261106020001_studio_response_reconciliation.sql"
+        "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -4091,7 +4106,8 @@
         "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
         "scripts/localAcceptanceBuild.mjs",
         "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
-        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql"
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {
@@ -4138,7 +4154,8 @@
         "supabase/migrations/20261011053000_supabase_provider_secret_backend.sql",
         "scripts/localAcceptanceBuild.mjs",
         "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
-        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql"
+        "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
       ],
       "ownership": [
         {

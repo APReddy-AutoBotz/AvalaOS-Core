@@ -54,6 +54,7 @@ export const PR_C_APPROVED_SUCCESSOR_TAIL = Object.freeze([
   '20261106012003_scoped_studio_role_lookup.sql',
   '20261106020001_studio_response_reconciliation.sql',
   '20261106040803_studio_v2_rendition_renderer.sql',
+  '20261106045007_studio_v2_renderer_identity_convergence.sql',
 ]);
 
 export const assertPrCMigrationTail = migrationNames => {
@@ -72,5 +73,5 @@ export const assertPrCMigrationTail = migrationNames => {
 // spending allowance.
 export const approvedFullChainTip = migrationNames => {
   assertPrCMigrationTail(migrationNames);
-  return '20261106040803';
+  return '20261106045007';
 };

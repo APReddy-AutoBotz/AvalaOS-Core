@@ -4,8 +4,8 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const brokerPdfPath = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export.pdf');
-const expectedSha256 = '92f36ceb8ba54d42854dc0acfeaf7ab8d7aaca7a81a7276bfb0874e3c0667f19';
-const expectedByteLength = 4_339;
+const expectedSha256 = 'c69867c842a603645489ea2b93a4ef12fcaa30373f25e9f2ac3227a5903d8022';
+const expectedByteLength = 5_799;
 const artifactId = '00000038-0000-4000-8000-000000000038';
 const approvedVersionId = '00000053-0000-4000-8000-000000000053';
 const renditionId = '00000058-0000-4000-8000-000000000058';
@@ -96,7 +96,7 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     filename: 'synthetic-sdd-db-cross-layer.pdf',
     byteLength: expectedByteLength,
     sha256: expectedSha256,
-    rendererVersion: 'studio-pdf-1',
+    rendererVersion: 'studio-pdf-2',
     retentionMode: 'indefinite',
     retentionUntil: null,
     legalHoldActive: false,

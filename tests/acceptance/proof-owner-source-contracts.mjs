@@ -659,6 +659,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "studio-v2-rendition-renderer",
     "sourceReference": "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
     "selector": "RENAME TO studio_private_artifact_command_claim_renderer1_legacy;"
+  },
+  {
+    "anchorId": "studio-v2-renderer-identity",
+    "sourceReference": "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+    "selector": "DO $studio_v2_renderer_identity_convergence$"
   }
 ]);
 
@@ -1912,6 +1917,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-DUPLICATE_IMPORT",
     "testId": "DELIVERY-007",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
       "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
       "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
@@ -2044,6 +2051,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-RETAINED_LINEAGE",
     "testId": "DELIVERY-008",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
       "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
       "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
@@ -2573,6 +2582,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-ASSEMBLE_PHASE1_NONEXECUTION",
     "testId": "EI-005",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2627,6 +2638,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-COMMAND_REPLAY",
     "testId": "EI-004",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2681,6 +2694,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-INGESTION_LINEAGE",
     "testId": "EI-002",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2735,6 +2750,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-INGESTION_VALIDATION",
     "testId": "EI-001",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2789,6 +2806,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-QUERY_TENANT_ISOLATION",
     "testId": "EI-003",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -3796,6 +3815,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "testId": "STUDIO-007",
     "sourceAnchorIds": [
       "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "studio-artifact-contracts",
       "authenticated-scripts-authenticatedacceptancecases-mjs",
       "authenticated-scripts-authenticatedacceptanceprofile-mjs",
@@ -3841,6 +3861,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "testId": "STUDIO-003",
     "sourceAnchorIds": [
       "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "studio-artifact-contracts",
       "authenticated-scripts-authenticatedacceptancecases-mjs",
       "authenticated-scripts-authenticatedacceptanceprofile-mjs",
