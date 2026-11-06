@@ -1,5 +1,9 @@
 # Process evidence to confirmed delivery work
 
+## Retained renderer fixture correction — 6 November 2026 UTC
+
+Candidate `f7ff0f8b95036e69dce63eebc9125e5a6651efd1` deployed to the dedicated preview/backend with all 131 migrations and exact source identity verified. Required Exhaustive Acceptance reproduced a retained client fixture using the invented `pdf-v1` renderer alias. The production decoder correctly rejects it. Replace only that fixture identity with the actual server `studio-pdf-1` and add an explicit invalid-alias rejection assertion. The full `test:studio-artifacts` suite passes locally after reproducing the original failure. No runtime, permissions, installed migration or provider allowance changes. Required replacement CI and the remaining live selective refresh/corrected canonical export are pending. Provider execution remains disabled; cumulative usage is unchanged. Rollback restores the failing fixture without changing the production guard.
+
 ## Four approved documents; selective refresh and PDF branches — 6 November 2026 UTC
 
 Executed evidence on `88f1738ef6bd3f7d73c533e92ec80fe8815abc15`: all 17 required workflows passed. The dedicated immutable preview/backend, 18 functions/265 inputs, 130 installed migrations and eight separate actors verified. Normal UI generated SDD v1 using the retained source handoff. Human text/flow corrections saved as v2 and all eleven sections survived reload; separate reviewer and approver accounts approved v2 for documentation and planning. BRD v5, PDD v4, FRD v2 and six selected board items remain available. Board source links, Blocked GET implementation dependency and the contrasting no-AI assessment were reverified on this candidate.
