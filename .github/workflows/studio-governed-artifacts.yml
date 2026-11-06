@@ -87,6 +87,7 @@ jobs:
           } 2>&1 | tee studio-private-postgresql-16.log
         env:
           ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       - name: Upload sanitized PostgreSQL 16 evidence

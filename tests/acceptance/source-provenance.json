@@ -439,6 +439,7 @@
     "supabase/migrations/20261106020001_studio_response_reconciliation.sql": "sha256:2b4d03e805a9d2504adc98302f8fc73e514a8754e84082ab720fb549d216cc50",
     "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql": "sha256:72a678e270212ea3d87bbe538202b66b77a0e86478b63a3bccda39669a8143d5",
     "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql": "sha256:ef70ed1d45051b4d21315fe93a0e927ae9a04b927c05a4ed05c958961a96cea8",
+    "supabase/migrations/20261106070101_delivery_numbered_requirements.sql": "sha256:4ea05a5b398c4e0739ea8e51b69526f2ae08986ef7adb268706886d87092bbbb",
     "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
     "testing/process-lifecycle/contracts/pr-a-assertion-registry.json": "sha256:8dca3fc1d04349863dfac862695a492f3fcee7846ecea5f1198df1f2784feac8",
     "testing/process-lifecycle/contracts/pr-a-evidence.schema.json": "sha256:6cbe7858cc86d49a993c9c7259dfa5c6db0089af5bc51260bc23701a3137adf3",
@@ -452,9 +453,9 @@
     "testing/process-lifecycle/fixtures/sources/assess/PROMPT-INJECTION-01.vtt": "sha256:4c5c2d62f52fb7dabd7e16db842d4d74c24e55e1972b57a1645970d8052164e4",
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/acceptance/catalog/schema.json": "sha256:96cf00e298b79ca4a8c4bdc36e2d970dfb6b6537cea46755e178ae93fc8d981f",
-    "tests/acceptance/catalog/test-catalog.json": "sha256:8324aad9cb17d572d61c174fd77ba29a57c268b15fe944119495af5e52d91555",
-    "tests/acceptance/proof-owner-registry.json": "sha256:b2ace3f56e5370c9d2e358f804b236219792e7e6e6b8d2219c65c8ffd9f4a4c6",
-    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:43f0c873e8a9e0e4eed7d9a0b0a961ffe455297c9493d64d59865c0bec402d7c",
+    "tests/acceptance/catalog/test-catalog.json": "sha256:47b7605ea1e29fb9cff96effe6e3ba720ef400ff51e180052b328cdfdef3bf59",
+    "tests/acceptance/proof-owner-registry.json": "sha256:5419a3550d871875f9dbb81b3aafdd32cd48581301b7420835e495d9292b89d6",
+    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:8e8a9431962c9e7fc4fed63c42f9474945fd16a3d6ed31ff46caadd5633f66d0",
     "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:f55f0d860b9a94067cd1934d3798b25b3a5d14479299244d344d9989dccdd044",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:a0fbcc5b2f4751a6887bb58f6d6a54f28fbc5ef1967c636df7cd8bca56b281af",
@@ -1874,7 +1875,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -2026,7 +2028,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -2639,7 +2642,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -2701,7 +2705,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -2763,7 +2768,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -2825,7 +2831,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -2887,7 +2894,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -4107,7 +4115,8 @@
         "scripts/localAcceptanceBuild.mjs",
         "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {
@@ -4155,7 +4164,8 @@
         "scripts/localAcceptanceBuild.mjs",
         "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "ownership": [
         {

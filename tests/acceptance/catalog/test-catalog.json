@@ -3101,7 +3101,8 @@
         "scripts/localAcceptanceBuild.mjs",
         "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "STUDIO-GENERATION_FAILURE"
@@ -3361,7 +3362,8 @@
         "scripts/localAcceptanceBuild.mjs",
         "supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "STUDIO-DOWNLOAD_DENIAL"
@@ -4164,7 +4166,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "DELIVERY-DUPLICATE_IMPORT"
@@ -4245,7 +4248,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "DELIVERY-RETAINED_LINEAGE"
@@ -5821,7 +5825,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -5912,7 +5917,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -6003,7 +6009,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "EI-QUERY_TENANT_ISOLATION"
@@ -6094,7 +6101,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -6185,7 +6193,8 @@
         "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
         "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
         "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
-        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql"
+        "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+        "supabase/migrations/20261106070101_delivery_numbered_requirements.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"
