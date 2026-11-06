@@ -1,5 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { parse } from 'yaml';
+import { validateLegacyDeliveryDatabaseUrl } from './legacyDeliveryPostgresFixture.mjs';
+
+const workflow = parse(await readFile('.github/workflows/studio-governed-artifacts.yml', 'utf8'));
+const postgresJob = workflow.jobs['studio-private-artifacts-postgresql-16'];
+const authorityStep = postgresJob.steps.find(step => step.run?.includes('node scripts/deliveryNumberedRequirementsPostgres.mjs'));
+const databaseUrl = authorityStep.env.LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL;
+assert.doesNotThrow(() => validateLegacyDeliveryDatabaseUrl(databaseUrl));
+assert.equal(new URL(databaseUrl).pathname, `/${postgresJob.services.postgres.env.POSTGRES_DB}`,
+  'the guarded publication harness uses the database actually created by CI');
+assert.throws(() => validateLegacyDeliveryDatabaseUrl(databaseUrl.replace('/avalaos_exhaustive', '/postgres')),
+  /LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL_REJECTED/u);
 
 const service = await readFile('services/productAcceptanceBridge/requirementProposals.ts', 'utf8');
 const test = await readFile('components/docs/StudioApprovedArtifactPublish.test.tsx', 'utf8');

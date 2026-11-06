@@ -63,7 +63,7 @@ jobs:
     services:
       postgres:
         image: postgres:16
-        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: avalaos_studio_private_artifacts }
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: avalaos_exhaustive }
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
@@ -87,7 +87,7 @@ jobs:
           } 2>&1 | tee studio-private-postgresql-16.log
         env:
           ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-          LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          LEGACY_DELIVERY_ACCEPTANCE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_exhaustive
           STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       - name: Upload sanitized PostgreSQL 16 evidence
