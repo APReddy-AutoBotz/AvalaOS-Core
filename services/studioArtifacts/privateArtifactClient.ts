@@ -239,14 +239,15 @@ export const decodeStudioPrivateArtifactProjection = (
     record.approved !== true ||
     typeof record.readOnly !== 'boolean' ||
     !Array.isArray(record.renditions) ||
-    record.renditions.length > STUDIO_PRIVATE_ARTIFACT_FORMATS.length ||
+    record.renditions.length > STUDIO_PRIVATE_ARTIFACT_FORMATS.length * 2 ||
     record.artifactId !== expected.artifactId ||
     record.artifactVersionId !== expected.artifactVersionId
   ) unavailable();
   const renditions = (record.renditions as unknown[]).map(decodeRendition);
   if (
     new Set(renditions.map(rendition => rendition.id)).size !== renditions.length ||
-    new Set(renditions.map(rendition => rendition.format)).size !== renditions.length
+    new Set(renditions.map(rendition => `${rendition.format}:${rendition.rendererVersion}`)).size !== renditions.length ||
+    STUDIO_PRIVATE_ARTIFACT_FORMATS.some(format => renditions.filter(rendition => rendition.format === format).length > 2)
   ) unavailable();
   return {
     artifactId: record.artifactId,

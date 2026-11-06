@@ -356,3 +356,14 @@ void (async () => {
   console.error(error);
   process.exitCode = 1;
 });
+
+// Immutable historical and current renderers coexist for one approved version.
+const historicalAndCurrent = {...projection, renditions: [
+  {...rendition, rendererVersion: "studio-pdf-1"},
+  {...rendition, id: U[0], rendererVersion: "studio-pdf-2"},
+]};
+assert.equal(decodeStudioPrivateArtifactProjection(historicalAndCurrent, {artifactId: U[2], artifactVersionId: U[3]}).renditions.length, 2);
+assert.throws(() => decodeStudioPrivateArtifactProjection({...historicalAndCurrent, renditions: [...historicalAndCurrent.renditions, {...rendition, id: U[1], rendererVersion: "studio-pdf-2"}]}, {artifactId: U[2], artifactVersionId: U[3]}));
+assert.throws(() => decodeStudioPrivateArtifactProjection({...projection, renditions: Array.from({length: 7}, (_,i) => ({...rendition, id: `10000000-0000-4000-8000-${String(i).padStart(12,"0")}`,rendererVersion: `pdf-${i}`}))}, {artifactId: U[2], artifactVersionId: U[3]}));
+
+assert.throws(() => decodeStudioPrivateArtifactProjection({...historicalAndCurrent, renditions: [...historicalAndCurrent.renditions, {...rendition, id: U[1], rendererVersion: "studio-pdf-3"}]}, {artifactId: U[2], artifactVersionId: U[3]}));

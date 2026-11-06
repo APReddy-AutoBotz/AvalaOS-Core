@@ -112,7 +112,10 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     artifactType: 'sdd',
     approved: true,
     readOnly: false,
-    renditions: generated ? [rendition] : [],
+    renditions: generated ? [
+      {...rendition, id: '00000059-0000-4000-8000-000000000059', rendererVersion: 'studio-pdf-1'},
+      rendition,
+    ] : [],
   });
 
   // More specific routes below fulfill synthetic server requests inside the browser.

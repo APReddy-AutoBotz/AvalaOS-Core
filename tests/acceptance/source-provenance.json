@@ -252,7 +252,7 @@
     "services/scoringEngine.ts": "sha256:c06bd2ddab219755d13d45ee55793b2245da52e2e7ee1dc82cb0fb5d2d326c90",
     "services/storage.ts": "sha256:3dbab165aed478a79a512874123b49e3d5efaeb7480911e8fb9e5bcb185be20a",
     "services/studioArtifacts/contracts.ts": "sha256:24d14e633ae72e20a3660b0f80135e136eecce830cd3eaf1af829d09f49bdffa",
-    "services/studioArtifacts/privateArtifactClient.ts": "sha256:cab247222f77ae30c69349c70a04b43d04f2413d6032ff8ed9b14e59a9d4dff9",
+    "services/studioArtifacts/privateArtifactClient.ts": "sha256:6383eb03385183a0080955758702f6ce9545604090da552cb8c78c1f0e48aa50",
     "services/studioArtifacts/privateArtifactContracts.ts": "sha256:5df27f63d7f10b616e74c50b5f056ac89ebe205111e835a288c7cd7538e02d7c",
     "services/syntheticAdminClient.ts": "sha256:ba0e6b62c1267311e911bf91118418091ebb7cbbf48ebf7d883bbcf95e586034",
     "services/transcriptFlow/assessApply.test.ts": "sha256:eb78b32ce8fec0b46748907baf3b30f19e8d29424e4261197b2c63c0c210f26b",
