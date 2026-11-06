@@ -11,7 +11,7 @@ if (!['postgres:', 'postgresql:'].includes(adminUrl.protocol)
   || adminUrl.pathname !== '/postgres' || adminUrl.search || adminUrl.hash) {
   throw new Error('Disposable loopback PostgreSQL required');
 }
-assert.equal(migrationNames.at(-1), '20261106153001_process_evidence_validation_renewal.sql');
+assert.equal(migrationNames.at(-1), '20261106170001_studio_timeout_reconciliation.sql');
 
 const name = `studio_response_reconciliation_${randomUUID().replaceAll('-', '')}`;
 const ids = Object.fromEntries([
@@ -36,7 +36,7 @@ try {
   await applyMigrations(db, migrationNames);
 
   assert.equal((await one(`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).migration_tip,
-    '20261106153001');
+    '20261106170001');
   for (const relation of ['studio_generation_provider_candidates', 'studio_generation_spent_output_lost_reconciliations']) {
     assert.deepEqual(await one(`SELECT relrowsecurity rls,relforcerowsecurity force_rls,
       has_table_privilege('service_role',oid,'SELECT') service_select,
@@ -376,7 +376,7 @@ try {
       failure_class,execution_token,execution_fence,day_bucket,month_bucket)
     VALUES($1,NULL,NULL,'studio',$2,$3,$4,$5,$6,1,$7,$8,'openai',
       'studio.document.generate','gpt-4.1-mini-2025-04-14','uncertain',100,4000,
-      'pre_settlement_persistence_failed',$9,1,current_date,date_trunc('month',current_date)::date)`, [
+      'provider_timeout',$9,1,current_date,date_trunc('month',current_date)::date)`, [
     run.reservation, run.receipt, run.attempt, run.org, run.workspace, run.studio,
     run.studioRoute, run.config, run.token,
   ]);
@@ -407,6 +407,19 @@ try {
   await rejected(() => db.query(reconcileSql, reconcileArgs), /STUDIO_SPENT_OUTPUT_LOST_RUNTIME_NOT_OFF/);
   await db.query(`UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton`);
   await db.query(`SET session_replication_role=replica`);
+  await db.query(`INSERT INTO public.enterprise_provider_secret_backend_ownerships(
+      key_ref_id,exercise_id,receipt_id,org_id,workspace_id,provider,backend_kind,
+      secret_reference_hash,safe_fingerprint,vault_secret_id,state)
+    VALUES($1,$2,$3,$4,$5,'openai','supabase_vault',$6,$7,$8,'written')`, [
+    run.key, randomUUID(), randomUUID(), run.org, run.workspace, hash('2'),
+    `sha256:${'3'.repeat(24)}`, randomUUID(),
+  ]);
+  await db.query(`SET session_replication_role=origin`);
+  await rejected(() => db.query(reconcileSql, reconcileArgs), /STUDIO_SPENT_OUTPUT_LOST_RUNTIME_NOT_OFF/);
+  await db.query(`SET session_replication_role=replica`);
+  await db.query(`DELETE FROM public.enterprise_provider_secret_backend_ownerships WHERE key_ref_id=$1`, [run.key]);
+  await db.query(`SET session_replication_role=origin`);
+  await db.query(`SET session_replication_role=replica`);
   await db.query(`UPDATE public.studio_artifact_generation_attempts
     SET execution_lease_expires_at=statement_timestamp()+interval '1 minute' WHERE id=$1`, [run.attempt]);
   await db.query(`SET session_replication_role=origin`);
@@ -419,12 +432,53 @@ try {
   staleAttestation[20] = new Date(Date.now() - 16 * 60 * 1000);
   await rejected(() => db.query(reconcileSql, staleAttestation), /STUDIO_SPENT_OUTPUT_LOST_BINDING_INVALID/);
 
+  await db.query(`SET session_replication_role=replica`);
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations
+    SET failure_class='provider_request_failed' WHERE id=$1`, [run.reservation]);
+  await db.query(`SET session_replication_role=origin`);
+  await rejected(() => db.query(reconcileSql, reconcileArgs), /STUDIO_SPENT_OUTPUT_LOST_HISTORY_UNSAFE/);
+  await db.query(`SET session_replication_role=replica`);
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations
+    SET failure_class='provider_timeout' WHERE id=$1`, [run.reservation]);
+  await db.query(`SET session_replication_role=origin`);
+  await db.query(`SET session_replication_role=replica`);
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations
+    SET failure_class=NULL WHERE id=$1`, [run.reservation]);
+  await db.query(`SET session_replication_role=origin`);
+  await rejected(() => db.query(reconcileSql, reconcileArgs), /STUDIO_SPENT_OUTPUT_LOST_HISTORY_UNSAFE/);
+  await db.query(`SET session_replication_role=replica`);
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations
+    SET failure_class='provider_timeout' WHERE id=$1`, [run.reservation]);
+  await db.query(`UPDATE public.studio_artifact_generation_attempts
+    SET provider_operation_id='unpersisted-provider-result' WHERE id=$1`, [run.attempt]);
+  await db.query(`SET session_replication_role=origin`);
+  await rejected(() => db.query(reconcileSql, reconcileArgs), /STUDIO_SPENT_OUTPUT_LOST_HISTORY_UNSAFE/);
+  await db.query(`SET session_replication_role=replica`);
+  await db.query(`UPDATE public.studio_artifact_generation_attempts
+    SET provider_operation_id=NULL WHERE id=$1`, [run.attempt]);
+  await db.query(`SET session_replication_role=origin`);
+  const wrongDebit = [...reconcileArgs];
+  wrongDebit[9] = randomUUID();
+  await rejected(() => db.query(reconcileSql, wrongDebit), /STUDIO_SPENT_OUTPUT_LOST_HISTORY_UNSAFE/);
+
   const conservativeBefore = await one(`SELECT reservation.state,reservation.failure_class,
       reservation.actual_total_tokens,reservation.release_reason,
       debit.debit_usd_nanos::text debit_usd_nanos,debit.consumed_at IS NOT NULL consumed
     FROM public.enterprise_ai_budget_reservations reservation
     JOIN public.synthetic_ai_campaign_effect_debits debit ON debit.id=$2
     WHERE reservation.id=$1`, [run.reservation, run.debit]);
+  const cumulativeLedgerBefore = await one(`SELECT count(*)::int call_count,
+      count(*) FILTER (WHERE consumed_at IS NOT NULL)::int consumed_count,
+      COALESCE(sum(debit_usd_nanos),0)::text debit_usd_nanos
+    FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`, [permit.campaignId]);
+  await db.query('BEGIN');
+  await db.query(`SET LOCAL session_replication_role=replica`);
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations
+    SET failure_class='pre_settlement_persistence_failed' WHERE id=$1`, [run.reservation]);
+  await db.query(`SET LOCAL session_replication_role=origin`);
+  const preservedPriorClass = (await one(reconcileSql, reconcileArgs)).value;
+  assert.equal(preservedPriorClass.failureClass, 'pre_settlement_persistence_failed');
+  await db.query('ROLLBACK');
   await db.query('BEGIN');
   const rolledBack = (await one(reconcileSql, reconcileArgs)).value;
   assert.equal(rolledBack.disposition, 'spent_output_lost');
@@ -439,6 +493,7 @@ try {
   assert.equal(reconciled.actualUsage, 'unknown');
   assert.equal(reconciled.callAllocationRetained, true);
   assert.equal(reconciled.providerRetryAuthorized, false);
+  assert.equal(reconciled.failureClass, 'provider_timeout');
   assert.equal((await one(`SELECT state FROM public.studio_artifact_generation_attempts WHERE id=$1`,
     [run.attempt])).state, 'spent_output_lost');
   assert.deepEqual(await one(`SELECT reservation.state,reservation.failure_class,
@@ -447,6 +502,18 @@ try {
     FROM public.enterprise_ai_budget_reservations reservation
     JOIN public.synthetic_ai_campaign_effect_debits debit ON debit.id=$2
     WHERE reservation.id=$1`, [run.reservation, run.debit]), conservativeBefore);
+  assert.deepEqual(await one(`SELECT count(*)::int call_count,
+      count(*) FILTER (WHERE consumed_at IS NOT NULL)::int consumed_count,
+      COALESCE(sum(debit_usd_nanos),0)::text debit_usd_nanos
+    FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`, [permit.campaignId]),
+  cumulativeLedgerBefore);
+  assert.equal((await one(`SELECT reservation_failure_class FROM
+    public.studio_generation_spent_output_lost_reconciliations WHERE attempt_id=$1`,
+  [run.attempt])).reservation_failure_class, 'provider_timeout');
+  assert.equal((await one(`SELECT metadata->>'failureClass' failure_class
+    FROM public.privileged_audit_events
+    WHERE action='studio.artifact.generation.spent-output-lost.reconcile' AND resource_id=$1`,
+  [run.attempt])).failure_class, 'provider_timeout');
   assert.equal((await one(reconcileSql, reconcileArgs)).value.replayed, true);
   const replayMismatch = [...reconcileArgs];
   replayMismatch[18] = 'spent-output-lost-changed-binding';

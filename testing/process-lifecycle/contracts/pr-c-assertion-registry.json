@@ -477,7 +477,7 @@
   "owners": {
     "migration-static": {
       "path": "scripts/checkGovernedDeliveryMonitorPrCMigrationContract.mjs",
-      "sha256": "cc9f0b6e3c0aa6b5280624017b6bd84209d48ee2198ea1a207f0a0da15ee3c38"
+      "sha256": "f796c5060bfd5151e5d69ad6c644776e86138de150015532aaec66b88b6fa7c7"
     },
     "postgres": {
       "path": "scripts/testTranscriptFlowPrCPostgres.mjs",
@@ -529,7 +529,7 @@
     },
     "studio-source-postgres": {
       "path": "scripts/testStudioSourceIntegrationPostgres.mjs",
-      "sha256": "0ae21f116ead1ea077948005abb466d2deeee882da657179330325b4876aa169"
+      "sha256": "06f7a10280f77f02b5cd66beb5f5027ec4673898fff7524eff1da836184986df"
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",

@@ -623,7 +623,9 @@ void (async () => {
     return { attemptId: ids[9], executionToken: ids[12], executionFence: 8, leaseExpiresAt: '2030-01-01T00:00:00Z', providerAllowed: false, reconcileOnly: true, ...storedPromptPlan } as never;
   }, async authoritativePlan => { claimMaterialPlan = authoritativePlan; return material; });
   mark(rpcName === STUDIO_RPC.generationClaim && claim.reconcileOnly && !claim.providerAllowed && claim.executionFence === 8
-    && rpcArgs.p_attempt_id === ids[9] && rpcArgs.p_lease_seconds === 45
+    && rpcArgs.p_attempt_id === ids[9] && rpcArgs.p_lease_seconds === 90
+    && claim.timeoutMs === 60_000
+    && Number(rpcArgs.p_lease_seconds) * 1_000 - claim.timeoutMs === 30_000
     && claimMaterialPlan.promptVersion === 'studio-pr-b-2'
     && claimMaterialPlan.providerPlanHash === 'f'.repeat(64),
   'IDEMP-002-B', 'db.reconcile-only-claim-uses-stored-prompt-authority', 'staged-response-refence', {

@@ -1,5 +1,16 @@
 # Process evidence to confirmed delivery work
 
+## Bounded Studio timeout and retained-spend disposition — 6 November 2026
+
+Executed evidence on `1b0d2c90254947f52550ed8f99e27b7f255885cf`: all 17 required workflows passed, 127 migrations and exact preview/backend were verified, and normal provider validation restored actual freshness. The ordinary UI FRD generation timed out at 30 seconds under a 45-second lease. Private readback confirmed `provider_timeout`, an uncertain reservation, and zero captured candidates, staged responses or document versions. Provider execution is disabled and the key binding revoked. Ten cumulative attempts retain USD 4.714592; the failed FRD actual usage remains unknown. No paid retry has occurred. Normal UI also reverified the six persistent board items, blocked GET dependency/exact BRD requirement link, and separate no-AI recommendation on this candidate.
+
+Read-only architecture, security and quality review completed before implementation: server-owned Studio timeout 60 seconds, lease 90 seconds, unchanged shared gateway maximum, and no automatic paid retries. Additive migration 128 permits only the existing exact-bound spent/output-lost disposition to recognize `provider_timeout` alongside the retained persistence-failure class, recording the actual class. Every actor, campaign, attempt, reservation, receipt, debit, route, key, model, token and fence binding remains required. Require expired lease, disabled execution/routes and revoked key binding; reject any captured/staged/version output, known usage, extra debit or unrelated uncertainty. The reservation stays uncertain and fully counted, actual usage stays unknown, and the old attempt never re-enters the provider boundary.
+
+Acceptance: focused production-adapter and gateway bounds tests; one-effect timeout classification; real PostgreSQL exact timeout disposition and rejection cases; unchanged cumulative accounting/replay; full migration-chain/installed-routine contract verification; required exact-candidate CI and preview gate. Only after exact deployment and reconciliation may a new FRD request consume another allocation. The current cumulative allowance has three calls left for FRD, SDD and selective refresh; further recovery must use a verified cumulative allowance within AP's existing credit ceiling, never a reset.
+
+Rollback/fallback: disable permit and provider runtimes, revoke binding, preserve uncertain usage and approved outputs. Revert the timeout/lease pair together if needed; once installed, retain migration bytes and use a forward repair. This does not establish generation success or complete the milestone. Executed locally: Studio output/recovery/API/provider suites, edge typecheck, exact timeout/lease tests, real PostgreSQL timeout/null/unrelated-class rejection and retained-spend disposition, 128-migration standard/Supabase inventory with adversarial drift and stable reinspection, static tail/routine tests (18/18), acceptance catalog/oracle, PR C contract, AI-boundary and secret-hygiene checks all pass. Replacement exact-candidate CI, hosted installation/reconciliation and actual generation remain pending.
+
+
 
 ## Stale provider validation renewal — 6 November 2026
 

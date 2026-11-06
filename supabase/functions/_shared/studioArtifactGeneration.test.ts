@@ -186,7 +186,7 @@ const claim: StudioExecutableGenerationClaim = {
     artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-2',
     providerPlanHash: hash('f'), resolverDecision: decision,
   },
-  maximumOutputTokens: 2_000, timeoutMs: 30_000,
+  maximumOutputTokens: 2_000, timeoutMs: 60_000,
   providerAllowed: true, reconcileOnly: false,
 };
 const providerResult: StudioProviderGatewayResult = {
@@ -267,9 +267,11 @@ void (async () => {
   }));
 
   const events: string[] = []; let providerEffects = 0; let providerInputAnchorsBound = false;
+  let providerTimeoutBound = false;
   const deps = {
     runProvider: async (providerInput: Parameters<StudioGenerationDependencies['runProvider']>[0]) => {
       providerInputAnchorsBound = JSON.stringify(providerInput.canonicalSourceAnchors) === JSON.stringify(canonicalAnchors);
+      providerTimeoutBound = providerInput.timeoutMs === 60_000;
       providerEffects += 1; events.push('provider'); return providerResult;
     },
     stage: async () => { events.push('stage'); },
@@ -422,7 +424,7 @@ void (async () => {
   'PROVIDER-009-B', 'generation.invalid-or-non-brd-v2-prompt-plan-fails-before-budget-and-provider',
   'missing-wrong-prompt-identity-and-v2-non-brd-matrix');
   const success = await executeClaimedStudioGeneration(claim, deps);
-  mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound
+  mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound && providerTimeoutBound
     && events.join(',') === 'provider,stage,finalize',
   'IDEMP-001', 'generation.one-provider-effect-staged-before-finalize', 'provider-success-single-effect');
 

@@ -1,5 +1,12 @@
 # AvalaOS Core Source Of Truth
 
+## Studio timeout recovery — 6 November 2026
+
+Candidate `1b0d2c90254947f52550ed8f99e27b7f255885cf` passed all 17 required checks, verified 127 installed migrations and exact nonproduction frontend/backend identity. Normal provider validation succeeded. The subsequent real FRD request hit the 30-second timeout; no candidate, staged response or document version exists. Runtime and permit are disabled, key binding revoked, and ten attempts retain USD 4.714592 in conservative ledger exposure. Actual FRD usage is unknown; last observed posted provider spend was USD 0.04 before this attempt.
+
+The [active milestone](planning/process-evidence-to-delivery.md) owns the narrow Studio-only 60-second timeout / 90-second lease and additive exact-bound timeout disposition. It preserves uncertain reservations, all cumulative allocations, independent approvals and source lineage. BRD/PDD and six board items remain reviewable; FRD/SDD and selective refresh remain incomplete.
+
+
 
 ## Selected Delivery work and stale validation recovery — 6 November 2026
 

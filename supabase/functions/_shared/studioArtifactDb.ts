@@ -35,6 +35,12 @@ import { resolveAuthenticatedSyntheticStudioTransport } from './authenticatedSyn
 
 type StudioBoundProviderPlan = NonNullable<StudioExecutableGenerationClaim['providerPlan']>;
 
+// Keep the server-owned provider deadline inside the shared gateway ceiling and
+// leave a bounded persistence window after the fetch returns. Neither value is
+// accepted from the browser or the generation command.
+export const STUDIO_PROVIDER_TIMEOUT_MS = 60_000;
+export const STUDIO_GENERATION_LEASE_SECONDS = 90;
+
 /** Centralized RPC inventory; migrations and adapters must move in lockstep. */
 export const STUDIO_RPC = {
   authority: 'studio_artifact_authority',
@@ -620,7 +626,8 @@ export const claimStudioGeneration = async (
   const value = object(await invoke<unknown>(syntheticPermitId
     ? STUDIO_RPC.authenticatedSyntheticGenerationClaim
     : STUDIO_RPC.generationClaim, {
-    p_attempt_id: attemptId, p_execution_token: executionToken, p_lease_seconds: 45,
+    p_attempt_id: attemptId, p_execution_token: executionToken,
+    p_lease_seconds: STUDIO_GENERATION_LEASE_SECONDS,
   }));
   const terminalState = field(value, 'state');
   const terminalReplay = field(value, 'outcome') === 'replayed'
@@ -695,7 +702,7 @@ export const claimStudioGeneration = async (
     manualBrief: material.manualBrief,
     providerPlan: material.providerPlan,
     maximumOutputTokens: integer(field(plan, 'maximumOutputTokens', 'maximum_output_tokens'), 1),
-    timeoutMs: 30_000,
+    timeoutMs: STUDIO_PROVIDER_TIMEOUT_MS,
     providerAllowed: field(value, 'providerAllowed', 'provider_allowed') === true,
     reconcileOnly: field(value, 'reconcileOnly', 'reconcile_only') === true,
     ...(field(plan, 'authenticatedSyntheticPermitId', 'authenticated_synthetic_permit_id') ? {

@@ -674,6 +674,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "process-evidence-validation-renewal",
     "sourceReference": "supabase/migrations/20261106153001_process_evidence_validation_renewal.sql",
     "selector": "DO $process_evidence_validation_renewal$"
+  },
+  {
+    "anchorId": "studio-timeout-reconciliation",
+    "sourceReference": "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
+    "selector": "DO $studio_timeout_reconciliation$"
   }
 ]);
 
@@ -1960,7 +1965,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -2096,7 +2102,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -2639,7 +2646,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -2697,7 +2705,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -2755,7 +2764,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -2813,7 +2823,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -2871,7 +2882,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -3873,7 +3885,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "local-real-backend-build",
       "local-real-backend-authority",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
@@ -3917,7 +3930,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "local-real-backend-build",
       "local-real-backend-authority",
       "delivery-numbered-requirements",
-      "process-evidence-validation-renewal"
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation"
     ],
     "ownership": [
       {
