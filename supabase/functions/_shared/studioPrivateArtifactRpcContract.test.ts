@@ -12,6 +12,7 @@ import {
   decodeStudioPrivateArtifactDueWork,
   STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
+  STUDIO_SDD_PDF_RENDERER_VERSION,
   STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
 } from './studioPrivateArtifactRpcContract.ts';
 
@@ -107,6 +108,14 @@ test('real private claim vocabulary is strict and versioned', () => {
     format: 'pdf',
     rendererVersion: STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
   }));
+  assert.equal(decodeStudioRenditionClaim({
+    ...rendition,
+    artifactType: 'sdd',
+    format: 'pdf',
+    contentSchemaVersion: 'studio-artifact-2',
+    rendererVersion: STUDIO_SDD_PDF_RENDERER_VERSION,
+    templateVersion: 'studio-sdd-1',
+  }).rendererVersion, 'studio-pdf-3');
   assert.throws(() =>
     decodeStudioRenditionClaim({
       ...rendition,

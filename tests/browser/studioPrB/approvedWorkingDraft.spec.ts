@@ -5,10 +5,12 @@ test('approved document creates a distinct editable working draft and retains ap
   await page.getByLabel('Artifact type',{exact:true}).selectOption('sdd');
   const editor=page.getByRole('region',{name:'Current document',exact:true});
   await expect(page.getByRole('button',{name:'Create working draft',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Update selected sections',exact:true})).toHaveCount(0);
   await expect(editor.getByLabel('Section body')).toBeDisabled();
   await page.getByRole('button',{name:'Create working draft',exact:true}).click();
   await expect(editor.getByLabel('Section body')).toBeEnabled();
   await expect(page.getByRole('button',{name:'Create working draft',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Update selected sections',exact:true})).toBeVisible();
   const revise=await page.evaluate(()=>((window as any).__studioCommandCalls??[]).filter((c:any)=>c.commandType==='studio.artifact.draft.revise'));
   expect(revise).toHaveLength(1);
   expect(revise[0].body.payload.parentVersionId).toBe('00000053-0000-4000-8000-000000000053');
@@ -29,5 +31,6 @@ test('read-only actor cannot create a working draft from approved content',async
   await page.goto('/tests/browser/studioPrB/harness.html?mode=direct&sddFlows=1&approvedDocument=1&caps=artifacts');
   await page.getByLabel('Artifact type',{exact:true}).selectOption('sdd');
   await expect(page.getByRole('button',{name:'Create working draft',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Update selected sections',exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>((window as any).__studioCommandCalls??[]).length)).toBe(0);
 });

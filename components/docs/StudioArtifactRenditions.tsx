@@ -55,6 +55,10 @@ const currentRenderer: Record<StudioPrivateArtifactFormat, string> = {
   pdf: 'studio-pdf-2',
   docx: 'studio-docx-2',
 };
+const currentRendererFor = (
+  artifactType: StudioArtifactProjectionDto['artifactType'],
+  format: StudioPrivateArtifactFormat,
+) => artifactType === 'sdd' && format === 'pdf' ? 'studio-pdf-3' : currentRenderer[format];
 const stateLabel: Record<StudioRenditionProjectionDto['state'], string> = {
   requested: 'Generation requested',
   rendering: 'Rendering',
@@ -176,11 +180,12 @@ export default function StudioArtifactRenditions({
         rendition => rendition.format === format,
       );
       const preferred = usesV2Contract
-        ? candidates.find(rendition => rendition.rendererVersion === currentRenderer[format])
+        ? candidates.find(rendition =>
+            rendition.rendererVersion === currentRendererFor(artifact.artifactType, format))
         : undefined;
       return [format, preferred ?? candidates.at(-1)];
     })) as Partial<Record<StudioPrivateArtifactFormat, StudioRenditionProjectionDto>>,
-    [projection, usesV2Contract],
+    [artifact.artifactType, projection, usesV2Contract],
   );
 
   const load = useCallback(async () => {
@@ -348,7 +353,8 @@ export default function StudioArtifactRenditions({
             candidate => candidate.format === format && candidate.id !== rendition?.id,
           );
           const currentRendererMissing = Boolean(
-            usesV2Contract && rendition && rendition.rendererVersion !== currentRenderer[format],
+            usesV2Contract && rendition &&
+              rendition.rendererVersion !== currentRendererFor(artifact.artifactType, format),
           );
           const generating =
             rendition && ['requested', 'rendering', 'uploading'].includes(rendition.state);

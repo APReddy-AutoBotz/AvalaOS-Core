@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Four approved planning documents — 6 November 2026 UTC
+
+Candidate `88f1738ef6bd3f7d73c533e92ec80fe8815abc15` passed all 17 required workflows and exact dedicated preview/backend plus 130-migration verification. Real BRD/PDD/FRD/SDD content is saved and independently approved for planning. Six selected requirement-derived board items and the separate no-AI assessment remain verified. The SDD canonical PDF inspection found obscured branch routes, and current-source drafts lack a visible selective-refresh action. The [active milestone](planning/process-evidence-to-delivery.md) owns these focused corrections, their immutable rendition boundary and remaining ordinary-UI proof. Provider execution is disabled and the key binding revoked. The milestone is not complete.
+
 ## Synthetic generation compatibility correction — 6 November 2026 UTC
 
 The dedicated `32d3240f` preview/backend and 129-migration inventory verified, and the preview gate passed. Required CI found that the SDD prompt migration omitted the existing authenticated-synthetic constraint branch and transport/permit coupling. The [active milestone](planning/process-evidence-to-delivery.md) owns a narrow additive repair with real PostgreSQL and canonical browser regression coverage. Installed bytes remain immutable. Three approved documents, six board items and the no-AI case remain reviewable. Provider execution is disabled, the key binding is revoked, and no new call occurred; SDD and selective refresh remain incomplete.

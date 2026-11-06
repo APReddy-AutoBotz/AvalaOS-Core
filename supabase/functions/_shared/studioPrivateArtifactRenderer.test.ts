@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { inspectMermaidFlowcharts } from '../../../services/mermaidFlowchart';
 import {
   StudioRenditionError,
   assertValidStudioPdf,
   inspectStudioDocxEntries,
   normalizeStudioApprovedContent,
+  planStudioPdf3Diagram,
   renderStudioPrivateArtifact,
   sha256Hex,
   validateStudioApprovedContent,
@@ -93,6 +95,12 @@ const renderV2 = (
     : format === 'pdf'
       ? 'studio-pdf-2'
       : 'studio-docx-2',
+});
+const renderSddPdf3 = (value: unknown) => renderStudioPrivateArtifact(value, 'pdf', {
+  artifactType: 'sdd',
+  contentSchemaVersion: 'studio-artifact-2',
+  templateVersion: 'studio-sdd-1',
+  rendererVersion: 'studio-pdf-3',
 });
 
 void test('renderer accepts bounded canonical objects without dropping fields', () => {
@@ -295,6 +303,76 @@ void test('renderer-2 keeps strict SDD flows as bounded vector diagrams', async 
   assert.match(pdf, /Human judgment/u);
   assert.match(pdf, /\d+ \d+ \d+ \d+ re B/u);
   assert.doesNotMatch(pdf, /flowchart (?:TD|LR)/u);
+});
+void test('renderer-3 routes every canonical SDD branch visibly and emits a complete transition legend', async () => {
+  const asIsFlow = [
+    'flowchart TD',
+    'A[Receive query and acknowledge within two working days]',
+    'B[Human verifies requester authority]',
+    'C[Analyst identifies stated invoice reference]',
+    'D[Read and verify invoice status]',
+    'E[Human investigates ambiguity or dispute]',
+    'F[Human approves and sends reply]',
+    'G[Record original source and approved reply]',
+    'A --> B', 'B -->|Verified| C', 'B -->|Unresolved| E',
+    'C -->|Exact reference| D', 'C -->|Missing or ambiguous| E',
+    'D -->|Verified status| F', 'D -->|Error or dispute| E',
+    'E -->|Resolved for reply| F', 'F --> G',
+  ].join('\n');
+  const toBeFlow = [
+    'flowchart TD',
+    'A[Proposed workflow capture and acknowledgment]',
+    'B[Human verifies requester authority]',
+    'C[Proposed rules validate exact invoice and supplier references]',
+    'D[Ready read-only GET retrieves invoice status]',
+    'E[Human reviews missing records errors or disputes]',
+    'F[Prepare reply from verified status]',
+    'G[Human approves and sends reply]',
+    'H[Proposed evidence record links source and approved reply]',
+    'A --> B', 'B -->|Verified| C', 'B -->|Unresolved| E',
+    'C -->|Exact match| D', 'C -->|Invalid or ambiguous| E',
+    'D -->|Matching status| F', 'D -->|Not found denied or technical failure| E',
+    'E -->|Resolved for reply| F', 'F --> G', 'G --> H',
+  ].join('\n');
+  const content = v2Content('sdd', { asIsFlow, toBeFlow });
+  const historicalPdf2 = await renderV2('sdd', content, 'pdf');
+  assert.equal(historicalPdf2.sha256, '2781e80ae0c2b702c41c43da2f5d6b1058ca50ce7d49575cac6957f199edb82f');
+  const first = await renderSddPdf3(content);
+  const second = await renderSddPdf3(content);
+  assert.deepEqual(first.bytes, second.bytes);
+  assert.equal(first.rendererVersion, 'studio-pdf-3');
+  const pdf = new TextDecoder('latin1').decode(first.bytes);
+  assert.match(pdf, /AvalaOS deterministic studio-pdf-3/u);
+  assert.equal((pdf.match(/Complete transition legend/g) ?? []).length, 2);
+  for (const expected of [
+    'E3: [B] Human verifies requester authority --Unresolved-->',
+    'E5: [C] Analyst identifies stated invoice reference --Missing or ambiguous-->',
+    'E6: [D] Read and verify invoice status --Verified status-->',
+    'E7: [D] Ready read-only GET retrieves invoice status --Not found denied or technical failure-->',
+  ]) assert.ok(pdf.includes(expected), expected);
+
+  const chart = inspectMermaidFlowcharts(asIsFlow, true)[0];
+  const plan = planStudioPdf3Diagram({
+    kind: 'diagram', title: 'As is flow', chart,
+    nodeIds: chart.nodes.map(node => node.id), part: 1, parts: 1, advance: 472,
+  }, 720);
+  assert.equal(plan.routes.length, chart.edges.length);
+  assert.equal(new Set(plan.routes.map(route => route.edgeId)).size, chart.edges.length);
+  assert.ok(plan.routes.find(route => route.edgeId === 'E3')!.points.length > 2);
+});
+void test('renderer-3 is authorized only for the exact SDD V2 schema and template', async () => {
+  const content = v2Content('sdd', {
+    asIsFlow: 'flowchart TD\nA[Start] --> B[Review]',
+    toBeFlow: 'flowchart TD\nA[Start] --> B[Ready GET]',
+  });
+  await assert.doesNotReject(() => renderSddPdf3(content));
+  for (const authority of [
+    { artifactType: 'brd' as const, contentSchemaVersion: 'studio-artifact-1', templateVersion: 'studio-brd-1' },
+    { artifactType: 'sdd' as const, contentSchemaVersion: 'studio-artifact-1', templateVersion: 'studio-sdd-1' },
+    { artifactType: 'sdd' as const, contentSchemaVersion: 'studio-artifact-2', templateVersion: 'studio-brd-1' },
+  ]) await assert.rejects(() => renderStudioPrivateArtifact(content, 'pdf', {
+    ...authority, rendererVersion: 'studio-pdf-3',
+  }), errorCode('VERSION_MISMATCH'));
 });
 void test('canonical SDD schema v2 renders As-Is and To-Be as bounded vector diagrams', async () => {
   const anchor = { sourceVersionId: '11111111-1111-4111-8111-111111111111', locator: 'page:1', anchorHash: 'a'.repeat(64) };

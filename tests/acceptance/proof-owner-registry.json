@@ -802,6 +802,11 @@
       "anchorId": "studio-synthetic-prompt-compatibility",
       "sourceReference": "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
       "selector": "DO $studio_synthetic_prompt_precondition$"
+    },
+    {
+      "anchorId": "studio-sdd-pdf-branch-routing",
+      "sourceReference": "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+      "selector": "DO $studio_sdd_pdf_branch_precondition$"
     }
   ],
   "contracts": [
@@ -1977,7 +1982,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -2116,7 +2122,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -2662,7 +2669,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -2723,7 +2731,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -2784,7 +2793,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -2845,7 +2855,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -2906,7 +2917,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -3911,7 +3923,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {
@@ -3958,7 +3971,8 @@
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
         "sdd-completion-allowance",
-        "studio-synthetic-prompt-compatibility"
+        "studio-synthetic-prompt-compatibility",
+        "studio-sdd-pdf-branch-routing"
       ],
       "ownership": [
         {

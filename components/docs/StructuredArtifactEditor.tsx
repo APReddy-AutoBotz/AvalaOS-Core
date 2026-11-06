@@ -21,7 +21,7 @@ interface Props {
   onRegenerateSelected?: (sectionIds: readonly string[]) => void;
   projectedSections?: readonly StudioArtifactSectionDto[];
   selectedSources?: readonly StudioWorkspaceSelectedSourceDto[];
-  onCommit: (content: Record<string, unknown>) => void;
+  onCommit: (content: Record<string, unknown>) => boolean | Promise<boolean>;
 }
 
 export default function StructuredArtifactEditor({
@@ -54,8 +54,10 @@ export default function StructuredArtifactEditor({
   const [pendingRegeneration, setPendingRegeneration] = useState<
     readonly string[] | null
   >(null);
+  const [refreshRequested, setRefreshRequested] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const regenerateAfterSaveRef = useRef<readonly string[] | null>(null);
+  const refreshRequestPendingRef = useRef(false);
   useEffect(() => {
     setSections(initial);
     setDocumentTitle(initialTitle);
@@ -64,12 +66,17 @@ export default function StructuredArtifactEditor({
     setDirty(false);
     setSelectedForUpdate(new Set());
     setPendingRegeneration(null);
-    const requested = regenerateAfterSaveRef.current;
-    if (requested) {
-      regenerateAfterSaveRef.current = null;
-      queueMicrotask(() => onRegenerateSelected?.(requested));
+    if (!regenerateAfterSaveRef.current) {
+      refreshRequestPendingRef.current = false;
+      setRefreshRequested(false);
     }
   }, [initial]);
+  useEffect(() => {
+    const requested = regenerateAfterSaveRef.current;
+    if (!requested || !onRegenerateSelected) return;
+    regenerateAfterSaveRef.current = null;
+    queueMicrotask(() => onRegenerateSelected(requested));
+  }, [initial, onRegenerateSelected]);
   const selectedIndex = Math.max(
     0,
     sections.findIndex((section) => section.id === selectedId),
@@ -145,22 +152,37 @@ export default function StructuredArtifactEditor({
     if (next) onCommit(next);
   };
   const regenerate = () => {
+    if (refreshRequestPendingRef.current) return;
     const selected = [...selectedForUpdate];
     if (dirty) {
       setPendingRegeneration(selected);
       return;
     }
+    refreshRequestPendingRef.current = true;
+    setRefreshRequested(true);
     onRegenerateSelected?.(selected);
   };
-  const saveThenRegenerate = () => {
+  const saveThenRegenerate = async () => {
     const next = validatedContent();
-    if (!next || !pendingRegeneration) return;
+    if (!next || !pendingRegeneration || refreshRequestPendingRef.current) return;
     regenerateAfterSaveRef.current = pendingRegeneration;
-    onCommit(next);
-    setPendingRegeneration(null);
+    refreshRequestPendingRef.current = true;
+    setRefreshRequested(true);
+    let committed = false;
+    try {
+      committed = await onCommit(next);
+    } catch {
+      committed = false;
+    }
+    if (!committed) {
+      regenerateAfterSaveRef.current = null;
+      refreshRequestPendingRef.current = false;
+      setRefreshRequested(false);
+      setPendingRegeneration(null);
+    }
   };
   const discardThenRegenerate = () => {
-    if (!pendingRegeneration) return;
+    if (!pendingRegeneration || refreshRequestPendingRef.current) return;
     const requested = pendingRegeneration;
     setSections(initial);
     setDocumentTitle(initialTitle);
@@ -168,6 +190,8 @@ export default function StructuredArtifactEditor({
     setErrors([]);
     setDocumentSummary(typeof content.summary === "string" ? content.summary : "");
     setPendingRegeneration(null);
+    refreshRequestPendingRef.current = true;
+    setRefreshRequested(true);
     onRegenerateSelected?.(requested);
   };
   return (
@@ -219,6 +243,17 @@ export default function StructuredArtifactEditor({
           <strong>Needs review.</strong> The sources changed after this document
           was saved. Select the affected sections to update. Unselected content
           and approved history are preserved.
+        </div>
+      )}
+      {onRegenerateSelected && !readOnly && (
+        <div className={`mt-4 rounded-lg border p-3 text-sm ${needsReview ? "border-amber-300 bg-amber-50 text-amber-950" : "border-[var(--av-color-border)] bg-[var(--av-color-bg-subtle)] text-[var(--av-color-text)]"}`}>
+          {!needsReview && (
+            <p>
+              <strong>Update selected sections.</strong> Regenerate only the
+              sections you choose from the current source package. Unselected
+              authored content and source references are preserved.
+            </p>
+          )}
           <fieldset className="mt-3 grid gap-2 sm:grid-cols-2">
             <legend className="sr-only">Sections selected for update</legend>
             {sections.map((section) => (
@@ -226,7 +261,7 @@ export default function StructuredArtifactEditor({
                 <input
                   type="checkbox"
                   checked={selectedForUpdate.has(section.id)}
-                  disabled={readOnly}
+                  disabled={saving || refreshRequested}
                   onChange={(event) =>
                     setSelectedForUpdate((current) => {
                       const next = new Set(current);
@@ -240,16 +275,14 @@ export default function StructuredArtifactEditor({
               </label>
             ))}
           </fieldset>
-          {onRegenerateSelected && (
-            <button
-              type="button"
-              disabled={readOnly || saving || selectedForUpdate.size === 0}
-              onClick={regenerate}
-              className="btn-primary mt-3 min-h-10 px-3 text-xs font-bold disabled:opacity-50"
-            >
-              Update selected sections
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={saving || refreshRequested || selectedForUpdate.size === 0}
+            onClick={regenerate}
+            className="btn-primary mt-3 min-h-10 px-3 text-xs font-bold disabled:opacity-50"
+          >
+            Update selected sections
+          </button>
           <details className="mt-3 text-xs">
             <summary className="cursor-pointer font-semibold">
               Audit details
@@ -276,13 +309,15 @@ export default function StructuredArtifactEditor({
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
+              disabled={saving || refreshRequested}
               className="btn-primary min-h-10 px-3 text-xs font-bold"
-              onClick={saveThenRegenerate}
+              onClick={() => void saveThenRegenerate()}
             >
               Save changes
             </button>
             <button
               type="button"
+              disabled={saving || refreshRequested}
               className="btn-ghost min-h-10 px-3 text-xs font-bold"
               onClick={discardThenRegenerate}
             >
@@ -290,6 +325,7 @@ export default function StructuredArtifactEditor({
             </button>
             <button
               type="button"
+              disabled={saving || refreshRequested}
               className="btn-ghost min-h-10 px-3 text-xs font-bold"
               onClick={() => setPendingRegeneration(null)}
             >

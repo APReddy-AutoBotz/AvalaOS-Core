@@ -689,6 +689,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "studio-synthetic-prompt-compatibility",
     "sourceReference": "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
     "selector": "DO $studio_synthetic_prompt_precondition$"
+  },
+  {
+    "anchorId": "studio-sdd-pdf-branch-routing",
+    "sourceReference": "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+    "selector": "DO $studio_sdd_pdf_branch_precondition$"
   }
 ]);
 
@@ -1978,7 +1983,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -2117,7 +2123,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -2663,7 +2670,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -2724,7 +2732,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -2785,7 +2794,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -2846,7 +2856,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -2907,7 +2918,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -3912,7 +3924,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {
@@ -3959,7 +3972,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "process-evidence-validation-renewal",
       "studio-timeout-reconciliation",
       "sdd-completion-allowance",
-      "studio-synthetic-prompt-compatibility"
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing"
     ],
     "ownership": [
       {

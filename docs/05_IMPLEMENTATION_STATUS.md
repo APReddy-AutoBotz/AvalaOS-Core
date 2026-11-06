@@ -1,5 +1,9 @@
 # AvalaOS Core: current implementation and verification status
 
+## Four approved planning documents — 6 November 2026 UTC
+
+Candidate `88f1738ef6bd3f7d73c533e92ec80fe8815abc15` passed all 17 required workflows and exact dedicated preview/backend plus 130-migration verification. Real BRD/PDD/FRD/SDD content is saved and independently approved for planning. Six selected requirement-derived board items and the separate no-AI assessment remain verified. The SDD canonical PDF inspection found obscured branch routes, and current-source drafts lack a visible selective-refresh action. The [active milestone](planning/process-evidence-to-delivery.md) owns these focused corrections, their immutable rendition boundary and remaining ordinary-UI proof. Provider execution is disabled and the key binding revoked. The milestone is not complete.
+
 ## Three approved documents and persistent board — 6 November 2026 UTC
 
 Candidate `4ded34f001a9204951a2bd754d458299b8716c57` passed all 17 required workflows and exact nonproduction preview/backend verification with 128 migrations. Normal UI retains independently approved BRD v5, PDD v4 and FRD v2; all canonical PDF pages were inspected. Six selected requirement-derived board items persist, including edited Tasks, a Blocked GET Story and its discovery dependency. Repeated import creates no duplicates. The contrasting order-status assessment displays its supported no-AI design separately from evidence gaps.

@@ -17,11 +17,16 @@ export const STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS = {
   docx: 'studio-docx-1',
 } as const;
 
+// The SDD PDF renderer advances independently because its vector diagrams have
+// topology requirements that do not apply to the other document types.
+export const STUDIO_SDD_PDF_RENDERER_VERSION = 'studio-pdf-3' as const;
+
 export type StudioPrivateArtifactFormat =
   keyof typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS;
 export type StudioPrivateArtifactRendererVersion =
   | (typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS)[StudioPrivateArtifactFormat]
-  | (typeof STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS)[StudioPrivateArtifactFormat];
+  | (typeof STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS)[StudioPrivateArtifactFormat]
+  | typeof STUDIO_SDD_PDF_RENDERER_VERSION;
 export type StudioPrivateArtifactType = 'brd' | 'frd' | 'pdd' | 'sdd';
 export type StudioPrivateArtifactMimeType =
   | 'text/markdown; charset=utf-8'
@@ -235,10 +240,12 @@ const rendererVersion = (
     ? [
         STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS[expectedFormat],
         STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS[expectedFormat],
+        ...(expectedFormat === 'pdf' ? [STUDIO_SDD_PDF_RENDERER_VERSION] : []),
       ]
     : [
         ...Object.values(STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS),
         ...Object.values(STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS),
+        STUDIO_SDD_PDF_RENDERER_VERSION,
       ];
   if (
     typeof value !== 'string' ||

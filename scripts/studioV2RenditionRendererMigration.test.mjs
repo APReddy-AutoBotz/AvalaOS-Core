@@ -6,6 +6,10 @@ const source = readFileSync(
   'supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql',
   'utf8',
 );
+const branchSource = readFileSync(
+  'supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql',
+  'utf8',
+);
 
 test('renderer-2 is selected only by the service RPC for exact system-template V2 content', () => {
   for (const token of [
@@ -51,4 +55,28 @@ test('renderer-2 generation keeps replay, tuple, and authorization controls', ()
     'studio_private_artifact_command_receipts',
     'privileged_audit_events',
   ]) assert.ok(source.includes(token), token);
+});
+
+test('renderer-3 is a guarded SDD V2 PDF branch and preserves function authority', () => {
+  for (const token of [
+    "marker.migration_tip<>'20261106191539'",
+    "IF format_name='pdf' AND artifact_type='sdd' THEN",
+    "renderer:='studio-pdf-3'",
+    'STUDIO_SDD_PDF_BRANCH_SOURCE_MISMATCH',
+    'STUDIO_SDD_PDF_BRANCH_AUTHORITY_DRIFT',
+    "new_tip text:='20261106210205'",
+    "CHECK(migration_tip='20261106210205')",
+  ]) assert.ok(branchSource.includes(token), token);
+  assert.match(branchSource,
+    /IF NOT COALESCE\(is_v2_system_document, false\) THEN[\s\S]+?RETURN public\.studio_private_artifact_command_claim_renderer1_legacy\(p_command\);[\s\S]+?IF format_name='pdf' AND artifact_type='sdd' THEN[\s\S]+?renderer:='studio-pdf-3'/u);
+  assert.match(branchSource,
+    /metadata_after IS DISTINCT FROM metadata_before[\s\S]+?STUDIO_SDD_PDF_BRANCH_AUTHORITY_DRIFT/u);
+});
+
+test('renderer-3 routing is additive and does not rewrite rendition history', () => {
+  assert.doesNotMatch(branchSource, /DELETE\s+FROM\s+public\.studio_(?:renditions|rendition_attempts)/iu);
+  assert.doesNotMatch(branchSource, /UPDATE\s+public\.studio_(?:renditions|rendition_attempts)/iu);
+  assert.doesNotMatch(branchSource, /studio-pdf-1[^']*:=|studio-pdf-2[^']*:=/u);
+  assert.match(branchSource, /EXISTS\(SELECT 1 FROM public\.authenticated_synthetic_exercises WHERE lifecycle='active'\)/u);
+  assert.match(branchSource, /EXISTS\(SELECT 1 FROM public\.synthetic_ai_campaign_authorities WHERE enabled\)/u);
 });

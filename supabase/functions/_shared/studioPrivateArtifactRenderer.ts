@@ -2,6 +2,7 @@ import {
   decodeStudioApprovedContent,
   STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
+  STUDIO_SDD_PDF_RENDERER_VERSION,
   type StudioApprovedContent,
   type StudioApprovedJson,
   type StudioPrivateArtifactRendererVersion,
@@ -414,7 +415,8 @@ export const normalizeStudioApprovedContent = (
   const usesCurrentRenderer = authority.rendererVersion
     ? (Object.values(
         STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
-      ) as readonly string[]).includes(authority.rendererVersion)
+      ) as readonly string[]).includes(authority.rendererVersion) ||
+      authority.rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION
     : false;
   if (usesCurrentRenderer)
     return normalizeStudioV2ApprovedContent(source, authority);
@@ -661,7 +663,10 @@ type PdfDiagram = {
   advance: number;
 };
 type PdfItem = PdfLine | PdfDiagram;
-const pdfItems = (content: StudioNormalizedContent): PdfItem[] => {
+const pdfItems = (
+  content: StudioNormalizedContent,
+  includeCompleteTransitionLegend = false,
+): PdfItem[] => {
   const lines: PdfItem[] = [];
   const add = (
     value: string,
@@ -743,6 +748,20 @@ const pdfItems = (content: StudioNormalizedContent): PdfItem[] => {
           );
         }
       });
+      if (includeCompleteTransitionLegend) {
+        add("Complete transition legend", true, 10, 88, 14);
+        chart.edges.forEach((edge, edgeIndex) => {
+          const from = nodeById.get(edge.from)!;
+          const to = nodeById.get(edge.to)!;
+          add(
+            `E${edgeIndex + 1}: [${from.id}] ${from.label} --${edge.branchLabel ?? "transition"}--> [${to.id}] ${to.label}`,
+            false,
+            8,
+            112,
+            11,
+          );
+        });
+      }
     } else {
       add(section.title, true, 13, 76, 19);
       add(section.content, false, 11, 88, 15);
@@ -869,6 +888,164 @@ const diagramCommands = (diagram: PdfDiagram, top: number) => {
   return commands;
 };
 
+type PdfPoint = Readonly<{ x: number; y: number }>;
+type PdfRect = Readonly<{ x: number; y: number; width: number; height: number }>;
+export type StudioPdf3DiagramRoute = Readonly<{
+  edgeId: string;
+  from: string;
+  to: string;
+  points: readonly PdfPoint[];
+  continuation: "none" | "outgoing" | "incoming";
+}>;
+export type StudioPdf3DiagramPlan = Readonly<{
+  nodes: Readonly<Record<string, PdfRect>>;
+  routes: readonly StudioPdf3DiagramRoute[];
+}>;
+
+const routeSegments = (points: readonly PdfPoint[]) =>
+  points.slice(1).map((point, index) => [points[index], point] as const);
+const segmentCrossesRect = (
+  [start, end]: readonly [PdfPoint, PdfPoint],
+  rect: PdfRect,
+) => {
+  if (start.x === end.x) {
+    const low = Math.min(start.y, end.y);
+    const high = Math.max(start.y, end.y);
+    return start.x > rect.x && start.x < rect.x + rect.width &&
+      high > rect.y && low < rect.y + rect.height;
+  }
+  if (start.y === end.y) {
+    const low = Math.min(start.x, end.x);
+    const high = Math.max(start.x, end.x);
+    return start.y > rect.y && start.y < rect.y + rect.height &&
+      high > rect.x && low < rect.x + rect.width;
+  }
+  return true;
+};
+
+export const planStudioPdf3Diagram = (
+  diagram: PdfDiagram,
+  top: number,
+): StudioPdf3DiagramPlan => {
+  const height = 34;
+  const gap = 28;
+  const nodeWidth = 280;
+  const nodeX = 166;
+  const visible = new Set(diagram.nodeIds);
+  const nodes = Object.fromEntries(diagram.nodeIds.map((id, index) => [id, {
+    x: nodeX,
+    y: top - 48 - index * (height + gap) - height,
+    width: nodeWidth,
+    height,
+  }])) as Record<string, PdfRect>;
+  const sourceOrder = new Map(diagram.nodeIds.map((id, index) => [id, index]));
+  let sideLane = 0;
+  const routes: StudioPdf3DiagramRoute[] = [];
+  diagram.chart.edges.forEach((edge, edgeIndex) => {
+    const fromVisible = visible.has(edge.from);
+    const toVisible = visible.has(edge.to);
+    if (!fromVisible && !toVisible) return;
+    const edgeId = `E${edgeIndex + 1}`;
+    const fromRect = fromVisible ? nodes[edge.from] : undefined;
+    const toRect = toVisible ? nodes[edge.to] : undefined;
+    const adjacent = fromVisible && toVisible &&
+      sourceOrder.get(edge.to)! === sourceOrder.get(edge.from)! + 1;
+    if (adjacent) {
+      routes.push({ edgeId, from: edge.from, to: edge.to, continuation: "none", points: [
+        { x: fromRect!.x + fromRect!.width / 2, y: fromRect!.y },
+        { x: toRect!.x + toRect!.width / 2, y: toRect!.y + toRect!.height },
+      ] });
+      return;
+    }
+    const right = sideLane % 2 === 1;
+    const laneOffset = Math.floor(sideLane / 2) * 16;
+    const laneX = right ? 500 + laneOffset : 112 - laneOffset;
+    sideLane += 1;
+    if (laneX < 32 || laneX > 580)
+      throw new StudioRenditionError("OUTPUT_INVALID");
+    if (fromRect && toRect) {
+      const fromY = fromRect.y + fromRect.height / 2;
+      const toY = toRect.y + toRect.height / 2;
+      const fromX = right ? fromRect.x + fromRect.width : fromRect.x;
+      const toX = right ? toRect.x + toRect.width : toRect.x;
+      routes.push({ edgeId, from: edge.from, to: edge.to, continuation: "none", points: [
+        { x: fromX, y: fromY }, { x: laneX, y: fromY },
+        { x: laneX, y: toY }, { x: toX, y: toY },
+      ] });
+    } else if (fromRect) {
+      const y = fromRect.y + fromRect.height / 2;
+      const x = right ? fromRect.x + fromRect.width : fromRect.x;
+      routes.push({ edgeId, from: edge.from, to: edge.to, continuation: "outgoing", points: [
+        { x, y }, { x: laneX, y }, { x: laneX, y: 78 },
+      ] });
+    } else if (toRect) {
+      const y = toRect.y + toRect.height / 2;
+      const x = right ? toRect.x + toRect.width : toRect.x;
+      routes.push({ edgeId, from: edge.from, to: edge.to, continuation: "incoming", points: [
+        { x: laneX, y: top - 24 }, { x: laneX, y }, { x, y },
+      ] });
+    }
+  });
+  for (const route of routes) {
+    for (const [nodeId, rect] of Object.entries(nodes)) {
+      if (nodeId === route.from || nodeId === route.to) continue;
+      if (routeSegments(route.points).some(segment => segmentCrossesRect(segment, rect)))
+        throw new StudioRenditionError("OUTPUT_INVALID");
+    }
+  }
+  return { nodes, routes };
+};
+
+const diagramCommandsV3 = (diagram: PdfDiagram, top: number) => {
+  const plan = planStudioPdf3Diagram(diagram, top);
+  const commands = [
+    "0.25 w", "0 G", "0 g", "BT", "/F2 13 Tf",
+    `1 0 0 1 72 ${top} Tm`, `(${pdfLiteral(diagram.title)}) Tj`, "ET",
+  ];
+  if (diagram.parts > 1) commands.push(
+    "BT", "/F1 8 Tf", `1 0 0 1 72 ${top - 16} Tm`,
+    `(Diagram part ${diagram.part} of ${diagram.parts}) Tj`, "ET",
+  );
+  for (const route of plan.routes) {
+    const [first, ...rest] = route.points;
+    const path = [`${first.x} ${first.y} m`, ...rest.map(point => `${point.x} ${point.y} l`), "S"];
+    commands.push(...path);
+    const last = route.points.at(-1)!;
+    const before = route.points.at(-2)!;
+    if (route.continuation !== "outgoing") {
+      if (last.x === before.x)
+        commands.push(`${last.x - 3} ${last.y + 5} m ${last.x} ${last.y} l ${last.x + 3} ${last.y + 5} l S`);
+      else {
+        const direction = last.x > before.x ? -1 : 1;
+        commands.push(`${last.x + direction * 5} ${last.y - 3} m ${last.x} ${last.y} l ${last.x + direction * 5} ${last.y + 3} l S`);
+      }
+    }
+    const markerSegment = routeSegments(route.points).reduce((longest, segment) => {
+      const length = Math.abs(segment[1].x - segment[0].x) + Math.abs(segment[1].y - segment[0].y);
+      const longestLength = Math.abs(longest[1].x - longest[0].x) + Math.abs(longest[1].y - longest[0].y);
+      return length > longestLength ? segment : longest;
+    });
+    const marker = {
+      x: (markerSegment[0].x + markerSegment[1].x) / 2,
+      y: (markerSegment[0].y + markerSegment[1].y) / 2,
+    };
+    commands.push("1 g", `${marker.x - 2} ${marker.y - 2} 18 10 re f`, "0 g", "BT", "/F2 8 Tf",
+      `1 0 0 1 ${marker.x} ${marker.y} Tm`, `(${route.edgeId}) Tj`, "ET");
+  }
+  const nodeById = new Map(diagram.chart.nodes.map(node => [node.id, node]));
+  for (const [nodeId, rect] of Object.entries(plan.nodes)) {
+    const node = nodeById.get(nodeId)!;
+    commands.push("0.96 g", `${rect.x} ${rect.y} ${rect.width} ${rect.height} re B`);
+    const max = Math.max(12, Math.floor(rect.width / 5.6));
+    const label = node.label.length > max ? `${node.label.slice(0, max - 3)}...` : node.label;
+    const width = Math.min(rect.width - 20, label.length * 5);
+    commands.push("0 g", "BT", "/F1 9 Tf",
+      `1 0 0 1 ${rect.x + (rect.width - width) / 2} ${rect.y + 13} Tm`,
+      `(${pdfLiteral(label)}) Tj`, "ET");
+  }
+  return commands;
+};
+
 const legacyPdfLines = (content: StudioNormalizedContent) => {
   const lines: Array<{
     text: string;
@@ -973,11 +1150,11 @@ const renderStudioLegacyPdf = (
 
 export const renderStudioPdf = (
   content: StudioNormalizedContent,
-  rendererVersion: "studio-pdf-1" | "studio-pdf-2" = "studio-pdf-1",
+  rendererVersion: "studio-pdf-1" | "studio-pdf-2" | "studio-pdf-3" = "studio-pdf-1",
 ): Uint8Array => {
   const pages: PdfItem[][] = [[]];
   let y = 720;
-  for (const line of pdfItems(content)) {
+  for (const line of pdfItems(content, rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION)) {
     if (y - line.advance < 72 && pages[pages.length - 1].length > 0) {
       pages.push([]);
       y = 720;
@@ -1012,7 +1189,9 @@ export const renderStudioPdf = (
     const commands: string[] = [];
     for (const line of page) {
       if (line.kind === "diagram")
-        commands.push(...diagramCommands(line, cursor));
+        commands.push(...(rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION
+          ? diagramCommandsV3(line, cursor)
+          : diagramCommands(line, cursor)));
       else
         commands.push(
           "0 g",
@@ -1371,21 +1550,29 @@ export const renderStudioPrivateArtifact = async (
     STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS[typedFormat];
   if (
     authority.rendererVersion !== currentRenderer &&
-    authority.rendererVersion !== legacyRenderer
+    authority.rendererVersion !== legacyRenderer &&
+    authority.rendererVersion !== STUDIO_SDD_PDF_RENDERER_VERSION
   ) {
     throw new StudioRenditionError("VERSION_MISMATCH");
   }
+  const usesSddPdf3 = authority.rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION;
+  if (usesSddPdf3 && (
+    typedFormat !== "pdf" ||
+    authority.artifactType !== "sdd" ||
+    authority.contentSchemaVersion !== "studio-artifact-2" ||
+    authority.templateVersion !== "studio-sdd-1"
+  )) throw new StudioRenditionError("VERSION_MISMATCH");
   const usesCurrentRenderer = authority.rendererVersion === currentRenderer;
   const content = normalizeStudioApprovedContent(value, authority);
   const bytes =
     typedFormat === "markdown"
       ? renderStudioMarkdown(content)
       : typedFormat === "pdf"
-        ? usesCurrentRenderer ||
+        ? usesCurrentRenderer || usesSddPdf3 ||
           authority.contentSchemaVersion === "studio-artifact-2"
           ? renderStudioPdf(
               content,
-              authority.rendererVersion as "studio-pdf-1" | "studio-pdf-2",
+              authority.rendererVersion as "studio-pdf-1" | "studio-pdf-2" | "studio-pdf-3",
             )
           : renderStudioLegacyPdf(content)
         : renderStudioDocx(

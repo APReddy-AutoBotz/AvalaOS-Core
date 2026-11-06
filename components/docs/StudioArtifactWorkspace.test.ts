@@ -59,6 +59,19 @@ assert.ok(!source.includes('Last committed receipt {receipt.receiptId}') || sour
 const ordinaryEditorActions=structuredEditor.slice(structuredEditor.indexOf('<div className="mt-4 flex justify-end">'));
 assert.equal(ordinaryEditorActions.match(/Save changes/gu)?.length,1,'the ordinary structured editor exposes one Save changes action');
 assert.equal(source.match(/>Save changes<\/button>/gu)?.length??0,0,'technical JSON import must not add another Save changes action');
+for(const token of [
+  "const sourceNeedsReview=",
+  "const selectedRefreshAvailable=Boolean(",
+  "&&can('studio.artifact.draft.revise')",
+  "&&capabilities.includes('studio.artifacts.generate')",
+  "&&!controlledHumanSyntheticGeneration",
+  "&&artifactWorkspace.providerAvailability.available",
+  "&&artifactWorkspace.actions.includes('studio.generation.request')",
+  "onRegenerateSelected={selectedRefreshAvailable?",
+]) assert.ok(source.includes(token),`selected refresh authority gate missing: ${token}`);
+assert.ok(structuredEditor.includes('<strong>Update selected sections.</strong>'),'current-source drafts must expose neutral selective refresh wording');
+assert.ok(structuredEditor.includes('regenerateAfterSaveRef.current = null;'),'failed or ambiguous saves must clear deferred refresh intent');
+assert.ok(structuredEditor.includes('setRefreshRequested(true);'),'selected refresh must lock against duplicate dispatch');
 const offlineBranch=source.indexOf("if (offline)"), ordinaryClearBranch=source.indexOf('if (!preserveProjection)');
 assert.ok(offlineBranch < ordinaryClearBranch&&ordinaryClearBranch < source.indexOf('clearProjection();',ordinaryClearBranch),'offline state must preserve the committed projection for read-only inspection');
 assert.equal(source.match(/clearProjection\(\);/g)?.length, 2, 'only a genuine source/type identity load or rejected cross-authority load may clear the projection');

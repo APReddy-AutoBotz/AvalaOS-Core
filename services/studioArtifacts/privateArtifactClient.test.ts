@@ -38,7 +38,7 @@ const rendition = {
   filename: 'governed-brief.pdf',
   byteLength: 1250,
   sha256: 'a'.repeat(64),
-  rendererVersion: 'pdf-v1',
+  rendererVersion: 'studio-pdf-1',
   retentionMode: 'until',
   retentionUntil: '2027-07-29T00:00:00.000Z',
   legalHoldActive: false,
@@ -367,3 +367,21 @@ assert.throws(() => decodeStudioPrivateArtifactProjection({...historicalAndCurre
 assert.throws(() => decodeStudioPrivateArtifactProjection({...projection, renditions: Array.from({length: 7}, (_,i) => ({...rendition, id: `10000000-0000-4000-8000-${String(i).padStart(12,"0")}`,rendererVersion: `pdf-${i}`}))}, {artifactId: U[2], artifactVersionId: U[3]}));
 
 assert.throws(() => decodeStudioPrivateArtifactProjection({...historicalAndCurrent, renditions: [...historicalAndCurrent.renditions, {...rendition, id: U[1], rendererVersion: "studio-pdf-3"}]}, {artifactId: U[2], artifactVersionId: U[3]}));
+
+const sddPdfHistory = {
+  ...historicalAndCurrent,
+  artifactType: 'sdd',
+  renditions: [
+    ...historicalAndCurrent.renditions,
+    {...rendition, id: U[1], rendererVersion: 'studio-pdf-3'},
+  ],
+};
+assert.equal(decodeStudioPrivateArtifactProjection(sddPdfHistory, {artifactId: U[2], artifactVersionId: U[3]}).renditions.length, 3);
+assert.throws(() => decodeStudioPrivateArtifactProjection({
+  ...sddPdfHistory,
+  renditions: [...sddPdfHistory.renditions, {
+    ...rendition,
+    id: '66666666-6666-4666-8666-666666666666',
+    rendererVersion: 'studio-pdf-4',
+  }],
+}, {artifactId: U[2], artifactVersionId: U[3]}));

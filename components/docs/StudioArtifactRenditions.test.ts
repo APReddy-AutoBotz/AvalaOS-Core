@@ -114,6 +114,8 @@ for (const token of [
   'deletion_reconciliation_required',
   'deletion_reconciling',
   'studio-pdf-2',
+  'studio-pdf-3',
+  'currentRendererFor',
   'Generate current',
   'Download historical',
   'History',
@@ -154,8 +156,8 @@ assert.equal(
 );
 assert.match(
   source,
-  /usesV2Contract[\s\S]+?rendererVersion === currentRenderer\[format\][\s\S]+?preferred \?\? candidates\.at\(-1\)/u,
-  'V2 display must prefer the current renderer while retaining a legacy fallback',
+  /usesV2Contract[\s\S]+?rendererVersion === currentRendererFor\(artifact\.artifactType, format\)[\s\S]+?preferred \?\? candidates\.at\(-1\)/u,
+  'V2 display must prefer the artifact-aware current renderer while retaining a legacy fallback',
 );
 assert.match(
   source,

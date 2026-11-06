@@ -438,11 +438,11 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
 
   const run = async (commandType: StudioCommandType, payload: Record<string, unknown>) => {
     const ticket = authorityEpoch.current.issue();
-    if (blocked) return;
+    if (blocked) return false;
     if (offline) {
       setState('offline');
       setMessage('Offline. No command was submitted.');
-      return;
+      return false;
     }
     const mutationSequence=beginWorkspaceMutation();
     try{
@@ -450,42 +450,45 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setMessage('Submitting. Success appears only after commit and projection reload.');
       try {
       const result = await executeStudioArtifactCommand(context, commandType, artifact, payload, crypto.randomUUID(), transport);
-      if (!accepts(ticket)) return;
+      if (!accepts(ticket)) return false;
       setReceipt(result);
       if (result.outcome === 'generation_failed') {
         setState('generation_failed');
         setMessage('Generation attempt was committed and later failed. No artifact version was created.');
-        return;
+        return false;
       }
       try {
         const value = artifact?.contractVersion==='studio-artifact-2'
           ? await readStudioArtifactV2(context,artifact.id,transport)
           : await readStudioArtifact(context, handoffId, artifactType, transport);
-        if (!accepts(ticket)) return;
+        if (!accepts(ticket)) return false;
         if(artifact?.contractVersion==='studio-artifact-2'&&value.id!==artifact.id)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
         const exactWorkspace = value.contractVersion === 'studio-artifact-2'
           ? await readStudioArtifactWorkspace(context, value.id, 0, 20, transport)
           : null;
-        if (!accepts(ticket)) return;
+        if (!accepts(ticket)) return false;
         setArtifact(value);
         setArtifactWorkspace(exactWorkspace);
         setState(value.readOnly ? 'read_only' : value.lifecycle);
         setMessage(`${labels[value.lifecycle]} committed.`);
         if(['reviewer_ready','in_review'].includes(value.lifecycle)){
           const eligible=await readStudioEligibleReviewers(context,value.id,value.currentVersion.id,transport);
-          if (!accepts(ticket)) return;
+          if (!accepts(ticket)) return false;
           setReviewers(eligible);setReviewerId(eligible[0]?.actorId??'');
         }
+        return true;
       } catch {
-        if (!accepts(ticket)) return;
+        if (!accepts(ticket)) return false;
         setState('committed_reload_failed');
         setMessage('Command committed, but projection reload failed. Mutations are blocked.');
+        return false;
       }
       } catch (error) {
-        if (!accepts(ticket)) return;
+        if (!accepts(ticket)) return false;
         const next = stateForError(error, commandType === 'studio.artifact.generation.request');
         setState(next.state);
         setMessage(next.message);
+        return false;
       }
     }finally{finishWorkspaceMutation(mutationSequence);}
   };
@@ -503,12 +506,12 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const reviseStructured = (content: Record<string, unknown>) => {
     setDraft(JSON.stringify(content));
     setDraftValidationError(null);
-    void run('studio.artifact.draft.revise', {artifactId: artifact!.id,parentVersionId:artifact!.currentVersion.id,content});
+    return run('studio.artifact.draft.revise', {artifactId: artifact!.id,parentVersionId:artifact!.currentVersion.id,content});
   };
 
   const createWorkingDraft = () => {
     if (!artifact || artifact.lifecycle !== 'approved' || blocked || !can('studio.artifact.draft.revise')) return;
-    reviseStructured(artifact.currentVersion.content);
+    void reviseStructured(artifact.currentVersion.content);
   };
 
   const loadWorkspacePage = async (page: number) => {
@@ -673,6 +676,29 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const legacyProjection = Boolean(artifact && artifact.contractVersion !== 'studio-artifact-2');
   const editableArtifact = exact('draft','changes_requested','review_rejected','approval_rejected');
   const showStructuredEditor = Boolean(artifact && (artifact.contractVersion === 'studio-artifact-2' || editableArtifact));
+  const sourceNeedsReview=artifactWorkspace?.sourcePackage.stale===true||Boolean(artifactWorkspace&&artifact&&'sourcePackageId' in artifact.ancestry&&(artifact.ancestry.sourcePackageId!==artifactWorkspace.sourcePackage.id||artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash));
+  const selectedRefreshTemplate=artifact?.template&&workspace?.templates.find(item=>item.templateVersionId===artifact.template!.templateVersionId&&item.templateHash===artifact.template!.templateHash&&String(item.version)===String(artifact.template!.version));
+  const selectedRefreshAvailable=Boolean(
+    artifact&&workspace&&governedSelection&&artifactWorkspace&&editableArtifact&&!blocked
+    &&can('studio.artifact.draft.revise')
+    &&capabilities.includes('studio.artifacts.generate')
+    &&!controlledHumanSyntheticGeneration
+    &&artifact.id===governedSelection.artifactId
+    &&governedSelection.sourcePackage.artifactId===artifact.id
+    &&artifactWorkspace.organizationId===context.organizationId
+    &&artifactWorkspace.workspaceId===context.workspaceId
+    &&artifactWorkspace.artifact.id===artifact.id
+    &&artifactWorkspace.artifact.currentVersionId===artifact.currentVersion.id
+    &&artifactWorkspace.artifact.currentApprovedVersionId===(artifact.currentApprovedVersion?.id??null)
+    &&artifactWorkspace.sourcePackage.id===governedSelection.sourcePackage.sourcePackageId
+    &&artifactWorkspace.sourcePackage.version===governedSelection.sourcePackage.sourcePackageVersion
+    &&artifactWorkspace.sourcePackage.hash===governedSelection.sourcePackage.sourcePackageHash
+    &&artifactWorkspace.providerAvailability.available
+    &&artifactWorkspace.actions.includes('studio.generation.request')
+    &&selectedRefreshTemplate?.lifecycle==='approved'
+    &&selectedRefreshTemplate.actions.includes('studio.generation.request')
+    &&(selectedRefreshTemplate.artifactType===artifact.artifactType||selectedRefreshTemplate.artifactType==='custom')
+  );
   const handoffProjection=handoffReadiness.identity===authorityIdentity?handoffReadiness.projection:null;
   const handoffFailureState=artifact?.readOnly===true||['stale','version_conflict','authorization_revoked','read_only','command_failed','generation_failed','committed_reload_failed'].includes(state);
   const handoffDisabled=!canUseStudioHandoffProjection({readiness:handoffReadiness,currentIdentity:authorityIdentity,context,offline,
@@ -705,7 +731,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
         <aside className="space-y-4" aria-label="Artifact governance context"><div className="av-surface p-4"><div className="flex items-start justify-between gap-3"><div><p className="av-eyebrow">Lifecycle status</p><h3 className="mt-2 text-lg font-bold text-[var(--av-color-text)]">{artifact ? labels[artifact.lifecycle] : 'Awaiting source'}</h3></div><span className={`mt-1 h-3 w-3 rounded-full ${artifact?.lifecycle === 'approved' ? 'bg-emerald-500' : artifact ? 'bg-amber-500' : 'bg-slate-300'}`} aria-hidden="true" /></div><div className="mt-5 space-y-3 border-l border-[var(--av-color-border-strong)] pl-4 text-xs font-semibold text-[var(--av-color-text-muted)]">{sequence.map(item => <div key={item} className={artifact && artifact.lifecycle === item ? 'font-bold text-[var(--av-color-brand-primary)]' : ''}>{labels[item]}</div>)}</div></div>{reviewers.length > 0 && <div className="av-surface p-4"><p className="av-eyebrow">Review assignment</p><label className="av-form-label mt-3">Eligible independent reviewer<select aria-label="Eligible independent reviewer" value={reviewerId} onChange={event => setReviewerId(event.target.value)} className="av-input mt-2">{reviewers.map(person => <option key={person.actorId} value={person.actorId}>{person.displayName}</option>)}</select></label></div>}<div className="av-surface p-4"><p className="av-eyebrow">Authority context</p><p className="mt-2 text-sm leading-6 text-[var(--av-color-text-muted)]">{blocked ? 'Mutations are blocked. Existing committed records remain available.' : 'Commands require the current capability, exact version, and a committed projection reload.'}</p></div></aside>
       </div>
 
-      {artifact && showStructuredEditor && <div className="px-4 pb-4 sm:px-5"><StructuredArtifactEditor content={artifact.currentVersion.content} projectedSections={artifactWorkspace?.artifact.id === artifact.id && artifactWorkspace.artifact.currentVersionId === artifact.currentVersion.id ? artifactWorkspace.artifact.sections : artifact.sections} selectedSources={artifactWorkspace?.selectedSources.items} needsReview={artifactWorkspace?.sourcePackage.stale === true||Boolean(artifactWorkspace&&'sourcePackageId' in artifact.ancestry&&(artifact.ancestry.sourcePackageId!==artifactWorkspace.sourcePackage.id||artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash))} onRegenerateSelected={sectionIds=>void withWorkspaceMutation(()=>generateGovernedPackage(sectionIds))} readOnly={blocked || !can('studio.artifact.draft.revise') || !editableArtifact} saving={state === 'loading'} announceStatus={!legacyProjection} onCommit={reviseStructured} /></div>}
+      {artifact && showStructuredEditor && <div className="px-4 pb-4 sm:px-5"><StructuredArtifactEditor content={artifact.currentVersion.content} projectedSections={artifactWorkspace?.artifact.id === artifact.id && artifactWorkspace.artifact.currentVersionId === artifact.currentVersion.id ? artifactWorkspace.artifact.sections : artifact.sections} selectedSources={artifactWorkspace?.selectedSources.items} needsReview={sourceNeedsReview} onRegenerateSelected={selectedRefreshAvailable?(sectionIds=>void withWorkspaceMutation(()=>generateGovernedPackage(sectionIds))):undefined} readOnly={blocked || !can('studio.artifact.draft.revise') || !editableArtifact} saving={state === 'loading'||state==='generating'||workspaceMutationPending} announceStatus={!legacyProjection} onCommit={reviseStructured} /></div>}
 
       {artifact?.lifecycle === 'approved' && <div className="px-4 pb-4 sm:px-5">
         <button type="button" disabled={blocked || !can('studio.artifact.draft.revise')} onClick={createWorkingDraft} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Create working draft</button>
