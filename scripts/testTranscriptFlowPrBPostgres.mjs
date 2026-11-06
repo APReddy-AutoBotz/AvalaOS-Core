@@ -749,9 +749,19 @@ try{
     const result = (await fresh.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) result',
       [JSON.stringify(claim)])).rows[0].result;
     assert.equal(result.generationPlan.sourcePackageId, sddSource);
-    const stored = (await fresh.query('SELECT artifact_id,template_id FROM public.studio_artifact_generation_attempts WHERE id=$1', [result.attemptId])).rows[0];
-    assert.deepEqual(stored, { artifact_id: sddArtifact, template_id: projectedSdd.templateVersionId });
-    console.log('SDD system generation claim persisted with its exact template and source package; provider not run.');
+    assert.equal(result.generationPlan.promptVersion, 'studio-pr-b-4');
+    const stored = (await fresh.query('SELECT artifact_id,template_id,prompt_version FROM public.studio_artifact_generation_attempts WHERE id=$1', [result.attemptId])).rows[0];
+    assert.deepEqual(stored, { artifact_id: sddArtifact, template_id: projectedSdd.templateVersionId, prompt_version: 'studio-pr-b-4' });
+    await fresh.query('SAVEPOINT sdd_prompt_substitution');
+    await assert.rejects(fresh.query(`UPDATE public.studio_artifact_generation_attempts
+      SET prompt_version='studio-pr-b-3' WHERE id=$1`, [result.attemptId]), /STUDIO_IMMUTABLE/);
+    await fresh.query('ROLLBACK TO SAVEPOINT sdd_prompt_substitution');
+    await fresh.query('RELEASE SAVEPOINT sdd_prompt_substitution');
+    const sddClaim = (await fresh.query('SELECT public.studio_artifact_generation_claim_v2($1,$2,60) result',
+      [result.attemptId,runtime.uuid(17305)])).rows[0].result;
+    assert.equal(sddClaim.promptVersion, 'studio-pr-b-4');
+    assert.equal(sddClaim.artifactType, 'sdd');
+    console.log('SDD system generation claim persisted with the exact b4 prompt, template and source package; provider not run.');
   } finally { await fresh.query('ROLLBACK'); }
   assert.deepEqual(generationA.selectors,generationPreGenerationProjection);assert.equal(generationA.result.generationPlan.sourcePackageId,generationPreGenerationProjection.sourcePackageId);assert.equal(generationA.result.generationPlan.sourcePackageHash,generationPreGenerationProjection.sourcePackageHash);
   emit('SOURCEPKG-PRB-001','PREGENERATION-FIRST-GENERATION-BINDING','handoff-consume-first-generation',context(runtimePersona,runtime.org,runtime.workspace,{sourcePackage:{id:generationA.selectors.sourcePackageId,version:Number(generationA.selectors.sourcePackageVersion),hash:generationA.selectors.sourcePackageHash,projectionBound:true},template:{kind:'tenant',versionId:approvedTemplate.id,version:1,hash:approvedTemplate.template_hash},handoff:{id:generationHandoffId,status:'consumed'},artifact:{id:generationA.selectors.artifactId,aggregateVersion:Number(generationA.selectors.aggregateVersion),currentVersionId:generationA.selectors.currentVersionId,currentApprovedVersionId:generationA.selectors.currentApprovedVersionId,attemptId:generationA.result.attemptId,serverPlanHashBound:true}}));

@@ -1,21 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fingerprintRoutine, routineCatalog, parseRoutineContract, matchRoutineContract } from './hostedPilotRoutineContract.mjs';
+import { fingerprintRoutine, routineCatalog, parseRoutineContract, matchRoutineContract, MAX_ROUTINE_CONTRACT_BYTES } from './hostedPilotRoutineContract.mjs';
 import { createPreflightToken, verifyPreflightToken } from './hostedPilotActivation.mjs';
 
-const migrations = [{ name: '20261106170001_fixture.sql', sha256: 'a'.repeat(64) }];
+const migrations = [{ name: '20261106190001_fixture.sql', sha256: 'a'.repeat(64) }];
 const row = {schema:'public',name:'projection',argument_types:'uuid',owner:'postgres',
   authority_metadata:{source:'select 1\r\n',binary:null,language:'sql',securityDefiner:true,configuration:['search_path=pg_catalog']},
   authority_acl:[{grantee:'authenticated',grantor:'postgres',privilege:'EXECUTE',grantable:false},{grantee:'postgres',grantor:'postgres',privilege:'EXECUTE',grantable:false}],
   authority_effective:{anon:{execute:false,grantable:false},authenticated:{execute:true,grantable:false},service_role:{execute:false,grantable:false}}};
 const entry = {...row,authority:fingerprintRoutine(row)};
 const catalog = routineCatalog([entry]);
-const fixture = () => ({schemaVersion:1,runtimeMigrationTip:'20261106170001',checkpoints:[{
+const fixture = () => ({schemaVersion:1,runtimeMigrationTip:'20261106190001',checkpoints:[{
   migrationNames:migrations.map(m=>m.name),migrationHashes:migrations.map(m=>m.sha256),profiles:{standard:catalog,supabase:catalog},
 }]});
 const parse = value => parseRoutineContract(Buffer.from(JSON.stringify(value)),migrations);
 const canonical = {migrations,routineContract:parse(fixture())};
 const raw = {appliedMigrations:migrations.map(m=>m.name),routines:[entry]};
+
+test('routine contract remains bounded before JSON decoding',()=>{
+  assert.equal(MAX_ROUTINE_CONTRACT_BYTES,21_000_000);
+  assert.throws(()=>parseRoutineContract(Buffer.alloc(MAX_ROUTINE_CONTRACT_BYTES+1),migrations),/ROUTINE_CONTRACT_SIZE_REJECTED/);
+  const excessive=fixture();excessive.checkpoints=Array.from({length:19},()=>excessive.checkpoints[0]);
+  assert.throws(()=>parse(excessive),/ROUTINE_CONTRACT_SCHEMA_REJECTED/);
+});
 
 test('canonical source binding and exact whole-profile match are required',()=>{
   assert.equal(matchRoutineContract(raw,canonical),'standard');

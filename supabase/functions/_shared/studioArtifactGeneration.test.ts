@@ -407,6 +407,8 @@ void (async () => {
     { ...claim, providerPlan: { ...claim.providerPlan, promptVersion: undefined } },
     { ...claim, providerPlan: { ...claim.providerPlan, providerPlanHash: 'bad' } },
     { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'pdd', promptVersion: 'studio-pr-b-2' } },
+    { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'brd', promptVersion: 'studio-pr-b-4' } },
+    { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-3' } },
   ];
   let invalidPromptBudgetEntries = 0; let invalidPromptProviderEffects = 0; let invalidPromptFailureWrites = 0;
   const invalidPromptResults = [];
@@ -421,8 +423,8 @@ void (async () => {
   mark(invalidPromptResults.every(result => result.state === 'failed')
     && invalidPromptBudgetEntries === 0 && invalidPromptProviderEffects === 0
     && invalidPromptFailureWrites === invalidPromptClaims.length,
-  'PROVIDER-009-B', 'generation.invalid-or-non-brd-v2-prompt-plan-fails-before-budget-and-provider',
-  'missing-wrong-prompt-identity-and-v2-non-brd-matrix');
+  'PROVIDER-009-B', 'generation.invalid-artifact-prompt-pairs-fail-before-budget-and-provider',
+  'missing-wrong-prompt-identity-brd-and-sdd-matrix');
   const success = await executeClaimedStudioGeneration(claim, deps);
   mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound && providerTimeoutBound
     && events.join(',') === 'provider,stage,finalize',
@@ -496,7 +498,7 @@ void (async () => {
   const unsafeFlowResult = await executeClaimedStudioGeneration({
     ...claim,
     templatePayload: flowTemplatePayload,
-    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-1' },
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
   }, {
     ...deps,
     runProvider: async () => ({
@@ -521,6 +523,60 @@ void (async () => {
     && unsafeFlowEvents.join(',') === 'capture,reject:PROVIDER_OUTPUT_INVALID',
   'STUDIO-TR-008', 'generation.invalid-sdd-flow-is-captured-then-rejected-without-staging',
   'sdd-unsafe-click-provider-output');
+
+  const duplicateFlowCandidate = {
+    ...validFlows,
+    sections: [validFlows.sections[0], { ...validFlows.sections[1], body: validFlows.sections[0].body }],
+  };
+  const duplicateFlowEvents: string[] = [];
+  const duplicateFlowRejected = await executeClaimedStudioGeneration({
+    ...claim, providerAllowed: false, reconcileOnly: true, executionFence: 6,
+    templatePayload: flowTemplatePayload,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => { throw new Error('provider forbidden during captured SDD rejection'); },
+    runBudgeted: (async () => { throw new Error('budget reservation forbidden during captured SDD rejection'); }) as unknown as typeof runBudgetedProviderEffect,
+    loadCandidate: async () => {
+      duplicateFlowEvents.push('load');
+      return {
+        state: 'captured', response: duplicateFlowCandidate, responseHash: hash('6'), reservationId: ids[3],
+        providerOperationId: 'chatcmpl-sdd-duplicate-sanitized',
+        usage: { inputTokens: 17_808, outputTokens: 1_531, totalTokens: 19_339 },
+      };
+    },
+    settleCandidate: async input => {
+      duplicateFlowEvents.push(`settle:${input.usage.inputTokens}/${input.usage.outputTokens}`);
+    },
+    rejectCandidate: async input => { duplicateFlowEvents.push(`reject:${input.failureCode}`); },
+    stage: async () => { duplicateFlowEvents.push('stage-forbidden'); },
+    finalize: async () => { duplicateFlowEvents.push('finalize-forbidden'); return { state: 'completed', resource: {} }; },
+  });
+  mark(duplicateFlowRejected.state === 'failed'
+    && duplicateFlowRejected.failureCode === 'PROVIDER_OUTPUT_INVALID'
+    && duplicateFlowEvents.join(',') === 'load,settle:17808/1531,reject:PROVIDER_OUTPUT_INVALID',
+  'STUDIO-TR-008', 'generation.captured-sdd-v4-identical-flows-settle-actual-usage-then-reject-without-stage-or-finalize',
+  'sanitized-retained-sdd-duplicate-flow-candidate');
+
+  const distinctFlowEvents: string[] = [];
+  const distinctFlowCompleted = await executeClaimedStudioGeneration({
+    ...claim,
+    templatePayload: flowTemplatePayload,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({
+      ...providerResult, providerOperationId: 'chatcmpl-sdd-distinct-1', content: validFlows,
+    }),
+    captureCandidate: async () => { distinctFlowEvents.push('capture'); },
+    stage: async () => { distinctFlowEvents.push('stage'); },
+    finalize: async () => { distinctFlowEvents.push('finalize'); return { state: 'completed', resource: { version: 1 } }; },
+    runBudgeted: executedBudget,
+  });
+  mark(distinctFlowCompleted.state === 'completed'
+    && distinctFlowEvents.join(',') === 'capture,stage,finalize',
+  'STUDIO-TR-008', 'generation.sdd-v4-materially-distinct-grounded-flows-capture-stage-and-finalize',
+  'sdd-v4-distinct-as-is-to-be-positive');
 
   const assessAnchor = { sourceVersionId: ids[0], locator: 'assess:accepted-handoff', anchorHash: hash('d') };
   const fact = (value: boolean | null, status = value === null ? 'unknown' : 'known') => ({ value, status });

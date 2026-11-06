@@ -463,6 +463,29 @@ void (async () => {
     && nonBrdV3Rejected && nonBrdV3Reads === 0,
   'PROVIDER-009-B', 'db.brd-v3-material-loads-canonical-assess-process-and-non-brd-rejects-before-read',
   'studio-pr-b-3-authoritative-material-contract', { promptVersion: 'studio-pr-b-3', sourceVersionId: ids[15] });
+  const v4Plan = {
+    ...plan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4', providerPlanHash: '4'.repeat(64),
+  };
+  const v4Material = await loadStudioGenerationMaterial(v4Plan, read);
+  let mismatchedV4Reads = 0; let mismatchedV4Rejections = 0;
+  for (const mismatch of [
+    { ...plan, promptVersion: 'studio-pr-b-4' },
+    { ...v4Plan, promptVersion: 'studio-pr-b-2' },
+    { ...v4Plan, promptVersion: 'studio-pr-b-3' },
+  ]) {
+    try {
+      await loadStudioGenerationMaterial(mismatch, async <T>() => {
+        mismatchedV4Reads += 1; return [] as T;
+      });
+    } catch (error) {
+      if (error instanceof StudioArtifactError && error.code === 'PROVIDER_ROUTE_UNAVAILABLE') mismatchedV4Rejections += 1;
+    }
+  }
+  mark(v4Material.providerPlan.promptVersion === 'studio-pr-b-4'
+    && v4Material.providerPlan.artifactType === 'sdd'
+    && mismatchedV4Rejections === 3 && mismatchedV4Reads === 0,
+  'PROVIDER-009-B', 'db.sdd-v4-material-loads-only-for-exact-sdd-prompt-pair-before-read',
+  'studio-pr-b-4-authoritative-material-contract', { promptVersion: 'studio-pr-b-4', sourceVersionId: ids[15] });
 
   const hybridCandidateManifestHash = 'e'.repeat(64);
   const hybridCandidateManifest = [
@@ -651,6 +674,29 @@ void (async () => {
   'PROVIDER-009-B', 'db.claimed-brd-v3-prompt-authority-overrides-caller-substitution',
   'caller-v1-stored-v3-generation-claim', {
     attemptId: ids[10], promptVersion: String(v3ClaimMaterialPlan.promptVersion), providerAllowed: true,
+  });
+  let v4ClaimMaterialPlan: Record<string, unknown> = {};
+  const authoritativeV4Claim = await claimStudioGeneration({
+    ...plan, promptVersion: 'studio-pr-b-1', providerPlanHash: '1'.repeat(64),
+    attemptId: ids[10], receiptId: ids[8], authorizationVersion: 4, expectedAggregateVersion: 2,
+    sourcePackageVersion: 1, maximumOutputTokens: 4_000, expectedTemplateVersion: 'system-brd-v3',
+  }, async () => ({
+    attemptId: ids[10], executionToken: ids[13], executionFence: 10,
+    leaseExpiresAt: '2030-01-01T00:00:00Z', providerAllowed: true, reconcileOnly: false,
+    artifactType: 'sdd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-4',
+    providerPlanHash: '4'.repeat(64),
+  }) as never, async authoritativePlan => {
+    v4ClaimMaterialPlan = authoritativePlan;
+    return v4Material;
+  });
+  mark(authoritativeV4Claim.claimKind === 'active'
+    && authoritativeV4Claim.providerPlan.promptVersion === 'studio-pr-b-4'
+    && authoritativeV4Claim.providerPlan.artifactType === 'sdd'
+    && v4ClaimMaterialPlan.promptVersion === 'studio-pr-b-4'
+    && v4ClaimMaterialPlan.providerPlanHash === '4'.repeat(64),
+  'PROVIDER-009-B', 'db.claimed-sdd-v4-prompt-authority-overrides-caller-substitution',
+  'caller-v1-stored-v4-generation-claim', {
+    attemptId: ids[10], promptVersion: String(v4ClaimMaterialPlan.promptVersion), providerAllowed: true,
   });
 
   let syntheticClaimRpc = '';

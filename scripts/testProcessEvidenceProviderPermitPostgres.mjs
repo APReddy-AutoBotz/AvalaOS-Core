@@ -614,17 +614,196 @@ try {
   await db.query('BEGIN');
   await assert.rejects(extraction('post-use-five'),/PERMIT_EXHAUSTED/);
   await db.query('ROLLBACK');
+
+  // The retained 13-call profile remains effective until an exact 12-call
+  // completion baseline is durably present. Exercise its seven-Studio ceiling
+  // in a rollback-only branch before constructing the retained real-use
+  // history for the completion window.
+  await db.query('BEGIN');
   for(let index=0;index<7;index++) await debit(db,'studio.document.generate',id.studio);
+  await rejectedAtSavepoint(()=>debit(db,'studio.document.generate',id.studio),/PERMIT_EXHAUSTED/);
+  assert.deepEqual(await result(db,`SELECT count(*)::int calls,sum(debit_usd_nanos)::bigint::text reserved
+    FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`,[permit.campaignId]),
+    {calls:13,reserved:'6128969600'});
+  await db.query('ROLLBACK');
+
+  // Model the retained provider ledger at the actual acceptance baseline:
+  // two validations, four settled extractions, four settled Studio calls
+  // (including the settled rejected SDD response) and two exact immutable
+  // spent-output-lost journals. The fixture uses PostgreSQL's replication
+  // role only to install already-resolved historical rows; admission for all
+  // subsequent effects is exercised through the production guard.
+  const studioAuthorizationVersion=Number((await result(db,`SELECT version FROM public.authorization_versions
+    WHERE org_id=$1 AND user_id=$2`,[id.org,id.studio])).version);
+  async function retainedStudioEffect(index,{uncertain=false,failureClass=null,inputTokens=120,outputTokens=30}={}) {
+    const receiptId=randomUUID(),attemptId=randomUUID(),artifactId=randomUUID();
+    const reservationId=randomUUID(),debitId=randomUUID(),executionToken=randomUUID();
+    const requestId=randomUUID(),effectHash=(index.toString(16).padStart(2,'0')).repeat(32);
+    await db.query(`INSERT INTO public.studio_artifact_command_receipts(
+      id,org_id,workspace_id,actor_id,command_type,idempotency_key,request_id,request_hash,status,completed_at)
+      VALUES($1,$2,$3,$4,'generate','retained-studio-'||$5,$6,$7,'committed',now())`,[
+      receiptId,id.org,id.workspace,id.studio,String(index),requestId,effectHash,
+    ]);
+    await db.query(`INSERT INTO public.studio_artifact_generation_attempts(
+      id,artifact_id,org_id,workspace_id,handoff_id,requested_by,request_id,template_id,input_hash,state,
+      failure_code,completed_at,source_package_id,source_package_hash,template_kind,template_version,template_hash,
+      expected_aggregate_version,requester_authorization_version,provider_plan_state,provider_route_id,
+      provider_config_id,provider_name,provider_model,prompt_key,prompt_version,provider_plan_hash,
+      execution_token,execution_fence,provider_effect_key)
+      VALUES($1,$2,$3,$4,NULL,$5,$6,$7,$8,$9,$10,now(),$11,$12,'system','studio-sdd-1',$13,
+        0,$14,'bound',$15,$16,'openai',$17,'studio-multisource-generation','studio-pr-b-4',$18,$19,1,$20)`,[
+      attemptId,artifactId,id.org,id.workspace,id.studio,requestId,randomUUID(),'1'.repeat(64),
+      uncertain?'spent_output_lost':'provider_rejected',uncertain?'GENERATION_SPENT_OUTPUT_LOST':'PROVIDER_OUTPUT_INVALID',
+      randomUUID(),'2'.repeat(64),'3'.repeat(64),studioAuthorizationVersion,id.studioRoute,id.config,model,
+      '4'.repeat(64),executionToken,effectHash,
+    ]);
+    const totalTokens=inputTokens+outputTokens;
+    await db.query(`INSERT INTO public.enterprise_ai_budget_reservations(
+      id,receipt_id,job_id,authority_kind,studio_receipt_id,studio_attempt_id,org_id,workspace_id,actor_id,
+      authorization_version,route_id,provider_config_id,provider,capability,model,state,
+      estimated_input_tokens,maximum_output_tokens,actual_input_tokens,actual_output_tokens,actual_total_tokens,
+      failure_class,execution_token,execution_fence,day_bucket,month_bucket,settled_at)
+      VALUES($1,NULL,NULL,'studio',$2,$3,$4,$5,$6,$7,$8,$9,'openai','studio.document.generate',$10,$11,
+        100,4096,$12,$13,$14,$15,$16,1,(now() AT TIME ZONE 'UTC')::date,
+        date_trunc('month',now() AT TIME ZONE 'UTC')::date,CASE WHEN $11='settled' THEN now() END)`,[
+      reservationId,receiptId,attemptId,id.org,id.workspace,id.studio,studioAuthorizationVersion,
+      id.studioRoute,id.config,model,uncertain?'uncertain':'settled',
+      uncertain?null:inputTokens,uncertain?null:outputTokens,uncertain?null:totalTokens,failureClass,executionToken,
+    ]);
+    await db.query(`INSERT INTO public.synthetic_ai_campaign_effect_debits(
+      id,campaign_id,receipt_id,effect_id,authority_kind,studio_receipt_id,studio_attempt_id,actor_id,
+      org_id,workspace_id,authorization_version,execution_token,execution_fence,command_request_hash,
+      effect_request_hash,maximum_output_tokens,operation,route_id,provider_config_id,key_ref_id,provider,
+      endpoint,model,debit_usd_nanos,consumed_at,process_run_slot)
+      VALUES($1,$2,NULL,$3,'studio',$4,$3,$5,$6,$7,$8,$9,1,$10,$11,4096,
+        'studio.document.generate',$12,$13,$14,'openai',$15,$16,471459200,now(),$17)`,[
+      debitId,permit.campaignId,attemptId,receiptId,id.studio,id.org,id.workspace,studioAuthorizationVersion,
+      executionToken,'6'.repeat(64),effectHash,id.studioRoute,id.config,id.key,endpoint,model,index,
+    ]);
+    if(uncertain) {
+      await db.query(`INSERT INTO public.studio_generation_spent_output_lost_reconciliations(
+        id,campaign_id,attempt_id,artifact_id,reservation_id,debit_id,receipt_id,org_id,workspace_id,
+        operator_actor_id,studio_actor_id,operator_authorization_version,route_id,provider_config_id,key_ref_id,
+        provider,model,execution_token,execution_fence,reservation_failure_class,actual_usage_status,disposition,
+        request_id,idempotency_key,key_unbound_attestation_digest,key_unbound_attested_at,audit_event_id,result)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'openai',$16,$17,1,$18,
+          'unknown','spent_output_lost',$19,$20,$21,now(),$22,$23::jsonb)`,[
+        randomUUID(),permit.campaignId,attemptId,artifactId,reservationId,debitId,receiptId,id.org,id.workspace,
+        id.operator,id.studio,authVersion,id.studioRoute,id.config,id.key,model,executionToken,failureClass,
+        randomUUID(),`retained-lost-${index}`,'sha256:'+'7'.repeat(64),randomUUID(),JSON.stringify({
+          status:'reconciled',disposition:'spent_output_lost',actualUsage:'unknown',failureClass,
+          callAllocationRetained:true,providerRetryAuthorized:false,
+        }),
+      ]);
+    }
+    return {reservationId,debitId,receiptId,attemptId};
+  }
+
+  await db.query('BEGIN');
+  await db.query("SET LOCAL session_replication_role='replica'");
+  const retainedStudio=[];
+  retainedStudio.push(await retainedStudioEffect(1));
+  retainedStudio.push(await retainedStudioEffect(2));
+  retainedStudio.push(await retainedStudioEffect(3));
+  retainedStudio.push(await retainedStudioEffect(4,{inputTokens:17808,outputTokens:1531}));
+  retainedStudio.push(await retainedStudioEffect(5,{uncertain:true,failureClass:'pre_settlement_persistence_failed'}));
+  retainedStudio.push(await retainedStudioEffect(6,{uncertain:true,failureClass:'provider_timeout'}));
+  await db.query('COMMIT');
+  assert.deepEqual(await result(db,`SELECT count(*)::int calls,sum(debit_usd_nanos)::bigint::text reserved,
+    count(*) FILTER(WHERE operation='provider.validate')::int validation,
+    count(*) FILTER(WHERE operation='assess.evidence.extract')::int extraction,
+    count(*) FILTER(WHERE operation='studio.document.generate')::int studio
+    FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`,[permit.campaignId]),
+    {calls:12,reserved:'5657510400',validation:2,extraction:4,studio:6});
+  assert.deepEqual(await result(db,`SELECT count(*)::int journals,
+    count(*) FILTER(WHERE reservation_failure_class='pre_settlement_persistence_failed')::int persistence,
+    count(*) FILTER(WHERE reservation_failure_class='provider_timeout')::int timeout
+    FROM public.studio_generation_spent_output_lost_reconciliations WHERE campaign_id=$1`,[permit.campaignId]),
+    {journals:2,persistence:1,timeout:1});
+  assert.deepEqual(await result(db,`SELECT count(*)::int windows,
+    bool_and(maximum_effects=13 AND maximum_reserved_usd_nanos=6128969600
+      AND validation_effects=2 AND extraction_effects=4 AND studio_effects=7) immutable_prior
+    FROM public.process_evidence_provider_post_use_windows WHERE campaign_id=$1`,[permit.campaignId]),
+    {windows:3,immutable_prior:true});
+
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('SELECT public.synthetic_ai_campaign_disable($1,$2,$3,$4,$5,$6)',
+    [id.operator,id.org,id.workspace,authVersion,fingerprint,project]);
+  const completionAttestedAt=new Date();
+  const completionArgs=[...renewalArgs];
+  completionArgs[15]='8'.repeat(40);
+  completionArgs[16]=new Date(Date.now()+2*3600000-5000);
+  completionArgs[17]=randomUUID();
+  completionArgs[18]='sdd-completion-window';
+  completionArgs[19]='sha256:'+'a'.repeat(64);
+  completionArgs[20]=completionAttestedAt;
+  completionArgs[21]='sha256:'+'b'.repeat(64);
+  completionArgs[22]=completionAttestedAt;
+  completionArgs[23]=new Date(Date.now()+3*86400000);
+  completionArgs[24]=2_357_296_000;
+
+  // Generic uncertainty and any identity mismatch remain hard stops even when
+  // the two exact spent-output-lost journal classes are admitted.
+  await db.query('BEGIN');
+  await db.query("SET LOCAL session_replication_role='replica'");
+  await db.query(`UPDATE public.enterprise_ai_budget_reservations SET state='uncertain',
+    failure_class='provider_request_failed',actual_input_tokens=NULL,actual_output_tokens=NULL,
+    actual_total_tokens=NULL,settled_at=NULL WHERE id=$1`,[retainedStudio[0].reservationId]);
+  await db.query("SET LOCAL session_replication_role='origin'");
+  await assert.rejects(db.query(renewSql,completionArgs),/POST_USE_HISTORY_UNSAFE/);
+  await db.query('ROLLBACK');
+  await db.query('BEGIN');
+  await db.query("SET LOCAL session_replication_role='replica'");
+  await db.query(`UPDATE public.studio_generation_spent_output_lost_reconciliations
+    SET key_ref_id=$2 WHERE reservation_id=$1`,[retainedStudio[4].reservationId,randomUUID()]);
+  await db.query("SET LOCAL session_replication_role='origin'");
+  await assert.rejects(db.query(renewSql,completionArgs),/POST_USE_HISTORY_UNSAFE/);
+  await db.query('ROLLBACK');
+  const completionShortCredit=[...completionArgs]; completionShortCredit[24]-=1;
+  await assert.rejects(db.query(renewSql,completionShortCredit),/POST_USE_HISTORY_UNSAFE/);
+  const completionWrongKey=[...completionArgs]; completionWrongKey[10]=randomUUID();
+  await assert.rejects(db.query(renewSql,completionWrongKey),/POST_USE_NOT_AUTHORIZED/);
+
+  const completionOther=await connect();
+  const completionRace=await Promise.all([db,completionOther].map(client=>result(client,renewSql,completionArgs)));
+  assert.deepEqual(completionRace.map(value=>value.renewal.replayed).sort(),[false,true]);
+  assert.equal(completionRace[0].renewal.windowId,completionRace[1].renewal.windowId);
+  const completion=completionRace[0].renewal;
+  assert.equal(completion.sequence,4);
+  assert.equal(completion.baselineCalls,12);
+  assert.equal(completion.maxCalls,17);
+  assert.equal(completion.maximumReservedUsdNanos,8014806400);
+  assert.equal(completion.remainingValidation,0);
+  assert.equal(completion.remainingExtractions,0);
+  assert.equal(completion.remainingStudio,5);
+  assert.deepEqual(await result(db,`SELECT count(*)::int windows,
+    count(*) FILTER(WHERE maximum_effects=13)::int prior_windows,
+    count(*) FILTER(WHERE maximum_effects=17 AND maximum_reserved_usd_nanos=8014806400
+      AND validation_effects=2 AND extraction_effects=4 AND studio_effects=11)::int completion_windows
+    FROM public.process_evidence_provider_post_use_windows WHERE campaign_id=$1`,[permit.campaignId]),
+    {windows:4,prior_windows:3,completion_windows:1});
+  const completionReplayMismatch=[...completionArgs]; completionReplayMismatch[24]+=1;
+  await assert.rejects(db.query(renewSql,completionReplayMismatch),/POST_USE_REPLAY_MISMATCH/);
+
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
+  for(let index=0;index<4;index++) await debit(db,'studio.document.generate',id.studio);
+  const finalSlotRace=await Promise.allSettled([db,completionOther].map(client=>
+    debit(client,'studio.document.generate',id.studio)));
+  assert.equal(finalSlotRace.filter(outcome=>outcome.status==='fulfilled').length,1);
+  assert.equal(finalSlotRace.filter(outcome=>outcome.status==='rejected'
+    && /PERMIT_EXHAUSTED/.test(String(outcome.reason?.message))).length,1);
   await db.query('BEGIN');
   await assert.rejects(debit(db,'studio.document.generate',id.studio),/PERMIT_EXHAUSTED/);
   await db.query('ROLLBACK');
   assert.deepEqual(await result(db,`SELECT count(*)::int calls,sum(debit_usd_nanos)::bigint::text reserved
     FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1`,[permit.campaignId]),
-    {calls:13,reserved:'6128969600'});
+    {calls:17,reserved:'8014806400'});
   const finalSlots=(await db.query(`SELECT operation,array_agg(process_run_slot::int ORDER BY process_run_slot) slots
     FROM public.synthetic_ai_campaign_effect_debits WHERE campaign_id=$1 GROUP BY operation ORDER BY operation`,
     [permit.campaignId])).rows;
-  assert.deepEqual(finalSlots.map(row=>row.slots),[[1,2,3,4],[1,2],[1,2,3,4,5,6,7]]);
+  assert.deepEqual(finalSlots.map(row=>row.slots),[[1,2,3,4],[1,2],[1,2,3,4,5,6,7,8,9,10,11]]);
   assert.deepEqual(await result(db,`SELECT role.permissions,
     (SELECT count(*)::int FROM public.organization_members member WHERE member.org_id=$2) organization_members,
     (SELECT count(*)::int FROM public.workspace_memberships member
@@ -634,7 +813,7 @@ try {
   await db.query('BEGIN');
   await assert.rejects(debit(db,'studio.document.generate',id.studio),/PERMIT_INACTIVE/);
   await db.query('ROLLBACK');
-  console.log('Process-evidence permit passed: original 1/2/5 profile, retained 1-validation/2-settled-extraction baseline, immutable three-window chain including zero-use renewal, fresh validation reuse, generic reserve compatibility, cumulative 2/4/7 and 13-call/USD 6.1289696 enforcement, replay/concurrency/expiry, and unchanged rights. Provider effects: zero.');
+  console.log('Process-evidence permit passed: original 1/2/5 profile, immutable three-window 2/4/7 and 13-call/USD 6.1289696 behavior, exact retained 12-call history including settled rejected SDD and both journaled spent-output-lost classes, completion-window 2/4/11 and 17-call/USD 8.0148064 enforcement, generic uncertainty/identity/credit/replay/concurrency/expiry negatives, and unchanged rights. Provider effects: zero.');
 } finally {
   for(const db of clients) await db.end();
   if(created) await admin.query('DROP DATABASE '+name+' WITH (FORCE)');

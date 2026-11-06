@@ -1,5 +1,12 @@
 # AvalaOS Core Source Of Truth
 
+## Generated FRD and distinct SDD flow correction — 6 November 2026 UTC
+
+Candidate `4ded34f001a9204951a2bd754d458299b8716c57` passed all 17 required workflows, exact preview/backend verification and the complete 128-migration inventory. Normal UI generation produced FRD version 1; saved requirement-linked criteria and fact/proposal corrections survived reload as version 2, then separate reviewer and approver accounts approved that content for planning. BRD/PDD and the six existing board items remain retained. The no-AI contrast was reverified through normal UI.
+
+The new SDD response duplicated its As-Is and To-Be bodies and was correctly rejected before document creation. Its actual usage was settled and candidate retained; earlier lost-response reservations remain uncertain and counted. Provider execution is disabled and the key binding revoked. Twelve cumulative attempts retain USD 5.6575104 in ledger exposure; the last posted billing display of USD 0.05 had not reflected the latest two requests. The [active milestone](planning/process-evidence-to-delivery.md) owns versioned SDD flow guidance and a bounded cumulative completion allowance. SDD, selective refresh and rendered SDD export remain incomplete.
+
+
 ## Studio timeout recovery — 6 November 2026
 
 Candidate `1b0d2c90254947f52550ed8f99e27b7f255885cf` passed all 17 required checks, verified 127 installed migrations and exact nonproduction frontend/backend identity. Normal provider validation succeeded. The subsequent real FRD request hit the 30-second timeout; no candidate, staged response or document version exists. Runtime and permit are disabled, key binding revoked, and ten attempts retain USD 4.714592 in conservative ledger exposure. Actual FRD usage is unknown; last observed posted provider spend was USD 0.04 before this attempt.

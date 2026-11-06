@@ -20,6 +20,7 @@ import {
   callStudioArtifactProvider,
   STUDIO_PROVIDER_PROMPT_KEY,
   STUDIO_PROVIDER_PROMPT_VERSIONS,
+  studioProviderPromptSupportsArtifact,
   type StudioProviderArtifactType,
 } from './studioArtifactProvider.ts';
 import { ENTERPRISE_AI_PROVIDERS } from '../../../services/enterpriseIntelligence.ts';
@@ -420,7 +421,7 @@ export async function loadStudioGenerationMaterial(
     || promptKey !== STUDIO_PROVIDER_PROMPT_KEY
     || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion as never)
     || !projectionHash.test(providerPlanHash)
-    || promptVersion !== 'studio-pr-b-1' && artifactType !== 'brd') {
+    || !studioProviderPromptSupportsArtifact(promptVersion as StudioBoundProviderPlan['promptVersion'], artifactType)) {
     throw new StudioArtifactError('PROVIDER_ROUTE_UNAVAILABLE');
   }
   const sourcePackageId = string(field(plan, 'sourcePackageId', 'source_package_id'));

@@ -1,5 +1,11 @@
 # AvalaOS Core: current implementation and verification status
 
+## Three approved documents and persistent board — 6 November 2026 UTC
+
+Candidate `4ded34f001a9204951a2bd754d458299b8716c57` passed all 17 required workflows and exact nonproduction preview/backend verification with 128 migrations. Normal UI retains independently approved BRD v5, PDD v4 and FRD v2; all canonical PDF pages were inspected. Six selected requirement-derived board items persist, including edited Tasks, a Blocked GET Story and its discovery dependency. Repeated import creates no duplicates. The contrasting order-status assessment displays its supported no-AI design separately from evidence gaps.
+
+The actual SDD response duplicated its As-Is/To-Be flows and was correctly rejected without creating a document version. SDD, selective refresh and rendered SDD export remain incomplete. Provider execution is disabled and its key binding revoked; all 12 cumulative attempts and uncertain reservations remain counted. The [active milestone](planning/process-evidence-to-delivery.md) owns the focused SDD guidance and cumulative completion allowance under verification. Earlier snapshots below retain their original scope.
+
 ## Planning approvals and export inspection — 6 November 2026
 
 Normal UI proof on the verified PR #355 preview retains independently approved BRD v5 and PDD v2, with corrected acknowledgment timing, API operation boundaries and explicit planning limitations. The canonical BRD PDF downloaded successfully on `3490f58b`, but all-page inspection exposed raw structured JSON rather than a business document. Corrected export is not yet proven. Sixteen of 17 required checks passed; the remaining capture-audit fixture correction passes the local 16-stage PostgreSQL journey. Real FRD/SDD, selective refresh, SDD flow export and persistent board import are still pending. Provider execution and key binding remain off. [Milestone and remaining work](planning/process-evidence-to-delivery.md).
