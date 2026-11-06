@@ -43,6 +43,8 @@ export default function StructuredArtifactEditor({
   const [sections, setSections] = useState<StructuredStudioSection[]>(initial);
   const initialTitle = typeof content.title === "string" ? content.title : initial[0]?.title || "Untitled document";
   const [documentTitle, setDocumentTitle] = useState(initialTitle);
+  const hasDocumentSummary = typeof content.summary === "string";
+  const [documentSummary, setDocumentSummary] = useState(hasDocumentSummary ? content.summary as string : "");
   const [selectedId, setSelectedId] = useState(initial[0]?.id || "");
   const [dirty, setDirty] = useState(false);
   const [selectedForUpdate, setSelectedForUpdate] = useState<Set<string>>(
@@ -57,6 +59,7 @@ export default function StructuredArtifactEditor({
   useEffect(() => {
     setSections(initial);
     setDocumentTitle(initialTitle);
+    setDocumentSummary(typeof content.summary === "string" ? content.summary : "");
     setSelectedId(initial[0]?.id || "");
     setDirty(false);
     setSelectedForUpdate(new Set());
@@ -135,7 +138,7 @@ export default function StructuredArtifactEditor({
       requestAnimationFrame(() => errorRef.current?.focus());
       return null;
     }
-    return structuredSectionsToContent({ ...content, title: documentTitle.trim() }, sections);
+    return structuredSectionsToContent({ ...content, title: documentTitle.trim(), ...(hasDocumentSummary ? {summary: documentSummary} : {}) }, sections);
   };
   const commit = () => {
     const next = validatedContent();
@@ -163,6 +166,7 @@ export default function StructuredArtifactEditor({
     setDocumentTitle(initialTitle);
     setDirty(false);
     setErrors([]);
+    setDocumentSummary(typeof content.summary === "string" ? content.summary : "");
     setPendingRegeneration(null);
     onRegenerateSelected?.(requested);
   };
@@ -202,6 +206,11 @@ export default function StructuredArtifactEditor({
           onChange={(event) => { setDocumentTitle(event.target.value); setDirty(true); }}
         />
       </label>
+      {hasDocumentSummary && <label className="av-form-label mt-4 block">
+        Document summary
+        <textarea className="av-input mt-2" rows={4} value={documentSummary} maxLength={100_000}
+          disabled={readOnly || saving} onChange={(event) => { setDocumentSummary(event.target.value); setDirty(true); }} />
+      </label>}
       {needsReview && (
         <div
           role="status"

@@ -10,6 +10,7 @@ import {
   decodeStudioRenditionReconciliationClaim,
   decodeStudioRenditionClaim,
   decodeStudioPrivateArtifactDueWork,
+  STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
 } from './studioPrivateArtifactRpcContract.ts';
@@ -92,8 +93,20 @@ test('real private claim vocabulary is strict and versioned', () => {
   });
   assert.equal(
     rendition.rendererVersion,
-    STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
+    STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS.markdown,
   );
+  assert.equal(
+    decodeStudioRenditionClaim({
+      ...rendition,
+      rendererVersion: STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
+    }).rendererVersion,
+    'studio-markdown-2',
+  );
+  assert.throws(() => decodeStudioRenditionClaim({
+    ...rendition,
+    format: 'pdf',
+    rendererVersion: STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
+  }));
   assert.throws(() =>
     decodeStudioRenditionClaim({
       ...rendition,

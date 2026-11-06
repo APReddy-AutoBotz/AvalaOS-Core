@@ -506,6 +506,11 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
     void run('studio.artifact.draft.revise', {artifactId: artifact!.id,parentVersionId:artifact!.currentVersion.id,content});
   };
 
+  const createWorkingDraft = () => {
+    if (!artifact || artifact.lifecycle !== 'approved' || blocked || !can('studio.artifact.draft.revise')) return;
+    reviseStructured(artifact.currentVersion.content);
+  };
+
   const loadWorkspacePage = async (page: number) => {
     if(activeHandoffCommandRef.current||activeWorkspaceMutationsRef.current.size>0)return;
     const ticket = authorityEpoch.current.issue();
@@ -702,6 +707,10 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
 
       {artifact && showStructuredEditor && <div className="px-4 pb-4 sm:px-5"><StructuredArtifactEditor content={artifact.currentVersion.content} projectedSections={artifactWorkspace?.artifact.id === artifact.id && artifactWorkspace.artifact.currentVersionId === artifact.currentVersion.id ? artifactWorkspace.artifact.sections : artifact.sections} selectedSources={artifactWorkspace?.selectedSources.items} needsReview={artifactWorkspace?.sourcePackage.stale === true||Boolean(artifactWorkspace&&'sourcePackageId' in artifact.ancestry&&(artifact.ancestry.sourcePackageId!==artifactWorkspace.sourcePackage.id||artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash))} onRegenerateSelected={sectionIds=>void withWorkspaceMutation(()=>generateGovernedPackage(sectionIds))} readOnly={blocked || !can('studio.artifact.draft.revise') || !editableArtifact} saving={state === 'loading'} announceStatus={!legacyProjection} onCommit={reviseStructured} /></div>}
 
+      {artifact?.lifecycle === 'approved' && <div className="px-4 pb-4 sm:px-5">
+        <button type="button" disabled={blocked || !can('studio.artifact.draft.revise')} onClick={createWorkingDraft} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Create working draft</button>
+        <p className="mt-2 text-sm text-[var(--av-color-text-muted)]">The approved document remains in History. Changes to the working draft require independent review and approval.</p>
+      </div>}
       <div className="border-t border-[var(--av-color-border)] bg-[var(--av-color-surface)]/95 p-4 sm:p-5">
         {artifact && <details data-testid="studio-canonical-json-audit" className="mx-auto mb-4 max-w-7xl rounded-xl border border-[var(--av-color-border)] p-3">
           <summary className="cursor-pointer text-sm font-bold text-[var(--av-color-text)]">Audit details</summary>

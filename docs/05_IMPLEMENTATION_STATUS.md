@@ -1,5 +1,9 @@
 # AvalaOS Core: current implementation and verification status
 
+## Planning approvals and export inspection — 6 November 2026
+
+Normal UI proof on the verified PR #355 preview retains independently approved BRD v5 and PDD v2, with corrected acknowledgment timing, API operation boundaries and explicit planning limitations. The canonical BRD PDF downloaded successfully on `3490f58b`, but all-page inspection exposed raw structured JSON rather than a business document. Corrected export is not yet proven. Sixteen of 17 required checks passed; the remaining capture-audit fixture correction passes the local 16-stage PostgreSQL journey. Real FRD/SDD, selective refresh, SDD flow export and persistent board import are still pending. Provider execution and key binding remain off. [Milestone and remaining work](planning/process-evidence-to-delivery.md).
+
 ## Actual planning documents — 6 November 2026
 
 The exact `1870a2a1` nonproduction candidate generated and saved a BRD and PDD from the retained fresh-source assessment through independent planning handoffs. The SDD returned an ambiguous post-provider persistence/validation result with no stored response; FRD generation has not run. Provider execution and key binding are disabled pending bounded recovery. Document approvals, rendered SDD export and persistent selected board import remain unverified. See the [active milestone and accounting distinction](planning/process-evidence-to-delivery.md).

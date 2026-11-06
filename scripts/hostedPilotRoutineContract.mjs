@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const MAX_ROUTINE_CONTRACT_BYTES = 14_000_000;
+export const MAX_ROUTINE_CONTRACT_BYTES = 15_000_000;
 export const ROUTINE_CONTRACT_PATH = 'scripts/hostedPilotRoutineContract.json';
 const hash = value => createHash('sha256').update(value).digest('hex');
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -36,8 +36,8 @@ export function parseRoutineContract(bytes, migrations) {
   if (!bytes) return undefined;
   if (Buffer.byteLength(bytes) > MAX_ROUTINE_CONTRACT_BYTES) throw new Error('ROUTINE_CONTRACT_SIZE_REJECTED');
   const value = JSON.parse(bytes.toString());
-  if (value.schemaVersion !== 1 || value.runtimeMigrationTip !== '20261106020001'
-    || !Array.isArray(value.checkpoints) || !value.checkpoints.length || value.checkpoints.length > 12) {
+  if (value.schemaVersion !== 1 || value.runtimeMigrationTip !== '20261106040803'
+    || !Array.isArray(value.checkpoints) || !value.checkpoints.length || value.checkpoints.length > 13) {
     throw new Error('ROUTINE_CONTRACT_SCHEMA_REJECTED');
   }
   const lengths = new Set();

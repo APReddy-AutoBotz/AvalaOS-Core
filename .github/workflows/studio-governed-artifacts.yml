@@ -17,6 +17,7 @@ jobs:
       - name: Cheap workflow, documentation, claims, and link contracts
         run: npm run test:workflow-yaml && npm run test:docs:pr1d && npm run test:docs:pr1e
       - run: npm run lint:studio-artifacts
+      - run: node --test scripts/studioV2RenditionRendererMigration.test.mjs
       - run: npm run lint:studio-private-artifacts
       - run: npm run test:studio-private-artifacts-lifecycle
       - run: npm run test:studio-private-artifacts-client
@@ -80,8 +81,10 @@ jobs:
           {
             npm run test:migrations:studio-artifacts
             npm run test:migrations:studio-private-artifacts
+            node scripts/studioV2RenditionRendererPostgres.mjs
           } 2>&1 | tee studio-private-postgresql-16.log
         env:
+          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           STUDIO_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           STUDIO_PRIVATE_ARTIFACT_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       - name: Upload sanitized PostgreSQL 16 evidence

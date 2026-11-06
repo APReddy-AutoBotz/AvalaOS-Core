@@ -50,6 +50,11 @@ const formatLabel: Record<StudioPrivateArtifactFormat, string> = {
   pdf: 'PDF',
   docx: 'DOCX',
 };
+const currentRenderer: Record<StudioPrivateArtifactFormat, string> = {
+  markdown: 'studio-markdown-2',
+  pdf: 'studio-pdf-2',
+  docx: 'studio-docx-2',
+};
 const stateLabel: Record<StudioRenditionProjectionDto['state'], string> = {
   requested: 'Generation requested',
   rendering: 'Rendering',
@@ -162,13 +167,20 @@ export default function StudioArtifactRenditions({
     offline ||
     mutationBlockingStates.has(panelState) ||
     projection?.readOnly === true;
+  const usesV2Contract =
+    approvedVersion?.content.contractVersion === 'studio-artifact-2';
 
   const byFormat = useMemo(
-    () =>
-      Object.fromEntries(
-        (projection?.renditions ?? []).map(rendition => [rendition.format, rendition]),
-      ) as Partial<Record<StudioPrivateArtifactFormat, StudioRenditionProjectionDto>>,
-    [projection],
+    () => Object.fromEntries(STUDIO_PRIVATE_ARTIFACT_FORMATS.map(format => {
+      const candidates = (projection?.renditions ?? []).filter(
+        rendition => rendition.format === format,
+      );
+      const preferred = usesV2Contract
+        ? candidates.find(rendition => rendition.rendererVersion === currentRenderer[format])
+        : undefined;
+      return [format, preferred ?? candidates.at(-1)];
+    })) as Partial<Record<StudioPrivateArtifactFormat, StudioRenditionProjectionDto>>,
+    [projection, usesV2Contract],
   );
 
   const load = useCallback(async () => {
@@ -332,6 +344,12 @@ export default function StudioArtifactRenditions({
       <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-3">
         {STUDIO_PRIVATE_ARTIFACT_FORMATS.map(format => {
           const rendition = byFormat[format];
+          const historicalRenditions = (projection?.renditions ?? []).filter(
+            candidate => candidate.format === format && candidate.id !== rendition?.id,
+          );
+          const currentRendererMissing = Boolean(
+            usesV2Contract && rendition && rendition.rendererVersion !== currentRenderer[format],
+          );
           const generating =
             rendition && ['requested', 'rendering', 'uploading'].includes(rendition.state);
           const downloadable = rendition?.state === 'available';
@@ -352,26 +370,33 @@ export default function StudioArtifactRenditions({
                 {!rendition ? 'Not generated' : stateLabel[rendition.state]}
               </p>
               {rendition && (
-                <dl className="mt-2 grid min-w-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-sm">
-                  <dt className="font-bold">Renderer</dt>
-                  <dd className="min-w-0 break-all">{rendition.rendererVersion}</dd>
-                  <dt className="font-bold">Hash</dt>
-                  <dd className="min-w-0 break-all">
-                    {rendition.sha256 ?? 'Available after verified upload'}
-                  </dd>
-                  <dt className="font-bold">Bytes</dt>
-                  <dd>{rendition.byteLength?.toLocaleString() ?? 'Pending verification'}</dd>
-                  <dt className="font-bold">Retention</dt>
-                  <dd className="min-w-0 break-words">
-                    {rendition.retentionMode === null
-                      ? 'Pending availability snapshot'
-                      : rendition.retentionMode === 'indefinite'
-                      ? 'Indefinite retention'
-                      : `Active through ${new Date(rendition.retentionUntil!).toLocaleDateString()}`}
-                  </dd>
-                  <dt className="font-bold">Legal hold</dt>
-                  <dd>{rendition.legalHoldActive ? 'Active' : 'Not active'}</dd>
-                </dl>
+                <>
+                  <dl className="mt-2 grid min-w-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-sm">
+                    <dt className="font-bold">Retention</dt>
+                    <dd className="min-w-0 break-words">
+                      {rendition.retentionMode === null
+                        ? 'Pending availability snapshot'
+                        : rendition.retentionMode === 'indefinite'
+                        ? 'Indefinite retention'
+                        : `Active through ${new Date(rendition.retentionUntil!).toLocaleDateString()}`}
+                    </dd>
+                    <dt className="font-bold">Legal hold</dt>
+                    <dd>{rendition.legalHoldActive ? 'Active' : 'Not active'}</dd>
+                  </dl>
+                  <details className="mt-2 text-sm">
+                    <summary className="cursor-pointer font-semibold">Audit details</summary>
+                    <dl className="mt-1 grid min-w-0 grid-cols-[auto_1fr] gap-x-2">
+                      <dt className="font-bold">Renderer</dt>
+                      <dd className="min-w-0 break-all">{rendition.rendererVersion}</dd>
+                      <dt className="font-bold">Hash</dt>
+                      <dd className="min-w-0 break-all">
+                        {rendition.sha256 ?? 'Available after verified upload'}
+                      </dd>
+                      <dt className="font-bold">Bytes</dt>
+                      <dd>{rendition.byteLength?.toLocaleString() ?? 'Pending verification'}</dd>
+                    </dl>
+                  </details>
+                </>
               )}
               {rendition && rendition.activeHolds.length > 0 && (
                 <ul
@@ -412,7 +437,11 @@ export default function StudioArtifactRenditions({
                   type="button"
                   disabled={
                     !can('studio.rendition.generate') ||
-                    Boolean(rendition && rendition.state !== 'failed') ||
+                    Boolean(
+                      rendition &&
+                      rendition.state !== 'failed' &&
+                      !currentRendererMissing,
+                    ) ||
                     Boolean(generating)
                   }
                   onClick={() =>
@@ -424,7 +453,11 @@ export default function StudioArtifactRenditions({
                   }
                   className="btn-ghost disabled:opacity-50"
                 >
-                  {rendition?.state === 'failed' ? `Retry ${formatLabel[format]}` : `Generate ${formatLabel[format]}`}
+                  {currentRendererMissing
+                    ? `Generate current ${formatLabel[format]}`
+                    : rendition?.state === 'failed'
+                    ? `Retry ${formatLabel[format]}`
+                    : `Generate ${formatLabel[format]}`}
                 </button>
                 {rendition?.state === 'deleted' && (
                   <p className="w-full rounded-lg bg-slate-100 p-2 text-sm">
@@ -526,6 +559,33 @@ export default function StudioArtifactRenditions({
                   </>
                 )}
               </div>
+              {historicalRenditions.length > 0 && (
+                <details className="mt-3 rounded-lg border border-slate-200 p-2 text-sm">
+                  <summary className="cursor-pointer font-bold">History</summary>
+                  <ul className="mt-2 space-y-2">
+                    {historicalRenditions.map(historical => (
+                      <li key={historical.id} className="rounded-lg bg-slate-50 p-2">
+                        <p>{stateLabel[historical.state]}</p>
+                        <details className="mt-1">
+                          <summary className="cursor-pointer font-semibold">Audit details</summary>
+                          <p className="break-all">Renderer: {historical.rendererVersion}</p>
+                          <p className="break-all">Hash: {historical.sha256 ?? 'Not available'}</p>
+                        </details>
+                        {historical.state === 'available' && (
+                          <button
+                            type="button"
+                            disabled={blocked || !capabilities.includes('studio.artifacts.download')}
+                            onClick={() => void download(historical)}
+                            className="btn-ghost mt-2 disabled:opacity-50"
+                          >
+                            Download historical {formatLabel[format]}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {rendition && canonicalMutationAllowed && (
                 <div className="mt-3">
                   <label htmlFor={`retention-${format}`} className="text-sm font-bold">

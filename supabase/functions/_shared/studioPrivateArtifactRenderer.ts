@@ -1,5 +1,6 @@
 import {
   decodeStudioApprovedContent,
+  STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
   type StudioApprovedContent,
   type StudioApprovedJson,
@@ -69,6 +70,8 @@ const MAX_SECTIONS = 500;
 const MAX_TITLE = 300;
 const MAX_SUMMARY = 100_000;
 const MAX_SECTION_CONTENT = 100_000;
+const MAX_V2_SUMMARY = 5_000;
+const MAX_V2_SECTION_CONTENT = 20_000;
 const MIME = {
   markdown: "text/markdown; charset=utf-8",
   pdf: "application/pdf",
@@ -82,32 +85,67 @@ const FILENAMES = {
 const invalidText = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u;
 const loneSurrogate =
   /[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/u;
-const TEMPLATE_SECTION_INVENTORY: Readonly<
-  Record<StudioPrivateArtifactType, readonly string[]>
+const SYSTEM_TEMPLATE_SECTIONS: Readonly<
+  Record<
+    StudioPrivateArtifactType,
+    readonly Readonly<{ id: string; title: string }>[]
+  >
 > = {
-  brd: ["summary", "objectives", "scope", "requirements", "risks"],
-  frd: [
-    "summary",
-    "functionalRequirements",
-    "rules",
-    "interfaces",
-    "acceptanceCriteria",
+  brd: [
+    { id: "summary", title: "Summary" },
+    { id: "objectives", title: "Objectives" },
+    { id: "scope", title: "Scope" },
+    { id: "requirements", title: "Requirements" },
+    { id: "risks", title: "Risks" },
   ],
-  pdd: ["summary", "process", "roles", "controls", "exceptions"],
+  frd: [
+    { id: "summary", title: "Summary" },
+    { id: "functionalRequirements", title: "Functional requirements" },
+    { id: "rules", title: "Rules" },
+    { id: "interfaces", title: "Interfaces" },
+    { id: "acceptanceCriteria", title: "Acceptance criteria" },
+  ],
+  pdd: [
+    { id: "summary", title: "Summary" },
+    { id: "process", title: "Process" },
+    { id: "roles", title: "Roles" },
+    { id: "controls", title: "Controls" },
+    { id: "exceptions", title: "Exceptions" },
+  ],
   sdd: [
-    "summary",
-    "architecture",
-    "components",
-    "interfaces",
-    "dataDesign",
-    "asIsFlow",
-    "toBeFlow",
-    "securityControls",
-    "operationalDesign",
-    "designDecisions",
-    "openQuestionsAndProposals",
+    { id: "summary", title: "Summary" },
+    { id: "architecture", title: "Architecture" },
+    { id: "components", title: "Components" },
+    { id: "interfaces", title: "Interfaces" },
+    { id: "dataDesign", title: "Data design" },
+    { id: "asIsFlow", title: "As is flow" },
+    { id: "toBeFlow", title: "To be flow" },
+    { id: "securityControls", title: "Security controls" },
+    { id: "operationalDesign", title: "Operational design" },
+    { id: "designDecisions", title: "Design decisions" },
+    {
+      id: "openQuestionsAndProposals",
+      title: "Open questions and proposals",
+    },
   ],
 };
+const TEMPLATE_SECTION_INVENTORY = Object.fromEntries(
+  Object.entries(SYSTEM_TEMPLATE_SECTIONS).map(([artifactType, sections]) => [
+    artifactType,
+    sections.map((section) => section.id),
+  ]),
+) as unknown as Readonly<
+  Record<StudioPrivateArtifactType, readonly string[]>
+>;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const HASH = /^[0-9a-f]{64}$/u;
+const SECTION_ID = /^[a-z][A-Za-z0-9_.-]{0,79}$/u;
+const V2_LABELS = new Set([
+  "human_authored",
+  "template_required",
+  "assumption",
+]);
 
 const own = (value: object, key: string) =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -198,12 +236,163 @@ const humanize = (key: string) => {
     : "Canonical field";
 };
 
+const normalizeStudioV2ApprovedContent = (
+  source: StudioApprovedContent,
+  authority: Pick<
+    StudioRenderingAuthority,
+    "artifactType" | "contentSchemaVersion" | "templateVersion"
+  >,
+): StudioNormalizedContent => {
+  const schemaMatchesSystemTemplate =
+    authority.artifactType === "sdd"
+      ? authority.contentSchemaVersion === "studio-artifact-2"
+      : authority.contentSchemaVersion === "studio-artifact-1";
+  if (
+    !schemaMatchesSystemTemplate ||
+    authority.templateVersion !== `studio-${authority.artifactType}-1` ||
+    !exactKeys(source, [
+      "contractVersion",
+      "title",
+      "summary",
+      "sections",
+      "coverage",
+    ]) ||
+    source.contractVersion !== "studio-artifact-2" ||
+    !validString(source.title, MAX_TITLE, true) ||
+    !validString(source.summary, MAX_V2_SUMMARY) ||
+    !Array.isArray(source.sections)
+  ) {
+    throw new StudioRenditionError("INVALID_CONTENT");
+  }
+
+  const rawCoverage = source.coverage;
+  if (
+    !rawCoverage ||
+    typeof rawCoverage !== "object" ||
+    Array.isArray(rawCoverage) ||
+    !exactKeys(rawCoverage, [
+      "selectedSourceVersionIds",
+      "coveredSourceVersionIds",
+      "complete",
+    ])
+  ) {
+    throw new StudioRenditionError("INVALID_CONTENT");
+  }
+  const coverage = rawCoverage as Readonly<
+    Record<string, StudioApprovedJson>
+  >;
+  if (
+    coverage.complete !== true ||
+    !Array.isArray(coverage.selectedSourceVersionIds) ||
+    !Array.isArray(coverage.coveredSourceVersionIds)
+  ) {
+    throw new StudioRenditionError("INVALID_CONTENT");
+  }
+  const selectedSourceVersionIds = coverage.selectedSourceVersionIds;
+  const coveredSourceVersionIds = coverage.coveredSourceVersionIds;
+  if (
+    selectedSourceVersionIds.length > 20 ||
+    selectedSourceVersionIds.some(
+      (value) => typeof value !== "string" || !UUID.test(value),
+    ) ||
+    new Set(selectedSourceVersionIds).size !== selectedSourceVersionIds.length ||
+    JSON.stringify([...selectedSourceVersionIds].sort()) !==
+      JSON.stringify([...coveredSourceVersionIds].sort())
+  ) {
+    throw new StudioRenditionError("INVALID_CONTENT");
+  }
+
+  const expectedSections = SYSTEM_TEMPLATE_SECTIONS[authority.artifactType];
+  if (source.sections.length !== expectedSections.length) {
+    throw new StudioRenditionError("INVALID_CONTENT");
+  }
+  const anchoredSources = new Set<string>();
+  const sections = source.sections.map((section, index) => {
+    if (
+      !section ||
+      typeof section !== "object" ||
+      Array.isArray(section) ||
+      !exactKeys(section, ["id", "title", "body", "sourceAnchors", "labels"])
+    ) {
+      throw new StudioRenditionError("INVALID_CONTENT");
+    }
+    const mapped = section as Readonly<Record<string, StudioApprovedJson>>;
+    const expected = expectedSections[index];
+    if (
+      !validString(mapped.id, 80, true) ||
+      !SECTION_ID.test(mapped.id) ||
+      mapped.id !== expected.id ||
+      !validString(mapped.title, MAX_TITLE, true) ||
+      mapped.title !== expected.title ||
+      !validString(mapped.body, MAX_V2_SECTION_CONTENT) ||
+      !Array.isArray(mapped.sourceAnchors) ||
+      mapped.sourceAnchors.length > 200 ||
+      !Array.isArray(mapped.labels) ||
+      mapped.labels.length > 3
+    ) {
+      throw new StudioRenditionError("INVALID_CONTENT");
+    }
+    const labels = mapped.labels;
+    if (
+      labels.some(
+        (label) => typeof label !== "string" || !V2_LABELS.has(label),
+      ) ||
+      new Set(labels).size !== labels.length ||
+      (mapped.sourceAnchors.length === 0 && labels.length === 0)
+    ) {
+      throw new StudioRenditionError("INVALID_CONTENT");
+    }
+    for (const anchor of mapped.sourceAnchors) {
+      if (
+        !anchor ||
+        typeof anchor !== "object" ||
+        Array.isArray(anchor) ||
+        !exactKeys(anchor, ["sourceVersionId", "locator", "anchorHash"])
+      ) {
+        throw new StudioRenditionError("INVALID_CONTENT");
+      }
+      const sourceVersionId = anchor.sourceVersionId;
+      const locator = anchor.locator;
+      const anchorHash = anchor.anchorHash;
+      if (
+        typeof sourceVersionId !== "string" ||
+        !UUID.test(sourceVersionId) ||
+        !selectedSourceVersionIds.includes(sourceVersionId) ||
+        !validString(locator, 500, true) ||
+        typeof anchorHash !== "string" ||
+        !HASH.test(anchorHash)
+      ) {
+        throw new StudioRenditionError("INVALID_CONTENT");
+      }
+      anchoredSources.add(sourceVersionId);
+    }
+    if (mapped.id === "asIsFlow" || mapped.id === "toBeFlow") {
+      try {
+        if (inspectMermaidFlowcharts(mapped.body, true).length !== 1)
+          throw new Error();
+      } catch {
+        throw new StudioRenditionError("INVALID_CONTENT");
+      }
+    }
+    return { id: mapped.id, title: mapped.title, content: mapped.body };
+  });
+  if (
+    selectedSourceVersionIds.some(
+      (sourceVersionId) => !anchoredSources.has(sourceVersionId),
+    )
+  ) {
+    throw new StudioRenditionError("INVALID_CONTENT");
+  }
+  return { title: source.title, summary: source.summary, sections };
+};
+
 export const normalizeStudioApprovedContent = (
   value: unknown,
   authority: Pick<
     StudioRenderingAuthority,
     "artifactType" | "contentSchemaVersion" | "templateVersion"
-  >,
+  > &
+    Partial<Pick<StudioRenderingAuthority, "rendererVersion">>,
 ): StudioNormalizedContent => {
   if (
     !["studio-artifact-1", "studio-artifact-2"].includes(
@@ -222,6 +411,16 @@ export const normalizeStudioApprovedContent = (
     ? titleValue
     : `${authority.artifactType.toUpperCase()} governed artifact`;
 
+  const usesCurrentRenderer = authority.rendererVersion
+    ? (Object.values(
+        STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
+      ) as readonly string[]).includes(authority.rendererVersion)
+    : false;
+  if (usesCurrentRenderer)
+    return normalizeStudioV2ApprovedContent(source, authority);
+
+  // Renderer-1 claims are historical authority. Keep their permissive schema-2
+  // normalization byte-compatible so an existing attempt can be reconciled.
   if (authority.contentSchemaVersion === "studio-artifact-2") {
     if (
       source.contractVersion !== "studio-artifact-2" ||
@@ -774,6 +973,7 @@ const renderStudioLegacyPdf = (
 
 export const renderStudioPdf = (
   content: StudioNormalizedContent,
+  rendererVersion: "studio-pdf-1" | "studio-pdf-2" = "studio-pdf-1",
 ): Uint8Array => {
   const pages: PdfItem[][] = [[]];
   let y = 720;
@@ -832,7 +1032,7 @@ export const renderStudioPdf = (
   });
   objects.set(
     infoId,
-    "<< /Title (Governed Studio Artifact) /Author (AvalaOS Studio) /Creator (AvalaOS Studio) /Producer (AvalaOS deterministic studio-pdf-1) /CreationDate (D:20000101000000Z) /ModDate (D:20000101000000Z) >>",
+    `<< /Title (Governed Studio Artifact) /Author (AvalaOS Studio) /Creator (AvalaOS Studio) /Producer (AvalaOS deterministic ${rendererVersion}) /CreationDate (D:20000101000000Z) /ModDate (D:20000101000000Z) >>`,
   );
 
   let pdf = "%PDF-1.7\n%\xE2\xE3\xCF\xD3\n";
@@ -1028,11 +1228,13 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><T
 const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`;
 const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
 const CORE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Governed Studio Artifact</dc:title><dc:creator>AvalaOS Studio</dc:creator><cp:lastModifiedBy>AvalaOS Studio</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">2000-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2000-01-01T00:00:00Z</dcterms:modified></cp:coreProperties>`;
-const APP = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>AvalaOS deterministic studio-docx-1</Application><AppVersion>1.0</AppVersion></Properties>`;
+const appMetadata = (rendererVersion: "studio-docx-1" | "studio-docx-2") =>
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>AvalaOS deterministic ${rendererVersion}</Application><AppVersion>1.0</AppVersion></Properties>`;
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="BodyText"><w:name w:val="Body Text"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:after="240"/><w:keepNext/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading 1"/><w:pPr><w:spacing w:before="240" w:after="120"/><w:keepNext/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="26"/></w:rPr></w:style></w:styles>`;
 
 export const renderStudioDocx = (
   content: StudioNormalizedContent,
+  rendererVersion: "studio-docx-1" | "studio-docx-2" = "studio-docx-1",
 ): Uint8Array => {
   const body = [
     paragraph(content.title, "Title"),
@@ -1048,7 +1250,10 @@ export const renderStudioDocx = (
   const entries: ZipEntry[] = [
     { name: "[Content_Types].xml", bytes: encoder.encode(CONTENT_TYPES) },
     { name: "_rels/.rels", bytes: encoder.encode(ROOT_RELS) },
-    { name: "docProps/app.xml", bytes: encoder.encode(APP) },
+    {
+      name: "docProps/app.xml",
+      bytes: encoder.encode(appMetadata(rendererVersion)),
+    },
     { name: "docProps/core.xml", bytes: encoder.encode(CORE) },
     { name: "word/_rels/document.xml.rels", bytes: encoder.encode(DOC_RELS) },
     { name: "word/document.xml", bytes: encoder.encode(document) },
@@ -1160,21 +1365,33 @@ export const renderStudioPrivateArtifact = async (
     throw new StudioRenditionError("UNSUPPORTED_FORMAT");
   }
   const typedFormat = format as StudioRenditionFormat;
+  const currentRenderer =
+    STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS[typedFormat];
+  const legacyRenderer =
+    STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS[typedFormat];
   if (
-    authority.rendererVersion !==
-    STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS[typedFormat]
+    authority.rendererVersion !== currentRenderer &&
+    authority.rendererVersion !== legacyRenderer
   ) {
     throw new StudioRenditionError("VERSION_MISMATCH");
   }
+  const usesCurrentRenderer = authority.rendererVersion === currentRenderer;
   const content = normalizeStudioApprovedContent(value, authority);
   const bytes =
     typedFormat === "markdown"
       ? renderStudioMarkdown(content)
       : typedFormat === "pdf"
-        ? authority.contentSchemaVersion === "studio-artifact-2"
-          ? renderStudioPdf(content)
+        ? usesCurrentRenderer ||
+          authority.contentSchemaVersion === "studio-artifact-2"
+          ? renderStudioPdf(
+              content,
+              authority.rendererVersion as "studio-pdf-1" | "studio-pdf-2",
+            )
           : renderStudioLegacyPdf(content)
-        : renderStudioDocx(content);
+        : renderStudioDocx(
+            content,
+            authority.rendererVersion as "studio-docx-1" | "studio-docx-2",
+          );
   if (!bytes.byteLength || bytes.byteLength > MAX_OUTPUT_BYTES) {
     throw new StudioRenditionError("OUTPUT_OVERSIZED");
   }

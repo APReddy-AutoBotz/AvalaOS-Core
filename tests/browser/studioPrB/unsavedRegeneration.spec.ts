@@ -82,6 +82,7 @@ test("saving dirty sections completes before selected regeneration and preserves
     .getByLabel("Section body")
     .fill("Saved authored summary retained across selected refresh.");
   await editor.getByLabel("Document title").fill("Supplier invoice solution design");
+  await editor.getByLabel("Document summary").fill("Planning only; optional AI requires separate evidence.");
   await editor.getByRole("checkbox", { name: "As-Is flow" }).check();
   const generationCount = () =>
     page.evaluate(
@@ -122,4 +123,5 @@ test("saving dirty sections completes before selected regeneration and preserves
     "Saved authored summary retained across selected refresh.",
   );
   await expect(reloaded.getByLabel("Document title")).toHaveValue("Supplier invoice solution design");
+  await expect(reloaded.getByLabel("Document summary")).toHaveValue("Planning only; optional AI requires separate evidence.");
 });

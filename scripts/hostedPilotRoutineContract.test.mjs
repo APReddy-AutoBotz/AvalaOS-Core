@@ -3,14 +3,14 @@ import test from 'node:test';
 import { fingerprintRoutine, routineCatalog, parseRoutineContract, matchRoutineContract } from './hostedPilotRoutineContract.mjs';
 import { createPreflightToken, verifyPreflightToken } from './hostedPilotActivation.mjs';
 
-const migrations = [{ name: '20261106020001_fixture.sql', sha256: 'a'.repeat(64) }];
+const migrations = [{ name: '20261106040803_fixture.sql', sha256: 'a'.repeat(64) }];
 const row = {schema:'public',name:'projection',argument_types:'uuid',owner:'postgres',
   authority_metadata:{source:'select 1\r\n',binary:null,language:'sql',securityDefiner:true,configuration:['search_path=pg_catalog']},
   authority_acl:[{grantee:'authenticated',grantor:'postgres',privilege:'EXECUTE',grantable:false},{grantee:'postgres',grantor:'postgres',privilege:'EXECUTE',grantable:false}],
   authority_effective:{anon:{execute:false,grantable:false},authenticated:{execute:true,grantable:false},service_role:{execute:false,grantable:false}}};
 const entry = {...row,authority:fingerprintRoutine(row)};
 const catalog = routineCatalog([entry]);
-const fixture = () => ({schemaVersion:1,runtimeMigrationTip:'20261106020001',checkpoints:[{
+const fixture = () => ({schemaVersion:1,runtimeMigrationTip:'20261106040803',checkpoints:[{
   migrationNames:migrations.map(m=>m.name),migrationHashes:migrations.map(m=>m.sha256),profiles:{standard:catalog,supabase:catalog},
 }]});
 const parse = value => parseRoutineContract(Buffer.from(JSON.stringify(value)),migrations);

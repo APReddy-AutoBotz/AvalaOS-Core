@@ -654,6 +654,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "studio-response-reconciliation",
     "sourceReference": "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
     "selector": "CREATE FUNCTION public.process_evidence_reconcile_spent_output_lost("
+  },
+  {
+    "anchorId": "studio-v2-rendition-renderer",
+    "sourceReference": "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+    "selector": "RENAME TO studio_private_artifact_command_claim_renderer1_legacy;"
   }
 ]);
 
@@ -3790,6 +3795,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-DOWNLOAD_DENIAL",
     "testId": "STUDIO-007",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
       "studio-artifact-contracts",
       "authenticated-scripts-authenticatedacceptancecases-mjs",
       "authenticated-scripts-authenticatedacceptanceprofile-mjs",
@@ -3834,6 +3840,7 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-GENERATION_FAILURE",
     "testId": "STUDIO-003",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
       "studio-artifact-contracts",
       "authenticated-scripts-authenticatedacceptancecases-mjs",
       "authenticated-scripts-authenticatedacceptanceprofile-mjs",

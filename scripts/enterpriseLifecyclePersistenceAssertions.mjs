@@ -129,6 +129,50 @@ export const assertEnterpriseLifecycleCommandPersistence = async ({ db, commands
       terminalAuditBound,
       duplicateFree: true,
     });
+    if (command.captureAudit !== undefined) {
+      assert.equal(domain, 'studio', `ENTERPRISE_LIFECYCLE_CAPTURE_DOMAIN:${index}`);
+      assert.equal(typeof command.captureAudit, 'boolean', `ENTERPRISE_LIFECYCLE_CAPTURE_EXPECTATION:${index}`);
+      const captured = await db.query(`SELECT
+          c.capture_audit_event_id::text, c.response_hash,
+          public.enterprise_sha256_jsonb(c.response_content) computed_hash,
+          c.input_tokens, c.output_tokens, c.total_tokens,
+          c.original_execution_fence, c.state candidate_state,
+          a.id::text audit_id, a.request_id::text, a.actor_id::text,
+          a.org_id::text, a.workspace_id::text, a.action,
+          a.resource_type, a.resource_id::text, a.outcome, a.resource_version,
+          a.metadata,
+          c.org_id::text candidate_org, c.workspace_id::text candidate_workspace,
+          c.artifact_id::text candidate_artifact, t.artifact_id::text attempt_artifact
+        FROM public.studio_generation_provider_candidates c
+        JOIN public.studio_artifact_generation_attempts t ON t.id=c.attempt_id
+        LEFT JOIN public.privileged_audit_events a ON a.id=c.capture_audit_event_id
+        WHERE c.attempt_id=$1`, [resourceId]);
+      assert.equal(captured.rows.length, command.captureAudit ? 1 : 0, `ENTERPRISE_LIFECYCLE_CAPTURE_COUNT:${index}`);
+      if (command.captureAudit) {
+        const row = captured.rows[0];
+        assert.ok(row.audit_id === row.capture_audit_event_id
+          && row.request_id === requestId && row.actor_id === actorId
+          && row.org_id === organizationId && row.workspace_id === workspaceId
+          && row.candidate_org === organizationId && row.candidate_workspace === workspaceId
+          && row.candidate_artifact === row.attempt_artifact
+          && row.action === 'studio.artifact.generation.candidate.capture'
+          && row.resource_type === 'studio_generation_attempt' && row.resource_id === resourceId
+          && row.outcome === 'succeeded' && row.candidate_state === 'validated'
+          && Number(row.resource_version) === Number(row.original_execution_fence)
+          && Number.isSafeInteger(Number(row.original_execution_fence)) && Number(row.original_execution_fence) > 0
+          && /^[a-f0-9]{64}$/u.test(row.response_hash) && row.response_hash === row.computed_hash
+          && row.metadata?.responseHash === row.response_hash
+          && row.metadata?.artifactId === row.attempt_artifact
+          && row.metadata?.inputTokens === row.input_tokens
+          && row.metadata?.outputTokens === row.output_tokens
+          && row.metadata?.totalTokens === row.total_tokens
+          && Number.isSafeInteger(row.input_tokens) && row.input_tokens >= 0
+          && Number.isSafeInteger(row.output_tokens) && row.output_tokens >= 0
+          && row.total_tokens > 0 && row.total_tokens === row.input_tokens + row.output_tokens,
+        `ENTERPRISE_LIFECYCLE_CAPTURE_BINDING:${index}`);
+        auditCount += 1;
+      }
+    }
     auditCount += terminalAudit === null ? 1 : 2;
   }
 
