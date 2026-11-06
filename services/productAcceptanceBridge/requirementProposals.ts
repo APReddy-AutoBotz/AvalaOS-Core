@@ -12,12 +12,16 @@ const record = (value: unknown): value is Record<string, unknown> => Boolean(val
 const text = (value: unknown) => typeof value === 'string' ? value : null;
 const requirementId = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:REQ|BR|FR|NFR|AC)[-_ ]?\d+)\s*[:.\-]\s*\S/iu;
 const normativeRequirement = /(?:^|\s)(?:must|shall|required to|needs to)(?:\s|$)/iu;
+const numberedRequirement = /^(\d+)[.)]\s+\S/iu;
+const numberedImperative = /^\d+[.)]\s+(?:accept|acknowledge|address|allow|apply|approve|assign|authenticate|authorize|calculate|capture|classify|collect|compare|complete|configure|confirm|create|detect|disable|display|document|draft|enforce|ensure|exclude|extract|generate|handle|identify|import|keep|log|maintain|notify|persist|preserve|prevent|publish|record|reject|require|resolve|restrict|retain|retrieve|review|route|save|send|store|support|track|update|use|validate|verify|withhold)\b/iu;
 const markdownHeading = /^#{1,6}\s+/u;
 const speculativeStatement = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:open\s+)?question|assume|assumption|proposal|proposed|speculative)(?:\s|[:.\-]|$)/iu;
 const excludedSectionPurpose = /(?:^|\s)(?:questions?|assumptions?|proposals?|flows?|diagrams?)(?:\s|$)/iu;
 const mermaidFlow = /^\s*(?:flowchart|graph)\s+/imu;
 const unresolvedSectionPurpose = /(?:^|\s)(?:open\s+)?(?:questions?|unknowns?|unresolved)(?:\s|$)/iu;
 const unresolvedQuestion = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:open\s+)?question|unknown|unresolved)(?:\s*[:.\-]\s*|\s+)/iu;
+const explicitRequirementSection = /(?:^|\s)requirements?(?:\s|$)/iu;
+const sourceFactsSentinel = 'Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):';
 
 export const isApprovedRequirementLine = (line: string) => {
   const value = line.trim();
@@ -68,10 +72,18 @@ const approvedSections = (content: Record<string, unknown>): ApprovedSection[] =
     const body = text(value.body) ?? text(value.content);
     if (!id?.trim() || !title?.trim() || body === null) return [];
     const section = { id: id.trim(), title: title.trim(), body };
-    const purpose = `${section.id.replace(/([a-z])([A-Z])/gu, '$1 $2')} ${section.title}`;
+    const purpose = `${section.id.replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[-_]+/gu, ' ')} ${section.title}`;
     if (excludedSectionPurpose.test(purpose) || mermaidFlow.test(section.body)) return [];
     return [section];
   });
+};
+
+const sectionPurpose = (section: ApprovedSection) => `${section.id.replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[-_]+/gu, ' ')} ${section.title}`;
+
+const sectionLines = (section: ApprovedSection) => {
+  const lines = section.body.split(/\r?\n/u);
+  const sentinelIndex = lines.findIndex(line => line.trim() === sourceFactsSentinel);
+  return sentinelIndex < 0 ? lines : lines.slice(0, sentinelIndex);
 };
 
 const unresolvedQuestionLinks = (content: Record<string, unknown>): StudioDeliveryRequirementLink[] => {
@@ -96,18 +108,42 @@ const title = (prefix: string, value: string) => {
   return candidate.length <= 300 ? candidate : `${candidate.slice(0, 297).trimEnd()}…`;
 };
 
-const linksFor = (section: ApprovedSection): StudioDeliveryRequirementLink[] => section.body
-  .split(/\r?\n/u)
+const linksFor = (section: ApprovedSection, hasExplicitRequirementSection: boolean): StudioDeliveryRequirementLink[] => sectionLines(section)
   .map(line => line.trim())
-  .filter(isApprovedRequirementLine)
+  .filter(line => {
+    if (!line || line.length > 2_000 || markdownHeading.test(line) || line.endsWith('?') || speculativeStatement.test(line)) return false;
+    if (requirementId.test(line)) return true;
+    if (!hasExplicitRequirementSection) return normativeRequirement.test(line);
+    if (!explicitRequirementSection.test(sectionPurpose(section))) return false;
+    return normativeRequirement.test(line) || numberedImperative.test(line);
+  })
   .map(requirementText => ({ sectionId: section.id, sectionTitle: section.title, requirementText }));
 
 export const deriveRequirementProposals = (content: Record<string, unknown>): RequirementProposalResult => {
-  const sections = approvedSections(content).map(section => ({ section, links: linksFor(section) })).filter(value => value.links.length > 0);
+  const candidateSections = approvedSections(content);
+  const hasExplicitRequirementSection = candidateSections.some(section => explicitRequirementSection.test(sectionPurpose(section)));
+  const sections = candidateSections.map(section => ({ section, links: linksFor(section, hasExplicitRequirementSection) }))
+    .filter(value => value.links.length > 0);
   const requirementCount = sections.reduce((total, value) => total + value.links.length, 0);
   if (requirementCount === 0) return {
     proposals: [], requirementCount: 0,
     blockedReason: 'No explicit requirement statement was found. Add an approved REQ/FR/NFR/AC line or a statement using must, shall, required to, or needs to.',
+  };
+
+  const numberedIdentities = new Map<string, StudioDeliveryRequirementLink[]>();
+  sections.forEach(({ section, links }) => {
+    if (!explicitRequirementSection.test(sectionPurpose(section))) return;
+    links.forEach(link => {
+      if (requirementId.test(link.requirementText) || !numberedRequirement.test(link.requirementText)
+        || (!numberedImperative.test(link.requirementText) && !normativeRequirement.test(link.requirementText))) return;
+      const identity = link.requirementText.match(numberedRequirement)?.[1];
+      if (identity) numberedIdentities.set(identity, [...(numberedIdentities.get(identity) ?? []), link]);
+    });
+  });
+  const duplicateNumber = [...numberedIdentities.entries()].find(([, links]) => links.length > 1);
+  if (duplicateNumber) return {
+    proposals: [], requirementCount,
+    blockedReason: `Approved numbered requirement identity “${duplicateNumber[0]}” appears more than once. Number each approved requirement uniquely before publishing.`,
   };
 
   const allLinks = sections.flatMap(({ links }) => links);

@@ -705,7 +705,7 @@ export const startAuthenticatedHostedSignInEntryFixture = async ({ processSeedMo
     origin: PREVIEW_ORIGIN,
     deploymentId: DEPLOY_ID,
     backendDigest: digest('authenticated-hosted-composed-backend'),
-    migrationVersion: '20261106045007',
+    migrationVersion: '20261106070101',
     migrationDigest: digest('authenticated-hosted-composed-migration'),
     exerciseDigest: EXERCISE_DIGEST,
     catalogDigest: digest('authenticated-hosted-composed-catalog'),

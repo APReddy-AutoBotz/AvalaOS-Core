@@ -25,7 +25,7 @@ const bundle = () => ({
   schemaVersion:'canonical-hands-on-access-v1',bundleId:'00000000-0000-4000-8000-000000000099',
   targetProjectRef:'abcdefghijklmnopqrst',targetPublicDigest:`sha256:${'c'.repeat(64)}`,
   organizationId:'00000000-0000-4000-8000-000000000100',workspaceId:'00000000-0000-4000-8000-000000000101',
-  migrationVersion:'20261106045007',operatorSha:operator,previewReleaseSha:release,
+  migrationVersion:'20261106070101',operatorSha:operator,previewReleaseSha:release,
   previewUrl:'https://ap-acceptance-aaaaaaaa--avalaos-pilot.netlify.app',
   createdAt:'2026-10-31T10:00:00.000Z',expiresAt:'2026-11-02T10:00:00.000Z',
   personas:keys.map((key,index)=>({key,userId:ids[index],roleId:roles[index],
@@ -221,7 +221,7 @@ test('disposable PostgreSQL proves trigger-safe prepare and drift-tolerant histo
       CREATE TABLE public.enterprise_provider_secret_cleanup_jobs(id uuid PRIMARY KEY,state text NOT NULL);
       CREATE TABLE public.enterprise_ai_capability_routes(id uuid PRIMARY KEY,org_id uuid NOT NULL,workspace_id uuid NOT NULL,enabled boolean NOT NULL);
       CREATE TABLE public.business_history(id uuid PRIMARY KEY,actor_id uuid NOT NULL REFERENCES public.profiles(id),detail text NOT NULL);
-      INSERT INTO public.hosted_pilot_environment_identity VALUES(true,'avalaos-core','hosted_nonproduction_pilot','20261106045007',false,false,false);
+      INSERT INTO public.hosted_pilot_environment_identity VALUES(true,'avalaos-core','hosted_nonproduction_pilot','20261106070101',false,false,false);
       INSERT INTO public.studio_artifact_runtime_control VALUES(true,false);
       INSERT INTO public.enterprise_intelligence_runtime_control VALUES(true,false);`);
     const value=validate(bundle());

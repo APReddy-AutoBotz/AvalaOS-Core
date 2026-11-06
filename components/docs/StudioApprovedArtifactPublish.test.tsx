@@ -34,6 +34,72 @@ assert.equal(isApprovedRequirementLine('FR-1: Reviewer must record a decision.')
 assert.equal(isApprovedRequirementLine('REQ-8: The reviewer must record an approval decision for each proposal.'), true);
 assert.equal(isApprovedRequirementLine('- The workflow shall preserve the approved source link.'), true);
 
+const sourceFactsSentinel = 'Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):';
+const numberedRequirements = [
+  '1. Capture supplier query details including email, received time, requester, and invoice references, and acknowledge within two working days.',
+  '2. Verify requester authority by checking supplier contact records before disclosing invoice status.',
+  '3. Extract invoice references accurately without inferring missing numbers; handle multiple or ambiguous requests via human intervention.',
+  '4. Use approved read-only GET API to retrieve invoice status, matching invoiceId and supplierId exactly.',
+  '5. Draft responses based on verified status; only humans may approve and send replies.',
+  '6. Record original source and human-approved responses for audit; retention duration is an open question.',
+  '7. Resolve ambiguities, disputes, and exceptions through human investigation; route bank-detail requests to independent finance procedures.',
+  '8. Exclude the prohibited bank-details POST. Keep the unknown invoice PATCH unavailable pending separate evidence and approval.',
+  '9. Maintain audit and monitoring controls including data classification before AI access.',
+  '10. Support a hybrid operating model combining automation and human approval components.',
+  '11. Address unresolved evidence and technical questions before implementation.',
+];
+const numberedResult = deriveRequirementProposals({ title: 'Supplier invoice BRD', sections: [
+  { id: 'summary', title: 'Summary', body: 'The process must acknowledge every query, but this modal summary is not a requirement source.' },
+  { id: 'requirements', title: 'Requirements', body: [
+    ...numberedRequirements,
+    '',
+    sourceFactsSentinel,
+    '1. Capture this server-authored source-fact list item only as evidence, never as another requirement.',
+    '  - Rules: The process must retain source evidence.',
+  ].join('\n') },
+  { id: 'appendix', title: 'Appendix', body: '1. Capture a narrative example.\nThe appendix must remain contextual.' },
+] });
+assert.equal(numberedResult.blockedReason, null);
+assert.equal(numberedResult.requirementCount, 11);
+assert.deepEqual(numberedResult.proposals.map(item => item.type), ['Epic', ...Array(11).fill('Story'), 'Task']);
+assert.deepEqual(numberedResult.proposals.slice(1, 12).map(item => item.requirementLinks[0]), numberedRequirements.map(requirementText => ({
+  sectionId: 'requirements', sectionTitle: 'Requirements', requirementText,
+})), 'numbering plus the exact approved section identity and text remains source-bound');
+assert.ok(numberedResult.proposals.flatMap(item => item.requirementLinks)
+  .every(value => value.sectionId === 'requirements' && !value.requirementText.includes('source-fact')),
+'summary, appendix and the server-authored source-facts tail cannot become implementation requirements');
+
+const explicitOutsideRequirementSection = deriveRequirementProposals({ sections: [
+  { id: 'requirements', title: 'Requirements', body: '1. Capture the approved request.' },
+  { id: 'appendix', title: 'Appendix', body: 'FR-9: The board must retain the exact approved source.\nThis appendix must not otherwise become work.' },
+  { id: 'acceptance', title: 'Acceptance criteria', body: 'AC-9: For FR-9, the exact source is visible after reload.' },
+] });
+assert.equal(explicitOutsideRequirementSection.requirementCount, 3,
+  'explicit FR/AC identities remain eligible in otherwise allowed sections while incidental modal prose is suppressed');
+assert.ok(explicitOutsideRequirementSection.proposals.some(item => item.proposalRole === 'implementation'
+  && item.requirementLinks.some(value => value.requirementText.startsWith('FR-9:'))));
+assert.ok(explicitOutsideRequirementSection.proposals.find(item => item.requirementLinks
+  .some(value => value.requirementText.startsWith('FR-9:')))?.requirementLinks.some(value => value.requirementText.startsWith('AC-9:')));
+
+const duplicateNumbered = deriveRequirementProposals({ sections: [
+  { id: 'businessRequirements', title: 'Business Requirements', body: '1. Capture the approved request.' },
+  { id: 'functional_requirements', title: 'Functional Requirements', body: '1. The reviewer must verify the approved request.' },
+] });
+assert.equal(duplicateNumbered.proposals.length, 0);
+assert.match(duplicateNumbered.blockedReason ?? '', /numbered requirement identity “1” appears more than once/i);
+
+const numberedNonRequirements = deriveRequirementProposals({ sections: [{
+  id: 'requirements', title: 'Requirements', body: '1. Background context.\n2. What happens next?\n3. Proposed integration choice.',
+}] });
+assert.equal(numberedNonRequirements.proposals.length, 0);
+assert.match(numberedNonRequirements.blockedReason ?? '', /No explicit requirement statement/);
+const excludedRequirementHeadingKeepsLegacyFallback = deriveRequirementProposals({ sections: [
+  { id: 'questions_requirements', title: 'Proposed Requirements', body: '1. Capture an unapproved proposal.' },
+  { id: 'summary', title: 'Summary', body: 'The approved workflow must preserve its source.' },
+] });
+assert.equal(excludedRequirementHeadingKeepsLegacyFallback.requirementCount, 1,
+  'an excluded proposal heading cannot suppress the established modal fallback when no explicit approved requirement section exists');
+
 const derived = deriveRequirementProposals({ title: 'Approved BRD', sections: [{ id: 'requirements', title: 'Requirements', body: [
   'Background information only.',
   'FR-1: Reviewer must record a decision.',
