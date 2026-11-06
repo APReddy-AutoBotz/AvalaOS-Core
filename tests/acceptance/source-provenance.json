@@ -52,7 +52,7 @@
     "playwright.assess-v2-native-postgrest.config.ts": "sha256:198a64e6935bbf5c47536d2c8c049370c2ac70206b561fcb7f35e15206a9147e",
     "playwright.authenticated-hosted-sign-in-entry.config.ts": "sha256:35d6968cfe49608def2c9251c6f43fcac64ce1e3dca6323f4d05a0a379d52a4a",
     "playwright.authenticated-hosted.config.ts": "sha256:b348e959442fb906bf82e4efcb153b5cb5c0061b974ebd5a3e75865d6b3768c9",
-    "playwright.config.ts": "sha256:b1964d1408725b5cdb0e75bae299f32b89131953ae0ebc2892f84a19c7d7401d",
+    "playwright.config.ts": "sha256:e5957d280a2418967060fd47c7252e1b11a32793d6139801b8ea5a13edb9e33d",
     "playwright.eligible-reviewer-request-diagnostics.config.ts": "sha256:602376586ca61d76fd3d51792c94bbf02891f61db9514c0d47a36b744b0f0092",
     "playwright.enterprise-intelligence.config.ts": "sha256:9e949021cb7abe0678ea9eb662543aa073c43857da6dff689087a7afa67d28f9",
     "playwright.enterprise-lifecycle-acceptance.config.ts": "sha256:fbb5a822f32fed5382c61b3c7e491fe83790700ce431466939851f68d9d7e51b",
