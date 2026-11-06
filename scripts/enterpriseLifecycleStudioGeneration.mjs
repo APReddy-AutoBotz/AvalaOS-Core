@@ -115,6 +115,11 @@ export function createEnterpriseLifecycleStudioGeneration({
       runBudgeted: (input, effect, options) => providerBudgetModule.runBudgetedProviderEffect(input, effect, {
         ...options, invoke: (name, args) => studioGenerationModule.studioBudgetRpc(name, args, invoke),
       }),
+      captureCandidate: input => studioDbModule.captureStudioGenerationCandidate(input, invoke),
+      loadCandidate: input => studioDbModule.loadStudioGenerationCandidate(input, invoke),
+      rejectCandidate: input => studioDbModule.rejectStudioGenerationCandidate(input, invoke),
+      settleCandidate: input => providerBudgetModule.settleProviderBudget(input,
+        (name, args) => studioGenerationModule.studioBudgetRpc(name, args, invoke)).then(() => undefined),
       stage: input => studioDbModule.stageStudioGeneration(input, invoke).then(() => undefined),
       finalize: input => studioDbModule.finalizeStudioGeneration(input, invoke),
       ...(authenticatedSyntheticModule ? {

@@ -60,6 +60,8 @@ for (const token of [
   'firstFrameOpacityTransitions',
   "not.toContain('all')",
   "not.toContain('opacity')",
+  "response.status() === 202",
+  "headers()['access-control-allow-origin']).toBe('*')",
 ]) {
   assert.ok(browserSource.includes(token), `private rendition transition regression missing: ${token}`);
 }

@@ -1015,6 +1015,7 @@ try{
       const reservation=(await fresh.query(`SELECT public.studio_artifact_reserve_provider_budget_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,120,80) result`,budgetArgs)).rows[0].result;assert.equal(reservation.ownsProviderEffect,true);
       await gatewayEffect(claimResult.providerEffectKey);
       const content=structuredContent(`Synthetic ${label} stale completion`,hybridPackage.anchor_manifest,['template_required']);
+      await fresh.query(`SELECT public.studio_artifact_generation_candidate_capture_v1($1,$2,$3,$4,$5::jsonb,80,20,100)`,[generation.attemptId,token,claimResult.executionFence,`synthetic-${label}`,JSON.stringify(content)]);
       await fresh.query(`SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,$4,$5::jsonb)`,[generation.attemptId,token,claimResult.executionFence,`synthetic-${label}`,JSON.stringify(content)]);
       await fresh.query(`SELECT public.studio_artifact_settle_provider_budget_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,80,20,100)`,[...budgetArgs,reservation.reservationId]);
       const headsBefore=(await fresh.query(`SELECT aggregate_version,current_version_id,current_approved_version_id FROM public.studio_artifact_aggregates WHERE id=$1`,[hybridArtifactId])).rows[0];
