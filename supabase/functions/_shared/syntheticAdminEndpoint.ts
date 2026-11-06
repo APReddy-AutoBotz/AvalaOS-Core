@@ -199,12 +199,15 @@ const executeOperation = async (deps: EndpointDeps, actorId: string, envelope: S
       });
       return completeBanAttempt(deps, args, claim, reservationId, envelope.requestId as string, fingerprint);
     }
-    case 'assign_role':
-      return deps.rpc<InternalClaim>('synthetic_admin_assign_studio_variant', { ...args,
+    case 'assign_role': {
+      const { p_version: p_authorization_version, ...variantScope } = args;
+      return deps.rpc<InternalClaim>('synthetic_admin_assign_studio_variant', { ...variantScope,
+        p_authorization_version,
         p_request_id: envelope.requestId, p_key: envelope.idempotencyKey,
         p_reservation_id: payload.reservationId, p_expected_version: payload.expectedVersion,
         p_preset: payload.rolePreset,
       });
+    }
     case 'grant_operator_assess_read':
     case 'remove_operator_assess_read':
       return deps.rpc<InternalClaim>(`synthetic_admin_${envelope.operation}`, { ...args,

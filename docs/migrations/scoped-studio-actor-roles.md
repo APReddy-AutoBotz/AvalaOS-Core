@@ -140,6 +140,8 @@ reload must show the exact effective role, base role, variant state, allowlist
 and current account version. The route, audit, idempotency and provider-off
 checks remain owned by the original role and route migrations.
 
+The Edge handler maps its current authorization version to the RPC parameter `p_authorization_version` for role assignment. It passes the account version separately as `p_expected_version`. The other Admin operations retain their own parameter names. In the dedicated preview, a request using `p_version` alone returned a temporary error before any membership changed; a fresh roster and database read confirmed all three original roles. The endpoint regression checks the outbound parameter names against the installed migration signature.
+
 ## Safe fallback and rollback
 
 Before disabling this capability, restore each bound actor through the normal

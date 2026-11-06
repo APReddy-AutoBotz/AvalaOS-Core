@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { handleSyntheticAdminRequest } from './syntheticAdminEndpoint.ts';
 
@@ -17,6 +18,12 @@ const request = (value: unknown) => new Request('https://synthetic.invalid/funct
   body: JSON.stringify(value),
 });
 const config = () => ({ enabled: true, fingerprint });
+const installedStudioVariantParameterNames = () => {
+  const source = readFileSync('supabase/migrations/20261106012001_scoped_studio_actor_roles.sql', 'utf8');
+  const signature = source.match(/CREATE OR REPLACE FUNCTION public\.synthetic_admin_assign_studio_variant\(\s*([\s\S]*?)\) RETURNS jsonb/u)?.[1];
+  assert.ok(signature, 'committed Studio variant function signature must remain discoverable');
+  return signature.split(',').map(parameter => parameter.trim().split(/\s+/u)[0]).sort();
+};
 
 test('Auth-incompatible password lengths reject before authorization, SQL claim or Auth effect', async () => {
   for (const length of [73, 128]) {
@@ -305,10 +312,11 @@ test('assign_role dispatches every bounded Studio activation and restore through
         calls++;
         assert.equal(name,'synthetic_admin_assign_studio_variant');
         assert.deepEqual(args,{
-          p_actor:actor,p_org:org,p_workspace:workspace,p_version:3,p_fingerprint:fingerprint,
+          p_actor:actor,p_org:org,p_workspace:workspace,p_authorization_version:3,p_fingerprint:fingerprint,
           p_request_id:actor,p_key:base.idempotencyKey,p_reservation_id:reservation,
           p_expected_version:4,p_preset:rolePreset,
         });
+        assert.deepEqual(Object.keys(args).sort(), installedStudioVariantParameterNames());
         return{status:'active',reservationId:reservation,version:5,rolePreset,
           baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive};
       },

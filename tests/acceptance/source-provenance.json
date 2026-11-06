@@ -308,7 +308,7 @@
     "supabase/functions/_shared/studioPrivateArtifactDownloadHandler.ts": "sha256:f98e5c920145de15bca752d1aada67b8bc8f5005c6d6a273d3c133bcabe8ba18",
     "supabase/functions/_shared/studioPrivateArtifactHandler.ts": "sha256:89ed2deee9889ccdd053575c82f473cb1e995dad88739552fcba07f7c3d4e496",
     "supabase/functions/_shared/supabase.ts": "sha256:6e6adb421c0bea639ddf678c5c9025890624f5f61d27a59c771ca92c454e06f2",
-    "supabase/functions/_shared/syntheticAdminEndpoint.ts": "sha256:589601ba8b757e4ec9b57bc410c0a8b8225d5461068203339d4e8cbd6f7d8e71",
+    "supabase/functions/_shared/syntheticAdminEndpoint.ts": "sha256:b11d5d873131e8a90a281effb0ae6d891bd8988ac90aa48b6a8b387da6ee23cc",
     "supabase/functions/_shared/tenantAuthority.ts": "sha256:ae5f112360ab1329364e8f7f82e8e16ec244f7e43fd059e7848a7722c0d5ec9d",
     "supabase/functions/_shared/transcriptSourceSetMigration.test.mjs": "sha256:2489cfcde1109c169a5cdfee9e54586a03891bf8c381bf26b513fd3467f86265",
     "supabase/functions/process-command/index.ts": "sha256:20f8f7516279c60c1ecd18b51938b8c4702973e00ac94e9a22c2dfa1226b1331",
