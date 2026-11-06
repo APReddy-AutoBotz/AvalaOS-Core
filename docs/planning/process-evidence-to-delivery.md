@@ -1,5 +1,9 @@
 # Process evidence to confirmed delivery work
 
+## Exact scanner registration after fixture update — 6 November 2026 UTC
+
+The full disposable PostgreSQL private-artifact harness now passes 394 scenarios, including the current PDF3 broker fixture. Candidate `1e4e2b2c9b5c549692d1a5f6e44aa62729cf33ef` verified the dedicated frontend/backend, 131 installed migrations and separate actor sessions. CI rejects the synthetic browser-session line because the fixture additions moved its exact scanner registration from line 70 to line 78. The same path, pattern, reason and restriction remain unchanged; only the exact line coordinate is corrected. Original scan fails with one forbidden hit and one stale entry; corrected full scan passes with zero of each. No runtime source, permission, scanner implementation, provider allowance or migration changes. Provider remains off, with unchanged cumulative exposure. Required replacement CI and real selective refresh remain pending.
+
 ## Canonical SDD export and remaining fixture parity — 6 November 2026 UTC
 
 Replacement `8dd7ed19a9ccaadf96894c5f4a68edd51e69c3e6` verified the dedicated immutable frontend/backend, all 18 functions/265 inputs, 131 installed migrations and eight actor sessions. Ordinary Studio author actions generated and broker-downloaded the corrected canonical SDD v2 PDF3. All six pages were visually inspected: branch routes, complete transition legends, two-working-day acknowledgment, ready GET, prohibited POST, unknown PATCH, explicit design proposals and open questions are readable. The original PDF2 remains immutable. Creating working draft v3 preserved approved v2 and its content.

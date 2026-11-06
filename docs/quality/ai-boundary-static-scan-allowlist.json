@@ -678,7 +678,7 @@
       "pattern": "localStorage",
       "path": "tests/browser/studioPrB/canonicalSddExport.spec.ts",
       "lines": [
-        70
+        78
       ],
       "reason": "test/control documentation",
       "futureAction": "Use only the synthetic local browser session for the scoped rendition and download fixture. Never store a real provider credential or use this fixture as server authorization."
