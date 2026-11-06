@@ -41,6 +41,8 @@ export default function StructuredArtifactEditor({
     [content, projectedSections, selectedSources],
   );
   const [sections, setSections] = useState<StructuredStudioSection[]>(initial);
+  const initialTitle = typeof content.title === "string" ? content.title : initial[0]?.title || "Untitled document";
+  const [documentTitle, setDocumentTitle] = useState(initialTitle);
   const [selectedId, setSelectedId] = useState(initial[0]?.id || "");
   const [dirty, setDirty] = useState(false);
   const [selectedForUpdate, setSelectedForUpdate] = useState<Set<string>>(
@@ -54,6 +56,7 @@ export default function StructuredArtifactEditor({
   const regenerateAfterSaveRef = useRef<readonly string[] | null>(null);
   useEffect(() => {
     setSections(initial);
+    setDocumentTitle(initialTitle);
     setSelectedId(initial[0]?.id || "");
     setDirty(false);
     setSelectedForUpdate(new Set());
@@ -126,12 +129,13 @@ export default function StructuredArtifactEditor({
       }
       return [];
     });
+    if (!documentTitle.trim()) nextErrors.unshift("Document title is required.");
     setErrors(nextErrors);
     if (nextErrors.length) {
       requestAnimationFrame(() => errorRef.current?.focus());
       return null;
     }
-    return structuredSectionsToContent(content, sections);
+    return structuredSectionsToContent({ ...content, title: documentTitle.trim() }, sections);
   };
   const commit = () => {
     const next = validatedContent();
@@ -156,6 +160,7 @@ export default function StructuredArtifactEditor({
     if (!pendingRegeneration) return;
     const requested = pendingRegeneration;
     setSections(initial);
+    setDocumentTitle(initialTitle);
     setDirty(false);
     setErrors([]);
     setPendingRegeneration(null);
@@ -187,6 +192,16 @@ export default function StructuredArtifactEditor({
           {saving ? "Saving changes…" : dirty ? "Changes not saved" : "Saved"}
         </span>
       </div>
+      <label className="av-form-label mt-4 block">
+        Document title
+        <input
+          className="av-input mt-2"
+          value={documentTitle}
+          maxLength={300}
+          disabled={readOnly || saving}
+          onChange={(event) => { setDocumentTitle(event.target.value); setDirty(true); }}
+        />
+      </label>
       {needsReview && (
         <div
           role="status"

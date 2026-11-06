@@ -418,7 +418,7 @@ export const contentToStructuredSections = (
 
 export const structuredSectionsToContent = (prior: Record<string, unknown>, sections: readonly StructuredStudioSection[]) => ({
   ...prior,
-  title: sections[0]?.title || 'Untitled document',
+  title: typeof prior.title === 'string' && prior.title.trim() ? prior.title : sections[0]?.title || 'Untitled document',
   sections: sections.map(section => ({
     id: section.id,
     title: section.title.trim(),

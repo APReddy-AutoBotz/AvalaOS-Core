@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Generated planning drafts and response recovery — 6 November 2026
+
+Candidate `1870a2a1d23569cc725cd3f648ad02aadae6e077` passed all 17 required workflows and exact nonproduction frontend/backend plus 122-migration verification. The scoped Studio grants, independent planning review and assessed handoffs committed through normal UI/administration. Real BRD and PDD drafts are saved, including the corrected acknowledgment target and human review boundaries. The SDD response was lost between provider return and validated staging; its exact validation/persistence cause is unknown. Provider execution is off and the key binding revoked, with all eight debits preserved. The [active milestone plan](planning/process-evidence-to-delivery.md) owns the bounded recovery repair and remaining FRD/SDD, document approval and board proof. The document-to-board milestone is not complete.
+
 ## Dedicated Studio acceptance actors — 6 November 2026
 
 AP authorized account-specific Studio handoff permissions and private rendition generation/download in the dedicated acceptance workspace. The provider operator, Assess route, actor identities and cumulative allowance stay unchanged. Only the existing Studio generation route may be rebound to the same Studio author's exclusive workspace role. Normal Admin assignment, independent document approvals and the existing Delivery board remain required.

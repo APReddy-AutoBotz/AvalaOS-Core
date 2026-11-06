@@ -193,14 +193,20 @@ export const runBudgetedProviderEffect = async <T extends { usage: EnterprisePro
   effect: () => Promise<T>,
   options: {
     /**
-     * Strictly validate/ground and durably stage the sanitized provider result.
-     * This must complete before usage settlement so a response-loss replay can
+     * Durably capture the bounded provider response, then strictly validate it
+     * and either stage the sanitized result or retain a classified rejection.
+     * This must complete before usage settlement so response-loss replay can
      * reconcile from durable state without invoking the provider again.
      */
     beforeSettle: (result: T, reservation: ProviderBudgetReservation) => Promise<void>;
     invoke?: Rpc;
     signal?: AbortSignal;
     classifyFailure?: (error: unknown) => { effectMayHaveOccurred: boolean; failureClass: string };
+    /**
+     * Classifies a failure after the provider returned but before its usage was
+     * settled. The value is audit-only and must never release the reservation.
+     */
+    classifyBeforeSettleFailure?: (error: unknown) => string;
   },
 ): Promise<{ kind: 'executed'; result: T; reservation: ProviderBudgetReservation } | { kind: 'replay'; reservation: ProviderBudgetReservation }> => {
   const reservation = await reserveProviderBudget(input, options.invoke);
@@ -215,9 +221,13 @@ export const runBudgetedProviderEffect = async <T extends { usage: EnterprisePro
     const result = await effect();
     try {
       await options.beforeSettle(result, reservation);
-    } catch {
+    } catch (error) {
+      const classified = options.classifyBeforeSettleFailure?.(error);
+      const failureClass = typeof classified === 'string' && /^[a-z0-9_]{1,80}$/.test(classified)
+        ? classified
+        : 'pre_settlement_persistence_failed';
       await markProviderBudgetUncertain({
-        ...input, reservationId: reservation.reservationId, failureClass: 'pre_settlement_persistence_failed',
+        ...input, reservationId: reservation.reservationId, failureClass,
       }, options.invoke).catch(() => undefined);
       throw new ProviderBudgetError('PROVIDER_EFFECT_UNCERTAIN');
     }

@@ -81,6 +81,7 @@ test("saving dirty sections completes before selected regeneration and preserves
   await editor
     .getByLabel("Section body")
     .fill("Saved authored summary retained across selected refresh.");
+  await editor.getByLabel("Document title").fill("Supplier invoice solution design");
   await editor.getByRole("checkbox", { name: "As-Is flow" }).check();
   const generationCount = () =>
     page.evaluate(
@@ -112,6 +113,7 @@ test("saving dirty sections completes before selected regeneration and preserves
   await expect(editor.getByLabel("Section body")).toHaveValue(
     "Saved authored summary retained across selected refresh.",
   );
+  await expect(editor.getByLabel("Document title")).toHaveValue("Supplier invoice solution design");
   await page.reload({ waitUntil: "domcontentloaded" });
   await workspace.getByLabel("Artifact type").selectOption("sdd");
   const reloaded = page.getByRole("region", { name: "Current document" });
@@ -119,4 +121,5 @@ test("saving dirty sections completes before selected regeneration and preserves
   await expect(reloaded.getByLabel("Section body")).toHaveValue(
     "Saved authored summary retained across selected refresh.",
   );
+  await expect(reloaded.getByLabel("Document title")).toHaveValue("Supplier invoice solution design");
 });

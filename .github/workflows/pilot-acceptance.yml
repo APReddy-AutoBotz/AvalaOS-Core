@@ -76,6 +76,7 @@ jobs:
           node scripts/testAssessedPlanningReviewPostgres.mjs
           node scripts/assessedPlanningDeliveryPostgres.mjs
           PILOT_OPERATIONS_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres node scripts/testScopedStudioRolesPostgres.mjs
+          PILOT_OPERATIONS_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres node scripts/testStudioResponseReconciliationPostgres.mjs
       - name: Fresh, accepted-main upgrade, RLS, receipt/effect, and recovery contracts
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic

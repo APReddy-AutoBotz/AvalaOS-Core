@@ -52,6 +52,7 @@ export type EnterpriseProviderRequest = {
 export type EnterpriseProviderResult = {
   provider: UnifiedEnterpriseAiProvider; model: string; output: string;
   usage: EnterpriseProviderUsage; latencyMs: number;
+  providerOperationId?: string;
 };
 
 export const isSafeEnterpriseSecretReference = (provider: UnifiedEnterpriseAiProvider, secretRef: string, organizationId?: string) =>
@@ -221,7 +222,13 @@ export const parseProviderResponse = (provider: UnifiedEnterpriseAiProvider, req
     usage = strictUsage(value.usage?.prompt_tokens, value.usage?.completion_tokens, value.usage?.total_tokens);
   }
   if (typeof output !== 'string' || !output.trim() || output.length > 1_000_000) throw new EnterpriseAiGatewayError('PROVIDER_RESPONSE_INVALID');
-  return { output: output.trim(), model: strictModel(value.model ?? value.modelVersion, requestedModel, provider), usage };
+  const rawOperationId = provider === 'gemini' ? value.responseId : value.id;
+  if (rawOperationId !== undefined && (typeof rawOperationId !== 'string'
+    || !/^[A-Za-z0-9._:-]{1,200}$/.test(rawOperationId))) throw new EnterpriseAiGatewayError('PROVIDER_RESPONSE_INVALID');
+  return {
+    output: output.trim(), model: strictModel(value.model ?? value.modelVersion, requestedModel, provider), usage,
+    ...(rawOperationId === undefined ? {} : { providerOperationId: rawOperationId }),
+  };
 };
 const readResponse = async (provider: UnifiedEnterpriseAiProvider, model: string, response: Response) => {
   if (response.status === 429) throw new EnterpriseAiGatewayError('PROVIDER_RATE_LIMITED');
@@ -402,7 +409,11 @@ export const runGovernedProviderRequest = async (request: EnterpriseProviderRequ
   if (secret.status === 'blocked') throw new EnterpriseAiGatewayError(secret.failureClass === 'secret_reference_unsafe' ? 'SECRET_REFERENCE_UNSAFE' : 'SECRET_UNAVAILABLE');
   await consumeEffect(permit);
   const started = now(); const parsed = await requestProvider(transport.request, transport.prompt, secret.apiKey, fetchImpl);
-  return { provider: snapshot.provider, model: parsed.model, output: parsed.output, usage: parsed.usage, latencyMs: Math.max(0, now() - started) };
+  return {
+    provider: snapshot.provider, model: parsed.model, output: parsed.output, usage: parsed.usage,
+    latencyMs: Math.max(0, now() - started),
+    ...(parsed.providerOperationId === undefined ? {} : { providerOperationId: parsed.providerOperationId }),
+  };
 };
 
 export const parseJsonObjectResponse = <T>(value: string, guard?: (value: unknown) => value is T): T => {

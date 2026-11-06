@@ -284,6 +284,9 @@ export const buildStudioArtifactTaskInstruction = (
   if (approvalPurpose === 'documentation_planning') instruction.splice(-1, 0,
     'This assessed source is independently approved only for documentation and planning. Preserve that purpose in the document and never describe it as Verified, Govern-approved, implementation-ready, or execution-authorized.',
     'Keep supported facts, proposed design choices, optional alternatives, and unresolved questions visibly distinct. Preserve each supplied unresolved question and state the design or delivery action it blocks without inventing evidence.',
+    'Preserve API evidence operation by operation. Keep ready or available, prohibited, unknown or not established, and excluded from the recommended design as distinct states for each method or capability; never generalize one operation state to another.',
+    'An unknown operation or an operation excluded from the recommended design is not a policy prohibition and is not evidence of availability or unavailability. Keep it unknown, do not recommend or promote it, and preserve any separate ready and prohibited operations exactly.',
+    'AI eligibility or a viable optional AI alternative does not mean AI is selected, necessary, approved, or part of the recommended design. Preserve the source-stated recommended approach and any No AI required conclusion separately from optional alternatives.',
     'Document approval approves the content for planning. It does not certify unresolved facts or implementation readiness.',
   );
   if (promptVersion !== 'studio-pr-b-1') instruction.splice(-1, 0,
@@ -427,5 +430,6 @@ export const callStudioArtifactProvider = async (
     model: result.model,
     content,
     usage: result.usage,
+    ...(result.providerOperationId === undefined ? {} : { providerOperationId: result.providerOperationId }),
   };
 };

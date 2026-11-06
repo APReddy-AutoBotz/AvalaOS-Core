@@ -229,6 +229,25 @@ await test('PROVIDER-007 malformed/model-substitution/usage-mismatch remain trut
   evidence('PROVIDER-007','malformed-model-and-usage-failures',[authority]);
 });
 
+await test('provider operation identity is retained only when it is bounded and provider-authored', () => {
+  assert.deepEqual(parseProviderResponse('openai', 'governed-model', {
+    ...bodies.openai, id: 'chatcmpl_acceptance-123',
+  }), {
+    output: 'draft', model: 'governed-model', usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
+    providerOperationId: 'chatcmpl_acceptance-123',
+  });
+  assert.deepEqual(parseProviderResponse('gemini', 'governed-model', {
+    ...bodies.gemini, responseId: 'response:acceptance_123',
+  }), {
+    output: 'draft', model: 'governed-model', usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
+    providerOperationId: 'response:acceptance_123',
+  });
+  for (const id of ['', 'contains whitespace', 'x'.repeat(201)]) {
+    assert.throws(() => parseProviderResponse('openai', 'governed-model', { ...bodies.openai, id }),
+      (error: unknown) => error instanceof EnterpriseAiGatewayError && error.code === 'PROVIDER_RESPONSE_INVALID');
+  }
+});
+
 await test('PROVIDER-001..006 adapters use exact paths, no redirects, header-only secrets, and strict usage', async () => {
   const originalDeno = (globalThis as any).Deno;
   (globalThis as any).Deno = { env: { get: (key: string) => key === 'AVALA_PROVIDER_ENDPOINT_ALLOWLIST' ? 'https://azure.fixture.example,https://compatible.fixture.example' : undefined } };

@@ -1,5 +1,9 @@
 # AvalaOS Core: current implementation and verification status
 
+## Actual planning documents — 6 November 2026
+
+The exact `1870a2a1` nonproduction candidate generated and saved a BRD and PDD from the retained fresh-source assessment through independent planning handoffs. The SDD returned an ambiguous post-provider persistence/validation result with no stored response; FRD generation has not run. Provider execution and key binding are disabled pending bounded recovery. Document approvals, rendered SDD export and persistent selected board import remain unverified. See the [active milestone and accounting distinction](planning/process-evidence-to-delivery.md).
+
 ## Requirement-derived Delivery candidate
 
 The proposed work comes from approved requirement text and uses the existing selective import and board. Verification must distinguish a synthetic approved Studio input from a fresh provider-generated artifact. The continuous nonproduction run remains pending. [Delivery authority and verification](migrations/authenticated-studio-delivery-outcome-monitor.md)

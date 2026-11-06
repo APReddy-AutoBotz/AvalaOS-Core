@@ -143,6 +143,58 @@ await test('crash while staging retains uncertain budget and replay cannot repea
   assert.equal(replay.kind, 'replay'); assert.deepEqual({ effects, uncertain }, { effects: 1, uncertain: 1 });
 });
 
+await test('post-effect persistence failures retain a closed audit classification without releasing exposure', async () => {
+  const transitions: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const invoke = async <T>(name: string, args: Record<string, unknown>) => {
+    transitions.push({ name, args });
+    if (name === 'enterprise_ai_reserve_provider_budget') return {
+      reservationId: ids.reservationId, state: 'reserved', ownsProviderEffect: true,
+      replayed: false, reservedTokens: 30,
+    } as T;
+    if (name === 'enterprise_ai_mark_provider_budget_uncertain_v2') return {
+      reservationId: ids.reservationId, state: 'uncertain', ownsProviderEffect: false,
+      replayed: false, reservedTokens: 30,
+    } as T;
+    throw new Error(`unexpected ${name}`);
+  };
+  await assert.rejects(runBudgetedProviderEffect(input, async () => ({
+    usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
+  }), {
+    invoke,
+    beforeSettle: async () => { throw new Error('validated stage unavailable'); },
+    classifyBeforeSettleFailure: () => 'studio_validated_stage_failed',
+  }), (error: unknown) => error instanceof ProviderBudgetError && error.code === 'PROVIDER_EFFECT_UNCERTAIN');
+  const uncertain = transitions.find(item => item.name === 'enterprise_ai_mark_provider_budget_uncertain_v2');
+  assert.equal(uncertain?.args.p_failure_class, 'studio_validated_stage_failed');
+  assert.equal(transitions.some(item => item.name === 'enterprise_ai_release_provider_budget_v2'), false);
+});
+
+await test('post-effect persistence failure classification is bounded and fail-closed', async () => {
+  const transitions: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const invoke = async <T>(name: string, args: Record<string, unknown>) => {
+    transitions.push({ name, args });
+    if (name === 'enterprise_ai_reserve_provider_budget') return {
+      reservationId: ids.reservationId, state: 'reserved', ownsProviderEffect: true,
+      replayed: false, reservedTokens: 30,
+    } as T;
+    if (name === 'enterprise_ai_mark_provider_budget_uncertain_v2') return {
+      reservationId: ids.reservationId, state: 'uncertain', ownsProviderEffect: false,
+      replayed: false, reservedTokens: 30,
+    } as T;
+    throw new Error(`unexpected ${name}`);
+  };
+  await assert.rejects(runBudgetedProviderEffect(input, async () => ({
+    usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
+  }), {
+    invoke,
+    beforeSettle: async () => { throw new Error('candidate capture unavailable'); },
+    classifyBeforeSettleFailure: () => 'INVALID CLASSIFICATION',
+  }), (error: unknown) => error instanceof ProviderBudgetError && error.code === 'PROVIDER_EFFECT_UNCERTAIN');
+  const uncertain = transitions.find(item => item.name === 'enterprise_ai_mark_provider_budget_uncertain_v2');
+  assert.equal(uncertain?.args.p_failure_class, 'pre_settlement_persistence_failed');
+  assert.equal(transitions.some(item => item.name === 'enterprise_ai_release_provider_budget_v2'), false);
+});
+
 await test('budget lifecycle wrappers validate and bind exact usage, failure, and release inputs', async () => {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   const invoke = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {

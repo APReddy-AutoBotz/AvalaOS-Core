@@ -9,7 +9,7 @@ import { applySyntheticAiTerminalJournalMigrationForTest } from './syntheticAiTe
 const { Client } = pg;
 const AUTHORITY_MIGRATION = '20261010025331_legacy_delivery_authority.sql';
 const REQUIREMENT_BOUNDARY_MIGRATION = '20261103170103_process_evidence_live_permit.sql';
-const CURRENT_CHAIN_TIP = '20261106012003_scoped_studio_role_lookup.sql';
+const CURRENT_CHAIN_TIP = '20261106020001_studio_response_reconciliation.sql';
 const DUPLICATE_SAFE_MIGRATIONS = new Set([
   '20260923133000_pr1e_evidence_claim_operator_binding.sql',
   '20260923142120_pr1e_govern_control_alias_binding.sql',

@@ -2,6 +2,7 @@ import { StudioArtifactError, type StudioArtifactAtomicCommand } from './studioA
 import {
   STUDIO_RPC,
   cancelStudioGeneration,
+  captureStudioGenerationCandidate,
   claimStudioGeneration,
   decodeStudioTemplateProjection,
   decodeStudioRpcError,
@@ -10,6 +11,8 @@ import {
   failStudioGeneration,
   finalizeStudioGeneration,
   loadStudioGenerationMaterial,
+  loadStudioGenerationCandidate,
+  rejectStudioGenerationCandidate,
   stageStudioGeneration,
   timeoutStudioGeneration,
 } from './studioArtifactDb.ts';
@@ -286,6 +289,121 @@ void (async () => {
       p_provider_operation_id: null, p_response: stagedResponse,
     }),
     'IDEMP-002-B', 'db.staged-response-exact-rpc-binding', 'provider-response-loss-recovery', { attemptId: ids[9], executionFence: 7 });
+  const candidateUsage = { inputTokens: 17, outputTokens: 5, totalTokens: 22 };
+  const candidateHash = 'c'.repeat(64);
+  await captureStudioGenerationCandidate({
+    attemptId: ids[9], executionToken: ids[12], executionFence: 7,
+    reservationId: ids[10],
+    providerOperationId: 'chatcmpl-candidate-1', response: stagedResponse, usage: candidateUsage,
+  }, async (name, args) => {
+    rpcName = name; rpcArgs = args;
+    return {
+      outcome: 'committed', attemptId: ids[9], state: 'captured', reservationId: ids[10],
+      responseHash: candidateHash, usage: candidateUsage,
+    } as never;
+  });
+  const captureName = rpcName; const captureArgs = rpcArgs;
+  let replayedCaptureAckAccepted = false;
+  await captureStudioGenerationCandidate({
+    attemptId: ids[9], executionToken: ids[12], executionFence: 7,
+    reservationId: ids[10],
+    providerOperationId: 'chatcmpl-candidate-1', response: stagedResponse, usage: candidateUsage,
+  }, async () => ({
+    outcome: 'replayed', attemptId: ids[9], state: 'captured', reservationId: ids[10],
+    responseHash: candidateHash, usage: candidateUsage,
+  }) as never);
+  replayedCaptureAckAccepted = true;
+  const loadedCandidate = await loadStudioGenerationCandidate({
+    attemptId: ids[9], executionToken: ids[12], executionFence: 8,
+  }, async (name, args) => {
+    rpcName = name; rpcArgs = args;
+    return {
+      attemptId: ids[9], state: 'captured', reservationId: ids[10], response: stagedResponse,
+      providerOperationId: 'chatcmpl-candidate-1', responseHash: candidateHash, usage: candidateUsage,
+    } as never;
+  });
+  const loadName = rpcName; const loadArgs = rpcArgs;
+  await rejectStudioGenerationCandidate({
+    attemptId: ids[9], executionToken: ids[12], executionFence: 8,
+    failureCode: 'PROVIDER_OUTPUT_INVALID',
+  }, async (name, args) => {
+    rpcName = name; rpcArgs = args;
+    return {
+      outcome: 'committed', attemptId: ids[9], state: 'rejected',
+      failureCode: 'PROVIDER_OUTPUT_INVALID', reservationId: ids[10],
+      responseHash: candidateHash, usage: candidateUsage,
+    } as never;
+  });
+  mark(replayedCaptureAckAccepted && captureName === STUDIO_RPC.generationCandidateCapture
+    && JSON.stringify(captureArgs) === JSON.stringify({
+      p_attempt_id: ids[9], p_execution_token: ids[12], p_execution_fence: 7,
+      p_provider_operation_id: 'chatcmpl-candidate-1', p_response: stagedResponse,
+      p_input_tokens: 17, p_output_tokens: 5, p_total_tokens: 22,
+    })
+    && loadName === STUDIO_RPC.generationCandidateLoad
+    && JSON.stringify(loadArgs) === JSON.stringify({
+      p_attempt_id: ids[9], p_execution_token: ids[12], p_execution_fence: 8,
+    })
+    && loadedCandidate?.providerOperationId === 'chatcmpl-candidate-1'
+    && loadedCandidate.reservationId === ids[10]
+    && JSON.stringify(loadedCandidate.usage) === JSON.stringify(candidateUsage)
+    && rpcName === STUDIO_RPC.generationCandidateReject
+    && JSON.stringify(rpcArgs) === JSON.stringify({
+      p_attempt_id: ids[9], p_execution_token: ids[12], p_execution_fence: 8,
+      p_failure_code: 'PROVIDER_OUTPUT_INVALID',
+    }),
+  'IDEMP-002-B', 'db.private-provider-candidate-capture-load-and-reject-exact-bindings',
+  'provider-candidate-recovery-adapters', { attemptId: ids[9], executionFence: 8 });
+  let malformedCandidateAcks = 0;
+  for (const ack of [
+    { attemptId: ids[9], state: 'captured', reservationId: ids[10], response: stagedResponse,
+      providerOperationId: 'contains whitespace', responseHash: candidateHash, usage: candidateUsage },
+    { attemptId: ids[9], state: 'captured', reservationId: ids[10], response: stagedResponse,
+      providerOperationId: null, responseHash: candidateHash, usage: { ...candidateUsage, totalTokens: 99 } },
+    { attemptId: ids[9], state: 'captured', reservationId: ids[10], response: stagedResponse,
+      providerOperationId: null, responseHash: 'not-a-hash', usage: candidateUsage },
+  ]) {
+    try {
+      await loadStudioGenerationCandidate({
+        attemptId: ids[9], executionToken: ids[12], executionFence: 8,
+      }, async () => ack as never);
+    } catch { malformedCandidateAcks += 1; }
+  }
+  mark(malformedCandidateAcks === 3,
+    'STUDIO-TR-009', 'db.provider-candidate-private-receipt-malformation-fails-closed',
+    'provider-candidate-malformed-ack-matrix', { rejectedAcknowledgements: malformedCandidateAcks });
+  let mismatchedCaptureUsageRejected = false;
+  try {
+    await captureStudioGenerationCandidate({
+      attemptId: ids[9], executionToken: ids[12], executionFence: 7,
+      reservationId: ids[10],
+      providerOperationId: 'chatcmpl-candidate-1', response: stagedResponse, usage: candidateUsage,
+    }, async () => ({
+      outcome: 'committed', attemptId: ids[9], state: 'captured', reservationId: ids[10],
+      responseHash: candidateHash, usage: { inputTokens: 18, outputTokens: 4, totalTokens: 22 },
+    }) as never);
+  } catch (error) {
+    mismatchedCaptureUsageRejected = error instanceof StudioArtifactError && error.code === 'COMMAND_UNAVAILABLE';
+  }
+  mark(mismatchedCaptureUsageRejected,
+    'STUDIO-TR-009', 'db.provider-candidate-capture-ack-usage-must-match-request',
+    'provider-candidate-capture-usage-binding');
+  let mismatchedCaptureReservationRejected = false;
+  try {
+    await captureStudioGenerationCandidate({
+      attemptId: ids[9], executionToken: ids[12], executionFence: 7,
+      reservationId: ids[10],
+      providerOperationId: 'chatcmpl-candidate-1', response: stagedResponse, usage: candidateUsage,
+    }, async () => ({
+      outcome: 'committed', attemptId: ids[9], state: 'captured', reservationId: ids[11],
+      responseHash: candidateHash, usage: candidateUsage,
+    }) as never);
+  } catch (error) {
+    mismatchedCaptureReservationRejected = error instanceof StudioArtifactError && error.code === 'COMMAND_UNAVAILABLE';
+  }
+  mark(mismatchedCaptureReservationRejected,
+    'STUDIO-TR-009', 'db.provider-candidate-capture-ack-reservation-must-match-budget-owner',
+    'provider-candidate-capture-reservation-binding');
   await timeoutStudioGeneration(ids[9], async (name, args) => { rpcName = name; rpcArgs = args; return { outcome: 'committed', state: 'timed_out' } as never; });
   mark(rpcName === STUDIO_RPC.generationTimeout && JSON.stringify(Object.keys(rpcArgs)) === JSON.stringify(['p_attempt_id']),
     'STUDIO-TR-009', 'db.timeout-is-service-owned-deadline', 'server-scheduled-generation-timeout', { attemptId: ids[9], timeoutAuthority: 'server-fixed-10m' });

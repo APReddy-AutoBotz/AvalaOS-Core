@@ -33,6 +33,14 @@ const reviewedPlanningWorkspace={...artifactWorkspace,sourcePackage:{...artifact
 assert.equal(decodeStudioArtifactWorkspaceProjection(reviewedPlanningWorkspace,context).sourcePackage.planningOnly,true);
 const summaryPage={contractVersion:'studio-artifact-summary-2',organizationId:U[0],workspaceId:U[1],items:[{id:U[6],artifactType:'brd',aggregateVersion:1,lifecycle:'draft',currentVersionId:U[7],currentApprovedVersionId:null,sourceMode:'direct_transcript_bundle',lineageClassification:'not_assessed',planningOnly:true,displayLabel:'BRD · Direct planning package',updatedAt:'2026-08-28T00:00:00.000Z',actions:['studio.artifact.draft.revise']}],total:1,offset:0,limit:20,hasMore:false};
 assert.equal(decodeStudioArtifactSummaryPage(summaryPage,context).items[0].planningOnly,true);
+// A failed first generation must not hide the other saved documents in the index.
+const attemptedSummary={...summaryPage.items[0],id:U[5],artifactType:'sdd',aggregateVersion:1,currentVersionId:null,actions:[]};
+const mixedAttemptPage={...summaryPage,items:[attemptedSummary,...summaryPage.items],total:2};
+assert.equal(decodeStudioArtifactSummaryPage(mixedAttemptPage,context).items[1].currentVersionId,U[7]);
+for(const invalid of [{...attemptedSummary,lifecycle:'approved'},{...attemptedSummary,currentApprovedVersionId:U[8]},{...attemptedSummary,actions:['studio.artifact.draft.revise']}])assert.throws(()=>decodeStudioArtifactSummaryPage({...summaryPage,items:[invalid]},context),StudioArtifactBoundaryError);
+const attemptedWorkspace={...manualWorkspace,artifact:{...manualWorkspace.artifact,aggregateVersion:1}};
+assert.equal(decodeStudioArtifactWorkspaceProjection(attemptedWorkspace,context).artifact.currentVersionId,null);
+assert.throws(()=>decodeStudioArtifactWorkspaceProjection({...attemptedWorkspace,artifact:{...attemptedWorkspace.artifact,lifecycle:'approved'}},context),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioArtifactSummaryPage({...summaryPage,workspaceId:U[2]},context),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioArtifactSummaryPage({...summaryPage,items:[{...summaryPage.items[0],sourceLabel:'forbidden'}]},context),StudioArtifactBoundaryError);
 const summaryTransport={readArtifactSummaries:async(_context:TenantContextProjection,offset:number,limit:number)=>({...summaryPage,offset,limit})} as StudioArtifactTransport;
@@ -124,8 +132,9 @@ void(async()=>{let envelope:any;
   assert.throws(()=>decodeStudioSourcePackageIdentity({...sourcePackageIdentity,sourceMode:'manual_brief'}),StudioArtifactBoundaryError);
   assert.throws(()=>decodeStudioSourcePackageIdentity({...sourcePackageIdentity,aggregateVersion:0}),StudioArtifactBoundaryError);
   assert.equal(decodeStudioSourcePackageIdentity({...sourcePackageIdentity,aggregateVersion:0,currentVersionId:null}).aggregateVersion,0);
+  assert.equal(decodeStudioSourcePackageIdentity({...sourcePackageIdentity,aggregateVersion:1,currentVersionId:null}).currentVersionId,null);
   assert.equal(decodeStudioSourcePackageIdentity({...sourcePackageIdentity,currentApprovedVersionId:U[8]}).currentApprovedVersionId,U[8]);
-  for(const malformed of [{...sourcePackageIdentity,version:3},{...sourcePackageIdentity,routePolicyVersion:0},{...sourcePackageIdentity,createdAt:'yesterday'},{...sourcePackageIdentity,currentVersionId:null},{...sourcePackageIdentity,sourcePackageHash:'short'}])assert.throws(()=>decodeStudioSourcePackageIdentity(malformed),StudioArtifactBoundaryError);
+  for(const malformed of [{...sourcePackageIdentity,version:3},{...sourcePackageIdentity,routePolicyVersion:0},{...sourcePackageIdentity,createdAt:'yesterday'},{...sourcePackageIdentity,currentVersionId:null,currentApprovedVersionId:U[8]},{...sourcePackageIdentity,sourcePackageHash:'short'}])assert.throws(()=>decodeStudioSourcePackageIdentity(malformed),StudioArtifactBoundaryError);
   const workspaceTransport:StudioArtifactTransport={...transport,readWorkspace:async()=>({projection:workspaceProjection}),readArtifactV2:async()=>directProjection,readSourcePackage:async()=>sourcePackageIdentity,readArtifactWorkspace:async(_context,_artifactId,offset,limit)=>({...artifactWorkspace,selectedSources:{...artifactWorkspace.selectedSources,offset,limit,hasMore:offset+artifactWorkspace.selectedSources.items.length<artifactWorkspace.selectedSources.total}}),invokeWorkspace:async(value)=>{envelope=value;return response;}};
   assert.equal((await readStudioWorkspace(context,1,workspaceTransport))?.planningOnly,true);
   assert.equal((await readStudioArtifactV2(context,U[6],workspaceTransport)).contractVersion,'studio-artifact-2');

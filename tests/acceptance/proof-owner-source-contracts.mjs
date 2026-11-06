@@ -649,6 +649,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "scoped-studio-role-lookup",
     "sourceReference": "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
     "selector": "SCOPED_STUDIO_ROLE_LOOKUP_PREDECESSOR_MISMATCH"
+  },
+  {
+    "anchorId": "studio-response-reconciliation",
+    "sourceReference": "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_reconcile_spent_output_lost("
   }
 ]);
 
@@ -1930,7 +1935,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
@@ -2061,7 +2067,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
@@ -2599,7 +2606,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
@@ -2652,7 +2660,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
@@ -2705,7 +2714,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
@@ -2758,7 +2768,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
@@ -2811,7 +2822,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "assessed-planning-delivery",
       "scoped-studio-actor-roles",
       "scoped-studio-route-admission",
-      "scoped-studio-role-lookup"
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation"
     ],
     "ownership": [
       {
