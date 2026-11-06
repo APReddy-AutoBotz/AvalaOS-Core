@@ -1,5 +1,13 @@
 # Process evidence to confirmed delivery work
 
+## Retained planning edits and capture-audit manifest correction — 6 November 2026
+
+Candidate `2cf7c3229784c4b1c13ab04ab393ef6cb6d5b266` verified the dedicated frontend/backend, 18 functions/265 source inputs, all 125 installed migrations and eight separate actor sessions. PDD version 4 now preserves the saved summary and exception corrections after reload and separate reviewer/approver planning approval. The canonical BRD renderer-2 rendition is available alongside immutable renderer-1 history; its business pages still require inspection. FRD/SDD generation, selective refresh and board confirmation remain outstanding.
+
+Required Pilot Acceptance executed its backend and browser journeys but the final manifest rejected the Studio generation audit count. Durable response capture correctly adds a third audit; the producer already asserts it, while the final validator still expected two. The validator now requires exactly three. Focused regression checks pass 33 tests, including rejection of both missing and extra capture audits. No runtime, migration, permission or provider allowance changes are made by this correction. The replacement candidate must pass required CI before provider activation. Rollback reverts the validator and its regression tests together and leaves provider execution disabled; do not remove the legitimate capture audit to satisfy the former expectation.
+
+Provider execution remains disabled and the key binding revoked. No new paid calls occurred; eight attempts retain USD 3.7716736 in ledger exposure. The last observed provider dashboard amount of USD 0.04 is stale and must be refreshed before further use.
+
 ## Approved generated BRD/PDD and export repair — 6 November 2026
 
 Candidate `339d6a9865820e85f5bb93240e8a6b6dfa9350a3` verified the immutable preview, 18 backend functions/265 source inputs, all 123 installed migrations and eight separate authorized sessions. The normal UI now reloads the saved documents despite the headless SDD draft. BRD title and acknowledgment edits and PDD proposed-control corrections survived reload. Independent review requested a BRD risk correction; the author saved and resubmitted it, the reviewer accepted it, and the separate approver approved BRD version 5 and PDD version 2 **for planning**. The FRD handoff was consumed normally but generation remains pending.

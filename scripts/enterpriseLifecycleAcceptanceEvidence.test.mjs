@@ -52,7 +52,7 @@ const makeFixture = root => {
     'govern.assign': [1, 1, 1, 0], 'govern.attest': [2, 2, 2, 0], 'govern.changes-requested': [1, 1, 1, 0],
     'govern.revise': [1, 1, 1, 0], 'govern.resubmit': [2, 2, 2, 0], 'govern.approve': [4, 4, 4, 0],
     'govern.reject': [5, 5, 5, 0], 'govern.separation-denied': [0, 0, 0, 0], 'govern.resolve': [1, 1, 1, 0],
-    'studio.handoff': [2, 1, 1, 0], 'studio.consume': [6, 4, 4, 0], 'studio.generate': [1, 1, 2, 1],
+    'studio.handoff': [2, 1, 1, 0], 'studio.consume': [6, 4, 4, 0], 'studio.generate': [1, 1, 3, 1],
     'studio.provider-failure': [1, 1, 2, 0],
   };
   const stages = REQUIRED_BACKEND_STAGES.map(id => {
@@ -225,6 +225,8 @@ test('connected lifecycle evidence fails closed on identity, stages, assertions,
       ['backend-final-reviewer-semantic', value => { value.backend.assertions['govern.separation-denied.final-reviewer'] = false; }],
       ['backend-actions-bound-semantic', value => { value.backend.assertions['govern.resolve.actions-bound'] = false; }],
       ['backend-duplicate-assertion', value => { value.backend.stages[0].assertionIds.push(value.backend.stages[0].assertionIds[0]); }],
+      ['capture-audit-missing', value => { const stage=value.backend.stages.find(stage => stage.id === 'studio.generate'); stage.auditDelta=2; stage.persistence.auditCount=2; }],
+      ['capture-audit-extra', value => { const stage=value.backend.stages.find(stage => stage.id === 'studio.generate'); stage.auditDelta=4; stage.persistence.auditCount=4; }],
       ['backend-delta', value => { value.backend.stages.find(stage => stage.id === 'studio.consume').mutationDelta += 1; }],
       ['backend-persistence', value => { value.backend.stages.find(stage => stage.id === 'govern.approve').persistence.bindings[0].resourceBound = false; }],
       ['browser-stage', value => { value.browser.projects[0].stages = value.browser.projects[0].stages.filter(stage => stage.id !== 'studio-consume'); }],
