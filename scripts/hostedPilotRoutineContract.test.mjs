@@ -10,7 +10,7 @@ const row = {schema:'public',name:'projection',argument_types:'uuid',owner:'post
   authority_effective:{anon:{execute:false,grantable:false},authenticated:{execute:true,grantable:false},service_role:{execute:false,grantable:false}}};
 const entry = {...row,authority:fingerprintRoutine(row)};
 const catalog = routineCatalog([entry]);
-const fixture = () => ({schemaVersion:1,runtimeMigrationTip:'20261106190001',checkpoints:[{
+const fixture = () => ({schemaVersion:1,runtimeMigrationTip:'20261106191539',checkpoints:[{
   migrationNames:migrations.map(m=>m.name),migrationHashes:migrations.map(m=>m.sha256),profiles:{standard:catalog,supabase:catalog},
 }]});
 const parse = value => parseRoutineContract(Buffer.from(JSON.stringify(value)),migrations);
@@ -18,9 +18,11 @@ const canonical = {migrations,routineContract:parse(fixture())};
 const raw = {appliedMigrations:migrations.map(m=>m.name),routines:[entry]};
 
 test('routine contract remains bounded before JSON decoding',()=>{
-  assert.equal(MAX_ROUTINE_CONTRACT_BYTES,21_000_000);
+  assert.equal(MAX_ROUTINE_CONTRACT_BYTES,22_000_000);
+  const boundary=Buffer.from(JSON.stringify(fixture()).padEnd(MAX_ROUTINE_CONTRACT_BYTES,' '));
+  assert.equal(parseRoutineContract(boundary,migrations).schemaVersion,1);
   assert.throws(()=>parseRoutineContract(Buffer.alloc(MAX_ROUTINE_CONTRACT_BYTES+1),migrations),/ROUTINE_CONTRACT_SIZE_REJECTED/);
-  const excessive=fixture();excessive.checkpoints=Array.from({length:19},()=>excessive.checkpoints[0]);
+  const excessive=fixture();excessive.checkpoints=Array.from({length:20},()=>excessive.checkpoints[0]);
   assert.throws(()=>parse(excessive),/ROUTINE_CONTRACT_SCHEMA_REJECTED/);
 });
 

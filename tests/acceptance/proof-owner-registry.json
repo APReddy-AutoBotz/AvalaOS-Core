@@ -797,6 +797,11 @@
       "anchorId": "sdd-completion-allowance",
       "sourceReference": "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
       "selector": "DO $sdd_completion_precondition$"
+    },
+    {
+      "anchorId": "studio-synthetic-prompt-compatibility",
+      "sourceReference": "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
+      "selector": "DO $studio_synthetic_prompt_precondition$"
     }
   ],
   "contracts": [
@@ -1971,7 +1976,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -2109,7 +2115,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -2654,7 +2661,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -2714,7 +2722,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -2774,7 +2783,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -2834,7 +2844,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -2894,7 +2905,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -3898,7 +3910,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
@@ -3944,7 +3957,8 @@
         "delivery-numbered-requirements",
         "process-evidence-validation-renewal",
         "studio-timeout-reconciliation",
-        "sdd-completion-allowance"
+        "sdd-completion-allowance",
+        "studio-synthetic-prompt-compatibility"
       ],
       "ownership": [
         {
