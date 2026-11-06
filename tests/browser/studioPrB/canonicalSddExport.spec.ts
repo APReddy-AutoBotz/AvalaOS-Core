@@ -3,9 +3,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
-const brokerPdfPath = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export.pdf');
-const expectedSha256 = 'c69867c842a603645489ea2b93a4ef12fcaa30373f25e9f2ac3227a5903d8022';
-const expectedByteLength = 5_799;
+const brokerPdfPath = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export-pdf3.pdf');
+const expectedSha256 = 'c7c365cf93c5f37a834673d1504495b608f87407724f7b6bfc9e884c0186c998';
+const expectedByteLength = 7_042;
+const historicalPdf2Path = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export.pdf');
+const historicalPdf2Sha256 = 'c69867c842a603645489ea2b93a4ef12fcaa30373f25e9f2ac3227a5903d8022';
+const historicalPdf2ByteLength = 5_799;
 const artifactId = '00000038-0000-4000-8000-000000000038';
 const approvedVersionId = '00000053-0000-4000-8000-000000000053';
 const renditionId = '00000058-0000-4000-8000-000000000058';
@@ -18,9 +21,14 @@ const base64Url = (value: unknown) => Buffer.from(JSON.stringify(value)).toStrin
 
 test('ordinary SDD Generate PDF and Download use the private broker client and preserve exact bytes', async ({ page }) => {
   const brokerPdf = readFileSync(brokerPdfPath);
+  const historicalPdf2 = readFileSync(historicalPdf2Path);
   expect({ byteLength: brokerPdf.byteLength, sha256: sha256(brokerPdf) }).toEqual({
     byteLength: expectedByteLength,
     sha256: expectedSha256,
+  });
+  expect({ byteLength: historicalPdf2.byteLength, sha256: sha256(historicalPdf2) }).toEqual({
+    byteLength: historicalPdf2ByteLength,
+    sha256: historicalPdf2Sha256,
   });
 
   const accessToken = [
@@ -96,7 +104,7 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     filename: 'synthetic-sdd-db-cross-layer.pdf',
     byteLength: expectedByteLength,
     sha256: expectedSha256,
-    rendererVersion: 'studio-pdf-2',
+    rendererVersion: 'studio-pdf-3',
     retentionMode: 'indefinite',
     retentionUntil: null,
     legalHoldActive: false,
@@ -114,6 +122,13 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     readOnly: false,
     renditions: generated ? [
       {...rendition, id: '00000059-0000-4000-8000-000000000059', rendererVersion: 'studio-pdf-1'},
+      {
+        ...rendition,
+        id: '00000060-0000-4000-8000-000000000060',
+        byteLength: historicalPdf2ByteLength,
+        sha256: historicalPdf2Sha256,
+        rendererVersion: 'studio-pdf-2',
+      },
       rendition,
     ] : [],
   });

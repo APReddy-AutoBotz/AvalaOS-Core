@@ -18,6 +18,7 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
     artifactType = "brd",
     format = "markdown",
     brokerFixturePath = null,
+    expectedRendererVersion = null,
   },
 ) {
   assert.ok(["brd", "frd", "pdd", "sdd"].includes(artifactType));
@@ -288,6 +289,12 @@ export async function runStudioPrivateArtifactCrossLayerEvidence(
       assert.equal(work.rendererVersion, rendition.renderer_version);
       assert.equal(work.templateVersion, rendition.template_version);
       assert.equal(work.contentSchemaVersion, rendition.content_schema_version);
+      if (expectedRendererVersion !== null) {
+        assert.equal(generation.renditionClaim.rendererVersion, expectedRendererVersion);
+        assert.equal(work.rendererVersion, expectedRendererVersion);
+        assert.equal(attempt.renderer_version, expectedRendererVersion);
+        assert.equal(rendition.renderer_version, expectedRendererVersion);
+      }
     });
     await scenario(names[3], async () => {
       assert.deepEqual(
