@@ -669,6 +669,11 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "delivery-numbered-requirements",
     "sourceReference": "supabase/migrations/20261106070101_delivery_numbered_requirements.sql",
     "selector": "DO $delivery_numbered_requirements$"
+  },
+  {
+    "anchorId": "process-evidence-validation-renewal",
+    "sourceReference": "supabase/migrations/20261106153001_process_evidence_validation_renewal.sql",
+    "selector": "DO $process_evidence_validation_renewal$"
   }
 ]);
 
@@ -1954,7 +1959,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -2089,7 +2095,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -2631,7 +2638,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -2688,7 +2696,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -2745,7 +2754,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -2802,7 +2812,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -2859,7 +2870,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "scoped-studio-route-admission",
       "scoped-studio-role-lookup",
       "studio-response-reconciliation",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -3860,7 +3872,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-build",
       "local-real-backend-authority",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {
@@ -3903,7 +3916,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-build",
       "local-real-backend-authority",
-      "delivery-numbered-requirements"
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal"
     ],
     "ownership": [
       {

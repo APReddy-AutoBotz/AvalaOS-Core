@@ -19,7 +19,7 @@ const BASELINE_COUNT=112;
 const RETAINED_COUNT=113;
 const POST_USE_COUNT=114;
 const PLANNING_PREDECESSOR=115;
-const CURRENT_COUNT=126;
+const CURRENT_COUNT=127;
 const RELEASE_BEFORE_CONTRACT='ecc740bfbd8296b5b94b71e433fff7464838393f';
 const adminUrl=new URL(process.env.PILOT_OPERATIONS_DATABASE_URL??'');
 if(process.argv.includes('--write-contract')&&process.env.CI)throw new Error('ROUTINE_CONTRACT_WRITE_FORBIDDEN_IN_CI');
@@ -99,7 +99,7 @@ try{
     inventories[profile]=connected.inventory;
   }
 
-  const generated={schemaVersion:1,runtimeMigrationTip:'20261106070101',checkpoints:[
+  const generated={schemaVersion:1,runtimeMigrationTip:'20261106153001',checkpoints:[
     checkpoint(BASELINE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,baselineSnapshots[profile]]))),
     checkpoint(RETAINED_COUNT,Object.fromEntries(profiles.map(profile=>[profile,retainedSnapshots[profile]]))),
     checkpoint(POST_USE_COUNT,Object.fromEntries(profiles.map(profile=>[profile,postUseSnapshots[profile]]))),

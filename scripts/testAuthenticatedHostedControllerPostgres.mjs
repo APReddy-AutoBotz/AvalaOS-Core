@@ -128,7 +128,7 @@ const config = {
   deploymentId: 'b'.repeat(24),
   origin: 'https://avalaos-pilot.netlify.app',
   backendDigest: digest('c'),
-  migrationVersion: '20261106070101',
+  migrationVersion: '20261106153001',
   migrationDigest: digest('d'),
   exerciseDigest: digest('e'),
   profileVersion: 'hosted-authenticated-synthetic-profile-v3',
@@ -180,6 +180,14 @@ try {
       await admin.query(`CREATE ROLE ${role} NOLOGIN${role === 'service_role' ? ' BYPASSRLS' : ''}`);
     }
   }
+  // PostgreSQL roles are cluster-wide while every fixture database is disposable.
+  // Normalize the Supabase service-role invariant when a preceding fixture left
+  // an existing role without BYPASSRLS, otherwise production-equivalent reads
+  // against FORCE RLS tables silently return no rows.
+  await admin.query('ALTER ROLE service_role BYPASSRLS');
+  assert.equal((await admin.query(
+    "SELECT rolbypassrls FROM pg_roles WHERE rolname='service_role'",
+  )).rows[0]?.rolbypassrls, true);
   assert.equal((await admin.query('SELECT 1 FROM pg_database WHERE datname=$1', [database])).rowCount, 0);
   await admin.query(`CREATE DATABASE ${database}`);
   created = true;

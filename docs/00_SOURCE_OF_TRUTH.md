@@ -1,5 +1,12 @@
 # AvalaOS Core Source Of Truth
 
+
+## Selected Delivery work and stale validation recovery — 6 November 2026
+
+Candidate `478b99d33094539f5072058cbfa506abd50a8433` passed all 17 required checks and verified the dedicated preview/backend with 126 migrations. Six reviewed BRD-derived items are imported onto the existing native Delivery board; saved status/details survive reload and repeat import creates no duplicate. BRD/PDD are independently approved for planning with canonical exports inspected. FRD/SDD, selective refresh and full four-document acceptance remain incomplete.
+
+Renewal encountered an expired provider validation before any new provider call. The [active milestone](planning/process-evidence-to-delivery.md) owns the additive repair permitting the remaining real validation while preserving generation freshness, cumulative spend, source lineage and independent approvals. Provider execution is disabled and the key binding revoked. Eight attempts retain USD 3.7716736 in ledger debits/reservations; the refreshed billing UI separately shows USD 0.04 posted usage. No merge or production deployment is authorized.
+
 ## Approved documents and requirement publication correction — 6 November 2026
 
 Candidate `c5a6ca187c653dc105972c2809837ff0ff2b0c3d` passed all 17 required workflows and verified the dedicated preview/backend, 125 installed migrations and eight separate actors. BRD v5 and PDD v4 are independently approved for planning; their canonical PDF pages were inspected. The order-status UI shows the supported non-AI design separately from its remaining evidence gaps. Before any board publication, ordinary Studio incorrectly derived work from a Summary paragraph while missing 11 numbered approved requirements. The [active milestone](planning/process-evidence-to-delivery.md) owns the focused client/server recognition repair and additive migration 126. Its verification and actual publication/import remain pending. Provider execution is disabled and the key binding revoked. FRD/SDD generation, selective refresh and the completed document-to-board journey remain outstanding.

@@ -371,11 +371,18 @@ try {
     baselineValidationReceipt.execution_fence,null,id.config,id.key,'openai',endpoint,model,
     'provider.validate','1'.repeat(64),32768];
   const baselineValidation=(await result(db,rpc,baselineValidationArgs)).permit;
-  await db.query('UPDATE public.synthetic_ai_campaign_effect_debits SET consumed_at=now() WHERE id=$1',
-    [baselineValidation.reservationId]);
-  await db.query("UPDATE public.ai_provider_key_refs SET status='active' WHERE id=$1",[id.key]);
-  await db.query('UPDATE public.ai_provider_configs SET last_validated_at=now() WHERE id=$1',[id.config]);
-  const validatedAt=(await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at;
+  async function completeSuccessfulValidation(receipt, reservationId) {
+    await db.query('UPDATE public.synthetic_ai_campaign_effect_debits SET consumed_at=statement_timestamp() WHERE id=$1',
+      [reservationId]);
+    await result(db,`SELECT public.enterprise_provider_lifecycle_transition(
+      'provider.validate',$1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9::jsonb) value`,[
+      id.operator,id.org,id.workspace,authVersion,{providerConfigId:id.config},receipt.id,
+      receipt.execution_token,receipt.execution_fence,
+      {resourceId:id.config,providerConfigId:id.config,status:'validated'},
+    ]);
+    return (await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at;
+  }
+  const validatedAt=await completeSuccessfulValidation(baselineValidationReceipt,baselineValidation.reservationId);
 
   async function extraction(label) {
     const executionAuthVersion=Number((await result(db,`SELECT version FROM public.authorization_versions
@@ -421,6 +428,9 @@ try {
     count(*) FILTER(WHERE consumed_at IS NOT NULL)::int consumed,
     sum(debit_usd_nanos)::bigint::text reserved FROM public.synthetic_ai_campaign_effect_debits
     WHERE campaign_id=$1`,[permit.campaignId]),{calls:3,consumed:3,reserved:'1414377600'});
+  await db.query("UPDATE public.ai_provider_configs SET last_validated_at=statement_timestamp()-interval '35 hours' WHERE id=$1",[id.config]);
+  const staleValidatedAt=(await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at;
+  assert.ok(Date.now()-staleValidatedAt.getTime()>34*60*60*1000);
   await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
   await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
   await db.query('SELECT public.synthetic_ai_campaign_disable($1,$2,$3,$4,$5,$6)',
@@ -451,6 +461,14 @@ try {
   const badDigest=[...renewalArgs]; badDigest[19]='sha256:bad';
   await assert.rejects(db.query(renewSql,badDigest),/POST_USE_BINDING_INVALID/);
   await db.query('BEGIN');
+  await db.query('UPDATE public.ai_provider_configs SET last_validated_at=NULL WHERE id=$1',[id.config]);
+  await assert.rejects(db.query(renewSql,renewalArgs),/POST_USE_BINDING_STALE/);
+  await db.query('ROLLBACK');
+  await db.query('BEGIN');
+  await db.query("UPDATE public.ai_provider_configs SET last_validated_at=statement_timestamp()+interval '1 minute' WHERE id=$1",[id.config]);
+  await assert.rejects(db.query(renewSql,renewalArgs),/POST_USE_BINDING_STALE/);
+  await db.query('ROLLBACK');
+  await db.query('BEGIN');
   await db.query(`UPDATE public.enterprise_ai_budget_reservations SET state='released',release_reason=NULL,
     actual_input_tokens=NULL,actual_output_tokens=NULL,actual_total_tokens=NULL WHERE id=$1`,
     [(await result(db,`SELECT id FROM public.enterprise_ai_budget_reservations ORDER BY reserved_at LIMIT 1`)).id]);
@@ -470,7 +488,7 @@ try {
   assert.equal(renewalRace[0].renewal.baselineCalls,3);
   assert.equal(renewalRace[0].renewal.maxCalls,13);
   assert.equal(renewalRace[0].renewal.maximumReservedUsdNanos,6128969600);
-  assert.equal((await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at.getTime(),validatedAt.getTime());
+  assert.equal((await result(db,'SELECT last_validated_at FROM public.ai_provider_configs WHERE id=$1',[id.config])).last_validated_at.getTime(),staleValidatedAt.getTime());
   assert.deepEqual(await result(db,`SELECT campaign.enabled,campaign.campaign_cap_usd_nanos::text cap,
     config.status,key_ref.status key_status,key_ref.safe_fingerprint,
     enterprise.provider_enabled enterprise_provider,studio.provider_enabled studio_provider
@@ -495,6 +513,39 @@ try {
   const replayMismatch=[...renewalArgs]; replayMismatch[24]=52_000_000_000;
   await assert.rejects(db.query(renewSql,replayMismatch),/POST_USE_REPLAY_MISMATCH/);
 
+  async function bindRoutedEffect(actor,operation,route,label) {
+    const version=Number((await result(db,`SELECT version FROM public.authorization_versions
+      WHERE org_id=$1 AND user_id=$2`,[id.org,actor])).version);
+    const source=await claim(db,actor,operation==='assess.evidence.extract'
+      ?'transcript.assess.extract':'studio.source.create');
+    const values=[actor,id.org,id.workspace,version,source.id,randomUUID(),
+      source.execution_token,source.execution_fence,route,id.config,id.key,'openai',endpoint,model,
+      operation,label.repeat(64).slice(0,64),4096];
+    return result(db,'SELECT (public.synthetic_ai_campaign_assert_effect_binding('
+      +values.map((_,index)=>'$'+(index+1)).join(',')+')).id receipt_id',values);
+  }
+  await assert.rejects(bindRoutedEffect(id.assess,'assess.evidence.extract',id.assessRoute,'a'),/PROVIDER_STALE/);
+  await assert.rejects(bindRoutedEffect(id.studio,'studio.document.generate',id.studioRoute,'b'),/PROVIDER_STALE/);
+
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
+  const secondValidationReceipt=await claim(db,id.operator,'provider.validate');
+  const secondValidationArgs=[...baselineValidationArgs];
+  secondValidationArgs.splice(6,4,secondValidationReceipt.id,secondValidationReceipt.id,
+    secondValidationReceipt.execution_token,secondValidationReceipt.execution_fence);
+  secondValidationArgs[17]='7'.repeat(64);
+  const secondValidation=(await result(db,rpc,secondValidationArgs)).permit;
+  const secondValidationStarted=Date.now();
+  const refreshedAt=await completeSuccessfulValidation(secondValidationReceipt,secondValidation.reservationId);
+  assert.ok(refreshedAt.getTime()>=secondValidationStarted-1000);
+  assert.ok(refreshedAt.getTime()>staleValidatedAt.getTime());
+  await db.query('BEGIN');
+  assert.ok((await bindRoutedEffect(id.assess,'assess.evidence.extract',id.assessRoute,'c')).receipt_id);
+  assert.ok((await bindRoutedEffect(id.studio,'studio.document.generate',id.studioRoute,'d')).receipt_id);
+  await db.query('ROLLBACK');
+  await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
+  await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
+
   // Cleanup can disable an otherwise healthy window before it spends another
   // slot. A fresh attested window may chain the same cumulative baseline; the
   // hard sequence ceiling still prevents unbounded renewal.
@@ -509,9 +560,14 @@ try {
   zeroUseRenewalArgs[20]=zeroUseAttestedAt;
   zeroUseRenewalArgs[21]='sha256:'+'9'.repeat(64);
   zeroUseRenewalArgs[22]=zeroUseAttestedAt;
+  await db.query('BEGIN');
+  await db.query("UPDATE public.ai_provider_configs SET last_validated_at=statement_timestamp()-interval '35 hours' WHERE id=$1",[id.config]);
+  await assert.rejects(db.query(renewSql,zeroUseRenewalArgs),/POST_USE_BINDING_STALE/);
+  await db.query('ROLLBACK');
   const zeroUseRenewal=(await result(db,renewSql,zeroUseRenewalArgs)).renewal;
   assert.equal(zeroUseRenewal.sequence,2);
-  assert.equal(zeroUseRenewal.baselineCalls,3);
+  assert.equal(zeroUseRenewal.baselineCalls,4);
+  assert.equal(zeroUseRenewal.remainingValidation,0);
 
   // A still-fresh validation permits extraction immediately; no paid
   // validation is forced merely because a new window was chained.
@@ -519,7 +575,7 @@ try {
   await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
   await extraction('post-use-three');
   assert.equal((await result(db,`SELECT count(*)::int n FROM public.synthetic_ai_campaign_effect_debits
-    WHERE operation='provider.validate'`)).n,1);
+    WHERE operation='provider.validate'`)).n,2);
   await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=false WHERE singleton');
   await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=false WHERE singleton');
   await db.query('SELECT public.synthetic_ai_campaign_disable($1,$2,$3,$4,$5,$6)',
@@ -536,8 +592,8 @@ try {
   secondRenewalArgs[22]=secondAttestedAt;
   const secondRenewal=(await result(db,renewSql,secondRenewalArgs)).renewal;
   assert.equal(secondRenewal.sequence,3);
-  assert.equal(secondRenewal.baselineCalls,4);
-  assert.equal(secondRenewal.remainingValidation,1);
+  assert.equal(secondRenewal.baselineCalls,5);
+  assert.equal(secondRenewal.remainingValidation,0);
   assert.equal(secondRenewal.remainingExtractions,1);
   assert.deepEqual(await result(db,`SELECT count(*)::int windows,min(sequence_number)::int first,
     max(sequence_number)::int last,count(prior_resume_window_id)::int resume_links,
@@ -547,15 +603,6 @@ try {
 
   await db.query('UPDATE public.enterprise_intelligence_runtime_control SET provider_enabled=true WHERE singleton');
   await db.query('UPDATE public.studio_artifact_runtime_control SET provider_enabled=true WHERE singleton');
-  const secondValidationReceipt=await claim(db,id.operator,'provider.validate');
-  const secondValidationArgs=[...baselineValidationArgs];
-  secondValidationArgs.splice(6,4,secondValidationReceipt.id,secondValidationReceipt.id,
-    secondValidationReceipt.execution_token,secondValidationReceipt.execution_fence);
-  secondValidationArgs[17]='7'.repeat(64);
-  const secondValidation=(await result(db,rpc,secondValidationArgs)).permit;
-  await db.query('UPDATE public.synthetic_ai_campaign_effect_debits SET consumed_at=now() WHERE id=$1',
-    [secondValidation.reservationId]);
-  await db.query('UPDATE public.ai_provider_configs SET last_validated_at=now() WHERE id=$1',[id.config]);
   await db.query('BEGIN');
   const thirdValidationReceipt=await claim(db,id.operator,'provider.validate');
   const thirdValidationArgs=[...secondValidationArgs];
