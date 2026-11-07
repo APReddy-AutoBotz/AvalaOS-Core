@@ -594,8 +594,8 @@
         68,
         69,
         70,
-        188,
-        189
+        196,
+        197
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep synthetic session/navigation setup and persisted-view assertions confined to the loopback-only Legacy Delivery browser fixture; never treat these fixture values as server or provider authority."

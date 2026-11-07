@@ -93,7 +93,9 @@ export async function createLegacyDeliveryBrowserFixture(options = {}) {
   const controlToken = `legacy-delivery-control-${crypto.randomUUID()}`;
   const commandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryCommand.ts'));
   const queryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryQuery.ts'));
-  for (const capability of ['studio.artifacts.read']) {
+  // The browser journey uses the normal project Delivery board, whose route
+  // guard requires read authority in addition to the legacy mutation grants.
+  for (const capability of ['studio.artifacts.read', 'project.read']) {
     await postgres.db.query(
       'INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,$2) ON CONFLICT DO NOTHING',
       [ids.role, capability],

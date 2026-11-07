@@ -2,6 +2,8 @@
 
 ## Planning evidence, current documents and stored dependencies
 
+Hosted execution on 56f73d83 completed both discovery tasks through all five permitted stages. Each accepted disposition survived reload. The Delivery Planner advanced the FR-5 implementation story to In Progress. The FR-7 implementation story remained To Do with its own completed scope decision. A fresh Delivery Planner session on 5c9abbf1 confirmed all ten records, both distinct prerequisite IDs, both independent outcome versions, and the final statuses. The business review pack contains the four current approvals and before/after board evidence.
+
 On the project board, Move follows the existing server workflow. Complete an accepted discovery through In Progress, In Review, Testing, Ready for Release and Done. The dependent story requires both the accepted disposition and the completed discovery. The transition regression checks every board choice against the installed database rule.
 
 Studio Retry PDF on fb874ec0 produced the approved three-page FRD, including AC-8 and its two open questions. The [review pack](https://drive.google.com/file/d/1G8l8aP_W1EDWp76URa5HdGuhUr6g0U6u/view) contains all four current PDFs, a requirement-linked ten-item board export and the selective-refresh comparison. The Studio Author proposed and a separate Assessment Author accepted the source-backed FR-5 answer and the FR-7 limited scope. FR-7 authorizes exclusion only. Current board wording was corrected while exact earlier source quotations and all six prior identities remain intact. The project board status control uses current server-bound capabilities and outcome data; missing decision evidence or an incomplete discovery remains blocking. Use the pack for observed hosted transition evidence.

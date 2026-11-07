@@ -75,15 +75,20 @@ const enterProjectDocuments = async (page: Page, setup: FixtureSetup) => {
   await page.getByText('Legacy Delivery', { exact: true }).click();
   const openNavigation = page.getByRole('button', { name: 'Open navigation', exact: true });
   if (await openNavigation.isVisible().catch(() => false)) await openNavigation.click();
+  const studio = page.getByRole('button', { name: 'Studio', exact: true });
+  await expect(studio).toBeEnabled();
+  await studio.click();
+  if (await openNavigation.isVisible().catch(() => false)) await openNavigation.click();
   const documentVault = page.getByRole('button', { name: 'Document Vault', exact: true });
   await expect(documentVault).toBeEnabled();
   await documentVault.click();
   await expect(page.getByRole('heading', { name: 'Document Repository', exact: true })).toBeVisible();
 };
-const enterLegacyDeliveryBacklog = async (page: Page) => {
+const expectCurrentProjectBoard = async (page: Page) => {
   await expect(page.getByText('Server context active', { exact: true })).toBeVisible();
-  const heading = page.getByRole('heading', { name: 'Legacy Delivery', exact: true });
-  await expect(heading).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Legacy Delivery delivery board', exact: true }))
+    .toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
 };
 const enterCurrentProjectBoard = async (page: Page) => {
   const openNavigation = page.getByRole('button', { name: 'Open navigation', exact: true });
@@ -160,14 +165,17 @@ test.describe('legacy Delivery server authority', () => {
     await expect(statusControl).toBeEnabled();
     await statusControl.selectOption('In Progress');
     await expect(page.getByRole('status')).toContainText('Browser-created task moved to In Progress.');
-    await expect(page.getByText('In Progress', { exact: true }).first()).toBeVisible();
+    await expect(page.getByLabel('In Progress work items', { exact: true })
+      .getByText('Browser-created task', { exact: true })).toBeVisible();
     await expect.poll(async () => (await control<Snapshot>('/control/snapshot')).max_version).toBeGreaterThanOrEqual(2);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await enterLegacyDeliveryBacklog(page);
-    await expect(page.getByText('Browser-created task', { exact: true })).toBeVisible();
-    await expect(page.getByText('In Progress', { exact: true }).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Delete Browser-created task', exact: true }).click();
+    await expectCurrentProjectBoard(page);
+    const persistedTask = page.getByLabel('In Progress work items', { exact: true })
+      .getByText('Browser-created task', { exact: true });
+    await expect(persistedTask).toBeVisible();
+    const persistedTaskCard = persistedTask.locator('xpath=ancestor::div[@data-task-id]');
+    await persistedTaskCard.getByRole('button', { name: 'Remove from active delivery', exact: true }).click();
     await expect(page.getByText('Browser-created task', { exact: true })).toHaveCount(0);
     const finalSnapshot = await expect.poll(async () => control<Snapshot>('/control/snapshot')).toMatchObject({
       tasks: 3,
@@ -179,7 +187,7 @@ test.describe('legacy Delivery server authority', () => {
     });
     void finalSnapshot;
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await enterLegacyDeliveryBacklog(page);
+    await expectCurrentProjectBoard(page);
     await expect(page.getByText('Capture governed request', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Browser-created task', { exact: true })).toHaveCount(0);
     expect(unexpectedOrigins).toEqual(new Set());
