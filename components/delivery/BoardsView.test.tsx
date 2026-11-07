@@ -37,6 +37,10 @@ const statusControl = (markup: string, title: string) => {
 };
 
 const accepted = render(allow, 'source_backed_answer_accepted');
+for (const status of ['To Do', 'In Progress', 'In Review', 'Done']) {
+  assert.match(accepted, new RegExp(`tabindex="0" aria-label="${status} work items"`, 'u'),
+    `${status} scroll region must be named and keyboard focusable`);
+}
 assert.match(accepted, /data-task-id="dependent"[\s\S]*?draggable="true"/,
   'server-authorized status mutation must make the released dependent card draggable');
 assert.match(accepted, /data-task-id="discovery"[^>]*data-discovery-disposition="source_backed_answer_accepted"/);
@@ -71,6 +75,14 @@ assert.match(statusControl(unresolved, unresolvedDiscovery.title), /<option valu
   'unresolved discovery keeps Done visibly unavailable');
 assert.match(statusControl(unresolved, unresolvedDependent.title), /<option value="In Progress" disabled="">In Progress<\/option>/,
   'dependent implementation keeps its forward transition disabled while discovery remains unresolved');
+
+const missingDependency = renderToStaticMarkup(<BoardsView
+  tasks={[dependent]} projects={[project]} epics={[]} users={[currentUser]} currentUser={currentUser}
+  mutationPolicy={allow} discoveryDispositions={new Map()} discoveryReadState="ready"
+  onUpdateTaskStatus={() => { throw new Error('a missing prerequisite must not invoke writes'); }} onSelectTask={() => undefined} onAddTask={() => undefined} onDeleteTask={() => undefined}
+/>);
+assert.match(statusControl(missingDependency, dependent.title), /<option value="In Progress" disabled="">In Progress<\/option>/,
+  'a referenced prerequisite missing from a filtered or incomplete projection fails closed');
 
 const denied = render(deny, 'source_backed_answer_accepted');
 assert.match(denied, /data-task-id="dependent"[\s\S]*?draggable="false"/,

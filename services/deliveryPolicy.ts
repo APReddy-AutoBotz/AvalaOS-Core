@@ -27,6 +27,7 @@ const RELEASED_DISCOVERY_DISPOSITIONS = new Set<StudioDeliveryDiscoveryDispositi
 ]);
 
 export type DeliveryDiscoveryDispositionByTask = ReadonlyMap<string, StudioDeliveryDiscoveryDisposition | null>;
+export type DeliveryDependencyViolation = Pick<Task, 'id' | 'title' | 'status' | 'sourceLineage'>;
 
 const normalized = (values: string[] | undefined) => [...(values || [])].sort().join('|');
 
@@ -94,9 +95,16 @@ export const getDependencyViolations = (
   allTasks: Task[],
   nextStatus: TaskStatus = task.status,
   discoveryDispositions?: DeliveryDiscoveryDispositionByTask,
-) => {
+): DeliveryDependencyViolation[] => {
   if (!ACTIVE_STATUSES.includes(nextStatus)) return [];
-  const dependencies = allTasks.filter(candidate => task.dependencyIds?.includes(candidate.id));
+  const tasksById = new Map(allTasks.map(candidate => [candidate.id, candidate]));
+  const dependencies: DeliveryDependencyViolation[] = (task.dependencyIds || []).map(dependencyId =>
+    tasksById.get(dependencyId) ?? {
+      id: dependencyId,
+      title: 'A referenced prerequisite is unavailable in this view',
+      status: 'Blocked',
+      sourceLineage: undefined,
+    });
   return dependencies.filter(dependency => dependency.status !== 'Done'
     || discoveryDispositions !== undefined
       && dependency.sourceLineage?.proposalRole === 'discovery'

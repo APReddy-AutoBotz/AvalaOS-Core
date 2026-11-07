@@ -131,6 +131,12 @@ if (blockedDependencies.length !== 1 || blockedDependencies[0].id !== dependency
   throw new Error('Dependency gate did not identify unfinished predecessor task.');
 }
 
+const missingDependency = getDependencyViolations(dependentTask, [dependentTask], 'In Progress');
+if (missingDependency.length !== 1 || missingDependency[0].id !== dependencyTask.id
+  || missingDependency[0].title !== 'A referenced prerequisite is unavailable in this view') {
+  throw new Error('A filtered or incomplete dependency projection incorrectly released dependent work.');
+}
+
 const unresolvedDiscovery = new Map([[discoveryTask.id, 'blocking_unresolved' as const]]);
 const archivedDoneBlockers = getDependencyViolations(
   discoveryDependentTask,

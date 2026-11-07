@@ -373,7 +373,11 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                 </span>
                                             </div>
 
-                                            <div className="max-h-[400px] min-h-[76px] space-y-2.5 overflow-y-auto p-2.5">
+                                            <div
+                                                className="max-h-[400px] min-h-[76px] space-y-2.5 overflow-y-auto p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b4f7d]"
+                                                tabIndex={0}
+                                                aria-label={`${status} work items`}
+                                            >
                                                 {columnTasks.map(task => (
                                                     <TaskCard
                                                         key={task.id}

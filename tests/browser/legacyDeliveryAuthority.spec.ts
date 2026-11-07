@@ -85,6 +85,14 @@ const enterLegacyDeliveryBacklog = async (page: Page) => {
   const heading = page.getByRole('heading', { name: 'Legacy Delivery', exact: true });
   await expect(heading).toBeVisible({ timeout: 15_000 });
 };
+const enterCurrentProjectBoard = async (page: Page) => {
+  const openNavigation = page.getByRole('button', { name: 'Open navigation', exact: true });
+  if (await openNavigation.isVisible().catch(() => false)) await openNavigation.click();
+  const boardEntry = page.getByRole('button', { name: 'Overview / Board', exact: true });
+  await expect(boardEntry).toBeEnabled();
+  await boardEntry.click();
+  await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
+};
 
 test.describe('legacy Delivery server authority', () => {
   let setup: FixtureSetup;
@@ -147,8 +155,7 @@ test.describe('legacy Delivery server authority', () => {
     await expect(page.getByText('Browser-created task', { exact: true })).toBeVisible();
     await expect.poll(async () => (await control<Snapshot>('/control/snapshot')).tasks).toBe(3);
 
-    await page.getByRole('button', { name: 'Delivery', exact: true }).first().click();
-    await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
+    await enterCurrentProjectBoard(page);
     const statusControl = page.getByLabel('Move Browser-created task to another status', { exact: true });
     await expect(statusControl).toBeEnabled();
     await statusControl.selectOption('In Progress');
