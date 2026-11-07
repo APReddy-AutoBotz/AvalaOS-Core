@@ -1032,7 +1032,7 @@
     "tests/browser/studioPrB/approvedWorkingDraft.spec.ts": "sha256:2f1499d8606a6d7ebef8f92d61fb2352ce3a82e7e6f665116090f334bffde685",
     "tests/browser/studioPrB/canonicalSddExport.spec.ts": "sha256:8fe11fc32ed948c8793f21a008873dabf5abf9f62b1ebeda05f362b6f509d357",
     "tests/browser/studioPrB/harness.tsx": "sha256:555d94473c890138b928961fe07856d2112481f0340029a9f1f97dc9e7cb26da",
-    "tests/browser/studioPrB/studioPrB.spec.ts": "sha256:fb9e29569f3d7754cea3cdc4902f674389cc26a75d3d9049ece36cc3ea9468a0",
+    "tests/browser/studioPrB/studioPrB.spec.ts": "sha256:d5d86ae3378596ebb20a8ab1edc6b39cc1aaaf42f04ff32d76d1f7d5f81fa8f3",
     "tests/browser/studioPrB/unsavedRegeneration.spec.ts": "sha256:73812458f0b4ae0f8c2a7be3414ff4b84a49a4970b5e0c52f44bfbd66dccbc71",
     "tests/browser/studioPrivateArtifacts.spec.ts": "sha256:36c3ec762963fd1f4266480d59ab6187e96ca320f9b596d9a7ec5988ae4d475c",
     "tests/browser/syntheticAdmin.spec.ts": "sha256:f8939473e5f2f49c24812b066ab24a241f7d93f771f340812aa8d9541a61839c",

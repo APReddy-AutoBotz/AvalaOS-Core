@@ -284,8 +284,9 @@ test('PR C synthetic runner edits, commits, submits, and assigns one exact sourc
   await page.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');
   await page.getByRole('button',{name:'Generate governed package draft'}).click();
   await expect(page.getByText('Draft committed. Current document and document list refreshed.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('combobox',{name:'Current document',exact:true})).toHaveValue('00000038-0000-4000-8000-000000000038');
   const interactions:string[]=[];
-  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'BRD · direct transcript bundle',reviewerActorId:'00000020-0000-4000-8000-000000000020',captureCommand:captureStudioFixtureCommand});
+  const result=await editAndSubmitSyntheticStudioDraft(page,interactions,{title:'Current BRD · Draft',reviewerActorId:'00000020-0000-4000-8000-000000000020',captureCommand:captureStudioFixtureCommand});
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   expect(interactions).toEqual(['select:synthetic-studio-transcript-draft','commit:immutable-structured-studio-revision','submit-and-assign:synthetic-studio-transcript-draft']);
   await expect(page.getByText('In review committed.',{exact:true})).toBeVisible();
@@ -304,7 +305,8 @@ test('PR C synthetic observation phase split keeps Studio commands outside the s
   await page.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');
   await page.getByRole('button',{name:'Generate governed package draft'}).click();
   await expect(page.getByText('Draft committed. Current document and document list refreshed.',{exact:true})).toBeVisible();
-  const workspace=await selectSyntheticStudioDraft(page,[],'BRD · direct transcript bundle');
+  await expect(page.getByRole('combobox',{name:'Current document',exact:true})).toHaveValue('00000038-0000-4000-8000-000000000038');
+  const workspace=await selectSyntheticStudioDraft(page,[],'Current BRD · Draft');
   const artifactId=await workspace.getByRole('combobox',{name:'Current document',exact:true}).inputValue();
   const identity={applicationActorDigest:`sha256:${'a'.repeat(64)}`,applicationSessionDigest:`sha256:${'b'.repeat(64)}`};
   const state=new Map<string,any>([
@@ -353,6 +355,7 @@ test('PR C synthetic generation binds the exact source-only hybrid artifact and 
   expect(prepared.templateVersionId).toBe('00000022-0000-4000-8000-000000000022');
   await prepared.generate.click();
   await expect(page.getByText('Draft committed. Current document and document list refreshed.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('combobox',{name:'Current document',exact:true})).toHaveValue('00000038-0000-4000-8000-000000000038');
   await page.getByRole('button',{name:'Submit for review',exact:true}).click();
   await expect(page.getByText('Reviewer ready committed.',{exact:true})).toBeVisible();
   await page.getByLabel('Eligible independent reviewer',{exact:true}).selectOption('00000020-0000-4000-8000-000000000020');
@@ -504,7 +507,6 @@ test('PR C synthetic draft selection waits for the exact loaded document before 
   expect(result).toMatchObject({changed:true,submitted:true,assigned:true});
   await page.reload({waitUntil:'domcontentloaded'});
   await selectSyntheticStudioDraft(page,[]);
-  await expect(page.getByRole('combobox',{name:'Current document',exact:true})).toHaveValue('00000038-0000-4000-8000-000000000038');
   await expect(page.getByRole('region',{name:'Current document'}).getByLabel('Section body')).toHaveValue('Synthetic Studio source context retained for controlled acceptance editing.\nSynthetic acceptance edit.');
 });
 
