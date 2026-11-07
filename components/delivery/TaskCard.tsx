@@ -13,6 +13,7 @@ interface TaskCardProps {
     canDrag?: boolean;
     canDelete?: boolean;
     discoveryDisposition?: StudioDeliveryDiscoveryDisposition | null;
+    statusControl?: React.ReactNode;
     onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
     onSelectTask: () => void;
     onDeleteTask: (taskId: string) => void;
@@ -62,6 +63,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     canDrag = true,
     canDelete = true,
     discoveryDisposition,
+    statusControl,
     onDragStart,
     onSelectTask,
     onDeleteTask,
@@ -203,6 +205,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     <span>{formattedDueDate ? `${overdue ? 'Overdue' : 'Due'} ${formattedDueDate}` : 'Date unassigned'}</span>
                 </div>
             </div>
+            {statusControl}
         </div>
     );
 };

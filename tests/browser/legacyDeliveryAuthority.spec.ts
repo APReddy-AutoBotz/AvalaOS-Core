@@ -147,10 +147,12 @@ test.describe('legacy Delivery server authority', () => {
     await expect(page.getByText('Browser-created task', { exact: true })).toBeVisible();
     await expect.poll(async () => (await control<Snapshot>('/control/snapshot')).tasks).toBe(3);
 
-    await page.getByText('Browser-created task', { exact: true }).click();
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
-    await page.getByLabel('Status', { exact: true }).selectOption('In Progress');
-    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Delivery', exact: true }).first().click();
+    await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
+    const statusControl = page.getByLabel('Move Browser-created task to another status', { exact: true });
+    await expect(statusControl).toBeEnabled();
+    await statusControl.selectOption('In Progress');
+    await expect(page.getByRole('status')).toContainText('Browser-created task moved to In Progress.');
     await expect(page.getByText('In Progress', { exact: true }).first()).toBeVisible();
     await expect.poll(async () => (await control<Snapshot>('/control/snapshot')).max_version).toBeGreaterThanOrEqual(2);
 
@@ -179,7 +181,7 @@ test.describe('legacy Delivery server authority', () => {
       view: JSON.parse(localStorage.getItem('avalaos-core-v1-view') || 'null'),
       scope: JSON.parse(localStorage.getItem('avalaos-core-v1-scope') || 'null'),
     }));
-    expect(persisted).toEqual({ view: 'backlog', scope: { type: 'project', id: setup.projectId, name: 'Legacy Delivery' } });
+    expect(persisted).toEqual({ view: 'boards', scope: { type: 'project', id: setup.projectId, name: 'Legacy Delivery' } });
     await mkdir(outputDirectory, { recursive: true });
     await writeFile(path.join(outputDirectory, `${testInfo.project.name}.json`), `${JSON.stringify({
       schemaVersion: 'legacy-delivery-browser-evidence.v1',

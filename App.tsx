@@ -465,10 +465,26 @@ function App() {
     return true;
   }, [resolveProductActionDecision]);
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<boolean> => {
     const task = tasks.find(item => item.id === taskId);
-    if (!ensureProductAction('workflow.status.change', { projectId: task?.projectId })) return;
-    deliveryUpdateTaskStatus(taskId, newStatus).catch(surfaceDeliveryError);
+    if (!task) {
+      surfaceDeliveryError(new Error('This work item is no longer present in the current Delivery board. Reload before changing its status.'));
+      return false;
+    }
+    if (!ensureProductAction('workflow.status.change', { projectId: task.projectId })) return false;
+    try {
+      const saved = await deliveryUpdateTaskStatus(taskId, newStatus);
+      if (saved.id !== taskId || saved.status !== newStatus) {
+        await deliveryRefresh();
+        surfaceDeliveryError(new Error('The status change was not confirmed by the current Delivery projection. The board has been reloaded.'));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      surfaceDeliveryError(error);
+      await deliveryRefresh().catch(() => undefined);
+      return false;
+    }
   };
 
   const handleUpdateProjectLifecycleStage = (projectId: string, newStage: ProjectLifecycleStage) => {
