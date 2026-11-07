@@ -62,8 +62,8 @@ try {
   assert.match((await admin.query('SHOW server_version')).rows[0].server_version, /^16\./);
   await admin.query('CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS');
   const migrations = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  assert.equal(approvedFullChainTip(migrations), '20261103103752');
-  assert.equal(migrations.length, 108);
+  assert.equal(approvedFullChainTip(migrations), '20261107120003');
+  assert.equal(migrations.length, 135);
   const creationStart = migrations.indexOf('20260915142940_creation_access_process_authority.sql');
   const oldConvergenceIndex = migrations.indexOf('20260916003000_creation_access_migration_identity_convergence.sql');
   const mappingIndex = migrations.indexOf('20260916083814_assess_supporting_document_mapping.sql');
@@ -105,7 +105,34 @@ try {
   assert.equal(migrations[renewalIndex + 24], '20261011053000_supabase_provider_secret_backend.sql');
   assert.equal(migrations[renewalIndex + 25], '20261019161723_local_real_backend_authenticated_acceptance.sql');
   assert.equal(migrations[renewalIndex + 26], '20261103103752_process_evidence_studio_sdd_flows.sql');
-  assert.equal(renewalIndex, migrations.length - 27);
+  assert.equal(migrations[renewalIndex + 27], '20261103104435_delivery_requirement_bound_proposals.sql');
+  assert.equal(migrations[renewalIndex + 28], '20261103170101_stable_requirement_proposal_identity.sql');
+  assert.equal(migrations[renewalIndex + 29], '20261103170102_current_assessment_delivery_project.sql');
+  assert.equal(migrations[renewalIndex + 30], '20261103170103_process_evidence_live_permit.sql');
+  assert.equal(migrations[renewalIndex + 31], '20261105024717_process_evidence_operator_access_resume.sql');
+  assert.equal(migrations[renewalIndex + 32], '20261105041249_process_evidence_post_use_renewal.sql');
+  assert.equal(migrations[renewalIndex + 33], '20261105110657_govern_mixed_snapshot_normalization.sql');
+  assert.equal(migrations[renewalIndex + 34], '20261105140001_assessed_planning_review.sql');
+  assert.equal(migrations[renewalIndex + 35], '20261105140002_assessed_planning_studio.sql');
+  assert.equal(migrations[renewalIndex + 36], '20261105140003_assessed_planning_delivery.sql');
+  assert.equal(migrations[renewalIndex + 37], '20261105140004_assessed_planning_govern_projection.sql');
+  assert.equal(migrations[renewalIndex + 38], '20261106012001_scoped_studio_actor_roles.sql');
+  assert.equal(migrations[renewalIndex + 39], '20261106012002_scoped_studio_route_admission.sql');
+  assert.equal(migrations[renewalIndex + 40], '20261106012003_scoped_studio_role_lookup.sql');
+  assert.equal(migrations[renewalIndex + 41], '20261106020001_studio_response_reconciliation.sql');
+  assert.equal(migrations[renewalIndex + 42], '20261106040803_studio_v2_rendition_renderer.sql');
+  assert.equal(migrations[renewalIndex + 43], '20261106045007_studio_v2_renderer_identity_convergence.sql');
+  assert.equal(migrations[renewalIndex + 44], '20261106070101_delivery_numbered_requirements.sql');
+  assert.equal(migrations[renewalIndex + 45], '20261106153001_process_evidence_validation_renewal.sql');
+  assert.equal(migrations[renewalIndex + 46], '20261106170001_studio_timeout_reconciliation.sql');
+  assert.equal(migrations[renewalIndex + 47], '20261106190001_sdd_completion_allowance.sql');
+  assert.equal(migrations[renewalIndex + 48], '20261106191539_studio_synthetic_prompt_compatibility.sql');
+  assert.equal(migrations[renewalIndex + 49], '20261106210205_studio_sdd_pdf_branch_routing.sql');
+  assert.equal(migrations[renewalIndex + 50], '20261107110000_delivery_discovery_resolution.sql');
+  assert.equal(migrations[renewalIndex + 51], '20261107120000_planning_discovery_resolution.sql');
+  assert.equal(migrations[renewalIndex + 52], '20261107120001_studio_pdf_business_readability.sql');
+  assert.equal(migrations[renewalIndex + 53], '20261107120003_studio_reviewer_display_names.sql');
+  assert.equal(renewalIndex, migrations.length - 54);
   const apply = async (db, files) => {
     for (const file of files) {
       const sql = await readFile(join('supabase/migrations', file), 'utf8');
@@ -138,7 +165,7 @@ try {
       GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
     return { db, dbUrl };
   };
-  const assertFinalIdentity = async (db, expectedTip = '20261103103752') => {
+  const assertFinalIdentity = async (db, expectedTip = '20261107120003') => {
     assert.deepEqual((await db.query(`SELECT product_key,environment_class,schema_contract,migration_tip,
       production_authorized,customer_data_authorized,real_provider_calls_authorized
       FROM hosted_pilot_environment_identity WHERE singleton`)).rows[0], {

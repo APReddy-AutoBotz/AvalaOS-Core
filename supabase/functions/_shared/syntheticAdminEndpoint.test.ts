@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { handleSyntheticAdminRequest } from './syntheticAdminEndpoint.ts';
 
@@ -17,6 +18,12 @@ const request = (value: unknown) => new Request('https://synthetic.invalid/funct
   body: JSON.stringify(value),
 });
 const config = () => ({ enabled: true, fingerprint });
+const installedStudioVariantParameterNames = () => {
+  const source = readFileSync('supabase/migrations/20261106012001_scoped_studio_actor_roles.sql', 'utf8');
+  const signature = source.match(/CREATE OR REPLACE FUNCTION public\.synthetic_admin_assign_studio_variant\(\s*([\s\S]*?)\) RETURNS jsonb/u)?.[1];
+  assert.ok(signature, 'committed Studio variant function signature must remain discoverable');
+  return signature.split(',').map(parameter => parameter.trim().split(/\s+/u)[0]).sort();
+};
 
 test('Auth-incompatible password lengths reject before authorization, SQL claim or Auth effect', async () => {
   for (const length of [73, 128]) {
@@ -255,6 +262,83 @@ test('disabled server target rejects before reading identity or hitting SQL/Auth
   } as any);
   assert.equal(anyEffect, false);
   assert.deepEqual(await response.json(), { errorCode: 'FEATURE_DISABLED' });
+});
+
+test('operator access operations dispatch only the exact fixed Assess read RPC', async () => {
+  for (const [operation, rpcName, status, version] of [
+    ['grant_operator_assess_read','synthetic_admin_grant_operator_assess_read','operator_access_granted',8],
+    ['remove_operator_assess_read','synthetic_admin_remove_operator_assess_read','operator_access_removed',9],
+  ] as const) {
+    let calls = 0;
+    const response = await handleSyntheticAdminRequest(request({ ...base, operation, payload: {} }), {
+      targetConfig: config, getUser: async () => ({ id: actor }),
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        calls++;
+        assert.equal(name, rpcName);
+        assert.equal(args.p_actor, actor);
+        assert.equal(args.p_org, org);
+        assert.equal(args.p_workspace, workspace);
+        assert.equal(args.p_version, 3);
+        assert.equal(args.p_fingerprint, fingerprint);
+        assert.equal(args.p_request_id, actor);
+        assert.equal(args.p_key, base.idempotencyKey);
+        assert.deepEqual(Object.keys(args).sort(), ['p_actor','p_fingerprint','p_key','p_org','p_request_id','p_version','p_workspace'].sort());
+        return { status, version };
+      },
+    } as any);
+    assert.equal(calls, 1);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status, version });
+  }
+});
+
+test('operator access response cannot disclose role, capability or actor details', async () => {
+  const response = await handleSyntheticAdminRequest(request({ ...base,
+    operation: 'grant_operator_assess_read', payload: {} }), {
+    targetConfig: config, getUser: async () => ({ id: actor }),
+    rpc: async () => ({ status: 'operator_access_granted', version: 8, capability: 'assess.read' }),
+  } as any);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { errorCode: 'TEMPORARY_FAILURE' });
+});
+
+test('assign_role dispatches every bounded Studio activation and restore through the guarded variant RPC', async () => {
+  for (const [rolePreset,studioVariantActive] of [['studio-author',true],['author',false]] as const) {
+    let calls=0;
+    const response=await handleSyntheticAdminRequest(request({ ...base, operation:'assign_role',
+      payload:{reservationId:reservation,expectedVersion:4,rolePreset} }),{
+      targetConfig:config,getUser:async()=>({id:actor}),
+      rpc:async(name:string,args:Record<string,unknown>)=>{
+        calls++;
+        assert.equal(name,'synthetic_admin_assign_studio_variant');
+        assert.deepEqual(args,{
+          p_actor:actor,p_org:org,p_workspace:workspace,p_authorization_version:3,p_fingerprint:fingerprint,
+          p_request_id:actor,p_key:base.idempotencyKey,p_reservation_id:reservation,
+          p_expected_version:4,p_preset:rolePreset,
+        });
+        assert.deepEqual(Object.keys(args).sort(), installedStudioVariantParameterNames());
+        return{status:'active',reservationId:reservation,version:5,rolePreset,
+          baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive};
+      },
+    } as any);
+    assert.equal(calls,1);
+    assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),{status:'active',reservationId:reservation,version:5,
+      rolePreset,baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive});
+  }
+});
+
+test('assign_role rejects a role projection that adds arbitrary capability or actor authority', async () => {
+  for(const extra of [{capabilities:['studio.artifacts.generate']},{actorId:authId},{rolePreset:'studio-admin'}]){
+    const response=await handleSyntheticAdminRequest(request({ ...base, operation:'assign_role',
+      payload:{reservationId:reservation,expectedVersion:4,rolePreset:'studio-author'} }),{
+      targetConfig:config,getUser:async()=>({id:actor}),
+      rpc:async()=>({status:'active',reservationId:reservation,version:5,rolePreset:'studio-author',
+        baseRolePreset:'author',studioVariant:'studio-author',studioVariantActive:true,...extra}),
+    } as any);
+    assert.equal(response.status,503);
+    assert.deepEqual(await response.json(),{errorCode:'TEMPORARY_FAILURE'});
+  }
 });
 
 test('a forged roster row cannot disclose an Auth UUID or arbitrary SQL fields', async () => {

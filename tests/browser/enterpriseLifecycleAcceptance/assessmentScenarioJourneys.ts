@@ -22,7 +22,6 @@ import {
 } from '../authenticatedLifecycleHarness';
 import type { StudioDeliveryDownstreamFrame } from './studioDeliveryMonitorJourney';
 import { authenticatedHostedActionIds } from '../authenticatedLifecycleHarness';
-import { runV1AssessmentCompletion } from './v1AssessmentCompletion';
 
 type ScenarioCaseId = 'E2E-005' | 'E2E-006';
 const hostedAuthenticatedAcceptance = process.env.ENTERPRISE_LIFECYCLE_HOSTED_REAL_AUTH === 'true';
@@ -56,6 +55,24 @@ type LifecycleFrame = Readonly<{
   audits: number;
   targetHash: string;
 }>;
+
+const assertCommittedStudioGeneration = async (page: Page) => {
+  const studio = page.getByTestId('studio-artifact-workspace');
+  await expect(studio.getByText('Draft committed. Current document and document list refreshed.', { exact: true })).toBeVisible();
+  const currentDocument = studio.getByRole('region', { name: 'Current document', exact: true });
+  await expect(currentDocument.getByLabel('Section title', { exact: true }).first()).not.toHaveValue('');
+  const documentAudit = studio.getByTestId('studio-current-document-audit');
+  if (!await documentAudit.evaluate(element => element.hasAttribute('open'))) {
+    await documentAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(documentAudit.getByText(/^Aggregate v\d+ · Content v\d+$/u, { exact: true })).toBeVisible();
+  const sourceCoverage = studio.getByRole('region', { name: 'Source coverage', exact: true });
+  const packageAudit = sourceCoverage.locator('details').filter({ hasText: 'Package:' }).first();
+  if (!await packageAudit.evaluate(element => element.hasAttribute('open'))) {
+    await packageAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(packageAudit.locator('dd').first()).toHaveText(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12} · v[1-9][0-9]*$/u);
+};
 
 type ScenarioDecision = Readonly<{
   decisionId: string;
@@ -132,18 +149,9 @@ const createAndFinalizeDecision = async (
   page: Page,
   setup: AuthenticatedLifecycleSetup,
   variant: AuthenticatedAssessmentVariant,
-  actionReference: (request: Request) => Promise<string | null>,
   settleActorTransitionEvidence: () => Promise<void>,
 ) => {
-  const processId = await enterProcessAs(page, setup.actors.author, setup.aliases.process,
-    settleActorTransitionEvidence);
-  await runV1AssessmentCompletion({
-    page,
-    identity: { actorId: setup.actors.author.user.id, processId },
-    actionReference,
-    runStep: (title, operation) => test.step(title, operation),
-  });
-  await page.getByRole('button', { name: 'Back to Process', exact: true }).click();
+  await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
   await page.getByRole('button', { name: 'Start assessment', exact: true }).click();
   await expect(page.getByText('Working draft created. Add the minimum assessment structure before finalization.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add minimum working structure', exact: true }).click();
@@ -159,7 +167,9 @@ const createAndFinalizeDecision = async (
 };
 
 const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetup,
+  variant: 'low-suitability' | 'strong-automation',
   settleActorTransitionEvidence: () => Promise<void>) => {
+  const approvedRequirement = `REQ-SCENARIO-${variant === 'low-suitability' ? 'LOW' : 'STRONG'}: Delivery must preserve the finalized scenario policy and exact source lineage in downstream work.`;
   await enterProcessAs(page, setup.actors.reviewer, setup.aliases.process, settleActorTransitionEvidence);
   let review = page.getByTestId('assess-v2-review-workspace');
   await selectReviewer(page, setup.actors.reviewer);
@@ -175,11 +185,23 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   await review.getByLabel('Govern rationale', { exact: true }).fill('Independent resolver confirmed every required scenario control.');
   await review.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click();
   await expect(page.getByText('Govern resolution committed.', { exact: true })).toBeVisible();
-  await review.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click();
+  await review.getByRole('button', { name: 'Create Studio handoff', exact: true }).click();
   await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
+  const studioHandoffTarget = await control<{ upstreamHandoffId: string }>(
+    '/control/project-studio-handoff-target',
+    { projectName: setup.projectName },
+  );
+  expect(studioHandoffTarget.upstreamHandoffId)
+    .toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
+  await enterProcessAs(page, setup.actors.author, setup.aliases.process, settleActorTransitionEvidence);
+  review = page.getByTestId('assess-v2-review-workspace');
+  const projectResponse = page.waitForResponse(response => new URL(response.url()).pathname
+    === '/rest/v1/rpc/assess_v2_current_delivery_project_ensure');
+  await review.getByRole('button', { name: 'Open Studio for this process', exact: true }).click();
+  expect((await projectResponse).status()).toBe(200);
 
   await enterStudioAs(page, setup.actors.approver, settleActorTransitionEvidence);
-  const requestedResponse = await commitEligibleHandoff(page);
+  const requestedResponse = await commitEligibleHandoff(page, studioHandoffTarget.upstreamHandoffId);
   const requestedTarget = await persistedHandoffTargetFromResponse(requestedResponse, 'requested');
   await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
   await enterStudioAs(page, setup.actors.reviewer, settleActorTransitionEvidence);
@@ -208,7 +230,12 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   const template = studio.getByLabel('Exact approved Studio template', { exact: true });
   await selectExactStudioTemplate(template, setup.studioTemplate);
   await studio.getByRole('button', { name: 'Generate governed package draft', exact: true }).click();
-  await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
+  await assertCommittedStudioGeneration(page);
+  await studio.getByRole('button', { name: 'Add section', exact: true }).click();
+  await studio.getByLabel('Section title', { exact: true }).fill('Delivery requirements');
+  await studio.getByLabel('Section body', { exact: true }).fill(approvedRequirement);
+  await studio.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByText('Draft committed.', { exact: true })).toBeVisible();
   await commitStudioArtifactCommand(
     page,
     'studio.artifact.review.submit',
@@ -239,6 +266,8 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
     () => page.getByRole('button', { name: 'Final approve', exact: true }).click(),
     'Approved committed.',
   );
+  await studio.locator('summary').filter({ hasText: /^View source$/u }).click();
+  await expect(studio.locator('pre')).toContainText(approvedRequirement);
 };
 
 const countDelta = (before: StudioDeliveryDownstreamFrame, after: StudioDeliveryDownstreamFrame) => Object.fromEntries(
@@ -248,16 +277,14 @@ const countDelta = (before: StudioDeliveryDownstreamFrame, after: StudioDelivery
 const runScenario = async (
   page: Page, project: string, variant: 'low-suitability' | 'strong-automation',
   productionResponses: readonly ObservedProductionResponse[],
-  actionReference: (request: Request) => Promise<string | null>,
   settleActorTransitionEvidence: () => Promise<void>,
 ): Promise<AssessmentScenarioCaseResult> => {
   const testId: ScenarioCaseId = variant === 'low-suitability' ? 'E2E-005' : 'E2E-006';
   const responseStart = productionResponses.length;
   const projectName = `${project}-${variant}`;
-  const setup = await control<AuthenticatedLifecycleSetup>('/control/setup', { projectName });
+  const setup = await control<AuthenticatedLifecycleSetup>('/control/setup', { projectName, preseedDeliveryProject: false });
   validateSetupLabels(setup, projectName, hostedAuthenticatedAcceptance);
-  const decisionBefore = await createAndFinalizeDecision(page, setup, variant, actionReference,
-    settleActorTransitionEvidence);
+  const decisionBefore = await createAndFinalizeDecision(page, setup, variant, settleActorTransitionEvidence);
   expect(decisionBefore.outputHash).toMatch(/^[a-f0-9]{64}$/u); expectDigest(decisionBefore.targetHash);
   expect(decisionBefore.validationStatus).toBe('reviewer-ready');
   const writeDecisions = decisionBefore.interactionDecisions.filter(item => decisionBefore.sourceInteractions
@@ -272,24 +299,68 @@ const runScenario = async (
     expect(writeDecisions[0].approvalBoundActions).toHaveLength(0);
     expect(writeDecisions[0].prohibitedActions).toHaveLength(0);
   }
-  await approveGovernStudio(page, setup, settleActorTransitionEvidence);
-  await control('/control/bind-delivery-project-source', { projectName });
-  await enterAs(page, setup.actors.approver, settleActorTransitionEvidence);
-  await selectProjectScope(page, setup.deliveryProject.name);
+  await approveGovernStudio(page, setup, variant, settleActorTransitionEvidence);
+  const publicationBinding = await control<Readonly<{
+    project: Readonly<{ id: string; name: string }>;
+    artifact: Readonly<{ id: string; versionId: string }>;
+    compatibilityAssessmentCount: number;
+  }>>(
+    '/control/current-assessment-project-source', { projectName },
+  );
+  expect(publicationBinding.compatibilityAssessmentCount).toBe(0);
+  await enterAs(page, setup.actors.author, settleActorTransitionEvidence);
+  await selectProjectScope(page, publicationBinding.project.name);
   await clickProduct(page, 'Studio');
+  await page.getByRole('combobox', { name: 'Current document', exact: true }).selectOption(publicationBinding.artifact.id);
   const publisher = page.getByTestId('studio-approved-artifact-publish');
-  const item = publisher.getByTestId('studio-approved-work-items').getByRole('group').first();
-  await item.getByRole('combobox', { name: 'Type', exact: true }).selectOption('Task');
-  await item.getByLabel('Title', { exact: true }).fill(`${testId} governed scenario work item`);
-  await item.getByLabel('Description', { exact: true }).fill('Human-authored downstream work bound to the exact finalized scenario decision.');
-  await item.getByLabel('Acceptance criteria · one per line', { exact: true }).fill('The exact scenario policy and lineage remain preserved.');
+  await expect(publisher.getByText(publicationBinding.artifact.versionId, { exact: false })).toBeVisible();
+  const scenarioItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
+  const scenarioProposalCount = await scenarioItems.count();
+  expect(scenarioProposalCount).toBeGreaterThan(0);
+  for (let index = 1; index < scenarioProposalCount; index += 1) {
+    await scenarioItems.nth(index).getByLabel('Select for publication', { exact: true }).uncheck();
+  }
+  const item = scenarioItems.first();
+  await item.getByTestId('studio-approved-work-item-type').selectOption('Task');
+  await item.getByTestId('studio-approved-work-item-title').fill(`${testId} governed scenario work item`);
+  await item.getByTestId('studio-approved-work-item-description').fill('Human-authored downstream work bound to the exact finalized scenario decision.');
+  await item.getByTestId('studio-approved-work-item-acceptance').fill('The exact scenario policy and lineage remain preserved.');
   const before = await control<StudioDeliveryDownstreamFrame>('/control/downstream-frame', { projectName });
   const publicationResponseStart = productionResponses.length;
   await publisher.getByTestId('publish-approved-studio-artifact').click();
   await expect(publisher.getByRole('status')).toContainText('Published 1 approved work item');
+  const afterPublication = await control<StudioDeliveryDownstreamFrame>('/control/downstream-frame', { projectName });
+  expect(afterPublication.counts.publications).toBe(before.counts.publications + 1);
+  expect(afterPublication.publication?.projectId).toBe(publicationBinding.project.id);
+  expect(afterPublication.publication?.sourceAssessmentId).toBeNull();
+  await clickProduct(page, 'Document Vault');
+  await expect(page.getByRole('heading', { name: 'Document Repository', exact: true })).toBeVisible();
+  const generatedCards = page.locator('.card');
+  await expect(generatedCards).toHaveCount(1);
+  await generatedCards.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('button', { name: 'Work Items', exact: true }).click();
+  await page.getByRole('button', { name: 'Import to Backlog', exact: true }).click();
+  const importDialog = page.getByRole('dialog', { name: 'Import Work Items to Backlog', exact: true });
+  await expect(importDialog.getByText('1 / 1 selected', { exact: true })).toBeVisible();
+  await importDialog.getByRole('button', { name: 'Import 1 Item', exact: true }).click();
+  await expect(importDialog).toBeHidden();
+  await clickProduct(page, 'Delivery');
+  await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
+  const boardItem = page.locator('.task-card').filter({ has: page.getByRole('heading', { name: `${testId} governed scenario work item`, exact: true }) });
+  await expect(boardItem).toHaveCount(1);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.task-card').filter({ has: page.getByRole('heading', { name: `${testId} governed scenario work item`, exact: true }) })).toHaveCount(1);
   const after = await control<StudioDeliveryDownstreamFrame>('/control/downstream-frame', { projectName });
-  expect(after.counts.publications).toBe(before.counts.publications + 1);
-  expect(after.publication?.projectId).toBe(setup.deliveryProject.id);
+  expect(after.counts.imports).toBe(before.counts.imports + 1);
+  expect(after.counts.activeTasks).toBe(before.counts.activeTasks + 1);
+  expect(after.lineage).toMatchObject({ chainCount: 1, completeCount: 1, complete: true });
+  expect(after.tasks.find(task => task.title === `${testId} governed scenario work item`)).toMatchObject({
+    projectId: publicationBinding.project.id,
+    documentGenerationId: afterPublication.publication?.documentGenerationId,
+    sourceAssessmentId: null,
+    status: 'To Do',
+    retentionState: 'active',
+  });
   const decisionAfter = await control<ScenarioDecision>('/control/scenario-decision', { projectName });
   expect(decisionAfter).toEqual(decisionBefore);
   const publicationResponses = measuredResponses(productionResponses, publicationResponseStart,
@@ -298,13 +369,14 @@ const runScenario = async (
     testId, assertions: ASSERTIONS[testId].map(id => ({ id, status: 'passed' as const })),
     observations: {
       browser: { actions: ['Completed deterministic scenario facts', 'Finalized and independently approved the decision',
-        'Resolved Govern controls', 'Generated and approved Studio output', 'Published one exact downstream work item'],
+        'Resolved Govern controls', 'Generated and approved Studio output', 'Published one exact downstream work item',
+        'Imported the selected item and reloaded the Delivery board'],
         result: variant === 'low-suitability'
           ? 'Persisted write readiness remained Prohibited and the exact low-suitability policy survived downstream publication.'
           : 'Persisted write readiness remained Ready with a Strong Fit candidate and governed approval survived downstream publication.' },
-      api: { productionRoutes: ['/functions/v1/assess-v2-command', '/functions/v1/studio-artifact-command', '/functions/v1/studio-delivery-authority-command'],
+      api: { productionRoutes: ['/functions/v1/assess-v2-command', '/functions/v1/studio-artifact-command', '/functions/v1/studio-delivery-authority-command', '/functions/v1/legacy-delivery-command'],
         responses: measuredResponses(productionResponses, responseStart,
-          ['/functions/v1/assess-v2-command', '/functions/v1/studio-artifact-command', '/functions/v1/studio-delivery-authority-command']) },
+          ['/functions/v1/assess-v2-command', '/functions/v1/studio-artifact-command', '/functions/v1/studio-delivery-authority-command', '/functions/v1/legacy-delivery-command']) },
     },
     measurements: { setupExcluded: true, before, after, delta: countDelta(before, after), stateBeforeHash: before.writeFingerprint,
       stateAfterHash: after.writeFingerprint, targetBeforeHash: decisionBefore.targetHash, targetAfterHash: decisionAfter.targetHash },
@@ -323,11 +395,10 @@ export const runAssessmentScenarioJourneys = async (page: Page, project: string,
     if (route.startsWith('/functions/v1/')) productionResponses.push({ route, status: response.status(),
       actionId:startTrackedRequest?.(response.request()) });
   });
-  const actionReference = (request: Request) => startTrackedRequest?.(request) ?? Promise.resolve(null);
-  return [
-    await runScenario(page, project, 'low-suitability', productionResponses, actionReference,
-      settleActorTransitionEvidence),
-    await runScenario(page, project, 'strong-automation', productionResponses, actionReference,
-      settleActorTransitionEvidence),
-  ] as const;
+  const lowSuitability = await runScenario(page, project, 'low-suitability', productionResponses,
+    settleActorTransitionEvidence);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const strongAutomation = await runScenario(page, project, 'strong-automation', productionResponses,
+    settleActorTransitionEvidence);
+  return [lowSuitability, strongAutomation] as const;
 };

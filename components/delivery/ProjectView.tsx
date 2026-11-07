@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Project, Task, Epic, Sprint, User, Automation, TimesheetEntry, TaskStatus, DocumentGeneration, DocTemplate, AiProviderType, HandoffLedgerEntry } from '../../types';
-import BoardsView from './BoardsView';
+import BoardsView, { type DeliveryBoardMutationPolicy } from './BoardsView';
 import TaskListView from './TaskListView';
 import GanttChartView from './GanttChartView';
 import CalendarView from './CalendarView';
@@ -15,6 +15,17 @@ import DocsView from '../docs/DocsView';
 import DeliveryPackView from './DeliveryPackView';
 import { filterActiveDeliveryTasks } from '../../services/deliveryWorkflowPolicy';
 import type { ArtifactExportDecision } from '../../services/artifactExportPolicy';
+import { loadCompleteStudioDeliveryOutcomeProjection } from '../../services/productAcceptanceBridge/outcomePaging';
+import type { StudioDeliveryScope } from '../../services/productAcceptanceBridge/client';
+import type { StudioDeliveryOutcomeQueryResult } from '../../services/productAcceptanceBridge/contracts';
+import type { DeliveryDiscoveryDispositionByTask } from '../../services/deliveryPolicy';
+
+type DeliveryBoardAuthority = {
+    scope: StudioDeliveryScope;
+    mutationPolicy: DeliveryBoardMutationPolicy;
+    refreshKey: string;
+    loadOutcomes?: (scope: StudioDeliveryScope, projectId: string) => Promise<StudioDeliveryOutcomeQueryResult>;
+};
 
 interface ProjectViewProps {
     view: View;
@@ -30,6 +41,7 @@ interface ProjectViewProps {
     documentGenerations: DocumentGeneration[];
     handoffEntries: HandoffLedgerEntry[];
     deliveryPackSnapshot?: React.ReactNode;
+    deliveryBoardAuthority?: DeliveryBoardAuthority;
     deliveryPackArtifactPolicy?: {
         exportMarkdown?: ArtifactExportDecision;
         exportJson?: ArtifactExportDecision;
@@ -53,18 +65,47 @@ interface ProjectViewProps {
 const ProjectView: React.FC<ProjectViewProps> = (props) => {
     const { 
         view, project, tasks, epics, sprints, users, currentUser, automations, timesheetEntries, 
-        docTemplates, documentGenerations, handoffEntries, deliveryPackArtifactPolicy, deliveryPackSnapshot,
+        docTemplates, documentGenerations, handoffEntries, deliveryPackArtifactPolicy, deliveryPackSnapshot, deliveryBoardAuthority,
         onUpdateTaskStatus, onUpdateTask, onSelectTask, onUpdateTaskSprint, onUpdateSprint, onReorderTask, onAddTask, onDeleteTask,
         onCreateAutomation, onUpdateAutomation, onDeleteAutomation, onToggleAutomation, onUpdateTimesheet,
         onViewGeneration
     } = props;
 
     const activeTasks = filterActiveDeliveryTasks(tasks);
+    const boardAuthorityKey = deliveryBoardAuthority
+        ? `${deliveryBoardAuthority.scope.actorId}:${deliveryBoardAuthority.scope.organizationId}:${deliveryBoardAuthority.scope.workspaceId}:${deliveryBoardAuthority.scope.authorizationVersion}:${project.id}:${deliveryBoardAuthority.refreshKey}`
+        : null;
+    const [discoveryState, setDiscoveryState] = useState<{
+        key: string;
+        state: 'loading' | 'ready' | 'unavailable';
+        dispositions: DeliveryDiscoveryDispositionByTask;
+    } | null>(null);
+    useEffect(() => {
+        if (!deliveryBoardAuthority || !boardAuthorityKey) { setDiscoveryState(null); return; }
+        let current = true;
+        setDiscoveryState({ key: boardAuthorityKey, state: 'loading', dispositions: new Map() });
+        const load = deliveryBoardAuthority.loadOutcomes ?? loadCompleteStudioDeliveryOutcomeProjection;
+        void load(deliveryBoardAuthority.scope, project.id).then(projection => {
+            if (!current || projection.projectId !== project.id || projection.page.hasMore || projection.page.nextCursor !== null) return;
+            setDiscoveryState({
+                key: boardAuthorityKey,
+                state: 'ready',
+                dispositions: new Map(projection.items.map(item => [item.taskId, item.discoveryResolution?.disposition ?? null])),
+            });
+        }).catch(() => {
+            if (current) setDiscoveryState({ key: boardAuthorityKey, state: 'unavailable', dispositions: new Map() });
+        });
+        return () => { current = false; };
+    }, [boardAuthorityKey, deliveryBoardAuthority?.loadOutcomes, project.id]);
+    const currentDiscoveryState = discoveryState?.key === boardAuthorityKey ? discoveryState : null;
 
     const renderCurrentView = () => {
         switch (view) {
             case View.BOARDS:
-                return <BoardsView tasks={activeTasks} projects={[project]} epics={epics} title={`${project.name} delivery board`} contextLabel="Project delivery" users={users} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask} />;
+                return <BoardsView tasks={activeTasks} projects={[project]} epics={epics} title={`${project.name} delivery board`} contextLabel="Project delivery" users={users} currentUser={currentUser} onUpdateTaskStatus={onUpdateTaskStatus} onSelectTask={onSelectTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask}
+                    mutationPolicy={deliveryBoardAuthority?.mutationPolicy}
+                    discoveryDispositions={deliveryBoardAuthority ? currentDiscoveryState?.dispositions ?? new Map() : undefined}
+                    discoveryReadState={deliveryBoardAuthority ? currentDiscoveryState?.state ?? 'loading' : undefined} />;
             case View.LIST:
                 return <TaskListView tasks={activeTasks} projects={[project]} onSelectTask={onSelectTask} onDeleteTask={onDeleteTask} />;
             case View.GANTT:

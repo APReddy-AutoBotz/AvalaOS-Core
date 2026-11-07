@@ -25,6 +25,7 @@ jobs:
       - run: npm ci
       - run: node scripts/checkPilotOperationsCi.mjs
       - run: npm run test:pilot-operations
+      - run: npm run test:hosted-pilot
       - run: npm run typecheck && npm run typecheck:edge
       - run: npm run test:scoring && npm run test:ai-boundary-static && npm run test:secret-hygiene
       - run: npm run build && npm audit --audit-level=moderate && git diff --check
@@ -57,6 +58,12 @@ jobs:
       - name: Apply fresh and accepted-baseline upgrade to disposable PostgreSQL 16
         env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
         run: npm run test:migrations:pilot-operations
+      - name: Verify named pgcrypto wrappers with production installer and inventory
+        env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
+        run: node scripts/testHostedPgcryptoPostgres.mjs
+      - name: Verify exact canonical routine authority and implementation contract
+        env: {PILOT_OPERATIONS_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
+        run: node scripts/testHostedRoutineContractPostgres.mjs
       - name: Prove Studio handoff rejects stale approved-reviewer authority
         env: {PR1E_REVIEW_AUTHORITY_DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_operations'}
         run: node scripts/testPr1eStudioHandoffReviewerAuthority.mjs

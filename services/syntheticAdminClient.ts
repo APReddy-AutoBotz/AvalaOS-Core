@@ -5,11 +5,15 @@ import {
   SYNTHETIC_ADMIN_ERROR_CODES,
   SYNTHETIC_ADMIN_OPERATIONS,
   SYNTHETIC_ADMIN_ROLE_PRESETS,
+  SYNTHETIC_ADMIN_STUDIO_VARIANTS,
   type SyntheticAdminEnvelope,
+  type SyntheticAdminAssignableRolePreset,
   type SyntheticAdminErrorCode,
   type SyntheticAdminOperation,
   type SyntheticAdminResult,
+  type SyntheticAdminRolePreset,
   type SyntheticAdminRosterItem,
+  type SyntheticAdminStudioVariant,
   parseSyntheticAdminEnvelope,
   SyntheticAdminError,
 } from './syntheticAdminContract';
@@ -23,6 +27,30 @@ const exact = (row: Record<string, unknown>, names: readonly string[]) =>
   Object.keys(row).every(name => names.includes(name));
 const uuid = (input: unknown): input is string => typeof input === 'string' && UUID.test(input);
 const positiveVersion = (input: unknown): input is number => Number.isSafeInteger(input) && Number(input) >= 1;
+const basePreset = (input: unknown): input is SyntheticAdminRolePreset =>
+  typeof input === 'string' && (SYNTHETIC_ADMIN_ROLE_PRESETS as readonly string[]).includes(input);
+const studioVariant = (input: unknown): input is SyntheticAdminStudioVariant =>
+  typeof input === 'string' && (SYNTHETIC_ADMIN_STUDIO_VARIANTS as readonly string[]).includes(input);
+const assignablePreset = (input: unknown): input is SyntheticAdminAssignableRolePreset =>
+  basePreset(input) || studioVariant(input);
+const expectedBaseByVariant: Record<SyntheticAdminStudioVariant,SyntheticAdminRolePreset> = {
+  'studio-author':'author', 'studio-reviewer':'reviewer', 'studio-approver':'approver',
+};
+const exactRoleList = (input: unknown, expected: readonly string[]) =>
+  Array.isArray(input) && input.length === expected.length && input.every((value,index) => value === expected[index]);
+
+const exactEffectiveRole = (input: Record<string, unknown>) => {
+  const variant = input.studioVariant;
+  if (!assignablePreset(input.rolePreset) || !basePreset(input.baseRolePreset)
+    || typeof input.studioVariantActive !== 'boolean') return false;
+  if (variant === null) {
+    return input.studioVariantActive === false && input.rolePreset === input.baseRolePreset;
+  }
+  if (!studioVariant(variant)) return false;
+  return expectedBaseByVariant[variant] === input.baseRolePreset
+    && input.studioVariantActive === (input.rolePreset === variant)
+    && (input.rolePreset === input.baseRolePreset || input.rolePreset === variant);
+};
 
 export class SyntheticAdminOutcomeUnknown extends Error {
   constructor() { super('OUTCOME_UNKNOWN'); this.name = 'SyntheticAdminOutcomeUnknown'; }
@@ -34,12 +62,15 @@ export const canManageSyntheticUsers = (context: TenantContextProjection | null,
   && context.capabilities.includes(SYNTHETIC_ADMIN_CAPABILITY);
 
 const rosterItem = (input: unknown): SyntheticAdminRosterItem => {
-  if (!own(input) || !exact(input, ['reservationId','label','loginId','rolePreset','state','version'])
+  if (!own(input) || !exact(input, ['reservationId','label','loginId','rolePreset','baseRolePreset','studioVariant',
+    'studioVariantActive','assignableRolePresets','state','version'])
     || !uuid(input.reservationId) || typeof input.loginId !== 'string'
     || !LOGIN.test(input.loginId) || LOGIN.exec(input.loginId)?.[1] !== input.reservationId
     || typeof input.label !== 'string'
     || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/.test(input.label)
-    || !(SYNTHETIC_ADMIN_ROLE_PRESETS as readonly string[]).includes(String(input.rolePreset))
+    || !exactEffectiveRole(input)
+    || !exactRoleList(input.assignableRolePresets, input.studioVariant === null
+      ? SYNTHETIC_ADMIN_ROLE_PRESETS : [String(input.baseRolePreset),String(input.studioVariant)])
     || !(states as readonly string[]).includes(String(input.state)) || !positiveVersion(input.version)) {
     throw new SyntheticAdminError('TEMPORARY_FAILURE');
   }
@@ -47,7 +78,8 @@ const rosterItem = (input: unknown): SyntheticAdminRosterItem => {
 };
 
 export const decodeSyntheticAdminResult = (input: unknown, operation: SyntheticAdminOperation): SyntheticAdminResult => {
-  if (!own(input) || !exact(input, ['status','reservationId','loginId','version','roster','nextCursor'])
+  if (!own(input) || !exact(input, ['status','reservationId','loginId','version','roster','nextCursor',
+    'rolePreset','baseRolePreset','studioVariant','studioVariantActive'])
     || typeof input.status !== 'string') throw new SyntheticAdminError('TEMPORARY_FAILURE');
   if (operation === 'list') {
     if (input.status !== 'listed' || !Array.isArray(input.roster)
@@ -57,11 +89,31 @@ export const decodeSyntheticAdminResult = (input: unknown, operation: SyntheticA
     if (new Set(roster.map(item => item.reservationId)).size !== roster.length) throw new SyntheticAdminError('TEMPORARY_FAILURE');
     return { status:'listed', roster, nextCursor: input.nextCursor as string | null | undefined };
   }
+  if (operation === 'grant_operator_assess_read' || operation === 'remove_operator_assess_read') {
+    const expected = operation === 'grant_operator_assess_read' ? 'operator_access_granted' : 'operator_access_removed';
+    if (input.status !== expected || !positiveVersion(input.version)
+      || 'reservationId' in input || 'loginId' in input || 'roster' in input || 'nextCursor' in input)
+      throw new SyntheticAdminError('TEMPORARY_FAILURE');
+    return { status: expected, version: input.version };
+  }
+  const hasRoleProjection = ['rolePreset','baseRolePreset','studioVariant','studioVariantActive']
+    .some(key => key in input);
+  if (hasRoleProjection && (operation !== 'assign_role'
+    || !exact(input, ['status','reservationId','version','rolePreset','baseRolePreset','studioVariant','studioVariantActive'])
+    || !exactEffectiveRole(input))) throw new SyntheticAdminError('TEMPORARY_FAILURE');
   if (!(states as readonly string[]).includes(input.status)
     || !uuid(input.reservationId) || !positiveVersion(input.version)
     || (input.loginId !== undefined && (typeof input.loginId !== 'string' || !LOGIN.test(input.loginId) || LOGIN.exec(input.loginId)?.[1] !== input.reservationId))
     || 'roster' in input || 'nextCursor' in input) throw new SyntheticAdminError('TEMPORARY_FAILURE');
-  return { status:input.status as SyntheticAdminResult['status'], reservationId:input.reservationId, loginId:input.loginId as string | undefined, version:input.version };
+  return { status:input.status as SyntheticAdminResult['status'], reservationId:input.reservationId,
+    loginId:input.loginId as string | undefined, version:input.version,
+    ...(hasRoleProjection ? {
+      rolePreset:input.rolePreset as SyntheticAdminAssignableRolePreset,
+      baseRolePreset:input.baseRolePreset as SyntheticAdminRolePreset,
+      studioVariant:input.studioVariant as SyntheticAdminStudioVariant | null,
+      studioVariantActive:input.studioVariantActive as boolean,
+    } : {}),
+  };
 };
 
 const knownError = (input: unknown): SyntheticAdminErrorCode | null => {

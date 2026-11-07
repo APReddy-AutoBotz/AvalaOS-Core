@@ -9,13 +9,15 @@ const command: StudioDeliveryCommandEnvelope<'studio.approved-artifact.publish'>
   schemaVersion: 'studio-delivery-command.v1', action: 'studio.approved-artifact.publish', organizationId: U[0], workspaceId: U[1],
   expectedAuthorizationVersion: 7, requestId: U[2], idempotencyKey: 'studio-delivery.publish.handler-1', payload: {
     artifactId: U[3], expectedArtifactVersionId: U[4], expectedAggregateVersion: 5, projectId: U[5],
-    workItems: [{ type: 'Task', title: 'Verify authority', description: '', acceptanceCriteria: [] }],
+    workItems: [{ proposalRole: 'verification', type: 'Task', title: 'Verify authority', description: '', acceptanceCriteria: [],
+      requirementLinks: [{ sectionId: 'controls', sectionTitle: 'Controls', requirementText: 'NFR-1: The service must verify current authority.' }] }],
   },
 };
 const context: TenantContext = { userId: U[6], organizationId: U[0], workspaceId: U[1], authorizationVersion: 7, capabilities: ['studio.artifacts.publish'] };
 const success = { ok: true, schemaVersion: command.schemaVersion, action: command.action, outcome: 'committed', receiptId: U[7], resource: {
   publicationId: U[8], documentGenerationId: U[9], projectId: U[5], artifactId: U[3], artifactVersionId: U[4], artifactVersion: 3,
-  artifactContentHash: 'a'.repeat(64), sourceProcessId: U[10], sourceAssessmentId: U[11], governResolutionId: U[12], workItemCount: 1,
+  artifactContentHash: 'a'.repeat(64), sourceProcessId: U[10], sourceAssessmentId: U[11], reviewResolutionId: U[12],
+  governResolutionId: U[13], studioHandoffId: U[14], approvalPurpose: 'implementation_readiness', workItemCount: 1,
   workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T05:11:00Z',
 } };
 const request = (body: unknown, target = 'command') => new Request(`https://example.test/${target}`, { method: 'POST', body: JSON.stringify(body) });
@@ -60,6 +62,9 @@ const main = async () => {
     assigneeQuery: async () => { assigneeEffects += 1; return assigneeResult; } };
   const assigneeRead = await handleStudioDeliveryOutcomeQuery(request(assigneeQuery, 'query'), assigneeDependencies);
   assert.equal(assigneeRead.status, 200); assert.equal(assigneeEffects, 1); assert.equal(assigneeChecks, 2);
+  const projectManagerRead = await handleStudioDeliveryOutcomeQuery(request(assigneeQuery, 'query'), { ...assigneeDependencies,
+    authority: async () => ({ ...context, capabilities: ['project.manage'] }) });
+  assert.equal(projectManagerRead.status, 200, 'the intended Delivery project manager can read the scoped assignee directory');
   const assigneeDenied = await handleStudioDeliveryOutcomeQuery(request(assigneeQuery, 'query'), { ...assigneeDependencies,
     authority: async () => ({ ...context, capabilities: ['task.update.own'] }), assigneeQuery: async () => { throw new Error('must not run'); } });
   assert.equal(assigneeDenied.status, 404);

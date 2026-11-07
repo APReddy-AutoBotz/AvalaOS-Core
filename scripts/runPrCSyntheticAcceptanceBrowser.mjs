@@ -136,7 +136,7 @@ const ACTION_LABEL_OVERRIDES = Object.freeze({
 const BROWSER_ASSERTION_PLANS = Object.freeze({
   'select-two-assess-transcripts': { kind: 'assess-source-selection' },
   'complete-remaining-assess-fields-manually': { kind: 'complete-assess-fields' },
-  'decline-studio-handoff': { kind: 'disabled-control', role: 'button', names: ['Create durable Studio handoff'] },
+  'decline-studio-handoff': { kind: 'disabled-control', role: 'button', names: ['Create Studio handoff'] },
   'verify-no-studio-resource': { kind: 'text', values: ['Studio handoff not ready'], all: true },
   'select-two-different-studio-transcripts': { kind: 'studio-source-selection' },
   'select-custom-template': { kind: 'select', labels: ['Exact approved Studio template'], option: 'Synthetic controlled-human requirements template' },
@@ -599,15 +599,23 @@ const selectLoadedStudioArtifact = async (page, select, value) => {
   await select.selectOption(value);
   await page.waitForFunction(expected => {
     const workspace = document.querySelector('[data-testid="studio-artifact-workspace"]');
-    const selected = workspace?.querySelector('select[aria-label="Governed artifact"]');
+    const selected = workspace?.querySelector('select[aria-label="Current document"], select[aria-label="Governed artifact"]');
     return workspace?.getAttribute('data-studio-usable') === 'true'
       && selected instanceof HTMLSelectElement && selected.value === expected;
   }, value);
 };
 
+const studioDocumentSelect = async workspace => {
+  const current = workspace.getByRole('combobox', { name: 'Current document', exact: true });
+  if (await current.count() === 1) return current;
+  const retained = workspace.getByLabel('Governed artifact', { exact: true });
+  assert.equal(await retained.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_DOCUMENT_SELECT_COUNT');
+  return retained;
+};
+
 export const selectSyntheticStudioDraft = async (page, interactionSequence, title = SYNTHETIC_STUDIO_DRAFT_TITLE) => {
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const select = workspace.getByLabel('Governed artifact', { exact: true });
+  const select = await studioDocumentSelect(workspace);
   await select.waitFor({ state: 'visible' });
   const options = await select.locator('option').allTextContents();
   const matches = options.filter(value => value.includes(title));
@@ -636,7 +644,7 @@ export const selectSyntheticStudioDraft = async (page, interactionSequence, titl
 
 export const selectSyntheticHybridStudioDraft = async (page, interactionSequence, sectionBody = SYNTHETIC_HYBRID_SECTION_BODY, artifactId = '') => {
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const select = workspace.getByLabel('Governed artifact', { exact: true });
+  const select = await studioDocumentSelect(workspace);
   await select.waitFor({ state: 'visible' });
   const candidates = await select.locator('option').evaluateAll(nodes => nodes.map(node => node.value).filter(Boolean));
   if (artifactId) assert.equal(candidates.filter(value => value === artifactId).length, 1, 'PR_C_SYNTHETIC_BROWSER_HYBRID_ARTIFACT_ID_MISSING');
@@ -688,7 +696,7 @@ export const persistAndSubmitSyntheticStudioDraft = async (page, interactionSequ
   const workspace = page.getByTestId('studio-artifact-workspace');
   assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready',
     'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
-  const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
+  const artifactId = await (await studioDocumentSelect(workspace)).inputValue();
   assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(artifactId),
     'PR_C_SYNTHETIC_BROWSER_STUDIO_ARTIFACT_ID_INVALID');
   const editor = workspace.getByRole('region', { name: 'Current document', exact: true });
@@ -1375,6 +1383,77 @@ export const SYNTHETIC_ASSESS_REVIEW_CLAIMS = Object.freeze([
   'asset.strategicLifespan', 'asset.technicalHealth', 'asset.businessCriticality', 'asset.ownershipModel', 'asset.vendorRoadmap', 'asset.operatingStability', 'asset.accountableOwner',
 ]);
 
+const checkedAriaLabels = locator => locator.evaluateAll(nodes => nodes
+  .filter(node => node.checked)
+  .map(node => node.getAttribute('aria-label') ?? '')
+  .filter(Boolean)
+  .sort());
+
+export const readSelectedAssessEvidenceClaims = async (scope, evidenceNumber) => {
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const labels = await checkedAriaLabels(scope
+    .getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true })
+    .getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') }));
+  return labels.map(label => label.slice(prefix.length)).sort();
+};
+
+export const findAssessEvidenceNumberByOwner = async (scope, expectedOwner) => {
+  assert(typeof expectedOwner === 'string' && expectedOwner.trim() === expectedOwner && expectedOwner.length > 0,
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_OWNER_REJECTED');
+  const groups = scope.getByRole('group', { name: /^Evidence \d+$/u });
+  const matches = [];
+  for (let index = 0; index < await groups.count(); index += 1) {
+    const group = groups.nth(index);
+    const owner = group.getByLabel(/^Evidence \d+ owner$/u);
+    assert.equal(await owner.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    if (await owner.inputValue() !== expectedOwner) continue;
+    const label = await owner.getAttribute('aria-label');
+    const parsed = /^Evidence (\d+) owner$/u.exec(label ?? '');
+    assert(parsed, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    matches.push(Number(parsed[1]));
+  }
+  assert.equal(matches.length, 1, `PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_AMBIGUOUS:${expectedOwner}`);
+  return matches[0];
+};
+
+export const findAssessEvidenceNumberByExactClaims = async (scope, expectedClaims) => {
+  assert(Array.isArray(expectedClaims), 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CLAIMS_REJECTED');
+  const expected = [...new Set(expectedClaims)].sort();
+  assert.equal(expected.length, expectedClaims.length, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CLAIMS_REJECTED');
+  const groups = scope.getByRole('group', { name: /^Evidence \d+$/u });
+  const matches = [];
+  for (let index = 0; index < await groups.count(); index += 1) {
+    const owner = groups.nth(index).getByLabel(/^Evidence \d+ owner$/u);
+    assert.equal(await owner.count(), 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    const label = await owner.getAttribute('aria-label');
+    const parsed = /^Evidence (\d+) owner$/u.exec(label ?? '');
+    assert(parsed, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_CONTROL_REJECTED');
+    const evidenceNumber = Number(parsed[1]);
+    if (JSON.stringify(await readSelectedAssessEvidenceClaims(scope, evidenceNumber)) === JSON.stringify(expected)) matches.push(evidenceNumber);
+  }
+  assert.equal(matches.length, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_CLAIM_PROVENANCE_AMBIGUOUS');
+  return matches[0];
+};
+
+export const selectExactAssessEvidenceClaims = async (scope, evidenceNumber, claims) => {
+  assert(Array.isArray(claims) && claims.length > 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EMPTY_CLAIM_SELECTION_REJECTED');
+  const expected = new Set(claims);
+  assert.equal(expected.size, claims.length, 'PR_C_SYNTHETIC_BROWSER_ASSESS_DUPLICATE_CLAIM_SELECTION_REJECTED');
+  const group = scope.getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true });
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const checkboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') });
+  const labels = await checkboxes.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? ''));
+  const available = new Set(labels.map(label => label.slice(prefix.length)));
+  for (const claim of expected) assert(available.has(claim), `PR_C_SYNTHETIC_BROWSER_ASSESS_UNREGISTERED_CLAIM:${claim}`);
+  for (const label of labels) {
+    const checkbox = group.getByLabel(label, { exact: true });
+    if (expected.has(label.slice(prefix.length))) await checkbox.check();
+    else await checkbox.uncheck();
+  }
+  assert.deepEqual(await readSelectedAssessEvidenceClaims(scope, evidenceNumber), [...expected].sort(),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EXACT_CLAIM_SET_REJECTED');
+};
+
 export const createSyntheticAssessDraft = async (page, interactionSequence, { expectedScope } = {}) => {
   const workspace = page.getByTestId('assess-v2-workspace');
   await workspace.waitFor({ state: 'visible' });
@@ -1429,7 +1508,13 @@ export const completeSyntheticAssessFields = async (page, interactionSequence) =
   for (const fact of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'])
     await workspace.getByLabel(`Interaction 1 ${fact}`, { exact: true }).selectOption('true');
   await workspace.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }).click();
-  await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '));
+  const evidenceOne = workspace.getByRole('group', { name: 'Evidence 1', exact: true });
+  const attachments = evidenceOne.getByRole('checkbox', { name: /^Evidence 1 attach to /u });
+  const attachedBefore = await checkedAriaLabels(attachments);
+  assert(attachedBefore.length > 0, 'PR_C_SYNTHETIC_BROWSER_ASSESS_ENTITY_EVIDENCE_ATTACHMENT_MISSING');
+  await selectExactAssessEvidenceClaims(workspace, 1, SYNTHETIC_ASSESS_REVIEW_CLAIMS);
+  assert.deepEqual(await checkedAriaLabels(attachments), attachedBefore,
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_ENTITY_EVIDENCE_ATTACHMENT_CHANGED');
   interactionSequence.push('link:manual-synthetic-decision-claims');
   interactionSequence.push('fill:manual-assess-facts');
   return { manuallyCompletedFactCount: 7, owner: 'Synthetic Assess owner', primitiveId };
@@ -1456,7 +1541,7 @@ export const assertSyntheticAssessDraftReadback = async (page, primitiveId) => {
   for (const fact of ['interfaceAvailable', 'operationCovered', 'apiDocumented', 'errorContract'])
     assert.equal(await workspace.getByLabel(`Interaction 1 ${fact}`, { exact: true }).inputValue(), 'true',
       `PR_C_SYNTHETIC_BROWSER_ASSESS_INTERACTION_READBACK_REJECTED:${fact}`);
-  assert.equal(await workspace.getByLabel('Evidence 1 claim IDs', { exact: true }).inputValue(), SYNTHETIC_ASSESS_REVIEW_CLAIMS.join(', '),
+  assert.deepEqual(await readSelectedAssessEvidenceClaims(workspace, 1), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
     'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIMS_READBACK_REJECTED');
   return { exactFieldCount: 10 };
 };
@@ -1485,6 +1570,18 @@ export const persistSyntheticAssessDraft = async (page, interactionSequence, {
   assert(target.name === 'Capture request' && target.type === 'Capture'
     && rule?.fieldId === 'primitive.rulesStable' && rule?.value === true && rule?.status === 'known' && rule?.source === 'user',
   'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_COMMAND_REJECTED');
+  const evidenceLinks = command.body?.payload?.evidenceLinks;
+  assert(Array.isArray(evidenceLinks) && evidenceLinks.length === 1,
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_COMMAND_REJECTED');
+  const evidenceId = evidenceLinks[0]?.id;
+  assert(typeof evidenceId === 'string' && UUID.test(evidenceId),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_COMMAND_REJECTED');
+  assert.deepEqual([...(evidenceLinks[0]?.claimIds ?? [])].sort(), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_CLAIM_SET_REJECTED');
+  assert(target.evidenceIds?.includes(evidenceId), 'PR_C_SYNTHETIC_BROWSER_ASSESS_PRIMITIVE_EVIDENCE_ATTACHMENT_REJECTED');
+  const interactions = command.body?.payload?.interactions;
+  assert(Array.isArray(interactions) && interactions.some(interaction => interaction?.primitiveId === primitiveId && interaction?.evidenceIds?.includes(evidenceId)),
+    'PR_C_SYNTHETIC_BROWSER_ASSESS_INTERACTION_EVIDENCE_ATTACHMENT_REJECTED');
   await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
   interactionSequence.push('save:assess-v2-draft');
   await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
@@ -1509,21 +1606,34 @@ export const finalizeAssessDraftForReview = async (page, interactionSequence, { 
   if (afterTranscriptApply) {
     const evidencePanel = workspace.locator('details').filter({ has: page.locator('summary').filter({ hasText: '4. Agent necessity and evidence' }) });
     if (await evidencePanel.getAttribute('open') === null) await evidencePanel.locator('summary').click();
-    const claims = evidencePanel.getByRole('textbox', { name: /^Evidence \d+ claim IDs$/u });
-    assert.equal(await claims.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
-    let linkedCount = 0;
-    for (let index = 0; index < await claims.count(); index += 1) {
-      if ((await claims.nth(index).inputValue()).trim()) continue;
-      await claims.nth(index).fill('primitive.businessDisposition');
-      await evidencePanel.getByLabel(`Evidence ${index + 1} owner`, { exact: true }).fill('Synthetic Assess owner');
-      linkedCount += 1;
+    const evidenceGroups = evidencePanel.getByRole('group', { name: /^Evidence \d+$/u });
+    assert.equal(await evidenceGroups.count(), 2, 'PR_C_SYNTHETIC_BROWSER_ASSESS_APPLIED_EVIDENCE_COUNT');
+    const manualEvidenceNumber = await findAssessEvidenceNumberByOwner(evidencePanel, 'Assessment owner');
+    const transcriptEvidenceNumber = await findAssessEvidenceNumberByExactClaims(evidencePanel, []);
+    assert.notEqual(manualEvidenceNumber, transcriptEvidenceNumber, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_COLLISION');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, manualEvidenceNumber), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_MANUAL_CLAIM_CONTEXT_REJECTED');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, transcriptEvidenceNumber), [],
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
+    const transcriptOwnerControl = evidencePanel.getByLabel(`Evidence ${transcriptEvidenceNumber} owner`, { exact: true });
+    let transcriptEvidenceOwner = (await transcriptOwnerControl.inputValue()).trim();
+    if (!transcriptEvidenceOwner) {
+      transcriptEvidenceOwner = 'Synthetic transcript evidence owner';
+      await transcriptOwnerControl.fill(transcriptEvidenceOwner);
     }
-    assert.equal(linkedCount, 1, 'PR_C_SYNTHETIC_BROWSER_ASSESS_UNLINKED_TRANSCRIPT_EVIDENCE_COUNT');
+    assert.notEqual(transcriptEvidenceOwner, 'Assessment owner', 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_COLLISION');
+    await selectExactAssessEvidenceClaims(evidencePanel, transcriptEvidenceNumber, ['primitive.businessDisposition']);
     await workspace.getByRole('button', { name: 'Save working draft', exact: true }).click();
     await workspace.getByText('Draft saved as a new immutable authoring version.', { exact: true }).waitFor({ state: 'visible' });
     await workspace.getByRole('button', { name: 'Reload current draft', exact: true }).click();
     await workspace.getByText('Current immutable draft reloaded.', { exact: true }).waitFor({ state: 'visible' });
-    for (const input of await claims.all()) assert((await input.inputValue()).trim(), 'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
+    const reloadedManualEvidenceNumber = await findAssessEvidenceNumberByOwner(evidencePanel, 'Assessment owner');
+    const reloadedTranscriptEvidenceNumber = await findAssessEvidenceNumberByOwner(evidencePanel, transcriptEvidenceOwner);
+    assert.notEqual(reloadedManualEvidenceNumber, reloadedTranscriptEvidenceNumber, 'PR_C_SYNTHETIC_BROWSER_ASSESS_EVIDENCE_PROVENANCE_COLLISION');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, reloadedManualEvidenceNumber), [...SYNTHETIC_ASSESS_REVIEW_CLAIMS].sort(),
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
+    assert.deepEqual(await readSelectedAssessEvidenceClaims(evidencePanel, reloadedTranscriptEvidenceNumber), ['primitive.businessDisposition'],
+      'PR_C_SYNTHETIC_BROWSER_ASSESS_CLAIM_LINK_NOT_PERSISTED');
     interactionSequence.push('link:imported-transcript-evidence', 'save:claim-linked-assess-draft', 'reload:claim-linked-assess-draft');
   }
   const finalize = workspace.getByRole('button', { name: 'Finalize assessment for review', exact: true });
@@ -2111,7 +2221,7 @@ export const runSyntheticObservationPrerequisites = async ({ planned, sessions, 
     assert.equal(state.has('phase:ch02:studio-draft'), false, 'PR_C_SYNTHETIC_BROWSER_CH02_SELECTION_MARKER_DUPLICATE');
     const interactions = [];
     const workspace = await selectSyntheticStudioDraft(requester.page, interactions);
-    const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
+    const artifactId = await (await studioDocumentSelect(workspace)).inputValue();
     state.set('phase:ch02:studio-draft', { phase: 'selected', artifactId,
       actorDigest: requester.identity.applicationActorDigest });
     prerequisiteInteractions(interactionSequence, interactions);

@@ -6,15 +6,32 @@ import type {
 import { StudioPrivateArtifactError } from './studioPrivateArtifactCommand.ts';
 
 export const STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS = {
+  markdown: 'studio-markdown-2',
+  pdf: 'studio-pdf-2',
+  docx: 'studio-docx-2',
+} as const;
+
+export const STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS = {
   markdown: 'studio-markdown-1',
   pdf: 'studio-pdf-1',
   docx: 'studio-docx-1',
 } as const;
 
+// The SDD PDF renderer advances independently because its vector diagrams have
+// topology requirements that do not apply to the other document types.
+export const STUDIO_SDD_PDF_RENDERER_VERSION = 'studio-pdf-3' as const;
+// Renderer 4 is the current PDF renderer for every exact system-template
+// document. Earlier renderer identities remain available for immutable
+// rendition replay and download.
+export const STUDIO_BUSINESS_PDF_RENDERER_VERSION = 'studio-pdf-4' as const;
+
 export type StudioPrivateArtifactFormat =
   keyof typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS;
 export type StudioPrivateArtifactRendererVersion =
-  (typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS)[StudioPrivateArtifactFormat];
+  | (typeof STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS)[StudioPrivateArtifactFormat]
+  | (typeof STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS)[StudioPrivateArtifactFormat]
+  | typeof STUDIO_SDD_PDF_RENDERER_VERSION
+  | typeof STUDIO_BUSINESS_PDF_RENDERER_VERSION;
 export type StudioPrivateArtifactType = 'brd' | 'frd' | 'pdd' | 'sdd';
 export type StudioPrivateArtifactMimeType =
   | 'text/markdown; charset=utf-8'
@@ -224,17 +241,23 @@ const rendererVersion = (
   value: unknown,
   expectedFormat?: StudioPrivateArtifactFormat,
 ): StudioPrivateArtifactRendererVersion => {
+  const allowed = expectedFormat
+    ? [
+        STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS[expectedFormat],
+        STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS[expectedFormat],
+        ...(expectedFormat === 'pdf'
+          ? [STUDIO_SDD_PDF_RENDERER_VERSION, STUDIO_BUSINESS_PDF_RENDERER_VERSION]
+          : []),
+      ]
+    : [
+        ...Object.values(STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS),
+        ...Object.values(STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS),
+        STUDIO_SDD_PDF_RENDERER_VERSION,
+        STUDIO_BUSINESS_PDF_RENDERER_VERSION,
+      ];
   if (
     typeof value !== 'string' ||
-    !Object.values(STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS).includes(
-      value as StudioPrivateArtifactRendererVersion,
-    )
-  ) {
-    unavailable();
-  }
-  if (
-    expectedFormat &&
-    value !== STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS[expectedFormat]
+    !(allowed as readonly string[]).includes(value)
   ) {
     unavailable();
   }

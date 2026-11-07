@@ -35,7 +35,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const json=value=>JSON.stringify(value);
 const uuid=()=>crypto.randomUUID();
 const migrations=(await readdir('supabase/migrations')).filter(name=>name.endsWith('.sql')).sort();
-assert.equal(approvedFullChainTip(migrations), '20261103103752');
+assert.equal(approvedFullChainTip(migrations), '20261107120003');
 const featureMigration='20260916083814_assess_supporting_document_mapping.sql';
 const EXPECTED_ASSERTIONS=[
  'MAP-PG-BUDGET-001-legacy-domain-preserved',
@@ -524,8 +524,14 @@ try{
  const studioContent={contractVersion:'studio-artifact-2',title:'Synthetic AP business requirements',summary:'Source-backed AP exception requirements.',sections:contract.sections.map((section,index)=>({id:section.id,title:section.title,body:`Distinct source-backed ${section.id} content ${index+1}.`,sourceAnchors:index===0?anchorCatalog.map(anchor=>({anchorRef:anchor.anchorRef})):[],labels:index===0?[]:['template_required']})),coverage:{selectedSourceVersionIds:selected,coveredSourceVersionIds:selected,complete:true}};
  const studioBefore=gateway.counts();const studioRunProvider=input=>studioProvider.callStudioArtifactProvider(input,{runGateway:(request)=>enterpriseAi.runGovernedProviderRequest(request,{...gateway.gatewayDeps,fetchImpl:gateway.fakeFetch(studioContent)})});
  const studioRunBudgeted=(input,effect,options)=>providerBudget.runBudgetedProviderEffect(input,effect,{...options,invoke:(name,args)=>studioGeneration.studioBudgetRpc(name,args,gateway.invoke)});
+ const studioCandidateDeps={
+  captureCandidate:input=>studioDb.captureStudioGenerationCandidate(input,gateway.invoke),
+  loadCandidate:input=>studioDb.loadStudioGenerationCandidate(input,gateway.invoke),
+  rejectCandidate:input=>studioDb.rejectStudioGenerationCandidate(input,gateway.invoke),
+  settleCandidate:input=>providerBudget.settleProviderBudget(input,(name,args)=>studioGeneration.studioBudgetRpc(name,args,gateway.invoke)),
+ };
  let loseFinalizeResponse=true;
- const studioDeps={runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async input=>{await database.query('SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,$4,$5::jsonb)',[input.attemptId,input.executionToken,input.executionFence,input.providerOperationId??null,json(input.response)])},finalize:async input=>{const result=(await database.query('SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result',[input.attemptId,input.executionToken,input.executionFence])).rows[0].result;if(loseFinalizeResponse){loseFinalizeResponse=false;throw new Error('SYNTHETIC_FINALIZE_RESPONSE_LOST')}return result.stale?{state:'stale',resource:result}:{state:'completed',resource:result}},fail:async(attemptId,code)=>{await database.query('SELECT public.studio_artifact_generation_fail_v2($1,$2,$3,$4)',[attemptId,studioClaim.executionToken,studioClaim.executionFence,code])}};
+ const studioDeps={...studioCandidateDeps,runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async input=>{await database.query('SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,$4,$5::jsonb)',[input.attemptId,input.executionToken,input.executionFence,input.providerOperationId??null,json(input.response)])},finalize:async input=>{const result=(await database.query('SELECT public.studio_artifact_generation_finalize_v2($1,$2,$3) result',[input.attemptId,input.executionToken,input.executionFence])).rows[0].result;if(loseFinalizeResponse){loseFinalizeResponse=false;throw new Error('SYNTHETIC_FINALIZE_RESPONSE_LOST')}return result.stale?{state:'stale',resource:result}:{state:'completed',resource:result}},fail:async(attemptId,code)=>{await database.query('SELECT public.studio_artifact_generation_fail_v2($1,$2,$3,$4)',[attemptId,studioClaim.executionToken,studioClaim.executionFence,code])}};
  const studioResult=await studioGeneration.executeClaimedStudioGeneration(studioClaim,studioDeps);
  assert.equal(studioResult.state,'uncertain');assert.deepEqual(gateway.counts(),{secretReads:studioBefore.secretReads+1,fetches:studioBefore.fetches+1});
  const studioPostEffect=await one(database,`SELECT attempt.state,reservation.state reservation_state,
@@ -566,7 +572,7 @@ try{
  const failedRequested=(await database.query('SELECT public.studio_artifact_generation_request_v2($1::jsonb) result',[json(failedRequest)])).rows[0].result;
  const failedInitial={...failedRequested.generationPlan,actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,authorizationVersion,requestId:failedRequest.requestId,receiptId:failedRequested.receiptId,sourcePackageVersion:Number(studioPackage.version)};
  const failedClaim=await studioDb.claimStudioGeneration(failedInitial,gateway.invoke,plan=>studioDb.loadStudioGenerationMaterial(plan,createPostgrestRead(database),gateway.invoke));assert.equal(failedClaim.providerAllowed,true);
- const beforeStageFailure=gateway.counts();const stageFailureDeps={runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async()=>{throw new Error('SYNTHETIC_STAGE_PERSISTENCE_FAILED')},finalize:async()=>{throw new Error('FINALIZE_WITHOUT_STAGE_FORBIDDEN')},fail:async()=>{throw new Error('TERMINAL_FAILURE_AFTER_EFFECT_FORBIDDEN')}};
+ const beforeStageFailure=gateway.counts();const stageFailureDeps={...studioCandidateDeps,runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async()=>{throw new Error('SYNTHETIC_STAGE_PERSISTENCE_FAILED')},finalize:async()=>{throw new Error('FINALIZE_WITHOUT_STAGE_FORBIDDEN')},fail:async()=>{throw new Error('TERMINAL_FAILURE_AFTER_EFFECT_FORBIDDEN')}};
  const stageFailure=await studioGeneration.executeClaimedStudioGeneration(failedClaim,stageFailureDeps);assert.equal(stageFailure.state,'uncertain');assert.deepEqual(gateway.counts(),{secretReads:beforeStageFailure.secretReads+1,fetches:beforeStageFailure.fetches+1});
  assert.equal((await one(database,'SELECT state FROM public.enterprise_ai_budget_reservations WHERE studio_attempt_id=$1',[failedRequested.attemptId])).state,'uncertain');assert.equal(await count(database,'public.synthetic_ai_campaign_effect_debits','studio_attempt_id=$1 AND consumed_at IS NOT NULL',[failedRequested.attemptId]),1);assert.equal(await count(database,'public.studio_generation_staged_responses','attempt_id=$1',[failedRequested.attemptId]),0);
  const beforeUncertainReplay=gateway.counts();const uncertainReplay=await studioGeneration.executeClaimedStudioGeneration(failedClaim,stageFailureDeps);assert.equal(uncertainReplay.state,'uncertain');assert.deepEqual(gateway.counts(),beforeUncertainReplay);assert.equal(await count(database,'public.enterprise_ai_budget_reservations','studio_attempt_id=$1',[failedRequested.attemptId]),1);assert.equal(await count(database,'public.synthetic_ai_campaign_effect_debits','studio_attempt_id=$1',[failedRequested.attemptId]),1);
@@ -611,7 +617,7 @@ try{
  const staleInitial={...staleRequested.generationPlan,actorId:fixture.requester,organizationId:fixture.org,workspaceId:fixture.workspace,authorizationVersion,requestId:staleRequest.requestId,receiptId:staleRequested.receiptId,sourcePackageVersion:1};
  const staleClaim=await studioDb.claimStudioGeneration(staleInitial,gateway.invoke,plan=>studioDb.loadStudioGenerationMaterial(plan,createPostgrestRead(database),gateway.invoke));assert.equal(staleClaim.claimKind,'active');assert.equal(staleClaim.providerAllowed,true);
  let loseStaleFinalizeResponse=true;
- const staleDeps={runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async input=>{await database.query('SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,$4,$5::jsonb)',[input.attemptId,input.executionToken,input.executionFence,input.providerOperationId??null,json(input.response)])},finalize:async input=>{
+ const staleDeps={...studioCandidateDeps,runProvider:studioRunProvider,runBudgeted:studioRunBudgeted,stage:async input=>{await database.query('SELECT public.studio_artifact_generation_stage_v2($1,$2,$3,$4,$5::jsonb)',[input.attemptId,input.executionToken,input.executionFence,input.providerOperationId??null,json(input.response)])},finalize:async input=>{
   if(loseStaleFinalizeResponse){
    await replaceTenantTemplate(staleTemplate,staleReplacementTemplate,'stale-replace');
   }

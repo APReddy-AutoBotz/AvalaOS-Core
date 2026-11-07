@@ -50,7 +50,8 @@ try {
     contractParityPassed: true,
     artifactType: "sdd",
     format: "pdf",
-    brokerFixturePath: "tests/fixtures/process-evidence/synthetic-sdd-export.pdf",
+    brokerFixturePath: "tests/fixtures/process-evidence/synthetic-sdd-export-pdf4.pdf",
+    expectedRendererVersion: "studio-pdf-4",
   });
   assert.equal(passed.length, crossLayerScenarioNames.length);
   console.log(

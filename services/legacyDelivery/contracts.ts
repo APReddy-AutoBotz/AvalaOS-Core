@@ -12,6 +12,8 @@ export const LEGACY_DELIVERY_TASK_PRIORITIES = ['High', 'Medium', 'Low'] as cons
 export type LegacyDeliveryTaskPriority = typeof LEGACY_DELIVERY_TASK_PRIORITIES[number];
 export const LEGACY_DELIVERY_TASK_TYPES = ['Story', 'Task', 'Bug', 'Subtask'] as const;
 export type LegacyDeliveryTaskType = typeof LEGACY_DELIVERY_TASK_TYPES[number];
+export const LEGACY_DELIVERY_WORK_ITEM_TYPES = ['Epic', ...LEGACY_DELIVERY_TASK_TYPES] as const;
+export type LegacyDeliveryWorkItemType = typeof LEGACY_DELIVERY_WORK_ITEM_TYPES[number];
 
 export type LegacyDeliveryImportPayload = {
   projectId: string;
@@ -65,7 +67,9 @@ export type LegacyDeliverySourceItem = {
   description: string;
   acceptanceCriteria: string[];
 };
-export type LegacyDeliverySourceProjection = { id: string; digest: string; items: LegacyDeliverySourceItem[] };
+export type LegacyDeliverySourceProjection = { id: string; digest: string; materializesEpics: boolean; items: LegacyDeliverySourceItem[] };
+
+export type LegacyDeliveryRequirementLink = { sectionId: string; sectionTitle: string; requirementText: string };
 
 export type LegacyDeliveryTaskLineage = {
   schemaVersion: 'legacy-delivery-lineage.v1';
@@ -74,9 +78,17 @@ export type LegacyDeliveryTaskLineage = {
   documentSourceDigest: string;
   sourceItemIndex: number;
   sourceProcessId: string;
-  sourceAssessmentId: string;
+  sourceAssessmentId: string | null;
+  sourceAssessmentCaseId?: string | null;
+  sourceAssessmentDecisionId?: string | null;
   sourceEpicIndex: number | null;
   sourceEpicTitle: string | null;
+  proposalOriginId: string | null;
+  proposalRole: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | 'discovery' | null;
+  studioArtifactId: string | null;
+  studioArtifactVersionId: string | null;
+  studioArtifactVersion: number | null;
+  requirementLinks: LegacyDeliveryRequirementLink[];
 };
 
 export type LegacyDeliveryTaskProjection = {
@@ -88,7 +100,7 @@ export type LegacyDeliveryTaskProjection = {
   description: string;
   status: LegacyDeliveryTaskStatus;
   priority: LegacyDeliveryTaskPriority;
-  type: LegacyDeliveryTaskType;
+  type: LegacyDeliveryWorkItemType;
   assigneeIds: string[];
   dependencyIds: string[];
   ownerId: string | null;
@@ -281,15 +293,56 @@ export const decodeLegacyDeliveryQuery = (value: unknown): LegacyDeliveryQueryRe
 const decodeLineage = (value: unknown): LegacyDeliveryTaskLineage | null => {
   if (value === null) return null;
   const row = record(value);
+  const hasAssessmentCase = Object.hasOwn(row, 'sourceAssessmentCaseId');
+  const hasAssessmentDecision = Object.hasOwn(row, 'sourceAssessmentDecisionId');
+  if (hasAssessmentCase !== hasAssessmentDecision) invalid();
+  const hasCurrentLineageFields = hasAssessmentCase && hasAssessmentDecision;
   exact(row, ['schemaVersion', 'importId', 'documentGenerationId', 'documentSourceDigest', 'sourceItemIndex',
-    'sourceProcessId', 'sourceAssessmentId', 'sourceEpicIndex', 'sourceEpicTitle']);
+    'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineageFields ? ['sourceAssessmentCaseId', 'sourceAssessmentDecisionId'] : []),
+    'sourceEpicIndex', 'sourceEpicTitle', 'proposalOriginId', 'proposalRole',
+    'studioArtifactId', 'studioArtifactVersionId', 'studioArtifactVersion', 'requirementLinks']);
   if (row.schemaVersion !== 'legacy-delivery-lineage.v1' || typeof row.documentSourceDigest !== 'string'
-    || !digestPattern.test(row.documentSourceDigest)) invalid();
+    || !digestPattern.test(row.documentSourceDigest) || !Array.isArray(row.requirementLinks) || row.requirementLinks.length > 100
+    || !(row.proposalOriginId === null || typeof row.proposalOriginId === 'string' && digestPattern.test(row.proposalOriginId))
+    || !(row.proposalRole === null || ['coordination', 'implementation', 'acceptance-review', 'verification', 'discovery'].includes(String(row.proposalRole)))
+    || row.sourceAssessmentId === null && !hasCurrentLineageFields) invalid();
+  const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
+  let currentAssessmentLineage: Pick<LegacyDeliveryTaskLineage, 'sourceAssessmentCaseId' | 'sourceAssessmentDecisionId'> | undefined;
+  if (hasCurrentLineageFields) {
+    const caseIsNull = row.sourceAssessmentCaseId === null;
+    const decisionIsNull = row.sourceAssessmentDecisionId === null;
+    if (caseIsNull !== decisionIsNull || sourceAssessmentId === null && caseIsNull) invalid();
+    if (caseIsNull) {
+      currentAssessmentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
+    } else {
+      currentAssessmentLineage = {
+        sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
+        sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
+      };
+    }
+  }
+  const requirementLinks = (row.requirementLinks as unknown[]).map(value => {
+    const link = record(value);
+    exact(link, ['sectionId', 'sectionTitle', 'requirementText']);
+    return { sectionId: text(link.sectionId, 80), sectionTitle: text(link.sectionTitle, 300), requirementText: text(link.requirementText, 2_000) };
+  });
+  const studioArtifactId = row.studioArtifactId === null ? null : id(row.studioArtifactId);
+  const studioArtifactVersionId = row.studioArtifactVersionId === null ? null : id(row.studioArtifactVersionId);
+  const studioArtifactVersion = row.studioArtifactVersion === null ? null : positiveInteger(row.studioArtifactVersion);
+  if ((row.proposalOriginId === null) !== (requirementLinks.length === 0)
+    || (row.proposalOriginId === null) !== (studioArtifactId === null)
+    || (row.proposalOriginId === null) !== (studioArtifactVersionId === null)
+    || (row.proposalOriginId === null) !== (studioArtifactVersion === null)
+    || new Set(requirementLinks.map(link => `${link.sectionId}\u0000${link.requirementText}`)).size !== requirementLinks.length) invalid();
   return { schemaVersion: 'legacy-delivery-lineage.v1', importId: id(row.importId), documentGenerationId: id(row.documentGenerationId),
     documentSourceDigest: row.documentSourceDigest as string, sourceItemIndex: nonNegativeInteger(row.sourceItemIndex, 999),
-    sourceProcessId: id(row.sourceProcessId), sourceAssessmentId: id(row.sourceAssessmentId),
+    sourceProcessId: id(row.sourceProcessId), sourceAssessmentId,
+    ...(currentAssessmentLineage ?? {}),
     sourceEpicIndex: row.sourceEpicIndex === null ? null : nonNegativeInteger(row.sourceEpicIndex, 999),
-    sourceEpicTitle: nullableText(row.sourceEpicTitle, 300) as string | null };
+    sourceEpicTitle: nullableText(row.sourceEpicTitle, 300) as string | null,
+    proposalOriginId: row.proposalOriginId as string | null,
+    proposalRole: row.proposalRole as LegacyDeliveryTaskLineage['proposalRole'],
+    studioArtifactId, studioArtifactVersionId, studioArtifactVersion, requirementLinks };
 };
 export const decodeLegacyDeliveryTaskProjection = (value: unknown): LegacyDeliveryTaskProjection => {
   const row = record(value);
@@ -301,7 +354,7 @@ export const decodeLegacyDeliveryTaskProjection = (value: unknown): LegacyDelive
   return { id: id(row.id), version: row.version === null ? null : positiveInteger(row.version), mutable: row.mutable as boolean,
     projectId: id(row.projectId), title: text(row.title, 300) as string,
     description: text(row.description, 20_000, true) as string, status: oneOf(row.status, LEGACY_DELIVERY_TASK_STATUSES), priority: oneOf(row.priority, LEGACY_DELIVERY_TASK_PRIORITIES),
-    type: oneOf(row.type, LEGACY_DELIVERY_TASK_TYPES), assigneeIds: ids(row.assigneeIds, 50), dependencyIds: ids(row.dependencyIds, 100), ownerId: row.mutable ? id(row.ownerId) : nullableId(row.ownerId),
+    type: oneOf(row.type, LEGACY_DELIVERY_WORK_ITEM_TYPES), assigneeIds: ids(row.assigneeIds, 50), dependencyIds: ids(row.dependencyIds, 100), ownerId: row.mutable ? id(row.ownerId) : nullableId(row.ownerId),
     reporterId: nullableId(row.reporterId), sourceLineage: decodeLineage(row.sourceLineage), sourceEpicIndex, sourceEpicTitle: nullableText(row.sourceEpicTitle, 300) as string | null,
     retentionState: oneOf(row.retentionState, ['active', 'soft_deleted', 'retained'] as const),
     retentionClass: oneOf(row.retentionClass, ['none', 'dependency', 'lineage', 'terminal'] as const),
@@ -318,11 +371,12 @@ const decodeSourceItem = (value: unknown): LegacyDeliverySourceItem => {
 const decodeSource = (value: unknown): LegacyDeliverySourceProjection | null => {
   if (value === null) return null;
   const row = record(value);
-  exact(row, ['id', 'digest', 'items']);
-  if (typeof row.digest !== 'string' || !digestPattern.test(row.digest) || !Array.isArray(row.items) || row.items.length > 1_000) invalid();
+  exact(row, ['id', 'digest', 'materializesEpics', 'items']);
+  if (typeof row.digest !== 'string' || !digestPattern.test(row.digest) || typeof row.materializesEpics !== 'boolean'
+    || !Array.isArray(row.items) || row.items.length > 1_000) invalid();
   const items = (row.items as unknown[]).map(decodeSourceItem);
   if (items.some((item, index) => index > 0 && item.sourceIndex <= items[index - 1].sourceIndex)) invalid();
-  return { id: id(row.id), digest: row.digest as string, items };
+  return { id: id(row.id), digest: row.digest as string, materializesEpics: row.materializesEpics as boolean, items };
 };
 
 export const decodeLegacyDeliveryCommandSuccess = (value: unknown, command: LegacyDeliveryCommandEnvelope): LegacyDeliveryCommandSuccess => {

@@ -187,6 +187,7 @@ const authenticatedLifecycleControlStepTitles = Object.freeze<Record<string, str
   '/control/browser-action': 'hosted:control:action-finish',
   '/control/browser-case': 'hosted:control:case-submit',
   '/control/arm-browser-fault': 'hosted:control:permit-arm',
+  '/control/project-studio-handoff-target': 'hosted:control:observe',
   '/control/process-frame': 'hosted:control:observe',
   '/control/lifecycle-frame': 'hosted:control:observe',
   '/control/studio-failure-frame': 'hosted:control:observe',
@@ -1207,9 +1208,19 @@ const authenticatedLifecycleSelectStudioMailbox = async (
   return tabpanel;
 };
 
-export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (page: Page) => {
+export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (
+  page: Page,
+  expectedUpstreamHandoffId?: string,
+) => {
+  if (expectedUpstreamHandoffId !== undefined && !persistedHandoffId.test(expectedUpstreamHandoffId)) {
+    throw persistedHandoffTargetRejected();
+  }
   const tabpanel = await authenticatedLifecycleSelectStudioMailbox(page, 'Inbox');
-  const action = tabpanel.getByRole('button', { name: 'Request handoff', exact: true });
+  const eligibleCard = expectedUpstreamHandoffId === undefined
+    ? tabpanel.locator('li').filter({ has: tabpanel.getByRole('button', { name: 'Request handoff', exact: true }) })
+    : tabpanel.locator(`li[data-upstream-handoff-id="${expectedUpstreamHandoffId}"]`);
+  await expect(eligibleCard).toHaveCount(1);
+  const action = eligibleCard.getByRole('button', { name: 'Request handoff', exact: true });
   await expect(action).toHaveCount(1);
   await expect(action).toBeVisible();
   await expect(action).toBeEnabled();
@@ -1223,8 +1234,14 @@ export const authenticatedLifecycleOpenEligibleStudioHandoffRequest = async (pag
   return { dialog, upstreamHandoffId };
 };
 
-export const authenticatedLifecycleCommitEligibleStudioHandoffRequest = async (page: Page) => {
-  const { dialog, upstreamHandoffId } = await authenticatedLifecycleOpenEligibleStudioHandoffRequest(page);
+export const authenticatedLifecycleCommitEligibleStudioHandoffRequest = async (
+  page: Page,
+  expectedUpstreamHandoffId?: string,
+) => {
+  const { dialog, upstreamHandoffId } = await authenticatedLifecycleOpenEligibleStudioHandoffRequest(
+    page,
+    expectedUpstreamHandoffId,
+  );
   const responsePromise = page.waitForResponse(response => (
     response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/functions/v1/studio-artifact-command'
@@ -1366,7 +1383,7 @@ export const authenticatedLifecycleCompleteRequiredAssessmentFacts = async (
     await interaction.getByLabel('financialAction', { exact: true }).check();
   }
   await page.getByText('4. Agent necessity and evidence', { exact: true }).click();
-  await page.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(connectedEvidenceClaims.join(', '));
+  await selectExactConnectedEvidenceClaims(page, 1, connectedEvidenceClaims);
   await expect(page.getByText(/Before finalization, add:/u)).toHaveCount(0);
 };
 
@@ -1374,4 +1391,34 @@ export const authenticatedLifecycleFinalizeDecisionPack = async (page: Page) => 
   const button = page.getByRole('button', { name: 'Finalize assessment for review', exact: true });
   await expect(button).toBeEnabled({ timeout: 15_000 });
   await button.click();
+};
+
+const checkedEvidenceLabels = async (locator: Locator): Promise<string[]> => locator.evaluateAll(nodes => nodes
+  .filter(node => (node as HTMLInputElement).checked)
+  .map(node => node.getAttribute('aria-label') ?? '')
+  .filter(Boolean)
+  .sort());
+
+const selectExactConnectedEvidenceClaims = async (page: Page, evidenceNumber: number, claims: readonly string[]) => {
+  const group = page.getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true });
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const checkboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') });
+  const availableLabels = await checkboxes.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? ''));
+  const availableClaims = new Set(availableLabels.map(label => label.slice(prefix.length)));
+  const expectedClaims = new Set<string>(claims);
+  expect([...expectedClaims].sort()).toEqual([...claims].sort());
+  for (const claim of claims) expect(availableClaims.has(claim), `Registered evidence claim ${claim} must be selectable.`).toBe(true);
+
+  const attachmentCheckboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} attach to `, 'u') });
+  const attachedBefore = await checkedEvidenceLabels(attachmentCheckboxes);
+  expect(attachedBefore.length).toBeGreaterThan(0);
+  for (const label of availableLabels) {
+    const claim = label.slice(prefix.length);
+    const checkbox = group.getByLabel(label, { exact: true });
+    if (expectedClaims.has(claim)) await checkbox.check();
+    else await checkbox.uncheck();
+  }
+  const selected = (await checkedEvidenceLabels(checkboxes)).map(label => label.slice(prefix.length)).sort();
+  expect(selected).toEqual([...claims].sort());
+  expect(await checkedEvidenceLabels(attachmentCheckboxes)).toEqual(attachedBefore);
 };

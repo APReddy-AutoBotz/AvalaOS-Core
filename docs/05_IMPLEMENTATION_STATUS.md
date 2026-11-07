@@ -1,5 +1,44 @@
 # AvalaOS Core: current implementation and verification status
 
+## Planning review and Delivery dependencies
+
+The workspace’s separate Studio Author and Assessment Author recorded two immutable proposal/acceptance pairs. The FRD appendix exported through normal Retry PDF on fb874ec0. The project board now uses the bound server session’s status capability, checks stored prerequisites, and displays the recorded disposition instead of falling back to unresolved. No additional role grants were made.
+
+The acceptance workspace has ten stored board items: the original six and four selected FRD v4 proposals. Two stored dependencies bind FR-5 and FR-7 implementation to distinct questions. BRD v7 and PDD v6 each export in two pages; SDD v7 exports in six pages with both flows. The FRD appendix fix and the PostgreSQL-to-download regression use the actual document shape and brokered PDF bytes. See the [acceptance plan](planning/process-evidence-to-delivery.md) for the verified scope and fallback.
+
+The latest approved supplier invoice documents are BRD v7, PDD v6, FRD v4 and SDD v7. The author edited the previous approved versions and separate accounts reviewed and approved the revisions. The dedicated workspace directory returned all eight actor display names. Current business text distinguishes the prohibited bank-details POST from the invoice PATCH whose support is unknown. Historical source quotations retain their original wording. See the [acceptance plan](planning/process-evidence-to-delivery.md) for the database and hosted proof boundaries.
+
+## Business review evidence
+
+The dedicated preview of `4f0bda98453e93bbf4f70936eaed347d2ce6b404` passed 17 required checks and matched its backend and 131 installed migrations. Real extraction, corrected facts, four independently approved planning documents, selected regeneration and six persistent board items were exercised through the normal application. The GET Story retained its Blocked status after reload and repeated import produced no duplicates. In the retained six-item dataset, the GET-to-R11 dependency is written in the description. The project contains zero stored dependency edges. Acceptance of a historical proposal did not attest technical readiness.
+
+The correction pass reproduced the Delivery actor's assignee-directory error through its authenticated application route. The actor held project management authority. The same query returned eight eligible members in a read-write transaction and failed in a read-only transaction because the authority check takes row locks. The migration preserves those checks and makes the POST reads use the appropriate transaction mode. Assignees are editable through the eligible-member directory. The stored task owner identifies its creator.
+
+Studio tests cover save A, open B, reopen A, plus generation, independent approval and movement between selector pages. The catalog compares each displayed process's current case head with its decision source revision. An absent decision, a failed read and a failed save have distinct presentation. The [active plan](planning/process-evidence-to-delivery.md) records the release conditions for discovery work and the limits of the retained board evidence.
+
+## Four approved planning documents — 6 November 2026 UTC
+
+Candidate `88f1738ef6bd3f7d73c533e92ec80fe8815abc15` passed all 17 required workflows and exact dedicated preview/backend plus 130-migration verification. Real BRD/PDD/FRD/SDD content is saved and independently approved for planning. Six selected requirement-derived board items and the separate no-AI assessment remain verified. The SDD canonical PDF inspection found obscured branch routes, and current-source drafts lack a visible selective-refresh action. The [active milestone](planning/process-evidence-to-delivery.md) owns these focused corrections, their immutable rendition boundary and remaining ordinary-UI proof. Provider execution is disabled and the key binding revoked. The milestone is not complete.
+
+## Three approved documents and persistent board — 6 November 2026 UTC
+
+Candidate `4ded34f001a9204951a2bd754d458299b8716c57` passed all 17 required workflows and exact nonproduction preview/backend verification with 128 migrations. Normal UI retains independently approved BRD v5, PDD v4 and FRD v2; all canonical PDF pages were inspected. Six selected requirement-derived board items persist, including edited Tasks, a Blocked GET Story and its discovery dependency. Repeated import creates no duplicates. The contrasting order-status assessment displays its supported no-AI design separately from evidence gaps.
+
+The actual SDD response duplicated its As-Is/To-Be flows and was correctly rejected without creating a document version. SDD, selective refresh and rendered SDD export remain incomplete. Provider execution is disabled and its key binding revoked; all 12 cumulative attempts and uncertain reservations remain counted. The [active milestone](planning/process-evidence-to-delivery.md) owns the focused SDD guidance and cumulative completion allowance under verification. Earlier snapshots below retain their original scope.
+
+## Planning approvals and export inspection — 6 November 2026
+
+Normal UI proof on the verified PR #355 preview retains independently approved BRD v5 and PDD v2, with corrected acknowledgment timing, API operation boundaries and explicit planning limitations. The canonical BRD PDF downloaded successfully on `3490f58b`, but all-page inspection exposed raw structured JSON rather than a business document. Corrected export is not yet proven. Sixteen of 17 required checks passed; the remaining capture-audit fixture correction passes the local 16-stage PostgreSQL journey. Real FRD/SDD, selective refresh, SDD flow export and persistent board import are still pending. Provider execution and key binding remain off. [Milestone and remaining work](planning/process-evidence-to-delivery.md).
+
+## Actual planning documents — 6 November 2026
+
+The exact `1870a2a1` nonproduction candidate generated and saved a BRD and PDD from the retained fresh-source assessment through independent planning handoffs. The SDD returned an ambiguous post-provider persistence/validation result with no stored response; FRD generation has not run. Provider execution and key binding are disabled pending bounded recovery. Document approvals, rendered SDD export and persistent selected board import remain unverified. See the [active milestone and accounting distinction](planning/process-evidence-to-delivery.md).
+
+## Requirement-derived Delivery candidate
+
+The proposed work comes from approved requirement text and uses the existing selective import and board. Verification must distinguish a synthetic approved Studio input from a fresh provider-generated artifact. The continuous nonproduction run remains pending. [Delivery authority and verification](migrations/authenticated-studio-delivery-outcome-monitor.md)
+
+
 ## Governed Studio milestone candidate
 
 The candidate adds the canonical SDD and its two flow sections. PostgreSQL replay executed the additive template, decoder and source-authority migration without replacing existing immutable templates. Actual provider quality remains unverified separately for BRD, PDD, FRD and SDD. [Studio verification and rollback](planning/process-evidence-studio-sdd-and-flows.md)

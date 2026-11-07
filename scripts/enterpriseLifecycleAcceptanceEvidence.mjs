@@ -41,7 +41,7 @@ const BACKEND_STAGE_DELTAS = Object.freeze({
   'govern.resolve': [1, 1, 1, 0],
   'studio.handoff': [2, 1, 1, 0],
   'studio.consume': [6, 4, 4, 0],
-  'studio.generate': [1, 1, 2, 1],
+  'studio.generate': [1, 1, 3, 1],
   'studio.provider-failure': [1, 1, 2, 0],
 });
 const BACKEND_STAGE_EXPECTATIONS = Object.freeze(Object.fromEntries(REQUIRED_BACKEND_STAGES.map(id => [id, {

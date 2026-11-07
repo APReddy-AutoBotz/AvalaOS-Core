@@ -624,6 +624,12 @@ export interface TaskSourceLineageMetadata {
     sourceAssessmentId?: string;
     sourceEpicIndex?: number | null;
     sourceEpicTitle?: string | null;
+    proposalOriginId?: string;
+    proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | 'discovery';
+    studioArtifactId?: string;
+    studioArtifactVersionId?: string;
+    studioArtifactVersion?: number;
+    requirementLinks?: Array<{ sectionId: string; sectionTitle: string; requirementText: string }>;
     deliveryPackId?: string;
     processId?: string;
     assessmentId?: string;
@@ -909,7 +915,7 @@ export type TaskStatus = typeof ALL_STATUSES[number];
 export const ALL_PRIORITIES = ['High', 'Medium', 'Low'] as const;
 export type TaskPriority = typeof ALL_PRIORITIES[number];
 
-export const ALL_TASK_TYPES = ['Story', 'Task', 'Bug', 'Subtask'] as const;
+export const ALL_TASK_TYPES = ['Epic', 'Story', 'Task', 'Bug', 'Subtask'] as const;
 export type TaskType = typeof ALL_TASK_TYPES[number];
 export type DeliveryDeletionState = 'active' | 'soft_deleted' | 'retained';
 export type DeliveryDeletionMode = 'soft_delete' | 'retained_lineage';

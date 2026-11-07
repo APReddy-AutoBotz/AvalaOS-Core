@@ -118,6 +118,16 @@ export const buildAssessmentRecommendationModel = (
     });
     const reasons = unique(selectedCandidates.flatMap(item => item.rationale));
     const evidenceGaps = unique([
+      ...selectedCandidates.flatMap(candidate => {
+        if (candidate.confidence !== 'Insufficient Evidence') return [];
+        const fields = [
+          ['primitive.workflowPatternKnown', 'the workflow pattern'],
+          ['primitive.interfaceDependencyKnown', 'the interface dependency'],
+        ];
+        return fields.flatMap(([id, label]) => candidate.fieldIds.includes(id)
+          && primitive.facts[id]?.status === 'known' && !primitive.facts[id].evidenceIds.length
+          ? [`The author recorded ${label}, but the step fact has no linked evidence.`] : []);
+      }),
       ...decision.interactionDecisions
         .filter(item => assessment.interactions.some(interaction => interaction.id === item.interactionId && interaction.primitiveId === primitive.id))
         .flatMap(item => item.evidenceGaps),
@@ -161,6 +171,21 @@ export const buildAssessmentRecommendationModel = (
   const everyStepCovered = steps.length > 0 && steps.every(step =>
     (step.components.length > 0 || ['Human-Led', 'Simplify', 'Monitor / Do Nothing'].includes(step.businessDisposition ?? ''))
     && (step.evidenceConfidence === 'Verified' || step.evidenceConfidence === 'Partially Evidenced'));
+  // The proposed read-and-route design can be deterministic while the evidence
+  // links needed to verify it for implementation are still incomplete.
+  const readAndRouteDesign = steps.some(step => step.apiStatus === 'ready')
+    && steps.every((step, index) => {
+      const primitive = assessment.primitives[index];
+      const field = primitive.type === 'Retrieve' ? 'primitive.interfaceDependencyKnown' : 'primitive.workflowPatternKnown';
+      const facts = [field, 'primitive.rulesStable', 'primitive.controlRequirementsKnown'];
+      return (primitive.type === 'Retrieve' || primitive.type === 'Route')
+        && facts.every(id => primitive.facts[id]?.status === 'known' && primitive.facts[id]?.value === true
+          && primitive.facts[id]?.source === 'user')
+        && step.components.length > 0
+        && step.components.every(component => component === 'Workflow Orchestration' || component === 'Native API Integration')
+        && (primitive.type !== 'Retrieve' || step.components.includes('Native API Integration'))
+        && step.apiOperations.every(operation => operation.mode === 'read' && operation.readiness === 'Ready');
+    });
   const everySelectionConclusive = steps.every(step => {
     const selectedCandidates = decision.candidateEvaluations.filter(item =>
       item.primitiveId === step.primitiveId && step.components.includes(item.component));
@@ -174,7 +199,7 @@ export const buildAssessmentRecommendationModel = (
   });
   const aiUseStatus: AiUseStatus = aiSelected
     ? 'included'
-    : everyStepCovered && everySelectionConclusive && decision.processReadiness !== 'Insufficient evidence'
+    : (everyStepCovered || readAndRouteDesign) && everySelectionConclusive && decision.processReadiness !== 'Insufficient evidence'
       ? 'unnecessary'
       : 'unproven';
   const coverage = selectedComponents.length ? selectedComponents.join(', ') : 'human work and unresolved design questions';
@@ -186,7 +211,7 @@ export const buildAssessmentRecommendationModel = (
   const explanation = aiUseStatus === 'included'
     ? `The deterministic assessment selected ${coverage}. AI remains bounded by the listed controls and human decisions.`
     : aiUseStatus === 'unnecessary'
-      ? `The evidence-supported composition is covered by ${coverage}. These steps can proceed without AI.`
+      ? `Proposed approach: ${coverage}. AI is not selected.${everyStepCovered ? '' : ' The recorded workflow and ready read operation cover these steps. Link supporting evidence to the step facts before treating the design as verified for implementation.'}`
       : `The current facts do not justify an AI conclusion. The components under consideration are ${coverage}. Review the alternatives and evidence gaps before deciding.`;
 
   return {

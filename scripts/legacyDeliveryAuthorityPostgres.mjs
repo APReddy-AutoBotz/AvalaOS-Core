@@ -89,7 +89,7 @@ export async function runLegacyDeliveryAuthorityPostgres(options = {}) {
   let primaryCleanupVerified = false;
   try {
     assert.equal(fixture.version, LEGACY_DELIVERY_FIXTURE_VERSION);
-    assert.equal((await fixture.db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip, '20261103103752');
+    assert.equal((await fixture.db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip, '20261107120003');
     assert.equal((await fixture.db.query('SELECT count(*)::int n FROM public.legacy_delivery_workspace_controls')).rows[0].n, 0);
     const disabled = await fixture.callCommand({ key: 'disabled-import-0001', action: 'import', payload: {
       projectId: x.project, sourceGenerationId: x.generation, expectedSourceDigest: `sha256:${'0'.repeat(64)}`, sourceItemIndices: [0, 1, 2],
@@ -142,7 +142,7 @@ export async function runLegacyDeliveryAuthorityPostgres(options = {}) {
     await fixture.db.query('UPDATE public.document_generations SET artifacts=$1::jsonb WHERE id=$2', [JSON.stringify(fixture.artifacts), x.generation]);
     const deniedBefore = await fixture.snapshot();
     const foreign = await fixture.callCommand({ actor: x.denied, version: 1, key: 'foreign-import-0001', action: 'import', payload: importPayload });
-    await assert.rejects(fixture.asRole('authenticated', () => fixture.db.query(`SELECT public.legacy_delivery_apply_command(
+    await assert.rejects(fixture.asRole('authenticated', () => fixture.db.query(`SELECT public.legacy_delivery_apply_requirement_command(
       $1,$2,$3,1,$4,'browser-denied','import',$5::jsonb)`, [x.actor, x.organization, x.workspace, randomUUID(), JSON.stringify(importPayload)])), /permission denied/u);
     const deniedAfter = await fixture.snapshot();
     assert.equal(foreign.errorCode, 'NOT_FOUND');

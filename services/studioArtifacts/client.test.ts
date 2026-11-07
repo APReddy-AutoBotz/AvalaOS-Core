@@ -17,6 +17,11 @@ assert.equal(decodeStudioArtifactProjection(prBProjection,context).sourcePackage
 const directAncestry={...mixedAncestry,sourceMode:'direct_transcript_bundle',assessmentLabel:'not_assessed',planningLabel:'planning_only',caseId:null,sourceCaseVersionId:null,sourceCaseVersion:null,decisionId:null,decisionVersion:null,reviewResolutionId:null,governResolutionId:null,studioHandoffId:null,reviewSchemaVersion:null,reviewSequence:null};
 const directProjection={...prBProjection,ancestry:directAncestry,sourcePackage:{...prBProjection.sourcePackage,sourceMode:'direct_transcript_bundle',assessmentLabel:'not_assessed',planningLabel:'planning_only',assessHandoff:null},assessmentLabel:'not_assessed',planningLabel:'planning_only'};
 assert.equal(decodeStudioArtifactProjection(directProjection,context).ancestry.caseId,null);
+const reviewedPlanningAncestry={...projection.ancestry,contractVersion:'studio-artifact-2',sourceMode:'assess_handoff',assessmentLabel:'assessed',planningLabel:'reviewed_planning',sourcePackageId:U[5],sourcePackageVersion:2,studioInputBundleId:null,studioInputBundleVersionId:null,studioInputBundleVersion:null,governResolutionId:null};
+const reviewedPlanningProjection={...prBProjection,ancestry:reviewedPlanningAncestry,sourcePackage:{...prBProjection.sourcePackage,sourceMode:'assess_handoff',assessmentLabel:'assessed',planningLabel:'reviewed_planning',studioInputBundle:null},assessmentLabel:'assessed',planningLabel:'reviewed_planning'};
+assert.equal(decodeStudioArtifactProjection(reviewedPlanningProjection,context).planningLabel,'reviewed_planning');
+assert.throws(()=>decodeStudioArtifactProjection({...reviewedPlanningProjection,ancestry:{...reviewedPlanningAncestry,governResolutionId:U[6]}},context),StudioArtifactBoundaryError);
+assert.throws(()=>decodeStudioArtifactProjection({...prBProjection,ancestry:{...mixedAncestry,governResolutionId:null}},context),StudioArtifactBoundaryError);
 const staleCompletionVersion={...version,id:U[6],version:2,parentVersionId:version.id,contentHash:'e'.repeat(64),createdAt:'2026-07-27T00:01:00.000Z'};
 const staleCompletionProjection={...directProjection,aggregateVersion:2,currentVersion:version,versions:[version,staleCompletionVersion]};
 assert.equal(decodeStudioArtifactProjection(staleCompletionProjection,context).currentVersion.id,version.id);
@@ -24,8 +29,18 @@ const artifactWorkspace={contractVersion:'studio-workspace-2',organizationId:U[0
 assert.equal(decodeStudioArtifactWorkspaceProjection(artifactWorkspace,context).selectedSources.hasMore,true);
 const manualWorkspace={...artifactWorkspace,artifact:{...artifactWorkspace.artifact,aggregateVersion:0,currentVersionId:null,sections:[]},sourcePackage:{...artifactWorkspace.sourcePackage,mode:'manual_brief',lineageClassification:'not_assessed',planningOnly:true,inputBundle:null},selectedSources:{items:[],total:0,offset:0,limit:20,hasMore:false},coverage:{selectedSourceVersionIds:[],coveredSourceVersionIds:[],uncoveredSourceVersionIds:[],complete:true,citations:[],conflicts:[]},providerAvailability:{available:false,reason:'read_only'},actions:[]};
 assert.equal(decodeStudioArtifactWorkspaceProjection(manualWorkspace,context).sourcePackage.mode,'manual_brief');
+const reviewedPlanningWorkspace={...artifactWorkspace,sourcePackage:{...artifactWorkspace.sourcePackage,mode:'assess_handoff',lineageClassification:'assessed',planningOnly:true,inputBundle:null}};
+assert.equal(decodeStudioArtifactWorkspaceProjection(reviewedPlanningWorkspace,context).sourcePackage.planningOnly,true);
 const summaryPage={contractVersion:'studio-artifact-summary-2',organizationId:U[0],workspaceId:U[1],items:[{id:U[6],artifactType:'brd',aggregateVersion:1,lifecycle:'draft',currentVersionId:U[7],currentApprovedVersionId:null,sourceMode:'direct_transcript_bundle',lineageClassification:'not_assessed',planningOnly:true,displayLabel:'BRD · Direct planning package',updatedAt:'2026-08-28T00:00:00.000Z',actions:['studio.artifact.draft.revise']}],total:1,offset:0,limit:20,hasMore:false};
 assert.equal(decodeStudioArtifactSummaryPage(summaryPage,context).items[0].planningOnly,true);
+// A failed first generation must not hide the other saved documents in the index.
+const attemptedSummary={...summaryPage.items[0],id:U[5],artifactType:'sdd',aggregateVersion:1,currentVersionId:null,actions:[]};
+const mixedAttemptPage={...summaryPage,items:[attemptedSummary,...summaryPage.items],total:2};
+assert.equal(decodeStudioArtifactSummaryPage(mixedAttemptPage,context).items[1].currentVersionId,U[7]);
+for(const invalid of [{...attemptedSummary,lifecycle:'approved'},{...attemptedSummary,currentApprovedVersionId:U[8]},{...attemptedSummary,actions:['studio.artifact.draft.revise']}])assert.throws(()=>decodeStudioArtifactSummaryPage({...summaryPage,items:[invalid]},context),StudioArtifactBoundaryError);
+const attemptedWorkspace={...manualWorkspace,artifact:{...manualWorkspace.artifact,aggregateVersion:1}};
+assert.equal(decodeStudioArtifactWorkspaceProjection(attemptedWorkspace,context).artifact.currentVersionId,null);
+assert.throws(()=>decodeStudioArtifactWorkspaceProjection({...attemptedWorkspace,artifact:{...attemptedWorkspace.artifact,lifecycle:'approved'}},context),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioArtifactSummaryPage({...summaryPage,workspaceId:U[2]},context),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioArtifactSummaryPage({...summaryPage,items:[{...summaryPage.items[0],sourceLabel:'forbidden'}]},context),StudioArtifactBoundaryError);
 const summaryTransport={readArtifactSummaries:async(_context:TenantContextProjection,offset:number,limit:number)=>({...summaryPage,offset,limit})} as StudioArtifactTransport;
@@ -37,7 +52,7 @@ for(const malformed of [
   {...artifactWorkspace,artifact:{...artifactWorkspace.artifact,aggregateVersion:0}},
   {...artifactWorkspace,artifact:{...artifactWorkspace.artifact,currentApprovedVersionId:U[8],currentVersionId:null}},
   {...artifactWorkspace,artifact:{...artifactWorkspace.artifact,sections:[{...prBProjection.sections[0],sourceAnchors:[],labels:[]}]}},
-  {...artifactWorkspace,sourcePackage:{...artifactWorkspace.sourcePackage,planningOnly:true}},
+  {...artifactWorkspace,sourcePackage:{...artifactWorkspace.sourcePackage,planningOnly:true,lineageClassification:'not_assessed'}},
   {...artifactWorkspace,sourcePackage:{...artifactWorkspace.sourcePackage,mode:'direct_transcript_bundle',lineageClassification:'not_assessed',planningOnly:true,inputBundle:null}},
   {...artifactWorkspace,sourcePackage:{...artifactWorkspace.sourcePackage,inputBundle:{...artifactWorkspace.sourcePackage.inputBundle,version:0}}},
   {...artifactWorkspace,selectedSources:{...artifactWorkspace.selectedSources,items:[...artifactWorkspace.selectedSources.items,...artifactWorkspace.selectedSources.items]}},
@@ -100,8 +115,10 @@ assert.throws(()=>decodeStudioCommandResponse({...response,resource_id:U[6]}),St
 assert.throws(()=>decodeStudioCommandResponse({...response,ok:false}),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioCommandResponse({...response,outcome:'authorized'}),StudioArtifactBoundaryError);
 assert.throws(()=>decodeStudioCommandResponse({...response,resource:null}),StudioArtifactBoundaryError);
-const retainedPrivateProjection={artifactId:U[6],artifactVersionId:U[7],artifactVersion:1,artifactType:'brd',approved:true,readOnly:false,renditions:[{id:U[5],version:1,format:'pdf',state:'available',mimeType:'application/pdf',filename:'retained-governed-brief.pdf',byteLength:1024,sha256:'d'.repeat(64),rendererVersion:'pdf-v1',retentionMode:'until',retentionUntil:'2027-08-28T00:00:00.000Z',legalHoldActive:false,activeHolds:[],deletion:null,failureCode:null,updatedAt:'2026-08-28T00:00:00.000Z'}]};
+const retainedPrivateProjection={artifactId:U[6],artifactVersionId:U[7],artifactVersion:1,artifactType:'brd',approved:true,readOnly:false,renditions:[{id:U[5],version:1,format:'pdf',state:'available',mimeType:'application/pdf',filename:'retained-governed-brief.pdf',byteLength:1024,sha256:'d'.repeat(64),rendererVersion:'studio-pdf-1',retentionMode:'until',retentionUntil:'2027-08-28T00:00:00.000Z',legalHoldActive:false,activeHolds:[],deletion:null,failureCode:null,updatedAt:'2026-08-28T00:00:00.000Z'}]};
 assert.equal(decodeStudioPrivateArtifactProjection(retainedPrivateProjection,{artifactId:U[6],artifactVersionId:U[7]}).renditions[0].state,'available');
+// Retained PDF fixtures use the actual server renderer identity; aliases remain invalid.
+assert.throws(()=>decodeStudioPrivateArtifactProjection({...retainedPrivateProjection,renditions:[{...retainedPrivateProjection.renditions[0],rendererVersion:'pdf-v1'}]},{artifactId:U[6],artifactVersionId:U[7]}));
 console.log(`PR_B_ASSERTION ${JSON.stringify({testId:'COMPAT-003',assertionId:'retained-studio-and-private-projection-strict-decoders',fixture:'LEGACY-STUDIO-PRIVATE-01',result:'passed',runtimeContext:{persona:{id:U[8],state:'active',capabilities:['studio.artifacts.read']},organizationId:U[0],workspaceId:U[1],lineage:{profile:'node-client',sourcePackageId:U[5],sourcePackageVersionId:null,sourcePackageVersion:2,sourcePackageHash:'b'.repeat(64),templateId:U[3],templateVersionId:U[4],templateVersion:'studio-brd-1',templateHash:'c'.repeat(64),handoffId:U[7],handoffVersionId:null,handoffVersion:2,artifactId:U[6],artifactVersionId:U[7],artifactVersion:1,studioContractVersion:'studio-artifact-1',extendedStudioContractVersion:'studio-artifact-2',privateProjectionVersion:1,renditionId:U[5],renditionVersion:1}}})}`);
 
 void(async()=>{let envelope:any;
@@ -117,8 +134,9 @@ void(async()=>{let envelope:any;
   assert.throws(()=>decodeStudioSourcePackageIdentity({...sourcePackageIdentity,sourceMode:'manual_brief'}),StudioArtifactBoundaryError);
   assert.throws(()=>decodeStudioSourcePackageIdentity({...sourcePackageIdentity,aggregateVersion:0}),StudioArtifactBoundaryError);
   assert.equal(decodeStudioSourcePackageIdentity({...sourcePackageIdentity,aggregateVersion:0,currentVersionId:null}).aggregateVersion,0);
+  assert.equal(decodeStudioSourcePackageIdentity({...sourcePackageIdentity,aggregateVersion:1,currentVersionId:null}).currentVersionId,null);
   assert.equal(decodeStudioSourcePackageIdentity({...sourcePackageIdentity,currentApprovedVersionId:U[8]}).currentApprovedVersionId,U[8]);
-  for(const malformed of [{...sourcePackageIdentity,version:3},{...sourcePackageIdentity,routePolicyVersion:0},{...sourcePackageIdentity,createdAt:'yesterday'},{...sourcePackageIdentity,currentVersionId:null},{...sourcePackageIdentity,sourcePackageHash:'short'}])assert.throws(()=>decodeStudioSourcePackageIdentity(malformed),StudioArtifactBoundaryError);
+  for(const malformed of [{...sourcePackageIdentity,version:3},{...sourcePackageIdentity,routePolicyVersion:0},{...sourcePackageIdentity,createdAt:'yesterday'},{...sourcePackageIdentity,currentVersionId:null,currentApprovedVersionId:U[8]},{...sourcePackageIdentity,sourcePackageHash:'short'}])assert.throws(()=>decodeStudioSourcePackageIdentity(malformed),StudioArtifactBoundaryError);
   const workspaceTransport:StudioArtifactTransport={...transport,readWorkspace:async()=>({projection:workspaceProjection}),readArtifactV2:async()=>directProjection,readSourcePackage:async()=>sourcePackageIdentity,readArtifactWorkspace:async(_context,_artifactId,offset,limit)=>({...artifactWorkspace,selectedSources:{...artifactWorkspace.selectedSources,offset,limit,hasMore:offset+artifactWorkspace.selectedSources.items.length<artifactWorkspace.selectedSources.total}}),invokeWorkspace:async(value)=>{envelope=value;return response;}};
   assert.equal((await readStudioWorkspace(context,1,workspaceTransport))?.planningOnly,true);
   assert.equal((await readStudioArtifactV2(context,U[6],workspaceTransport)).contractVersion,'studio-artifact-2');

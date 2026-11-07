@@ -1,4 +1,5 @@
 import { Task, TaskStatus, User } from '../types';
+import type { StudioDeliveryDiscoveryDisposition } from './productAcceptanceBridge/contracts';
 
 export class DeliveryPolicyError extends Error {
   constructor(message: string) {
@@ -10,6 +11,23 @@ export class DeliveryPolicyError extends Error {
 const ADMIN_PERMISSIONS = new Set(['org.admin', 'security.manage', 'roles.manage']);
 const MANAGER_PERMISSIONS = new Set(['project.manage']);
 const ACTIVE_STATUSES: TaskStatus[] = ['In Progress', 'In Review', 'Testing', 'Ready for Release', 'Done'];
+export const LEGACY_DELIVERY_STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
+  'To Do': ['To Do', 'In Progress', 'On Hold', 'Blocked'],
+  'In Progress': ['In Progress', 'In Review', 'On Hold', 'Blocked'],
+  'In Review': ['In Review', 'Testing', 'In Progress', 'On Hold', 'Blocked'],
+  'Testing': ['Testing', 'Ready for Release', 'In Review', 'Blocked'],
+  'Ready for Release': ['Ready for Release', 'Done', 'Testing', 'Blocked'],
+  'Done': ['Done'],
+  'Blocked': ['Blocked', 'On Hold'],
+  'On Hold': ['On Hold', 'To Do', 'Blocked'],
+};
+const RELEASED_DISCOVERY_DISPOSITIONS = new Set<StudioDeliveryDiscoveryDisposition>([
+  'source_backed_answer_accepted',
+  'approved_nonblocking_scope',
+]);
+
+export type DeliveryDiscoveryDispositionByTask = ReadonlyMap<string, StudioDeliveryDiscoveryDisposition | null>;
+export type DeliveryDependencyViolation = Pick<Task, 'id' | 'title' | 'status' | 'sourceLineage'>;
 
 const normalized = (values: string[] | undefined) => [...(values || [])].sort().join('|');
 
@@ -63,10 +81,49 @@ const hasProtectedFieldChange = (previousTask: Task, nextTask: Task) =>
   normalized(previousTask.assigneeIds) !== normalized(nextTask.assigneeIds) ||
   normalized(previousTask.dependencyIds) !== normalized(nextTask.dependencyIds);
 
-export const getDependencyViolations = (task: Task, allTasks: Task[], nextStatus: TaskStatus = task.status) => {
+export const discoveryDispositionReleasesWork = (disposition: StudioDeliveryDiscoveryDisposition | null | undefined) =>
+  Boolean(disposition && RELEASED_DISCOVERY_DISPOSITIONS.has(disposition));
+
+export const isLegacyDeliveryStatusTransitionAllowed = (from: TaskStatus, to: TaskStatus) =>
+  LEGACY_DELIVERY_STATUS_TRANSITIONS[from].includes(to);
+
+export const getLegacyDeliveryStatusTargets = (from: TaskStatus) =>
+  LEGACY_DELIVERY_STATUS_TRANSITIONS[from].filter(status => status !== from);
+
+export const getDependencyViolations = (
+  task: Task,
+  allTasks: Task[],
+  nextStatus: TaskStatus = task.status,
+  discoveryDispositions?: DeliveryDiscoveryDispositionByTask,
+): DeliveryDependencyViolation[] => {
   if (!ACTIVE_STATUSES.includes(nextStatus)) return [];
-  const dependencies = allTasks.filter(candidate => task.dependencyIds?.includes(candidate.id));
-  return dependencies.filter(dependency => dependency.status !== 'Done');
+  const tasksById = new Map(allTasks.map(candidate => [candidate.id, candidate]));
+  const dependencies: DeliveryDependencyViolation[] = (task.dependencyIds || []).map(dependencyId =>
+    tasksById.get(dependencyId) ?? {
+      id: dependencyId,
+      title: 'A referenced prerequisite is unavailable in this view',
+      status: 'Blocked',
+      sourceLineage: undefined,
+    });
+  return dependencies.filter(dependency => dependency.status !== 'Done'
+    || discoveryDispositions !== undefined
+      && dependency.sourceLineage?.proposalRole === 'discovery'
+      && !discoveryDispositionReleasesWork(discoveryDispositions.get(dependency.id)));
+};
+
+export const getStatusTransitionViolations = (
+  task: Task,
+  allTasks: Task[],
+  nextStatus: TaskStatus,
+  discoveryDispositions?: DeliveryDiscoveryDispositionByTask,
+) => {
+  const violations = getDependencyViolations(task, allTasks, nextStatus, discoveryDispositions);
+  if (nextStatus === 'Done' && discoveryDispositions !== undefined
+    && task.sourceLineage?.proposalRole === 'discovery'
+    && !discoveryDispositionReleasesWork(discoveryDispositions.get(task.id))) {
+    return [...violations, task];
+  }
+  return violations;
 };
 
 export const canUpdateDeliveryTask = (user: User | null | undefined, previousTask: Task, nextTask: Task, allTasks: Task[]) => {

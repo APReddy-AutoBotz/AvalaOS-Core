@@ -67,6 +67,17 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci
+      - name: Assessed planning from independent review through selected board import
+        env:
+          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
+          PILOT_ACCEPTANCE_HEAD: ${{ env.CANDIDATE_SHA }}
+        run: |
+          node --test scripts/assessedPlanningReviewContract.test.mjs
+          node scripts/testAssessedPlanningReviewPostgres.mjs
+          node --test scripts/planningDiscoveryResolutionMigration.test.mjs
+          node scripts/assessedPlanningDeliveryPostgres.mjs
+          PILOT_OPERATIONS_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres node scripts/testScopedStudioRolesPostgres.mjs
+          PILOT_OPERATIONS_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres node scripts/testStudioResponseReconciliationPostgres.mjs
       - name: Fresh, accepted-main upgrade, RLS, receipt/effect, and recovery contracts
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
@@ -92,6 +103,10 @@ jobs:
         env:
           GOVERN_ACTION_AUTHORITY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic
         run: node scripts/testGovernImmutableActionAuthorityPostgres.mjs
+      - name: Mixed immutable Govern snapshot compatibility
+        env:
+          GOVERN_MIXED_SNAPSHOT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: node scripts/testGovernMixedSnapshotNormalizationPostgres.mjs
       - name: Connected Assess Govern Studio lifecycle evidence
         env:
           ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/avalaos_pilot_synthetic

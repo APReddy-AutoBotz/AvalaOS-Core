@@ -130,3 +130,54 @@ test('fails closed on duplicate receipts and mismatched persisted resources', as
     /ENTERPRISE_LIFECYCLE_PERSISTENCE_RESOURCE_BINDING:0/u,
   );
 });
+
+const captureFixture = (captureRows, captureAudit = true) => {
+  const expected = { ...command, domain: 'studio', captureAudit,
+    resourceType: 'studio_generation_attempt', receiptResourceId: command.resourceId };
+  const row = {
+    audit_id: 'capture-audit', capture_audit_event_id: 'capture-audit',
+    request_id: command.requestId, actor_id: command.actorId,
+    org_id: command.organizationId, workspace_id: command.workspaceId,
+    candidate_org: command.organizationId, candidate_workspace: command.workspaceId,
+    candidate_artifact: command.resourceId, attempt_artifact: command.resourceId,
+    action: 'studio.artifact.generation.candidate.capture', resource_type: 'studio_generation_attempt',
+    resource_id: command.resourceId, outcome: 'succeeded', candidate_state: 'validated',
+    resource_version: '1', original_execution_fence: '1',
+    response_hash: 'a'.repeat(64), computed_hash: 'a'.repeat(64),
+    input_tokens: 100, output_tokens: 40, total_tokens: 140,
+    metadata: { artifactId: command.resourceId, responseHash: 'a'.repeat(64), inputTokens: 100, outputTokens: 40, totalTokens: 140 },
+  };
+  const baseDb = db({ receiptRows: [receipt({status: 'committed', resource_id: command.resourceId})],
+    auditRows: [audit({resource_type: 'studio_generation_attempt'})] });
+  return { commands: [expected], db: {query: async (sql, values) => {
+    if (sql.includes('studio_generation_provider_candidates')) {
+      assert.deepEqual(values, [command.resourceId]);
+      assert.match(sql, /enterprise_sha256_jsonb\(c.response_content\)/u);
+      assert.match(sql, /a.id=c.capture_audit_event_id/u);
+      return {rows: captureRows ? captureRows(row) : [row]};
+    }
+    return baseDb.query(sql, values);
+  }} };
+};
+
+test('counts only the exact validated response capture audit and retains zero capture on provider failure', async () => {
+  assert.equal((await assertEnterpriseLifecycleCommandPersistence(captureFixture())).auditCount, 2);
+  assert.equal((await assertEnterpriseLifecycleCommandPersistence(captureFixture(() => [], false))).auditCount, 1);
+  await assert.rejects(assertEnterpriseLifecycleCommandPersistence(captureFixture(undefined, false)), /CAPTURE_COUNT/u);
+  await assert.rejects(assertEnterpriseLifecycleCommandPersistence(captureFixture(() => [])), /CAPTURE_COUNT/u);
+  await assert.rejects(assertEnterpriseLifecycleCommandPersistence(captureFixture(row => [row, row])), /CAPTURE_COUNT/u);
+});
+
+for (const field of ['audit_id','request_id','actor_id','org_id','workspace_id','candidate_org',
+  'candidate_workspace','candidate_artifact','action','resource_type','resource_id','outcome',
+  'candidate_state','resource_version','original_execution_fence','response_hash','computed_hash',
+  'input_tokens','output_tokens','total_tokens']) {
+  test(`rejects substituted capture binding ${field}`, async () => {
+    await assert.rejects(assertEnterpriseLifecycleCommandPersistence(captureFixture(row => [{...row, [field]: 'wrong'}])), /CAPTURE_BINDING/u);
+  });
+}
+for (const field of ['artifactId','responseHash','inputTokens','outputTokens','totalTokens']) {
+  test(`rejects substituted capture metadata ${field}`, async () => {
+    await assert.rejects(assertEnterpriseLifecycleCommandPersistence(captureFixture(row => [{...row, metadata: {...row.metadata, [field]: 'wrong'}}])), /CAPTURE_BINDING/u);
+  });
+}

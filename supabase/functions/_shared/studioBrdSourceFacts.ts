@@ -13,14 +13,6 @@ const MAX_DOCUMENT_CHARACTERS = 500_000;
 const MAX_SOURCE_CHARACTERS = 110_000;
 const MAX_ITEMS = 200;
 
-const AGENT_NECESSITY_FIELDS = [
-  'irreducibleAmbiguity',
-  'adaptiveNextStep',
-  'toolOrPathSelection',
-  'incrementalValue',
-  'controllable',
-] as const;
-
 type SourceFactsBlock = Readonly<{
   body: string;
   anchor: StudioCanonicalSourceAnchorDto;
@@ -55,18 +47,17 @@ const sourceText = (value: unknown, maximum: number): string | null => {
   return value;
 };
 
-const escaped = (value: string) => value
-  .replace(/\r\n?|\n/g, '\\n')
+const readableSourceText = (value: string) => value
+  .replace(/\r\n?|\n/g, ' ')
   .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, character =>
     `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/([\\`*_{}\[\]()#+.!|~-])/g, '\\$1');
+  .replace(/>/g, '&gt;');
 
 const display = (value: unknown, maximum = 4_000): string => {
   if (value === undefined || value === null) return 'Unknown';
-  if (typeof value === 'string') return escaped(sourceText(value, maximum) ?? 'Unknown');
+  if (typeof value === 'string') return readableSourceText(sourceText(value, maximum) ?? 'Unknown');
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   invalid();
@@ -78,32 +69,20 @@ const sourceArray = (value: unknown): readonly unknown[] | null => {
   return value;
 };
 
-const stringList = (value: unknown, maximum = 2_000): string => {
+const stringList = (value: unknown, maximum = 2_000): string | null => {
   const values = sourceArray(value);
-  if (values === null) return 'Unknown';
-  if (values.length === 0) return 'None stated';
+  if (values === null || values.length === 0) return null;
   return values.map(item => {
     if (typeof item !== 'string') invalid();
     return display(item, maximum);
   }).join('; ');
 };
 
-const scalarFact = (value: unknown): string => {
-  if (value === undefined || value === null) return 'value=Unknown, status=Unknown';
-  if (!object(value)) invalid();
-  const status = value.status === undefined || value.status === null
-    ? 'Unknown'
-    : typeof value.status === 'string' && ['known', 'unknown', 'suggested', 'assumed'].includes(value.status)
-      ? escaped(value.status)
-      : invalid();
-  return `value=${display(value.value, 200)}, status=${status}`;
-};
-
-const necessityLines = (value: unknown, indentation: string) => {
-  if (value !== undefined && value !== null && !object(value)) invalid();
-  const facts = value as JsonObject | null | undefined;
-  return AGENT_NECESSITY_FIELDS.map(field =>
-    `${indentation}- ${field}: ${scalarFact(facts?.[field])}`);
+const optionalLine = (label: string, value: unknown, maximum = 2_000) =>
+  value === undefined || value === null ? [] : [`    - ${label}: ${display(value, maximum)}`];
+const optionalListLine = (label: string, value: unknown, maximum = 2_000) => {
+  const rendered = stringList(value, maximum);
+  return rendered === null ? [] : [`    - ${label}: ${rendered}`];
 };
 
 const resolvedPrimitiveName = (id: unknown, namesById: ReadonlyMap<string, string>) => {
@@ -149,23 +128,17 @@ export const deriveStudioBrdSourceFacts = (
     for (const raw of primitives) {
       if (!object(raw) || typeof raw.id !== 'string' || !UUID.test(raw.id) || namesById.has(raw.id)) invalid();
       const rawName = sourceText(raw.name, 200);
-      const resolvedName = rawName === null ? 'Unknown' : escaped(rawName);
+      const resolvedName = rawName === null ? 'Unknown' : readableSourceText(rawName);
       namesById.set(raw.id, resolvedName);
-      const volumeShare = display(raw.volumeShare, 200);
-      const manualEffort = display(raw.manualEffort, 200);
       const lines = [
         `  - Name: ${resolvedName}`,
         `    - Type: ${display(raw.type, 100)}`,
-        `    - Description: ${display(raw.description)}`,
-        `    - Trigger: ${display(raw.trigger, 2_000)}`,
-        `    - Owner: ${display(raw.owner, 200)}`,
-        `    - Inputs: ${stringList(raw.inputs)}`,
-        `    - Outputs: ${stringList(raw.outputs)}`,
-        `    - Rules: ${stringList(raw.rules)}`,
-        `    - Volume share: ${volumeShare}`,
-        `    - Manual effort: ${manualEffort}`,
-        '    - Agent necessity:',
-        ...necessityLines(raw.agentNecessity, '      '),
+        ...optionalLine('Description', raw.description),
+        ...optionalLine('Trigger', raw.trigger),
+        ...optionalLine('Owner', raw.owner, 200),
+        ...optionalListLine('Inputs', raw.inputs),
+        ...optionalListLine('Outputs', raw.outputs),
+        ...optionalListLine('Rules', raw.rules),
       ];
       primitiveRows.push({ sort: resolvedName.toLocaleLowerCase('en-US'), lines });
     }
@@ -194,8 +167,8 @@ export const deriveStudioBrdSourceFacts = (
     return [
       `  - Primitive: ${primitive}`,
       `    - Decision: ${display(raw.name, 200)}`,
-      `    - Outcomes: ${stringList(raw.outcomeLabels, 200)}`,
-      `    - Rule: ${display(raw.ruleDescription, 2_000)}`,
+      ...optionalListLine('Outcomes', raw.outcomeLabels, 200),
+      ...optionalLine('Rule', raw.ruleDescription),
     ].join('\n');
   }).sort((left, right) => left.localeCompare(right, 'en'));
 
@@ -205,11 +178,9 @@ export const deriveStudioBrdSourceFacts = (
     const from = resolvedPrimitiveName(raw.fromPrimitiveId, namesById);
     if (duplicateNames.has(from)) invalid();
     const resolutionIds = sourceArray(raw.resolutionPrimitiveIds);
-    const resolutions = resolutionIds === null
-      ? 'Unknown'
-      : resolutionIds.length === 0
-        ? 'None stated'
-        : resolutionIds.map(id => {
+    const resolutions = resolutionIds === null || resolutionIds.length === 0
+      ? null
+      : resolutionIds.map(id => {
           const name = resolvedPrimitiveName(id, namesById);
           if (duplicateNames.has(name)) invalid();
           return name;
@@ -218,7 +189,7 @@ export const deriveStudioBrdSourceFacts = (
       `  - From primitive: ${from}`,
       `    - Exception: ${display(raw.name, 200)}`,
       `    - Trigger: ${display(raw.trigger, 2_000)}`,
-      `    - Resolution primitives: ${resolutions}`,
+      ...(resolutions === null ? [] : [`    - Resolution primitives: ${resolutions}`]),
     ].join('\n');
   }).sort((left, right) => left.localeCompare(right, 'en'));
 
@@ -234,19 +205,18 @@ export const deriveStudioBrdSourceFacts = (
 
   const rows = (values: readonly string[] | null, label: string) => [
     `- ${label}:`,
-    ...(values === null ? ['  - Unknown'] : values.length === 0 ? ['  - None stated'] : values),
+    ...(values === null || values.length === 0 ? ['  - No accepted detail is recorded for this category.'] : values),
   ];
   const primitiveLines = primitiveRows.sort((left, right) => left.sort.localeCompare(right.sort, 'en'))
     .flatMap(row => row.lines);
   const body = [
-    'Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):',
+    'Readable source references from the accepted Assess handoff:',
+    '- Source: accepted Assess handoff (exact version and integrity details are retained in audit details).',
     ...rows(primitives === null ? null : primitiveLines, 'Process primitives (not ordered)'),
     ...rows(edgeRows, 'Explicit workflow edges'),
     ...rows(decisionRows, 'Decisions and outcomes'),
     ...rows(exceptionRows, 'Exception paths'),
     ...rows(assetRows, 'Application assets'),
-    '- Process agent necessity:',
-    ...necessityLines(process.agentNecessity, '  '),
   ].join('\n');
   if (body.length > MAX_SOURCE_FACTS_CHARACTERS || body.length >= MAX_SECTION_CHARACTERS
     || JSON.stringify({ body, anchor: assessAnchors[0] }).length > MAX_DOCUMENT_CHARACTERS) invalid();

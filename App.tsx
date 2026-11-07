@@ -49,6 +49,7 @@ import { resolveProductActionPolicy, type ProductAction, type ProductActionConte
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 import { queryStudioDeliveryAssignees } from './services/productAcceptanceBridge/client';
+import { canUseDeliveryAssigneeDirectory } from './services/deliveryAssigneeAccess';
 import { resolveGovernPresentationAccess } from './services/governPresentationAccess';
 import {
   isApplicationPortfolioMarketingCapture,
@@ -164,6 +165,7 @@ function App() {
     updateTaskSprint: deliveryUpdateTaskSprint,
     reorderTask: deliveryReorderTask,
     deleteTask: deliveryDeleteTask,
+    refresh: deliveryRefresh,
   } = useDelivery();
   const { processes, readState: processReadState } = useProcessService();
   const [teams, setTeams] = usePersistentState<Team[]>(StorageKeys.TEAMS, localRuntimeEnabled ? MOCK_TEAMS : [], { enabled: localRuntimeEnabled });
@@ -206,8 +208,11 @@ function App() {
   const pendingNavigationTransition = useRef<ProductNavigationTransition | null>(null);
   const pendingPopStateSearch = useRef<string | null>(null);
   const navigationAuthorityKey = [currentUser?.id ?? 'anonymous', currentOrganization?.id ?? 'no-organization', currentWorkspace?.id ?? 'no-workspace', tenantContext?.authorizationVersion ?? 'no-authorization', sessionState].join(':');
-  const canAssignDeliveryTasks = Boolean(dataAccess === 'server' && sessionState === 'ready' && tenantContext
-    && ['task.assign', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => tenantContext.capabilities.includes(value)));
+  const canAssignDeliveryTasks = Boolean(tenantContext && canUseDeliveryAssigneeDirectory({
+    dataAccess,
+    sessionState,
+    capabilities: tenantContext.capabilities,
+  }));
   const loadDeliveryAssigneeOptions = useCallback(async (projectId: string) => {
     if (dataAccess !== 'server' || sessionState !== 'ready' || !tenantContext || !canAssignDeliveryTasks) throw new Error('ASSIGNEE_DIRECTORY_UNAVAILABLE');
     return (await queryStudioDeliveryAssignees({ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,
@@ -460,10 +465,26 @@ function App() {
     return true;
   }, [resolveProductActionDecision]);
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<boolean> => {
     const task = tasks.find(item => item.id === taskId);
-    if (!ensureProductAction('workflow.status.change', { projectId: task?.projectId })) return;
-    deliveryUpdateTaskStatus(taskId, newStatus).catch(surfaceDeliveryError);
+    if (!task) {
+      surfaceDeliveryError(new Error('This work item is no longer present in the current Delivery board. Reload before changing its status.'));
+      return false;
+    }
+    if (!ensureProductAction('workflow.status.change', { projectId: task.projectId })) return false;
+    try {
+      const saved = await deliveryUpdateTaskStatus(taskId, newStatus);
+      if (saved.id !== taskId || saved.status !== newStatus) {
+        await deliveryRefresh();
+        surfaceDeliveryError(new Error('The status change was not confirmed by the current Delivery projection. The board has been reloaded.'));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      surfaceDeliveryError(error);
+      await deliveryRefresh().catch(() => undefined);
+      return false;
+    }
   };
 
   const handleUpdateProjectLifecycleStage = (projectId: string, newStage: ProjectLifecycleStage) => {
@@ -1286,6 +1307,10 @@ function App() {
         onBack={() => applyGuardedView(View.PROCESS_CATALOG)}
         onStartAssessment={(id) => { setSelectedProcessId(id); applyGuardedView(View.GUIDED_ASSESSMENT); }}
         onGenerateDocs={handleAssessToDocsHandoff}
+        onOpenCurrentStudio={async project => {
+          await deliveryRefresh();
+          applyGuardedView(View.DOCS_FORGE, { type: ScopeType.PROJECT, id: project.projectId, name: project.projectName });
+        }}
         captureMode={applicationPortfolioMarketingCapture}
       />;
     }
@@ -1304,6 +1329,7 @@ function App() {
         createProcessDecision={resolveProductActionDecision('process.create')}
         presentationProcesses={productMarketingCapture ? MARKETING_CAPTURE_PROCESSES : undefined}
         captureMode={productMarketingCapture}
+        dataAccess={dataAccess}
       />;
     }
     if (currentView === View.TEMPLATE_LIBRARY) {
@@ -1556,6 +1582,20 @@ function App() {
             users={users} currentUser={currentUser} automations={automationsForScope} timesheetEntries={timesheetsForScope}
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
             handoffEntries={handoffEntries}
+            deliveryBoardAuthority={dataAccess === 'server' && tenantContext ? {
+              refreshKey: selectedTask?.id ?? 'board',
+              scope: {
+                actorId: tenantContext.userId,
+                organizationId: tenantContext.organizationId,
+                workspaceId: tenantContext.workspaceId,
+                authorizationVersion: tenantContext.authorizationVersion,
+              },
+              mutationPolicy: {
+                canChangeStatus: resolveProductActionDecision('workflow.status.change', { projectId: projectsForScope[0].id }).allowed,
+                canCreate: resolveProductActionDecision('project.task.create', { projectId: projectsForScope[0].id }).allowed,
+                canDelete: resolveProductActionDecision('project.task.delete', { projectId: projectsForScope[0].id }).allowed,
+              },
+            } : undefined}
             deliveryPackSnapshot={dataAccess === 'server' && tenantContext ? <DeliveryPackSnapshotAction
               key={`${navigationAuthorityKey}:${projectsForScope[0].id}`}
               scope={{ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,

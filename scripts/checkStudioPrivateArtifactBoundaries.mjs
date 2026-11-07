@@ -456,7 +456,8 @@ assert(
 for (const boundary of [
   'STUDIO_PRIVATE_ARTIFACT_DISPOSABLE_DATABASE',
   '127.0.0.1',
-  'brokerFixturePath: "tests/fixtures/process-evidence/synthetic-sdd-export.pdf"',
+  'brokerFixturePath: "tests/fixtures/process-evidence/synthetic-sdd-export-pdf4.pdf"',
+  'expectedRendererVersion: "studio-pdf-4"',
 ]) {
   assert(
     sddCrossLayerRunner.includes(boundary),

@@ -4,7 +4,21 @@ import { Task, Project, TaskStatus, Epic, User } from '../../types';
 import TaskCard from './TaskCard';
 import InlineTaskCreator from './InlineTaskCreator';
 import { ViewBoardsIcon } from '../shared/icons';
-import { canCreateDeliveryTask, canDeleteDeliveryTask, canEditDeliveryTask } from '../../services/deliveryPolicy';
+import {
+    canCreateDeliveryTask,
+    canDeleteDeliveryTask,
+    canEditDeliveryTask,
+    getLegacyDeliveryStatusTargets,
+    getStatusTransitionViolations,
+    isLegacyDeliveryStatusTransitionAllowed,
+    type DeliveryDiscoveryDispositionByTask,
+} from '../../services/deliveryPolicy';
+
+export type DeliveryBoardMutationPolicy = {
+    canChangeStatus: boolean;
+    canCreate: boolean;
+    canDelete: boolean;
+};
 
 interface BoardsViewProps {
     tasks: Task[];
@@ -15,7 +29,10 @@ interface BoardsViewProps {
     users?: User[];
     currentUser?: User;
     showProjectLabel?: boolean;
-    onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
+    mutationPolicy?: DeliveryBoardMutationPolicy;
+    discoveryDispositions?: DeliveryDiscoveryDispositionByTask;
+    discoveryReadState?: 'loading' | 'ready' | 'unavailable';
+    onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void | boolean | Promise<void | boolean>;
     onSelectTask: (task: Task) => void;
     onAddTask: (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => void;
     onDeleteTask: (taskId: string) => void;
@@ -59,6 +76,9 @@ const BoardsView: React.FC<BoardsViewProps> = ({
     users = [],
     currentUser,
     showProjectLabel = false,
+    mutationPolicy,
+    discoveryDispositions,
+    discoveryReadState,
     onUpdateTaskStatus,
     onSelectTask,
     onAddTask,
@@ -67,6 +87,9 @@ const BoardsView: React.FC<BoardsViewProps> = ({
     const [draggedOverColumn, setDraggedOverColumn] = useState<string | null>(null);
     const [swimlaneBy, setSwimlaneBy] = useState<'epic' | null>('epic');
     const [searchQuery, setSearchQuery] = useState('');
+    const [boardError, setBoardError] = useState('');
+    const [boardMessage, setBoardMessage] = useState('');
+    const [pendingTransition, setPendingTransition] = useState<{ taskId: string; status: TaskStatus } | null>(null);
 
     const isGrouped = swimlaneBy === 'epic';
 
@@ -74,23 +97,86 @@ const BoardsView: React.FC<BoardsViewProps> = ({
     const getEpicForTask = (epicId: string | undefined) => epicId ? epics.find(epic => epic.id === epicId) : undefined;
     const getSubtasks = (subtaskIds: string[] | undefined) => subtaskIds ? tasks.filter(task => subtaskIds.includes(task.id)) : [];
 
+    const hasStatusAuthority = (task: Task) => mutationPolicy
+        ? mutationPolicy.canChangeStatus
+        : !currentUser || canEditDeliveryTask(currentUser, task);
+
+    const resolveDropStatus = (from: TaskStatus, column: TaskStatus) => {
+        if (isLegacyDeliveryStatusTransitionAllowed(from, column) && from !== column) return column;
+        return getLegacyDeliveryStatusTargets(from).find(status => statusColumnMap[status] === column) || null;
+    };
+
+    const canDragTask = (task: Task) => hasStatusAuthority(task) && statusColumns.some(column => {
+        if (column === statusColumnMap[task.status]) return false;
+        const target = resolveDropStatus(task.status, column);
+        return Boolean(target && getStatusTransitionViolations(task, tasks, target, discoveryDispositions).length === 0);
+    });
+
+    const transitionError = (task: Task, newStatus: TaskStatus) => {
+        if (!hasStatusAuthority(task)) return 'Your current server-authorized workspace cannot change this work item status.';
+        if (!isLegacyDeliveryStatusTransitionAllowed(task.status, newStatus)) {
+            return `Move ${task.title} through the next permitted delivery step before ${newStatus}.`;
+        }
+        const violations = getStatusTransitionViolations(task, tasks, newStatus, discoveryDispositions);
+        if (violations.length === 0) return null;
+        return task.sourceLineage?.proposalRole === 'discovery' && newStatus === 'Done'
+            ? 'This discovery item remains blocking. Done requires an independently accepted source-backed answer or approved nonblocking scope.'
+            : `Complete accepted prerequisites first: ${violations.map(item => item.title).join(', ')}.`;
+    };
+
+    const attemptStatusChange = async (task: Task, newStatus: TaskStatus) => {
+        if (pendingTransition) return;
+        const blocked = transitionError(task, newStatus);
+        if (blocked) { setBoardMessage(''); setBoardError(blocked); return; }
+        setBoardError('');
+        setBoardMessage(`Saving ${task.title} as ${newStatus}.`);
+        setPendingTransition({ taskId: task.id, status: newStatus });
+        try {
+            const result = await onUpdateTaskStatus(task.id, newStatus);
+            if (result === false) {
+                setBoardMessage('');
+                setBoardError(`${task.title} was not changed. Reload the current board state before trying again.`);
+                return;
+            }
+            setBoardMessage(`${task.title} moved to ${newStatus}.`);
+        } catch {
+            setBoardMessage('');
+            setBoardError(`${task.title} was not changed. Reload the current board state before trying again.`);
+        } finally {
+            setPendingTransition(null);
+        }
+    };
+
     const handleDragStart = (event: React.DragEvent<HTMLDivElement>, taskId: string) => {
         const task = tasks.find(item => item.id === taskId);
-        if (currentUser && task && !canEditDeliveryTask(currentUser, task)) {
+        if (!task || !canDragTask(task)) {
             event.preventDefault();
             return;
         }
+        setBoardError(''); setBoardMessage('');
+        event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('taskId', taskId);
+        event.dataTransfer.setData('text/plain', taskId);
     };
 
     const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
     };
 
-    const handleDrop = (event: React.DragEvent<HTMLDivElement>, newStatus: TaskStatus) => {
-        const taskId = event.dataTransfer.getData('taskId');
-        onUpdateTaskStatus(taskId, newStatus);
+    const handleDrop = (event: React.DragEvent<HTMLDivElement>, columnStatus: TaskStatus) => {
+        event.preventDefault(); event.stopPropagation();
+        const taskId = event.dataTransfer.getData('taskId') || event.dataTransfer.getData('text/plain');
+        const task = tasks.find(item => item.id === taskId);
         setDraggedOverColumn(null);
+        if (!task) { setBoardMessage(''); setBoardError('The dragged work item was not recognized. No status change was requested.'); return; }
+        const target = resolveDropStatus(task.status, columnStatus);
+        if (!target) {
+            setBoardMessage('');
+            setBoardError(`${task.title} cannot move directly to this board step. Use Move status to choose the next permitted delivery step.`);
+            return;
+        }
+        void attemptStatusChange(task, target);
     };
 
     const handleDragEnter = (status: TaskStatus, swimlaneId: string) => {
@@ -187,6 +273,10 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                         ))}
                     </div>
                 </div>
+                {discoveryReadState === 'loading' && <p role="status" className="mt-3 text-xs font-semibold text-slate-500">Checking committed discovery dispositions. Dependent advancement remains unavailable until this check completes.</p>}
+                {discoveryReadState === 'unavailable' && <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Committed discovery dispositions are unavailable. Dependent advancement remains blocked; task status is not substituted as evidence of resolution.</p>}
+                {boardError && <p role="alert" className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-900">{boardError}</p>}
+                {boardMessage && <p role="status" className="mt-3 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-900">{boardMessage}</p>}
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                     <label className="min-w-[240px] flex-1 sm:max-w-sm">
@@ -283,7 +373,11 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                 </span>
                                             </div>
 
-                                            <div className="max-h-[400px] min-h-[76px] space-y-2.5 overflow-y-auto p-2.5">
+                                            <div
+                                                className="max-h-[400px] min-h-[76px] space-y-2.5 overflow-y-auto p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b4f7d]"
+                                                tabIndex={0}
+                                                aria-label={`${status} work items`}
+                                            >
                                                 {columnTasks.map(task => (
                                                     <TaskCard
                                                         key={task.id}
@@ -293,8 +387,24 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                         users={users}
                                                         subtasks={getSubtasks(task.subtaskIds)}
                                                         showProjectLabel={showProjectLabel}
-                                                        canDrag={!currentUser || canEditDeliveryTask(currentUser, task)}
-                                                        canDelete={!currentUser || canDeleteDeliveryTask(currentUser)}
+                                                        canDrag={!pendingTransition && canDragTask(task)}
+                                                        canDelete={mutationPolicy ? mutationPolicy.canDelete : !currentUser || canDeleteDeliveryTask(currentUser)}
+                                                        discoveryDisposition={discoveryDispositions?.get(task.id)}
+                                                        statusControl={<div className="border-t border-slate-100 pt-2.5 dark:border-slate-800" onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
+                                                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                                                Move status
+                                                                <select
+                                                                    aria-label={`Move ${task.title} to another status`}
+                                                                    value=""
+                                                                    disabled={Boolean(pendingTransition) || !hasStatusAuthority(task) || !getLegacyDeliveryStatusTargets(task.status).some(nextStatus => !transitionError(task, nextStatus))}
+                                                                    onChange={event => { const nextStatus = event.target.value as TaskStatus; if (nextStatus) void attemptStatusChange(task, nextStatus); }}
+                                                                    className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                                                                >
+                                                                    <option value="">{pendingTransition?.taskId === task.id ? `Saving ${pendingTransition.status}…` : 'Move to…'}</option>
+                                                                    {getLegacyDeliveryStatusTargets(task.status).map(nextStatus => <option key={nextStatus} value={nextStatus} disabled={Boolean(transitionError(task, nextStatus))}>{nextStatus}</option>)}
+                                                                </select>
+                                                            </label>
+                                                        </div>}
                                                         onDragStart={event => handleDragStart(event, task.id)}
                                                         onSelectTask={() => onSelectTask(task)}
                                                         onDeleteTask={onDeleteTask}
@@ -307,7 +417,7 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                     </div>
                                                 )}
 
-                                                {(!currentUser || canCreateDeliveryTask(currentUser)) && (
+                                                {(mutationPolicy ? mutationPolicy.canCreate : !currentUser || canCreateDeliveryTask(currentUser)) && (
                                                     <InlineTaskCreator
                                                         onAddTask={taskTitle => onAddTask({
                                                             title: taskTitle,

@@ -283,6 +283,11 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions,
     if (isEditing) {
         return (
             <div className="space-y-4">
+                <div>
+                    <label htmlFor="work-item-title" className="block text-sm font-medium">Title</label>
+                    <input id="work-item-title" name="title" value={editedTask.title} onChange={handleChange}
+                        maxLength={300} required className="av-input mt-1 w-full" />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Status</label>
@@ -329,7 +334,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions,
                 </div>
                 <div className="flex justify-end gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-gray-700">
                     <button type="button" disabled={saving} onClick={onCancel} className="px-4 py-2 text-sm font-semibold rounded-2xl focus:outline-none focus:ring-3 focus:ring-slate-400 btn-ghost disabled:opacity-50">Cancel</button>
-                    <button type="button" disabled={saving} onClick={onSave} className="px-4 py-2 text-sm font-semibold rounded-2xl btn-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save Changes'}</button>
+                    <button type="button" disabled={saving || !editedTask.title.trim()} onClick={onSave} className="px-4 py-2 text-sm font-semibold rounded-2xl btn-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save Changes'}</button>
                 </div>
             </div>
         );
@@ -367,6 +372,28 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions,
                     <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(task.description || 'No description provided.') }} />
                 </div>
             </div>
+            {task.sourceLineage?.requirementLinks && task.sourceLineage.requirementLinks.length > 0 && (
+                <section data-testid="delivery-requirement-source-links" aria-labelledby="delivery-requirement-source-title" className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+                    <h3 id="delivery-requirement-source-title" className="text-md font-semibold">Approved requirement sources</h3>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Immutable source links from the exact approved Studio artifact. Task detail and status edits do not change these bindings.</p>
+                    <details className="mt-3 rounded-lg bg-white p-3 dark:bg-abz-ink-900">
+                        <summary className="cursor-pointer font-semibold focus:outline-none focus:ring-3 focus:ring-abz-primary">Open approved source details</summary>
+                        <dl className="mt-3 grid gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <div><dt className="font-semibold">Approved artifact</dt><dd className="break-all">{task.sourceLineage.studioArtifactId ?? 'Legacy publication'}</dd></div>
+                            <div><dt className="font-semibold">Approved revision</dt><dd className="break-all">{task.sourceLineage.studioArtifactVersion !== undefined ? `Revision ${task.sourceLineage.studioArtifactVersion} · ${task.sourceLineage.studioArtifactVersionId}` : 'Recorded before revision-bound Delivery publication'}</dd></div>
+                        </dl>
+                        <ul className="mt-3 space-y-3 text-sm">
+                            {task.sourceLineage.requirementLinks.map(link => (
+                                <li key={`${link.sectionId}:${link.requirementText}`} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                    <p className="font-semibold">{link.sectionTitle} · {link.sectionId}</p>
+                                    <blockquote className="mt-1 whitespace-pre-wrap border-l-2 border-slate-300 pl-3 text-slate-600 dark:border-slate-600 dark:text-slate-300">{link.requirementText}</blockquote>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                    {task.sourceLineage.proposalOriginId && <p className="mt-3 break-all text-[11px] font-semibold text-slate-500">Stable proposal origin: {task.sourceLineage.proposalOriginId}</p>}
+                </section>
+            )}
             <div>
                 <h3 className="text-md font-semibold mb-2">Assignees</h3>
                 <div className="flex flex-wrap gap-4">

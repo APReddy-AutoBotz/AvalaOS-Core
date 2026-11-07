@@ -21,6 +21,8 @@ export const LEGACY_DELIVERY_BROWSER_SOURCES = Object.freeze([
   'components/delivery/ImportWorkItemsModal.tsx',
   'components/delivery/WorkspaceView.tsx',
   'components/delivery/BacklogView.tsx',
+  'components/delivery/BoardsView.tsx',
+  'components/delivery/TaskCard.tsx',
   'components/delivery/InlineTaskCreator.tsx',
   'components/delivery/TaskDetailModal.tsx',
   'components/docs/DocsProvider.tsx',

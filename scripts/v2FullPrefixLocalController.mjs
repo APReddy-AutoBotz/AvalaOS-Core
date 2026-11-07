@@ -14,6 +14,7 @@ const EXPECTED_PRIMARY_CASES = V2_FULL_PRIMARY_EXPECTED_CASES;
 const DIRECT_FIXTURE_CONTROLS = new Set([
   '/control/setup',
   '/control/canonical-created-process',
+  '/control/project-studio-handoff-target',
   '/control/arm-browser-fault',
   '/control/assess-v2-runtime',
   '/control/native-postgrest-stream',
@@ -145,7 +146,7 @@ export async function createV2FullPrefixLocalController({ fixture, origin, varia
   const migrationVersion = (await fixture.db.query(
     'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton',
   )).rows[0]?.migration_tip;
-  if (migrationVersion !== '20261103103752') {
+  if (migrationVersion !== '20261107120003') {
     throw new Error('V2_FULL_PREFIX_LOCAL_MIGRATION_REJECTED');
   }
 

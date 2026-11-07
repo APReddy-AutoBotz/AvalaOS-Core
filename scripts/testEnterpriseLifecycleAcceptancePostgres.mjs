@@ -329,6 +329,7 @@ const main = async () => {
           commandType: 'studio.artifact.generation.request.v2', auditAction: 'studio.artifact.generation.request.v2', actorId: actor,
           organizationId: body.organizationId, workspaceId: body.workspaceId,
           resourceType: 'studio_generation_attempt', resourceId: attemptId, receiptResourceId: responseBody.resourceId,
+          captureAudit: responseBody.outcome === 'generation_completed',
           terminalAudit: {
             action: responseBody.outcome === 'generation_completed' ? 'studio.artifact.generation.finalize' : 'studio.artifact.generation.fail.v2',
             resourceType: 'studio_generation_attempt', resourceId: attemptId,

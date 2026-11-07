@@ -3,9 +3,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
-const brokerPdfPath = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export.pdf');
-const expectedSha256 = '92f36ceb8ba54d42854dc0acfeaf7ab8d7aaca7a81a7276bfb0874e3c0667f19';
-const expectedByteLength = 4_339;
+const brokerPdfPath = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export-pdf4.pdf');
+const expectedSha256 = 'ea27c4f8638aea894f7670dad5c0e9e3ab7ef89e8621bcd03ff4eae78e1f4206';
+const expectedByteLength = 6_296;
+const historicalPdf3Path = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export-pdf3.pdf');
+const historicalPdf3Sha256 = 'c7c365cf93c5f37a834673d1504495b608f87407724f7b6bfc9e884c0186c998';
+const historicalPdf3ByteLength = 7_042;
+const historicalPdf2Path = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export.pdf');
+const historicalPdf2Sha256 = 'c69867c842a603645489ea2b93a4ef12fcaa30373f25e9f2ac3227a5903d8022';
+const historicalPdf2ByteLength = 5_799;
 const artifactId = '00000038-0000-4000-8000-000000000038';
 const approvedVersionId = '00000053-0000-4000-8000-000000000053';
 const renditionId = '00000058-0000-4000-8000-000000000058';
@@ -18,9 +24,19 @@ const base64Url = (value: unknown) => Buffer.from(JSON.stringify(value)).toStrin
 
 test('ordinary SDD Generate PDF and Download use the private broker client and preserve exact bytes', async ({ page }) => {
   const brokerPdf = readFileSync(brokerPdfPath);
+  const historicalPdf3 = readFileSync(historicalPdf3Path);
+  const historicalPdf2 = readFileSync(historicalPdf2Path);
   expect({ byteLength: brokerPdf.byteLength, sha256: sha256(brokerPdf) }).toEqual({
     byteLength: expectedByteLength,
     sha256: expectedSha256,
+  });
+  expect({ byteLength: historicalPdf3.byteLength, sha256: sha256(historicalPdf3) }).toEqual({
+    byteLength: historicalPdf3ByteLength,
+    sha256: historicalPdf3Sha256,
+  });
+  expect({ byteLength: historicalPdf2.byteLength, sha256: sha256(historicalPdf2) }).toEqual({
+    byteLength: historicalPdf2ByteLength,
+    sha256: historicalPdf2Sha256,
   });
 
   const accessToken = [
@@ -96,7 +112,7 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     filename: 'synthetic-sdd-db-cross-layer.pdf',
     byteLength: expectedByteLength,
     sha256: expectedSha256,
-    rendererVersion: 'studio-pdf-1',
+    rendererVersion: 'studio-pdf-4',
     retentionMode: 'indefinite',
     retentionUntil: null,
     legalHoldActive: false,
@@ -112,7 +128,24 @@ test('ordinary SDD Generate PDF and Download use the private broker client and p
     artifactType: 'sdd',
     approved: true,
     readOnly: false,
-    renditions: generated ? [rendition] : [],
+    renditions: generated ? [
+      {...rendition, id: '00000059-0000-4000-8000-000000000059', rendererVersion: 'studio-pdf-1'},
+      {
+        ...rendition,
+        id: '00000060-0000-4000-8000-000000000060',
+        byteLength: historicalPdf2ByteLength,
+        sha256: historicalPdf2Sha256,
+        rendererVersion: 'studio-pdf-2',
+      },
+      {
+        ...rendition,
+        id: '00000061-0000-4000-8000-000000000061',
+        byteLength: historicalPdf3ByteLength,
+        sha256: historicalPdf3Sha256,
+        rendererVersion: 'studio-pdf-3',
+      },
+      rendition,
+    ] : [],
   });
 
   // More specific routes below fulfill synthetic server requests inside the browser.

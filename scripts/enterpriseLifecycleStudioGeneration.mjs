@@ -38,7 +38,7 @@ export function createEnterpriseLifecycleStudioGeneration({
       throw studioDbModule.decodeStudioRpcError(error);
     }
   };
-  // Only material reads reached by an Assess-handoff/system-template BRD are
+  // Only material reads reached by an Assess-handoff/system-template document are
   // supported. Unexpected product queries fail instead of receiving fake rows.
   const tables = new Set([
     'studio_artifact_source_packages', 'assess_v2_studio_handoffs',
@@ -84,14 +84,21 @@ export function createEnterpriseLifecycleStudioGeneration({
     const selected = [...input.selectedSourceVersionIds];
     const content = {
       contractVersion: 'studio-artifact-2',
-      title: 'Synthetic governed lifecycle BRD',
-      summary: 'Integration fixture output bound to the approved Assess handoff.',
-      sections: contract.sections.map((section, index) => ({
-        id: section.id, title: section.title,
-        body: `Synthetic ${section.id} section ${index + 1}; approved source facts are retained by the production composer.`,
-        sourceAnchors: index === 0 ? input.canonicalSourceAnchors.map(anchor => ({ ...anchor })) : [],
-        labels: index === 0 ? [] : [section.required ? 'template_required' : 'assumption'],
-      })),
+      title: `Synthetic governed lifecycle ${input.plan.artifactType.toUpperCase()}`,
+      summary: `Integration fixture ${input.plan.artifactType.toUpperCase()} output bound to the approved Assess handoff.`,
+      sections: contract.sections.map((section, index) => {
+        const flow = section.id === 'asIsFlow'
+          ? 'flowchart TD\n  A[Start] --> B[Review]\n  B --> C[Complete]'
+          : section.id === 'toBeFlow'
+            ? 'flowchart TD\n  A[Start] --> B[API]\n  B --> C[Human review]'
+            : null;
+        return {
+          id: section.id, title: section.title,
+          body: flow ?? `${input.plan.artifactType.toUpperCase()}-${index + 1}: Delivery must implement the approved ${section.id} requirement while preserving its source facts.`,
+          sourceAnchors: index === 0 ? input.canonicalSourceAnchors.map(anchor => ({ ...anchor })) : [],
+          labels: index === 0 ? [] : [section.required ? 'template_required' : 'assumption'],
+        };
+      }),
       coverage: { selectedSourceVersionIds: selected, coveredSourceVersionIds: selected, complete: true },
     };
     return toProductionJson({
@@ -108,6 +115,11 @@ export function createEnterpriseLifecycleStudioGeneration({
       runBudgeted: (input, effect, options) => providerBudgetModule.runBudgetedProviderEffect(input, effect, {
         ...options, invoke: (name, args) => studioGenerationModule.studioBudgetRpc(name, args, invoke),
       }),
+      captureCandidate: input => studioDbModule.captureStudioGenerationCandidate(input, invoke),
+      loadCandidate: input => studioDbModule.loadStudioGenerationCandidate(input, invoke),
+      rejectCandidate: input => studioDbModule.rejectStudioGenerationCandidate(input, invoke),
+      settleCandidate: input => providerBudgetModule.settleProviderBudget(input,
+        (name, args) => studioGenerationModule.studioBudgetRpc(name, args, invoke)).then(() => undefined),
       stage: input => studioDbModule.stageStudioGeneration(input, invoke).then(() => undefined),
       finalize: input => studioDbModule.finalizeStudioGeneration(input, invoke),
       ...(authenticatedSyntheticModule ? {

@@ -32,6 +32,7 @@ const assignmentFor = (binding: ReviewBinding, sequence: number): ReviewAssignme
 const resolutionFor = (binding: ReviewBinding, assignment: ReviewAssignment, status: ReviewResolution['status']): ReviewResolution => ({
   ...binding, id: `resolution-${assignment.reviewSequence}-${status}`, assignmentId: assignment.id,
   reviewSchemaVersion: ASSESS_V2_REVIEW_VERSION, reviewSequence: assignment.reviewSequence, status,
+  approvalPurpose: status === 'planning_approved' ? 'documentation_planning' : 'implementation_readiness',
   reviewerActorId: assignment.reviewerActorId, reviewerAuthorizationVersion: assignment.reviewerAuthorizationVersion,
   rationale: status === 'changes_requested' ? 'Clarify exception controls.' : 'Reworked evidence is acceptable.',
   conditions: [], confidence: 'Insufficient Evidence', resolvedAt: `2026-08-13T11:0${assignment.reviewSequence}:00.000Z`,

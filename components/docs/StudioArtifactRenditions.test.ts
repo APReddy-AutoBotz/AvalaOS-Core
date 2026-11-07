@@ -60,6 +60,8 @@ for (const token of [
   'firstFrameOpacityTransitions',
   "not.toContain('all')",
   "not.toContain('opacity')",
+  "response.status() === 202",
+  "headers()['access-control-allow-origin']).toBe('*')",
 ]) {
   assert.ok(browserSource.includes(token), `private rendition transition regression missing: ${token}`);
 }
@@ -111,6 +113,12 @@ for (const token of [
   'new approved artifact version',
   'deletion_reconciliation_required',
   'deletion_reconciling',
+  'studio-pdf-4',
+  'currentRendererFor',
+  'Generate current',
+  'Download historical',
+  'History',
+  'Audit details',
 ]) {
   assert.ok(source.includes(token), `private rendition UI contract missing: ${token}`);
 }
@@ -145,6 +153,16 @@ assert.equal(
   2,
   'legal-hold placement and retention extension must share the canonical allowlist',
 );
+assert.match(
+  source,
+  /usesV2Contract[\s\S]+?rendererVersion === currentRendererFor\(artifact\.artifactType, format\)[\s\S]+?preferred \?\? candidates\.at\(-1\)/u,
+  'V2 display must prefer the artifact-aware current renderer while retaining a legacy fallback',
+);
+assert.match(
+  source,
+  /historicalRenditions[\s\S]+?download\(historical\)[\s\S]+?Download historical/u,
+  'superseded renderer output must remain user-accessible through brokered download',
+);
 console.log(
-  'studio artifact renditions UI: 46 state, capability, recovery, broker, and false-success assertions passed',
+  'studio artifact renditions UI: 54 state, history, capability, recovery, broker, and false-success assertions passed',
 );

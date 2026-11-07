@@ -769,8 +769,11 @@ test('control operation titles are fixed and unknown paths use the generic bound
     fetchImpl: async () => Response.json({ ok: true }),
   });
   await control('/control/arm-browser-fault', { requestId: 'private-id' });
+  await control('/control/project-studio-handoff-target', { projectName: 'desktop-chromium' });
   await control('/control/unrecognized-private-id');
-  assert.deepEqual(operationTitles, ['hosted:control:permit-arm', 'hosted:control:other']);
+  assert.deepEqual(operationTitles, [
+    'hosted:control:permit-arm', 'hosted:control:observe', 'hosted:control:other',
+  ]);
   assert.equal(operationTitles.some(title => title.includes('private')), false);
 });
 

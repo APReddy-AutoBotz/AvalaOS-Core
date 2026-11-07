@@ -46,7 +46,7 @@ export type LegacyDeliveryRpcTransport = {
 
 export const callLegacyDeliveryRpc = async (
   transport: LegacyDeliveryRpcTransport,
-  rpcName: 'legacy_delivery_apply_command' | 'legacy_delivery_query',
+  rpcName: 'legacy_delivery_apply_requirement_command' | 'legacy_delivery_requirement_query',
   args: Record<string, unknown>,
 ): Promise<unknown> => {
   const controller = new AbortController();
@@ -79,7 +79,7 @@ export const legacyDeliveryDatabaseDependencies = (request: Request) => ({
   authenticate: () => getAuthUser(request),
   authority: (actorId: string, organizationId: string, workspaceId: string, expectedAuthorizationVersion: number) =>
     resolveTenantAuthority(actorId, { organizationId, workspaceId, expectedAuthorizationVersion }, createTenantAuthorityDatabase(request)),
-  apply: (actorId: string, command: LegacyDeliveryCommandEnvelope) => callLegacyDeliveryRpc(transport(), 'legacy_delivery_apply_command', {
+  apply: (actorId: string, command: LegacyDeliveryCommandEnvelope) => callLegacyDeliveryRpc(transport(), 'legacy_delivery_apply_requirement_command', {
     p_actor_id: actorId,
     p_org_id: command.organizationId,
     p_workspace_id: command.workspaceId,
@@ -89,7 +89,7 @@ export const legacyDeliveryDatabaseDependencies = (request: Request) => ({
     p_action: command.action,
     p_payload: command.payload,
   }),
-  query: (actorId: string, query: LegacyDeliveryQueryRequest) => callLegacyDeliveryRpc(transport(), 'legacy_delivery_query', {
+  query: (actorId: string, query: LegacyDeliveryQueryRequest) => callLegacyDeliveryRpc(transport(), 'legacy_delivery_requirement_query', {
     p_actor_id: actorId,
     p_org_id: query.organizationId,
     p_workspace_id: query.workspaceId,

@@ -99,6 +99,24 @@ type LifecycleFrame = Readonly<{
   handoffs: number; sourcePackages: number; artifacts: number; generationAttempts: number; artifactVersions: number;
   receipts: number; audits: number; targetHash: string;
 }>;
+const assertCommittedStudioGeneration = async (page: Page) => {
+  const studio = page.getByTestId('studio-artifact-workspace');
+  await expect(studio.getByText('Draft committed. Current document and document list refreshed.', { exact: true })).toBeVisible();
+  const currentDocument = studio.getByRole('region', { name: 'Current document', exact: true });
+  await expect(currentDocument).toBeVisible();
+  await expect(currentDocument.getByLabel('Section title', { exact: true }).first()).not.toHaveValue('');
+  const documentAudit = studio.getByTestId('studio-current-document-audit');
+  if (!await documentAudit.evaluate(element => element.hasAttribute('open'))) {
+    await documentAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(documentAudit.getByText(/^Aggregate v\d+ · Content v\d+$/u, { exact: true })).toBeVisible();
+  const sourceCoverage = studio.getByRole('region', { name: 'Source coverage', exact: true });
+  const packageAudit = sourceCoverage.locator('details').filter({ hasText: 'Package:' }).first();
+  if (!await packageAudit.evaluate(element => element.hasAttribute('open'))) {
+    await packageAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(packageAudit.locator('dd').first()).toHaveText(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12} · v[1-9][0-9]*$/u);
+};
 type ProjectFinalization = Readonly<{
   journeyBinding: string;
   status: 'passed';
@@ -455,6 +473,37 @@ const connectedEvidenceClaims = [
   'asset.accountableOwner',
 ] as const;
 
+const checkedEvidenceLabels = async (page: Page, evidenceNumber: number, kind: 'claim' | 'attach to'): Promise<string[]> => page
+  .getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true })
+  .getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} ${kind} `, 'u') })
+  .evaluateAll(nodes => nodes
+    .filter(node => (node as HTMLInputElement).checked)
+    .map(node => node.getAttribute('aria-label') ?? '')
+    .filter(Boolean)
+    .sort());
+
+const selectExactConnectedEvidenceClaims = async (page: Page, evidenceNumber: number, claims: readonly string[]) => {
+  const group = page.getByRole('group', { name: `Evidence ${evidenceNumber}`, exact: true });
+  const prefix = `Evidence ${evidenceNumber} claim `;
+  const checkboxes = group.getByRole('checkbox', { name: new RegExp(`^Evidence ${evidenceNumber} claim `, 'u') });
+  const availableLabels = await checkboxes.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? ''));
+  const availableClaims = new Set(availableLabels.map(label => label.slice(prefix.length)));
+  const expectedClaims = new Set<string>(claims);
+  expect(expectedClaims.size).toBe(claims.length);
+  for (const claim of claims) expect(availableClaims.has(claim), `Registered evidence claim ${claim} must be selectable.`).toBe(true);
+
+  const attachedBefore = await checkedEvidenceLabels(page, evidenceNumber, 'attach to');
+  expect(attachedBefore.length).toBeGreaterThan(0);
+  for (const label of availableLabels) {
+    const checkbox = group.getByLabel(label, { exact: true });
+    if (expectedClaims.has(label.slice(prefix.length))) await checkbox.check();
+    else await checkbox.uncheck();
+  }
+  const selected = (await checkedEvidenceLabels(page, evidenceNumber, 'claim')).map(label => label.slice(prefix.length)).sort();
+  expect(selected).toEqual([...claims].sort());
+  expect(await checkedEvidenceLabels(page, evidenceNumber, 'attach to')).toEqual(attachedBefore);
+};
+
 const completeRequiredAssessmentFacts = async (page: Page) => {
   if (canonicalInvoiceExceptionJourney) {
     await page.getByLabel('Primitive 1 name', { exact: true }).fill('Resolve AP invoice exception');
@@ -486,7 +535,7 @@ const completeRequiredAssessmentFacts = async (page: Page) => {
   await interaction.getByLabel('highImpact', { exact: true }).check();
   await interaction.getByLabel('financialAction', { exact: true }).check();
   await page.getByText('4. Agent necessity and evidence', { exact: true }).click();
-  await page.getByLabel('Evidence 1 claim IDs', { exact: true }).fill(connectedEvidenceClaims.join(', '));
+  await selectExactConnectedEvidenceClaims(page, 1, connectedEvidenceClaims);
   await expect(page.getByText(/Before finalization, add:/u)).toHaveCount(0);
 };
 
@@ -872,7 +921,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (hasBoundaryFailure) throw boundaryFailure;
       return;
     }
-    if (!failed && !v2FullPrefixReproduction) {
+    if (!failed && !v2FullPrefixReproduction && process.env.CURRENT_ASSESSMENT_DELIVERY_FOCUSED !== 'true') {
       const finalized = await control<ProjectFinalization>('/control/finalize-project', { projectName });
       expect(finalized).toMatchObject({
         journeyBinding: setup.journeyBinding,
@@ -2011,14 +2060,20 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       ? await control<LifecycleFrame>('/control/lifecycle-frame', { projectName }) : null;
     const studioHandoffApi = await test.step('hosted:govern-studio:assess-handoff', () =>
       observeApiResponse(page, '/functions/v1/assess-v2-command', () =>
-        reviewWorkspace.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click()));
+        reviewWorkspace.getByRole('button', { name: 'Create Studio handoff', exact: true }).click()));
     expect(studioHandoffApi.status).toBe(200);
     await expect(page.getByText('Studio handoff committed.', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assess-v2-review-workspace')).toContainText('Handed off to Studio');
+    const studioHandoffTarget = await control<{ upstreamHandoffId: string }>(
+      '/control/project-studio-handoff-target',
+      { projectName },
+    );
+    expect(studioHandoffTarget.upstreamHandoffId)
+      .toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
 
     await enterStudioAs(page, setup.actors.author, settleActorTransitionEvidence);
     const studioRequestResponse = await test.step('hosted:govern-studio:studio-request', () =>
-      commitEligibleStudioHandoffRequest(page));
+      commitEligibleStudioHandoffRequest(page, studioHandoffTarget.upstreamHandoffId));
     const studioRequestApi = observeStudioHandoffResponse(studioRequestResponse);
     const requestedHandoffTarget = await persistedHandoffTargetFromResponse(studioRequestResponse, 'requested');
     await expect(page.getByText('Handoff decision committed.', { exact: true })).toBeVisible();
@@ -2072,7 +2127,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
         testId: 'STUDIO-001', status: 'passed', proofMode: 'actual-ui',
         observations: {
           browser: { actions: [
-            { action: 'click', target: 'Create durable Studio handoff' },
+            { action: 'click', target: 'Create Studio handoff' },
             { action: 'click', target: 'Start Studio draft' },
           ], result: { approvedHandoffConsumed: true, exactSourceAncestryVisible: true } },
           api: { productionRoutes: ['/functions/v1/assess-v2-command','/functions/v1/studio-artifact-command'], responses: [
@@ -2138,8 +2193,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) await page.unroute('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
     }
     expect(generationApi.status).toBe(201);
-    await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Current document', exact: true })).toBeVisible();
+    await assertCommittedStudioGeneration(page);
     if (canonicalInvoiceExceptionJourney) {
       canonicalStudioArtifactReloadTarget = await captureCanonicalStudioArtifactReloadTarget(page, 1);
     }

@@ -14,9 +14,11 @@ const main=async()=>{
  const variants=[
   {...base,commandType:'assessment_v2.review.assign',payload:{...base.payload,reviewerId:evidenceId}},
   {...base,commandType:'assessment_v2.review.resolve',payload:{...base.payload,resolution:'approved',rationale:'complete',conditions:[]}},
+  {...base,commandType:'assessment_v2.review.plan',payload:{...base.payload,resolution:'planning_approved',rationale:'planning content reviewed',conditions:['Keep unresolved facts explicit.']}},
   {...base,commandType:'assessment_v2.revision.start',payload:{...base.payload,rationale:'revise'}},
   {...base,commandType:'assessment_v2.govern.resolve',payload:{...base.payload,rationale:'controls reviewed',controlDispositions:[{controlId:'audit',status:'resolved',condition:'',owner:'',dueDate:'',conditionSatisfied:false}]}},
   {...base,commandType:'assessment_v2.studio.handoff'},
+  {...base,commandType:'assessment_v2.studio.plan_handoff',payload:{...base.payload,approvalPurpose:'documentation_planning'}},
  ] as const;
  for(const variant of variants) assert.equal(parseAssessV2ReviewEnvelope(variant).commandType,variant.commandType);
  for(const invalid of [
@@ -26,11 +28,13 @@ const main=async()=>{
    {...envelope,payload:{...envelope.payload,outcome:'verified'}},
    {...envelope,payload:{...envelope.payload,reviewSequence:0}},
  ])assert.throws(()=>parseAssessV2ReviewEnvelope(invalid),e=>e instanceof AssessV2ReviewError&&e.code==='INVALID_COMMAND');
+ assert.throws(()=>parseAssessV2ReviewEnvelope({...base,commandType:'assessment_v2.review.plan',payload:{...base.payload,resolution:'approved',rationale:'wrong purpose',conditions:[]}}),e=>e instanceof AssessV2ReviewError&&e.code==='INVALID_COMMAND');
+ assert.throws(()=>parseAssessV2ReviewEnvelope({...base,commandType:'assessment_v2.studio.plan_handoff',payload:{...base.payload,approvalPurpose:'implementation_readiness'}}),e=>e instanceof AssessV2ReviewError&&e.code==='INVALID_COMMAND');
  const result=await executeAssessV2ReviewCommand(request,parsed,deps());assert.equal(result.outcome,'committed');
  await assert.rejects(()=>executeAssessV2ReviewCommand(request,parsed,deps([])),e=>e instanceof AssessV2ReviewError&&e.code==='PERMISSION_DENIED');
  const stale=deps();stale.loadFreshAuthority=async()=>({actorId:actor,organizationId:org,workspaceId:workspace,authorizationVersion:8,capabilities:Object.values(ASSESS_V2_REVIEW_CAPABILITY)});await assert.rejects(()=>executeAssessV2ReviewCommand(request,parsed,stale),e=>e instanceof AssessV2ReviewError&&e.code==='AUTHORITY_STALE');
  const body=buildAssessV2ReviewRpcBody({...parsed,actorId:actor});assert.equal(body.p_actor_id,actor);assert.deepEqual(body.p_payload,parsed.payload);assert.equal((body as Record<string,unknown>).reviewerId,undefined);
- for(const command of ['assessment_v2.review.assign','assessment_v2.review.resolve','assessment_v2.revision.start','assessment_v2.govern.resolve','assessment_v2.studio.handoff'] as const)assert.ok(ASSESS_V2_REVIEW_CAPABILITY[command]);
+ for(const command of ['assessment_v2.review.assign','assessment_v2.review.resolve','assessment_v2.review.plan','assessment_v2.revision.start','assessment_v2.govern.resolve','assessment_v2.studio.handoff','assessment_v2.studio.plan_handoff'] as const)assert.ok(ASSESS_V2_REVIEW_CAPABILITY[command]);
  assert.throws(()=>parseAssessV2ReviewEnvelope({...envelope,commandType:'assessment_v2.unknown'}),e=>e instanceof AssessV2ReviewError&&e.code==='COMMAND_NOT_SUPPORTED');
  assert.throws(()=>parseAssessV2ReviewEnvelope(null),e=>e instanceof AssessV2ReviewError&&e.code==='INVALID_COMMAND');
  assert.equal(new AssessV2ReviewError('AUTHENTICATION_REQUIRED').status,401);assert.equal(new AssessV2ReviewError('PERMISSION_DENIED').status,403);

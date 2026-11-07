@@ -10,7 +10,10 @@ import {
   decodeStudioRenditionReconciliationClaim,
   decodeStudioRenditionClaim,
   decodeStudioPrivateArtifactDueWork,
+  STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
+  STUDIO_BUSINESS_PDF_RENDERER_VERSION,
+  STUDIO_SDD_PDF_RENDERER_VERSION,
   STUDIO_PRIVATE_ARTIFACT_RPC_MANIFEST,
 } from './studioPrivateArtifactRpcContract.ts';
 
@@ -92,7 +95,38 @@ test('real private claim vocabulary is strict and versioned', () => {
   });
   assert.equal(
     rendition.rendererVersion,
-    STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
+    STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS.markdown,
+  );
+  assert.equal(
+    decodeStudioRenditionClaim({
+      ...rendition,
+      rendererVersion: STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
+    }).rendererVersion,
+    'studio-markdown-2',
+  );
+  assert.throws(() => decodeStudioRenditionClaim({
+    ...rendition,
+    format: 'pdf',
+    rendererVersion: STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS.markdown,
+  }));
+  assert.equal(decodeStudioRenditionClaim({
+    ...rendition,
+    artifactType: 'sdd',
+    format: 'pdf',
+    contentSchemaVersion: 'studio-artifact-2',
+    rendererVersion: STUDIO_SDD_PDF_RENDERER_VERSION,
+    templateVersion: 'studio-sdd-1',
+  }).rendererVersion, 'studio-pdf-3');
+  for (const artifactType of ['brd', 'pdd', 'frd', 'sdd'] as const) assert.equal(
+    decodeStudioRenditionClaim({
+      ...rendition,
+      artifactType,
+      format: 'pdf',
+      contentSchemaVersion: 'studio-artifact-2',
+      rendererVersion: STUDIO_BUSINESS_PDF_RENDERER_VERSION,
+      templateVersion: `studio-${artifactType}-1`,
+    }).rendererVersion,
+    'studio-pdf-4',
   );
   assert.throws(() =>
     decodeStudioRenditionClaim({

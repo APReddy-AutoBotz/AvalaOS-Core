@@ -13,10 +13,10 @@ export function validateLockedTarget({ lockedTarget, preflightClassification, ca
 }
 
 export async function ensureHostedPgcryptoCompatibility(client) {
-  // Catalog identity proof supersedes the former to_regprocedure('public.digest(text,text)') and
-  // to_regprocedure('extensions.digest(text,text)') presence-only probes retained in contract history.
+  // Match input types independently of PostgreSQL's optional argument names.
+  // Implementation, ownership, configuration and ACL checks remain mandatory.
   const inspect = () => client.query(`select n.nspname as schema_name,
-    pg_get_function_identity_arguments(p.oid) as identity_arguments,
+    pg_catalog.oidvectortypes(p.proargtypes) as argument_types,
     l.lanname as language_name, p.prosrc as source, p.provolatile, p.proisstrict,
     p.proparallel, coalesce(p.proconfig, array[]::text[]) as configuration,
     owner.rolname as owner_name, current_user as current_user_name,
@@ -33,11 +33,11 @@ export async function ensureHostedPgcryptoCompatibility(client) {
   left join pg_extension ext on ext.oid=d.refobjid
   left join pg_roles ext_owner on ext_owner.oid=ext.extowner
   where p.proname='digest' and n.nspname in ('public','extensions')
-    and pg_get_function_identity_arguments(p.oid) in ('text, text','bytea, text')
-  order by n.nspname, pg_get_function_identity_arguments(p.oid)`);
+    and pg_catalog.oidvectortypes(p.proargtypes) in ('text, text','bytea, text')
+  order by n.nspname, pg_catalog.oidvectortypes(p.proargtypes)`);
 
   let rows = (await inspect()).rows;
-  const byKey = new Map(rows.map(row => [`${row.schema_name}:${row.identity_arguments}`, row]));
+  const byKey = new Map(rows.map(row => [`${row.schema_name}:${row.argument_types}`, row]));
   if (byKey.size !== rows.length) throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');
   const pair = schema => ['text, text', 'bytea, text'].map(args => byKey.get(`${schema}:${args}`));
   const publicPair = pair('public');
@@ -60,7 +60,7 @@ export async function ensureHostedPgcryptoCompatibility(client) {
     }
     rows = (await inspect()).rows;
     byKey.clear();
-    for (const row of rows) byKey.set(`${row.schema_name}:${row.identity_arguments}`, row);
+    for (const row of rows) byKey.set(`${row.schema_name}:${row.argument_types}`, row);
     if (!pair('extensions').every(Boolean) || pair('public').some(Boolean)) {
       await client.query('rollback');
       throw new Error('PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH');

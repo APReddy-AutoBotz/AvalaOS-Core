@@ -1,0 +1,464 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 2181 >>
+stream
+0 g
+BT
+/F2 18 Tf
+1 0 0 1 72 720 Tm
+(Synthetic SDD cross-layer export) Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 695 Tm
+(Executive Summary) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 676 Tm
+(Synthetic database-backed export evidence; not provider-generated business output.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 660 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 651 Tm
+(Summary) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 632 Tm
+(Synthetic export path verification.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 616 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 607 Tm
+(Architecture) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 588 Tm
+(A bounded service workflow with explicit human approval.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 572 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 563 Tm
+(Components) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 544 Tm
+(Studio, governed API integration, and the existing Delivery board.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 528 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 519 Tm
+(Interfaces) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 500 Tm
+(Read operations are distinct from unknown or prohibited write operations.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 484 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 475 Tm
+(Data design) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 456 Tm
+(Source anchors and unresolved questions remain explicit.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 440 Tm
+() Tj
+ET
+0.5 w
+0 G
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 431 Tm
+(As is flow) Tj
+ET
+306 343 m
+306 325 l
+S
+302 331 m 306 325 l 310 331 l S
+306 279 m
+306 261 l
+S
+302 267 m 306 261 l 310 267 l S
+1 g
+291.747 267 28.506 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 293.747 270 Tm
+(Yes) Tj
+ET
+156 302 m
+120 302 l
+120 174 l
+156 174 l
+S
+150 170 m 156 174 l 150 178 l S
+1 g
+107.502 235 24.996000000000002 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 109.502 238 Tm
+(E3) Tj
+ET
+0.96 g
+156 343 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 270.225 363 Tm
+(Receive request) Tj
+ET
+0.96 g
+306 325 m 456 302 l 306 279 l 156 302 l h B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 264.9735 299 Tm
+(Evidence complete) Tj
+ET
+0.96 g
+156 215 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 274.73400000000004 235 Tm
+(Human review) Tj
+ET
+0.96 g
+156 151 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 267.723 171 Tm
+(Request evidence) Tj
+ET
+0 g
+BT
+/F2 10 Tf
+1 0 0 1 72 95 Tm
+(Transition details) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 2352 >>
+stream
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 720 Tm
+([A] Receive request - continue -> [B] Evidence complete) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 707 Tm
+([B] Evidence complete - Yes -> [C] Human review) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 694 Tm
+([B] Evidence complete - No -> [D] Request evidence) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 681 Tm
+() Tj
+ET
+0.5 w
+0 G
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 672 Tm
+(To be flow) Tj
+ET
+306 584 m
+306 566 l
+S
+302 572 m 306 566 l 310 572 l S
+306 520 m
+306 502 l
+S
+302 508 m 306 502 l 310 508 l S
+306 456 m
+306 438 l
+S
+302 444 m 306 438 l 310 444 l S
+1 g
+291.747 444 28.506 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 293.747 447 Tm
+(Yes) Tj
+ET
+156 479 m
+120 479 l
+120 351 l
+156 351 l
+S
+150 347 m 156 351 l 150 355 l S
+1 g
+107.502 412 24.996000000000002 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 109.502 415 Tm
+(E4) Tj
+ET
+0.96 g
+156 584 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 270.225 604 Tm
+(Receive request) Tj
+ET
+0.96 g
+156 520 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 275.733 540 Tm
+(API validation) Tj
+ET
+0.96 g
+306 502 m 456 479 l 306 456 l 156 479 l h B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 270.225 476 Tm
+(Exception found) Tj
+ET
+0.96 g
+156 392 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 268.479 412 Tm
+(Human judgment) Tj
+ET
+0.96 g
+156 328 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 258.9705 348 Tm
+(Workflow completion) Tj
+ET
+0 g
+BT
+/F2 10 Tf
+1 0 0 1 72 272 Tm
+(Transition details) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 257 Tm
+([A] Receive request - continue -> [B] API validation) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 244 Tm
+([B] API validation - continue -> [C] Exception found) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 231 Tm
+([C] Exception found - Yes -> [D] Human judgment) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 218 Tm
+([C] Exception found - No -> [E] Workflow completion) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 205 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 196 Tm
+(Security controls) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 177 Tm
+(Server authorization, immutable lineage, and independent approval.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 161 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 152 Tm
+(Operational design) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 133 Tm
+(Unresolved technical failures route to human review.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 117 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 108 Tm
+(Design decisions) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 89 Tm
+(Use APIs and workflow where supported; AI remains optional unless selected.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 258 >>
+stream
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 720 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 711 Tm
+(Open questions and proposals) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 692 Tm
+(Confirm the write operation before technical approval.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 676 Tm
+() Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Title (Governed Studio Artifact) /Author (AvalaOS Studio) /Creator (AvalaOS Studio) /Producer (AvalaOS deterministic studio-pdf-4) /CreationDate (D:20000101000000Z) /ModDate (D:20000101000000Z) >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000133 00000 n 
+0000000230 00000 n 
+0000000332 00000 n 
+0000000468 00000 n 
+0000002700 00000 n 
+0000002836 00000 n 
+0000005239 00000 n 
+0000005376 00000 n 
+0000005685 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R /Info 11 0 R /ID [<00000000000000000000000000000000><00000000000000000000000000000000>] >>
+startxref
+5902
+%%EOF

@@ -76,6 +76,22 @@ test('document analysis is one native governed effect and cannot mutate determin
   assert.match(source, /commitAssessDocumentMapping/);
 });
 
+test('reloaded mapping results distinguish accepted, rejected, clean-zero and provider-failure outcomes', () => {
+  assert.match(source, /const next = await load\(isCurrent, bundleToken\)/);
+  assert.match(source, /typeof success === 'function' \? success\(next\) : success/);
+  assert.match(source, /source-grounded suggestion\$\{run\.proposalCount === 1 \? ' is' : 's are'\} ready for human review/);
+  assert.match(source, /no source-grounded suggestions passed evidence validation/);
+  assert.match(source, /no supported suggestions in this exact source bundle/);
+  assert.match(source, /Analysis stopped before a reviewable result was committed/);
+  assert.match(source, /TEXT_ANCHOR_AMBIGUOUS/);
+  assert.match(source, /repeated phrase without enough context/);
+  assert.match(source, /TEXT_ANCHOR_NOT_FOUND/);
+  assert.match(source, /cited text that was not found/);
+  assert.match(source, /Audit details/);
+  assert.match(source, /\{mappingWarningCopy\(warning\)\}<\/li>/);
+  assert.doesNotMatch(source, /AI suggestions are ready for human review/);
+});
+
 test('native intake declares branch-aware Mermaid flowchart support without implying OCR', () => {
   assert.match(source, /\.mmd/);
   assert.match(source, /Mermaid support covers flowchart\/graph direction, steps, directed edges, decision shapes, and explicit branch labels/);

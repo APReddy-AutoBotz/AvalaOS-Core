@@ -93,7 +93,9 @@ export async function createLegacyDeliveryBrowserFixture(options = {}) {
   const controlToken = `legacy-delivery-control-${crypto.randomUUID()}`;
   const commandModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryCommand.ts'));
   const queryModule = loadProductionModule(path.join(root, 'supabase', 'functions', '_shared', 'legacyDeliveryQuery.ts'));
-  for (const capability of ['studio.artifacts.read']) {
+  // The browser journey uses the normal project Delivery board, whose route
+  // guard requires read authority in addition to the legacy mutation grants.
+  for (const capability of ['studio.artifacts.read', 'project.read']) {
     await postgres.db.query(
       'INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,$2) ON CONFLICT DO NOTHING',
       [ids.role, capability],
@@ -321,4 +323,30 @@ export const legacyDeliveryBrowserFixtureSources = [
   'supabase/migrations/20261011053000_supabase_provider_secret_backend.sql',
   'supabase/migrations/20261019161723_local_real_backend_authenticated_acceptance.sql',
   'supabase/migrations/20261103103752_process_evidence_studio_sdd_flows.sql',
+  'supabase/migrations/20261103104435_delivery_requirement_bound_proposals.sql',
+  'supabase/migrations/20261103170101_stable_requirement_proposal_identity.sql',
+  'supabase/migrations/20261103170102_current_assessment_delivery_project.sql',
+  'supabase/migrations/20261103170103_process_evidence_live_permit.sql',
+  'supabase/migrations/20261105024717_process_evidence_operator_access_resume.sql',
+  'supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql',
+  'supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql',
+  'supabase/migrations/20261105140001_assessed_planning_review.sql',
+  'supabase/migrations/20261105140002_assessed_planning_studio.sql',
+  'supabase/migrations/20261105140004_assessed_planning_govern_projection.sql',
+  'supabase/migrations/20261106012001_scoped_studio_actor_roles.sql',
+  'supabase/migrations/20261106012002_scoped_studio_route_admission.sql',
+  'supabase/migrations/20261106012003_scoped_studio_role_lookup.sql',
+  'supabase/migrations/20261106020001_studio_response_reconciliation.sql',
+  'supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql',
+  'supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql',
+  'supabase/migrations/20261106070101_delivery_numbered_requirements.sql',
+  'supabase/migrations/20261106153001_process_evidence_validation_renewal.sql',
+  'supabase/migrations/20261106170001_studio_timeout_reconciliation.sql',
+  'supabase/migrations/20261106190001_sdd_completion_allowance.sql',
+  'supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql',
+  'supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql',
+  'supabase/migrations/20261107110000_delivery_discovery_resolution.sql',
+  'supabase/migrations/20261107120000_planning_discovery_resolution.sql',
+  'supabase/migrations/20261107120001_studio_pdf_business_readability.sql',
+  'supabase/migrations/20261107120003_studio_reviewer_display_names.sql',
 ];

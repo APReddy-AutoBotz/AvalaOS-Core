@@ -1,4 +1,5 @@
 import {
+  LEGACY_DELIVERY_STATUS_TRANSITIONS,
   DeliveryPolicyError,
   assertCanDeleteDeliveryTask,
   assertCanUpdateDeliveryTask,
@@ -6,8 +7,13 @@ import {
   canDeleteDeliveryTask,
   canEditDeliveryTask,
   getDependencyViolations,
+  getLegacyDeliveryStatusTargets,
+  getStatusTransitionViolations,
+  isLegacyDeliveryStatusTransitionAllowed,
 } from './deliveryPolicy';
 import { Task, User } from '../types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 console.log('Starting Delivery Policy Regression Suite...');
 
@@ -22,6 +28,27 @@ const pm = makeUser('pm-1', ['project.manage', 'task.create', 'task.update', 'ta
 const ba = makeUser('ba-1', ['project.read', 'task.read', 'comments.manage']);
 const developer = makeUser('dev-1', ['project.read', 'task.read', 'task.update.own']);
 const executive = makeUser('exec-1', ['portfolio.read', 'reports.read']);
+
+const transitionSql = readFileSync(join(process.cwd(), 'supabase/migrations/20261010025331_legacy_delivery_authority.sql'), 'utf8');
+const transitionFunction = transitionSql.slice(
+  transitionSql.indexOf('CREATE OR REPLACE FUNCTION public.legacy_delivery_transition_allowed'),
+  transitionSql.indexOf('CREATE OR REPLACE FUNCTION public.legacy_delivery_task_projection'),
+).replace(/\s+/g, ' ');
+for (const [from, targets] of Object.entries(LEGACY_DELIVERY_STATUS_TRANSITIONS)) {
+  const sqlTarget = targets.length === 1
+    ? `p_to='${targets[0]}'`
+    : `p_to=ANY(ARRAY[${targets.map(target => `'${target}'`).join(',')}])`;
+  if (!transitionFunction.includes(`WHEN '${from}' THEN ${sqlTarget}`)) {
+    throw new Error(`Client status choices drifted from the installed SQL transition for ${from}.`);
+  }
+}
+if (isLegacyDeliveryStatusTransitionAllowed('To Do', 'Done')) {
+  throw new Error('The client incorrectly permits the server-rejected To Do to Done shortcut.');
+}
+if (getLegacyDeliveryStatusTargets('In Review').join('|') !== 'Testing|In Progress|On Hold|Blocked'
+  || getLegacyDeliveryStatusTargets('Testing').join('|') !== 'Ready for Release|In Review|Blocked') {
+  throw new Error('The board omitted an underlying Testing or Ready for Release transition.');
+}
 
 const baseTask: Task = {
   id: 'task-1',
@@ -53,6 +80,21 @@ const dependentTask: Task = {
   id: 'dependent-1',
   title: 'Release workflow',
   dependencyIds: ['dependency-1'],
+};
+
+const discoveryTask: Task = {
+  ...dependencyTask,
+  id: 'discovery-1',
+  title: 'Resolve PATCH support',
+  status: 'Done',
+  dependencyIds: [],
+  sourceLineage: { proposalRole: 'discovery' },
+};
+
+const discoveryDependentTask: Task = {
+  ...dependentTask,
+  id: 'discovery-dependent-1',
+  dependencyIds: [discoveryTask.id],
 };
 
 if (!canCreateDeliveryTask(pm) || canCreateDeliveryTask(executive)) {
@@ -87,6 +129,37 @@ assertCanUpdateDeliveryTask(ba, baseTask, {
 const blockedDependencies = getDependencyViolations(dependentTask, [dependencyTask, dependentTask], 'In Progress');
 if (blockedDependencies.length !== 1 || blockedDependencies[0].id !== dependencyTask.id) {
   throw new Error('Dependency gate did not identify unfinished predecessor task.');
+}
+
+const missingDependency = getDependencyViolations(dependentTask, [dependentTask], 'In Progress');
+if (missingDependency.length !== 1 || missingDependency[0].id !== dependencyTask.id
+  || missingDependency[0].title !== 'A referenced prerequisite is unavailable in this view') {
+  throw new Error('A filtered or incomplete dependency projection incorrectly released dependent work.');
+}
+
+const unresolvedDiscovery = new Map([[discoveryTask.id, 'blocking_unresolved' as const]]);
+const archivedDoneBlockers = getDependencyViolations(
+  discoveryDependentTask,
+  [discoveryTask, discoveryDependentTask],
+  'In Progress',
+  unresolvedDiscovery,
+);
+if (archivedDoneBlockers.length !== 1 || archivedDoneBlockers[0].id !== discoveryTask.id) {
+  throw new Error('A Done discovery task with an unresolved committed disposition incorrectly released dependent work.');
+}
+
+const acceptedDiscovery = new Map([[discoveryTask.id, 'source_backed_answer_accepted' as const]]);
+if (getDependencyViolations(discoveryDependentTask, [discoveryTask, discoveryDependentTask], 'In Progress', acceptedDiscovery).length !== 0) {
+  throw new Error('An independently accepted source-backed answer did not release its completed discovery dependency.');
+}
+if (getStatusTransitionViolations(discoveryTask, [discoveryTask], 'Done', unresolvedDiscovery).length !== 1) {
+  throw new Error('An unresolved discovery item incorrectly became eligible for Done.');
+}
+if (getStatusTransitionViolations(discoveryTask, [discoveryTask], 'Done', acceptedDiscovery).length !== 0) {
+  throw new Error('An independently accepted discovery item remained blocked from Done.');
+}
+if (getDependencyViolations(discoveryDependentTask, [discoveryTask, discoveryDependentTask], 'In Progress').length !== 0) {
+  throw new Error('The existing local status-only dependency behavior changed without a committed outcome projection.');
 }
 
 try {

@@ -18,11 +18,15 @@ assert.match(source, /capabilities\.includes\(ASSESS_V2_CAPABILITIES\.draftWrite
 assert.match(source, /disabled=\{busy \|\| !can\(ASSESS_V2_CAPABILITIES\.draftWrite\)\}/, 'only a draft writer may start a requested revision');
 assert.match(source, /Avala Govern action and control review/);
 assert.match(source, /controlStatuses\[control\.controlId\] \?\? control\.status/,'reviewer disposition edits override the loaded projection');
-assert.match(source, /Create durable Studio handoff/);
+assert.match(source, /Approve for documentation and planning/);
+assert.match(source, /review\.status === 'planning_approved'/, 'planning approval must be a distinct Studio handoff path');
+assert.match(source, /Planning approval does not authorize Govern or implementation readiness/);
+assert.match(source, /review\.status === 'approved' && review\.governStatus === 'resolved'/, 'Verified approval retains the Govern gate');
+assert.match(source, /Create Studio handoff/);
 for (const state of ['Offline', 'stale', 'revoked', 'conflicted', 'Read-only mode', 'Persistence failed']) assert.match(source, new RegExp(state, 'i'));
 assert.ok(source.indexOf('const committed = await action()') < source.indexOf('setMessage(success)'), 'success must render only after a committed response');
 assert.doesNotMatch(source, /reviewerId\s*:/);
-assert.match(source, /Browser-supplied handoff content is never accepted/);
+assert.match(source, /actual confidence, accepted evidence and unanswered questions/, 'planning handoff explains preserved lineage');
 assert.match(source, /aria-live="polite"/);
 assert.match(source, /aria-label="Assigned-review queue"/);
 assert.match(source, /sm:grid-cols-2/);

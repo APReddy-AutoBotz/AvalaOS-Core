@@ -34,6 +34,15 @@ const base = {
 const assert = (value: unknown, message: string) => {
   if (!value) throw new Error(message);
 };
+const assertCommandCors = (response: Response, label: string) => {
+  assert(
+    response.headers.get('access-control-allow-origin') === '*' &&
+      response.headers.get('access-control-allow-headers') ===
+        'authorization, x-client-info, apikey, content-type' &&
+      response.headers.get('access-control-allow-methods') === 'POST, OPTIONS',
+    `${label} carries the command route CORS contract`,
+  );
+};
 const rejects = (value: unknown) => {
   try {
     parseStudioPrivateArtifactEnvelope(value);
@@ -342,6 +351,7 @@ const dependencies = {
 void (async () => {
   const ok = await handleStudioPrivateArtifactCommand(request(), dependencies);
   assert(ok.status === 201, 'authorized generation succeeds');
+  assertCommandCors(ok, 'successful generation response');
   assert(
     calls.join(',') === 'authenticate,authorize,claim,render-upload-complete',
     'fresh authority precedes receipt and external effect',
@@ -538,6 +548,7 @@ void (async () => {
     },
   });
   assert(stale.status === 409 && !calls.includes('claim'), 'stale authority denied before receipt');
+  assertCommandCors(stale, 'safe error response');
   const hidden = await handleStudioPrivateArtifactCommand(request(), {
     ...dependencies,
     loadFreshAuthority: async () => null,
@@ -670,6 +681,7 @@ void (async () => {
   });
   const recoveredTransportBody =
     await recoveredTransport.json() as Record<string, unknown>;
+  assertCommandCors(recoveredTransport, 'committed pending response');
   const recoveredTransportSerialized = JSON.stringify(recoveredTransportBody);
   assert(
     transportClaims === 2 &&

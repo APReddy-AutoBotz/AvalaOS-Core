@@ -38,8 +38,8 @@ interface DeliveryContextType {
   }) => Promise<{ epicCount: number; taskCount: number }>;
   updateProject: (project: Project) => Promise<void>;
   updateSprint: (sprint: Sprint) => Promise<void>;
-  updateTask: (task: Task) => Promise<void>;
-  updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<void>;
+  updateTask: (task: Task) => Promise<Task>;
+  updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<Task>;
   updateTaskSprint: (taskId: string, sprintId: string | null) => Promise<void>;
   reorderTask: (taskIdToMove: string, referenceTaskId: string | null, newEpicId: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
@@ -370,10 +370,10 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateTask = async (task: Task) => {
-    if (!currentOrganization || !user) return;
+    if (!currentOrganization || !user) throw new DeliveryPolicyError('A current Delivery actor and organization are required before updating work.');
     requireCurrentTaskProjection();
     const existingTask = tasks.find(t => t.id === task.id);
-    if (!existingTask) return;
+    if (!existingTask) throw new DeliveryPolicyError('This work item is no longer present in the current Delivery projection. Reload before updating it.');
     if (getRuntimeDataAccess() === 'server') {
       if (!tenantContext) throw new DeliveryPolicyError('A current server workspace is required before updating Delivery work.');
       const requestAuthorityKey = authorityKey;
@@ -385,7 +385,7 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       requireCurrentAuthority(requestAuthorityKey);
       setTasks(prev => sortTasksForDisplay(prev.map(item => item.id === saved.id ? saved : item)));
-      return;
+      return saved;
     }
     const workflowDecision = assertTaskMutationAllowed({
       actor: user,
@@ -408,14 +408,14 @@ export const DeliveryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ];
     const saved = await deliveryAdapter.saveTask({ ...task, activityLog }, currentOrganization.id, user.id);
     setTasks(prev => sortTasksForDisplay(prev.map(t => t.id === task.id ? saved : t)));
+    return saved;
   };
 
   const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
     requireCurrentTaskProjection();
     const task = tasks.find(t => t.id === taskId);
-    if (task) {
-      await updateTask({ ...task, status });
-    }
+    if (!task) throw new DeliveryPolicyError('This work item is no longer present in the current Delivery projection. Reload before changing its status.');
+    return updateTask({ ...task, status });
   };
 
   const updateTaskSprint = async (taskId: string, sprintId: string | null) => {

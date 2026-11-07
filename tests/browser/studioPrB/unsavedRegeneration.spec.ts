@@ -1,5 +1,63 @@
 import { expect, test } from "@playwright/test";
 
+test("current-source working draft exposes a neutral selected-section update without a stale warning", async ({
+  page,
+}) => {
+  await page.goto(
+    "/tests/browser/studioPrB/harness.html?mode=direct&sddFlows=1",
+    { waitUntil: "domcontentloaded" },
+  );
+  const workspace = page.getByTestId("studio-artifact-workspace");
+  await workspace.getByLabel("Artifact type").selectOption("sdd");
+  const editor = page.getByRole("region", { name: "Current document" });
+  await expect(editor.getByText("Needs review.")).toHaveCount(0);
+  await expect(
+    editor.getByText(/Regenerate only the sections you choose from the current source package/u),
+  ).toBeVisible();
+  const update = editor.getByRole("button", {
+    name: "Update selected sections",
+  });
+  await expect(update).toBeDisabled();
+  await editor.getByRole("checkbox", { name: "Summary" }).check();
+  await update.click();
+  await expect(page.getByText(/Selected sections were regenerated/u)).toBeVisible();
+  const generationCalls = await page.evaluate(() =>
+    ((window as any).__studioCommandCalls ?? []).filter(
+      (call: any) => call.commandType === "studio.generation.request",
+    ),
+  );
+  expect(generationCalls).toHaveLength(1);
+  expect(generationCalls[0].body.payload.selectedSectionIds).toEqual(["summary"]);
+  await expect(editor.getByLabel("Section body")).toHaveValue(
+    "Refreshed Summary from changed input.",
+  );
+  await editor.getByRole("button", { name: "2. As-Is flow", exact: true }).click();
+  await expect(editor.getByLabel("Section body")).toHaveValue(
+    "flowchart TD\n  A[Start] --> B[Manual review]\n  B --> C[Complete]",
+  );
+});
+
+test("selected refresh is absent without generation authority or provider availability", async ({
+  page,
+}) => {
+  await page.goto(
+    "/tests/browser/studioPrB/harness.html?mode=direct&sddFlows=1&state=unauthorized",
+    { waitUntil: "domcontentloaded" },
+  );
+  await page.getByLabel("Artifact type", { exact: true }).selectOption("sdd");
+  await expect(
+    page.getByRole("button", { name: "Update selected sections", exact: true }),
+  ).toHaveCount(0);
+  await page.goto(
+    "/tests/browser/studioPrB/harness.html?mode=direct&sddFlows=1&provider=unavailable",
+    { waitUntil: "domcontentloaded" },
+  );
+  await page.getByLabel("Artifact type", { exact: true }).selectOption("sdd");
+  await expect(
+    page.getByRole("button", { name: "Update selected sections", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("selected update requires explicit discard before unsaved sections can be replaced", async ({
   page,
 }) => {
@@ -81,6 +139,8 @@ test("saving dirty sections completes before selected regeneration and preserves
   await editor
     .getByLabel("Section body")
     .fill("Saved authored summary retained across selected refresh.");
+  await editor.getByLabel("Document title").fill("Supplier invoice solution design");
+  await editor.getByLabel("Document summary").fill("Planning only; optional AI requires separate evidence.");
   await editor.getByRole("checkbox", { name: "As-Is flow" }).check();
   const generationCount = () =>
     page.evaluate(
@@ -112,6 +172,7 @@ test("saving dirty sections completes before selected regeneration and preserves
   await expect(editor.getByLabel("Section body")).toHaveValue(
     "Saved authored summary retained across selected refresh.",
   );
+  await expect(editor.getByLabel("Document title")).toHaveValue("Supplier invoice solution design");
   await page.reload({ waitUntil: "domcontentloaded" });
   await workspace.getByLabel("Artifact type").selectOption("sdd");
   const reloaded = page.getByRole("region", { name: "Current document" });
@@ -119,4 +180,39 @@ test("saving dirty sections completes before selected regeneration and preserves
   await expect(reloaded.getByLabel("Section body")).toHaveValue(
     "Saved authored summary retained across selected refresh.",
   );
+  await expect(reloaded.getByLabel("Document title")).toHaveValue("Supplier invoice solution design");
+  await expect(reloaded.getByLabel("Document summary")).toHaveValue("Planning only; optional AI requires separate evidence.");
+});
+
+test("ambiguous save reload never dispatches the pending paid refresh", async ({
+  page,
+}) => {
+  await page.goto(
+    "/tests/browser/studioPrB/harness.html?mode=direct&sddFlows=1&state=reload-failed",
+    { waitUntil: "domcontentloaded" },
+  );
+  const workspace = page.getByTestId("studio-artifact-workspace");
+  await workspace.getByLabel("Artifact type").selectOption("sdd");
+  const editor = page.getByRole("region", { name: "Current document" });
+  await editor.getByLabel("Section body").fill("Saved, but reload remains ambiguous.");
+  await editor.getByRole("checkbox", { name: "As-Is flow" }).check();
+  await editor.getByRole("button", { name: "Update selected sections" }).click();
+  await editor
+    .getByRole("dialog", { name: "Save or discard your changes" })
+    .getByRole("button", { name: "Save changes" })
+    .click();
+  await expect(page.getByText(/Command committed, but projection reload failed/u)).toBeVisible();
+  const generationCount = () =>
+    page.evaluate(
+      () =>
+        ((window as any).__studioCommandCalls ?? []).filter(
+          (call: any) => call.commandType === "studio.generation.request",
+        ).length,
+    );
+  expect(await generationCount()).toBe(0);
+  await page
+    .getByRole("button", { name: "Reload explicitly committed state" })
+    .click();
+  await expect(page.getByText("Version 3", { exact: true })).toBeVisible();
+  expect(await generationCount()).toBe(0);
 });

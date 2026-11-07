@@ -158,11 +158,15 @@ test('exact Studio handoff personas preserve three-party authority in production
     expect((await observe(page, '/functions/v1/assess-v2-command', () =>
       reviewWorkspace.getByRole('button', { name: 'Resolve Govern controls', exact: true }).click())).status()).toBe(200);
     expect((await observe(page, '/functions/v1/assess-v2-command', () =>
-      reviewWorkspace.getByRole('button', { name: 'Create durable Studio handoff', exact: true }).click())).status()).toBe(200);
+      reviewWorkspace.getByRole('button', { name: 'Create Studio handoff', exact: true }).click())).status()).toBe(200);
     await checkpoint(`${prefix}-assess-handoff-ready`);
+    const studioHandoffTarget=await control<{upstreamHandoffId:string}>(
+      '/control/project-studio-handoff-target',{projectName:target.projectName});
+    expect(studioHandoffTarget.upstreamHandoffId)
+      .toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
 
     await enterStudioAs(page, target.actors.author, settleBoundary);
-    const requestResponse=await commitEligibleStudioHandoffRequest(page);
+    const requestResponse=await commitEligibleStudioHandoffRequest(page,studioHandoffTarget.upstreamHandoffId);
     expect(requestResponse.status()).toBe(201);
     const requestedTarget=await persistedHandoffTargetFromResponse(requestResponse,'requested');
     await enterStudioAs(page, target.actors.reviewer, settleBoundary);
@@ -462,7 +466,8 @@ test('exact Studio handoff personas preserve three-party authority in production
     await checkpoint('fault-final-accept-visible');
     await expect(finalAccept).toBeEnabled();
     await checkpoint('fault-final-accept-enabled');
-    const artifactMutation=page.getByRole('button',{name:'Generate legacy accepted-handoff draft',exact:true});
+    const artifactMutation=studioWorkspace.getByRole('button',{name:/^Generate (?:governed package|synthetic controlled-human) draft$/u});
+    await expect(artifactMutation).toHaveCount(1);
     await expect(artifactMutation).toBeDisabled();
     await checkpoint('fault-artifact-control-blocked');
     artifactFaultState=await studioWorkspace.getAttribute('data-studio-artifact-state')??'unknown';

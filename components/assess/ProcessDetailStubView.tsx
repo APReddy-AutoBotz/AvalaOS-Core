@@ -33,6 +33,7 @@ import {
     ExclamationTriangleIcon,
     SparklesIcon,
 } from '../shared/icons';
+import type { CurrentAssessmentProject } from '../../services/assessV2/currentAssessmentProjectClient';
 
 interface ProcessDetailStubViewProps {
     processId: string;
@@ -40,9 +41,10 @@ interface ProcessDetailStubViewProps {
     onStartAssessment: (id: string) => void;
     onGenerateDocs?: (payload: NonNullable<ReturnType<typeof buildAssessToStudioHandoffPayload>>) => void;
     captureMode?: boolean;
+    onOpenCurrentStudio?: (project: CurrentAssessmentProject) => Promise<void>;
 }
 
-const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs, captureMode = false }) => {
+const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId, onBack, onStartAssessment, onGenerateDocs, captureMode = false, onOpenCurrentStudio }) => {
     const { currentOrganization } = useOrganization();
     const { currentOrganization: orgContext, tenantContext, sessionState } = useOrganizationContext();
     const { getProcessById, readState, updateProcess, canUpdateProcess } = useProcessService();
@@ -447,6 +449,7 @@ const ProcessDetailStubView: React.FC<ProcessDetailStubViewProps> = ({ processId
                 processDescription={process.description || ''}
                 v1Assessment={assessment}
                 captureMode={captureMode}
+                onOpenStudio={onOpenCurrentStudio}
                 onPresentationChange={handleCurrentAssessmentPresentation}
             />}
 

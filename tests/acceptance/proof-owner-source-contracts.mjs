@@ -579,6 +579,141 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "process-evidence-studio-sdd",
     "sourceReference": "supabase/migrations/20261103103752_process_evidence_studio_sdd_flows.sql",
     "selector": "'sdd', 'studio-sdd-1', 'studio-artifact-2',"
+  },
+  {
+    "anchorId": "process-evidence-delivery-origin",
+    "sourceReference": "supabase/migrations/20261103104435_delivery_requirement_bound_proposals.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_delivery_proposal_origin("
+  },
+  {
+    "anchorId": "stable-requirement-proposal-role",
+    "sourceReference": "supabase/migrations/20261103170101_stable_requirement_proposal_identity.sql",
+    "selector": "CREATE FUNCTION public.studio_delivery_stable_proposal_origin("
+  },
+  {
+    "anchorId": "current-assessment-delivery-project",
+    "sourceReference": "supabase/migrations/20261103170102_current_assessment_delivery_project.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.assess_v2_current_delivery_project_ensure("
+  },
+  {
+    "anchorId": "process-evidence-live-permit",
+    "sourceReference": "supabase/migrations/20261103170103_process_evidence_live_permit.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_open_provider_run("
+  },
+  {
+    "anchorId": "process-evidence-operator-access-resume",
+    "sourceReference": "supabase/migrations/20261105024717_process_evidence_operator_access_resume.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_resume_provider_run("
+  },
+  {
+    "anchorId": "process-evidence-post-use-renewal",
+    "sourceReference": "supabase/migrations/20261105041249_process_evidence_post_use_renewal.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_renew_provider_run_after_use("
+  },
+  {
+    "anchorId": "govern-mixed-snapshot-normalization",
+    "sourceReference": "supabase/migrations/20261105110657_govern_mixed_snapshot_normalization.sql",
+    "selector": "DO $govern_mixed_snapshot_normalization$"
+  },
+  {
+    "anchorId": "assessed-planning-review",
+    "sourceReference": "supabase/migrations/20261105140001_assessed_planning_review.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.pr1e_resolve_assess_v2_planning("
+  },
+  {
+    "anchorId": "assessed-planning-govern-projection",
+    "sourceReference": "supabase/migrations/20261105140004_assessed_planning_govern_projection.sql",
+    "selector": "DO $assessed_planning_govern_projection_predecessor$"
+  },
+  {
+    "anchorId": "assessed-planning-studio",
+    "sourceReference": "supabase/migrations/20261105140002_assessed_planning_studio.sql",
+    "selector": "DO $planning_studio_preflight$"
+  },
+  {
+    "anchorId": "assessed-planning-delivery",
+    "sourceReference": "supabase/migrations/20261105140003_assessed_planning_delivery.sql",
+    "selector": "ALTER TABLE public.projects DROP CONSTRAINT projects_current_assessment_binding_check;"
+  },
+  {
+    "anchorId": "scoped-studio-actor-roles",
+    "sourceReference": "supabase/migrations/20261106012001_scoped_studio_actor_roles.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.synthetic_admin_assign_studio_variant("
+  },
+  {
+    "anchorId": "scoped-studio-route-admission",
+    "sourceReference": "supabase/migrations/20261106012002_scoped_studio_route_admission.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_studio_actor_route_role("
+  },
+  {
+    "anchorId": "scoped-studio-role-lookup",
+    "sourceReference": "supabase/migrations/20261106012003_scoped_studio_role_lookup.sql",
+    "selector": "SCOPED_STUDIO_ROLE_LOOKUP_PREDECESSOR_MISMATCH"
+  },
+  {
+    "anchorId": "studio-response-reconciliation",
+    "sourceReference": "supabase/migrations/20261106020001_studio_response_reconciliation.sql",
+    "selector": "CREATE FUNCTION public.process_evidence_reconcile_spent_output_lost("
+  },
+  {
+    "anchorId": "studio-v2-rendition-renderer",
+    "sourceReference": "supabase/migrations/20261106040803_studio_v2_rendition_renderer.sql",
+    "selector": "RENAME TO studio_private_artifact_command_claim_renderer1_legacy;"
+  },
+  {
+    "anchorId": "studio-v2-renderer-identity",
+    "sourceReference": "supabase/migrations/20261106045007_studio_v2_renderer_identity_convergence.sql",
+    "selector": "DO $studio_v2_renderer_identity_convergence$"
+  },
+  {
+    "anchorId": "delivery-numbered-requirements",
+    "sourceReference": "supabase/migrations/20261106070101_delivery_numbered_requirements.sql",
+    "selector": "DO $delivery_numbered_requirements$"
+  },
+  {
+    "anchorId": "process-evidence-validation-renewal",
+    "sourceReference": "supabase/migrations/20261106153001_process_evidence_validation_renewal.sql",
+    "selector": "DO $process_evidence_validation_renewal$"
+  },
+  {
+    "anchorId": "studio-timeout-reconciliation",
+    "sourceReference": "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
+    "selector": "DO $studio_timeout_reconciliation$"
+  },
+  {
+    "anchorId": "sdd-completion-allowance",
+    "sourceReference": "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
+    "selector": "DO $sdd_completion_precondition$"
+  },
+  {
+    "anchorId": "studio-synthetic-prompt-compatibility",
+    "sourceReference": "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
+    "selector": "DO $studio_synthetic_prompt_precondition$"
+  },
+  {
+    "anchorId": "studio-sdd-pdf-branch-routing",
+    "sourceReference": "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+    "selector": "DO $studio_sdd_pdf_branch_precondition$"
+  },
+  {
+    "anchorId": "delivery-discovery-resolution",
+    "sourceReference": "supabase/migrations/20261107110000_delivery_discovery_resolution.sql",
+    "selector": "DO $discovery_delivery_guard$"
+  },
+  {
+    "anchorId": "planning-discovery-resolution",
+    "sourceReference": "supabase/migrations/20261107120000_planning_discovery_resolution.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_delivery_discovery_resolution_valid("
+  },
+  {
+    "anchorId": "studio-business-pdf",
+    "sourceReference": "supabase/migrations/20261107120001_studio_pdf_business_readability.sql",
+    "selector": "DO $studio_pdf4_routing$"
+  },
+  {
+    "anchorId": "studio-reviewer-display",
+    "sourceReference": "supabase/migrations/20261107120003_studio_reviewer_display_names.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_artifact_eligible_reviewers("
   }
 ]);
 
@@ -1832,6 +1967,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-DUPLICATE_IMPORT",
     "testId": "DELIVERY-007",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
       "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
       "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
@@ -1846,7 +1983,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -1949,6 +2111,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "DELIVERY-RETAINED_LINEAGE",
     "testId": "DELIVERY-008",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "legacy-delivery-legacyDeliveryAuthorityPostgres-mjs",
       "legacy-delivery-legacyDeliveryPostgresFixture-mjs",
       "legacy-delivery-legacyDeliveryAcceptanceEvidence-mjs",
@@ -1963,7 +2127,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2463,6 +2652,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-ASSEMBLE_PHASE1_NONEXECUTION",
     "testId": "EI-005",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2487,7 +2678,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2502,6 +2718,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-COMMAND_REPLAY",
     "testId": "EI-004",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2526,7 +2744,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2541,6 +2784,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-INGESTION_LINEAGE",
     "testId": "EI-002",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2565,7 +2810,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2580,6 +2850,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-INGESTION_VALIDATION",
     "testId": "EI-001",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2604,7 +2876,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2619,6 +2916,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "EI-QUERY_TENANT_ISOLATION",
     "testId": "EI-003",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "ei-acceptance-testenterpriseintelligenceacceptancepostgres-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceevidence-mjs",
       "ei-acceptance-enterpriseintelligenceacceptanceparser-test-ts",
@@ -2643,7 +2942,32 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-migration",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-authority",
-      "process-evidence-studio-sdd"
+      "process-evidence-studio-sdd",
+      "process-evidence-delivery-origin",
+      "stable-requirement-proposal-role",
+      "current-assessment-delivery-project",
+      "process-evidence-live-permit",
+      "process-evidence-operator-access-resume",
+      "process-evidence-post-use-renewal",
+      "govern-mixed-snapshot-normalization",
+      "assessed-planning-review",
+      "assessed-planning-govern-projection",
+      "assessed-planning-studio",
+      "assessed-planning-delivery",
+      "scoped-studio-actor-roles",
+      "scoped-studio-route-admission",
+      "scoped-studio-role-lookup",
+      "studio-response-reconciliation",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -3610,6 +3934,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-DOWNLOAD_DENIAL",
     "testId": "STUDIO-007",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "studio-artifact-contracts",
       "authenticated-scripts-authenticatedacceptancecases-mjs",
       "authenticated-scripts-authenticatedacceptanceprofile-mjs",
@@ -3641,7 +3967,17 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-observation-adapter",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-build",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -3654,6 +3990,8 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
     "branchId": "STUDIO-GENERATION_FAILURE",
     "testId": "STUDIO-003",
     "sourceAnchorIds": [
+      "studio-v2-rendition-renderer",
+      "studio-v2-renderer-identity",
       "studio-artifact-contracts",
       "authenticated-scripts-authenticatedacceptancecases-mjs",
       "authenticated-scripts-authenticatedacceptanceprofile-mjs",
@@ -3681,7 +4019,17 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "authenticated-hosted-observation-adapter",
       "authenticated-hosted-native-secret-migration",
       "local-real-backend-build",
-      "local-real-backend-authority"
+      "local-real-backend-authority",
+      "delivery-numbered-requirements",
+      "process-evidence-validation-renewal",
+      "studio-timeout-reconciliation",
+      "sdd-completion-allowance",
+      "studio-synthetic-prompt-compatibility",
+      "studio-sdd-pdf-branch-routing",
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {

@@ -568,21 +568,21 @@
       "pattern": "localStorage",
       "path": "tests/browser/authenticatedLifecycleHarness.ts",
       "lines": [
-        410,
-        412,
-        444,
+        411,
+        413,
         445,
         446,
-        464,
-        546,
+        447,
+        465,
         547,
         548,
-        652,
+        549,
         653,
-        819,
-        822,
-        973,
-        974
+        654,
+        820,
+        823,
+        974,
+        975
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and read-only durable-navigation assertions to this approved acceptance harness. Compare browser identity only to detect drift; real hosted sessions remain independently verified. Browser storage never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -594,8 +594,8 @@
         68,
         69,
         70,
-        179,
-        180
+        196,
+        197
       ],
       "reason": "test/control documentation",
       "futureAction": "Keep synthetic session/navigation setup and persisted-view assertions confined to the loopback-only Legacy Delivery browser fixture; never treat these fixture values as server or provider authority."
@@ -604,10 +604,10 @@
       "pattern": "localStorage",
       "path": "tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts",
       "lines": [
-        530,
-        531,
-        715,
-        716
+        571,
+        572,
+        756,
+        757
       ],
       "reason": "test/control documentation",
       "futureAction": "Confine session handling and storage-exposure assertions to this approved acceptance harness. Real hosted sessions are independently verified; browser state never grants server authority. Do not persist provider credentials or export auth tokens."
@@ -678,7 +678,7 @@
       "pattern": "localStorage",
       "path": "tests/browser/studioPrB/canonicalSddExport.spec.ts",
       "lines": [
-        70
+        86
       ],
       "reason": "test/control documentation",
       "futureAction": "Use only the synthetic local browser session for the scoped rendition and download fixture. Never store a real provider credential or use this fixture as server authorization."

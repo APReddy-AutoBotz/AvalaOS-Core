@@ -9,7 +9,7 @@ import {
 } from './enterpriseIntelligenceAi.ts';
 import type { AllowedEnterpriseProviderResolverDecision } from './providerResolver.ts';
 import type { JsonObject } from './studioArtifactCommand.ts';
-import type { StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
+import type { StudioApprovalPurpose, StudioCanonicalSourceAnchorDto } from '../../../services/studioArtifacts/contracts.ts';
 import {
   normalizeStudioArtifactTemplate,
   STUDIO_TEMPLATE_ARTIFACT_TYPES,
@@ -19,9 +19,16 @@ import {
 export const STUDIO_PROVIDER_CAPABILITY = 'studio.document.generate' as const;
 export const STUDIO_PROVIDER_IDENTITIES: readonly EnterpriseAiProvider[] = ENTERPRISE_AI_PROVIDERS;
 export const STUDIO_PROVIDER_PROMPT_KEY = 'studio-multisource-generation' as const;
-export const STUDIO_PROVIDER_PROMPT_VERSIONS = ['studio-pr-b-1', 'studio-pr-b-2', 'studio-pr-b-3'] as const;
+export const STUDIO_PROVIDER_PROMPT_VERSIONS = ['studio-pr-b-1', 'studio-pr-b-2', 'studio-pr-b-3', 'studio-pr-b-4'] as const;
 export type StudioProviderPromptVersion = typeof STUDIO_PROVIDER_PROMPT_VERSIONS[number];
 export type StudioProviderArtifactType = typeof STUDIO_TEMPLATE_ARTIFACT_TYPES[number];
+
+export const studioProviderPromptSupportsArtifact = (
+  promptVersion: StudioProviderPromptVersion,
+  artifactType: StudioProviderArtifactType,
+) => promptVersion === 'studio-pr-b-1'
+  || (artifactType === 'brd' && (promptVersion === 'studio-pr-b-2' || promptVersion === 'studio-pr-b-3'))
+  || (artifactType === 'sdd' && promptVersion === 'studio-pr-b-4');
 
 export type StudioProviderPlan = Readonly<{
   provider: EnterpriseAiProvider;
@@ -234,6 +241,7 @@ export const buildStudioArtifactTaskInstruction = (
   selectedSourceVersionIds: readonly string[],
   promptVersion: StudioProviderPromptVersion,
   artifactType: StudioProviderArtifactType,
+  approvalPurpose: StudioApprovalPurpose = 'implementation_readiness',
 ) => {
   const selected = [...selectedSourceVersionIds];
   if (selected.length > 20 || selected.some(id => typeof id !== 'string' || !UUID.test(id))
@@ -241,7 +249,7 @@ export const buildStudioArtifactTaskInstruction = (
     || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion)
     || !STUDIO_TEMPLATE_ARTIFACT_TYPES.includes(artifactType)
     || template.artifactType !== null && template.artifactType !== artifactType
-    || promptVersion !== 'studio-pr-b-1' && artifactType !== 'brd') {
+    || !studioProviderPromptSupportsArtifact(promptVersion, artifactType)) {
     throw new Error('STUDIO_SELECTED_SOURCE_CONTRACT_INVALID');
   }
   const instruction = [
@@ -280,7 +288,29 @@ export const buildStudioArtifactTaskInstruction = (
     'For SDD technical details not established by supplied evidence, state an explicit open question or clearly labeled proposal; never present a proposal as an implemented fact.',
     'Do not invent API availability, interface contracts, data classifications, security controls, deployment topology, service levels, costs, or operational readiness.',
   );
-  if (promptVersion !== 'studio-pr-b-1') instruction.splice(-1, 0,
+  if (artifactType === 'pdd') instruction.splice(-1, 0,
+    'Present each supported process step with its source-established role, inputs, decision or rule, outputs, exception path, and handoff in the closest existing section. Keep any missing element explicitly unknown and do not infer ordering from array position.',
+    'Keep the current process, proposed changes, and unanswered design questions visibly separate. Do not turn a proposed component or optional alternative into a current process fact.',
+  );
+  if (artifactType === 'frd') instruction.splice(-1, 0,
+    'An unresolved question that blocks implementation remains blocking when it is recorded. State that release requires an independently accepted source-backed answer or an independently approved nonblocking disposition or revised scope.',
+    'Acceptance criteria must test the resolved behavior or the approved scope change; recording an unanswered question alone is not completion.',
+  );
+  if (promptVersion === 'studio-pr-b-4') instruction.splice(-1, 0,
+    'For this SDD, asIsFlow must describe the current source-supported process and toBeFlow must describe only the selected source-grounded proposed design.',
+    'The As-Is and To-Be Mermaid bodies must be materially distinct in at least one supported node, edge, branch, decision, role, or label. A cosmetic rename or layout-direction change is not a design difference.',
+    'Steps that remain unchanged may appear in both flows when they are source-supported. Do not invent nodes or edges solely to make the flows different.',
+    'When a proposed transition is not established, keep the boundary as an explicit Unknown or open-question node in the To-Be flow; do not fabricate a redesign or present the unknown as implemented.',
+  );
+  if (approvalPurpose === 'documentation_planning') instruction.splice(-1, 0,
+    'This assessed source is independently approved only for documentation and planning. Preserve that purpose in the document and never describe it as Verified, Govern-approved, implementation-ready, or execution-authorized.',
+    'Keep supported facts, proposed design choices, optional alternatives, and unresolved questions visibly distinct. Preserve each supplied unresolved question and state the design or delivery action it blocks without inventing evidence.',
+    'Preserve API evidence operation by operation. Keep ready or available, prohibited, unknown or not established, and excluded from the recommended design as distinct states for each method or capability; never generalize one operation state to another.',
+    'An unknown operation or an operation excluded from the recommended design is not a policy prohibition and is not evidence of availability or unavailability. Keep it unknown, do not recommend or promote it, and preserve any separate ready and prohibited operations exactly.',
+    'AI eligibility or a viable optional AI alternative does not mean AI is selected, necessary, approved, or part of the recommended design. Preserve the source-stated recommended approach and any No AI required conclusion separately from optional alternatives.',
+    'Document approval approves the content for planning. It does not certify unresolved facts or implementation readiness.',
+  );
+  if (promptVersion === 'studio-pr-b-2' || promptVersion === 'studio-pr-b-3') instruction.splice(-1, 0,
     'For this BRD, preserve every explicit workflow primitive, state, action, event, edge, sequence, branch, loop, and triggering condition in the closest existing template section; never collapse distinct source steps or add a section.',
     'Preserve only source-stated ordering, edges, and conditions; never infer a missing sequence, edge, or condition from array order or proximity.',
     'Preserve every explicit role, owner, responsibility boundary, and handoff, including who initiates, receives, decides, approves, escalates, or becomes accountable; never infer an unprovided owner or transfer ownership.',
@@ -289,9 +319,16 @@ export const buildStudioArtifactTaskInstruction = (
     'Do not infer that an AI agent or automation is necessary, suitable, approved, or unnecessary. Preserve only the source-stated position and keep an unstated position explicitly unknown.',
   );
   if (promptVersion === 'studio-pr-b-3') instruction.splice(-1, 0,
-    'For this BRD v3 request, a server-controlled post-validation step appends a bounded accepted-Assessment source-facts block for human review; that block is not model-generated reasoning and is outside this response schema.',
+    'For this BRD v3 request, a server-controlled post-validation step appends a bounded, readable accepted-Assessment source-reference summary for human review; exact technical lineage remains in audit details and is outside this response schema.',
   );
   return instruction.join(' ');
+};
+
+const studioApprovalPurpose = (sourcePackage: JsonObject): StudioApprovalPurpose => {
+  const assessPackage = sourcePackage.assessPackage;
+  return object(assessPackage) && assessPackage.approvalPurpose === 'documentation_planning'
+    ? 'documentation_planning'
+    : 'implementation_readiness';
 };
 
 export const buildStudioResponseSchema = (template: StudioArtifactTemplateContract) => {
@@ -312,7 +349,10 @@ export const estimateStudioProviderInputTokens = (
   input: Pick<StudioProviderGatewayInput, 'plan' | 'sourcePackage' | 'templatePayload' | 'selectedSourceVersionIds' | 'canonicalSourceAnchors' | 'manualBrief'>,
 ) => {
   const template = normalizeStudioArtifactTemplate(input.templatePayload);
-  if (input.plan.promptKey !== STUDIO_PROVIDER_PROMPT_KEY || !HASH.test(input.plan.providerPlanHash)) {
+  if (input.plan.promptKey !== STUDIO_PROVIDER_PROMPT_KEY || !HASH.test(input.plan.providerPlanHash)
+    || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(input.plan.promptVersion)
+    || !STUDIO_TEMPLATE_ARTIFACT_TYPES.includes(input.plan.artifactType)
+    || !studioProviderPromptSupportsArtifact(input.plan.promptVersion, input.plan.artifactType)) {
     throw new Error('STUDIO_PROVIDER_PLAN_INVALID');
   }
   const bindings = buildStudioProviderAnchorBindings(input.selectedSourceVersionIds, input.canonicalSourceAnchors);
@@ -320,6 +360,7 @@ export const estimateStudioProviderInputTokens = (
     capability: STUDIO_PROVIDER_CAPABILITY,
     taskInstruction: buildStudioArtifactTaskInstruction(
       template, input.selectedSourceVersionIds, input.plan.promptVersion, input.plan.artifactType,
+      studioApprovalPurpose(input.sourcePackage),
     ),
     untrustedSource: buildUntrustedStudioInput(input, bindings),
     // Reserve schema overhead conservatively for every provider; only OpenAI sends it.
@@ -342,6 +383,7 @@ export const callStudioArtifactProvider = async (
     || input.plan.promptKey !== STUDIO_PROVIDER_PROMPT_KEY
     || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(input.plan.promptVersion)
     || !STUDIO_TEMPLATE_ARTIFACT_TYPES.includes(input.plan.artifactType)
+    || !studioProviderPromptSupportsArtifact(input.plan.promptVersion, input.plan.artifactType)
     || !HASH.test(input.plan.providerPlanHash)
     || input.plan.resolverDecision.status !== 'allowed'
     || input.plan.resolverDecision.operation !== STUDIO_PROVIDER_CAPABILITY
@@ -355,6 +397,7 @@ export const callStudioArtifactProvider = async (
     template = normalizeStudioArtifactTemplate(input.templatePayload);
     instruction = buildStudioArtifactTaskInstruction(
       template, input.selectedSourceVersionIds, input.plan.promptVersion, input.plan.artifactType,
+      studioApprovalPurpose(input.sourcePackage),
     );
     const bindings = buildStudioProviderAnchorBindings(input.selectedSourceVersionIds, input.canonicalSourceAnchors);
     untrustedSource = buildUntrustedStudioInput(input, bindings);
@@ -412,5 +455,6 @@ export const callStudioArtifactProvider = async (
     model: result.model,
     content,
     usage: result.usage,
+    ...(result.providerOperationId === undefined ? {} : { providerOperationId: result.providerOperationId }),
   };
 };
