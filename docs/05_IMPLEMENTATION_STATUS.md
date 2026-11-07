@@ -1,5 +1,9 @@
 # AvalaOS Core: current implementation and verification status
 
+## Planning review and Delivery dependencies
+
+The latest approved supplier invoice documents are BRD v7, PDD v6, FRD v4 and SDD v7. The author edited the previous approved versions and separate accounts reviewed and approved the revisions. The dedicated workspace directory returned all eight actor display names. Current business text distinguishes the prohibited bank-details POST from the invoice PATCH whose support is unknown. Historical source quotations retain their original wording. See the [acceptance plan](planning/process-evidence-to-delivery.md) for the database and hosted proof boundaries.
+
 ## Business review evidence
 
 The dedicated preview of `4f0bda98453e93bbf4f70936eaed347d2ce6b404` passed 17 required checks and matched its backend and 131 installed migrations. Real extraction, corrected facts, four independently approved planning documents, selected regeneration and six persistent board items were exercised through the normal application. The GET Story retained its Blocked status after reload and repeated import produced no duplicates. In the retained six-item dataset, the GET-to-R11 dependency is written in the description. The project contains zero stored dependency edges. Acceptance of a historical proposal did not attest technical readiness.

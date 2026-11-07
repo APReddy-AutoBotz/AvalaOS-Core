@@ -74,6 +74,7 @@ jobs:
         run: |
           node --test scripts/assessedPlanningReviewContract.test.mjs
           node scripts/testAssessedPlanningReviewPostgres.mjs
+          node --test scripts/planningDiscoveryResolutionMigration.test.mjs
           node scripts/assessedPlanningDeliveryPostgres.mjs
           PILOT_OPERATIONS_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres node scripts/testScopedStudioRolesPostgres.mjs
           PILOT_OPERATIONS_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres node scripts/testStudioResponseReconciliationPostgres.mjs

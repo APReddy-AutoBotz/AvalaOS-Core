@@ -1,5 +1,9 @@
 # AvalaOS Core: remaining delivery plan
 
+## Business acceptance of the planning route
+
+Complete independent review of the four revised documents, confirm actual stored dependencies for FR-5 and FR-7 on the existing invoice project board, and inspect the canonical exports. The [acceptance plan](planning/process-evidence-to-delivery.md) records the review boundaries. Production and merge decisions follow business acceptance.
+
 ## Business acceptance of PR #355
 
 The fresh-source planning walkthrough and contrasting no-AI case are complete on `4f0bda98`. Independent business review covers the four approved documents, flow diagrams, six selected board items, exact BRD requirement links, and before/after evidence for selective refresh. The [active plan](planning/process-evidence-to-delivery.md) tracks the bounded discovery, selector and usability corrections. Merge and production deployment require separate decisions.

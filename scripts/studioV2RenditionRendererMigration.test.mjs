@@ -10,6 +10,10 @@ const branchSource = readFileSync(
   'supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql',
   'utf8',
 );
+const businessPdfSource = readFileSync(
+  'supabase/migrations/20261107120001_studio_pdf_business_readability.sql',
+  'utf8',
+);
 
 test('renderer-2 is selected only by the service RPC for exact system-template V2 content', () => {
   for (const token of [
@@ -79,4 +83,34 @@ test('renderer-3 routing is additive and does not rewrite rendition history', ()
   assert.doesNotMatch(branchSource, /studio-pdf-1[^']*:=|studio-pdf-2[^']*:=/u);
   assert.match(branchSource, /EXISTS\(SELECT 1 FROM public\.authenticated_synthetic_exercises WHERE lifecycle='active'\)/u);
   assert.match(branchSource, /EXISTS\(SELECT 1 FROM public\.synthetic_ai_campaign_authorities WHERE enabled\)/u);
+});
+
+test('renderer-4 routes every exact system PDF while preserving authority and history', () => {
+  for (const token of [
+    "marker.migration_tip<>'20261107110000'",
+    "IF format_name='pdf' THEN",
+    "renderer:='studio-pdf-4'",
+    'STUDIO_PDF4_SOURCE_MISMATCH',
+    'STUDIO_PDF4_AUTHORITY_DRIFT',
+  ]) assert.ok(businessPdfSource.includes(token), token);
+  assert.match(
+    businessPdfSource,
+    /IF NOT COALESCE\(is_v2_system_document, false\) THEN[\s\S]+?RETURN public\.studio_private_artifact_command_claim_renderer1_legacy\(p_command\);[\s\S]+?IF format_name='pdf' THEN[\s\S]+?renderer:='studio-pdf-4'/u,
+  );
+  assert.match(
+    businessPdfSource,
+    /metadata_after IS DISTINCT FROM metadata_before[\s\S]+?STUDIO_PDF4_AUTHORITY_DRIFT/u,
+  );
+  assert.doesNotMatch(
+    businessPdfSource,
+    /(?:DELETE|UPDATE)\s+(?:FROM\s+)?public\.studio_(?:renditions|rendition_attempts)/iu,
+  );
+  assert.doesNotMatch(
+    businessPdfSource,
+    /UPDATE\s+public\.hosted_pilot_environment_identity|STUDIO_PDF4_FUNCTION_SOURCE_MISMATCH/iu,
+  );
+  assert.match(
+    businessPdfSource,
+    /REVOKE|Service-only command authority/u,
+  );
 });

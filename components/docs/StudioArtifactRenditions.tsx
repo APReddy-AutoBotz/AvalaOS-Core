@@ -52,13 +52,13 @@ const formatLabel: Record<StudioPrivateArtifactFormat, string> = {
 };
 const currentRenderer: Record<StudioPrivateArtifactFormat, string> = {
   markdown: 'studio-markdown-2',
-  pdf: 'studio-pdf-2',
+  pdf: 'studio-pdf-4',
   docx: 'studio-docx-2',
 };
 const currentRendererFor = (
-  artifactType: StudioArtifactProjectionDto['artifactType'],
+  _artifactType: StudioArtifactProjectionDto['artifactType'],
   format: StudioPrivateArtifactFormat,
-) => artifactType === 'sdd' && format === 'pdf' ? 'studio-pdf-3' : currentRenderer[format];
+) => currentRenderer[format];
 const stateLabel: Record<StudioRenditionProjectionDto['state'], string> = {
   requested: 'Generation requested',
   rendering: 'Rendering',

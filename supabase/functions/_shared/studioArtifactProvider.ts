@@ -288,6 +288,14 @@ export const buildStudioArtifactTaskInstruction = (
     'For SDD technical details not established by supplied evidence, state an explicit open question or clearly labeled proposal; never present a proposal as an implemented fact.',
     'Do not invent API availability, interface contracts, data classifications, security controls, deployment topology, service levels, costs, or operational readiness.',
   );
+  if (artifactType === 'pdd') instruction.splice(-1, 0,
+    'Present each supported process step with its source-established role, inputs, decision or rule, outputs, exception path, and handoff in the closest existing section. Keep any missing element explicitly unknown and do not infer ordering from array position.',
+    'Keep the current process, proposed changes, and unanswered design questions visibly separate. Do not turn a proposed component or optional alternative into a current process fact.',
+  );
+  if (artifactType === 'frd') instruction.splice(-1, 0,
+    'An unresolved question that blocks implementation remains blocking when it is recorded. State that release requires an independently accepted source-backed answer or an independently approved nonblocking disposition or revised scope.',
+    'Acceptance criteria must test the resolved behavior or the approved scope change; recording an unanswered question alone is not completion.',
+  );
   if (promptVersion === 'studio-pr-b-4') instruction.splice(-1, 0,
     'For this SDD, asIsFlow must describe the current source-supported process and toBeFlow must describe only the selected source-grounded proposed design.',
     'The As-Is and To-Be Mermaid bodies must be materially distinct in at least one supported node, edge, branch, decision, role, or label. A cosmetic rename or layout-direction change is not a design difference.',
@@ -311,7 +319,7 @@ export const buildStudioArtifactTaskInstruction = (
     'Do not infer that an AI agent or automation is necessary, suitable, approved, or unnecessary. Preserve only the source-stated position and keep an unstated position explicitly unknown.',
   );
   if (promptVersion === 'studio-pr-b-3') instruction.splice(-1, 0,
-    'For this BRD v3 request, a server-controlled post-validation step appends a bounded accepted-Assessment source-facts block for human review; that block is not model-generated reasoning and is outside this response schema.',
+    'For this BRD v3 request, a server-controlled post-validation step appends a bounded, readable accepted-Assessment source-reference summary for human review; exact technical lineage remains in audit details and is outside this response schema.',
   );
   return instruction.join(' ');
 };

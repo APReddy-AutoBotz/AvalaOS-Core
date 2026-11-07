@@ -377,11 +377,30 @@ const sddPdfHistory = {
   ],
 };
 assert.equal(decodeStudioPrivateArtifactProjection(sddPdfHistory, {artifactId: U[2], artifactVersionId: U[3]}).renditions.length, 3);
-assert.throws(() => decodeStudioPrivateArtifactProjection({
+const sddPdf4History = decodeStudioPrivateArtifactProjection({
   ...sddPdfHistory,
   renditions: [...sddPdfHistory.renditions, {
     ...rendition,
     id: '66666666-6666-4666-8666-666666666666',
     rendererVersion: 'studio-pdf-4',
   }],
+}, {artifactId: U[2], artifactVersionId: U[3]});
+assert.equal(sddPdf4History.renditions.length, 4);
+assert.throws(() => decodeStudioPrivateArtifactProjection({
+  ...sddPdfHistory,
+  renditions: [...sddPdf4History.renditions, {
+    ...rendition,
+    id: '77777777-7777-4777-8777-777777777777',
+    rendererVersion: 'studio-pdf-5',
+  }],
 }, {artifactId: U[2], artifactVersionId: U[3]}));
+
+const brdPdf4History = decodeStudioPrivateArtifactProjection({
+  ...historicalAndCurrent,
+  renditions: [...historicalAndCurrent.renditions, {
+    ...rendition,
+    id: '66666666-6666-4666-8666-666666666667',
+    rendererVersion: 'studio-pdf-4',
+  }],
+}, {artifactId: U[2], artifactVersionId: U[3]});
+assert.equal(brdPdf4History.renditions.length, 3);

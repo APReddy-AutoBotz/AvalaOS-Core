@@ -232,8 +232,30 @@ async function run() {
   stage = 'predecessor-reproduction';
   await verifyPredecessorDiscoveryCompletionBug();
   stage = 'fixture-create';
-  const fixture = await createLegacyDeliveryPostgresFixture({ seed: false });
+  const fixture = await createLegacyDeliveryPostgresFixture({
+    throughMigration: '20261107120000_planning_discovery_resolution.sql',
+    seed: false,
+  });
   try {
+    stage = 'forward-routine-authority';
+    const routineAuthority = (await fixture.db.query(`SELECT p.proname,pg_get_userbyid(p.proowner) owner,p.prosecdef,
+      p.provolatile,p.proconfig,
+      has_function_privilege('anon',p.oid,'EXECUTE') anon_execute,
+      has_function_privilege('authenticated',p.oid,'EXECUTE') authenticated_execute,
+      has_function_privilege('service_role',p.oid,'EXECUTE') service_execute
+      FROM pg_proc p WHERE p.oid=ANY(ARRAY[
+       'public.studio_delivery_discovery_resolution_valid(public.delivery_work_items,public.studio_delivery_publications,jsonb,uuid,bigint)'::regprocedure,
+       'public.studio_delivery_outcome_query(uuid,uuid,uuid,bigint,uuid,integer,uuid)'::regprocedure])
+      ORDER BY p.proname`)).rows;
+    assert.deepEqual(routineAuthority, [{
+      proname: 'studio_delivery_discovery_resolution_valid', owner: 'postgres', prosecdef: true,
+      provolatile: 's', proconfig: ['search_path=""'], anon_execute: false,
+      authenticated_execute: false, service_execute: false,
+    }, {
+      proname: 'studio_delivery_outcome_query', owner: 'postgres', prosecdef: true,
+      provolatile: 'v', proconfig: ['search_path=""'], anon_execute: false,
+      authenticated_execute: false, service_execute: true,
+    }], 'forward repair must preserve owner, security, search-path, volatility and exact routine ACLs');
     stage = 'fixture-seed';
     const generated = await createCommittedStudioFixture(fixture.db, 'brd');
     const x = await reviseArtifactForPublication(fixture.db, generated);
@@ -706,6 +728,13 @@ async function run() {
       discoveryProjection.items.find(item => item.id === option.taskId)?.sourceLineage.sourceItemIndex ?? 'missing').join('-')}`;
     assert.ok(discoveryOutcomeProjection.sourceOptions.some(option => option.taskId === discoveryTask.id),
       'normal outcome UI must receive a readable accepted-source selector before the first outcome exists');
+    const discoverySourceOptions = discoveryOutcomeProjection.sourceOptions.filter(option =>
+      option.taskId === discoveryTask.id || option.taskId === scopeDiscoveryTask.id);
+    assert.deepEqual(discoverySourceOptions.map(option => option.taskId).sort(),
+      [discoveryTask.id, scopeDiscoveryTask.id].sort(),
+      'each imported planning-approved discovery task must expose one bound accepted source');
+    assert.ok(discoverySourceOptions.every(option => option.evidenceAttestationId === x.attestation),
+      'the selector must retain the exact accepted evidence attestation from the planning review');
     stage = 'discovery-resolution-unresolved';
     const unresolved = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
       taskId: discoveryTask.id, expectedTaskVersion: discoveryTask.version, expectedOutcomeVersion: null,
@@ -751,6 +780,16 @@ async function run() {
       WHERE task.id=$1`, [discoveryTask.id, JSON.stringify(proposedAnswerPayload), x.requester, authorizationVersion])).rows[0]?.valid;
     stage = `discovery-resolution-proposed-validation-${proposedValidation}`;
     assert.equal(proposedValidation, true);
+    const mismatchedPurposeValidation = (await fixture.db.query(`SELECT public.studio_delivery_discovery_resolution_valid(
+      ROW(task.*)::public.delivery_work_items,
+      jsonb_populate_record(ROW(publication.*)::public.studio_delivery_publications,
+       jsonb_build_object('approval_purpose','documentation_planning')),
+      $2::jsonb,$3,$4) valid FROM public.delivery_work_items task
+      JOIN public.document_generations generation ON generation.id=task.document_generation_id
+      JOIN public.studio_delivery_publications publication ON publication.id=generation.studio_delivery_publication_id
+      WHERE task.id=$1`, [discoveryTask.id, JSON.stringify(proposedAnswerPayload), x.requester, authorizationVersion])).rows[0]?.valid;
+    assert.equal(mismatchedPurposeValidation, false,
+      'implementation-readiness evidence cannot be reused through a documentation-planning publication purpose');
     const proposedAnswer = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record',
       proposedAnswerPayload, `discovery-proposed-answer-${randomUUID()}`);
     stage = `discovery-resolution-proposed-answer-${proposedAnswer.ok === true ? 'ok' : errorCode(proposedAnswer) ?? 'unknown'}`;
@@ -902,6 +941,8 @@ run().catch(error => {
   const kind = error instanceof assert.AssertionError ? 'ASSERTION_FAILED' : 'EXECUTION_FAILED';
   const safeReason = error instanceof Error && error.message.startsWith('LEGACY_DELIVERY_')
     ? `:${error.message.split(':').slice(0, 2).join('_')}` : '';
-  console.error(`STUDIO_DELIVERY_POSTGRES_${kind}:${stage}${sqlState}${safeReason}`);
+  const fixtureReason = error instanceof Error && error.message.startsWith('FIXTURE FAILED ')
+    ? `:${error.message.replaceAll(/[^a-zA-Z0-9_:. -]/gu, '_').slice(0, 400)}` : '';
+  console.error(`STUDIO_DELIVERY_POSTGRES_${kind}:${stage}${sqlState}${safeReason}${fixtureReason}`);
   process.exitCode = 1;
 });

@@ -19,10 +19,13 @@ const adminUrl = process.env.ENTERPRISE_LIFECYCLE_DATABASE_URL;
 if (!adminUrl) throw new Error('ENTERPRISE_LIFECYCLE_DATABASE_URL is required.');
 const renderer2Migration = '20261106040803_studio_v2_rendition_renderer.sql';
 const renderer3Migration = '20261106210205_studio_sdd_pdf_branch_routing.sql';
+const renderer4Migration = '20261107120001_studio_pdf_business_readability.sql';
 const renderer2Index = migrationNames.indexOf(renderer2Migration);
 const renderer3Index = migrationNames.indexOf(renderer3Migration);
+const renderer4Index = migrationNames.indexOf(renderer4Migration);
 assert.ok(renderer2Index > 0, 'renderer-2 migration must be in the ordered chain');
 assert.ok(renderer3Index > renderer2Index, 'renderer-3 migration must follow renderer-2');
+assert.ok(renderer4Index > renderer3Index, 'renderer-4 migration must follow renderer-3');
 const databaseName = `studio_v2_renderer_${process.pid}`;
 const negativeDatabaseName = `studio_v2_renderer_negative_${process.pid}`;
 const exactV2DatabaseNames = ['brd', 'pdd', 'frd'].map(type => `studio_v2_renderer_${type}_${process.pid}`);
@@ -104,6 +107,21 @@ const reviseAndApproveExactV2 = async (db, fixture) => {
     WHERE aggregate.id=$1::uuid`, [fixture.artifactId])).rows[0];
   assert.equal(approved.content.contractVersion, 'studio-artifact-2');
   return approved.current_approved_version_id;
+};
+const applyThroughRenderer4 = async db => {
+  await applyMigrations(db, migrationNames.slice(0, renderer4Index));
+  await db.query(`UPDATE public.authenticated_synthetic_exercises
+    SET lifecycle='quiesced',quiesced_at=statement_timestamp()
+    WHERE lifecycle='active'`);
+  await db.query(`UPDATE public.enterprise_intelligence_runtime_control
+    SET provider_enabled=false WHERE singleton`);
+  await db.query(`UPDATE public.studio_artifact_runtime_control
+    SET provider_enabled=false WHERE singleton`);
+  await applyMigrations(db, [renderer4Migration]);
+  await db.query(`UPDATE public.enterprise_intelligence_runtime_control
+    SET provider_enabled=true WHERE singleton`);
+  await db.query(`UPDATE public.studio_artifact_runtime_control
+    SET provider_enabled=true WHERE singleton`);
 };
 
 try {
@@ -209,13 +227,59 @@ try {
   [fixture.artifactVersionId])).rows;
   assert.deepEqual(branchTupleAfter, branchTupleBefore);
 
+  const renderer4MetadataBefore = (await database.query(`SELECT jsonb_build_object(
+      'owner',procedure_row.proowner,'securityDefiner',procedure_row.prosecdef,
+      'leakproof',procedure_row.proleakproof,'strict',procedure_row.proisstrict,
+      'volatility',procedure_row.provolatile,'parallel',procedure_row.proparallel,
+      'config',procedure_row.proconfig,'acl',procedure_row.proacl,'language',procedure_row.prolang,
+      'kind',procedure_row.prokind,'returnType',procedure_row.prorettype) metadata
+    FROM pg_proc procedure_row
+    WHERE procedure_row.oid='public.studio_private_artifact_command_claim(jsonb)'::regprocedure`)).rows[0].metadata;
+  await applyMigrations(database, migrationNames.slice(renderer3Index + 1, renderer4Index));
+  await database.query(`UPDATE public.authenticated_synthetic_exercises
+    SET lifecycle='quiesced',quiesced_at=statement_timestamp()
+    WHERE lifecycle='active'`);
+  await database.query(`UPDATE public.enterprise_intelligence_runtime_control
+    SET provider_enabled=false WHERE singleton`);
+  await database.query(`UPDATE public.studio_artifact_runtime_control
+    SET provider_enabled=false WHERE singleton`);
+  assert.equal(Number((await database.query(`SELECT count(*) total
+    FROM public.authenticated_synthetic_exercises WHERE lifecycle='active'`)).rows[0].total), 0);
+  const migrationSafety = (await database.query(`SELECT identity.migration_tip,
+      identity.production_authorized,identity.customer_data_authorized,
+      identity.real_provider_calls_authorized,
+      (SELECT count(*)::int FROM public.synthetic_ai_campaign_authorities WHERE enabled) enabled_campaigns,
+      (SELECT provider_enabled FROM public.enterprise_intelligence_runtime_control WHERE singleton) assess_enabled,
+      (SELECT provider_enabled FROM public.studio_artifact_runtime_control WHERE singleton) studio_enabled
+    FROM public.hosted_pilot_environment_identity identity WHERE singleton`)).rows[0];
+  assert.deepEqual(migrationSafety, {
+    migration_tip: '20261107110000', production_authorized: false,
+    customer_data_authorized: false, real_provider_calls_authorized: false,
+    enabled_campaigns: 0, assess_enabled: false, studio_enabled: false,
+  });
+  await applyMigrations(database, [renderer4Migration]);
+  const renderer4MetadataAfter = (await database.query(`SELECT jsonb_build_object(
+      'owner',procedure_row.proowner,'securityDefiner',procedure_row.prosecdef,
+      'leakproof',procedure_row.proleakproof,'strict',procedure_row.proisstrict,
+      'volatility',procedure_row.provolatile,'parallel',procedure_row.proparallel,
+      'config',procedure_row.proconfig,'acl',procedure_row.proacl,'language',procedure_row.prolang,
+      'kind',procedure_row.prokind,'returnType',procedure_row.prorettype) metadata
+    FROM pg_proc procedure_row
+    WHERE procedure_row.oid='public.studio_private_artifact_command_claim(jsonb)'::regprocedure`)).rows[0].metadata;
+  assert.deepEqual(renderer4MetadataAfter, renderer4MetadataBefore);
+  const readable = await privateCommand(database, command(10));
+  assert.equal(readable.outcome, 'committed');
+  assert.equal(readable.renditionClaim.rendererVersion, 'studio-pdf-4');
+  assert.equal(readable.renditionClaim.artifactType, 'sdd');
+  const readableCompleted = await finishRendition(database, readable.renditionClaim, 'd');
+
   const markdown = await privateCommand(database, {
     ...command(4), payload: { artifactVersionId: fixture.artifactVersionId, format: 'markdown' },
   });
   assert.equal(markdown.renditionClaim.rendererVersion, 'studio-markdown-2');
   negativeDatabase = await createDatabase(admin, adminUrl, negativeDatabaseName);
   await bootstrapAuth(negativeDatabase);
-  await applyMigrations(negativeDatabase, migrationNames.slice(0, renderer3Index + 1));
+  await applyThroughRenderer4(negativeDatabase);
   const brdFixture = await createApprovedStudioFixture(negativeDatabase, 'brd');
   const brdPdf = await privateCommand(negativeDatabase, {
     commandType: 'studio.rendition.generate', actorId: brdFixture.requester,
@@ -245,15 +309,18 @@ try {
      ORDER BY renderer_version`,
     [fixture.artifactVersionId],
   )).rows;
-  assert.equal(rows.length, 3);
-  assert.deepEqual(rows.map(row => row.renderer_version), ['studio-pdf-1', 'studio-pdf-2', 'studio-pdf-3']);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows.map(row => row.renderer_version), ['studio-pdf-1', 'studio-pdf-2', 'studio-pdf-3', 'studio-pdf-4']);
   assert.deepEqual(rows[0], legacyBefore);
   assert.deepEqual(rows[1], renderer2Before);
   assert.equal(rows[2].id, branchCompleted.renditionId);
+  assert.equal(rows[3].id, readableCompleted.renditionId);
   assert.notEqual(rows[0].object_key, rows[1].object_key);
   assert.notEqual(rows[0].content_hash, rows[1].content_hash);
   assert.notEqual(rows[1].object_key, rows[2].object_key);
   assert.notEqual(rows[1].content_hash, rows[2].content_hash);
+  assert.notEqual(rows[2].object_key, rows[3].object_key);
+  assert.notEqual(rows[2].content_hash, rows[3].content_hash);
 
   const legacyDownload = await downloadCommand(database, {
     actorId: fixture.requester,
@@ -271,7 +338,7 @@ try {
     const exactV2Database = await createDatabase(admin, adminUrl, exactV2DatabaseNames[index]);
     exactV2Databases.push(exactV2Database);
     await bootstrapAuth(exactV2Database);
-    await applyMigrations(exactV2Database, migrationNames.slice(0, renderer3Index + 1));
+    await applyThroughRenderer4(exactV2Database);
     const exactV2Fixture = await createApprovedStudioFixture(exactV2Database, artifactType);
     const exactV2VersionId = await reviseAndApproveExactV2(exactV2Database, exactV2Fixture);
     const exactV2Pdf = await privateCommand(exactV2Database, {
@@ -282,14 +349,14 @@ try {
       payload: { artifactVersionId: exactV2VersionId, format: 'pdf' },
     });
     assert.equal(exactV2Pdf.renditionClaim.artifactType, artifactType);
-    assert.equal(exactV2Pdf.renditionClaim.rendererVersion, 'studio-pdf-2');
+    assert.equal(exactV2Pdf.renditionClaim.rendererVersion, 'studio-pdf-4');
   }
 
   const identity = (await database.query(
     'SELECT migration_tip,production_authorized,customer_data_authorized,real_provider_calls_authorized FROM public.hosted_pilot_environment_identity WHERE singleton',
   )).rows[0];
   assert.deepEqual(identity, {
-    migration_tip: '20261106210205',
+    migration_tip: '20261107110000',
     production_authorized: false,
     customer_data_authorized: false,
     real_provider_calls_authorized: false,
@@ -314,7 +381,7 @@ try {
     current_service: true,
     current_authenticated: false,
   });
-  console.log('studio SDD PDF branch PostgreSQL: renderer-1/2/3 coexistence, exact SDD V2 routing, replay, immutable content, negative routing, identity and ACL passed');
+  console.log('studio PDF readability PostgreSQL: renderer-1/2/3/4 coexistence, all exact business PDF routing, replay, immutable content, negative routing, identity and ACL passed');
 } finally {
   if (database) await database.end();
   if (negativeDatabase) await negativeDatabase.end();

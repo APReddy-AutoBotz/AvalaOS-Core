@@ -21,7 +21,10 @@ const mermaidFlow = /^\s*(?:flowchart|graph)\s+/imu;
 const unresolvedSectionPurpose = /(?:^|\s)(?:open\s+)?(?:questions?|unknowns?|unresolved)(?:\s|$)/iu;
 const unresolvedQuestion = /^(?:[-*+]\s*|\d+[.)]\s*)?(?:(?:open\s+)?question|unknown|unresolved)(?:\s*[:.\-]\s*|\s+)/iu;
 const explicitRequirementSection = /(?:^|\s)requirements?(?:\s|$)/iu;
-const sourceFactsSentinel = 'Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):';
+const sourceFactsSentinels = new Set([
+  'Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):',
+  'Readable source references from the accepted Assess handoff:',
+]);
 
 export const isApprovedRequirementLine = (line: string) => {
   const value = line.trim();
@@ -82,7 +85,7 @@ const sectionPurpose = (section: ApprovedSection) => `${section.id.replace(/([a-
 
 const sectionLines = (section: ApprovedSection) => {
   const lines = section.body.split(/\r?\n/u);
-  const sentinelIndex = lines.findIndex(line => line.trim() === sourceFactsSentinel);
+  const sentinelIndex = lines.findIndex(line => sourceFactsSentinels.has(line.trim()));
   return sentinelIndex < 0 ? lines : lines.slice(0, sentinelIndex);
 };
 
@@ -228,7 +231,7 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
     proposals.push({
       proposalRole: 'discovery', type: 'Task', title: title('Resolve — ', question),
       description: `Resolve the approved unanswered question before dependent implementation is treated as ready: ${question}`,
-      acceptanceCriteria: [`A human records a source-backed answer or an independently approved nonblocking disposition or revised scope for: ${question}`],
+      acceptanceCriteria: [`A different authorized reviewer accepts a source-backed answer or approves a nonblocking disposition or revised scope. Question: ${question} Recording the unanswered question alone does not release dependent work.`],
       requirementLinks: [link],
     });
     referencedRequirementIdentifiers(link.requirementText).forEach(identifier => {
@@ -236,6 +239,8 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
       if (implementationIndex === undefined) return;
       const implementation = proposals[implementationIndex];
       implementation.dependencyProposalIndices = [...(implementation.dependencyProposalIndices ?? []), discoveryIndex];
+      implementation.acceptanceCriteria = [...implementation.acceptanceCriteria,
+        `The unresolved question remains blocking until a different authorized reviewer accepts a source-backed answer or approves a nonblocking disposition or revised scope: ${question}`];
     });
   });
   proposals.push({

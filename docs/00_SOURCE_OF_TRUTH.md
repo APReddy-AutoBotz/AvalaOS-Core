@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Current planning documents and discovery acceptance
+
+Independent Studio review and approval produced BRD v7, PDD v6, FRD v4 and SDD v7 for supplier invoice query handling. The planning assessment retains its confidence, accepted evidence and unanswered questions. The FRD contains two requirement-linked discovery questions. The [current acceptance plan](planning/process-evidence-to-delivery.md) tracks publication, stored dependencies, independent dispositions and canonical PDF verification.
+
 ## Business review of the planning journey
 
 The fresh supplier invoice case reached the existing Delivery board. On candidate `4f0bda98453e93bbf4f70936eaed347d2ce6b404`, all 17 required checks passed. The corrected acknowledgment target persisted through assessment and documentation. Separate actors approved BRD v5, PDD v4, FRD v2 and SDD v5 for documentation and planning. The final Architecture-only refresh preserved the other ten SDD sections, both flows, title and summary. All six pages of the canonical SDD v5 PDF were inspected. The separate order-status case recommended workflow and a read API with no AI selected.

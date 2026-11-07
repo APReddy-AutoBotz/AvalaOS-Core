@@ -1,5 +1,15 @@
 # Process evidence to confirmed delivery work
 
+## Planning evidence, current documents and stored dependencies
+
+Starting from 97593b88, the installed schema allowed implementation-readiness approvals to supply accepted evidence for a discovery answer but omitted documentation-and-planning approvals. Migration 20261107120000 admits accepted evidence from a planning publication only when the exact review, decision, source, purpose, workspace and organization match. The independent recorder, required authority and immutable disposition checks still apply.
+
+The retained supplier invoice documents received new working drafts, edits, independent reviews and approvals for planning. BRD v7 contains eleven business requirements and readable source references. PDD v6 follows each step from input to decision and output. FRD v4 links two discovery questions to FR-5 and FR-7 and specifies the evidence or approved scope needed for release. SDD v7 retains both flows and identifies document intelligence as optional. The corrected source generation and selective refresh paths apply to future drafts. Prior approvals remain in History.
+
+Acceptance requires the two distinct stored relationships, unresolved and self-acceptance denial, independent acceptance of a source-backed answer and approval of a nonblocking scope. The original six identities and exact historical requirement links remain reviewable alongside new work. Opening the board and manually selecting Blocked do not establish a stored relationship. Verify each current PDF through the governed broker and inspect the rendered pages. Use the existing Drive folder for independent business review.
+
+During rollback, retain the approved documents, immutable outcomes and existing PDF renditions. Keep affected implementation blocked and use the read-only board if a new outcome cannot be verified. Repair installed migrations forward. Planning approval does not authorize production implementation. Graphical flow editing and interpretation of image/PDF flowchart inputs remain outstanding.
+
 ## Business review correction pass — 7 November 2026
 
 Baseline `4f0bda98453e93bbf4f70936eaed347d2ce6b404` passed 17 required workflows. The canonical exports are BRD v5, PDD v4, FRD v2 and SDD v5. Architecture alone changed during real selective refresh. The author clarified optional AI before a separate reviewer and approver accepted v5 for planning. Its six-page PDF includes rendered As-Is and To-Be diagrams. The retained board has one Epic, two Stories and three Tasks with exact approved BRD links. Its GET Story is Blocked and references R11 in its description. Readback found zero stored dependency edges for these six items. The correction preserves that history and distinguishes a recorded relationship from prose.

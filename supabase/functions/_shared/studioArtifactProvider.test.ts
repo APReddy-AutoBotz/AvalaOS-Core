@@ -191,19 +191,25 @@ void (async () => {
       { id: `${artifactType}PlanningContent`, title: `${artifactType.toUpperCase()} planning content`, required: true, fieldKind: 'system' },
     ],
   }, [ids[0]], 'studio-pr-b-1', artifactType, 'documentation_planning'));
+  const pddPlanningInstruction = planningTypeInstructions[1];
+  const frdPlanningInstruction = planningTypeInstructions[2];
   mark(planningInstruction.includes('independently approved only for documentation and planning')
     && planningInstruction.includes('never describe it as Verified, Govern-approved, implementation-ready, or execution-authorized')
     && planningInstruction.includes('supported facts, proposed design choices, optional alternatives, and unresolved questions visibly distinct')
     && planningInstruction.includes('Preserve API evidence operation by operation')
     && planningInstruction.includes('ready or available, prohibited, unknown or not established, and excluded from the recommended design as distinct states')
-    && planningInstruction.includes('An unknown operation or an operation excluded from the recommended design is not a policy prohibition')
+    && planningInstruction.includes('An unknown operation or an operation excluded from the recommended design is not a policy prohibition and is not evidence of availability or unavailability')
     && planningInstruction.includes('do not recommend or promote it, and preserve any separate ready and prohibited operations exactly')
     && planningInstruction.includes('AI eligibility or a viable optional AI alternative does not mean AI is selected, necessary, approved, or part of the recommended design')
     && planningInstruction.includes('No AI required conclusion separately from optional alternatives')
     && planningInstruction.includes('Document approval approves the content for planning')
     && planningTypeInstructions.every(instruction => instruction.includes('approved only for documentation and planning')
       && instruction.includes('Preserve API evidence operation by operation')
-      && instruction.includes('AI eligibility or a viable optional AI alternative does not mean AI is selected')),
+      && instruction.includes('AI eligibility or a viable optional AI alternative does not mean AI is selected'))
+    && pddPlanningInstruction.includes('source-established role, inputs, decision or rule, outputs, exception path, and handoff')
+    && pddPlanningInstruction.includes('do not infer ordering from array position')
+    && frdPlanningInstruction.includes('remains blocking when it is recorded')
+    && frdPlanningInstruction.includes('recording an unanswered question alone is not completion'),
   'STUDIO-PLANNING-001', 'provider.four-distinct-reviewed-planning-types-operations-ai-and-unknowns-explicit',
   'assessed-planning-brd-pdd-frd-sdd-prompts', 'openai');
 
@@ -333,8 +339,8 @@ void (async () => {
     v3Request = request;
     return { provider: 'openai', model: 'governed-model', output, usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }, latencyMs: 1 };
   } });
-  mark(v3Request?.taskInstruction.includes('server-controlled post-validation step appends a bounded accepted-Assessment source-facts block') === true
-    && v3Request.taskInstruction.includes('not model-generated reasoning and is outside this response schema')
+  mark(v3Request?.taskInstruction.includes('server-controlled post-validation step appends a bounded, readable accepted-Assessment source-reference summary') === true
+    && v3Request.taskInstruction.includes('exact technical lineage remains in audit details and is outside this response schema')
     && !v3Request.taskInstruction.includes(hostileV2SourceFact)
     && v3Request.untrustedSource === v2Request?.untrustedSource
     && JSON.stringify(v3Request.responseSchema) === JSON.stringify(v2Request?.responseSchema),

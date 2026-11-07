@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
-import { buildAuthenticatedSyntheticStudioDraft, executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
+import { buildAuthenticatedSyntheticStudioDraft, executeClaimedStudioGeneration, preservesOptionalStudioAlternatives, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 import { composeStudioBrdSourceFacts, deriveStudioBrdSourceFacts } from './studioBrdSourceFacts.ts';
@@ -578,6 +578,74 @@ void (async () => {
   'STUDIO-TR-008', 'generation.sdd-v4-materially-distinct-grounded-flows-capture-stage-and-finalize',
   'sdd-v4-distinct-as-is-to-be-positive');
 
+  const optionalDecisionPackage = {
+    ...claim.sourcePackage,
+    assessPackage: {
+      decision: {
+        composedOperatingModel: [{ primitiveId: ids[16], components: ['Workflow Orchestration', 'Human Approval'] }],
+        candidateEvaluations: [
+          { primitiveId: ids[16], component: 'Document Intelligence', fit: 'Conditional Fit' },
+          { primitiveId: ids[16], component: 'Workflow Orchestration', fit: 'Strong Fit' },
+        ],
+      },
+    },
+  };
+  const optionalAssessAnchor = { ...canonicalAnchors[0], locator: 'assess:accepted-handoff' };
+  const sddSemanticTemplate = { artifactType: 'sdd', sections: ['architecture', 'components'] };
+  const semanticDraft = (architecture: string) => ({
+    ...valid,
+    title: 'SDD planning refresh',
+    sections: [
+      { ...valid.sections[0], id: 'architecture', title: 'Architecture', body: architecture, sourceAnchors: [optionalAssessAnchor] },
+      { ...valid.sections[1], id: 'components', title: 'Components', body: 'Workflow Orchestration and Human Approval are selected.' },
+    ],
+  });
+  const promotedOptional = semanticDraft('The architecture integrates Workflow Orchestration, Human Approval, and Document Intelligence.');
+  const preservedOptional = semanticDraft('Document Intelligence is an optional alternative, not a selected or required dependency.');
+  assert.equal(preservesOptionalStudioAlternatives(promotedOptional, optionalDecisionPackage, 'sdd'), false);
+  assert.equal(preservesOptionalStudioAlternatives(preservedOptional, optionalDecisionPackage, 'sdd'), true);
+  let driftStages = 0; let driftFinalizations = 0; let driftRejections = 0;
+  const driftResult = await executeClaimedStudioGeneration({
+    ...claim,
+    sourcePackage: optionalDecisionPackage,
+    sourceAnchors: [optionalAssessAnchor],
+    templatePayload: sddSemanticTemplate,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({ ...providerResult, content: promotedOptional }),
+    captureCandidate: async () => undefined,
+    stage: async () => { driftStages += 1; },
+    rejectCandidate: async () => { driftRejections += 1; },
+    finalize: async () => { driftFinalizations += 1; return { state: 'completed', resource: {} }; },
+  });
+  assert.deepEqual(
+    { driftResult, driftStages, driftFinalizations, driftRejections },
+    { driftResult: { state: 'failed', failureCode: 'PROVIDER_OUTPUT_INVALID' }, driftStages: 0, driftFinalizations: 0, driftRejections: 1 },
+    'an optional component promoted into selected architecture is rejected before version staging or finalization',
+  );
+  mark(driftResult.state === 'failed' && driftResult.failureCode === 'PROVIDER_OUTPUT_INVALID'
+    && driftStages === 0 && driftFinalizations === 0 && driftRejections === 1,
+  'STUDIO-REFRESH-002', 'generation.optional-document-intelligence-cannot-be-promoted-by-selected-section-refresh',
+  'retained-sdd-v3-to-v4-optional-component-drift');
+  let preservedStage = 0; let preservedFinalize = 0;
+  const preservedResult = await executeClaimedStudioGeneration({
+    ...claim,
+    sourcePackage: optionalDecisionPackage,
+    sourceAnchors: [optionalAssessAnchor],
+    templatePayload: sddSemanticTemplate,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({ ...providerResult, content: preservedOptional }),
+    captureCandidate: async () => undefined,
+    stage: async () => { preservedStage += 1; },
+    finalize: async () => { preservedFinalize += 1; return { state: 'completed', resource: {} }; },
+  });
+  mark(preservedResult.state === 'completed' && preservedStage === 1 && preservedFinalize === 1,
+  'STUDIO-REFRESH-002', 'generation.optional-document-intelligence-remains-optional-through-refresh',
+  'retained-sdd-v5-optional-component-preserved');
+
   const assessAnchor = { sourceVersionId: ids[0], locator: 'assess:accepted-handoff', anchorHash: hash('d') };
   const fact = (value: boolean | null, status = value === null ? 'unknown' : 'known') => ({ value, status });
   const sourceProcess = {
@@ -588,7 +656,7 @@ void (async () => {
         agentNecessity: { irreducibleAmbiguity: fact(false), adaptiveNextStep: fact(null) },
       },
       {
-        id: ids[17], type: 'Approve', name: 'Human policy review', description: 'Finance review',
+        id: ids[17], type: 'Approve', name: 'Human policy review', description: "Finance review. Owner's rule (current).",
         inputs: ['Case'], outputs: ['Decision'], rules: ['Approve or Escalate only when evidence is complete'], volumeShare: null, manualEffort: 0,
       },
     ],
@@ -642,7 +710,8 @@ void (async () => {
   const requirements = stagedSections?.find(section => section.id === 'requirements');
   mark(v3Completed.state === 'completed' && v3ProviderEffects === 1 && v3Stages === 1 && v3Finalizations === 1
     && requirements?.body.startsWith('Model omitted source details.\n\n')
-    && requirements.body.includes('Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):')
+    && requirements.body.includes('Readable source references from the accepted Assess handoff:')
+    && requirements.body.includes('Source: accepted Assess handoff (exact version and integrity details are retained in audit details).')
     && requirements.body.includes('Synthetic Finance') && requirements.body.includes('Approve; Escalate')
     && requirements.body.includes('Trigger: Invoice arrives') && requirements.body.includes('Owner: Synthetic Intake')
     && requirements.body.includes('Inputs: Case') && requirements.body.includes('Outputs: Case')
@@ -652,8 +721,13 @@ void (async () => {
     && requirements.body.includes('Resolution primitives: Human policy review')
     && requirements.body.includes('Technical health: unknown')
     && requirements.body.includes('condition: Invoice is complete')
-    && requirements.body.includes('Volume share: 0') && requirements.body.includes('Manual effort: Unknown')
-    && requirements.body.includes('value=false, status=known') && requirements.body.includes('&lt;script&gt;source only&lt;/script&gt;')
+    && requirements.body.includes('&lt;script&gt;source only&lt;/script&gt;')
+    && requirements.body.includes("Finance review. Owner's rule (current).")
+    && !requirements.body.includes('Finance review\\.')
+    && !requirements.body.includes('Volume share:') && !requirements.body.includes('Manual effort:')
+    && !requirements.body.includes('Agent necessity:') && !requirements.body.includes('None stated')
+    && !requirements.body.includes(': null')
+    && !requirements.body.includes('value=') && !requirements.body.includes('status=')
     && !requirements.body.includes('<script>')
     && JSON.stringify(requirements.sourceAnchors) === JSON.stringify([assessAnchor])
     && JSON.stringify(requirements.labels) === JSON.stringify(['template_required']),
@@ -689,7 +763,7 @@ void (async () => {
   });
   const replayedRequirements = (v3CandidateStage?.sections as Array<{ id: string; body: string }>)
     .find(section => section.id === 'requirements')?.body ?? '';
-  const factsHeading = 'Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):';
+  const factsHeading = 'Readable source references from the accepted Assess handoff:';
   mark(v3CandidateReplay.state === 'completed'
     && v3CandidateEvents.join(',') === 'load,stage,settle,finalize'
     && replayedRequirements.split(factsHeading).length - 1 === 1
@@ -720,10 +794,10 @@ void (async () => {
   }, sourceFactsBlock, { artifactType: 'brd', sections: ['summary', 'risks'] });
   const narrativeFallbackSections = narrativeFallback.sections as Array<{ id: string; body: string }>;
   const firstFallbackSections = firstSectionFallback.sections as Array<{ id: string; body: string }>;
-  mark(!narrativeFallbackSections[0].body.includes('Source facts from the accepted Assess handoff')
-    && narrativeFallbackSections[1].body.includes('Source facts from the accepted Assess handoff')
-    && firstFallbackSections[0].body.includes('Source facts from the accepted Assess handoff')
-    && !firstFallbackSections[1].body.includes('Source facts from the accepted Assess handoff'),
+  mark(!narrativeFallbackSections[0].body.includes('Readable source references from the accepted Assess handoff')
+    && narrativeFallbackSections[1].body.includes('Readable source references from the accepted Assess handoff')
+    && firstFallbackSections[0].body.includes('Readable source references from the accepted Assess handoff')
+    && !firstFallbackSections[1].body.includes('Readable source references from the accepted Assess handoff'),
   'STUDIO-TR-008', 'generation.brd-v3-targets-requirements-then-required-narrative-then-first-section',
   'brd-v3-trusted-section-selection-fallbacks');
 

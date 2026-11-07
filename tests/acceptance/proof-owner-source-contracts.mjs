@@ -699,6 +699,21 @@ export const PROOF_SOURCE_ANCHORS = Object.freeze([
     "anchorId": "delivery-discovery-resolution",
     "sourceReference": "supabase/migrations/20261107110000_delivery_discovery_resolution.sql",
     "selector": "DO $discovery_delivery_guard$"
+  },
+  {
+    "anchorId": "planning-discovery-resolution",
+    "sourceReference": "supabase/migrations/20261107120000_planning_discovery_resolution.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_delivery_discovery_resolution_valid("
+  },
+  {
+    "anchorId": "studio-business-pdf",
+    "sourceReference": "supabase/migrations/20261107120001_studio_pdf_business_readability.sql",
+    "selector": "DO $studio_pdf4_routing$"
+  },
+  {
+    "anchorId": "studio-reviewer-display",
+    "sourceReference": "supabase/migrations/20261107120003_studio_reviewer_display_names.sql",
+    "selector": "CREATE OR REPLACE FUNCTION public.studio_artifact_eligible_reviewers("
   }
 ]);
 
@@ -1990,7 +2005,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2131,7 +2149,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2679,7 +2700,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2742,7 +2766,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2805,7 +2832,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2868,7 +2898,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -2931,7 +2964,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -3938,7 +3974,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {
@@ -3987,7 +4026,10 @@ export const PROOF_OWNER_SOURCE_CONTRACTS = Object.freeze([
       "sdd-completion-allowance",
       "studio-synthetic-prompt-compatibility",
       "studio-sdd-pdf-branch-routing",
-      "delivery-discovery-resolution"
+      "delivery-discovery-resolution",
+      "planning-discovery-resolution",
+      "studio-business-pdf",
+      "studio-reviewer-display"
     ],
     "ownership": [
       {

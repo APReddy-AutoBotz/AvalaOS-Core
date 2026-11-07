@@ -1,5 +1,6 @@
 import {
   decodeStudioApprovedContent,
+  STUDIO_BUSINESS_PDF_RENDERER_VERSION,
   STUDIO_PRIVATE_ARTIFACT_LEGACY_RENDERER_VERSIONS,
   STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
   STUDIO_SDD_PDF_RENDERER_VERSION,
@@ -416,7 +417,8 @@ export const normalizeStudioApprovedContent = (
     ? (Object.values(
         STUDIO_PRIVATE_ARTIFACT_RENDERER_VERSIONS,
       ) as readonly string[]).includes(authority.rendererVersion) ||
-      authority.rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION
+      authority.rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION ||
+      authority.rendererVersion === STUDIO_BUSINESS_PDF_RENDERER_VERSION
     : false;
   if (usesCurrentRenderer)
     return normalizeStudioV2ApprovedContent(source, authority);
@@ -646,6 +648,50 @@ const wrapLine = (value: string, width: number) => {
   }
   return lines;
 };
+
+// Helvetica is one of the PDF standard fonts, so renderer 4 can wrap against
+// its stable widths without embedding a font program. This avoids the uneven
+// lines produced by character-count wrapping while keeping the PDF inert and
+// deterministic.
+const helveticaWidth = (value: string, size: number, bold = false) => {
+  let units = 0;
+  for (const character of asciiPdfText(value)) {
+    if (character === " ") units += 278;
+    else if (/[ilI.,'!|:;]/u.test(character)) units += 278;
+    else if (/[mwMW@%&]/u.test(character)) units += bold ? 889 : 833;
+    else if (/[A-Z0-9]/u.test(character)) units += bold ? 722 : 667;
+    else units += bold ? 556 : 500;
+  }
+  return units * size / 1000;
+};
+
+const wrapMeasuredLine = (
+  value: string,
+  maxWidth: number,
+  size: number,
+  bold = false,
+) => {
+  const lines: string[] = [];
+  for (const rawLine of asciiPdfText(value).replace(/\t/gu, "    ").split("\n")) {
+    const words = rawLine.trim().split(/\s+/u).filter(Boolean);
+    if (!words.length) {
+      lines.push("");
+      continue;
+    }
+    let current = "";
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (!current || helveticaWidth(next, size, bold) <= maxWidth) {
+        current = next;
+        continue;
+      }
+      lines.push(current);
+      current = word;
+    }
+    if (current) lines.push(current);
+  }
+  return lines;
+};
 type PdfLine = {
   kind: "text";
   text: string;
@@ -769,6 +815,73 @@ const pdfItems = (
     lines.push({ kind: "text", text: "", bold: false, size: 11, advance: 8 });
   }
   return lines;
+};
+
+const pdfItemsV4 = (content: StudioNormalizedContent): PdfItem[] => {
+  const items: PdfItem[] = [];
+  const add = (
+    value: string,
+    bold: boolean,
+    size: number,
+    maxWidth: number,
+    advance = size + 4,
+  ) => {
+    for (const text of wrapMeasuredLine(value, maxWidth, size, bold))
+      items.push({ kind: "text", text, bold, size, advance });
+  };
+  add(content.title, true, 18, 468, 25);
+  add("Executive Summary", true, 13, 468, 19);
+  add(content.summary, false, 11, 468, 16);
+  items.push({ kind: "text", text: "", bold: false, size: 11, advance: 9 });
+  for (const section of content.sections) {
+    if (section.id === "asIsFlow" || section.id === "toBeFlow") {
+      const [chart] = inspectMermaidFlowcharts(section.content, true);
+      const groups = Array.from(
+        { length: Math.ceil(chart.nodes.length / 8) },
+        (_, index) => chart.nodes.slice(index * 8, index * 8 + 8).map(node => node.id),
+      );
+      groups.forEach((nodeIds, index) => {
+        items.push({
+          kind: "diagram",
+          title: section.title,
+          chart,
+          nodeIds,
+          part: index + 1,
+          parts: groups.length,
+          advance: 80 + nodeIds.length * 64,
+        });
+        const visible = new Set(nodeIds);
+        const transitions = chart.edges.filter(edge => visible.has(edge.from));
+        if (transitions.length) {
+          add(
+            groups.length > 1
+              ? `Transition details for part ${index + 1}`
+              : "Transition details",
+            true,
+            10,
+            468,
+            15,
+          );
+          for (const edge of transitions) {
+            const from = chart.nodes.find(node => node.id === edge.from)!;
+            const to = chart.nodes.find(node => node.id === edge.to)!;
+            add(
+              `[${from.id}] ${from.label} - ${edge.branchLabel ?? "continue"} -> [${to.id}] ${to.label}`,
+              false,
+              9,
+              468,
+              13,
+            );
+          }
+        }
+      });
+    } else {
+      add(section.title, true, 13, 468, 19);
+      add(section.content, false, 11, 468, 16);
+    }
+    items.push({ kind: "text", text: "", bold: false, size: 11, advance: 9 });
+  }
+  return items;
 };
 
 const diagramCommands = (diagram: PdfDiagram, top: number) => {
@@ -1046,6 +1159,167 @@ const diagramCommandsV3 = (diagram: PdfDiagram, top: number) => {
   return commands;
 };
 
+const diagramCommandsV4 = (diagram: PdfDiagram, top: number) => {
+  const nodeHeight = 46;
+  const nodeWidth = 300;
+  const nodeX = 156;
+  const step = 64;
+  const visible = new Set(diagram.nodeIds);
+  const nodes = Object.fromEntries(diagram.nodeIds.map((id, index) => [id, {
+    x: nodeX,
+    y: top - 42 - index * step - nodeHeight,
+    width: nodeWidth,
+    height: nodeHeight,
+  }])) as Record<string, PdfRect>;
+  const sourceOrder = new Map(diagram.nodeIds.map((id, index) => [id, index]));
+  let sideLane = 0;
+  const routes: StudioPdf3DiagramRoute[] = [];
+  diagram.chart.edges.forEach((edge, edgeIndex) => {
+    const fromRect = nodes[edge.from];
+    const toRect = nodes[edge.to];
+    if (!fromRect && !toRect) return;
+    const adjacent = fromRect && toRect &&
+      sourceOrder.get(edge.to)! === sourceOrder.get(edge.from)! + 1;
+    if (adjacent) {
+      routes.push({
+        edgeId: `E${edgeIndex + 1}`,
+        from: edge.from,
+        to: edge.to,
+        continuation: "none",
+        points: [
+          { x: fromRect.x + nodeWidth / 2, y: fromRect.y },
+          { x: toRect.x + nodeWidth / 2, y: toRect.y + nodeHeight },
+        ],
+      });
+      return;
+    }
+    const right = sideLane % 2 === 1;
+    const laneX = right
+      ? 492 + Math.floor(sideLane / 2) * 14
+      : 120 - Math.floor(sideLane / 2) * 14;
+    sideLane += 1;
+    if (laneX < 42 || laneX > 570)
+      throw new StudioRenditionError("OUTPUT_INVALID");
+    if (fromRect && toRect) {
+      const fromY = fromRect.y + nodeHeight / 2;
+      const toY = toRect.y + nodeHeight / 2;
+      const fromX = right ? fromRect.x + nodeWidth : fromRect.x;
+      const toX = right ? toRect.x + nodeWidth : toRect.x;
+      routes.push({
+        edgeId: `E${edgeIndex + 1}`,
+        from: edge.from,
+        to: edge.to,
+        continuation: "none",
+        points: [
+          { x: fromX, y: fromY },
+          { x: laneX, y: fromY },
+          { x: laneX, y: toY },
+          { x: toX, y: toY },
+        ],
+      });
+    } else if (fromRect) {
+      const y = fromRect.y + nodeHeight / 2;
+      const x = right ? fromRect.x + nodeWidth : fromRect.x;
+      routes.push({
+        edgeId: `E${edgeIndex + 1}`,
+        from: edge.from,
+        to: edge.to,
+        continuation: "outgoing",
+        points: [{ x, y }, { x: laneX, y }, { x: laneX, y: 82 }],
+      });
+    } else {
+      const y = toRect.y + nodeHeight / 2;
+      const x = right ? toRect.x + nodeWidth : toRect.x;
+      routes.push({
+        edgeId: `E${edgeIndex + 1}`,
+        from: edge.from,
+        to: edge.to,
+        continuation: "incoming",
+        points: [{ x: laneX, y: top - 22 }, { x: laneX, y }, { x, y }],
+      });
+    }
+  });
+  const commands = [
+    "0.5 w", "0 G", "0 g", "BT", "/F2 13 Tf",
+    `1 0 0 1 72 ${top} Tm`, `(${pdfLiteral(diagram.title)}) Tj`, "ET",
+  ];
+  if (diagram.parts > 1) commands.push(
+    "BT", "/F1 9 Tf", `1 0 0 1 72 ${top - 16} Tm`,
+    `(Diagram part ${diagram.part} of ${diagram.parts}) Tj`, "ET",
+  );
+  const edgeById = new Map(
+    diagram.chart.edges.map((edge, index) => [`E${index + 1}`, edge]),
+  );
+  for (const route of routes) {
+    const [first, ...rest] = route.points;
+    commands.push(
+      `${first.x} ${first.y} m`,
+      ...rest.map(point => `${point.x} ${point.y} l`),
+      "S",
+    );
+    const last = route.points.at(-1)!;
+    const before = route.points.at(-2)!;
+    if (route.continuation !== "outgoing") {
+      if (last.x === before.x)
+        commands.push(
+          `${last.x - 4} ${last.y + 6} m ${last.x} ${last.y} l ${last.x + 4} ${last.y + 6} l S`,
+        );
+      else {
+        const direction = last.x > before.x ? -1 : 1;
+        commands.push(
+          `${last.x + direction * 6} ${last.y - 4} m ${last.x} ${last.y} l ${last.x + direction * 6} ${last.y + 4} l S`,
+        );
+      }
+    }
+    const edge = edgeById.get(route.edgeId)!;
+    if (edge.branchLabel) {
+      const sideRoute = route.points.length > 2;
+      const label = asciiPdfText(sideRoute ? route.edgeId : edge.branchLabel);
+      const segment = routeSegments(route.points).reduce((longest, candidate) => {
+        const length = Math.abs(candidate[1].x - candidate[0].x) +
+          Math.abs(candidate[1].y - candidate[0].y);
+        const longestLength = Math.abs(longest[1].x - longest[0].x) +
+          Math.abs(longest[1].y - longest[0].y);
+        return length > longestLength ? candidate : longest;
+      });
+      const width = Math.min(220, helveticaWidth(label, 9, true) + 8);
+      const marker = {
+        x: (segment[0].x + segment[1].x) / 2,
+        y: (segment[0].y + segment[1].y) / 2,
+      };
+      const labelX = Math.min(540 - width, Math.max(72, marker.x - width / 2));
+      commands.push(
+        "1 g",
+        `${labelX - 2} ${marker.y - 3} ${width + 4} 13 re f`,
+        "0 g", "BT", "/F2 9 Tf",
+        `1 0 0 1 ${labelX} ${marker.y} Tm`,
+        `(${pdfLiteral(label)}) Tj`, "ET",
+      );
+    }
+  }
+  const nodeById = new Map(diagram.chart.nodes.map(node => [node.id, node]));
+  for (const [nodeId, rect] of Object.entries(nodes)) {
+    const node = nodeById.get(nodeId)!;
+    commands.push("0.96 g");
+    if (node.kind === "decision") commands.push(
+      `${rect.x + rect.width / 2} ${rect.y + rect.height} m ${rect.x + rect.width} ${rect.y + rect.height / 2} l ${rect.x + rect.width / 2} ${rect.y} l ${rect.x} ${rect.y + rect.height / 2} l h B`,
+    );
+    else commands.push(`${rect.x} ${rect.y} ${rect.width} ${rect.height} re B`);
+    const lines = wrapMeasuredLine(node.label, rect.width - 28, 9, true);
+    if (lines.length > 3) throw new StudioRenditionError("OUTPUT_INVALID");
+    const startY = rect.y + rect.height / 2 + (lines.length - 1) * 5 - 3;
+    lines.forEach((line, index) => {
+      const width = helveticaWidth(line, 9, true);
+      commands.push(
+        "0 g", "BT", "/F2 9 Tf",
+        `1 0 0 1 ${rect.x + (rect.width - width) / 2} ${startY - index * 11} Tm`,
+        `(${pdfLiteral(line)}) Tj`, "ET",
+      );
+    });
+  }
+  return commands;
+};
+
 const legacyPdfLines = (content: StudioNormalizedContent) => {
   const lines: Array<{
     text: string;
@@ -1150,11 +1424,18 @@ const renderStudioLegacyPdf = (
 
 export const renderStudioPdf = (
   content: StudioNormalizedContent,
-  rendererVersion: "studio-pdf-1" | "studio-pdf-2" | "studio-pdf-3" = "studio-pdf-1",
+  rendererVersion:
+    | "studio-pdf-1"
+    | "studio-pdf-2"
+    | "studio-pdf-3"
+    | "studio-pdf-4" = "studio-pdf-1",
 ): Uint8Array => {
   const pages: PdfItem[][] = [[]];
   let y = 720;
-  for (const line of pdfItems(content, rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION)) {
+  const items = rendererVersion === STUDIO_BUSINESS_PDF_RENDERER_VERSION
+    ? pdfItemsV4(content)
+    : pdfItems(content, rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION);
+  for (const line of items) {
     if (y - line.advance < 72 && pages[pages.length - 1].length > 0) {
       pages.push([]);
       y = 720;
@@ -1189,9 +1470,13 @@ export const renderStudioPdf = (
     const commands: string[] = [];
     for (const line of page) {
       if (line.kind === "diagram")
-        commands.push(...(rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION
-          ? diagramCommandsV3(line, cursor)
-          : diagramCommands(line, cursor)));
+        commands.push(...(
+          rendererVersion === STUDIO_BUSINESS_PDF_RENDERER_VERSION
+            ? diagramCommandsV4(line, cursor)
+            : rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION
+              ? diagramCommandsV3(line, cursor)
+              : diagramCommands(line, cursor)
+        ));
       else
         commands.push(
           "0 g",
@@ -1551,16 +1836,25 @@ export const renderStudioPrivateArtifact = async (
   if (
     authority.rendererVersion !== currentRenderer &&
     authority.rendererVersion !== legacyRenderer &&
-    authority.rendererVersion !== STUDIO_SDD_PDF_RENDERER_VERSION
+    authority.rendererVersion !== STUDIO_SDD_PDF_RENDERER_VERSION &&
+    authority.rendererVersion !== STUDIO_BUSINESS_PDF_RENDERER_VERSION
   ) {
     throw new StudioRenditionError("VERSION_MISMATCH");
   }
   const usesSddPdf3 = authority.rendererVersion === STUDIO_SDD_PDF_RENDERER_VERSION;
+  const usesBusinessPdf4 =
+    authority.rendererVersion === STUDIO_BUSINESS_PDF_RENDERER_VERSION;
   if (usesSddPdf3 && (
     typedFormat !== "pdf" ||
     authority.artifactType !== "sdd" ||
     authority.contentSchemaVersion !== "studio-artifact-2" ||
     authority.templateVersion !== "studio-sdd-1"
+  )) throw new StudioRenditionError("VERSION_MISMATCH");
+  if (usesBusinessPdf4 && (
+    typedFormat !== "pdf" ||
+    authority.contentSchemaVersion !==
+      (authority.artifactType === "sdd" ? "studio-artifact-2" : "studio-artifact-1") ||
+    authority.templateVersion !== `studio-${authority.artifactType}-1`
   )) throw new StudioRenditionError("VERSION_MISMATCH");
   const usesCurrentRenderer = authority.rendererVersion === currentRenderer;
   const content = normalizeStudioApprovedContent(value, authority);
@@ -1568,11 +1862,15 @@ export const renderStudioPrivateArtifact = async (
     typedFormat === "markdown"
       ? renderStudioMarkdown(content)
       : typedFormat === "pdf"
-        ? usesCurrentRenderer || usesSddPdf3 ||
+        ? usesCurrentRenderer || usesSddPdf3 || usesBusinessPdf4 ||
           authority.contentSchemaVersion === "studio-artifact-2"
           ? renderStudioPdf(
               content,
-              authority.rendererVersion as "studio-pdf-1" | "studio-pdf-2" | "studio-pdf-3",
+              authority.rendererVersion as
+                | "studio-pdf-1"
+                | "studio-pdf-2"
+                | "studio-pdf-3"
+                | "studio-pdf-4",
             )
           : renderStudioLegacyPdf(content)
         : renderStudioDocx(

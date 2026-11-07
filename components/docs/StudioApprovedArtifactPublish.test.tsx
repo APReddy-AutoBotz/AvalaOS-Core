@@ -43,7 +43,7 @@ const numberedRequirements = [
   '5. Draft responses based on verified status; only humans may approve and send replies.',
   '6. Record original source and human-approved responses for audit; retention duration is an open question.',
   '7. Resolve ambiguities, disputes, and exceptions through human investigation; route bank-detail requests to independent finance procedures.',
-  '8. Exclude the prohibited bank-details POST. Keep the unknown invoice PATCH unavailable pending separate evidence and approval.',
+  '8. Exclude the prohibited bank-details POST. PATCH support remains unknown and excluded pending separate evidence and authorization.',
   '9. Maintain audit and monitoring controls including data classification before AI access.',
   '10. Support a hybrid operating model combining automation and human approval components.',
   '11. Address unresolved evidence and technical questions before implementation.',
@@ -65,6 +65,11 @@ assert.deepEqual(numberedResult.proposals.map(item => item.type), ['Epic', ...Ar
 assert.deepEqual(numberedResult.proposals.slice(1, 12).map(item => item.requirementLinks[0]), numberedRequirements.map(requirementText => ({
   sectionId: 'requirements', sectionTitle: 'Requirements', requirementText,
 })), 'numbering plus the exact approved section identity and text remains source-bound');
+assert.ok(numberedResult.proposals.some(item => item.requirementLinks.some(value =>
+  value.requirementText.includes('PATCH support remains unknown and excluded pending separate evidence and authorization')))
+  && numberedResult.proposals.every(item => item.requirementLinks.every(value =>
+    !value.requirementText.includes('PATCH unavailable'))),
+'unknown PATCH support remains unknown in requirement-derived work rather than becoming unavailable');
 assert.ok(numberedResult.proposals.flatMap(item => item.requirementLinks)
   .every(value => value.sectionId === 'requirements' && !value.requirementText.includes('source-fact')),
 'summary, appendix and the server-authored source-facts tail cannot become implementation requirements');
@@ -169,7 +174,7 @@ const discovery = excludedSections.proposals.find(item => item.proposalRole === 
 assert.ok(discovery, 'an approved unanswered question becomes an explicit discovery task');
 assert.equal(discovery?.requirementLinks[0].sectionId, 'openQuestionsAndProposals');
 assert.deepEqual(discovery?.acceptanceCriteria, [
-  'A human records a source-backed answer or an independently approved nonblocking disposition or revised scope for: The design must choose an unspecified API?',
+  'A different authorized reviewer accepts a source-backed answer or approves a nonblocking disposition or revised scope. Question: The design must choose an unspecified API? Recording the unanswered question alone does not release dependent work.',
 ]);
 assert.equal(discovery?.acceptanceCriteria.some(value => /retain(?:s|ed)? the question as unresolved/iu.test(value)), false,
   'an unresolved question is not a discovery-task completion outcome');
@@ -188,9 +193,16 @@ const explicitDiscovery = explicitDiscoveryDependency.proposals.findIndex(item =
 const unrelatedDiscovery = explicitDiscoveryDependency.proposals.findIndex(item => item.proposalRole === 'discovery'
   && item.requirementLinks[0].requirementText.includes('vendor roadmap'));
 assert.ok(explicitDiscovery >= 0 && unrelatedDiscovery >= 0);
+assert.match(explicitDiscoveryDependency.proposals[explicitDiscovery].acceptanceCriteria[0],
+  /different authorized reviewer accepts a source-backed answer or approves a nonblocking disposition or revised scope.*Recording the unanswered question alone does not release dependent work/iu,
+  'the discovery task itself requires independent acceptance or disposition rather than retaining the question');
 assert.deepEqual(explicitDiscoveryDependency.proposals.find(item => item.proposalRole === 'implementation'
   && item.requirementLinks[0].requirementText.startsWith('FR-1:'))?.dependencyProposalIndices, [explicitDiscovery],
   'an explicit unique requirement reference derives only the matching discovery dependency');
+assert.match(explicitDiscoveryDependency.proposals.find(item => item.proposalRole === 'implementation'
+  && item.requirementLinks[0].requirementText.startsWith('FR-1:'))?.acceptanceCriteria.at(-1) ?? '',
+  /remains blocking until a different authorized reviewer accepts a source-backed answer or approves a nonblocking disposition or revised scope/iu,
+  'the dependent implementation criterion cannot treat recording an unresolved question as release');
 assert.equal(explicitDiscoveryDependency.proposals.find(item => item.proposalRole === 'implementation'
   && item.requirementLinks[0].requirementText.startsWith('FR-2:'))?.dependencyProposalIndices, undefined,
   'an unrelated implementation proposal does not inherit an open question dependency');

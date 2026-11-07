@@ -181,6 +181,47 @@ const validGovernedFlow = (body: string) => {
   try { return inspectMermaidFlowcharts(body, true).length === 1; } catch { return false; }
 };
 
+const optionalAlternativeQualifier = /\b(?:optional|alternative|candidate|not\s+(?:selected|required|part\s+of)|excluded)\b/iu;
+
+/**
+ * Keeps a source-stated optional component from becoming selected architecture
+ * merely because one provider section was refreshed. The comparison uses the
+ * accepted Assess decision in the exact source package. Missing decision
+ * structure stays an explicit unknown and is not interpreted here.
+ */
+export const preservesOptionalStudioAlternatives = (
+  draft: JsonObject,
+  sourcePackage: JsonObject,
+  artifactType: string,
+) => {
+  if (artifactType !== 'sdd') return true;
+  const assessPackage = object(sourcePackage.assessPackage) ? sourcePackage.assessPackage : sourcePackage;
+  if (!object(assessPackage.decision)) return true;
+  const decision = assessPackage.decision;
+  if (!Array.isArray(decision.composedOperatingModel) || !Array.isArray(decision.candidateEvaluations)) return true;
+  const selected = new Set(decision.composedOperatingModel.flatMap(raw => {
+    if (!object(raw) || !Array.isArray(raw.components)) return [];
+    return raw.components.filter((component): component is string => typeof component === 'string');
+  }));
+  const optional = new Set(decision.candidateEvaluations.flatMap(raw => {
+    if (!object(raw)
+      || typeof raw.component !== 'string'
+      || !['Strong Fit', 'Conditional Fit'].includes(String(raw.fit))
+      || selected.has(raw.component)) return [];
+    return [raw.component];
+  }));
+  if (optional.size === 0 || !Array.isArray(draft.sections)) return true;
+  const designBodies = draft.sections.flatMap(raw => object(raw)
+    && ['architecture', 'components'].includes(String(raw.id)) && typeof raw.body === 'string' ? [raw.body] : []);
+  for (const component of optional) {
+    const componentPattern = new RegExp(component.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'iu');
+    const statements = designBodies.flatMap(body => body.split(/(?:[.!?]\s+|\r?\n)+/u))
+      .filter(statement => componentPattern.test(statement));
+    if (statements.some(statement => !optionalAlternativeQualifier.test(statement))) return false;
+  }
+  return true;
+};
+
 const candidateRejectionCode = (
   value: unknown,
   selectedSourceVersionIds: readonly string[],
@@ -438,6 +479,9 @@ export const executeClaimedStudioGeneration = async (
           content = validateStudioDraft(
             candidate.response, claim.selectedSourceVersionIds, claim.sourceAnchors, claim.templatePayload,
           );
+          if (!preservesOptionalStudioAlternatives(
+            content, claim.sourcePackage, claim.providerPlan?.artifactType ?? '',
+          )) throw new Error('invalid');
           if (claim.providerPlan?.promptVersion === 'studio-pr-b-3') {
             const facts = deriveStudioBrdSourceFacts(
               claim.sourcePackage, claim.sourceAnchors, claim.selectedSourceVersionIds,
@@ -614,6 +658,9 @@ export const executeClaimedStudioGeneration = async (
             claim.sourceAnchors,
             claim.templatePayload,
           );
+          if (!preservesOptionalStudioAlternatives(
+            content, claim.sourcePackage, claim.providerPlan.artifactType,
+          )) throw new Error('invalid');
           if (sourceFacts !== null) {
             content = composeStudioBrdSourceFacts(content, sourceFacts, claim.templatePayload);
             content = validateStudioDraft(

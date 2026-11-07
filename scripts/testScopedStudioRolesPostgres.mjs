@@ -60,7 +60,7 @@ async function install(client) {
     GRANT USAGE ON SCHEMA auth TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;`);
   const migrations = (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
-  assert.equal(migrations.at(-1), '20261107110000_delivery_discovery_resolution.sql');
+  assert.equal(migrations.at(-1), '20261107120003_studio_reviewer_display_names.sql');
   for (const filename of migrations) {
     const sql = (await readFile(`supabase/migrations/${filename}`, 'utf8')).replaceAll('\r\n', '\n');
     await applySyntheticAiTerminalJournalMigrationForTest(client, filename, async () => {

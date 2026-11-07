@@ -283,6 +283,11 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions,
     if (isEditing) {
         return (
             <div className="space-y-4">
+                <div>
+                    <label htmlFor="work-item-title" className="block text-sm font-medium">Title</label>
+                    <input id="work-item-title" name="title" value={editedTask.title} onChange={handleChange}
+                        maxLength={300} required className="av-input mt-1 w-full" />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Status</label>
@@ -329,7 +334,7 @@ const DetailsTab: React.FC<DetailsTabProps> = ({ task, project, assigneeOptions,
                 </div>
                 <div className="flex justify-end gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-gray-700">
                     <button type="button" disabled={saving} onClick={onCancel} className="px-4 py-2 text-sm font-semibold rounded-2xl focus:outline-none focus:ring-3 focus:ring-slate-400 btn-ghost disabled:opacity-50">Cancel</button>
-                    <button type="button" disabled={saving} onClick={onSave} className="px-4 py-2 text-sm font-semibold rounded-2xl btn-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save Changes'}</button>
+                    <button type="button" disabled={saving || !editedTask.title.trim()} onClick={onSave} className="px-4 py-2 text-sm font-semibold rounded-2xl btn-primary disabled:opacity-50">{saving ? 'Saving…' : 'Save Changes'}</button>
                 </div>
             </div>
         );
