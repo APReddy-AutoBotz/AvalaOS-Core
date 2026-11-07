@@ -599,15 +599,23 @@ const selectLoadedStudioArtifact = async (page, select, value) => {
   await select.selectOption(value);
   await page.waitForFunction(expected => {
     const workspace = document.querySelector('[data-testid="studio-artifact-workspace"]');
-    const selected = workspace?.querySelector('select[aria-label="Governed artifact"]');
+    const selected = workspace?.querySelector('select[aria-label="Current document"], select[aria-label="Governed artifact"]');
     return workspace?.getAttribute('data-studio-usable') === 'true'
       && selected instanceof HTMLSelectElement && selected.value === expected;
   }, value);
 };
 
+const studioDocumentSelect = async workspace => {
+  const current = workspace.getByLabel('Current document', { exact: true });
+  if (await current.count() === 1) return current;
+  const retained = workspace.getByLabel('Governed artifact', { exact: true });
+  assert.equal(await retained.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_DOCUMENT_SELECT_COUNT');
+  return retained;
+};
+
 export const selectSyntheticStudioDraft = async (page, interactionSequence, title = SYNTHETIC_STUDIO_DRAFT_TITLE) => {
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const select = workspace.getByLabel('Governed artifact', { exact: true });
+  const select = await studioDocumentSelect(workspace);
   await select.waitFor({ state: 'visible' });
   const options = await select.locator('option').allTextContents();
   const matches = options.filter(value => value.includes(title));
@@ -636,7 +644,7 @@ export const selectSyntheticStudioDraft = async (page, interactionSequence, titl
 
 export const selectSyntheticHybridStudioDraft = async (page, interactionSequence, sectionBody = SYNTHETIC_HYBRID_SECTION_BODY, artifactId = '') => {
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const select = workspace.getByLabel('Governed artifact', { exact: true });
+  const select = await studioDocumentSelect(workspace);
   await select.waitFor({ state: 'visible' });
   const candidates = await select.locator('option').evaluateAll(nodes => nodes.map(node => node.value).filter(Boolean));
   if (artifactId) assert.equal(candidates.filter(value => value === artifactId).length, 1, 'PR_C_SYNTHETIC_BROWSER_HYBRID_ARTIFACT_ID_MISSING');
@@ -688,7 +696,7 @@ export const persistAndSubmitSyntheticStudioDraft = async (page, interactionSequ
   const workspace = page.getByTestId('studio-artifact-workspace');
   assert.equal(await workspace.getAttribute('data-studio-projection-state'), 'artifact-ready',
     'PR_C_SYNTHETIC_BROWSER_STUDIO_DRAFT_PROJECTION_NOT_READY');
-  const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
+  const artifactId = await (await studioDocumentSelect(workspace)).inputValue();
   assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(artifactId),
     'PR_C_SYNTHETIC_BROWSER_STUDIO_ARTIFACT_ID_INVALID');
   const editor = workspace.getByRole('region', { name: 'Current document', exact: true });
@@ -2213,7 +2221,7 @@ export const runSyntheticObservationPrerequisites = async ({ planned, sessions, 
     assert.equal(state.has('phase:ch02:studio-draft'), false, 'PR_C_SYNTHETIC_BROWSER_CH02_SELECTION_MARKER_DUPLICATE');
     const interactions = [];
     const workspace = await selectSyntheticStudioDraft(requester.page, interactions);
-    const artifactId = await workspace.getByLabel('Governed artifact', { exact: true }).inputValue();
+    const artifactId = await (await studioDocumentSelect(workspace)).inputValue();
     state.set('phase:ch02:studio-draft', { phase: 'selected', artifactId,
       actorDigest: requester.identity.applicationActorDigest });
     prerequisiteInteractions(interactionSequence, interactions);

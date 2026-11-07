@@ -3,19 +3,21 @@ import { useProcessService } from '../../services/processService';
 import { useOrganization } from '../../services/organizationService';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import { listCurrentAssessV2Cases, type AssessV2CurrentCaseSummary } from '../../services/assessV2Client';
-import { buildCurrentAssessmentCatalog, presentCurrentAssessmentCatalogCount, presentCurrentAssessmentCatalogStatus } from '../../services/assessV2/currentAssessmentCatalog';
+import { buildCurrentAssessmentCatalog, presentCurrentAssessmentCatalogCount, presentProcessCatalogAssessmentStatus } from '../../services/assessV2/currentAssessmentCatalog';
 import ProcessCreationModal from './ProcessCreationModal';
 import { ChartBarIcon, CheckCircleIcon, ExclamationTriangleIcon, SparklesIcon } from '../shared/icons';
 import type { ProductActionDecision } from '../../services/productActionPolicy';
 import PageHeader from '../shared/ui/PageHeader';
 import StatusBadge from '../shared/ui/StatusBadge';
 import type { AssessProcess } from '../../types';
+import type { RuntimeDataAccess } from '../../services/runtimeMode';
 
 interface ProcessCatalogViewProps {
     onViewDetail: (processId: string) => void;
     createProcessDecision?: ProductActionDecision;
     presentationProcesses?: AssessProcess[];
     captureMode?: boolean;
+    dataAccess: RuntimeDataAccess;
 }
 
 const criticalityClass = (criticality: string) => {
@@ -32,13 +34,14 @@ const statusClass = (status: string) => {
     return 'bg-[#002C4B]/10 text-[#002C4B] ring-[#002C4B]/15 dark:bg-[#ffbc03]/10 dark:text-[#ffcf45] dark:ring-[#ffbc03]/20';
 };
 
-const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, createProcessDecision, presentationProcesses, captureMode = false }) => {
+const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, createProcessDecision, presentationProcesses, captureMode = false, dataAccess }) => {
     const { currentOrganization } = useOrganization();
     const { tenantContext } = useOrganizationContext();
     const { processes, loading } = useProcessService();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [currentCases, setCurrentCases] = useState<AssessV2CurrentCaseSummary[]>([]);
-    const [currentAssessmentState, setCurrentAssessmentState] = useState<'loading' | 'ready' | 'unavailable'>(captureMode ? 'ready' : 'loading');
+    const usesLocalCatalog = captureMode || dataAccess === 'local';
+    const [currentAssessmentState, setCurrentAssessmentState] = useState<'loading' | 'ready' | 'unavailable'>(usesLocalCatalog ? 'ready' : 'loading');
     const displayedProcesses = captureMode ? (presentationProcesses ?? []) : processes;
     const displayedProcessIds = displayedProcesses.map(process => process.id);
     const displayedProcessKey = displayedProcessIds.join(':');
@@ -52,7 +55,7 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
         ? `${tenantContext.userId}:${tenantContext.organizationId}:${tenantContext.workspaceId}:${tenantContext.authorizationVersion}`
         : 'no-tenant-context';
     useEffect(() => {
-        if (captureMode) {
+        if (usesLocalCatalog) {
             setCurrentCases([]);
             setCurrentAssessmentState('ready');
             return;
@@ -75,26 +78,30 @@ const ProcessCatalogView: React.FC<ProcessCatalogViewProps> = ({ onViewDetail, c
             setCurrentAssessmentState('unavailable');
         });
         return () => { active = false; };
-    }, [assessmentScopeKey, captureMode, displayedProcessKey]);
+    }, [assessmentScopeKey, displayedProcessKey, usesLocalCatalog]);
 
     const currentCatalog = useMemo(() => buildCurrentAssessmentCatalog(
         displayedProcessIds,
         currentCases,
     ), [currentCases, displayedProcessKey]);
     const currentCatalogByProcess = useMemo(() => new Map(currentCatalog.map(item => [item.processId, item])), [currentCatalog]);
-    const currentAssessmentLabel = (process: AssessProcess) => captureMode ? process.status
-        : presentCurrentAssessmentCatalogStatus(currentAssessmentState, currentCatalogByProcess.get(process.id));
+    const currentAssessmentLabel = (process: AssessProcess) => presentProcessCatalogAssessmentStatus({
+        usesLocalCatalog,
+        localStatus: process.status,
+        state: currentAssessmentState,
+        entry: currentCatalogByProcess.get(process.id),
+    });
 
     if (!currentOrganization) return null;
 
-    const completedCount = captureMode
+    const completedCount = usesLocalCatalog
         ? displayedProcesses.filter(process => ['Completed', 'Approved', 'Handed Off to Docs', 'Handed Off to Delivery'].includes(process.status)).length
         : currentCatalog.filter(item => item.scored).length;
     const criticalCount = displayedProcesses.filter(process => process.criticality === 'Critical' || process.criticality === 'High').length;
-    const inFlightCount = captureMode
+    const inFlightCount = usesLocalCatalog
         ? displayedProcesses.filter(process => !['Not Started', 'Completed', 'Approved', 'Archived'].includes(process.status)).length
         : currentCatalog.filter(item => item.inMotion).length;
-    const assessmentCount = (value: number) => captureMode ? value : presentCurrentAssessmentCatalogCount(currentAssessmentState, value);
+    const assessmentCount = (value: number) => usesLocalCatalog ? value : presentCurrentAssessmentCatalogCount(currentAssessmentState, value);
     const assessmentStats = [
         { label: 'Processes', value: displayedProcesses.length, detail: captureMode ? 'synthetic inventory' : 'enterprise inventory', icon: ChartBarIcon },
         { label: 'Scored', value: assessmentCount(completedCount), detail: 'current decision packs ready', icon: CheckCircleIcon },

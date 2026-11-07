@@ -533,7 +533,7 @@
     },
     "studio-source-browser": {
       "path": "tests/browser/studioPrB/studioPrB.spec.ts",
-      "sha256": "1e14fe9bc430e3f27815fee7c17194b3e325ccaa8cd987a5ef66cc15b59e672e"
+      "sha256": "2a257ea440f4142bea4086365d07e3c8380ef580d738761bf06104143b5cdef5"
     }
   },
   "assertions": [
@@ -2181,7 +2181,7 @@
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
         "migration": "20260831062024_governed_delivery_monitor_pr_c.sql",
-        "migrationTip": "20261106210205",
+        "migrationTip": "20261107110000",
         "sourcePackage": {
           "modes": [
             "studio_handoff",
@@ -2257,7 +2257,7 @@
         },
         "organizationId": "97000000-0000-4000-8000-000000000010",
         "workspaceId": "97000000-0000-4000-8000-000000000011",
-        "migrationTip": "20261106210205",
+        "migrationTip": "20261107110000",
         "roleBoundary": {
           "executionRole": "service_role",
           "directSourceSelect": false,

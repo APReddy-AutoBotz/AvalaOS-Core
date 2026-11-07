@@ -66,13 +66,14 @@ const reloadSectionTitles = Object.freeze([
 ]);
 
 const studioReloadFixture = ({ missing = false, duplicate = false, targetVersion = 2,
-  wrongSection = false, delayMs = 0 } = {}) => {
+  wrongSection = false, delayMs = 0, currentLabel = false } = {}) => {
+  const selectorLabel = currentLabel ? 'Current document' : 'Governed artifact';
   const target = missing ? '' : `
     <option value="${targetArtifactId}" data-version="${targetVersion}">Canonical AP BRD</option>
     ${duplicate ? `<option value="${targetArtifactId}" data-version="${targetVersion}">Duplicate canonical AP BRD</option>` : ''}`;
   return `<!doctype html><html><body>
     <section data-testid="studio-artifact-workspace" data-studio-projection-state="artifact-ready">
-      <label>Governed artifact<select aria-label="Governed artifact">
+      <label>${selectorLabel}<select aria-label="${selectorLabel}">
         <option value="${competingArtifactId}" data-version="3">Newer retained legacy BRD</option>${target}
       </select></label>
       <article aria-label="Artifact preview"><p role="status"></p><details data-testid="studio-current-document-audit"><summary>Audit details</summary><p data-version></p></details></article>
@@ -82,7 +83,7 @@ const studioReloadFixture = ({ missing = false, duplicate = false, targetVersion
         `<li><button>${index + 1}. ${wrongSection && index === 4 ? 'Unrelated retained section' : title}</button></li>`).join('')}</ol><button>Add section</button></nav>
     </section>
     <script>
-      const selector = document.querySelector('[aria-label="Governed artifact"]');
+      const selector = document.querySelector('[aria-label="${selectorLabel}"]');
       const workspace = document.querySelector('[data-testid="studio-artifact-workspace"]');
       const version = document.querySelector('article [data-version]');
       const status = document.querySelector('[role="status"]');
@@ -204,6 +205,19 @@ test('canonical Studio reload reselects the exact committed artifact instead of 
   await expect(page.getByTestId('studio-current-document-audit')
     .getByText('Aggregate v7 · Content v2', { exact: true })).toBeVisible();
   expect(businessCommands).toBe(0);
+});
+
+test('canonical Studio targeting accepts the current-document selector without dropping retained-label support', async ({ page }) => {
+  await page.route('http://canonical.test/studio-current-document', route => route.fulfill({
+    status: 200, contentType: 'text/html', body: studioReloadFixture({ currentLabel: true }),
+  }));
+  await page.goto('http://canonical.test/studio-current-document', { waitUntil: 'domcontentloaded' });
+  const selector = page.getByLabel('Current document', { exact: true });
+  await selector.selectOption(targetArtifactId);
+  await expect(captureCanonicalStudioArtifactReloadTarget(page, 2)).resolves.toEqual({
+    artifactId: targetArtifactId,
+    contentVersion: 2,
+  });
 });
 
 test('canonical Studio reload rejects missing, duplicate, wrong-version, wrong-target and wrong-section projections without mutation', async ({ page }) => {

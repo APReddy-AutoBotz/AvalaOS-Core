@@ -99,6 +99,24 @@ type LifecycleFrame = Readonly<{
   handoffs: number; sourcePackages: number; artifacts: number; generationAttempts: number; artifactVersions: number;
   receipts: number; audits: number; targetHash: string;
 }>;
+const assertCommittedStudioGeneration = async (page: Page) => {
+  const studio = page.getByTestId('studio-artifact-workspace');
+  await expect(studio.getByText('Draft committed. Current document and document list refreshed.', { exact: true })).toBeVisible();
+  const currentDocument = studio.getByRole('region', { name: 'Current document', exact: true });
+  await expect(currentDocument).toBeVisible();
+  await expect(currentDocument.getByLabel('Section title', { exact: true }).first()).not.toHaveValue('');
+  const documentAudit = studio.getByTestId('studio-current-document-audit');
+  if (!await documentAudit.evaluate(element => element.hasAttribute('open'))) {
+    await documentAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(documentAudit.getByText(/^Aggregate v\d+ · Content v\d+$/u, { exact: true })).toBeVisible();
+  const sourceCoverage = studio.getByRole('region', { name: 'Source coverage', exact: true });
+  const packageAudit = sourceCoverage.locator('details').filter({ hasText: 'Package:' }).first();
+  if (!await packageAudit.evaluate(element => element.hasAttribute('open'))) {
+    await packageAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(packageAudit.locator('dd').first()).toHaveText(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12} · v[1-9][0-9]*$/u);
+};
 type ProjectFinalization = Readonly<{
   journeyBinding: string;
   status: 'passed';
@@ -2175,8 +2193,7 @@ test.describe('connected Assess, Govern and Studio lifecycle', () => {
       if (hostedAuthenticatedAcceptance || canonicalInvoiceExceptionJourney) await page.unroute('**/functions/v1/studio-artifact-command', hostedSuccessRoute);
     }
     expect(generationApi.status).toBe(201);
-    await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Current document', exact: true })).toBeVisible();
+    await assertCommittedStudioGeneration(page);
     if (canonicalInvoiceExceptionJourney) {
       canonicalStudioArtifactReloadTarget = await captureCanonicalStudioArtifactReloadTarget(page, 1);
     }

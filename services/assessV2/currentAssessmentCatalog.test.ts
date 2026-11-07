@@ -1,6 +1,6 @@
 import { strict as assert } from 'assert';
 import fs from 'node:fs';
-import { buildCurrentAssessmentCatalog, presentCurrentAssessmentCatalogCount, presentCurrentAssessmentCatalogStatus, selectCurrentAssessmentCases, type CurrentAssessmentCaseSummary } from './currentAssessmentCatalog';
+import { buildCurrentAssessmentCatalog, presentCurrentAssessmentCatalogCount, presentCurrentAssessmentCatalogStatus, presentProcessCatalogAssessmentStatus, selectCurrentAssessmentCases, type CurrentAssessmentCaseSummary } from './currentAssessmentCatalog';
 
 const current = (processId: string, status: CurrentAssessmentCaseSummary['status']): CurrentAssessmentCaseSummary => ({
   id: `case-${processId}`,
@@ -30,6 +30,18 @@ assert.equal(presentCurrentAssessmentCatalogStatus('ready', undefined), 'Not sta
 assert.equal(presentCurrentAssessmentCatalogStatus('loading', undefined), 'Checking current assessment');
 assert.equal(presentCurrentAssessmentCatalogStatus('unavailable', catalog[0]), 'Current assessment unavailable');
 assert.equal(presentCurrentAssessmentCatalogCount('unavailable', 4), '—');
+assert.equal(presentProcessCatalogAssessmentStatus({
+  usesLocalCatalog: true,
+  localStatus: 'Not Started',
+  state: 'unavailable',
+  entry: undefined,
+}), 'Not Started', 'sandbox/local mode preserves the existing local new-process status and casing');
+assert.equal(presentProcessCatalogAssessmentStatus({
+  usesLocalCatalog: false,
+  localStatus: 'Not Started',
+  state: 'unavailable',
+  entry: undefined,
+}), 'Current assessment unavailable', 'server projection failures remain explicit');
 assert.equal(buildCurrentAssessmentCatalog(['not-finalized'], [{
   ...current('not-finalized', 'approved'),
   hasCurrentDecision: false,
@@ -46,7 +58,11 @@ assert.deepEqual(buildCurrentAssessmentCatalog(['duplicate'], duplicateCases),
 const catalogViewSource = fs.readFileSync('components/assess/ProcessCatalogView.tsx', 'utf8');
 assert.match(catalogViewSource, /listCurrentAssessV2Cases\(tenantContext, displayedProcessIds\)/);
 assert.match(catalogViewSource, /currentCatalog\.filter\(item => item\.scored\)/);
-assert.match(catalogViewSource, /presentCurrentAssessmentCatalogStatus\(currentAssessmentState, currentCatalogByProcess\.get\(process\.id\)\)/);
+assert.match(catalogViewSource, /entry: currentCatalogByProcess\.get\(process\.id\)/);
+assert.match(catalogViewSource, /usesLocalCatalog = captureMode \|\| dataAccess === 'local'/,
+  'sandbox/local mode must use its existing local process assessment status without a server fetch');
+assert.match(catalogViewSource, /presentProcessCatalogAssessmentStatus\(\{/,
+  'the catalog applies the tested local-versus-server presentation boundary');
 assert.doesNotMatch(catalogViewSource, /const completedCount = displayedProcesses\.filter/);
 
 console.log('current assessment catalog uses only the current Assess V2 case for badges and counts');

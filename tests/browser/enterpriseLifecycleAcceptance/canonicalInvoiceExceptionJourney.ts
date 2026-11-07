@@ -399,19 +399,26 @@ const openCanonicalStudioAudit = async (preview: Locator, timeoutMs: number) => 
   return audit;
 };
 
+const canonicalStudioDocumentSelector = async (workspace: Locator) => {
+  const current = workspace.getByLabel('Current document', { exact: true });
+  if (await current.count() === 1) return current;
+  const retained = workspace.getByLabel('Governed artifact', { exact: true });
+  if (await retained.count() === 1) return retained;
+  throw new Error('CANONICAL_STUDIO_RELOAD_SELECTOR_REJECTED');
+};
+
 export const captureCanonicalStudioArtifactReloadTarget = async (
   page: Page,
   contentVersion: number,
 ): Promise<CanonicalStudioArtifactReloadTarget> => {
+  const workspace = page.getByTestId('studio-artifact-workspace');
+  const selector = await canonicalStudioDocumentSelector(workspace);
   const target = {
-    artifactId: await page.getByTestId('studio-artifact-workspace')
-      .getByLabel('Governed artifact', { exact: true }).inputValue(),
+    artifactId: await selector.inputValue(),
     contentVersion,
   };
   canonicalStudioReloadBoundary(target, 15_000);
-  const exactOption = page.getByTestId('studio-artifact-workspace')
-    .getByLabel('Governed artifact', { exact: true })
-    .locator(`option[value="${target.artifactId}"]`);
+  const exactOption = selector.locator(`option[value="${target.artifactId}"]`);
   if (await exactOption.count() !== 1) throw new Error('CANONICAL_STUDIO_RELOAD_CAPTURE_REJECTED');
   const preview = page.getByTestId('studio-artifact-workspace')
     .getByRole('article', { name: 'Artifact preview', exact: true });
@@ -445,7 +452,7 @@ export const reloadCanonicalStudioArtifact = async (
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: remaining() });
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const selector = workspace.getByLabel('Governed artifact', { exact: true });
+  const selector = await canonicalStudioDocumentSelector(workspace);
   await selector.waitFor({ state: 'visible', timeout: remaining() });
   const exactOption = selector.locator(`option[value="${target.artifactId}"]`);
   if (await exactOption.count() === 0) {

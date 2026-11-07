@@ -1313,6 +1313,7 @@ function App() {
         createProcessDecision={resolveProductActionDecision('process.create')}
         presentationProcesses={productMarketingCapture ? MARKETING_CAPTURE_PROCESSES : undefined}
         captureMode={productMarketingCapture}
+        dataAccess={dataAccess}
       />;
     }
     if (currentView === View.TEMPLATE_LIBRARY) {

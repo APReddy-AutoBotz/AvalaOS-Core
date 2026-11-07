@@ -42,6 +42,15 @@ export const presentCurrentAssessmentCatalogStatus = (
   : state === 'unavailable' ? 'Current assessment unavailable'
     : entry?.statusLabel ?? 'Not started';
 
+export const presentProcessCatalogAssessmentStatus = (input: {
+  usesLocalCatalog: boolean;
+  localStatus: string;
+  state: CurrentAssessmentCatalogReadState;
+  entry: CurrentAssessmentCatalogEntry | undefined;
+}): string => input.usesLocalCatalog
+  ? input.localStatus
+  : presentCurrentAssessmentCatalogStatus(input.state, input.entry);
+
 export const presentCurrentAssessmentCatalogCount = (
   state: CurrentAssessmentCatalogReadState,
   count: number,

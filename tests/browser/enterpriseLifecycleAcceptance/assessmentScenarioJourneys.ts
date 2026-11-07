@@ -56,6 +56,24 @@ type LifecycleFrame = Readonly<{
   targetHash: string;
 }>;
 
+const assertCommittedStudioGeneration = async (page: Page) => {
+  const studio = page.getByTestId('studio-artifact-workspace');
+  await expect(studio.getByText('Draft committed. Current document and document list refreshed.', { exact: true })).toBeVisible();
+  const currentDocument = studio.getByRole('region', { name: 'Current document', exact: true });
+  await expect(currentDocument.getByLabel('Section title', { exact: true }).first()).not.toHaveValue('');
+  const documentAudit = studio.getByTestId('studio-current-document-audit');
+  if (!await documentAudit.evaluate(element => element.hasAttribute('open'))) {
+    await documentAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(documentAudit.getByText(/^Aggregate v\d+ · Content v\d+$/u, { exact: true })).toBeVisible();
+  const sourceCoverage = studio.getByRole('region', { name: 'Source coverage', exact: true });
+  const packageAudit = sourceCoverage.locator('details').filter({ hasText: 'Package:' }).first();
+  if (!await packageAudit.evaluate(element => element.hasAttribute('open'))) {
+    await packageAudit.getByText('Audit details', { exact: true }).click();
+  }
+  await expect(packageAudit.locator('dd').first()).toHaveText(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12} · v[1-9][0-9]*$/u);
+};
+
 type ScenarioDecision = Readonly<{
   decisionId: string;
   decisionVersion: string;
@@ -212,7 +230,7 @@ const approveGovernStudio = async (page: Page, setup: AuthenticatedLifecycleSetu
   const template = studio.getByLabel('Exact approved Studio template', { exact: true });
   await selectExactStudioTemplate(template, setup.studioTemplate);
   await studio.getByRole('button', { name: 'Generate governed package draft', exact: true }).click();
-  await expect(page.getByText(/Draft committed from exact Studio Source Package v\d+; v2 projection reloaded\./u)).toBeVisible();
+  await assertCommittedStudioGeneration(page);
   await studio.getByRole('button', { name: 'Add section', exact: true }).click();
   await studio.getByLabel('Section title', { exact: true }).fill('Delivery requirements');
   await studio.getByLabel('Section body', { exact: true }).fill(approvedRequirement);
@@ -293,7 +311,7 @@ const runScenario = async (
   await enterAs(page, setup.actors.author, settleActorTransitionEvidence);
   await selectProjectScope(page, publicationBinding.project.name);
   await clickProduct(page, 'Studio');
-  await page.getByLabel('Governed artifact', { exact: true }).selectOption(publicationBinding.artifact.id);
+  await page.getByLabel('Current document', { exact: true }).selectOption(publicationBinding.artifact.id);
   const publisher = page.getByTestId('studio-approved-artifact-publish');
   await expect(publisher.getByText(publicationBinding.artifact.versionId, { exact: false })).toBeVisible();
   const scenarioItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
