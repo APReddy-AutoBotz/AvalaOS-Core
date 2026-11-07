@@ -938,7 +938,7 @@
     "testing/assess-import/fixtures/process-sop.md": "sha256:382fcba5cf4a28325350a7b11bfe9ca3fdc31422d22c9e3153135306deaa28e6",
     "testing/assess-import/fixtures/README.md": "sha256:5ac2653e58ddadd17425613cb2e22af888f0ddb5ba8a26dbdf5967d462a0fa5a",
     "testing/assess-import/README.md": "sha256:02e5c53dd0603fce882ba232c202aff1d45765693d7ffe65a7a1c27adbb994b4",
-    "testing/process-lifecycle/contracts/pr-c-assertion-registry.json": "sha256:3576038de5bd64cf863a4ad37dc2d055b3e7452331f34c2957f5986ad064043d",
+    "testing/process-lifecycle/contracts/pr-c-assertion-registry.json": "sha256:726cbb8e724504cc79761067a6b16c16c2297e8e7b1b4b9ad1c3e75bd2df55ba",
     "testing/process-lifecycle/contracts/pr-c-assertion-registry.schema.json": "sha256:4ae27d3c0dfea6f7cab98d9f50999aaeef7d4341460b223a1065a58d8932e3f3",
     "testing/process-lifecycle/contracts/pr-c-control-script-coverage.md": "sha256:bee312862d2d0b8fd61a30ee567c0fa9a38e25ffc5d1b16e91f812b423e06e2a",
     "testing/process-lifecycle/contracts/pr-c-controlled-human-checkpoint.schema.json": "sha256:9be4d38fcbbfb76be19d00f9c0dd9d280ae0f96a96818e5aeb30ef4c84e10fe7",
