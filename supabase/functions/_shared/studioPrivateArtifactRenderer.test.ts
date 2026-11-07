@@ -439,20 +439,33 @@ void test('renderer-4 exports an appended UI-authored planning question without 
   for (const rejected of [
     { ...appendix, id: 'openQuestions' },
     { ...appendix, labels: ['assumption'] },
-    {
-      ...appendix,
-      sourceAnchors: [{
-        sourceVersionId: '11111111-1111-4111-8111-111111111111',
-        locator: 'page:1',
-        anchorHash: 'a'.repeat(64),
-      }],
-    },
   ]) {
     await assert.rejects(() => renderPdf4('frd', {
       ...base,
       sections: [...base.sections, rejected],
     }), errorCode('INVALID_CONTENT'));
   }
+
+  const sourceAnchor = {
+    sourceVersionId: '11111111-1111-4111-8111-111111111111',
+    locator: 'page:1',
+    anchorHash: 'a'.repeat(64),
+  };
+  const sourceBound = {
+    ...base,
+    coverage: {
+      selectedSourceVersionIds: [sourceAnchor.sourceVersionId],
+      coveredSourceVersionIds: [sourceAnchor.sourceVersionId],
+      complete: true,
+    },
+    sections: base.sections.map((section, index) => index === 0
+      ? { ...section, sourceAnchors: [sourceAnchor], labels: [] }
+      : section),
+  };
+  await assert.rejects(() => renderPdf4('frd', {
+    ...sourceBound,
+    sections: [...sourceBound.sections, { ...appendix, sourceAnchors: [sourceAnchor] }],
+  }), errorCode('INVALID_CONTENT'));
 });
 
 void test('renderer-4 keeps retained business flow labels and branch meaning readable without ellipsis', async () => {

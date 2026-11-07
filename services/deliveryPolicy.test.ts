@@ -6,6 +6,7 @@ import {
   canDeleteDeliveryTask,
   canEditDeliveryTask,
   getDependencyViolations,
+  getStatusTransitionViolations,
 } from './deliveryPolicy';
 import { Task, User } from '../types';
 
@@ -55,6 +56,21 @@ const dependentTask: Task = {
   dependencyIds: ['dependency-1'],
 };
 
+const discoveryTask: Task = {
+  ...dependencyTask,
+  id: 'discovery-1',
+  title: 'Resolve PATCH support',
+  status: 'Done',
+  dependencyIds: [],
+  sourceLineage: { proposalRole: 'discovery' },
+};
+
+const discoveryDependentTask: Task = {
+  ...dependentTask,
+  id: 'discovery-dependent-1',
+  dependencyIds: [discoveryTask.id],
+};
+
 if (!canCreateDeliveryTask(pm) || canCreateDeliveryTask(executive)) {
   throw new Error('Task creation permissions are incorrect.');
 }
@@ -87,6 +103,31 @@ assertCanUpdateDeliveryTask(ba, baseTask, {
 const blockedDependencies = getDependencyViolations(dependentTask, [dependencyTask, dependentTask], 'In Progress');
 if (blockedDependencies.length !== 1 || blockedDependencies[0].id !== dependencyTask.id) {
   throw new Error('Dependency gate did not identify unfinished predecessor task.');
+}
+
+const unresolvedDiscovery = new Map([[discoveryTask.id, 'blocking_unresolved' as const]]);
+const archivedDoneBlockers = getDependencyViolations(
+  discoveryDependentTask,
+  [discoveryTask, discoveryDependentTask],
+  'In Progress',
+  unresolvedDiscovery,
+);
+if (archivedDoneBlockers.length !== 1 || archivedDoneBlockers[0].id !== discoveryTask.id) {
+  throw new Error('A Done discovery task with an unresolved committed disposition incorrectly released dependent work.');
+}
+
+const acceptedDiscovery = new Map([[discoveryTask.id, 'source_backed_answer_accepted' as const]]);
+if (getDependencyViolations(discoveryDependentTask, [discoveryTask, discoveryDependentTask], 'In Progress', acceptedDiscovery).length !== 0) {
+  throw new Error('An independently accepted source-backed answer did not release its completed discovery dependency.');
+}
+if (getStatusTransitionViolations(discoveryTask, [discoveryTask], 'Done', unresolvedDiscovery).length !== 1) {
+  throw new Error('An unresolved discovery item incorrectly became eligible for Done.');
+}
+if (getStatusTransitionViolations(discoveryTask, [discoveryTask], 'Done', acceptedDiscovery).length !== 0) {
+  throw new Error('An independently accepted discovery item remained blocked from Done.');
+}
+if (getDependencyViolations(discoveryDependentTask, [discoveryTask, discoveryDependentTask], 'In Progress').length !== 0) {
+  throw new Error('The existing local status-only dependency behavior changed without a committed outcome projection.');
 }
 
 try {

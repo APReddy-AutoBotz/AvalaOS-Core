@@ -1,5 +1,6 @@
 import React from 'react';
 import { Task, Project, TaskPriority, TaskStatus, Epic, User } from '../../types';
+import type { StudioDeliveryDiscoveryDisposition } from '../../services/productAcceptanceBridge/contracts';
 import { ClockIcon, ArrowUpIcon, MinusIcon, ArrowDownIcon, ClipboardDocumentListIcon, TrashIcon, BanIcon, CheckCircleIcon } from '../shared/icons';
 
 interface TaskCardProps {
@@ -11,6 +12,7 @@ interface TaskCardProps {
     showProjectLabel?: boolean;
     canDrag?: boolean;
     canDelete?: boolean;
+    discoveryDisposition?: StudioDeliveryDiscoveryDisposition | null;
     onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
     onSelectTask: () => void;
     onDeleteTask: (taskId: string) => void;
@@ -59,6 +61,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     showProjectLabel = false,
     canDrag = true,
     canDelete = true,
+    discoveryDisposition,
     onDragStart,
     onSelectTask,
     onDeleteTask,
@@ -72,6 +75,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
     const statusBadge = statusBadgeMap[task.status];
     const hasLineage = Boolean(task.sourceLineage);
     const formattedDueDate = formatDate(task.dueDate);
+    const discoveryDispositionLabel = discoveryDisposition === 'source_backed_answer_accepted'
+        ? 'Source-backed answer accepted'
+        : discoveryDisposition === 'approved_nonblocking_scope'
+            ? 'Nonblocking scope approved'
+            : discoveryDisposition === 'source_backed_answer_proposed'
+                ? 'Answer awaiting independent acceptance'
+                : discoveryDisposition === 'nonblocking_scope_proposed'
+                    ? 'Scope awaiting independent approval'
+                    : discoveryDisposition === 'blocking_unresolved'
+                        ? 'Discovery unresolved'
+                        : null;
 
     const handleDelete = (event: React.MouseEvent) => {
         event.stopPropagation();
@@ -82,7 +96,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
     return (
         <div
+            data-task-id={task.id}
             data-status={statusKebabCase(task.status)}
+            data-discovery-disposition={task.sourceLineage?.proposalRole === 'discovery' ? discoveryDisposition ?? 'unavailable' : undefined}
             className={`task-card group relative flex flex-col gap-2.5 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_2px_8px_rgba(15,23,42,0.05)] transition hover:border-slate-300 hover:shadow-[0_6px_18px_rgba(15,23,42,0.08)] dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-600 ${canDrag ? 'cursor-pointer' : 'cursor-default'}`}
             draggable={canDrag}
             onDragStart={onDragStart}
@@ -117,6 +133,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         {task.status === 'Blocked' && <BanIcon className="h-3 w-3" />}
                         {task.status === 'Done' && <CheckCircleIcon className="h-3 w-3" />}
                         {task.status}
+                    </span>
+                )}
+                {task.sourceLineage?.proposalRole === 'discovery' && discoveryDispositionLabel && (
+                    <span className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+                        {discoveryDispositionLabel}
                     </span>
                 )}
             </div>

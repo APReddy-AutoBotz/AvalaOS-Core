@@ -1566,6 +1566,19 @@ function App() {
             users={users} currentUser={currentUser} automations={automationsForScope} timesheetEntries={timesheetsForScope}
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
             handoffEntries={handoffEntries}
+            deliveryBoardAuthority={dataAccess === 'server' && tenantContext ? {
+              scope: {
+                actorId: tenantContext.userId,
+                organizationId: tenantContext.organizationId,
+                workspaceId: tenantContext.workspaceId,
+                authorizationVersion: tenantContext.authorizationVersion,
+              },
+              mutationPolicy: {
+                canChangeStatus: resolveProductActionDecision('workflow.status.change', { projectId: projectsForScope[0].id }).allowed,
+                canCreate: resolveProductActionDecision('project.task.create', { projectId: projectsForScope[0].id }).allowed,
+                canDelete: resolveProductActionDecision('project.task.delete', { projectId: projectsForScope[0].id }).allowed,
+              },
+            } : undefined}
             deliveryPackSnapshot={dataAccess === 'server' && tenantContext ? <DeliveryPackSnapshotAction
               key={`${navigationAuthorityKey}:${projectsForScope[0].id}`}
               scope={{ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,

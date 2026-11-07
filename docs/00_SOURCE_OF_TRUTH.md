@@ -2,6 +2,8 @@
 
 ## Current planning documents and discovery acceptance
 
+The existing project board preserves six historical BRD items and four selected FRD v4 items with two stored prerequisite links. Studio exported all four current approvals, including the FRD’s human-authored appendix and the SDD’s rendered diagrams. The board records independent acceptance for exception routing and nonblocking PATCH exclusion. Planning does not authorize PATCH or confer implementation readiness.
+
 Independent Studio review and approval produced BRD v7, PDD v6, FRD v4 and SDD v7 for supplier invoice query handling. The planning assessment retains its confidence, accepted evidence and unanswered questions. The FRD contains two requirement-linked discovery questions. The [current acceptance plan](planning/process-evidence-to-delivery.md) tracks publication, stored dependencies, independent dispositions and canonical PDF verification.
 
 ## Business review of the planning journey
