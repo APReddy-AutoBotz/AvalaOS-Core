@@ -606,7 +606,7 @@ const selectLoadedStudioArtifact = async (page, select, value) => {
 };
 
 const studioDocumentSelect = async workspace => {
-  const current = workspace.getByLabel('Current document', { exact: true });
+  const current = workspace.getByRole('combobox', { name: 'Current document', exact: true });
   if (await current.count() === 1) return current;
   const retained = workspace.getByLabel('Governed artifact', { exact: true });
   assert.equal(await retained.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_DOCUMENT_SELECT_COUNT');

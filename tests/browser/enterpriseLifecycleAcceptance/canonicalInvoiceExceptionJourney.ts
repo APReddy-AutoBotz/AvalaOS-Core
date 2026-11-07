@@ -400,7 +400,7 @@ const openCanonicalStudioAudit = async (preview: Locator, timeoutMs: number) => 
 };
 
 const canonicalStudioDocumentSelector = async (workspace: Locator) => {
-  const current = workspace.getByLabel('Current document', { exact: true });
+  const current = workspace.getByRole('combobox', { name: 'Current document', exact: true });
   if (await current.count() === 1) return current;
   const retained = workspace.getByLabel('Governed artifact', { exact: true });
   if (await retained.count() === 1) return retained;

@@ -212,7 +212,7 @@ test('canonical Studio targeting accepts the current-document selector without d
     status: 200, contentType: 'text/html', body: studioReloadFixture({ currentLabel: true }),
   }));
   await page.goto('http://canonical.test/studio-current-document', { waitUntil: 'domcontentloaded' });
-  const selector = page.getByLabel('Current document', { exact: true });
+  const selector = page.getByRole('combobox', { name: 'Current document', exact: true });
   await selector.selectOption(targetArtifactId);
   await expect(captureCanonicalStudioArtifactReloadTarget(page, 2)).resolves.toEqual({
     artifactId: targetArtifactId,

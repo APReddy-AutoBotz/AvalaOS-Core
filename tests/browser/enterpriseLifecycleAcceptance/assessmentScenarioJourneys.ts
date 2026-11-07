@@ -311,7 +311,7 @@ const runScenario = async (
   await enterAs(page, setup.actors.author, settleActorTransitionEvidence);
   await selectProjectScope(page, publicationBinding.project.name);
   await clickProduct(page, 'Studio');
-  await page.getByLabel('Current document', { exact: true }).selectOption(publicationBinding.artifact.id);
+  await page.getByRole('combobox', { name: 'Current document', exact: true }).selectOption(publicationBinding.artifact.id);
   const publisher = page.getByTestId('studio-approved-artifact-publish');
   await expect(publisher.getByText(publicationBinding.artifact.versionId, { exact: false })).toBeVisible();
   const scenarioItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
