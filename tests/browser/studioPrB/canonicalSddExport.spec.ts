@@ -4,8 +4,8 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const brokerPdfPath = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export-pdf4.pdf');
-const expectedSha256 = 'f3c73b685712adf50643b39d47aae02f08adc1822434788dc52a008ff8bfefe4';
-const expectedByteLength = 22_472;
+const expectedSha256 = 'ea27c4f8638aea894f7670dad5c0e9e3ab7ef89e8621bcd03ff4eae78e1f4206';
+const expectedByteLength = 6_296;
 const historicalPdf3Path = path.resolve('tests/fixtures/process-evidence/synthetic-sdd-export-pdf3.pdf');
 const historicalPdf3Sha256 = 'c7c365cf93c5f37a834673d1504495b608f87407724f7b6bfc9e884c0186c998';
 const historicalPdf3ByteLength = 7_042;

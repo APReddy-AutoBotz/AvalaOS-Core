@@ -4,7 +4,7 @@
 << /Type /Catalog /Pages 2 0 R >>
 endobj
 2 0 obj
-<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R] /Count 6 >>
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R] /Count 3 >>
 endobj
 3 0 obj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
@@ -16,241 +16,197 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
 endobj
 6 0 obj
-<< /Length 4199 >>
+<< /Length 2181 >>
 stream
 0 g
 BT
 /F2 18 Tf
 1 0 0 1 72 720 Tm
-(Supplier invoice query handling - Solution Design for) Tj
-ET
-0 g
-BT
-/F2 18 Tf
-1 0 0 1 72 695 Tm
-(Planning) Tj
+(Synthetic SDD cross-layer export) Tj
 ET
 0 g
 BT
 /F2 13 Tf
-1 0 0 1 72 670 Tm
+1 0 0 1 72 695 Tm
 (Executive Summary) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 651 Tm
-(Source-grounded planning design using workflow, deterministic rules, the ready read-only) Tj
+1 0 0 1 72 676 Tm
+(Synthetic database-backed export evidence; not provider-generated business output.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 635 Tm
-(invoice-status GET and human judgment. The two-working-day target is acknowledgment.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 619 Tm
-(Bank-details POST is prohibited; invoice PATCH is unknown and unavailable. Proposed) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 603 Tm
-(components and controls, sourced current steps and unanswered technical questions are) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 587 Tm
-(distinguished. Planning approval does not authorize implementation.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 571 Tm
+1 0 0 1 72 660 Tm
 () Tj
 ET
 0 g
 BT
 /F2 13 Tf
-1 0 0 1 72 562 Tm
+1 0 0 1 72 651 Tm
 (Summary) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 543 Tm
-(Planning design for supplier invoice queries. The source-supported process captures queries,) Tj
+1 0 0 1 72 632 Tm
+(Synthetic export path verification.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 527 Tm
-(verifies requester authority, identifies invoice references, retrieves status and requires a) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 511 Tm
-(human to approve and send the reply. Acknowledge within two working days; no resolution) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 495 Tm
-(SLA is established. The ready read-only GET is supported. Bank-details POST is prohibited;) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 479 Tm
-(invoice PATCH is unknown and unavailable pending separate evidence and approval. The To-Be) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 463 Tm
-(workflow and technical controls below are proposals, not verified deployed capabilities. This) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 447 Tm
-(document is approved only for documentation and planning after independent review.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 431 Tm
+1 0 0 1 72 616 Tm
 () Tj
 ET
 0 g
 BT
 /F2 13 Tf
-1 0 0 1 72 422 Tm
+1 0 0 1 72 607 Tm
 (Architecture) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 403 Tm
-(Proposed planning architecture: workflow orchestration coordinates query capture,) Tj
+1 0 0 1 72 588 Tm
+(A bounded service workflow with explicit human approval.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 387 Tm
-(acknowledgment within two working days, requester verification, invoice-reference) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 371 Tm
-(matching, the ready read-only invoice-status GET, human response approval and audit) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 355 Tm
-(recording. Deterministic rules handle structured references; people resolve ambiguous) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 339 Tm
-(references, disputes, disclosure authority and unresolved lookup failures. The ready GET is) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 323 Tm
-(preferred to RPA for this lookup. Document intelligence is an optional alternative for) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 307 Tm
-(unstructured reference extraction, subject to separate justification and evidence; it is not a) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 291 Tm
-(required dependency or authority to approve or send replies. Event capture, case management) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 275 Tm
-(and audit components are proposed design responsibilities, not verified deployed services. The) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 259 Tm
-(prohibited bank-details POST is excluded. The unknown invoice PATCH remains unavailable) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 243 Tm
-(pending separate evidence and approval. Deployment topology, endpoint configuration,) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 227 Tm
-(authentication, capacity and service levels remain open design questions. Planning approval) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 211 Tm
-(does not authorize implementation.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 195 Tm
+1 0 0 1 72 572 Tm
 () Tj
 ET
 0 g
 BT
 /F2 13 Tf
-1 0 0 1 72 186 Tm
+1 0 0 1 72 563 Tm
 (Components) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 167 Tm
-(Proposed components and responsibilities:) Tj
+1 0 0 1 72 544 Tm
+(Studio, governed API integration, and the existing Delivery board.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 151 Tm
-(- Query intake and acknowledgment workflow: retain the original message and track the) Tj
+1 0 0 1 72 528 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 519 Tm
+(Interfaces) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 135 Tm
-(two-working-day acknowledgment target.) Tj
+1 0 0 1 72 500 Tm
+(Read operations are distinct from unknown or prohibited write operations.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 119 Tm
-(- Requester-verification work item: a person checks the supplier contact record before) Tj
+1 0 0 1 72 484 Tm
+() Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 475 Tm
+(Data design) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 103 Tm
-(disclosure.) Tj
+1 0 0 1 72 456 Tm
+(Source anchors and unresolved questions remain explicit.) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 440 Tm
+() Tj
+ET
+0.5 w
+0 G
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 431 Tm
+(As is flow) Tj
+ET
+306 343 m
+306 325 l
+S
+302 331 m 306 325 l 310 331 l S
+306 279 m
+306 261 l
+S
+302 267 m 306 261 l 310 267 l S
+1 g
+291.747 267 28.506 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 293.747 270 Tm
+(Yes) Tj
+ET
+156 302 m
+120 302 l
+120 174 l
+156 174 l
+S
+150 170 m 156 174 l 150 178 l S
+1 g
+107.502 235 24.996000000000002 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 109.502 238 Tm
+(E3) Tj
+ET
+0.96 g
+156 343 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 270.225 363 Tm
+(Receive request) Tj
+ET
+0.96 g
+306 325 m 456 302 l 306 279 l 156 302 l h B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 264.9735 299 Tm
+(Evidence complete) Tj
+ET
+0.96 g
+156 215 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 274.73400000000004 235 Tm
+(Human review) Tj
+ET
+0.96 g
+156 151 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 267.723 171 Tm
+(Request evidence) Tj
+ET
+0 g
+BT
+/F2 10 Tf
+1 0 0 1 72 95 Tm
+(Transition details) Tj
 ET
 endstream
 endobj
@@ -258,199 +214,197 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
 endobj
 8 0 obj
-<< /Length 3285 >>
+<< /Length 2352 >>
 stream
 0 g
 BT
-/F1 11 Tf
+/F1 9 Tf
 1 0 0 1 72 720 Tm
-(- Reference validation rules: match invoiceId and supplierId exactly; do not infer missing) Tj
+([A] Receive request - continue -> [B] Evidence complete) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 707 Tm
+([B] Evidence complete - Yes -> [C] Human review) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 694 Tm
+([B] Evidence complete - No -> [D] Request evidence) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 704 Tm
-(references.) Tj
+1 0 0 1 72 681 Tm
+() Tj
 ET
+0.5 w
+0 G
 0 g
 BT
-/F1 11 Tf
-1 0 0 1 72 688 Tm
-(- Read-only API adapter: use the ready invoice-status GET and the documented synthetic) Tj
-ET
-0 g
-BT
-/F1 11 Tf
+/F2 13 Tf
 1 0 0 1 72 672 Tm
-(error contract.) Tj
+(To be flow) Tj
+ET
+306 584 m
+306 566 l
+S
+302 572 m 306 566 l 310 572 l S
+306 520 m
+306 502 l
+S
+302 508 m 306 502 l 310 508 l S
+306 456 m
+306 438 l
+S
+302 444 m 306 438 l 310 444 l S
+1 g
+291.747 444 28.506 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 293.747 447 Tm
+(Yes) Tj
+ET
+156 479 m
+120 479 l
+120 351 l
+156 351 l
+S
+150 347 m 156 351 l 150 355 l S
+1 g
+107.502 412 24.996000000000002 13 re f
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 109.502 415 Tm
+(E4) Tj
+ET
+0.96 g
+156 584 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 270.225 604 Tm
+(Receive request) Tj
+ET
+0.96 g
+156 520 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 275.733 540 Tm
+(API validation) Tj
+ET
+0.96 g
+306 502 m 456 479 l 306 456 l 156 479 l h B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 270.225 476 Tm
+(Exception found) Tj
+ET
+0.96 g
+156 392 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 268.479 412 Tm
+(Human judgment) Tj
+ET
+0.96 g
+156 328 300 46 re B
+0 g
+BT
+/F2 9 Tf
+1 0 0 1 258.9705 348 Tm
+(Workflow completion) Tj
+ET
+0 g
+BT
+/F2 10 Tf
+1 0 0 1 72 272 Tm
+(Transition details) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 257 Tm
+([A] Receive request - continue -> [B] API validation) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 244 Tm
+([B] API validation - continue -> [C] Exception found) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 231 Tm
+([C] Exception found - Yes -> [D] Human judgment) Tj
+ET
+0 g
+BT
+/F1 9 Tf
+1 0 0 1 72 218 Tm
+([C] Exception found - No -> [E] Workflow completion) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 656 Tm
-(- Human exception and reply review: investigate ambiguity/disputes, approve and send) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 640 Tm
-(responses.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 624 Tm
-(- Evidence record: link the original source and approved response; retention duration is) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 608 Tm
-(unresolved.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 592 Tm
-(These are planning responsibilities, not claims that services or controls are already) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 576 Tm
-(implemented.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 560 Tm
+1 0 0 1 72 205 Tm
 () Tj
 ET
 0 g
 BT
 /F2 13 Tf
-1 0 0 1 72 551 Tm
-(Interfaces) Tj
+1 0 0 1 72 196 Tm
+(Security controls) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 532 Tm
-(Supported fictional interface: GET /sandbox/invoices/{invoiceId}/status is ready for) Tj
+1 0 0 1 72 177 Tm
+(Server authorization, immutable lineage, and independent approval.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 516 Tm
-(read-only lookup. Finance Applications Owner - Accounts Payable is accountable; the) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 500 Tm
-(application is Stable and status data is Confidential under the separately authored synthetic) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 484 Tm
-(supplement.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 468 Tm
-(Invalid reference requires correction. Not found routes to human review. Access denied stops) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 452 Tm
-(lookup and refers the issue to the accountable owner. Temporary failure/timeout uses the) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 436 Tm
-(existing bounded retry policy where applicable, then human review; no numeric retry limit is) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 420 Tm
-(supplied. Missing records and technical errors never mean successful status.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 404 Tm
-(POST /sandbox/supplier/bank-details is prohibited and excluded. PATCH) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 388 Tm
-(/sandbox/invoices/{invoiceId} is unknown and unavailable; neither operation is promoted by) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 372 Tm
-(the ready GET. These read APIs do not approve, pay, update or cancel anything. Endpoint) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 356 Tm
-(deployment configuration, authentication, capacity and SLAs remain unknown.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 340 Tm
+1 0 0 1 72 161 Tm
 () Tj
 ET
 0 g
 BT
 /F2 13 Tf
-1 0 0 1 72 331 Tm
-(Data design) Tj
+1 0 0 1 72 152 Tm
+(Operational design) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 312 Tm
-(Data captured includes supplier query email, received time, requester identity, and invoice) Tj
+1 0 0 1 72 133 Tm
+(Unresolved technical failures route to human review.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
-1 0 0 1 72 296 Tm
-(references. The original message is linked and acknowledged within two working days. Invoice) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 280 Tm
-(status data retrieved includes invoiceId, supplierId, and paymentStatus. Data classification is) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 264 Tm
-(Confidential for invoice status. Human approval is required before sending responses.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 248 Tm
-(Retention duration for recorded evidence is an open question.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 232 Tm
+1 0 0 1 72 117 Tm
 () Tj
+ET
+0 g
+BT
+/F2 13 Tf
+1 0 0 1 72 108 Tm
+(Design decisions) Tj
+ET
+0 g
+BT
+/F1 11 Tf
+1 0 0 1 72 89 Tm
+(Use APIs and workflow where supported; AI remains optional unless selected.) Tj
 ET
 endstream
 endobj
@@ -458,709 +412,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
 endobj
 10 0 obj
-<< /Length 3198 >>
-stream
-0.5 w
-0 G
-0 g
-BT
-/F2 13 Tf
-1 0 0 1 72 720 Tm
-(As is flow) Tj
-ET
-306 632 m
-306 614 l
-S
-302 620 m 306 614 l 310 620 l S
-306 568 m
-306 550 l
-S
-302 556 m 306 550 l 310 556 l S
-1 g
-281.739 556 48.522 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 283.739 559 Tm
-(Verified) Tj
-ET
-156 591 m
-120 591 l
-120 399 l
-156 399 l
-S
-150 395 m 156 399 l 150 403 l S
-1 g
-107.502 492 24.996000000000002 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 109.502 495 Tm
-(E3) Tj
-ET
-306 504 m
-306 486 l
-S
-302 492 m 306 486 l 310 492 l S
-1 g
-262.974 492 86.052 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 264.974 495 Tm
-(Exact reference) Tj
-ET
-456 527 m
-492 527 l
-492 399 l
-456 399 l
-S
-462 395 m 456 399 l 462 403 l S
-1 g
-479.502 460 24.996000000000002 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 481.502 463 Tm
-(E5) Tj
-ET
-156 463 m
-106 463 l
-106 335 l
-156 335 l
-S
-150 331 m 156 335 l 150 339 l S
-1 g
-93.502 396 24.996000000000002 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 95.502 399 Tm
-(E6) Tj
-ET
-306 440 m
-306 422 l
-S
-302 428 m 306 422 l 310 428 l S
-1 g
-262.974 428 86.052 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 264.974 431 Tm
-(Error or dispute) Tj
-ET
-306 376 m
-306 358 l
-S
-302 364 m 306 358 l 310 364 l S
-1 g
-259.221 364 93.558 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 261.221 367 Tm
-(Resolved for reply) Tj
-ET
-306 312 m
-306 294 l
-S
-302 300 m 306 294 l 310 300 l S
-0.96 g
-156 632 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 181.66500000000002 652 Tm
-(Receive query and acknowledge within two working days) Tj
-ET
-0.96 g
-156 568 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 226.1925 588 Tm
-(Human verifies requester authority) Tj
-ET
-0.96 g
-156 504 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 210.17700000000002 524 Tm
-(Analyst identifies stated invoice reference) Tj
-ET
-0.96 g
-156 440 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 238.95 460 Tm
-(Read and verify invoice status) Tj
-ET
-0.96 g
-156 376 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 215.937 396 Tm
-(Human investigates ambiguity or dispute) Tj
-ET
-0.96 g
-156 312 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 234.9495 332 Tm
-(Human approves and sends reply) Tj
-ET
-0.96 g
-156 248 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 213.93 268 Tm
-(Record original source and approved reply) Tj
-ET
-0 g
-BT
-/F2 10 Tf
-1 0 0 1 72 192 Tm
-(Transition details) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 177 Tm
-([A] Receive query and acknowledge within two working days - continue -> [B] Human verifies requester authority) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 164 Tm
-([B] Human verifies requester authority - Verified -> [C] Analyst identifies stated invoice reference) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 151 Tm
-([B] Human verifies requester authority - Unresolved -> [E] Human investigates ambiguity or dispute) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 138 Tm
-([C] Analyst identifies stated invoice reference - Exact reference -> [D] Read and verify invoice status) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 125 Tm
-([C] Analyst identifies stated invoice reference - Missing or ambiguous -> [E] Human investigates ambiguity or) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 112 Tm
-(dispute) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 99 Tm
-([D] Read and verify invoice status - Verified status -> [F] Human approves and sends reply) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 86 Tm
-([D] Read and verify invoice status - Error or dispute -> [E] Human investigates ambiguity or dispute) Tj
-ET
-endstream
-endobj
-11 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
-endobj
-12 0 obj
-<< /Length 2697 >>
-stream
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 720 Tm
-([E] Human investigates ambiguity or dispute - Resolved for reply -> [F] Human approves and sends reply) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 707 Tm
-([F] Human approves and sends reply - continue -> [G] Record original source and approved reply) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 694 Tm
-() Tj
-ET
-0.5 w
-0 G
-0 g
-BT
-/F2 13 Tf
-1 0 0 1 72 685 Tm
-(To be flow) Tj
-ET
-306 597 m
-306 579 l
-S
-302 585 m 306 579 l 310 585 l S
-306 533 m
-306 515 l
-S
-302 521 m 306 515 l 310 521 l S
-1 g
-281.739 521 48.522 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 283.739 524 Tm
-(Verified) Tj
-ET
-156 556 m
-120 556 l
-120 364 l
-156 364 l
-S
-150 360 m 156 364 l 150 368 l S
-1 g
-107.502 457 24.996000000000002 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 109.502 460 Tm
-(E3) Tj
-ET
-306 469 m
-306 451 l
-S
-302 457 m 306 451 l 310 457 l S
-1 g
-271.4835 457 69.033 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 273.4835 460 Tm
-(Exact match) Tj
-ET
-456 492 m
-492 492 l
-492 364 l
-456 364 l
-S
-462 360 m 456 364 l 462 368 l S
-1 g
-479.502 425 24.996000000000002 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 481.502 428 Tm
-(E5) Tj
-ET
-156 428 m
-106 428 l
-106 300 l
-156 300 l
-S
-150 296 m 156 300 l 150 304 l S
-1 g
-93.502 361 24.996000000000002 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 95.502 364 Tm
-(E6) Tj
-ET
-306 405 m
-306 387 l
-S
-302 393 m 306 387 l 310 393 l S
-1 g
-219.189 393 173.622 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 221.189 396 Tm
-(Not found denied or technical failure) Tj
-ET
-306 341 m
-306 323 l
-S
-302 329 m 306 323 l 310 329 l S
-1 g
-259.221 329 93.558 13 re f
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 261.221 332 Tm
-(Resolved for reply) Tj
-ET
-306 277 m
-306 259 l
-S
-302 265 m 306 259 l 310 265 l S
-306 213 m
-306 195 l
-S
-302 201 m 306 195 l 310 201 l S
-0.96 g
-156 597 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 196.67700000000002 617 Tm
-(Proposed workflow capture and acknowledgment) Tj
-ET
-0.96 g
-156 533 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 226.1925 553 Tm
-(Human verifies requester authority) Tj
-ET
-0.96 g
-156 469 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 170.145 489 Tm
-(Proposed rules validate exact invoice and supplier references) Tj
-ET
-0.96 g
-156 405 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 204.183 425 Tm
-(Ready read-only GET retrieves invoice status) Tj
-ET
-0.96 g
-156 341 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 193.17149999999998 361 Tm
-(Human reviews missing records errors or disputes) Tj
-ET
-0.96 g
-156 277 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 227.4435 297 Tm
-(Prepare reply from verified status) Tj
-ET
-0.96 g
-156 213 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 234.9495 233 Tm
-(Human approves and sends reply) Tj
-ET
-0.96 g
-156 149 300 46 re B
-0 g
-BT
-/F2 9 Tf
-1 0 0 1 178.902 169 Tm
-(Proposed evidence record links source and approved reply) Tj
-ET
-0 g
-BT
-/F2 10 Tf
-1 0 0 1 72 93 Tm
-(Transition details) Tj
-ET
-endstream
-endobj
-13 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 14 0 R >>
-endobj
-14 0 obj
-<< /Length 5000 >>
-stream
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 720 Tm
-([A] Proposed workflow capture and acknowledgment - continue -> [B] Human verifies requester authority) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 707 Tm
-([B] Human verifies requester authority - Verified -> [C] Proposed rules validate exact invoice and supplier) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 694 Tm
-(references) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 681 Tm
-([B] Human verifies requester authority - Unresolved -> [E] Human reviews missing records errors or disputes) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 668 Tm
-([C] Proposed rules validate exact invoice and supplier references - Exact match -> [D] Ready read-only GET) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 655 Tm
-(retrieves invoice status) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 642 Tm
-([C] Proposed rules validate exact invoice and supplier references - Invalid or ambiguous -> [E] Human reviews) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 629 Tm
-(missing records errors or disputes) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 616 Tm
-([D] Ready read-only GET retrieves invoice status - Matching status -> [F] Prepare reply from verified status) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 603 Tm
-([D] Ready read-only GET retrieves invoice status - Not found denied or technical failure -> [E] Human reviews) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 590 Tm
-(missing records errors or disputes) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 577 Tm
-([E] Human reviews missing records errors or disputes - Resolved for reply -> [F] Prepare reply from verified) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 564 Tm
-(status) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 551 Tm
-([F] Prepare reply from verified status - continue -> [G] Human approves and sends reply) Tj
-ET
-0 g
-BT
-/F1 9 Tf
-1 0 0 1 72 538 Tm
-([G] Human approves and sends reply - continue -> [H] Proposed evidence record links source and approved reply) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 525 Tm
-() Tj
-ET
-0 g
-BT
-/F2 13 Tf
-1 0 0 1 72 516 Tm
-(Security controls) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 497 Tm
-(Source-supported boundaries: verify requester authority before disclosure; require human) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 481 Tm
-(approval and sending of replies; route disputes and errors to people. Status information is) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 465 Tm
-(Confidential under the human-authored synthetic supplement.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 449 Tm
-(Proposed controls requiring technical design and verification: least-privilege access, audit) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 433 Tm
-(correlation, monitoring, segregation of duties and safe recovery for read failures. No control) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 417 Tm
-(effectiveness or compliance is certified here. No write compensation is assumed because the) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 401 Tm
-(proposed API path is read-only. Optional AI would require separately justified data-access) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 385 Tm
-(and safety controls before selection.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 369 Tm
-() Tj
-ET
-0 g
-BT
-/F2 13 Tf
-1 0 0 1 72 360 Tm
-(Operational design) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 341 Tm
-(Proposed workflow tracks receipt and acknowledgment within two working days, with human) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 325 Tm
-(verification before status disclosure and human approval before sending. No resolution SLA is) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 309 Tm
-(established. Validation errors require corrected references; not-found, ambiguous and) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 293 Tm
-(disputed cases require human review. Access-denied errors stop lookup and go to the) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 277 Tm
-(accountable owner. Temporary service errors follow the existing bounded retry policy where) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 261 Tm
-(applicable, then human review. Never convert an error into a successful status. Monitoring,) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 245 Tm
-(alert ownership, retry configuration, retention and service-level targets remain design) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 229 Tm
-(questions.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 213 Tm
-() Tj
-ET
-0 g
-BT
-/F2 13 Tf
-1 0 0 1 72 204 Tm
-(Design decisions) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 185 Tm
-(Planning decisions: prefer the ready read-only GET with workflow and deterministic rules;) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 169 Tm
-(retain human judgment for requester authority, ambiguity, disputes and outgoing replies.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 153 Tm
-(Exclude the prohibited bank-details POST and leave unknown PATCH unavailable. Keep the) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 137 Tm
-(two-working-day target specifically for acknowledgment. The proposed To-Be flow labels) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 121 Tm
-(workflow/rules as proposed and preserves human review. Optional AI is not a dependency of) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 105 Tm
-(this design; it requires separate justification and evidence. Planning approval authorizes) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 89 Tm
-(document content and discovery planning, not implementation or deployment.) Tj
-ET
-endstream
-endobj
-15 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 16 0 R >>
-endobj
-16 0 obj
-<< /Length 1875 >>
+<< /Length 258 >>
 stream
 0 g
 BT
@@ -1178,125 +430,35 @@ ET
 BT
 /F1 11 Tf
 1 0 0 1 72 692 Tm
-(Selected-design questions: confirm deployment configuration, authentication/least privilege,) Tj
+(Confirm the write operation before technical approval.) Tj
 ET
 0 g
 BT
 /F1 11 Tf
 1 0 0 1 72 676 Tm
-(capacity, service levels, retention, monitoring ownership and the applicable bounded retry) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 660 Tm
-(settings before dependent implementation. Record answers with source evidence; do not) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 644 Tm
-(infer them.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 628 Tm
-(Optional-alternative questions: agent controllability, adaptive next steps, incremental value,) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 612 Tm
-(tool/path selection and ambiguity evidence matter if AI is later proposed; they do not make AI) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 596 Tm
-(necessary now.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 580 Tm
-(Modernization context: strategic lifespan, technical health and vendor roadmap remain) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 564 Tm
-(unknown where not established; they inform future investment decisions, not the documented) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 548 Tm
-(read-only process facts. The synthetic supplement already establishes accountable) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 532 Tm
-(ownership, Stable operation, Confidential classification and the read error contract; do not) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 516 Tm
-(relabel those supplied facts as missing.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 500 Tm
-(Discovery tasks may be planned and independently approved. Affected implementation retains) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 484 Tm
-(its dependencies; planning approval does not certify unresolved facts or implementation) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 468 Tm
-(readiness.) Tj
-ET
-0 g
-BT
-/F1 11 Tf
-1 0 0 1 72 452 Tm
 () Tj
 ET
 endstream
 endobj
-17 0 obj
+11 0 obj
 << /Title (Governed Studio Artifact) /Author (AvalaOS Studio) /Creator (AvalaOS Studio) /Producer (AvalaOS deterministic studio-pdf-4) /CreationDate (D:20000101000000Z) /ModDate (D:20000101000000Z) >>
 endobj
 xref
-0 18
+0 12
 0000000000 65535 f 
 0000000015 00000 n 
 0000000064 00000 n 
-0000000154 00000 n 
-0000000251 00000 n 
-0000000353 00000 n 
-0000000489 00000 n 
-0000004739 00000 n 
-0000004875 00000 n 
-0000008211 00000 n 
-0000008348 00000 n 
-0000011598 00000 n 
-0000011736 00000 n 
-0000014485 00000 n 
-0000014623 00000 n 
-0000019675 00000 n 
-0000019813 00000 n 
-0000021740 00000 n 
+0000000133 00000 n 
+0000000230 00000 n 
+0000000332 00000 n 
+0000000468 00000 n 
+0000002700 00000 n 
+0000002836 00000 n 
+0000005239 00000 n 
+0000005376 00000 n 
+0000005685 00000 n 
 trailer
-<< /Size 18 /Root 1 0 R /Info 17 0 R /ID [<00000000000000000000000000000000><00000000000000000000000000000000>] >>
+<< /Size 12 /Root 1 0 R /Info 11 0 R /ID [<00000000000000000000000000000000><00000000000000000000000000000000>] >>
 startxref
-21957
+5902
 %%EOF

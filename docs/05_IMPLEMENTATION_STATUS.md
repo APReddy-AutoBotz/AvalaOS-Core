@@ -2,6 +2,8 @@
 
 ## Planning review and Delivery dependencies
 
+The acceptance workspace has ten stored board items: the original six and four selected FRD v4 proposals. Two stored dependencies bind FR-5 and FR-7 implementation to distinct questions. BRD v7 and PDD v6 each export in two pages; SDD v7 exports in six pages with both flows. The FRD appendix fix and the PostgreSQL-to-download regression use the actual document shape and brokered PDF bytes. See the [acceptance plan](planning/process-evidence-to-delivery.md) for the verified scope and fallback.
+
 The latest approved supplier invoice documents are BRD v7, PDD v6, FRD v4 and SDD v7. The author edited the previous approved versions and separate accounts reviewed and approved the revisions. The dedicated workspace directory returned all eight actor display names. Current business text distinguishes the prohibited bank-details POST from the invoice PATCH whose support is unknown. Historical source quotations retain their original wording. See the [acceptance plan](planning/process-evidence-to-delivery.md) for the database and hosted proof boundaries.
 
 ## Business review evidence

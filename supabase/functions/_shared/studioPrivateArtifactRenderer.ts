@@ -243,7 +243,7 @@ const normalizeStudioV2ApprovedContent = (
   authority: Pick<
     StudioRenderingAuthority,
     "artifactType" | "contentSchemaVersion" | "templateVersion"
-  >,
+  > & Partial<Pick<StudioRenderingAuthority, "rendererVersion">>,
 ): StudioNormalizedContent => {
   const schemaMatchesSystemTemplate =
     authority.artifactType === "sdd"
@@ -305,10 +305,18 @@ const normalizeStudioV2ApprovedContent = (
   }
 
   const expectedSections = SYSTEM_TEMPLATE_SECTIONS[authority.artifactType];
-  if (source.sections.length !== expectedSections.length) {
+  const permitsHumanAuthoredAppendices =
+    authority.rendererVersion === STUDIO_BUSINESS_PDF_RENDERER_VERSION;
+  if (
+    source.sections.length < expectedSections.length ||
+    source.sections.length > MAX_SECTIONS ||
+    (!permitsHumanAuthoredAppendices &&
+      source.sections.length !== expectedSections.length)
+  ) {
     throw new StudioRenditionError("INVALID_CONTENT");
   }
   const anchoredSources = new Set<string>();
+  const sectionIds = new Set<string>();
   const sections = source.sections.map((section, index) => {
     if (
       !section ||
@@ -320,18 +328,33 @@ const normalizeStudioV2ApprovedContent = (
     }
     const mapped = section as Readonly<Record<string, StudioApprovedJson>>;
     const expected = expectedSections[index];
+    const isHumanAuthoredAppendix = index >= expectedSections.length;
     if (
       !validString(mapped.id, 80, true) ||
       !SECTION_ID.test(mapped.id) ||
-      mapped.id !== expected.id ||
       !validString(mapped.title, MAX_TITLE, true) ||
-      mapped.title !== expected.title ||
       !validString(mapped.body, MAX_V2_SECTION_CONTENT) ||
       !Array.isArray(mapped.sourceAnchors) ||
       mapped.sourceAnchors.length > 200 ||
       !Array.isArray(mapped.labels) ||
-      mapped.labels.length > 3
+      mapped.labels.length > 3 ||
+      sectionIds.has(mapped.id)
     ) {
+      throw new StudioRenditionError("INVALID_CONTENT");
+    }
+    sectionIds.add(mapped.id);
+    if (isHumanAuthoredAppendix) {
+      if (
+        !permitsHumanAuthoredAppendices ||
+        !mapped.id.startsWith("section-") ||
+        !UUID.test(mapped.id.slice("section-".length)) ||
+        mapped.sourceAnchors.length !== 0 ||
+        mapped.labels.length !== 1 ||
+        mapped.labels[0] !== "human_authored"
+      ) {
+        throw new StudioRenditionError("INVALID_CONTENT");
+      }
+    } else if (mapped.id !== expected.id || mapped.title !== expected.title) {
       throw new StudioRenditionError("INVALID_CONTENT");
     }
     const labels = mapped.labels;

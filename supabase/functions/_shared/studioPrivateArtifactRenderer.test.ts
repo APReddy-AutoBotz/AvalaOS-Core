@@ -414,6 +414,47 @@ void test('renderer-4 deterministically exports every exact business document wh
   assert.equal(current.rendererVersion, 'studio-pdf-4');
 });
 
+void test('renderer-4 exports an appended UI-authored planning question without weakening required sections or source binding', async () => {
+  const base = v2Content('frd');
+  const appendix = {
+    id: 'section-dd481ada-5473-40ac-8d25-197c4c4de0a7',
+    title: 'Open questions',
+    body: 'Question: Is invoice PATCH supported and authorized, or must the implementation retain the blocker?',
+    sourceAnchors: [],
+    labels: ['human_authored'],
+  };
+  const current = await renderPdf4('frd', {
+    ...base,
+    sections: [...base.sections, appendix],
+  });
+  const pdf = new TextDecoder('latin1').decode(current.bytes);
+  assert.match(pdf, /Open questions/u);
+  assert.match(pdf, /Is invoice PATCH supported and authorized/u);
+
+  await assert.rejects(() => renderV2('frd', {
+    ...base,
+    sections: [...base.sections, appendix],
+  }, 'pdf'), errorCode('INVALID_CONTENT'));
+
+  for (const rejected of [
+    { ...appendix, id: 'openQuestions' },
+    { ...appendix, labels: ['assumption'] },
+    {
+      ...appendix,
+      sourceAnchors: [{
+        sourceVersionId: '11111111-1111-4111-8111-111111111111',
+        locator: 'page:1',
+        anchorHash: 'a'.repeat(64),
+      }],
+    },
+  ]) {
+    await assert.rejects(() => renderPdf4('frd', {
+      ...base,
+      sections: [...base.sections, rejected],
+    }), errorCode('INVALID_CONTENT'));
+  }
+});
+
 void test('renderer-4 keeps retained business flow labels and branch meaning readable without ellipsis', async () => {
   const asIsFlow = [
     'flowchart TD',
