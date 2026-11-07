@@ -19,6 +19,8 @@ const dependent: Task = {
   ...discovery, id: 'dependent', title: 'Implement bounded PATCH handling', status: 'To Do',
   dependencyIds: [discovery.id], sourceLineage: { proposalRole: 'implementation' },
 };
+const inReview: Task = { ...dependent, id: 'in-review', title: 'Review implementation', status: 'In Review', dependencyIds: [] };
+const testing: Task = { ...dependent, id: 'testing', title: 'Test implementation', status: 'Testing', dependencyIds: [] };
 const allow: DeliveryBoardMutationPolicy = { canChangeStatus: true, canCreate: true, canDelete: true };
 const deny: DeliveryBoardMutationPolicy = { canChangeStatus: false, canCreate: false, canDelete: false };
 const render = (mutationPolicy: DeliveryBoardMutationPolicy, disposition: 'blocking_unresolved' | 'source_backed_answer_accepted') => renderToStaticMarkup(<BoardsView
@@ -26,6 +28,13 @@ const render = (mutationPolicy: DeliveryBoardMutationPolicy, disposition: 'block
   mutationPolicy={mutationPolicy} discoveryDispositions={new Map([[discovery.id, disposition]])} discoveryReadState="ready"
   onUpdateTaskStatus={() => undefined} onSelectTask={() => undefined} onAddTask={() => undefined} onDeleteTask={() => undefined}
 />);
+const statusControl = (markup: string, title: string) => {
+  const start = markup.indexOf(`aria-label="Move ${title} to another status"`);
+  assert.notEqual(start, -1, `missing status control for ${title}`);
+  const end = markup.indexOf('</select>', start);
+  assert.notEqual(end, -1, `unterminated status control for ${title}`);
+  return markup.slice(start, end);
+};
 
 const accepted = render(allow, 'source_backed_answer_accepted');
 assert.match(accepted, /data-task-id="dependent"[\s\S]*?draggable="true"/,
@@ -36,6 +45,18 @@ assert.match(accepted, /aria-label="Move Implement bounded PATCH handling to ano
   'the normal board exposes a keyboard and touch status control');
 assert.doesNotMatch(accepted, /aria-label="Move Implement bounded PATCH handling to another status"[^>]*disabled=""/,
   'server-authorized released work has an enabled status control');
+assert.doesNotMatch(statusControl(accepted, dependent.title), /<option value="Done"/,
+  'the board must not offer the server-rejected To Do to Done shortcut');
+
+const adjacent = renderToStaticMarkup(<BoardsView
+  tasks={[inReview, testing]} projects={[project]} epics={[]} users={[currentUser]} currentUser={currentUser}
+  mutationPolicy={allow} discoveryDispositions={new Map()} discoveryReadState="ready"
+  onUpdateTaskStatus={() => undefined} onSelectTask={() => undefined} onAddTask={() => undefined} onDeleteTask={() => undefined}
+/>);
+assert.match(statusControl(adjacent, inReview.title), /<option value="Testing">Testing<\/option>/,
+  'the collapsed review column must expose the underlying Testing transition');
+assert.match(statusControl(adjacent, testing.title), /<option value="Ready for Release">Ready for Release<\/option>/,
+  'the collapsed review column must expose the underlying Ready for Release transition');
 
 const unresolvedDiscovery = { ...discovery, status: 'Ready for Release' as const };
 const unresolvedDependent = { ...dependent, dependencyIds: [unresolvedDiscovery.id] };
@@ -46,10 +67,10 @@ const unresolved = renderToStaticMarkup(<BoardsView
 />);
 assert.match(unresolved, /data-task-id="dependent"[\s\S]*?draggable="false"/,
   'an unresolved discovery prerequisite must keep dependent work locked');
-assert.match(unresolved, /aria-label="Move Resolve PATCH evidence to another status"[\s\S]*?<option value="Done" disabled="">Done<\/option>/,
+assert.match(statusControl(unresolved, unresolvedDiscovery.title), /<option value="Done" disabled="">Done<\/option>/,
   'unresolved discovery keeps Done visibly unavailable');
-assert.match(unresolved, /aria-label="Move Implement bounded PATCH handling to another status"[^>]*disabled=""/,
-  'dependent implementation has no enabled forward status while discovery remains unresolved');
+assert.match(statusControl(unresolved, unresolvedDependent.title), /<option value="In Progress" disabled="">In Progress<\/option>/,
+  'dependent implementation keeps its forward transition disabled while discovery remains unresolved');
 
 const denied = render(deny, 'source_backed_answer_accepted');
 assert.match(denied, /data-task-id="dependent"[\s\S]*?draggable="false"/,

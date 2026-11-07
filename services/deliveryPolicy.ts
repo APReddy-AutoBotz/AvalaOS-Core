@@ -11,6 +11,16 @@ export class DeliveryPolicyError extends Error {
 const ADMIN_PERMISSIONS = new Set(['org.admin', 'security.manage', 'roles.manage']);
 const MANAGER_PERMISSIONS = new Set(['project.manage']);
 const ACTIVE_STATUSES: TaskStatus[] = ['In Progress', 'In Review', 'Testing', 'Ready for Release', 'Done'];
+export const LEGACY_DELIVERY_STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
+  'To Do': ['To Do', 'In Progress', 'On Hold', 'Blocked'],
+  'In Progress': ['In Progress', 'In Review', 'On Hold', 'Blocked'],
+  'In Review': ['In Review', 'Testing', 'In Progress', 'On Hold', 'Blocked'],
+  'Testing': ['Testing', 'Ready for Release', 'In Review', 'Blocked'],
+  'Ready for Release': ['Ready for Release', 'Done', 'Testing', 'Blocked'],
+  'Done': ['Done'],
+  'Blocked': ['Blocked', 'On Hold'],
+  'On Hold': ['On Hold', 'To Do', 'Blocked'],
+};
 const RELEASED_DISCOVERY_DISPOSITIONS = new Set<StudioDeliveryDiscoveryDisposition>([
   'source_backed_answer_accepted',
   'approved_nonblocking_scope',
@@ -72,6 +82,12 @@ const hasProtectedFieldChange = (previousTask: Task, nextTask: Task) =>
 
 export const discoveryDispositionReleasesWork = (disposition: StudioDeliveryDiscoveryDisposition | null | undefined) =>
   Boolean(disposition && RELEASED_DISCOVERY_DISPOSITIONS.has(disposition));
+
+export const isLegacyDeliveryStatusTransitionAllowed = (from: TaskStatus, to: TaskStatus) =>
+  LEGACY_DELIVERY_STATUS_TRANSITIONS[from].includes(to);
+
+export const getLegacyDeliveryStatusTargets = (from: TaskStatus) =>
+  LEGACY_DELIVERY_STATUS_TRANSITIONS[from].filter(status => status !== from);
 
 export const getDependencyViolations = (
   task: Task,

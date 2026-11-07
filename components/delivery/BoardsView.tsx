@@ -8,7 +8,9 @@ import {
     canCreateDeliveryTask,
     canDeleteDeliveryTask,
     canEditDeliveryTask,
+    getLegacyDeliveryStatusTargets,
     getStatusTransitionViolations,
+    isLegacyDeliveryStatusTransitionAllowed,
     type DeliveryDiscoveryDispositionByTask,
 } from '../../services/deliveryPolicy';
 
@@ -99,12 +101,22 @@ const BoardsView: React.FC<BoardsViewProps> = ({
         ? mutationPolicy.canChangeStatus
         : !currentUser || canEditDeliveryTask(currentUser, task);
 
-    const canDragTask = (task: Task) => hasStatusAuthority(task) && statusColumns.some(status =>
-        status !== statusColumnMap[task.status]
-        && getStatusTransitionViolations(task, tasks, status, discoveryDispositions).length === 0);
+    const resolveDropStatus = (from: TaskStatus, column: TaskStatus) => {
+        if (isLegacyDeliveryStatusTransitionAllowed(from, column) && from !== column) return column;
+        return getLegacyDeliveryStatusTargets(from).find(status => statusColumnMap[status] === column) || null;
+    };
+
+    const canDragTask = (task: Task) => hasStatusAuthority(task) && statusColumns.some(column => {
+        if (column === statusColumnMap[task.status]) return false;
+        const target = resolveDropStatus(task.status, column);
+        return Boolean(target && getStatusTransitionViolations(task, tasks, target, discoveryDispositions).length === 0);
+    });
 
     const transitionError = (task: Task, newStatus: TaskStatus) => {
         if (!hasStatusAuthority(task)) return 'Your current server-authorized workspace cannot change this work item status.';
+        if (!isLegacyDeliveryStatusTransitionAllowed(task.status, newStatus)) {
+            return `Move ${task.title} through the next permitted delivery step before ${newStatus}.`;
+        }
         const violations = getStatusTransitionViolations(task, tasks, newStatus, discoveryDispositions);
         if (violations.length === 0) return null;
         return task.sourceLineage?.proposalRole === 'discovery' && newStatus === 'Done'
@@ -152,13 +164,19 @@ const BoardsView: React.FC<BoardsViewProps> = ({
         event.dataTransfer.dropEffect = 'move';
     };
 
-    const handleDrop = (event: React.DragEvent<HTMLDivElement>, newStatus: TaskStatus) => {
+    const handleDrop = (event: React.DragEvent<HTMLDivElement>, columnStatus: TaskStatus) => {
         event.preventDefault(); event.stopPropagation();
         const taskId = event.dataTransfer.getData('taskId') || event.dataTransfer.getData('text/plain');
         const task = tasks.find(item => item.id === taskId);
         setDraggedOverColumn(null);
         if (!task) { setBoardMessage(''); setBoardError('The dragged work item was not recognized. No status change was requested.'); return; }
-        void attemptStatusChange(task, newStatus);
+        const target = resolveDropStatus(task.status, columnStatus);
+        if (!target) {
+            setBoardMessage('');
+            setBoardError(`${task.title} cannot move directly to this board step. Use Move status to choose the next permitted delivery step.`);
+            return;
+        }
+        void attemptStatusChange(task, target);
     };
 
     const handleDragEnter = (status: TaskStatus, swimlaneId: string) => {
@@ -374,12 +392,12 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                                 <select
                                                                     aria-label={`Move ${task.title} to another status`}
                                                                     value=""
-                                                                    disabled={Boolean(pendingTransition) || !hasStatusAuthority(task) || !statusColumns.some(nextStatus => nextStatus !== statusColumnMap[task.status] && !transitionError(task, nextStatus))}
+                                                                    disabled={Boolean(pendingTransition) || !hasStatusAuthority(task) || !getLegacyDeliveryStatusTargets(task.status).some(nextStatus => !transitionError(task, nextStatus))}
                                                                     onChange={event => { const nextStatus = event.target.value as TaskStatus; if (nextStatus) void attemptStatusChange(task, nextStatus); }}
                                                                     className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                                                                 >
                                                                     <option value="">{pendingTransition?.taskId === task.id ? `Saving ${pendingTransition.status}…` : 'Move to…'}</option>
-                                                                    {statusColumns.filter(nextStatus => nextStatus !== statusColumnMap[task.status]).map(nextStatus => <option key={nextStatus} value={nextStatus} disabled={Boolean(transitionError(task, nextStatus))}>{nextStatus}</option>)}
+                                                                    {getLegacyDeliveryStatusTargets(task.status).map(nextStatus => <option key={nextStatus} value={nextStatus} disabled={Boolean(transitionError(task, nextStatus))}>{nextStatus}</option>)}
                                                                 </select>
                                                             </label>
                                                         </div>}

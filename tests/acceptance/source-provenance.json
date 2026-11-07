@@ -224,7 +224,7 @@
     "services/assessV2/applicationPortfolio.ts": "sha256:f2ad28154480e62cce6ad5cc9e74440ac1e3de216fbc4e2ec97d6cd98df7eb6a",
     "services/assessV2/reviewDomain.ts": "sha256:fce1b57af9cf4fbb597f985ea5363fb631f14a3d6786d3987672264744414af0",
     "services/deliveryPackService.ts": "sha256:dac1cbf329871f5f041ad8f7d7abc963c22901dc03bca3b8606ac1e786be093d",
-    "services/deliveryPolicy.ts": "sha256:bc63fd02d76945536b8e9842cae623ca00f8300f767258573b5b3212ae695d81",
+    "services/deliveryPolicy.ts": "sha256:842b58fa69de2544085cdc84e202e8601a8a06f4dc015880c8f232b9609748cb",
     "services/deliveryReadiness.test.ts": "sha256:c1e132196a13d0d0b6630e8603cc65452aa22edaf0d2547aec9d24301a9ba0bf",
     "services/deliveryReadiness.ts": "sha256:c68c3cc395bf3826a6dbaee756def8f6bf118fc22bc6fb2e754adb5a5c0152a1",
     "services/deliveryWorkflowPolicy.ts": "sha256:1a86a44c5f2b807a93f10944fe4e2fc776dc4ba507ecdb160d8001fdfc6c0e8e",

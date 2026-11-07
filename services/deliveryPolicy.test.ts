@@ -1,4 +1,5 @@
 import {
+  LEGACY_DELIVERY_STATUS_TRANSITIONS,
   DeliveryPolicyError,
   assertCanDeleteDeliveryTask,
   assertCanUpdateDeliveryTask,
@@ -6,9 +7,13 @@ import {
   canDeleteDeliveryTask,
   canEditDeliveryTask,
   getDependencyViolations,
+  getLegacyDeliveryStatusTargets,
   getStatusTransitionViolations,
+  isLegacyDeliveryStatusTransitionAllowed,
 } from './deliveryPolicy';
 import { Task, User } from '../types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 console.log('Starting Delivery Policy Regression Suite...');
 
@@ -23,6 +28,27 @@ const pm = makeUser('pm-1', ['project.manage', 'task.create', 'task.update', 'ta
 const ba = makeUser('ba-1', ['project.read', 'task.read', 'comments.manage']);
 const developer = makeUser('dev-1', ['project.read', 'task.read', 'task.update.own']);
 const executive = makeUser('exec-1', ['portfolio.read', 'reports.read']);
+
+const transitionSql = readFileSync(join(process.cwd(), 'supabase/migrations/20261010025331_legacy_delivery_authority.sql'), 'utf8');
+const transitionFunction = transitionSql.slice(
+  transitionSql.indexOf('CREATE OR REPLACE FUNCTION public.legacy_delivery_transition_allowed'),
+  transitionSql.indexOf('CREATE OR REPLACE FUNCTION public.legacy_delivery_task_projection'),
+).replace(/\s+/g, ' ');
+for (const [from, targets] of Object.entries(LEGACY_DELIVERY_STATUS_TRANSITIONS)) {
+  const sqlTarget = targets.length === 1
+    ? `p_to='${targets[0]}'`
+    : `p_to=ANY(ARRAY[${targets.map(target => `'${target}'`).join(',')}])`;
+  if (!transitionFunction.includes(`WHEN '${from}' THEN ${sqlTarget}`)) {
+    throw new Error(`Client status choices drifted from the installed SQL transition for ${from}.`);
+  }
+}
+if (isLegacyDeliveryStatusTransitionAllowed('To Do', 'Done')) {
+  throw new Error('The client incorrectly permits the server-rejected To Do to Done shortcut.');
+}
+if (getLegacyDeliveryStatusTargets('In Review').join('|') !== 'Testing|In Progress|On Hold|Blocked'
+  || getLegacyDeliveryStatusTargets('Testing').join('|') !== 'Ready for Release|In Review|Blocked') {
+  throw new Error('The board omitted an underlying Testing or Ready for Release transition.');
+}
 
 const baseTask: Task = {
   id: 'task-1',
