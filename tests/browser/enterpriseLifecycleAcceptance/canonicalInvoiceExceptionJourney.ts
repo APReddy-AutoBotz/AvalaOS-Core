@@ -399,20 +399,16 @@ const openCanonicalStudioAudit = async (preview: Locator, timeoutMs: number) => 
   return audit;
 };
 
-const canonicalStudioDocumentSelector = async (workspace: Locator) => {
-  const current = workspace.getByRole('combobox', { name: 'Current document', exact: true });
-  if (await current.count() === 1) return current;
-  const retained = workspace.getByLabel('Governed artifact', { exact: true });
-  if (await retained.count() === 1) return retained;
-  throw new Error('CANONICAL_STUDIO_RELOAD_SELECTOR_REJECTED');
-};
+const canonicalStudioDocumentSelector = (workspace: Locator) =>
+  workspace.getByRole('combobox', { name: 'Current document', exact: true })
+    .or(workspace.getByLabel('Governed artifact', { exact: true }));
 
 export const captureCanonicalStudioArtifactReloadTarget = async (
   page: Page,
   contentVersion: number,
 ): Promise<CanonicalStudioArtifactReloadTarget> => {
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const selector = await canonicalStudioDocumentSelector(workspace);
+  const selector = canonicalStudioDocumentSelector(workspace);
   const target = {
     artifactId: await selector.inputValue(),
     contentVersion,
@@ -452,7 +448,7 @@ export const reloadCanonicalStudioArtifact = async (
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: remaining() });
   const workspace = page.getByTestId('studio-artifact-workspace');
-  const selector = await canonicalStudioDocumentSelector(workspace);
+  const selector = canonicalStudioDocumentSelector(workspace);
   await selector.waitFor({ state: 'visible', timeout: remaining() });
   const exactOption = selector.locator(`option[value="${target.artifactId}"]`);
   if (await exactOption.count() === 0) {
