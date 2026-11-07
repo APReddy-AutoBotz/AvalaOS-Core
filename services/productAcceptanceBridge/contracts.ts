@@ -8,6 +8,19 @@ export type StudioDeliveryAction = typeof STUDIO_DELIVERY_ACTIONS[number];
 
 export const STUDIO_DELIVERY_OUTCOME_STATUSES = ['achieved', 'partial', 'not_achieved'] as const;
 export type StudioDeliveryOutcomeStatus = typeof STUDIO_DELIVERY_OUTCOME_STATUSES[number];
+export const STUDIO_DELIVERY_DISCOVERY_DISPOSITIONS = [
+  'blocking_unresolved', 'source_backed_answer_proposed', 'source_backed_answer_accepted',
+  'nonblocking_scope_proposed', 'approved_nonblocking_scope',
+] as const;
+export type StudioDeliveryDiscoveryDisposition = typeof STUDIO_DELIVERY_DISCOVERY_DISPOSITIONS[number];
+
+export type DeliveryDiscoveryResolution = {
+  disposition: StudioDeliveryDiscoveryDisposition;
+  question: string;
+  answer: string | null;
+  evidenceAttestationId: string | null;
+  revisedScope: string | null;
+};
 
 export type StudioDeliveryRequirementLink = {
   sectionId: string;
@@ -40,6 +53,7 @@ export type DeliveryOutcomeRecordPayload = {
   status: StudioDeliveryOutcomeStatus;
   label: string;
   detail: string;
+  discoveryResolution?: DeliveryDiscoveryResolution;
 };
 
 export type DeliveryPackSnapshotPayload = { projectId: string };
@@ -91,6 +105,7 @@ export type DeliveryOutcome = {
   status: StudioDeliveryOutcomeStatus;
   label: string;
   detail: string;
+  discoveryResolution?: DeliveryDiscoveryResolution | null;
   documentGenerationId: string;
   studioArtifactId: string;
   studioArtifactVersionId: string;
@@ -146,6 +161,7 @@ export type StudioDeliveryOutcomeQueryResult = {
   schemaVersion: typeof STUDIO_DELIVERY_OUTCOME_QUERY_SCHEMA_VERSION;
   projectId: string;
   items: DeliveryOutcome[];
+  sourceOptions?: Array<{ taskId: string; evidenceAttestationId: string; label: string }>;
   page: { limit: number; nextCursor: string | null; hasMore: boolean };
 };
 
@@ -278,13 +294,32 @@ const decodePayload = <A extends StudioDeliveryAction>(action: A, value: unknown
     exact(row, ['projectId']);
     return { projectId: id(row.projectId) } as StudioDeliveryPayloadByAction[A];
   }
-  exact(row, ['taskId', 'expectedTaskVersion', 'expectedOutcomeVersion', 'status', 'label', 'detail']);
+  const hasDiscoveryResolution = row.discoveryResolution !== undefined;
+  exact(row, ['taskId', 'expectedTaskVersion', 'expectedOutcomeVersion', 'status', 'label', 'detail',
+    ...(hasDiscoveryResolution ? ['discoveryResolution'] : [])]);
+  const discoveryResolution = hasDiscoveryResolution ? decodeDiscoveryResolution(row.discoveryResolution) : undefined;
   return {
     taskId: id(row.taskId), expectedTaskVersion: positive(row.expectedTaskVersion),
     expectedOutcomeVersion: row.expectedOutcomeVersion === null ? null : positive(row.expectedOutcomeVersion),
     status: oneOf(row.status, STUDIO_DELIVERY_OUTCOME_STATUSES), label: text(row.label, 200),
     detail: text(row.detail, 4_000),
+    ...(discoveryResolution ? { discoveryResolution } : {}),
   } as StudioDeliveryPayloadByAction[A];
+};
+
+const decodeDiscoveryResolution = (value: unknown): DeliveryDiscoveryResolution => {
+  const row = record(value);
+  exact(row, ['disposition', 'question', 'answer', 'evidenceAttestationId', 'revisedScope']);
+  const disposition = oneOf(row.disposition, STUDIO_DELIVERY_DISCOVERY_DISPOSITIONS);
+  const answer = row.answer === null ? null : text(row.answer, 4_000);
+  const evidenceAttestationId = row.evidenceAttestationId === null ? null : id(row.evidenceAttestationId);
+  const revisedScope = row.revisedScope === null ? null : text(row.revisedScope, 4_000);
+  if (disposition === 'blocking_unresolved' && (answer !== null || evidenceAttestationId !== null || revisedScope !== null)
+    || (disposition === 'source_backed_answer_proposed' || disposition === 'source_backed_answer_accepted')
+      && (answer === null || evidenceAttestationId === null || revisedScope !== null)
+    || (disposition === 'nonblocking_scope_proposed' || disposition === 'approved_nonblocking_scope')
+      && (answer !== null || evidenceAttestationId !== null || revisedScope === null)) invalid();
+  return { disposition, question: text(row.question, 2_000), answer, evidenceAttestationId, revisedScope };
 };
 
 export const decodeStudioDeliveryCommand = (value: unknown): StudioDeliveryCommandEnvelope => {
@@ -378,12 +413,16 @@ const decodePublication = (value: unknown): StudioDeliveryPublication => {
 
 export const decodeDeliveryOutcome = (value: unknown): DeliveryOutcome => {
   const row = record(value);
+  const hasDiscoveryResolution = row.discoveryResolution !== undefined;
   exact(row, ['outcomeId', 'version', 'taskId', 'taskVersion', 'projectId', 'status', 'label', 'detail',
+    ...(hasDiscoveryResolution ? ['discoveryResolution'] : []),
     'documentGenerationId', 'studioArtifactId', 'studioArtifactVersionId', 'recordedBy', 'recordedAt']);
   return {
     outcomeId: id(row.outcomeId), version: positive(row.version), taskId: id(row.taskId), taskVersion: positive(row.taskVersion),
     projectId: id(row.projectId), status: oneOf(row.status, STUDIO_DELIVERY_OUTCOME_STATUSES),
-    label: text(row.label, 200), detail: text(row.detail, 4_000), documentGenerationId: id(row.documentGenerationId),
+    label: text(row.label, 200), detail: text(row.detail, 4_000),
+    ...(hasDiscoveryResolution ? { discoveryResolution: row.discoveryResolution === null ? null : decodeDiscoveryResolution(row.discoveryResolution) } : {}),
+    documentGenerationId: id(row.documentGenerationId),
     studioArtifactId: id(row.studioArtifactId), studioArtifactVersionId: id(row.studioArtifactVersionId),
     recordedBy: id(row.recordedBy), recordedAt: iso(row.recordedAt),
   };
@@ -421,7 +460,8 @@ export const decodeStudioDeliveryCommandSuccess = <A extends StudioDeliveryActio
     const payload = command.payload as DeliveryOutcomeRecordPayload;
     if (outcome.taskId !== payload.taskId || outcome.taskVersion !== payload.expectedTaskVersion
       || outcome.version !== (payload.expectedOutcomeVersion ?? 0) + 1 || outcome.status !== payload.status
-      || outcome.label !== payload.label.trim() || outcome.detail !== payload.detail.trim()) invalid();
+      || outcome.label !== payload.label.trim() || outcome.detail !== payload.detail.trim()
+      || payload.discoveryResolution !== undefined && JSON.stringify(outcome.discoveryResolution) !== JSON.stringify(payload.discoveryResolution)) invalid();
   } else {
     const snapshot = resource as DeliveryPackSnapshot;
     const payload = command.payload as DeliveryPackSnapshotPayload;
@@ -438,18 +478,24 @@ export const decodeStudioDeliveryOutcomeQueryResult = (
   request: StudioDeliveryOutcomeQueryRequest,
 ): StudioDeliveryOutcomeQueryResult => {
   const row = record(value);
-  exact(row, ['ok', 'schemaVersion', 'projectId', 'items', 'page']);
+  const hasSourceOptions = row.sourceOptions !== undefined;
+  exact(row, ['ok', 'schemaVersion', 'projectId', 'items', ...(hasSourceOptions ? ['sourceOptions'] : []), 'page']);
   if (row.ok !== true || row.schemaVersion !== STUDIO_DELIVERY_OUTCOME_QUERY_SCHEMA_VERSION || id(row.projectId) !== request.projectId
     || !Array.isArray(row.items) || row.items.length > request.limit) invalid();
   const items = (row.items as unknown[]).map(decodeDeliveryOutcome);
   if (items.some(item => item.projectId !== request.projectId)) invalid();
+  const sourceOptions = hasSourceOptions && Array.isArray(row.sourceOptions) ? (row.sourceOptions as unknown[]).map(value => {
+    const option = record(value); exact(option, ['taskId', 'evidenceAttestationId', 'label']);
+    return { taskId: id(option.taskId), evidenceAttestationId: id(option.evidenceAttestationId), label: text(option.label, 300) };
+  }) : hasSourceOptions ? invalid() : undefined;
+  if (sourceOptions && (sourceOptions.length > 500 || new Set(sourceOptions.map(option => `${option.taskId}:${option.evidenceAttestationId}`)).size !== sourceOptions.length)) invalid();
   const page = record(row.page);
   exact(page, ['limit', 'nextCursor', 'hasMore']);
   if (positive(page.limit, 100) !== request.limit || typeof page.hasMore !== 'boolean') invalid();
   const nextCursor = page.nextCursor === null ? null : id(page.nextCursor);
   if ((nextCursor !== null) !== page.hasMore) invalid();
   return { ok: true, schemaVersion: STUDIO_DELIVERY_OUTCOME_QUERY_SCHEMA_VERSION, projectId: request.projectId,
-    items, page: { limit: request.limit, nextCursor, hasMore: page.hasMore as boolean } };
+    items, ...(sourceOptions ? { sourceOptions } : {}), page: { limit: request.limit, nextCursor, hasMore: page.hasMore as boolean } };
 };
 
 export const decodeStudioDeliveryPackQueryResult = (

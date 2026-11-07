@@ -49,6 +49,7 @@ import { resolveProductActionPolicy, type ProductAction, type ProductActionConte
 import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 import { queryStudioDeliveryAssignees } from './services/productAcceptanceBridge/client';
+import { canUseDeliveryAssigneeDirectory } from './services/deliveryAssigneeAccess';
 import { resolveGovernPresentationAccess } from './services/governPresentationAccess';
 import {
   isApplicationPortfolioMarketingCapture,
@@ -207,8 +208,11 @@ function App() {
   const pendingNavigationTransition = useRef<ProductNavigationTransition | null>(null);
   const pendingPopStateSearch = useRef<string | null>(null);
   const navigationAuthorityKey = [currentUser?.id ?? 'anonymous', currentOrganization?.id ?? 'no-organization', currentWorkspace?.id ?? 'no-workspace', tenantContext?.authorizationVersion ?? 'no-authorization', sessionState].join(':');
-  const canAssignDeliveryTasks = Boolean(dataAccess === 'server' && sessionState === 'ready' && tenantContext
-    && ['task.assign', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => tenantContext.capabilities.includes(value)));
+  const canAssignDeliveryTasks = Boolean(tenantContext && canUseDeliveryAssigneeDirectory({
+    dataAccess,
+    sessionState,
+    capabilities: tenantContext.capabilities,
+  }));
   const loadDeliveryAssigneeOptions = useCallback(async (projectId: string) => {
     if (dataAccess !== 'server' || sessionState !== 'ready' || !tenantContext || !canAssignDeliveryTasks) throw new Error('ASSIGNEE_DIRECTORY_UNAVAILABLE');
     return (await queryStudioDeliveryAssignees({ actorId: tenantContext.userId, organizationId: tenantContext.organizationId,

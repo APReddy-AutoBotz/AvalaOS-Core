@@ -10,7 +10,7 @@ export default function DeliveryTaskOutcome({ scope, task, readOnly }: {
   scope: StudioDeliveryScope; task: Task; readOnly: boolean;
 }) {
   const identity = `${scope.actorId}:${scope.organizationId}:${scope.workspaceId}:${scope.authorizationVersion}:${task.projectId}:${task.id}:${task.version}`;
-  const [result, setResult] = useState<{ identity: string; outcome: DeliveryOutcome | null } | null>(null);
+  const [result, setResult] = useState<{ identity: string; outcome: DeliveryOutcome | null; sourceOptions: Array<{ evidenceAttestationId: string; label: string }> } | null>(null);
   const [errorIdentity, setErrorIdentity] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   useEffect(() => {
@@ -18,7 +18,8 @@ export default function DeliveryTaskOutcome({ scope, task, readOnly }: {
     setResult(null); setErrorIdentity(null);
     const load = async () => {
       const projection = await loadCompleteStudioDeliveryOutcomeProjection(scope, task.projectId);
-      if (current) setResult({ identity, outcome: projection.items.find(item => item.taskId === task.id) ?? null });
+      if (current) setResult({ identity, outcome: projection.items.find(item => item.taskId === task.id) ?? null,
+        sourceOptions: (projection.sourceOptions ?? []).filter(option => option.taskId === task.id).map(({ evidenceAttestationId, label }) => ({ evidenceAttestationId, label })) });
     };
     void load().catch(() => { if (current) setErrorIdentity(identity); });
     return () => { current = false; };
@@ -32,8 +33,11 @@ export default function DeliveryTaskOutcome({ scope, task, readOnly }: {
     key={`${identity}:${result.outcome?.version ?? 'new'}`}
     scope={scope}
     task={{ taskId: task.id, taskVersion: task.version!, title: task.title, projectId: task.projectId }}
+    discoveryQuestion={task.sourceLineage?.proposalRole === 'discovery'
+      ? task.sourceLineage.requirementLinks?.[0]?.requirementText ?? null : null}
+    sourceOptions={result.sourceOptions}
     currentOutcome={result.outcome}
     disabled={readOnly}
-    onRecorded={value => setResult({ identity, outcome: value.resource })}
+    onRecorded={value => setResult(current => ({ identity, outcome: value.resource, sourceOptions: current?.sourceOptions ?? [] }))}
   /></div>;
 }

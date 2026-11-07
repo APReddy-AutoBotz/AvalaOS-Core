@@ -134,6 +134,7 @@ jobs:
           createdb -h 127.0.0.1 -U postgres avalaos_pilot_synthetic
           npm run test:authenticated-hosted:postgres
           node scripts/studioDeliveryAuthorityPostgres.mjs
+          node --test scripts/studioDeliveryProjectionVolatilityMigration.test.mjs scripts/studioDeliveryProjectionVolatilityPostgres.test.mjs
           node scripts/testAuthenticatedConnectedPostgres.mjs
       - name: Verify fresh-request reviewer replay against PostgreSQL
         env:

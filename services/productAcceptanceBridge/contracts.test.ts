@@ -79,6 +79,24 @@ const outcome: StudioDeliveryCommandEnvelope<'delivery.outcome.record'> = { ...p
     status: 'achieved', label: 'Cycle time reduced', detail: 'The operator confirmed the realized outcome.' } };
 assert.deepEqual(decodeStudioDeliveryCommand(outcome), outcome);
 assert.throws(() => decodeStudioDeliveryCommand({ ...outcome, payload: { ...outcome.payload, expectedOutcomeVersion: 0 } }), StudioDeliveryContractError);
+const unresolvedDiscovery = { ...outcome, payload: { ...outcome.payload, discoveryResolution: {
+  disposition: 'blocking_unresolved' as const, question: 'Open question: Which PATCH contract is approved?',
+  answer: null, evidenceAttestationId: null, revisedScope: null,
+} } };
+assert.deepEqual(decodeStudioDeliveryCommand(unresolvedDiscovery), unresolvedDiscovery);
+const answeredDiscovery = { ...outcome, payload: { ...outcome.payload, discoveryResolution: {
+  disposition: 'source_backed_answer_proposed' as const, question: 'Open question: Which PATCH contract is approved?',
+  answer: 'The accepted source limits the design to the ready GET operation.', evidenceAttestationId: U[10], revisedScope: null,
+} } };
+assert.deepEqual(decodeStudioDeliveryCommand(answeredDiscovery), answeredDiscovery);
+const proposedScope = { ...outcome, payload: { ...outcome.payload, discoveryResolution: {
+  disposition: 'nonblocking_scope_proposed' as const, question: 'Open question: Which PATCH contract is approved?',
+  answer: null, evidenceAttestationId: null, revisedScope: 'Exclude PATCH and retain the ready GET operation only.',
+} } };
+assert.deepEqual(decodeStudioDeliveryCommand(proposedScope), proposedScope);
+assert.throws(() => decodeStudioDeliveryCommand({ ...unresolvedDiscovery, payload: { ...unresolvedDiscovery.payload,
+  discoveryResolution: { ...unresolvedDiscovery.payload.discoveryResolution, answer: 'Free text cannot release the blocker.' },
+} }), StudioDeliveryContractError);
 const outcomeResource = { outcomeId: U[13], version: 1, taskId: U[12], taskVersion: 2,
   projectId: U[5], status: 'achieved', label: 'Cycle time reduced', detail: 'The operator confirmed the realized outcome.', documentGenerationId: U[7],
   studioArtifactId: U[3], studioArtifactVersionId: U[4], recordedBy: U[14], recordedAt: '2026-10-10T05:12:00+00:00' };
@@ -102,10 +120,13 @@ assert.throws(() => decodeStudioDeliveryCommand({ ...pack, payload: { ...pack.pa
 
 const query: StudioDeliveryOutcomeQueryRequest = { schemaVersion: 'studio-delivery-outcome-query.v1', organizationId: U[0], workspaceId: U[1],
   expectedAuthorizationVersion: 7, projectId: U[5], limit: 50, cursor: null };
-const result = { ok: true, schemaVersion: query.schemaVersion, projectId: U[5], items: [outcomeResource],
+const result = { ok: true, schemaVersion: query.schemaVersion, projectId: U[5], items: [outcomeResource], sourceOptions: [
+  { taskId: U[12], evidenceAttestationId: U[10], label: 'Accepted document source · independent review' },
+],
   page: { limit: 50, nextCursor: null, hasMore: false } };
 assert.deepEqual(decodeStudioDeliveryOutcomeQueryResult(result, query), result);
 assert.throws(() => decodeStudioDeliveryOutcomeQueryResult({ ...result, inferred: true }, query), StudioDeliveryContractError);
+assert.throws(() => decodeStudioDeliveryOutcomeQueryResult({ ...result, sourceOptions: [...result.sourceOptions, ...result.sourceOptions] }, query), StudioDeliveryContractError);
 const packQuery = decodeStudioDeliveryPackQuery({ schemaVersion: 'studio-delivery-pack-query.v1', organizationId: U[0], workspaceId: U[1],
   expectedAuthorizationVersion: 7, projectId: U[5] });
 assert.deepEqual(decodeStudioDeliveryPackQueryResult({ ok: true, schemaVersion: packQuery.schemaVersion, projectId: U[5], latestSnapshot: packResource }, packQuery).latestSnapshot, packResource);

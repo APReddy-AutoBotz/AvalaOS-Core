@@ -59,6 +59,7 @@ export const EI_ACCEPTANCE_SOURCE_REFERENCES = [
   'supabase/migrations/20261106190001_sdd_completion_allowance.sql',
   'supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql',
   'supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql',
+  'supabase/migrations/20261107110000_delivery_discovery_resolution.sql',
 ];
 export const EI_ACCEPTANCE_BRANCH_BY_TEST_ID = Object.freeze({
   'EI-001': 'EI-INGESTION_VALIDATION',

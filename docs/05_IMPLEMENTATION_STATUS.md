@@ -1,5 +1,13 @@
 # AvalaOS Core: current implementation and verification status
 
+## Business review evidence
+
+The dedicated preview of `4f0bda98453e93bbf4f70936eaed347d2ce6b404` passed 17 required checks and matched its backend and 131 installed migrations. Real extraction, corrected facts, four independently approved planning documents, selected regeneration and six persistent board items were exercised through the normal application. The GET Story retained its Blocked status after reload and repeated import produced no duplicates. In the retained six-item dataset, the GET-to-R11 dependency is written in the description. The project contains zero stored dependency edges. Acceptance of a historical proposal did not attest technical readiness.
+
+The correction pass reproduced the Delivery actor's assignee-directory error through its authenticated application route. The actor held project management authority. The same query returned eight eligible members in a read-write transaction and failed in a read-only transaction because the authority check takes row locks. The migration preserves those checks and makes the POST reads use the appropriate transaction mode. Assignees are editable through the eligible-member directory. The stored task owner identifies its creator.
+
+Studio tests cover save A, open B, reopen A, plus generation, independent approval and movement between selector pages. The catalog compares each displayed process's current case head with its decision source revision. An absent decision, a failed read and a failed save have distinct presentation. The [active plan](planning/process-evidence-to-delivery.md) records the release conditions for discovery work and the limits of the retained board evidence.
+
 ## Four approved planning documents — 6 November 2026 UTC
 
 Candidate `88f1738ef6bd3f7d73c533e92ec80fe8815abc15` passed all 17 required workflows and exact dedicated preview/backend plus 130-migration verification. Real BRD/PDD/FRD/SDD content is saved and independently approved for planning. Six selected requirement-derived board items and the separate no-AI assessment remain verified. The SDD canonical PDF inspection found obscured branch routes, and current-source drafts lack a visible selective-refresh action. The [active milestone](planning/process-evidence-to-delivery.md) owns these focused corrections, their immutable rendition boundary and remaining ordinary-UI proof. Provider execution is disabled and the key binding revoked. The milestone is not complete.

@@ -228,7 +228,7 @@ export const deriveRequirementProposals = (content: Record<string, unknown>): Re
     proposals.push({
       proposalRole: 'discovery', type: 'Task', title: title('Resolve — ', question),
       description: `Resolve the approved unanswered question before dependent implementation is treated as ready: ${question}`,
-      acceptanceCriteria: [`A human records a source-backed answer or explicitly retains the question as unresolved: ${question}`],
+      acceptanceCriteria: [`A human records a source-backed answer or an independently approved nonblocking disposition or revised scope for: ${question}`],
       requirementLinks: [link],
     });
     referencedRequirementIdentifiers(link.requirementText).forEach(identifier => {

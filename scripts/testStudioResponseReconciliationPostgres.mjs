@@ -11,7 +11,7 @@ if (!['postgres:', 'postgresql:'].includes(adminUrl.protocol)
   || adminUrl.pathname !== '/postgres' || adminUrl.search || adminUrl.hash) {
   throw new Error('Disposable loopback PostgreSQL required');
 }
-assert.equal(migrationNames.at(-1), '20261106210205_studio_sdd_pdf_branch_routing.sql');
+assert.equal(migrationNames.at(-1), '20261107110000_delivery_discovery_resolution.sql');
 
 const name = `studio_response_reconciliation_${randomUUID().replaceAll('-', '')}`;
 const ids = Object.fromEntries([
@@ -36,7 +36,7 @@ try {
   await applyMigrations(db, migrationNames);
 
   assert.equal((await one(`SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton`)).migration_tip,
-    '20261106210205');
+    '20261107110000');
   for (const relation of ['studio_generation_provider_candidates', 'studio_generation_spent_output_lost_reconciliations']) {
     assert.deepEqual(await one(`SELECT relrowsecurity rls,relforcerowsecurity force_rls,
       has_table_privilege('service_role',oid,'SELECT') service_select,

@@ -3,10 +3,10 @@
   "inventoryId": "avalaos-hosted-acceptance-2026-08",
   "proofOwnerRegistrySource": "tests/acceptance/proof-owner-registry.json",
   "sourceDigests": {
-    ".github/workflows/authenticated-product-acceptance.yml": "sha256:2fe668b550f69d695e788cee52cfe1298f99f37f57f8c9773df5b52ab8fd5e59",
+    ".github/workflows/authenticated-product-acceptance.yml": "sha256:25651fb71d5c2059eb8ce002ce16e6e9bc426e8416270d8152abd3d60293e35a",
     ".github/workflows/canonical-hands-on-access.yml": "sha256:66a97f8fe082385b312e9bb853b4e7a3556e8949e19a75097b8ba4d7d8538993",
     ".github/workflows/transcript-flow-pr-a.yml": "sha256:66b9d26fd35177b43540a37284cbb498ae5328d65dadd3fa5564cd23fa33d8ad",
-    "App.tsx": "sha256:498b81aa5d95dce71e951cf4ec078ec0d6843bc85f63bf7b0fd2556f53b13de2",
+    "App.tsx": "sha256:45e2446e63239960ee5668fe9f0316e18e5d1a3e7a0dbabb82ccb8c8b4b344bc",
     "components/admin/AdminSectionNav.tsx": "sha256:4fa9a40a8cdbde9259a287bdab025757fb85ccb65035752628850d20ee3787db",
     "components/admin/AdminWorkbench.tsx": "sha256:1898c4416d604c06e35b06dfaa7623c0845371facd7d93d0c616ff0a3e0a265c",
     "components/admin/PilotOperationsPanel.tsx": "sha256:6368270c9d40029187c910ce72bdd649e8586e87d1fe11d4894ae411d507a342",
@@ -15,17 +15,17 @@
     "components/auth/AuthProvider.tsx": "sha256:382d5b4e2c0f604ca9246df7deddc24eef72935e7803402f58cf60d16a7d8269",
     "components/auth/EnterpriseAccessView.tsx": "sha256:cb16d4b41c823ac60836397e4b4cffcdaa0835fe4d43a45abbf12c093de9c99b",
     "components/auth/LoginView.tsx": "sha256:507bcd73b101fd44ba7a07f488465199efe67b978e35447207f03fd0995c433c",
-    "components/delivery/DeliveryOutcomeEditor.tsx": "sha256:810d1aa450408a7359b7fa10e79c1e279bc14cb157d8194523b220a3cb7e2cbd",
+    "components/delivery/DeliveryOutcomeEditor.tsx": "sha256:56348feb3eba1f4058cc2f001b886d266d32508bc6af981d8f8b9227cc781405",
     "components/delivery/DeliveryPackSnapshotAction.tsx": "sha256:f35e3399ecbcb43769db48356db4171aded97da383e07ac2d946727a4d126a48",
-    "components/delivery/DeliveryPackView.tsx": "sha256:fcc03b4f01b33a0bdd5f344be4d2eeb300b0a7bd3346fc188a8320780250be9a",
+    "components/delivery/DeliveryPackView.tsx": "sha256:7c849044f062ea7bb5d813b223c108608c8fa5bc22b4fef9f080df7bca4c8d67",
     "components/delivery/DeliveryProvider.tsx": "sha256:c671068d279c887d72f4ced3048d8a63b3ecf9b351dee53539b35a568fd41c09",
-    "components/delivery/DeliveryTaskOutcome.tsx": "sha256:b06f4cf0d7905eae48903d0b6f8e18375cb6b8cc279ba6aec2bc15a1fe9d6189",
+    "components/delivery/DeliveryTaskOutcome.tsx": "sha256:61d112a1ad3f331c6d3bf21ee8988dd3d668dbc0ccfc542097ab3a1a86bd9717",
     "components/delivery/ProjectView.tsx": "sha256:90f2080ea33ee20308e7ec88800c96f12042d6ac46e2f27864e8fbdb0c4cfc13",
     "components/delivery/TaskDetailModal.tsx": "sha256:5280a253495e8eebf551b8adc43cbbd9e7da0f16e23c053c832c0b715f4d67ce",
     "components/delivery/WorkspaceView.tsx": "sha256:005a88bff873c615acfdbf18f24b67f58707cdc5fa939dc6e914146f27a588b7",
     "components/docs/GovernedStudioRoute.tsx": "sha256:82d23733c48df4e8ac6250a96d2e8ba092f1a3fb6516f6cc8062fbaa0b4d1be3",
     "components/docs/StudioApprovedArtifactPublish.tsx": "sha256:11f65e0c363d43d4fc5fab8ffd4eb5ce94d5b18e6fe3e9a027853288597ffc64",
-    "components/docs/StudioArtifactWorkspace.tsx": "sha256:8ca158745a3f806fd83375619caa35fbc4dd520596d3e4fbba8fec1e8ac87e5b",
+    "components/docs/StudioArtifactWorkspace.tsx": "sha256:427b6d589cd177c2ebcccdef91e6dfba1f027a2f876858e165426fa7e6048b61",
     "components/docs/studioHandoffReadiness.test.ts": "sha256:e7a28c9ec8aa9b590ab9261d8e1f1d2c5c857f3e6fec295ec6211dcc9d6235e5",
     "components/docs/studioHandoffReadiness.ts": "sha256:77033eab79ca36710b804d076327edbe0e6a952b3abf3449d21f42a0e7e4e221",
     "components/docs/TemplateEditor.test.ts": "sha256:c6cf631a9a270db0d871cbeb33ae94ac4408704fa26e327622e5d5062c3281da",
@@ -35,11 +35,11 @@
     "components/enterprise/TranscriptSourceLibrary.tsx": "sha256:266e2dcedc02fbfd1cf93c5ee1a71535a0d69cbfd3449e30ef78000fe6d1d717",
     "components/public/PublicWebsite.tsx": "sha256:94bc312383a53da77c1cf4aee70e9b8f5819cf78a10376dc64aead0116bccd57",
     "components/shared/CustomDashboardView.tsx": "sha256:b0ba45d74b52eb0d185bd755d00a4eb21d3cf20fce86e44cca13296454f588b1",
-    "components/shared/DeliveryOutcomeMonitorPanel.tsx": "sha256:b59e3d69b75efd3da28f50d36b8e09cf0735238bd2f794416b9943387ab57c36",
+    "components/shared/DeliveryOutcomeMonitorPanel.tsx": "sha256:fe63064753b5d8c2ae173f8a7888dc3a4b60215bb8ed1a36d5cdf3d3146f7bd4",
     "components/shared/MermaidRenderer.tsx": "sha256:cf7fef68622589e5a6266ac0f49f32c820bfd75cf5e2bcf960ca7eadf875f1b7",
     "components/shared/PortfolioView.tsx": "sha256:06a54bc593669810a11aa1805e24d2634a4f5f2fe148885eedc6a8ee9f6173ce",
     "constants/moduleConfig.ts": "sha256:6f42b0c7ddfaf2fefd8e7a04778e40964c021634314edea5af035932c456e5cd",
-    "docs/00_SOURCE_OF_TRUTH.md": "sha256:c50da33923c65a4626353c694b976de86eb446e1849bb3f1b475f960ee9c6f85",
+    "docs/00_SOURCE_OF_TRUTH.md": "sha256:f6c5a4ba9ddb2f305235342a8f9a8246cf9d0801b2a806023cf16f0caa2ed230",
     "docs/architecture/current-to-target-enterprise-architecture.md": "sha256:30b28cc3318522f12b27bc7eca0361de5aebef77f6fd6254f53f91634cac1c4f",
     "docs/planning/hosted-acceptance-completion.md": "sha256:ddeedbb46aba8c2b4eb32ce2929d7b87cbaba027befd359be9deed490a1192eb",
     "docs/quality/ai-boundary-static-scan-allowlist.json": "sha256:1220f4856c808dc57a9049e2e5a49a56377fa5d148fa967d35242be1e16d7415",
@@ -48,7 +48,7 @@
     "index.css": "sha256:645f9ca9e3068604aee26a1521d0efd399a14d44fa24b42e34a5608c936da63c",
     "index.html": "sha256:492aa8446db47d0b50eb7700b379e0e19f9f7fdff1838cd95458e46be90e7b76",
     "package-lock.json": "sha256:a5033cdeadb9ad5511587c0b20612d94d5c68c1a418a8bdc3116f743ff84395a",
-    "package.json": "sha256:83f7ca2f3fd7f255334793c59b2044fb84e9fbfde607c1137a0b43388090d28b",
+    "package.json": "sha256:52693580a06f16f05594f583ad87bc9ec2f32339d5cbec957e5ffe0a74ee0d98",
     "playwright.assess-v2-native-postgrest.config.ts": "sha256:198a64e6935bbf5c47536d2c8c049370c2ac70206b561fcb7f35e15206a9147e",
     "playwright.authenticated-hosted-sign-in-entry.config.ts": "sha256:35d6968cfe49608def2c9251c6f43fcac64ce1e3dca6323f4d05a0a379d52a4a",
     "playwright.authenticated-hosted.config.ts": "sha256:b348e959442fb906bf82e4efcb153b5cb5c0061b974ebd5a3e75865d6b3768c9",
@@ -100,7 +100,7 @@
     "scripts/authenticatedHostedPageClose.test.mjs": "sha256:7a2860a9ddfe9e2e5ca2f8bdb9fa4ae8a4744a7c259345f48ee6761dce0c8f11",
     "scripts/authenticatedHostedPlaywrightReporter.mjs": "sha256:043802a1217689ff93be5b1bd8be225ced2cf9cdcdd5c73cb9f0b371cc7f3147",
     "scripts/authenticatedHostedPlaywrightReporter.test.mjs": "sha256:dad7b62e1be2a03f32e7d16ee54185c52b2d30e8c2709be96952eafdad8842b6",
-    "scripts/authenticatedHostedWorkflowContract.test.mjs": "sha256:6fed58997d2e1765fc922fcb89df6147010988ecbcc89a49d611a9724135b0bf",
+    "scripts/authenticatedHostedWorkflowContract.test.mjs": "sha256:ae065c274641b7c03633d19588136cd882e9ca259ec37bb76010fcf6fa14a52a",
     "scripts/authenticatedObservationBrowserProof.mjs": "sha256:f723cfefccd98543f7cab8d903c3cfbb30cf4619f082e443b81a5d21d9f46e2d",
     "scripts/authenticatedObservationFinishProof.mjs": "sha256:10f81b9cd63ddf5a69d3cf7f17dc12d49cb39da669c3484a02e87218612c8687",
     "scripts/authenticatedObservationQueryProof.mjs": "sha256:167f2534336983176884871ad25145a27b6a67fa31d299209c852a288e2bd69f",
@@ -117,7 +117,7 @@
     "scripts/authenticatedV2ReloadDiagnostic.mjs": "sha256:01f1d2edf7bf8c8842d39a884752ab7037402e2f7f8753935acfeeb3cd253c6e",
     "scripts/authenticatedV2ReloadDiagnostic.test.mjs": "sha256:5c9d861cdb841293b72eb1088d7190fcf54cd4403cb26170ada7b46a2c413532",
     "scripts/canonicalHandsOnAccess.mjs": "sha256:d00b9b9dc9564d5c2e0880aa894c9c16505743009e39cf831f0d5f1bdb08a97c",
-    "scripts/canonicalHandsOnAccess.test.mjs": "sha256:6c0eb671bc9030fe1c1ecdef3240a6baff34ef8f3528eedde1c9822bd7274c90",
+    "scripts/canonicalHandsOnAccess.test.mjs": "sha256:85f18efe4ad7e02cde002d5e159a1232ce3804880ceca52fee7b915dc439a238",
     "scripts/canonicalInvoiceExceptionDatabaseEvidence.mjs": "sha256:68832fd877ff4712dba8adf8a231707c70958a65bc0d6838cba86bf2583f4645",
     "scripts/canonicalInvoiceExceptionDatabaseEvidence.test.mjs": "sha256:50036ef45bf607557f1b1899479d64719c081d5751cca347d5b4fce8ad6d74ee",
     "scripts/checkEnterpriseIntelligenceBoundaries.mjs": "sha256:373fe00e83cf2974fc9404d6b885bf8b8b0e2d210457151b823c78a12b684a1c",
@@ -129,7 +129,7 @@
     "scripts/eligibleReviewerRequestDiagnostic.test.mjs": "sha256:7b2c3a405f6e37b19153e81cd25ba06ba04516f1bc25f5620f47ea6f7888c778",
     "scripts/eligibleReviewerRequestDiagnosticsArtifact.mjs": "sha256:5638e1d172737a32750e5e841164598cd44fe20fe650d55dccf00a9042f32239",
     "scripts/eligibleReviewerRequestDiagnosticsArtifact.test.mjs": "sha256:26485fa1072eac6d2641e06aa21397c3dd6a594fde41fad509c93343c1935d19",
-    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:8f780379d951673301b682791b9ab87885b7d7c2cf7dea0085a50942d9588a11",
+    "scripts/enterpriseIntelligenceAcceptanceEvidence.mjs": "sha256:6b0a0d2c843ace432f6f4a967da3961507526b1c44077cb697befe543e0d8588",
     "scripts/enterpriseIntelligenceAcceptanceParser.test.ts": "sha256:aa7b6a5e6a8dd5f68db137926044104cde5ef01b073ee8bdfe0a04f961df7de3",
     "scripts/enterpriseIntelligencePostgresFixture.mjs": "sha256:8624c43f803f6334f0bc5abc0c5b932435aa6c07ac470c6df5c8c4cc464fc15a",
     "scripts/enterpriseLifecycleDatabaseBoundary.test.mjs": "sha256:92fdb587df47e0d2ed60d011da43a105120d1349df68ef5568106bf7c7fc63e9",
@@ -143,12 +143,12 @@
     "scripts/governPreparationIdentity.mjs": "sha256:7c96e58bda3243adbc2afeca1dccccc3801284d46b7cdc639b9ab093f89d8876",
     "scripts/hostedPilotActivation.mjs": "sha256:f8fbf4b48015f3da113692c4cba11b11f6c1ebb72610252ee4cd25e2d86d4cc3",
     "scripts/hostedPilotActivation.test.mjs": "sha256:ed6856426b58472beb3a0488f3f85da8f139627d97ebd4ff6a61f34481c2f9b9",
-    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:14c7536f8b8760c91023db1ce0ca02bb9b065b7f61b94efb77f148965cf107fd",
-    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:56b9125e931770c815310c2dd6a86e58a25324591021de79f6823f23a0b76199",
-    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:53ae5437c4126d58a89de483284ab0f9611ff57d7905a4d82b36eb7b1a3945be",
+    "scripts/legacyDeliveryAcceptanceEvidence.mjs": "sha256:d77cb08c1743fb25b7c59d1b5633aa814d7b3f3fa124dba2a01f202ff927c5a9",
+    "scripts/legacyDeliveryAuthorityPostgres.mjs": "sha256:d5e1c099aa2922ba527716ca8b0b858c5cf8110421ca1fe307db6b8ce2ee53eb",
+    "scripts/legacyDeliveryPostgresFixture.mjs": "sha256:266b67f0fcb523db226a0170a8f6cd9a9d5e8c570f3302c6ed3d57ad5a7b35e3",
     "scripts/localAcceptanceBuild.mjs": "sha256:cc5321560ca36474522ea68d65405eac9997bdf97544d82a02922bda6e635fe4",
     "scripts/localAcceptanceBuild.test.mjs": "sha256:b76f18e27b39ef827816ba030c32293b72dc0d57d26e50955c17328b1069c20a",
-    "scripts/localRealBackendAcceptanceMigration.test.mjs": "sha256:38d65adbf155fa14ceff2afc2ccf5dc26415f42844762e91524a27b4d4ed89c1",
+    "scripts/localRealBackendAcceptanceMigration.test.mjs": "sha256:0de0c73eb069186187852fbbd5ca34d42184780bd887573a211def4e0c2926ce",
     "scripts/playwright.govern-disabled-control-repro.config.ts": "sha256:4337338b3bf35a4ca1498a5a0485918a784e250f33f49b807bf1cf4f1973d334",
     "scripts/playwright.studio-handoff-persona-contract.config.ts": "sha256:2f047003253dfedd0d883a9dffb905ef4967d9cc5e9bffd29b64fc5497f54915",
     "scripts/preactivationSignInDiagnostics.mjs": "sha256:ea8f3f2e0d942cc34e25a5a4a09a37807295449ab336fa7c6e06f0b440bb0351",
@@ -162,8 +162,8 @@
     "scripts/projectionRpcPostgrestContract.mjs": "sha256:f497dce9e350d124e49a8c1f5e5cf961d9c38327057c7236582431295f659938",
     "scripts/reproduceGovernDisabledControl.mjs": "sha256:bac319a6552e9ef13b3680a41ec6547787f4578cefaa460c82b32fa97c8c6903",
     "scripts/reproduceStudioHandoffPersonaContract.mjs": "sha256:53ef6102cd8aabe428e7cdbe9cebfcb6dd633fc2849b8b8a847f6a823b8245d3",
-    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:b20060ee672c7bdd15893bd3bcb24711963ee168a52a6293a28865a20ff0fffe",
-    "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:fdd1054b904e8ce90c54a99a181dce37db36a86ab47f2eaf29a3944193c460ca",
+    "scripts/runAuthenticatedHostedAcceptance.mjs": "sha256:d59d60a98065cbdea5e9e04f2dc05b194ef26398cd579c2b5cf74e487563bbf3",
+    "scripts/runAuthenticatedHostedAcceptance.test.mjs": "sha256:4b89047241e9065567fb109923598c09dba92471afb9e0a20bda3602da7f4cd0",
     "scripts/runEligibleReviewerRequestDiagnosticsBrowser.mjs": "sha256:ca1e3b06d839df4d704ddfa2d830af728c3b33621ad352e78b99d987e03fe133",
     "scripts/runEligibleReviewerRequestDiagnosticsBrowser.test.mjs": "sha256:c0aa7228695f3f424a8e01aa96e23e28b186d35779c83097e57f050e587b2159",
     "scripts/runEnterpriseLifecycleAcceptanceBrowser.mjs": "sha256:50a73957605a43af044a5ca31f3460b547e78768f4ae2de2b98308c9841d2962",
@@ -178,18 +178,18 @@
     "scripts/studioHandoffPersonaArtifact.mjs": "sha256:6bb8fd5f82855fb6873c54e0072270a0a078de728013e615b80fa381be56e65d",
     "scripts/studioHandoffPersonaArtifact.test.mjs": "sha256:aff2c493514c743b160b704db44644a473d8a320c433e40d3d824a1468a7db77",
     "scripts/studioPrivateArtifactPostgresFixture.mjs": "sha256:b6ee1f1bbf4e1a15468bca00f67a9a305320cf9f89efeefe0b173137f35d5640",
-    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:7e73fa647c511302a871ecec1bfb6f4e6b8e6e710e09e8c0ce829d2ecc45f0e9",
+    "scripts/syntheticAiTerminalJournalMigrationTestGuard.mjs": "sha256:33868b86e70688ef7c345ceef955f38229fb62d70d384a7b677903604b70989d",
     "scripts/testAssessV2NativePostgrest.mjs": "sha256:8a4897485027a5b7273d5db86826796be49796e41dabee64cd5c815948dd1c63",
     "scripts/testAuthenticatedGovernStudioLineagePostgres.mjs": "sha256:933823a55b54f4c0c76c220d4c0b4eb4471eeb955b2db44a643c999ba0bdb8ee",
-    "scripts/testAuthenticatedHostedBootstrap.mjs": "sha256:c57aaf015f08c5510358ec184e23707d32d7438e3592b2c1b7d00ffa9947e335",
-    "scripts/testAuthenticatedHostedControllerPostgres.mjs": "sha256:9d74ab7715824e830c73506e20ad151434c826cabd51c1505b2f5f5c0ca69d41",
+    "scripts/testAuthenticatedHostedBootstrap.mjs": "sha256:bf6d28e2a95d6d8d3b79c9b0cb2d6b1bc01c56700c1fe5a97b4233baec6e0638",
+    "scripts/testAuthenticatedHostedControllerPostgres.mjs": "sha256:b8a600a189fc51213e6aba1c397d568b838fe19fa2ad565c744402d06541318b",
     "scripts/testAuthenticatedHostedPreauthTracking.mjs": "sha256:076abfc3e6e53fe33f8aff7fb368d77ab27c9ccaf8fba957f4c48f556b36e1a9",
-    "scripts/testAuthenticatedHostedSignInEntry.mjs": "sha256:398385d4697d28d7217778d4e64f94c424032f25acb38337710bb2fdcccdca0e",
+    "scripts/testAuthenticatedHostedSignInEntry.mjs": "sha256:771895cf9f49708bb904d87252495a4d304188089bb466afdd3e6241c838314f",
     "scripts/testAuthenticatedHostedSignInEntry.test.mjs": "sha256:6c3272de4d48112bc73a2178bfd5f0256194d73a356e8835b700af2b8b95bd27",
     "scripts/testAuthenticatedReviewerSelectionPostgres.mjs": "sha256:4cced2684cf8c4a06b58e46cff4250ba88bf91775d88c7662203da2e7c911d79",
     "scripts/testAuthenticatedSupabaseMultipart.mjs": "sha256:6568ab2f310bff711d6cc93071283ecb5a5d898cf0ed7c446681b25297000261",
     "scripts/testConnectedBrowserDiagnostics.mjs": "sha256:5cc5f0456707e1a29e0e6402336969af35ce00912e18c4f47f8da1768ffffc59",
-    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:864d822e90a0795ece54d93ff2a7af0c55a782ce1aaaecd75e182aa26a6f0bf7",
+    "scripts/testEnterpriseIntelligenceAcceptancePostgres.mjs": "sha256:b7bd28e641aa5e9faab6c3410a8ea5e22d286239e9d4f0fc9d3ab3c9f6bdd2bd",
     "scripts/testEnterpriseIntelligencePostgres.mjs": "sha256:cc46ea200ca0ff31c099f11368b3e8702f3322e4634152b898b8f7ba932f660d",
     "scripts/testGovernAcceptancePostgres.mjs": "sha256:20f8d9d76ebe72985ab7c95ea5fc1e3450ef767339d6df57809825c94c05f844",
     "scripts/testPilotOperationsMigration.mjs": "sha256:59622919796a25646d76707d8cd29258300036ca1a501fe1a3c8bdbb6a942f61",
@@ -204,7 +204,7 @@
     "scripts/transcriptFlowEvidenceContract.test.mjs": "sha256:198306d83d32724bcf4840bf50d8df8865a8cbd51ca9a9e09cd34bcf30c63d44",
     "scripts/transcriptFlowEvidenceScope.mjs": "sha256:36525be958a8e448c7248ce79dd6b66de082be013335442d1dee5b94bb279f9c",
     "scripts/trustAcceptanceEvidence.mjs": "sha256:73ad241675694a42075e3acc73df6bd3b0735a075fc97525910408652edf91d5",
-    "scripts/v2FullPrefixLocalController.mjs": "sha256:6fa78f1335f9f01ef357f5c13dead20236191ab65a62af4ffa71278328839feb",
+    "scripts/v2FullPrefixLocalController.mjs": "sha256:e83637b24bb9d9f6c7a61d291e416f96a641abce75d2c6be3501943259501a6f",
     "scripts/v2FullPrefixReproduction.d.mts": "sha256:a7a53033e9235630ee93f59a69a7d48b3e2532ea45c0f3cf808aa65ed27bbc8b",
     "scripts/v2FullPrefixReproduction.mjs": "sha256:0515835a52a065e363dcc43d3c41676040e22a628d5c209dc8cba848ee199097",
     "scripts/v2FullPrefixReproduction.test.mjs": "sha256:bd595e3e7e9b5a8aaf097e65cb0552eb7ebab3972445cffd4767bb7a8a528d4c",
@@ -244,8 +244,8 @@
     "services/processUpdateClient.ts": "sha256:6c989c03d3cd886fee3d6a2a894ec798c8513a404df7675c445350ba59431c9f",
     "services/processUpdateContract.ts": "sha256:0e2e02671baf31f0ef7834ce2addcfed9fd835231b52c3e876bbe815cd265ab7",
     "services/productAcceptanceBridge/client.ts": "sha256:886169ead9ce28c149f8b6d17f8c07b31910f18c8e531982760ddad02eefebd2",
-    "services/productAcceptanceBridge/contracts.ts": "sha256:e5e793cf9df7494355aa1fd62b6681fb03fd45feece4af76969011c9a15742ba",
-    "services/productAcceptanceBridge/outcomePaging.ts": "sha256:c75d1c81ae91cf7d80efaf534044f2a19d7b25318ca02ece421c56cf8f7ef942",
+    "services/productAcceptanceBridge/contracts.ts": "sha256:a4ef9ca36afe2f36793e4454d05e61bf8e930098e6f7477a2114b57f4c0db11f",
+    "services/productAcceptanceBridge/outcomePaging.ts": "sha256:507e2091afbe37515fff0ec51984a83feab668a1782432ff4bd5105bcbd6eeae",
     "services/productNavigationController.test.ts": "sha256:8edee3f4b9c01968e81c34fa98c6e84c982eeedd3842fb537610122159acf95b",
     "services/productNavigationState.ts": "sha256:c27dcb6d8edd7240ce3c3cfa8473da238cd31cb64bfdeeda6ac2b625b042f0e1",
     "services/safeMarkdown.ts": "sha256:815151fd10c0b07e265385388f4f6fafdfddc10d6e0697bfe3cdf6571a724a6c",
@@ -445,6 +445,7 @@
     "supabase/migrations/20261106190001_sdd_completion_allowance.sql": "sha256:9600f313ecaf5f0f4a739f4f8cbf639e315e8bf3a907c71be651925ca72647f1",
     "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql": "sha256:ca47101917e130af5de60d5e5d420978e5ca13e6d910511d35412b77b4465b22",
     "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql": "sha256:710a9cfb969452c64cf6ebc948f306849fbaea787e74db0501a519d5600dc499",
+    "supabase/migrations/20261107110000_delivery_discovery_resolution.sql": "sha256:fd00496b6dd99b9d70f2292d4f85bc193a373aaf5cc21f769e13f7eab218af6c",
     "testing/process-lifecycle/contracts/pr-a-assertion-registry.json": "sha256:8dca3fc1d04349863dfac862695a492f3fcee7846ecea5f1198df1f2784feac8",
     "testing/process-lifecycle/contracts/pr-a-evidence.schema.json": "sha256:6cbe7858cc86d49a993c9c7259dfa5c6db0089af5bc51260bc23701a3137adf3",
     "testing/process-lifecycle/fixtures/identities/pr-a-personas.json": "sha256:8865e5e6efa1c8b99cc6a4d893d7e8446cda6ed8b653401db3c61c35ba6b9c66",
@@ -458,9 +459,9 @@
     "testing/process-lifecycle/README.md": "sha256:2ce7da7a18df4bd3b16eaef243f7a02a1c7e958ea70f017b9f404fffbe22e593",
     "testing/process-lifecycle/scenarios/pr-a.json": "sha256:defe3c7079866d1d07986967827b8cc1d72bff639fdaee5887e53cb0f555d91a",
     "tests/acceptance/catalog/schema.json": "sha256:96cf00e298b79ca4a8c4bdc36e2d970dfb6b6537cea46755e178ae93fc8d981f",
-    "tests/acceptance/catalog/test-catalog.json": "sha256:1df60543f63ddf2a5d492da77810a7352b9f0f1eab95b4cea3c369f7ba23a659",
-    "tests/acceptance/proof-owner-registry.json": "sha256:3fa8813f22a63a69e97f9de00d8def2f2b92420324840e47b033674ed221216a",
-    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:660a02ae74a51df34100a6d495e44eefd51e966bbf9679c559d8194f6f3cb1ce",
+    "tests/acceptance/catalog/test-catalog.json": "sha256:5b3324639cadfb9fa40318f30348d4e1c33c21a05b816f2d2f4821dd685c8660",
+    "tests/acceptance/proof-owner-registry.json": "sha256:ad714e2517e946c8b8fe333ca7f122203cdbd7c388edf9fb50949830c0197807",
+    "tests/acceptance/proof-owner-source-contracts.mjs": "sha256:c80c9337e2afa35bd1130b0e5002da3531fde6e6d2c9f137b4ed499b446e69b3",
     "tests/browser/assessV2NativePostgrest.spec.ts": "sha256:f55f0d860b9a94067cd1934d3798b25b3a5d14479299244d344d9989dccdd044",
     "tests/browser/authenticatedControlsAcceptance.ts": "sha256:2fbb931ba42d30882602969e3f62ea1e08ec7bee1196e3d5bb0085280e95e67e",
     "tests/browser/authenticatedHostedNetwork.ts": "sha256:a0fbcc5b2f4751a6887bb58f6d6a54f28fbc5ef1967c636df7cd8bca56b281af",
@@ -1886,7 +1887,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -2044,7 +2046,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -2663,7 +2666,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -2731,7 +2735,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -2799,7 +2804,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -2867,7 +2873,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -2935,7 +2942,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -4161,7 +4169,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {
@@ -4215,7 +4224,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "ownership": [
         {

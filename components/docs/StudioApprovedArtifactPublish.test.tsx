@@ -168,6 +168,11 @@ assert.equal(excludedSections.requirementCount, 1);
 const discovery = excludedSections.proposals.find(item => item.proposalRole === 'discovery');
 assert.ok(discovery, 'an approved unanswered question becomes an explicit discovery task');
 assert.equal(discovery?.requirementLinks[0].sectionId, 'openQuestionsAndProposals');
+assert.deepEqual(discovery?.acceptanceCriteria, [
+  'A human records a source-backed answer or an independently approved nonblocking disposition or revised scope for: The design must choose an unspecified API?',
+]);
+assert.equal(discovery?.acceptanceCriteria.some(value => /retain(?:s|ed)? the question as unresolved/iu.test(value)), false,
+  'an unresolved question is not a discovery-task completion outcome');
 assert.ok(excludedSections.proposals.filter(item => item.proposalRole === 'implementation')
   .every(item => item.dependencyProposalIndices === undefined),
   'an unanswered question without an explicit requirement reference does not manufacture an implementation dependency');

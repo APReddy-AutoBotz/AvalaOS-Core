@@ -128,7 +128,7 @@ const config = {
   deploymentId: 'b'.repeat(24),
   origin: 'https://avalaos-pilot.netlify.app',
   backendDigest: digest('c'),
-  migrationVersion: '20261106210205',
+  migrationVersion: '20261107110000',
   migrationDigest: digest('d'),
   exerciseDigest: digest('e'),
   profileVersion: 'hosted-authenticated-synthetic-profile-v3',

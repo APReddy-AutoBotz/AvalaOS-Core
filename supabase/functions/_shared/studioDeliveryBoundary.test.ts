@@ -62,6 +62,9 @@ const main = async () => {
     assigneeQuery: async () => { assigneeEffects += 1; return assigneeResult; } };
   const assigneeRead = await handleStudioDeliveryOutcomeQuery(request(assigneeQuery, 'query'), assigneeDependencies);
   assert.equal(assigneeRead.status, 200); assert.equal(assigneeEffects, 1); assert.equal(assigneeChecks, 2);
+  const projectManagerRead = await handleStudioDeliveryOutcomeQuery(request(assigneeQuery, 'query'), { ...assigneeDependencies,
+    authority: async () => ({ ...context, capabilities: ['project.manage'] }) });
+  assert.equal(projectManagerRead.status, 200, 'the intended Delivery project manager can read the scoped assignee directory');
   const assigneeDenied = await handleStudioDeliveryOutcomeQuery(request(assigneeQuery, 'query'), { ...assigneeDependencies,
     authority: async () => ({ ...context, capabilities: ['task.update.own'] }), assigneeQuery: async () => { throw new Error('must not run'); } });
   assert.equal(assigneeDenied.status, 404);

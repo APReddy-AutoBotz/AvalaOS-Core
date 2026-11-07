@@ -1,5 +1,9 @@
 # AvalaOS Core Source Of Truth
 
+## Business review of the planning journey
+
+The fresh supplier invoice case reached the existing Delivery board. On candidate `4f0bda98453e93bbf4f70936eaed347d2ce6b404`, all 17 required checks passed. The corrected acknowledgment target persisted through assessment and documentation. Separate actors approved BRD v5, PDD v4, FRD v2 and SDD v5 for documentation and planning. The final Architecture-only refresh preserved the other ten SDD sections, both flows, title and summary. All six pages of the canonical SDD v5 PDF were inspected. The separate order-status case recommended workflow and a read API with no AI selected.
+
 ## Four approved planning documents — 6 November 2026 UTC
 
 Candidate `88f1738ef6bd3f7d73c533e92ec80fe8815abc15` passed all 17 required workflows and exact dedicated preview/backend plus 130-migration verification. Real BRD/PDD/FRD/SDD content is saved and independently approved for planning. Six selected requirement-derived board items and the separate no-AI assessment remain verified. The SDD canonical PDF inspection found obscured branch routes, and current-source drafts lack a visible selective-refresh action. The [active milestone](planning/process-evidence-to-delivery.md) owns these focused corrections, their immutable rendition boundary and remaining ordinary-UI proof. Provider execution is disabled and the key binding revoked. The milestone is not complete.

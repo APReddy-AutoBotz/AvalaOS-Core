@@ -41,6 +41,7 @@ export async function applySyntheticAiTerminalJournalMigrationForTest(client, mi
     '20261106190001_sdd_completion_allowance.sql',
   '20261106191539_studio_synthetic_prompt_compatibility.sql',
   '20261106210205_studio_sdd_pdf_branch_routing.sql',
+  '20261107110000_delivery_discovery_resolution.sql',
   ].includes(migrationName);
   if (migrationName === GOVERN_IMMUTABLE_ACTION_AUTHORITY_MIGRATION
     || migrationName === '20261105110657_govern_mixed_snapshot_normalization.sql'

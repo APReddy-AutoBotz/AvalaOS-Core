@@ -47,6 +47,7 @@ export const STUDIO_GENERATION_CHECKPOINT_SOURCE_PATHS = Object.freeze([
   'supabase/migrations/20261106190001_sdd_completion_allowance.sql',
   'supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql',
   'supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql',
+  'supabase/migrations/20261107110000_delivery_discovery_resolution.sql',
 ]);
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;

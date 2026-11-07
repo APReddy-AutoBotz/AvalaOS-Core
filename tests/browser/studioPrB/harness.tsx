@@ -200,11 +200,17 @@ if(params.get('syntheticSelection')==='1'){
   Object.assign(other.ancestry,{sourcePackageId:otherPackageId});
   other.sections=other.sections!.map(section=>({...section,body:params.get('duplicateDraft')==='1'?section.body:'Different committed Studio content.'}));
   other.currentVersion={...other.currentVersion,id:otherVersionId,content:{title:'Another Studio document',sections:other.sections}};other.versions=[other.currentVersion];
+  const initialPrimaryAggregate=v2Artifact.aggregateVersion;
   const baseWorkspace=transport.readArtifactWorkspace!,baseIdentity=transport.readSourcePackage!;
   transport.readArtifactSummaries=async(_context,offset,limit)=>{
     if(ch10Connected)await delay(450);
-    const all=[v2Artifact!,other].map(value=>({id:value.id,artifactType:value.artifactType,aggregateVersion:value.aggregateVersion,lifecycle:value.lifecycle,currentVersionId:value.currentVersion.id,currentApprovedVersionId:value.currentApprovedVersion?.id??null,sourceMode:'direct_transcript_bundle' as const,lineageClassification:'not_assessed' as const,planningOnly:true,displayLabel:`${value.artifactType.toUpperCase()} · direct transcript bundle`,updatedAt:value.currentVersion.createdAt,actions:[]}));
-    return{contractVersion:'studio-artifact-summary-2',organizationId:context.organizationId,workspaceId:context.workspaceId,items:all.slice(offset,offset+limit),total:all.length,offset,limit,hasMore:false};
+    const [primarySummary,otherSummary]=[v2Artifact!,other].map(value=>({id:value.id,artifactType:value.artifactType,aggregateVersion:value.aggregateVersion,lifecycle:value.lifecycle,currentVersionId:value.currentVersion.id,currentApprovedVersionId:value.currentApprovedVersion?.id??null,sourceMode:'direct_transcript_bundle' as const,lineageClassification:'not_assessed' as const,planningOnly:true,displayLabel:`${value.artifactType.toUpperCase()} · direct transcript bundle`,updatedAt:value.currentVersion.createdAt,actions:[]}));
+    const fillers=Array.from({length:19},(_,index)=>({...otherSummary,id:`${String(index+101).padStart(8,'0')}-0000-4000-8000-${String(index+101).padStart(12,'0')}`,displayLabel:`Archived test document ${index+1}`}));
+    const all=params.get('pagedSelection')==='1'
+      ? v2Artifact!.aggregateVersion>initialPrimaryAggregate?[primarySummary,...fillers,otherSummary]:[otherSummary,...fillers,primarySummary]
+      : [primarySummary,otherSummary];
+    const items=all.slice(offset,offset+limit);
+    return{contractVersion:'studio-artifact-summary-2',organizationId:context.organizationId,workspaceId:context.workspaceId,items,total:all.length,offset,limit,hasMore:offset+items.length<all.length};
   };
   transport.readArtifactV2=async(_context,artifactId)=>{await delay(150);return structuredClone(artifactId===otherId?other:v2Artifact!);};
   transport.readEligibleReviewers=async()=>{await delay(150);return[{actorId:ids[19],displayName:'Independent reviewer'}];};

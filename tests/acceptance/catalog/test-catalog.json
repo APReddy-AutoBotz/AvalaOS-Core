@@ -3107,7 +3107,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "STUDIO-GENERATION_FAILURE"
@@ -3373,7 +3374,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "STUDIO-DOWNLOAD_DENIAL"
@@ -4182,7 +4184,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "DELIVERY-DUPLICATE_IMPORT"
@@ -4269,7 +4272,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "DELIVERY-RETAINED_LINEAGE"
@@ -5851,7 +5855,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "EI-INGESTION_VALIDATION"
@@ -5948,7 +5953,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "EI-INGESTION_LINEAGE"
@@ -6045,7 +6051,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "EI-QUERY_TENANT_ISOLATION"
@@ -6142,7 +6149,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "EI-COMMAND_REPLAY"
@@ -6239,7 +6247,8 @@
         "supabase/migrations/20261106170001_studio_timeout_reconciliation.sql",
         "supabase/migrations/20261106190001_sdd_completion_allowance.sql",
         "supabase/migrations/20261106191539_studio_synthetic_prompt_compatibility.sql",
-        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql"
+        "supabase/migrations/20261106210205_studio_sdd_pdf_branch_routing.sql",
+        "supabase/migrations/20261107110000_delivery_discovery_resolution.sql"
       ],
       "branchIds": [
         "EI-ASSEMBLE_PHASE1_NONEXECUTION"

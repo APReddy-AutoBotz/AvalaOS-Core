@@ -14,6 +14,9 @@ const FOREIGN_ORGANIZATION = '97000000-0000-4000-8000-000000000076';
 const FOREIGN_WORKSPACE = '97000000-0000-4000-8000-000000000077';
 const FOREIGN_TENANT_PROJECT = '97000000-0000-4000-8000-000000000078';
 const CLONE_PROJECT = '97000000-0000-4000-8000-000000000079';
+const OUTCOME_APPROVER = '97000000-0000-4000-8000-000000000080';
+const OUTCOME_OWN_ONLY = '97000000-0000-4000-8000-000000000081';
+const OUTCOME_OWN_ONLY_ROLE = '97000000-0000-4000-8000-000000000082';
 const WORK_ITEMS = [
   { proposalRole: 'coordination', type: 'Epic', title: 'Human approved outcome path', description: 'Exact structured grouping.', acceptanceCriteria: [], requirementLinks: [
     { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
@@ -26,13 +29,45 @@ const WORK_ITEMS = [
     { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
   ] },
 ];
+const DISCOVERY_QUESTION = 'Open question: The design must choose an unspecified API?';
+const SCOPE_QUESTION = 'Open question: Must the unknown write operation remain in implementation scope?';
+const DISCOVERY_WORK_ITEMS = [
+  { proposalRole: 'coordination', type: 'Epic', title: 'Coordinate discovery-bound outcome', description: 'Coordinate the approved planning scope.', acceptanceCriteria: [], requirementLinks: [
+    { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
+  ] },
+  { proposalRole: 'discovery', type: 'Task', title: 'Resolve the unspecified API', description: 'Resolve the exact approved question.', acceptanceCriteria: [
+    'Record an accepted source-backed answer or an independently approved nonblocking scope.',
+  ], requirementLinks: [
+    { sectionId: 'openQuestionsAndProposals', sectionTitle: 'Open questions and proposals', requirementText: DISCOVERY_QUESTION },
+  ] },
+  { proposalRole: 'implementation', type: 'Story', title: 'Implement the explicit outcome', description: 'Deliver only after discovery releases the blocker.', acceptanceCriteria: [
+    'Monitor reads the exact imported-task ancestry',
+  ], requirementLinks: [
+    { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
+  ], dependencyProposalIndices: [1] },
+  { proposalRole: 'discovery', type: 'Task', title: 'Resolve the unknown write scope', description: 'Resolve the exact approved scope question.', acceptanceCriteria: [
+    'Record an accepted source-backed answer or an independently approved nonblocking scope.',
+  ], requirementLinks: [
+    { sectionId: 'openQuestionsAndProposals', sectionTitle: 'Open questions and proposals', requirementText: SCOPE_QUESTION },
+  ] },
+  { proposalRole: 'implementation', type: 'Task', title: 'Implement the bounded write scope', description: 'Deliver only after scope discovery releases the blocker.', acceptanceCriteria: [
+    'The bounded implementation excludes unresolved operations.',
+  ], requirementLinks: [
+    { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-2: The implementation must retain only independently approved scope.' },
+  ], dependencyProposalIndices: [3] },
+  { proposalRole: 'verification', type: 'Task', title: 'Verify the discovery-bound outcome', description: 'Verify the bounded implementation.', acceptanceCriteria: [
+    'The approved outcome is independently verified.',
+  ], requirementLinks: [
+    { sectionId: 'summary', sectionTitle: 'Summary', requirementText: 'BR-1: The delivery owner must record an explicit outcome.' },
+  ] },
+];
 const APPROVED_STUDIO_CONTENT = {
   title: 'Exact approved fixture BRD',
   summary: 'Approved summary retained only as exact Studio source metadata.',
   sections: [
-    { id: 'summary', title: 'Summary', body: 'BR-1: The delivery owner must record an explicit outcome.', sourceAnchors: [], labels: ['human_authored'], citations: ['fixture-source-summary'] },
+    { id: 'summary', title: 'Summary', body: 'BR-1: The delivery owner must record an explicit outcome.\nBR-2: The implementation must retain only independently approved scope.', sourceAnchors: [], labels: ['human_authored'], citations: ['fixture-source-summary'] },
     { key: 'controls', title: 'Controls', content: 'NFR-1: Monitor shall read the exact imported-task ancestry.', citations: ['fixture-source-controls'] },
-    { id: 'openQuestionsAndProposals', title: 'Open questions and proposals', body: 'Open question: The design must choose an unspecified API?', citations: [] },
+    { id: 'openQuestionsAndProposals', title: 'Open questions and proposals', body: `${DISCOVERY_QUESTION}\n${SCOPE_QUESTION}`, citations: [] },
     { id: 'asIsFlow', title: 'As-Is Flow', body: 'flowchart TD\nA[Operator must review] --> B[Complete]', citations: [] },
   ],
 };
@@ -133,9 +168,69 @@ const reviseArtifactForPublication = async (db, x) => {
   return { ...x, aggregate, version };
 };
 
+async function verifyPredecessorDiscoveryCompletionBug() {
+  stage = 'predecessor-reproduction-create';
+  const fixture = await createLegacyDeliveryPostgresFixture({ throughMigration: '20261106210205_studio_sdd_pdf_branch_routing.sql', seed: false });
+  try {
+    const generated = await createCommittedStudioFixture(fixture.db, 'brd');
+    const x = await reviseArtifactForPublication(fixture.db, generated);
+    await fixture.db.query(`INSERT INTO public.assessments(id,process_id,org_id,workspace_id,status,score_version,created_by,updated_by)
+      VALUES($1,$2,$3,$4,'Approved','assess-core-2026-05',$5,$5)`, [ASSESSMENT, x.process, x.org, x.workspace, x.requester]);
+    await fixture.db.query(`INSERT INTO public.projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by,source_process_id,source_assessment_id)
+      VALUES($1,$2,$3,'Predecessor discovery reproduction',$4,$4,$4,$5,$6)`, [CLONE_PROJECT, x.org, x.workspace, x.requester, x.process, ASSESSMENT]);
+    for (const capability of ['assess.read','studio.artifacts.publish','workitems.import','task.read','task.update','backlog.read','project.manage']) {
+      await fixture.db.query('INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,$2) ON CONFLICT DO NOTHING', [x.role, capability]);
+    }
+    await fixture.db.query(`INSERT INTO public.studio_delivery_workspace_controls(org_id,workspace_id,publication_writes_enabled,outcome_writes_enabled,pack_writes_enabled)
+      VALUES($1,$2,true,true,true)`, [x.org, x.workspace]);
+    await fixture.db.query('INSERT INTO public.legacy_delivery_workspace_controls(org_id,workspace_id,writes_enabled) VALUES($1,$2,true)', [x.org, x.workspace]);
+    const aggregateVersion = await approveArtifact(fixture.db, x);
+    const authorizationVersion = Number((await fixture.db.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [x.org, x.requester],
+    )).rows[0].version);
+    const published = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion,
+      'studio.approved-artifact.publish', {
+        artifactId: x.artifactId, expectedArtifactVersionId: x.version.id, expectedAggregateVersion: aggregateVersion,
+        projectId: CLONE_PROJECT, workItems: DISCOVERY_WORK_ITEMS,
+      }, `predecessor-discovery-publish-${randomUUID()}`);
+    assert.equal(published.ok, true, JSON.stringify(published));
+    const source = (await fixture.asRole('service_role', () => fixture.db.query(
+      'SELECT public.legacy_delivery_requirement_query($1,$2,$3,$4,$5,100,NULL,$6,true) value',
+      [x.requester, x.org, x.workspace, authorizationVersion, CLONE_PROJECT, published.resource.documentGenerationId],
+    ))).rows[0].value.source;
+    const imported = (await fixture.asRole('service_role', () => fixture.db.query(
+      'SELECT public.legacy_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+      [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `predecessor-discovery-import-${randomUUID()}`, 'import', JSON.stringify({
+        projectId: CLONE_PROJECT, sourceGenerationId: published.resource.documentGenerationId,
+        expectedSourceDigest: source.digest, sourceItemIndices: [1, 2],
+      })],
+    ))).rows[0].value;
+    assert.equal(imported.ok, true, JSON.stringify(imported));
+    const projection = await fixture.callQuery({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, projectId: CLONE_PROJECT, sourceGenerationId: published.resource.documentGenerationId });
+    let discovery = projection.items.find(item => item.sourceLineage.sourceItemIndex === 1);
+    const dependent = projection.items.find(item => item.sourceLineage.sourceItemIndex === 2);
+    assert.ok(discovery && dependent && dependent.dependencyIds.includes(discovery.id), 'predecessor fixture must preserve the discovery dependency edge');
+    for (const status of ['In Progress','In Review','Testing','Ready for Release','Done']) {
+      const advanced = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+        version: authorizationVersion, key: `predecessor-discovery-${status}-${randomUUID()}`, action: 'task.update',
+        payload: { taskId: discovery.id, expectedVersion: discovery.version, patch: { status } } });
+      assert.equal(advanced.ok, true, `predecessor unexpectedly guarded unresolved discovery ${status}: ${JSON.stringify(advanced)}`);
+      discovery = advanced.resource;
+    }
+    const released = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `predecessor-dependent-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: dependent.id, expectedVersion: dependent.version, patch: { status: 'In Progress' } } });
+    assert.equal(released.ok, true, `predecessor must reproduce the original Done-only dependency release: ${JSON.stringify(released)}`);
+    console.log('STUDIO DELIVERY PREDECESSOR REPRO unresolved discovery reached Done and released dependent work without an accepted answer or approved scope');
+  } finally { await fixture.close(); }
+}
+
 async function run() {
   stage = 'dirty-marker';
   await verifyDirtyMarkerRollback();
+  stage = 'predecessor-reproduction';
+  await verifyPredecessorDiscoveryCompletionBug();
   stage = 'fixture-create';
   const fixture = await createLegacyDeliveryPostgresFixture({ seed: false });
   try {
@@ -161,10 +256,18 @@ async function run() {
     await fixture.db.query(`INSERT INTO public.workspaces(id,org_id,name,slug) VALUES($1,$2,'Foreign Studio Delivery workspace','foreign-studio-delivery-workspace')`, [FOREIGN_WORKSPACE, FOREIGN_ORGANIZATION]);
     await fixture.db.query(`INSERT INTO public.projects(id,org_id,workspace_id,name,owner_id,created_by,updated_by)
       VALUES($1,$2,$3,'Foreign tenant selector',$4,$4,$4)`, [FOREIGN_TENANT_PROJECT, FOREIGN_ORGANIZATION, FOREIGN_WORKSPACE, x.requester]);
-    for (const capability of ['assess.read','studio.artifacts.publish','delivery.outcomes.record','delivery.outcomes.read','delivery.pack.snapshot','workitems.import','task.read','backlog.read','project.manage']) {
+    for (const capability of ['assess.read','studio.artifacts.publish','delivery.outcomes.record','delivery.outcomes.read','delivery.pack.snapshot','workitems.import','task.read','task.update','backlog.read','project.manage']) {
       await fixture.db.query('INSERT INTO public.role_capabilities(role_id,capability_key) VALUES($1,$2) ON CONFLICT DO NOTHING', [x.role, capability]);
     }
+    await fixture.db.query(`INSERT INTO public.role_capabilities(role_id,capability_key)
+      SELECT DISTINCT assigned.role_id,capability FROM(
+       SELECT role_id FROM public.organization_members WHERE org_id=$1 AND user_id=ANY($2::uuid[])
+       UNION SELECT role_id FROM public.workspace_memberships WHERE org_id=$1 AND workspace_id=$3 AND user_id=ANY($2::uuid[]) AND role_id IS NOT NULL
+      ) assigned CROSS JOIN unnest(ARRAY['delivery.outcomes.record','delivery.outcomes.read','project.manage']) capability
+      ON CONFLICT DO NOTHING`, [x.org, [x.reviewer,x.approver], x.workspace]);
     const aggregateVersion = await approveArtifact(fixture.db, x);
+    await fixture.db.query('UPDATE public.organization_members SET role_id=$1 WHERE org_id=$2 AND user_id=ANY($3::uuid[])',
+      [x.role, x.org, [x.reviewer,x.approver]]);
     let authorizationVersion = Number((await fixture.db.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [x.org, x.requester])).rows[0].version);
     const before = await snapshot(fixture.db);
     stage = 'assignee-directory';
@@ -326,9 +429,9 @@ async function run() {
     stage = 'publish-bound-values';
     assert.equal(bound.artifacts.schemaVersion, 'studio-approved-work-items.v1'); assert.equal(bound.artifacts.workItems.length, WORK_ITEMS.length);
     assert.deepEqual(bound.artifacts.brd, { title: APPROVED_STUDIO_CONTENT.title, sections: [
-      { key: 'summary', title: 'Summary', content: 'BR-1: The delivery owner must record an explicit outcome.' },
+      { key: 'summary', title: 'Summary', content: 'BR-1: The delivery owner must record an explicit outcome.\nBR-2: The implementation must retain only independently approved scope.' },
       { key: 'controls', title: 'Controls', content: 'NFR-1: Monitor shall read the exact imported-task ancestry.' },
-      { key: 'openQuestionsAndProposals', title: 'Open questions and proposals', content: 'Open question: The design must choose an unspecified API?' },
+      { key: 'openQuestionsAndProposals', title: 'Open questions and proposals', content: `${DISCOVERY_QUESTION}\n${SCOPE_QUESTION}` },
       { key: 'asIsFlow', title: 'As-Is Flow', content: 'flowchart TD\nA[Operator must review] --> B[Complete]' },
     ] }, 'legacy primary document must map exact approved title and ordered section text');
     assert.deepEqual(bound.artifacts.approvedStudioContent, APPROVED_STUDIO_CONTENT, 'exact approved Studio content and citation/source metadata must remain immutable in the generation');
@@ -537,6 +640,258 @@ async function run() {
       assert.equal(direct.rows[0].pack_allowed, false, `${role} direct pack reads must remain revoked`);
       assert.equal(direct.rows[0].assignee_query_allowed, false, `${role} direct assignee directory execution must remain revoked`);
     }
+    stage = 'discovery-resolution-publication';
+    await fixture.db.query('INSERT INTO auth.users(id) VALUES($1)', [OUTCOME_APPROVER]);
+    await fixture.db.query("INSERT INTO public.profiles(id,email,full_name) VALUES($1,'outcome-approver@example.invalid','Independent outcome approver')", [OUTCOME_APPROVER]);
+    await fixture.db.query('INSERT INTO auth.users(id) VALUES($1)', [OUTCOME_OWN_ONLY]);
+    await fixture.db.query("INSERT INTO public.profiles(id,email,full_name) VALUES($1,'outcome-own-only@example.invalid','Own-task outcome proposer')", [OUTCOME_OWN_ONLY]);
+    await fixture.db.query(`INSERT INTO public.roles(id,org_id,name,slug,scope,permissions)
+      VALUES($1,$2,'Own-task outcome proposer','own-task-outcome-proposer','organization','[]'::jsonb)`, [OUTCOME_OWN_ONLY_ROLE, x.org]);
+    await fixture.db.query(`INSERT INTO public.role_capabilities(role_id,capability_key)
+      VALUES($1,'delivery.outcomes.record'),($1,'task.update.own')`, [OUTCOME_OWN_ONLY_ROLE]);
+    await fixture.db.query("INSERT INTO public.organization_members(org_id,user_id,role_id,status) VALUES($1,$2,$3,'active')",
+      [x.org, OUTCOME_OWN_ONLY, OUTCOME_OWN_ONLY_ROLE]);
+    await fixture.db.query("INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,status) VALUES($1,$2,$3,'active')",
+      [x.org, x.workspace, OUTCOME_OWN_ONLY]);
+    await fixture.db.query(`INSERT INTO public.organization_members(org_id,user_id,role_id,status)
+      SELECT org_id,$1,role_id,status FROM public.organization_members WHERE org_id=$2 AND user_id=$3`, [OUTCOME_APPROVER, x.org, x.requester]);
+    await fixture.db.query(`INSERT INTO public.workspace_memberships(org_id,workspace_id,user_id,role_id,status)
+      SELECT org_id,workspace_id,$1,role_id,status FROM public.workspace_memberships WHERE org_id=$2 AND workspace_id=$3 AND user_id=$4`,
+    [OUTCOME_APPROVER, x.org, x.workspace, x.requester]);
+    await fixture.db.query(`INSERT INTO public.role_capabilities(role_id,capability_key)
+      SELECT DISTINCT role_id,'project.manage' FROM(
+       SELECT role_id FROM public.organization_members WHERE org_id=$1 AND user_id=$2
+       UNION SELECT role_id FROM public.workspace_memberships WHERE org_id=$1 AND workspace_id=$3 AND user_id=$2
+      ) roles WHERE role_id IS NOT NULL ON CONFLICT DO NOTHING`, [x.org, OUTCOME_APPROVER, x.workspace]);
+    authorizationVersion = Number((await fixture.db.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [x.org, x.requester],
+    )).rows[0].version);
+    const discoveryPublished = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion,
+      'studio.approved-artifact.publish', {
+        artifactId: x.artifactId, expectedArtifactVersionId: x.version.id, expectedAggregateVersion: aggregateVersion,
+        projectId: CLONE_PROJECT, workItems: DISCOVERY_WORK_ITEMS,
+      }, `discovery-publish-${randomUUID()}`);
+    stage = `discovery-resolution-publication-${discoveryPublished.ok === true ? 'ok' : errorCode(discoveryPublished) ?? 'unknown'}`;
+    assert.equal(discoveryPublished.ok, true, JSON.stringify(discoveryPublished));
+    const discoverySource = (await fixture.asRole('service_role', () => fixture.db.query(
+      'SELECT public.legacy_delivery_requirement_query($1,$2,$3,$4,$5,100,NULL,$6,true) value',
+      [x.requester, x.org, x.workspace, authorizationVersion, CLONE_PROJECT, discoveryPublished.resource.documentGenerationId],
+    ))).rows[0].value.source;
+    const discoveryImported = (await fixture.asRole('service_role', () => fixture.db.query(
+      'SELECT public.legacy_delivery_apply_requirement_command($1,$2,$3,$4,$5,$6,$7,$8::jsonb) value',
+      [x.requester, x.org, x.workspace, authorizationVersion, randomUUID(), `discovery-import-${randomUUID()}`, 'import', JSON.stringify({
+        projectId: CLONE_PROJECT, sourceGenerationId: discoveryPublished.resource.documentGenerationId,
+        expectedSourceDigest: discoverySource.digest, sourceItemIndices: DISCOVERY_WORK_ITEMS.map((_item, index) => index),
+      })],
+    ))).rows[0].value;
+    stage = `discovery-resolution-import-${discoveryImported.ok === true ? 'ok' : errorCode(discoveryImported) ?? 'unknown'}`;
+    assert.equal(discoveryImported.ok, true, JSON.stringify(discoveryImported));
+    const discoveryProjection = await fixture.callQuery({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, projectId: CLONE_PROJECT, sourceGenerationId: discoveryPublished.resource.documentGenerationId });
+    const dependentTask = discoveryProjection.items.find(item => item.sourceLineage.sourceItemIndex === 2);
+    const scopeDependentTask = discoveryProjection.items.find(item => item.sourceLineage.proposalRole === 'implementation'
+      && item.sourceLineage.requirementLinks[0].requirementText.startsWith('BR-2:'));
+    const discoveryTask = discoveryProjection.items.find(item => item.sourceLineage.sourceItemIndex === 1);
+    const scopeDiscoveryTask = discoveryProjection.items.find(item => item.sourceLineage.sourceItemIndex === 3);
+    stage = `discovery-resolution-identities-${Boolean(discoveryTask)}-${Boolean(dependentTask)}-${Boolean(scopeDiscoveryTask)}-${Boolean(scopeDependentTask)}`;
+    assert.ok(discoveryTask && dependentTask && scopeDiscoveryTask && scopeDependentTask, 'both discovery/dependent pairs must materialize');
+    stage = `discovery-resolution-edge-questions-${discoveryTask.sourceLineage.requirementLinks[0].requirementText === DISCOVERY_QUESTION}-${scopeDiscoveryTask.sourceLineage.requirementLinks[0].requirementText === SCOPE_QUESTION}`;
+    assert.equal(discoveryTask.sourceLineage.requirementLinks[0].requirementText, DISCOVERY_QUESTION);
+    assert.equal(scopeDiscoveryTask.sourceLineage.requirementLinks[0].requirementText, SCOPE_QUESTION);
+    stage = `discovery-resolution-dependency-edge-${dependentTask.dependencyIds.length}-${scopeDependentTask.dependencyIds.length}-${dependentTask.dependencyIds[0] === discoveryTask.id}-${scopeDependentTask.dependencyIds[0] === scopeDiscoveryTask.id}`;
+    assert.equal(dependentTask.dependencyIds.length, 1); assert.equal(dependentTask.dependencyIds[0], discoveryTask.id);
+    assert.equal(scopeDependentTask.dependencyIds.length, 1); assert.equal(scopeDependentTask.dependencyIds[0], scopeDiscoveryTask.id);
+    const discoveryOutcomeProjection = await queryOutcomes(fixture, x.requester, x.org, x.workspace, authorizationVersion, CLONE_PROJECT);
+    stage = `discovery-resolution-source-options-${(discoveryOutcomeProjection.sourceOptions ?? []).map(option =>
+      discoveryProjection.items.find(item => item.id === option.taskId)?.sourceLineage.sourceItemIndex ?? 'missing').join('-')}`;
+    assert.ok(discoveryOutcomeProjection.sourceOptions.some(option => option.taskId === discoveryTask.id),
+      'normal outcome UI must receive a readable accepted-source selector before the first outcome exists');
+    stage = 'discovery-resolution-unresolved';
+    const unresolved = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: discoveryTask.id, expectedTaskVersion: discoveryTask.version, expectedOutcomeVersion: null,
+      status: 'partial', label: 'Discovery remains open', detail: 'The approved question remains unresolved and blocks implementation.',
+      discoveryResolution: { disposition: 'blocking_unresolved', question: DISCOVERY_QUESTION,
+        answer: null, evidenceAttestationId: null, revisedScope: null },
+    }, `discovery-unresolved-${randomUUID()}`);
+    stage = `discovery-resolution-unresolved-${unresolved.ok === true ? 'ok' : errorCode(unresolved) ?? 'unknown'}`;
+    assert.equal(unresolved.ok, true, JSON.stringify(unresolved));
+    let discoveryCurrent = discoveryTask;
+    for (const status of ['In Progress','In Review','Testing','Ready for Release']) {
+      const advanced = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+        version: authorizationVersion, key: `discovery-unresolved-${status}-${randomUUID()}`, action: 'task.update',
+        payload: { taskId: discoveryTask.id, expectedVersion: discoveryCurrent.version, patch: { status } } });
+      assert.equal(advanced.ok, true, JSON.stringify(advanced)); discoveryCurrent = advanced.resource;
+    }
+    const unresolvedDone = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-unresolved-done-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: discoveryTask.id, expectedVersion: discoveryCurrent.version, patch: { status: 'Done' } } });
+    stage = `discovery-resolution-unresolved-done-${errorCode(unresolvedDone) ?? (unresolvedDone.ok ? 'ok' : 'unknown')}`;
+    assert.equal(errorCode(unresolvedDone), 'DEPENDENCY_INCOMPLETE', 'Done alone cannot satisfy an unresolved discovery task');
+    const acceptedAttestation = discoveryOutcomeProjection.sourceOptions.find(option => option.taskId === discoveryTask.id)?.evidenceAttestationId;
+    stage = `discovery-resolution-accepted-attestation-${Boolean(acceptedAttestation)}`;
+    assert.ok(acceptedAttestation, 'fixture must expose an accepted immutable source review reference');
+    const directAccepted = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: discoveryTask.id, expectedTaskVersion: discoveryCurrent.version, expectedOutcomeVersion: 1,
+      status: 'achieved', label: 'Unreviewed answer', detail: 'Free text must not become accepted merely because its source was accepted.',
+      discoveryResolution: { disposition: 'source_backed_answer_accepted', question: DISCOVERY_QUESTION,
+        answer: 'Use an unrelated operation.', evidenceAttestationId: acceptedAttestation, revisedScope: null },
+    }, `discovery-direct-answer-${randomUUID()}`);
+    stage = `discovery-resolution-direct-answer-${errorCode(directAccepted) ?? (directAccepted.ok ? 'ok' : 'unknown')}`;
+    assert.notEqual(directAccepted.ok, true, 'accepted source alone cannot accept an arbitrary answer tuple');
+    const proposedAnswerPayload = {
+      taskId: discoveryTask.id, expectedTaskVersion: discoveryCurrent.version, expectedOutcomeVersion: 1,
+      status: 'partial', label: 'Source-backed answer proposed', detail: 'The exact answer and source await independent acceptance.',
+      discoveryResolution: { disposition: 'source_backed_answer_proposed', question: DISCOVERY_QUESTION,
+        answer: 'Use only the source-supported read operation.', evidenceAttestationId: acceptedAttestation, revisedScope: null },
+    };
+    const proposedValidation = (await fixture.db.query(`SELECT public.studio_delivery_discovery_resolution_valid(
+      ROW(task.*)::public.delivery_work_items,ROW(publication.*)::public.studio_delivery_publications,$2::jsonb,$3,$4) valid FROM public.delivery_work_items task
+      JOIN public.document_generations generation ON generation.id=task.document_generation_id
+      JOIN public.studio_delivery_publications publication ON publication.id=generation.studio_delivery_publication_id
+      WHERE task.id=$1`, [discoveryTask.id, JSON.stringify(proposedAnswerPayload), x.requester, authorizationVersion])).rows[0]?.valid;
+    stage = `discovery-resolution-proposed-validation-${proposedValidation}`;
+    assert.equal(proposedValidation, true);
+    const proposedAnswer = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record',
+      proposedAnswerPayload, `discovery-proposed-answer-${randomUUID()}`);
+    stage = `discovery-resolution-proposed-answer-${proposedAnswer.ok === true ? 'ok' : errorCode(proposedAnswer) ?? 'unknown'}`;
+    assert.equal(proposedAnswer.ok, true, JSON.stringify(proposedAnswer));
+    const selfAcceptedAnswer = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      ...proposedAnswerPayload, expectedOutcomeVersion: 2, status: 'achieved', label: 'Self acceptance denied',
+      discoveryResolution: { ...proposedAnswerPayload.discoveryResolution, disposition: 'source_backed_answer_accepted' },
+    }, `discovery-self-answer-${randomUUID()}`);
+    stage = `discovery-resolution-self-answer-${errorCode(selfAcceptedAnswer) ?? (selfAcceptedAnswer.ok ? 'ok' : 'unknown')}`;
+    assert.notEqual(selfAcceptedAnswer.ok, true);
+    const ownOnlyVersion = Number((await fixture.db.query(
+      'SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [x.org, OUTCOME_OWN_ONLY],
+    )).rows[0].version);
+    const ownOnlyAcceptedAnswer = await call(fixture, OUTCOME_OWN_ONLY, x.org, x.workspace, ownOnlyVersion, 'delivery.outcome.record', {
+      ...proposedAnswerPayload, expectedOutcomeVersion: 2, status: 'achieved', label: 'Own-task acceptance denied',
+      discoveryResolution: { ...proposedAnswerPayload.discoveryResolution, disposition: 'source_backed_answer_accepted' },
+    }, `discovery-own-only-answer-${randomUUID()}`);
+    stage = `discovery-resolution-own-only-answer-${errorCode(ownOnlyAcceptedAnswer) ?? (ownOnlyAcceptedAnswer.ok ? 'ok' : 'unknown')}`;
+    assert.notEqual(ownOnlyAcceptedAnswer.ok, true, 'task.update.own plus outcome recording cannot independently accept a blocker release');
+    const outcomeApproverVersion = Number((await fixture.db.query('SELECT version FROM public.authorization_versions WHERE org_id=$1 AND user_id=$2', [x.org, OUTCOME_APPROVER])).rows[0].version);
+    const outcomeApproverCapability = (await fixture.db.query(
+      "SELECT public.legacy_delivery_assert_any_authority($1,$2,$3,ARRAY['project.manage'],$4) capability",
+      [OUTCOME_APPROVER, x.org, x.workspace, outcomeApproverVersion])).rows[0].capability;
+    assert.equal(outcomeApproverCapability, 'project.manage');
+    const acceptedAnswer = await call(fixture, OUTCOME_APPROVER, x.org, x.workspace,
+      outcomeApproverVersion,
+      'delivery.outcome.record', { ...proposedAnswerPayload, expectedOutcomeVersion: 2, status: 'achieved', label: 'Answer independently accepted',
+        discoveryResolution: { ...proposedAnswerPayload.discoveryResolution, disposition: 'source_backed_answer_accepted' } },
+      `discovery-accepted-answer-${randomUUID()}`);
+    stage = `discovery-resolution-accepted-answer-${acceptedAnswer.ok === true ? 'ok' : errorCode(acceptedAnswer) ?? 'unknown'}`;
+    assert.equal(acceptedAnswer.ok, true, JSON.stringify(acceptedAnswer));
+    const discoveryDone = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-done-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: discoveryTask.id, expectedVersion: discoveryCurrent.version, patch: { status: 'Done' } } });
+    assert.equal(discoveryDone.ok, true, JSON.stringify(discoveryDone));
+    const reopenAfterDone = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: discoveryTask.id, expectedTaskVersion: discoveryDone.resource.version, expectedOutcomeVersion: 3,
+      status: 'partial', label: 'Reopen after Done denied', detail: 'A terminal discovery task cannot silently restore its blocker.',
+      discoveryResolution: { disposition: 'blocking_unresolved', question: DISCOVERY_QUESTION,
+        answer: null, evidenceAttestationId: null, revisedScope: null },
+    }, `discovery-reopen-done-${randomUUID()}`);
+    assert.equal(errorCode(reopenAfterDone), 'INVALID_COMMAND', 'Done discovery cannot be reopened through an outcome version');
+    const dependentStarted = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-dependent-start-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: dependentTask.id, expectedVersion: dependentTask.version, patch: { status: 'In Progress' } } });
+    assert.equal(dependentStarted.ok, true, JSON.stringify(dependentStarted));
+    const removedDependency = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-remove-edge-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: dependentTask.id, expectedVersion: dependentStarted.resource.version, patch: { dependencyIds: [] } } });
+    assert.equal(errorCode(removedDependency), 'DEPENDENCY_INCOMPLETE', 'an imported discovery dependency cannot be removed to bypass release semantics');
+    stage = 'historical-done-outcome-fails-closed';
+    await fixture.db.query('ALTER TABLE public.legacy_delivery_outcome_versions DISABLE TRIGGER legacy_delivery_outcome_version_immutable');
+    try {
+      await fixture.db.query(`UPDATE public.legacy_delivery_outcome_versions version SET
+        discovery_disposition=NULL,discovery_question=NULL,discovery_answer=NULL,
+        discovery_evidence_attestation_id=NULL,discovery_revised_scope=NULL,status='achieved'
+        FROM public.legacy_delivery_outcome_aggregates aggregate
+        WHERE aggregate.task_id=$1 AND version.id=aggregate.current_version_id`, [discoveryTask.id]);
+    } finally {
+      await fixture.db.query('ALTER TABLE public.legacy_delivery_outcome_versions ENABLE TRIGGER legacy_delivery_outcome_version_immutable');
+    }
+    const historicalRelease = (await fixture.db.query(`SELECT
+      (item.status='Done' AND item.retention_state='active') old_done_release,
+      public.legacy_delivery_discovery_dependency_released(item.id,item.org_id,item.workspace_id) corrected_release
+      FROM public.delivery_work_items item WHERE item.id=$1`, [discoveryTask.id])).rows[0];
+    assert.deepEqual(historicalRelease, { old_done_release: true, corrected_release: false },
+      'the reproduced original Done-only predicate releases a historical achieved row while the corrected guard fails closed');
+    const historicalDependentAdvance = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-historical-dependent-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: dependentTask.id, expectedVersion: dependentStarted.resource.version, patch: { status: 'In Review' } } });
+    assert.equal(errorCode(historicalDependentAdvance), 'DEPENDENCY_INCOMPLETE',
+      'a historical achieved outcome without a typed resolution cannot release dependent implementation');
+    const historicalProposal = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: discoveryTask.id, expectedTaskVersion: discoveryDone.resource.version, expectedOutcomeVersion: 3,
+      status: 'partial', label: 'Historical answer proposed', detail: 'The Done status remains unchanged while the exact tuple is reviewed.',
+      discoveryResolution: { disposition: 'source_backed_answer_proposed', question: DISCOVERY_QUESTION,
+        answer: 'Use only the source-supported read operation.', evidenceAttestationId: acceptedAttestation, revisedScope: null },
+    }, `discovery-historical-proposal-${randomUUID()}`);
+    assert.equal(historicalProposal.ok, true, JSON.stringify(historicalProposal));
+    const historicalAccepted = await call(fixture, OUTCOME_APPROVER, x.org, x.workspace,
+      outcomeApproverVersion,
+      'delivery.outcome.record', {
+        taskId: discoveryTask.id, expectedTaskVersion: discoveryDone.resource.version, expectedOutcomeVersion: 4,
+        status: 'achieved', label: 'Historical answer independently accepted', detail: 'The exact historical question, answer and source tuple is accepted.',
+        discoveryResolution: { disposition: 'source_backed_answer_accepted', question: DISCOVERY_QUESTION,
+          answer: 'Use only the source-supported read operation.', evidenceAttestationId: acceptedAttestation, revisedScope: null },
+      }, `discovery-historical-accepted-${randomUUID()}`);
+    assert.equal(historicalAccepted.ok, true, JSON.stringify(historicalAccepted));
+    const historicalDependentReleased = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-historical-released-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: dependentTask.id, expectedVersion: dependentStarted.resource.version, patch: { status: 'In Review' } } });
+    assert.equal(historicalDependentReleased.ok, true, JSON.stringify(historicalDependentReleased));
+    const qualifiedDowngrade = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: discoveryTask.id, expectedTaskVersion: discoveryDone.resource.version, expectedOutcomeVersion: 5,
+      status: 'partial', label: 'Qualified downgrade denied', detail: 'A qualified Done resolution cannot be silently downgraded.',
+      discoveryResolution: { disposition: 'blocking_unresolved', question: DISCOVERY_QUESTION,
+        answer: null, evidenceAttestationId: null, revisedScope: null },
+    }, `discovery-qualified-downgrade-${randomUUID()}`);
+    assert.equal(errorCode(qualifiedDowngrade), 'INVALID_COMMAND');
+    const unresolvedScope = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: scopeDiscoveryTask.id, expectedTaskVersion: scopeDiscoveryTask.version, expectedOutcomeVersion: null,
+      status: 'partial', label: 'Scope question remains open', detail: 'The exact scope question remains blocking.',
+      discoveryResolution: { disposition: 'blocking_unresolved', question: SCOPE_QUESTION,
+        answer: null, evidenceAttestationId: null, revisedScope: null },
+    }, `discovery-unresolved-scope-${randomUUID()}`);
+    assert.equal(unresolvedScope.ok, true, JSON.stringify(unresolvedScope));
+    const proposedScope = await call(fixture, x.requester, x.org, x.workspace, authorizationVersion, 'delivery.outcome.record', {
+      taskId: scopeDiscoveryTask.id, expectedTaskVersion: scopeDiscoveryTask.version, expectedOutcomeVersion: 1,
+      status: 'partial', label: 'Nonblocking scope proposed', detail: 'The implementation scope excludes the unresolved operation.',
+      discoveryResolution: { disposition: 'nonblocking_scope_proposed', question: SCOPE_QUESTION,
+        answer: null, evidenceAttestationId: null, revisedScope: 'Exclude the unknown operation and retain the approved read-only scope.' },
+    }, `discovery-proposed-scope-${randomUUID()}`);
+    assert.equal(proposedScope.ok, true, JSON.stringify(proposedScope));
+    const blockedWhileProposed = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-dependent-proposed-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: scopeDependentTask.id, expectedVersion: scopeDependentTask.version, patch: { status: 'In Progress' } } });
+    assert.equal(errorCode(blockedWhileProposed), 'DEPENDENCY_INCOMPLETE');
+    const approvedScope = await call(fixture, OUTCOME_APPROVER, x.org, x.workspace,
+      outcomeApproverVersion,
+      'delivery.outcome.record', {
+        taskId: scopeDiscoveryTask.id, expectedTaskVersion: scopeDiscoveryTask.version, expectedOutcomeVersion: 2,
+        status: 'achieved', label: 'Nonblocking scope independently approved', detail: 'A separate actor approved the exact revised scope.',
+        discoveryResolution: { disposition: 'approved_nonblocking_scope', question: SCOPE_QUESTION,
+          answer: null, evidenceAttestationId: null, revisedScope: 'Exclude the unknown operation and retain the approved read-only scope.' },
+      }, `discovery-approved-scope-${randomUUID()}`);
+    assert.equal(approvedScope.ok, true, JSON.stringify(approvedScope));
+    let scopeCurrent = scopeDiscoveryTask;
+    for (const status of ['In Progress','In Review','Testing','Ready for Release']) {
+      const advanced = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+        version: authorizationVersion, key: `discovery-scope-${status}-${randomUUID()}`, action: 'task.update',
+        payload: { taskId: scopeDiscoveryTask.id, expectedVersion: scopeCurrent.version, patch: { status } } });
+      assert.equal(advanced.ok, true, JSON.stringify(advanced)); scopeCurrent = advanced.resource;
+    }
+    const dependentReviewed = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-dependent-approved-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: scopeDiscoveryTask.id, expectedVersion: scopeCurrent.version, patch: { status: 'Done' } } });
+    assert.equal(dependentReviewed.ok, true, JSON.stringify(dependentReviewed));
+    const scopeDependentStarted = await fixture.callCommand({ actor: x.requester, org: x.org, workspace: x.workspace,
+      version: authorizationVersion, key: `discovery-scope-dependent-approved-${randomUUID()}`, action: 'task.update',
+      payload: { taskId: scopeDependentTask.id, expectedVersion: scopeDependentTask.version, patch: { status: 'In Progress' } } });
+    assert.equal(scopeDependentStarted.ok, true, JSON.stringify(scopeDependentStarted));
     console.log('STUDIO DELIVERY POSTGRES PASS exact approved requirement generation, user-selected confirmation, replay/conflict, stable-origin duplicate prevention, visible board links, persistent task outcome, immutable pack and zero-write queries');
   } finally { await fixture.close(); }
 }

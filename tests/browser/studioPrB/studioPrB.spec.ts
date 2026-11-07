@@ -611,6 +611,67 @@ test('independent read capabilities compose without unauthorized projection call
 
 test('canonical reload targeting reselects an exact retained artifact after the first summary wins remount',async({page})=>{await open(page,'?mode=direct&syntheticSelection=1');const commandsBefore=await page.evaluate(()=>(window as any).__studioCommandCalls.length);const selector=page.getByLabel('Governed artifact',{exact:true});const targetArtifactId='00000044-0000-4000-8000-000000000044';await selector.selectOption(targetArtifactId);await expect(selector).toHaveValue(targetArtifactId);await expect(page.locator('pre')).toContainText('Another Studio document');const target=await captureCanonicalStudioArtifactReloadTarget(page,1);await page.reload({waitUntil:'domcontentloaded'});await expect(page.getByRole('heading',{name:'Current document',exact:true})).toBeVisible();await expect(selector).toHaveValue('00000038-0000-4000-8000-000000000038');await reloadCanonicalStudioArtifact(page,target);await expect(selector).toHaveValue(targetArtifactId);await expect(page.locator('pre')).toContainText('Another Studio document');const commandsAfter=await page.evaluate(()=>(window as any).__studioCommandCalls.length);expect({commandsBefore,commandsAfter}).toEqual({commandsBefore:0,commandsAfter:0});});
 
+test('saved document A remains current after opening B and reopening A without a page reload',async({page})=>{
+  await open(page,'?mode=direct&syntheticSelection=1');
+  const workspace=page.getByTestId('studio-artifact-workspace');
+  const selector=workspace.getByLabel('Governed artifact',{exact:true});
+  const primaryId='00000038-0000-4000-8000-000000000038';
+  const otherId='00000044-0000-4000-8000-000000000044';
+  const editor=workspace.getByRole('region',{name:'Current document',exact:true});
+  await editor.getByLabel('Section title').fill('Saved without a full-page reload');
+  await editor.getByLabel('Section body').fill('The committed server revision survives selector navigation.');
+  await editor.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(workspace.getByText('Draft committed.',{exact:true})).toBeVisible();
+  await expect(selector.locator(`option[value="${primaryId}"]`)).toHaveText('Current BRD · Draft');
+  await selector.selectOption(otherId);
+  await expect(editor.getByLabel('Section title')).toHaveValue('Context');
+  await expect(editor.getByLabel('Section body')).toHaveValue('Different committed Studio content.');
+  await selector.selectOption(primaryId);
+  await expect(editor.getByLabel('Section title')).toHaveValue('Saved without a full-page reload');
+  await expect(editor.getByLabel('Section body')).toHaveValue('The committed server revision survives selector navigation.');
+  await expect(workspace).not.toContainText('Command failed before commit');
+  await expect(workspace).not.toContainText('projection reload failed');
+});
+
+test('a saved document that moves from a later index page reconciles against the latest page',async({page})=>{
+  await open(page,'?mode=direct&syntheticSelection=1&pagedSelection=1');
+  const workspace=page.getByTestId('studio-artifact-workspace');
+  const selector=workspace.getByLabel('Governed artifact',{exact:true});
+  const primaryId='00000038-0000-4000-8000-000000000038';
+  await workspace.getByRole('button',{name:'Next',exact:true}).click();
+  await expect(selector).toHaveValue(primaryId);
+  const editor=workspace.getByRole('region',{name:'Current document',exact:true});
+  await editor.getByLabel('Section body').fill('Committed from the later index page.');
+  await editor.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(workspace.getByText('Draft committed.',{exact:true})).toBeVisible();
+  await expect(selector).toHaveValue(primaryId);
+  await expect(editor.getByLabel('Section body')).toHaveValue('Committed from the later index page.');
+  await expect(workspace.getByRole('button',{name:'Previous',exact:true})).toBeDisabled();
+});
+
+test('generation and independent approval reconcile selector status before cross-document navigation',async({page})=>{
+  await open(page,'?mode=direct&syntheticSelection=1');
+  const workspace=page.getByTestId('studio-artifact-workspace');
+  const selector=workspace.getByLabel('Governed artifact',{exact:true});
+  const primaryId='00000038-0000-4000-8000-000000000038';
+  const otherId='00000044-0000-4000-8000-000000000044';
+  await workspace.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');
+  await workspace.getByRole('button',{name:'Generate governed package draft',exact:true}).click();
+  await expect(workspace.getByText(/current document and index reloaded/)).toBeVisible();
+  await workspace.getByRole('button',{name:'Submit for review',exact:true}).click();
+  await workspace.getByRole('button',{name:'Assign reviewer',exact:true}).click();
+  await workspace.getByRole('textbox',{name:'Rationale',exact:true}).fill('Independent review accepts the bounded planning content.');
+  await workspace.getByRole('button',{name:'Approve review',exact:true}).click();
+  await workspace.getByRole('button',{name:'Final approve',exact:true}).click();
+  await expect(selector.locator(`option[value="${primaryId}"]`)).toHaveText('Current BRD · Approved');
+  await selector.selectOption(otherId);
+  await expect(workspace.getByRole('region',{name:'Current document',exact:true}).getByLabel('Section body')).toHaveValue('Different committed Studio content.');
+  await selector.selectOption(primaryId);
+  await expect(selector).toHaveValue(primaryId);
+  await expect(workspace.getByRole('heading',{name:'Approved',exact:true})).toBeVisible();
+  await expect(workspace).not.toContainText('projection reload failed');
+});
+
 test('direct artifact index restores a cited human revision after full route reload',async({page},info)=>{await open(page,'?mode=direct');const builder=page.getByRole('region',{name:'Studio Source Package builder'});await builder.getByLabel('Exact locked Studio bundle').selectOption({index:1});await builder.getByRole('button',{name:'Create direct planning package'}).click();await expect(builder.getByText(/Direct BRD source package committed and reloaded/)).toBeVisible();await page.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');await page.getByRole('button',{name:'Generate governed package draft'}).click();await expect(page.getByText(/Draft committed from exact Studio Source Package v1/)).toBeVisible();const editor=page.getByRole('region',{name:'Current document'});await editor.getByLabel('Section title').fill('Reloaded governed invoice scope');await editor.getByRole('button',{name:'Save changes'}).click();await expect(page.getByText('Version 2',{exact:true})).toBeVisible();await page.reload({waitUntil:'domcontentloaded'});await expect(page.locator('[data-testid="studio-artifact-workspace"][data-studio-usable="true"][data-studio-projection-state="artifact-ready"]')).toBeVisible();await expect(page.getByLabel('Governed artifact')).toHaveValue('00000038-0000-4000-8000-000000000038');await expect(page.getByText('Version 2',{exact:true})).toBeVisible();const restored=page.getByRole('region',{name:'Current document'});await expect(restored.getByLabel('Section title')).toHaveValue('Reloaded governed invoice scope');await expect(restored.getByText('Studio workshop transcript · v3')).toBeVisible();marker(info,'STUDIO-TR-007','artifact-summary-full-reload-cited-revision','STUDIO-DIRECT-RELOAD-01',{artifactId:'00000038-0000-4000-8000-000000000038',artifactVersion:2,sourcePackageVersion:1,summaryContract:'studio-artifact-summary-2',canonicalAnchorKeys:['sourceVersionId','locator','anchorHash'],displayEnrichmentSource:'selectedSources',fullRouteReload:true});});
 
 test('manual brief creation and server-authorized generation keep browser and provider boundaries explicit',async({page},info)=>{await open(page,'?mode=direct');const builder=page.getByRole('region',{name:'Studio Source Package builder'});await expect(builder.getByText('Your browser sends raw text only when creating the source package. During an authorized generation, the server retrieves the committed private brief and sends it through the governed provider. Raw material is not returned in browser projections.',{exact:true})).toBeVisible();await builder.getByLabel('Manual brief').fill('Plan a governed invoice-exception operating model.');await builder.getByRole('button',{name:'Create manual planning package'}).click();await expect(builder.getByText(/Manual BRD source package committed and reloaded/)).toBeVisible();await page.getByLabel('Exact approved Studio template').selectOption('00000013-0000-4000-8000-000000000013');await page.getByRole('button',{name:'Generate governed package draft'}).click();await expect(page.getByText(/Draft committed from exact Studio Source Package v1; v2 projection reloaded/)).toBeVisible();await expect(page.getByRole('region',{name:'Current document'}).getByLabel('Section body')).toHaveValue('Bounded manual planning brief.');const sourceCoverage=page.getByRole('region',{name:'Source coverage'});await expect(sourceCoverage.getByText('Unselected sources have zero influence.',{exact:true})).toBeVisible();await expect(sourceCoverage.getByText('0/0 sources · complete',{exact:true})).toBeVisible();marker(info,'HANDOFF-007','manual-package-durable-identity-generation','STUDIO-MANUAL-PACKAGE-01',{mode:'manual_brief',sourcePackageId:'00000039-0000-4000-8000-000000000039',sourcePackageVersionId:'00000040-0000-4000-8000-000000000040',sourcePackageVersion:1,sourcePackageHash:'9'.repeat(64),templateId:'00000012-0000-4000-8000-000000000012',templateVersionId:'00000013-0000-4000-8000-000000000013',templateVersion:'studio-brd-2',templateHash:'c'.repeat(64),artifactId:'00000038-0000-4000-8000-000000000038',artifactVersionId:'00000040-0000-4000-8000-000000000040',artifactVersion:1,manualBriefCreateCharacterCount:51,browserPackageCreatePayloadManualBriefField:'present',browserGenerationCommandPayloadManualBriefField:'absent',browserProjectionRawManualBriefField:'absent',assessmentLabel:'not_assessed',planningOnly:true,selectedSources:0,coveredSources:0,coverageComplete:true,unselectedSourcesInfluence:false});});

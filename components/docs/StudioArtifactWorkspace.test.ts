@@ -29,6 +29,14 @@ for(const token of [
   'isCurrent:()=>boolean=()=>mountedRef.current&&accepts(ticket)',
   'const summarySequence=++governedSummarySequenceRef.current',
   'governedSummarySequenceRef.current===summarySequence',
+  'const reconcileCommittedArtifact = useCallback',
+  'await reconcileCommittedArtifact(',
+  'setArtifactSummaries(summaries);',
+  "summary => `${labels[summary.lifecycle]} committed.`",
+  'if (!summary && summaries.offset > 0)',
+  'summaries = await readStudioArtifactSummaries(context, 0, summaries.limit, transport);',
+  'const loaded = await loadGovernedSummary(summary, ticket);',
+  "if (!loaded || !accepts(ticket)) throw new StudioArtifactBoundaryError('AUTHORITY_STALE');",
   "const handoffFailureState=artifact?.readOnly===true||['stale'",
   "setState(current=>current==='loading'?(artifact?.readOnly?'read_only':artifact?.lifecycle??'empty'):current)",
   'studioHandoffLoadMayBegin(activeHandoffCommandRef.current,authorityIdentity)',
@@ -50,6 +58,9 @@ for(const token of [
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
 assert.ok(source.includes('Business users can review the current document, save changes, view its source, and open its history.'), 'normal Studio introduction must use business wording');
+assert.ok(source.includes('<label className="av-form-label mt-4">Current document<select aria-label="Governed artifact"'), 'artifact selection must use current-document wording');
+assert.ok(source.includes('Current {item.artifactType.toUpperCase()} · {labels[item.lifecycle]}'), 'artifact options must show a business document/status label');
+assert.ok(!source.includes('{item.displayLabel} · {item.lifecycle.replace'), 'artifact options must not expose source-mode revision labels');
 assert.ok(source.includes('data-testid="studio-current-document-audit"'), 'current technical revision details must remain available under audit');
 assert.ok(source.includes('Aggregate v{artifact.aggregateVersion} · Content v{artifact.currentVersion.version}'), 'audit retains exact aggregate/content revision identity');
 assert.ok(source.includes('data-testid="studio-canonical-json-audit"'), 'canonical JSON import must have a scoped audit disclosure');
