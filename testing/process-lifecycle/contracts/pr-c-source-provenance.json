@@ -21,7 +21,6 @@
     ".github/workflows/transcript-flow-pr-b.yml": "sha256:fb27b3bcefe768463c6b763eecc2904352789e31349bb02619f6716e3f60ceb7",
     ".github/workflows/transcript-flow-pr-c.yml": "sha256:4fcdfa555fbec9827887fe2a92088d785564f0f03adde7ae3010a900a3818e5d",
     ".gitignore": "sha256:e8c6ff7c4159be18f199face4cf15780dffcdde1fbe464c8d1720cbcf849b6b5",
-    ".playwright-cli/page-2026-11-07T10-42-07-190Z.yml": "sha256:05a13d1be18938768f85c55ed478b754960f3184a3f52de78fb0e926b72a3544",
     "AGENTS.md": "sha256:6c09719d4d2442651019ab03ced906a8423961b231cb56970b27991fd4502ed5",
     "App.tsx": "sha256:a9694e78cfba7aa940e257d6072487a1d0543512a845aa5a03253e9effba97dc",
     "README.md": "sha256:28acf0eee3b8b2a6a64549ae8f482aa42cce5bbdedb60810948e98ba83ddb9aa",
