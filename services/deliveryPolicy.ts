@@ -1,4 +1,5 @@
 import { Task, TaskStatus, User } from '../types';
+import type { StudioDeliveryDiscoveryDisposition } from './productAcceptanceBridge/contracts';
 
 export class DeliveryPolicyError extends Error {
   constructor(message: string) {
@@ -10,6 +11,12 @@ export class DeliveryPolicyError extends Error {
 const ADMIN_PERMISSIONS = new Set(['org.admin', 'security.manage', 'roles.manage']);
 const MANAGER_PERMISSIONS = new Set(['project.manage']);
 const ACTIVE_STATUSES: TaskStatus[] = ['In Progress', 'In Review', 'Testing', 'Ready for Release', 'Done'];
+const RELEASED_DISCOVERY_DISPOSITIONS = new Set<StudioDeliveryDiscoveryDisposition>([
+  'source_backed_answer_accepted',
+  'approved_nonblocking_scope',
+]);
+
+export type DeliveryDiscoveryDispositionByTask = ReadonlyMap<string, StudioDeliveryDiscoveryDisposition | null>;
 
 const normalized = (values: string[] | undefined) => [...(values || [])].sort().join('|');
 
@@ -63,10 +70,36 @@ const hasProtectedFieldChange = (previousTask: Task, nextTask: Task) =>
   normalized(previousTask.assigneeIds) !== normalized(nextTask.assigneeIds) ||
   normalized(previousTask.dependencyIds) !== normalized(nextTask.dependencyIds);
 
-export const getDependencyViolations = (task: Task, allTasks: Task[], nextStatus: TaskStatus = task.status) => {
+export const discoveryDispositionReleasesWork = (disposition: StudioDeliveryDiscoveryDisposition | null | undefined) =>
+  Boolean(disposition && RELEASED_DISCOVERY_DISPOSITIONS.has(disposition));
+
+export const getDependencyViolations = (
+  task: Task,
+  allTasks: Task[],
+  nextStatus: TaskStatus = task.status,
+  discoveryDispositions?: DeliveryDiscoveryDispositionByTask,
+) => {
   if (!ACTIVE_STATUSES.includes(nextStatus)) return [];
   const dependencies = allTasks.filter(candidate => task.dependencyIds?.includes(candidate.id));
-  return dependencies.filter(dependency => dependency.status !== 'Done');
+  return dependencies.filter(dependency => dependency.status !== 'Done'
+    || discoveryDispositions !== undefined
+      && dependency.sourceLineage?.proposalRole === 'discovery'
+      && !discoveryDispositionReleasesWork(discoveryDispositions.get(dependency.id)));
+};
+
+export const getStatusTransitionViolations = (
+  task: Task,
+  allTasks: Task[],
+  nextStatus: TaskStatus,
+  discoveryDispositions?: DeliveryDiscoveryDispositionByTask,
+) => {
+  const violations = getDependencyViolations(task, allTasks, nextStatus, discoveryDispositions);
+  if (nextStatus === 'Done' && discoveryDispositions !== undefined
+    && task.sourceLineage?.proposalRole === 'discovery'
+    && !discoveryDispositionReleasesWork(discoveryDispositions.get(task.id))) {
+    return [...violations, task];
+  }
+  return violations;
 };
 
 export const canUpdateDeliveryTask = (user: User | null | undefined, previousTask: Task, nextTask: Task, allTasks: Task[]) => {

@@ -128,7 +128,8 @@ test('actual Assess route uploads multiple sources, reviews typed AI suggestions
   const reviewStep = page.getByText('3. Analyze and review AI suggestions').locator('..');
   await reviewStep.getByLabel('Locked source bundle').selectOption({index:1});
   await reviewStep.getByRole('button',{name:'Analyze selected documents'}).click();
-  await expect(reviewStep.getByText('Parser disclosures')).toBeVisible();
+  await expect(reviewStep.getByText('Source-specific parser disclosures')).toBeVisible();
+  await reviewStep.getByText('Parser audit details').click();
   await expect(reviewStep).toContainText('HIDDEN_SHEETS_EXCLUDED');
   await expect(reviewStep).toContainText('FORMULA_CELLS_AND_CACHED_VALUES_EXCLUDED');
   await expect(reviewStep).toContainText('ERROR_CELLS_EXCLUDED');
@@ -193,6 +194,34 @@ test('actual Assess route uploads multiple sources, reviews typed AI suggestions
   await page.reload();
   await expect(page.getByLabel('Assessment name')).toHaveValue('Human-reviewed invoice resolution');
   await expect(page.getByLabel('Assessment description')).toHaveValue('V2 case');
+});
+
+test('an all-rejected mapping result is explicit, inert, and survives authoritative reload', async ({ page }) => {
+  const base = await installEnterpriseFixture(page, { capabilities:[...new Set([...ALL_CAPABILITIES, PROCESS_CREATE_CAPABILITY, ...mappingCapabilities])] });
+  const mapping = await installAssessImportFixture(page, { onCommit: values => base.commitDocumentMapping(values), analyzeOutcome:'all_rejected' });
+  await openNativeDraft(page);
+  const initialName = await page.getByLabel('Assessment name').inputValue();
+  const initialDescription = await page.getByLabel('Assessment description').inputValue();
+  const reviewStep = await uploadAndLock(page, [{ name:'systems.xlsx', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer:Buffer.from(evidenceWorkbook()) }]);
+  await reviewStep.getByRole('button',{name:'Analyze selected documents'}).click();
+
+  await expect(reviewStep.getByRole('alert')).toContainText('no source-grounded suggestions passed evidence validation');
+  await expect(reviewStep).toContainText('cited a repeated phrase without enough context to identify one source passage');
+  await expect(reviewStep.getByRole('button',{name:'Accept'})).toHaveCount(0);
+  await expect(reviewStep.getByRole('button',{name:/Preview.*reviewed suggestion/})).toBeDisabled();
+  const technicalCode = reviewStep.getByText('PROVIDER_PROPOSAL_REJECTED_TEXT_ANCHOR_AMBIGUOUS:1');
+  await expect(technicalCode).not.toBeVisible();
+  await reviewStep.getByText('Audit details',{exact:true}).click();
+  await expect(technicalCode).toBeVisible();
+  await expect(page.getByLabel('Assessment name')).toHaveValue(initialName);
+  await expect(page.getByLabel('Assessment description')).toHaveValue(initialDescription);
+
+  await page.getByRole('button',{name:'Reload committed state'}).click();
+  await expect(reviewStep.getByRole('alert')).toContainText('no source-grounded suggestions passed evidence validation');
+  await expect(reviewStep).toContainText('cited a repeated phrase without enough context to identify one source passage');
+  await expect(page.getByLabel('Assessment name')).toHaveValue(initialName);
+  await expect(page.getByLabel('Assessment description')).toHaveValue(initialDescription);
+  expect(mapping.operations.filter(operation => operation === 'assess.document-map.analyze')).toHaveLength(1);
 });
 
 for (const resolution of [

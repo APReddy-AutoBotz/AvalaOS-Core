@@ -27,10 +27,13 @@ export const loadCompleteStudioDeliveryOutcomeProjection = async (
   const items: StudioDeliveryOutcomeQueryResult['items'][number][] = [];
   const outcomeIds = new Set<string>();
   const cursors = new Set<string>();
+  let sourceOptions: StudioDeliveryOutcomeQueryResult['sourceOptions'];
   let cursor: string | null = null;
   for (let pageIndex = 0; pageIndex < MAX_OUTCOME_PAGES; pageIndex += 1) {
     const page = await queryPage(scope, { projectId, limit: 100, cursor }, transport);
     if (page.projectId !== projectId) throw new Error('OUTCOME_PROJECT_MISMATCH');
+    if (pageIndex === 0) sourceOptions = page.sourceOptions;
+    else if (JSON.stringify(page.sourceOptions) !== JSON.stringify(sourceOptions)) throw new Error('OUTCOME_PAGE_CONFLICT');
     for (const item of page.items) {
       if (item.projectId !== projectId || outcomeIds.has(item.outcomeId)) throw new Error('OUTCOME_PAGE_CONFLICT');
       outcomeIds.add(item.outcomeId);
@@ -43,6 +46,7 @@ export const loadCompleteStudioDeliveryOutcomeProjection = async (
         schemaVersion: page.schemaVersion,
         projectId,
         items,
+        ...(sourceOptions ? { sourceOptions } : {}),
         page: { limit: 100, nextCursor: null, hasMore: false },
       };
     }

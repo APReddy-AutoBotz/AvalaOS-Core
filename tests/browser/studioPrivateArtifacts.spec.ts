@@ -698,7 +698,12 @@ test('physical deletion failure is never rendered as deleted', async ({ page }) 
 test('provider-uncertain generation stays pending, reloads requested state, and blocks duplicate generation', async ({ page }) => {
   await installFixture(page, { committedPending: true });
   const panel = await openDocs(page);
+  const pendingResponse = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/functions/v1/studio-private-artifact-command' &&
+    response.status() === 202,
+  );
   await panel.getByRole('button', { name: 'Generate PDF' }).click();
+  expect((await pendingResponse).headers()['access-control-allow-origin']).toBe('*');
   await expect(panel.getByRole('status')).toContainText(
     'external effect is unconfirmed. Recovery is pending',
   );

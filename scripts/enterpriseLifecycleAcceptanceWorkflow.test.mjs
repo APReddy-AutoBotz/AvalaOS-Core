@@ -13,6 +13,9 @@ test('Pilot Acceptance runs the connected lifecycle once and gates on downloaded
   const migration = postgresSteps.find(step => step.name === 'Immutable Govern action authority and upgrade safety');
   assert.equal(migration?.run, 'node scripts/testGovernImmutableActionAuthorityPostgres.mjs');
   assert.match(migration?.env?.GOVERN_ACTION_AUTHORITY_DATABASE_URL || '', /127[.]0[.]0[.]1/u);
+  const mixed = postgresSteps.find(step => step.name === 'Mixed immutable Govern snapshot compatibility');
+  assert.equal(mixed?.run, 'node scripts/testGovernMixedSnapshotNormalizationPostgres.mjs');
+  assert.match(mixed?.env?.GOVERN_MIXED_SNAPSHOT_DATABASE_URL || '', /127[.]0[.]0[.]1:5432\/postgres$/u);
   const orchestrator = postgresSteps.find(step => step.name === 'Connected Assess Govern Studio lifecycle evidence');
   assert.match(orchestrator?.run || '', /^node scripts\/testEnterpriseLifecycleAcceptancePostgres[.]mjs --output output\/acceptance\/enterprise-lifecycle\/backend-evidence[.]json$/mu);
   assert.match(orchestrator?.run || '', /^node scripts\/runEnterpriseLifecycleAcceptanceBrowser[.]mjs$/mu);

@@ -14,11 +14,13 @@ import {
 const id = (n: number) => `ab000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const scope: StudioDeliveryScope = { actorId: id(1), organizationId: id(2).toUpperCase(), workspaceId: id(3).toUpperCase(), authorizationVersion: 7 };
 const payload = { artifactId: id(4), expectedArtifactVersionId: id(5), expectedAggregateVersion: 5, projectId: id(6),
-  workItems: [{ type: 'Task' as const, title: 'Human-authored task', description: 'Exact structured payload.', acceptanceCriteria: ['Bound to approved source'] }] };
+  workItems: [{ proposalRole: 'implementation' as const, type: 'Task' as const, title: 'Requirement-bound task', description: 'Exact structured payload.', acceptanceCriteria: ['Bound to approved source'],
+    requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Delivery must remain bound to the approved source.' }] }] };
 const success = (command: ReturnType<typeof buildStudioDeliveryCommand>) => ({ ok: true, schemaVersion: 'studio-delivery-command.v1', action: command.action,
   outcome: 'committed', receiptId: id(7), resource: { publicationId: id(8), documentGenerationId: id(9), projectId: id(6), artifactId: id(4),
     artifactVersionId: id(5), artifactVersion: 1, artifactContentHash: 'a'.repeat(64), sourceProcessId: id(10), sourceAssessmentId: id(11),
-    governResolutionId: id(12), workItemCount: 1, workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T00:00:00.000Z' } });
+    reviewResolutionId: id(12), governResolutionId: id(13), studioHandoffId: id(14), approvalPurpose: 'implementation_readiness',
+    workItemCount: 1, workItemDigest: `sha256:${'b'.repeat(64)}`, publishedAt: '2026-10-10T00:00:00.000Z' } });
 
 async function main() {
   const identity = { requestId: id(20), idempotencyKey: 'studio-delivery.client-retry' };

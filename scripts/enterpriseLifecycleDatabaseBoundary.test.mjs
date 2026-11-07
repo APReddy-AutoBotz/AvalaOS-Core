@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import test from 'node:test';
 import { PassThrough } from 'node:stream';
@@ -40,6 +41,19 @@ test('disposable database runner accepts only explicit loopback with the declare
     'postgres://fixture:fixture@127.0.0.1:5432/avalaos_pilot_synthetic',
     'postgresql://fixture:fixture@[::1]:55471/postgres',
   ]) assert.equal(validateEnterpriseLifecycleDatabaseUrl(value), value);
+});
+
+test('canonical connected Delivery uses requirement-aware authority and proves the selected Epic as a normal sourced board item', async () => {
+  const fixtureSource = await readFile(new URL('./enterpriseLifecyclePostgresFixture.mjs', import.meta.url), 'utf8');
+  const journeySource = await readFile(new URL('../tests/browser/enterpriseLifecycleAcceptance/studioDeliveryMonitorJourney.ts', import.meta.url), 'utf8');
+  assert.match(fixtureSource, /legacy_delivery_apply_requirement_command/u);
+  assert.match(fixtureSource, /legacy_delivery_requirement_query/u);
+  assert.doesNotMatch(fixtureSource, /SELECT public[.]legacy_delivery_apply_command/u);
+  assert.doesNotMatch(fixtureSource, /SELECT public[.]legacy_delivery_query/u);
+  assert.match(journeySource, /activeTasks[)]\.toBe\(beforeImport[.]counts[.]activeTasks \+ 3\)/u);
+  assert.match(journeySource, /openTask\(page, itemTitles[.]epic\)/u);
+  assert.match(journeySource, /studioArtifactVersionId: afterPublish[.]publication![.]artifactVersionId/u);
+  assert.match(journeySource, /Open approved source details/u);
 });
 
 test('aborted fixture request bodies release the serialized request tail', async () => {

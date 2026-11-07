@@ -21,7 +21,7 @@ interface OrganizationSetupViewProps {
 }
 
 const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUser, allUsers }) => {
-    const { tenantContext, sessionState } = useOrganizationContext();
+    const { tenantContext, sessionState, refreshOrgs } = useOrganizationContext();
     const { currentOrganization, updateCompanyProfile, updateOrganizationModules, getLimitsForCurrentOrg, getAuditLogsForOrg } = useOrganization();
     const { config: assessGovernanceConfig, updateConfig: updateAssessGovernanceConfig, resetConfig: resetAssessGovernanceConfig } = useAssessGovernanceConfig();
 
@@ -575,7 +575,7 @@ const OrganizationSetupView: React.FC<OrganizationSetupViewProps> = ({ currentUs
             }
             usersRoles={
                 <div className="space-y-6">
-            {tenantContext ? <SyntheticUserManagement tenantContext={tenantContext} sessionState={sessionState} /> : <>
+            {tenantContext ? <SyntheticUserManagement tenantContext={tenantContext} sessionState={sessionState} onAuthorityChanged={refreshOrgs} /> : <>
             {/* Role Management Stub */}
             <section className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Organization Members & Roles</h2>

@@ -239,14 +239,25 @@ export const decodeStudioPrivateArtifactProjection = (
     record.approved !== true ||
     typeof record.readOnly !== 'boolean' ||
     !Array.isArray(record.renditions) ||
-    record.renditions.length > STUDIO_PRIVATE_ARTIFACT_FORMATS.length ||
+    record.renditions.length >
+      (record.artifactType === 'sdd' ? STUDIO_PRIVATE_ARTIFACT_FORMATS.length * 2 + 2 : STUDIO_PRIVATE_ARTIFACT_FORMATS.length * 2 + 1) ||
     record.artifactId !== expected.artifactId ||
     record.artifactVersionId !== expected.artifactVersionId
   ) unavailable();
   const renditions = (record.renditions as unknown[]).map(decodeRendition);
+  const allowedRendererVersions: Readonly<Record<StudioPrivateArtifactFormat, readonly string[]>> = {
+    markdown: ['studio-markdown-1', 'studio-markdown-2'],
+    pdf: record.artifactType === 'sdd'
+      ? ['studio-pdf-1', 'studio-pdf-2', 'studio-pdf-3', 'studio-pdf-4']
+      : ['studio-pdf-1', 'studio-pdf-2', 'studio-pdf-4'],
+    docx: ['studio-docx-1', 'studio-docx-2'],
+  };
   if (
     new Set(renditions.map(rendition => rendition.id)).size !== renditions.length ||
-    new Set(renditions.map(rendition => rendition.format)).size !== renditions.length
+    new Set(renditions.map(rendition => `${rendition.format}:${rendition.rendererVersion}`)).size !== renditions.length ||
+    renditions.some(rendition => !allowedRendererVersions[rendition.format].includes(rendition.rendererVersion)) ||
+    STUDIO_PRIVATE_ARTIFACT_FORMATS.some(format => renditions.filter(rendition => rendition.format === format).length >
+      (format === 'pdf' ? record.artifactType === 'sdd' ? 4 : 3 : 2))
   ) unavailable();
   return {
     artifactId: record.artifactId,

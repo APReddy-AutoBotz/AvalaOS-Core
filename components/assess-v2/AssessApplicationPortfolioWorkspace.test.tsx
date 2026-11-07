@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import AssessApplicationPortfolioWorkspace,{ applicationProjectionErrorCopy, committedAssessment, currentApplicationLifecycle, nextCommittedApplicationMetadata, parseApplicationImportRows, renderApplicationPortfolioState, syntheticApplicationPortfolioFixture } from './AssessApplicationPortfolioWorkspace';
@@ -33,6 +34,11 @@ const html=renderToStaticMarkup(React.createElement(AssessApplicationPortfolioWo
 const requesterHtml=renderToStaticMarkup(React.createElement(AssessApplicationPortfolioWorkspace,{tenantContext:{...tenant,capabilities:['assess.v2.read','assess.v2.create']} as any,transport:{loadProjection:async()=>{throw new Error('Forbidden request was sent')},invoke:async()=>{throw new Error('Forbidden command was sent')}}}));
 assert.match(requesterHtml,/Application Portfolio is unavailable for your current workspace role/);
 assert.doesNotMatch(requesterHtml,/Failed persistence|Create portfolio application|CSV \/ JSON import|P0001/);
+const source=fs.readFileSync('components/assess-v2/AssessApplicationPortfolioWorkspace.tsx','utf8');
+assert.match(source,/data-testid="application-portfolio-read-error"[\s\S]*Read unavailable:/);
+assert.match(source,/data-testid="application-portfolio-save-error"[\s\S]*Changes were not saved:/);
+assert.match(source,/data-testid="application-portfolio-input-error"[\s\S]*Import input needs attention:/);
+assert.doesNotMatch(source,/\{readError && <p[^>]*>Failed persistence:/);
 for(const name of ['Create portfolio application','Save portfolio metadata','Import portfolio rows','Save portfolio assessment','Submit portfolio assessment for review','Record portfolio review decision','Create revised portfolio assessment','Generate application modernization snapshot','Show synthetic AP fixture'])assert.match(html,new RegExp(name));
 for(const stale of ['Create manual application','Save metadata version','>Import rows<','>Finalize<','>Approve<','>Review<','>Start revision<','Create portfolio snapshot'])assert.doesNotMatch(html,new RegExp(stale));
 console.log('PR 1G application portfolio workspace authority tests passed.');

@@ -1,1 +1,2 @@
 tests/fixtures/process-evidence/*.pdf binary
+supabase/migrations/*.sql -text

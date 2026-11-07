@@ -10,7 +10,7 @@ const evidence = [
 ];
 const attestation = (evidenceId: string, claimId: string, outcome: EvidenceAttestation['outcome'] = 'accepted'): EvidenceAttestation => ({ ...binding, id: `att-${evidenceId}-${outcome}`, assignmentId: assignment.id, evidenceId, claimIds: [claimId], evidenceSubmitterActorId: evidence.find(item => item.id === evidenceId)!.submittedBy, reviewerActorId: 'reviewer', reviewerAuthorizationVersion: 7, outcome, rationale: 'Source and claim checked independently.', reviewedAt: '2026-07-20T11:00:00.000Z', requestId: `request-${evidenceId}`, receiptId: `receipt-${evidenceId}`, auditId: `audit-${evidenceId}` });
 const claims = [{ claimId: 'claim-1', evidenceIds: ['ev-1'] }, { claimId: 'claim-2', evidenceIds: ['ev-2'] }];
-const resolution = (status: ReviewResolution['status']): ReviewResolution => ({ ...binding, id: `resolution-${status}`, assignmentId: assignment.id, reviewSchemaVersion: ASSESS_V2_REVIEW_VERSION, reviewSequence: 1, status, reviewerActorId: 'reviewer', reviewerAuthorizationVersion: 7, rationale: 'Review checkpoints completed.', conditions: [], confidence: 'Insufficient Evidence', resolvedAt: '2026-07-20T12:00:00.000Z', requestId: 'request-resolution', receiptId: 'receipt-resolution', auditId: 'audit-resolution' });
+const resolution = (status: ReviewResolution['status']): ReviewResolution => ({ ...binding, id: `resolution-${status}`, assignmentId: assignment.id, reviewSchemaVersion: ASSESS_V2_REVIEW_VERSION, reviewSequence: 1, status, approvalPurpose: status === 'planning_approved' ? 'documentation_planning' : 'implementation_readiness', reviewerActorId: 'reviewer', reviewerAuthorizationVersion: 7, rationale: 'Review checkpoints completed.', conditions: [], confidence: 'Insufficient Evidence', resolvedAt: '2026-07-20T12:00:00.000Z', requestId: 'request-resolution', receiptId: 'receipt-resolution', auditId: 'audit-resolution' });
 
 const run = () => {
   const accepted = [attestation('ev-1', 'claim-1'), attestation('ev-2', 'claim-2')];
@@ -54,6 +54,10 @@ const run = () => {
     () => resolveReview(assignment, 'approved', claims, evidence, [accepted[0], laterRejected, accepted[1]], resolution('approved')),
     /accepted independent attestation/,
   );
+  const planningApproved = resolveReview(assignment, 'planning_approved', claims, evidence, [accepted[0]], resolution('planning_approved'));
+  assert.equal(planningApproved.confidence, 'Partially Evidenced');
+  assert.equal(planningApproved.approvalPurpose, 'documentation_planning');
+  assert.throws(() => resolveReview(assignment, 'planning_approved', claims, evidence, [accepted[0]], { ...resolution('planning_approved'), approvalPurpose: 'implementation_readiness' }), /purpose/);
   const tiedRejected = { ...laterAccepted, id: 'att-ev-1-tied-rejected', outcome: 'rejected' as const };
   assert.equal(
     deriveReviewedConfidence(binding, claims, evidence, [laterAccepted, tiedRejected, accepted[1]], '2026-07-20T12:00:00.000Z'),

@@ -45,8 +45,8 @@ test('provider simulator is deterministic and cannot perform egress',()=>{
   assert.doesNotMatch(migration,/openai|anthropic|gemini|groq|azure/i);
 });
 test('hosted apply bridges Supabase pgcrypto schema without weakening authority',()=>{
-  assert.match(applySafety,/to_regprocedure\('public\.digest\(text,text\)'\)/);
-  assert.match(applySafety,/to_regprocedure\('extensions\.digest\(text,text\)'\)/);
+  assert.match(applySafety,/pg_catalog\.oidvectortypes\(p\.proargtypes\) as argument_types/);
+  assert.match(applySafety,/pg_catalog\.oidvectortypes\(p\.proargtypes\) in \('text, text','bytea, text'\)/);
   assert.match(applySafety,/begin[\s\S]+create function public\.digest\(data text[\s\S]+create function public\.digest\(data bytea[\s\S]+revoke all[\s\S]+grant execute[\s\S]+commit/i);
   assert.match(applySafety,/select extensions\.digest\(\$1,\$2\)/);
   assert.match(applySafety,/PGCRYPTO_SCHEMA_COMPATIBILITY_MISMATCH/);

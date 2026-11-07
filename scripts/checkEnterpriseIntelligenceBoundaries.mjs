@@ -533,7 +533,9 @@ const budgetedStageUncertaintyIsPreserved = extractionCommand.includes('beforeSe
     < extractionCommand.lastIndexOf('await failEvidenceExtractionAttempt')
   && extractionCommand.includes("throw new RecoverableEnterpriseCommandError('COMMAND_UNAVAILABLE')")
   && providerBudget.includes('await options.beforeSettle(result, reservation)')
-  && providerBudget.includes("failureClass: 'pre_settlement_persistence_failed'")
+  && providerBudget.includes("const failureClass = typeof classified === 'string' && /^[a-z0-9_]{1,80}$/.test(classified)")
+  && providerBudget.includes(": 'pre_settlement_persistence_failed';")
+  && providerBudget.includes('...input, reservationId: reservation.reservationId, failureClass,')
   && providerBudget.includes("throw new ProviderBudgetError('PROVIDER_EFFECT_UNCERTAIN')");
 if (!legacyStageUncertaintyIsPreserved && !budgetedStageUncertaintyIsPreserved) {
   throw new Error('Extraction staging uncertainty must preserve the receipt without failure authority.');

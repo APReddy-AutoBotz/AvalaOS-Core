@@ -25,6 +25,30 @@ test('synthetic Admin contract accepts an exact reserve and list envelope', () =
   assert.equal(list.operation, 'list');
 });
 
+test('Studio variants are bounded role assignments and can never reserve an account', () => {
+  for (const rolePreset of ['studio-author','studio-reviewer','studio-approver']) {
+    const assigned = parseSyntheticAdminEnvelope({ ...write, operation: 'assign_role',
+      payload: { reservationId: id, expectedVersion: 1, rolePreset } });
+    assert.equal(assigned.operation, 'assign_role');
+    assert.deepEqual(assigned.payload, { reservationId: id, expectedVersion: 1, rolePreset });
+    assert.throws(() => parseSyntheticAdminEnvelope({ ...write, operation: 'reserve',
+      payload: { label: 'Studio variant', rolePreset } }),
+    (error: unknown) => error instanceof SyntheticAdminError && error.errorCode === 'INVALID_REQUEST');
+  }
+});
+
+test('operator Assess read access is an exact operation with no caller-selected capability', () => {
+  for (const operation of ['grant_operator_assess_read','remove_operator_assess_read'] as const) {
+    const parsed = parseSyntheticAdminEnvelope({ ...write, operation, payload: {} });
+    assert.equal(parsed.operation, operation);
+    assert.deepEqual(parsed.payload, {});
+    for (const payload of [{ capability:'assess.read' }, { capability:'org.admin' }, { role:'author' }]) {
+      assert.throws(() => parseSyntheticAdminEnvelope({ ...write, operation, payload }),
+        (error: unknown) => error instanceof SyntheticAdminError && error.errorCode === 'INVALID_REQUEST');
+    }
+  }
+});
+
 test('synthetic Admin contract rejects extra authority, arbitrary roles, and malformed secrets', () => {
   const variants = [
     { ...write, operation: 'reserve', payload: { label: 'A', rolePreset: 'admin' } },
@@ -36,6 +60,8 @@ test('synthetic Admin contract rejects extra authority, arbitrary roles, and mal
     { ...write, operation: 'execute', payload: { reservationId: id, password: 'Unicode-Éxample123!' } },
     { ...write, operation: 'execute', payload: { reservationId: id, password: 'safe-long-value', authUserId: id } },
     { ...write, operation: 'assign_role', payload: { reservationId: id, expectedVersion: 1, rolePreset: 'owner' } },
+    { ...write, operation: 'assign_role', payload: { reservationId: id, expectedVersion: 1, rolePreset: 'studio-admin' } },
+    { ...write, operation: 'assign_role', payload: { reservationId: id, expectedVersion: 1, rolePreset: 'studio-author', capabilities: ['studio.artifacts.generate'] } },
     { ...write, operation: 'revoke', payload: { reservationId: id, expectedVersion: 0 } },
     { ...write, operation: 'reserve', payload: { label: 'A', rolePreset: 'author' }, actorId: id },
     { ...write, workspaceId: org, operation: 'list', payload: {} },

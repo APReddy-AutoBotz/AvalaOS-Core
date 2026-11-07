@@ -2,7 +2,8 @@ import type { DecisionPackV2, EvidenceConfidence, EvidenceSubmission } from './t
 
 export const ASSESS_V2_REVIEW_VERSION = 'assess-v2-review-2026-07' as const;
 
-export type ReviewStatus = 'reviewer_ready' | 'in_review' | 'approved' | 'changes_requested' | 'rejected';
+export type ReviewStatus = 'reviewer_ready' | 'in_review' | 'approved' | 'planning_approved' | 'changes_requested' | 'rejected';
+export type ReviewApprovalPurpose = 'implementation_readiness' | 'documentation_planning';
 export type AttestationOutcome = 'accepted' | 'rejected' | 'needs-more-information';
 
 export interface ReviewBinding {
@@ -50,6 +51,7 @@ export interface ReviewResolution extends ReviewBinding {
   reviewSchemaVersion: typeof ASSESS_V2_REVIEW_VERSION;
   reviewSequence: number;
   status: Exclude<ReviewStatus, 'reviewer_ready' | 'in_review'>;
+  approvalPurpose: ReviewApprovalPurpose;
   reviewerActorId: string;
   reviewerAuthorizationVersion: number;
   rationale: string;
@@ -152,6 +154,8 @@ export const resolveReview = (assignment: ReviewAssignment, status: ReviewResolu
     throw new ReviewDomainError('STALE_VERSION', 'Current reviewer authority is required.');
   }
   if (resolution.status !== status || !resolution.rationale.trim()) throw new ReviewDomainError('INCOMPLETE_REVIEW', 'A valid resolution and rationale are required.');
+  const expectedPurpose: ReviewApprovalPurpose = status === 'planning_approved' ? 'documentation_planning' : 'implementation_readiness';
+  if (resolution.approvalPurpose !== expectedPurpose) throw new ReviewDomainError('INVALID_STATE', 'The review purpose does not match its resolution.');
 
   const evidenceById = new Map(evidence.map(item => [item.id, item]));
   const attestationIds = new Set<string>();
@@ -172,6 +176,9 @@ export const resolveReview = (assignment: ReviewAssignment, status: ReviewResolu
   const confidence = deriveReviewedConfidence(assignment, claims, evidence, attestations, resolution.resolvedAt);
   if (status === 'approved' && confidence !== 'Verified') {
     throw new ReviewDomainError('INCOMPLETE_REVIEW', 'All current material claims require accepted independent attestation from the current reviewer assignment.');
+  }
+  if (status === 'planning_approved' && confidence === 'Insufficient Evidence') {
+    throw new ReviewDomainError('INCOMPLETE_REVIEW', 'Planning approval requires at least one independently accepted material claim.');
   }
   return Object.freeze({ ...resolution, confidence });
 };

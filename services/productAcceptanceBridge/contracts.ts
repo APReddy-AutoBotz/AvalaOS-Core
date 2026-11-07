@@ -8,12 +8,34 @@ export type StudioDeliveryAction = typeof STUDIO_DELIVERY_ACTIONS[number];
 
 export const STUDIO_DELIVERY_OUTCOME_STATUSES = ['achieved', 'partial', 'not_achieved'] as const;
 export type StudioDeliveryOutcomeStatus = typeof STUDIO_DELIVERY_OUTCOME_STATUSES[number];
+export const STUDIO_DELIVERY_DISCOVERY_DISPOSITIONS = [
+  'blocking_unresolved', 'source_backed_answer_proposed', 'source_backed_answer_accepted',
+  'nonblocking_scope_proposed', 'approved_nonblocking_scope',
+] as const;
+export type StudioDeliveryDiscoveryDisposition = typeof STUDIO_DELIVERY_DISCOVERY_DISPOSITIONS[number];
+
+export type DeliveryDiscoveryResolution = {
+  disposition: StudioDeliveryDiscoveryDisposition;
+  question: string;
+  answer: string | null;
+  evidenceAttestationId: string | null;
+  revisedScope: string | null;
+};
+
+export type StudioDeliveryRequirementLink = {
+  sectionId: string;
+  sectionTitle: string;
+  requirementText: string;
+};
 
 export type StudioDeliveryApprovedWorkItem = {
+  proposalRole?: 'coordination' | 'implementation' | 'acceptance-review' | 'verification' | 'discovery';
   type: 'Epic' | 'Story' | 'Task';
   title: string;
   description: string;
   acceptanceCriteria: string[];
+  requirementLinks: StudioDeliveryRequirementLink[];
+  dependencyProposalIndices?: number[];
 };
 
 export type StudioApprovedArtifactPublishPayload = {
@@ -31,6 +53,7 @@ export type DeliveryOutcomeRecordPayload = {
   status: StudioDeliveryOutcomeStatus;
   label: string;
   detail: string;
+  discoveryResolution?: DeliveryDiscoveryResolution;
 };
 
 export type DeliveryPackSnapshotPayload = { projectId: string };
@@ -61,8 +84,13 @@ export type StudioDeliveryPublication = {
   artifactVersion: number;
   artifactContentHash: string;
   sourceProcessId: string;
-  sourceAssessmentId: string;
-  governResolutionId: string;
+  sourceAssessmentId: string | null;
+  sourceAssessmentCaseId?: string | null;
+  sourceAssessmentDecisionId?: string | null;
+  reviewResolutionId: string;
+  governResolutionId: string | null;
+  studioHandoffId: string;
+  approvalPurpose: 'implementation_readiness' | 'documentation_planning';
   workItemCount: number;
   workItemDigest: string;
   publishedAt: string;
@@ -77,6 +105,7 @@ export type DeliveryOutcome = {
   status: StudioDeliveryOutcomeStatus;
   label: string;
   detail: string;
+  discoveryResolution?: DeliveryDiscoveryResolution | null;
   documentGenerationId: string;
   studioArtifactId: string;
   studioArtifactVersionId: string;
@@ -132,6 +161,7 @@ export type StudioDeliveryOutcomeQueryResult = {
   schemaVersion: typeof STUDIO_DELIVERY_OUTCOME_QUERY_SCHEMA_VERSION;
   projectId: string;
   items: DeliveryOutcome[];
+  sourceOptions?: Array<{ taskId: string; evidenceAttestationId: string; label: string }>;
   page: { limit: number; nextCursor: string | null; hasMore: boolean };
 };
 
@@ -208,13 +238,41 @@ const iso = (value: unknown): string => {
 
 const decodeWorkItem = (value: unknown): StudioDeliveryApprovedWorkItem => {
   const row = record(value);
-  exact(row, ['type', 'title', 'description', 'acceptanceCriteria']);
-  if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 100) invalid();
+  const hasDependencies = row.dependencyProposalIndices !== undefined;
+  exact(row, [
+    ...(row.proposalRole === undefined ? [] : ['proposalRole']),
+    'type', 'title', 'description', 'acceptanceCriteria', 'requirementLinks',
+    ...(hasDependencies ? ['dependencyProposalIndices'] : []),
+  ]);
+  if (!Array.isArray(row.acceptanceCriteria) || row.acceptanceCriteria.length > 100
+    || !Array.isArray(row.requirementLinks) || row.requirementLinks.length < 1 || row.requirementLinks.length > 100) invalid();
+  const requirementLinks = (row.requirementLinks as unknown[]).map(value => {
+    const link = record(value);
+    exact(link, ['sectionId', 'sectionTitle', 'requirementText']);
+    return {
+      sectionId: text(link.sectionId, 80),
+      sectionTitle: text(link.sectionTitle, 300),
+      requirementText: text(link.requirementText, 2_000),
+    };
+  });
+  if (new Set(requirementLinks.map(link => `${link.sectionId}\u0000${link.requirementText}`)).size !== requirementLinks.length) invalid();
+  const dependencyProposalIndices = hasDependencies
+    ? (Array.isArray(row.dependencyProposalIndices) ? (row.dependencyProposalIndices as unknown[]).map(value => {
+      if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 99) invalid();
+      return Number(value);
+    }) : invalid())
+    : undefined;
+  if (dependencyProposalIndices && new Set(dependencyProposalIndices).size !== dependencyProposalIndices.length) invalid();
   return {
+    ...(row.proposalRole === undefined ? {} : {
+      proposalRole: oneOf(row.proposalRole, ['coordination', 'implementation', 'acceptance-review', 'verification', 'discovery'] as const),
+    }),
     type: oneOf(row.type, ['Epic', 'Story', 'Task'] as const),
     title: text(row.title, 300),
     description: text(row.description, 20_000, true),
     acceptanceCriteria: (row.acceptanceCriteria as unknown[]).map(item => text(item, 2_000)),
+    requirementLinks,
+    ...(dependencyProposalIndices === undefined ? {} : { dependencyProposalIndices }),
   };
 };
 
@@ -223,23 +281,45 @@ const decodePayload = <A extends StudioDeliveryAction>(action: A, value: unknown
   if (action === 'studio.approved-artifact.publish') {
     exact(row, ['artifactId', 'expectedArtifactVersionId', 'expectedAggregateVersion', 'projectId', 'workItems']);
     if (!Array.isArray(row.workItems) || row.workItems.length < 1 || row.workItems.length > 100) invalid();
+    const workItems = (row.workItems as unknown[]).map(decodeWorkItem);
+    if (workItems.some((item, index) => (item.dependencyProposalIndices ?? []).some(dependency =>
+      item.proposalRole !== 'implementation' || dependency === index || workItems[dependency]?.proposalRole !== 'discovery'))) invalid();
     return {
       artifactId: id(row.artifactId), expectedArtifactVersionId: id(row.expectedArtifactVersionId),
       expectedAggregateVersion: positive(row.expectedAggregateVersion), projectId: id(row.projectId),
-      workItems: (row.workItems as unknown[]).map(decodeWorkItem),
+      workItems,
     } as StudioDeliveryPayloadByAction[A];
   }
   if (action === 'delivery.pack.snapshot') {
     exact(row, ['projectId']);
     return { projectId: id(row.projectId) } as StudioDeliveryPayloadByAction[A];
   }
-  exact(row, ['taskId', 'expectedTaskVersion', 'expectedOutcomeVersion', 'status', 'label', 'detail']);
+  const hasDiscoveryResolution = row.discoveryResolution !== undefined;
+  exact(row, ['taskId', 'expectedTaskVersion', 'expectedOutcomeVersion', 'status', 'label', 'detail',
+    ...(hasDiscoveryResolution ? ['discoveryResolution'] : [])]);
+  const discoveryResolution = hasDiscoveryResolution ? decodeDiscoveryResolution(row.discoveryResolution) : undefined;
   return {
     taskId: id(row.taskId), expectedTaskVersion: positive(row.expectedTaskVersion),
     expectedOutcomeVersion: row.expectedOutcomeVersion === null ? null : positive(row.expectedOutcomeVersion),
     status: oneOf(row.status, STUDIO_DELIVERY_OUTCOME_STATUSES), label: text(row.label, 200),
     detail: text(row.detail, 4_000),
+    ...(discoveryResolution ? { discoveryResolution } : {}),
   } as StudioDeliveryPayloadByAction[A];
+};
+
+const decodeDiscoveryResolution = (value: unknown): DeliveryDiscoveryResolution => {
+  const row = record(value);
+  exact(row, ['disposition', 'question', 'answer', 'evidenceAttestationId', 'revisedScope']);
+  const disposition = oneOf(row.disposition, STUDIO_DELIVERY_DISCOVERY_DISPOSITIONS);
+  const answer = row.answer === null ? null : text(row.answer, 4_000);
+  const evidenceAttestationId = row.evidenceAttestationId === null ? null : id(row.evidenceAttestationId);
+  const revisedScope = row.revisedScope === null ? null : text(row.revisedScope, 4_000);
+  if (disposition === 'blocking_unresolved' && (answer !== null || evidenceAttestationId !== null || revisedScope !== null)
+    || (disposition === 'source_backed_answer_proposed' || disposition === 'source_backed_answer_accepted')
+      && (answer === null || evidenceAttestationId === null || revisedScope !== null)
+    || (disposition === 'nonblocking_scope_proposed' || disposition === 'approved_nonblocking_scope')
+      && (answer !== null || evidenceAttestationId !== null || revisedScope === null)) invalid();
+  return { disposition, question: text(row.question, 2_000), answer, evidenceAttestationId, revisedScope };
 };
 
 export const decodeStudioDeliveryCommand = (value: unknown): StudioDeliveryCommandEnvelope => {
@@ -289,27 +369,60 @@ export const decodeStudioDeliveryAssigneeQuery = (value: unknown): StudioDeliver
 
 const decodePublication = (value: unknown): StudioDeliveryPublication => {
   const row = record(value);
+  const hasAssessmentCase = Object.hasOwn(row, 'sourceAssessmentCaseId');
+  const hasAssessmentDecision = Object.hasOwn(row, 'sourceAssessmentDecisionId');
+  if (hasAssessmentCase !== hasAssessmentDecision) invalid();
+  const hasCurrentLineageFields = hasAssessmentCase && hasAssessmentDecision;
   exact(row, ['publicationId', 'documentGenerationId', 'projectId', 'artifactId', 'artifactVersionId', 'artifactVersion',
-    'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', 'governResolutionId', 'workItemCount', 'workItemDigest', 'publishedAt']);
+    'artifactContentHash', 'sourceProcessId', 'sourceAssessmentId', ...(hasCurrentLineageFields
+      ? ['sourceAssessmentCaseId', 'sourceAssessmentDecisionId'] : []),
+    'reviewResolutionId', 'governResolutionId', 'studioHandoffId', 'approvalPurpose',
+    'workItemCount', 'workItemDigest', 'publishedAt']);
   if (typeof row.artifactContentHash !== 'string' || !hashPattern.test(row.artifactContentHash)
-    || typeof row.workItemDigest !== 'string' || !digestPattern.test(row.workItemDigest)) invalid();
+    || typeof row.workItemDigest !== 'string' || !digestPattern.test(row.workItemDigest)
+    || row.sourceAssessmentId === null && !hasCurrentLineageFields) invalid();
+  const sourceAssessmentId = row.sourceAssessmentId === null ? null : id(row.sourceAssessmentId);
+  let currentLineage: Pick<StudioDeliveryPublication, 'sourceAssessmentCaseId' | 'sourceAssessmentDecisionId'> | undefined;
+  if (hasCurrentLineageFields) {
+    const caseIsNull = row.sourceAssessmentCaseId === null;
+    const decisionIsNull = row.sourceAssessmentDecisionId === null;
+    if (caseIsNull !== decisionIsNull || sourceAssessmentId === null && caseIsNull) invalid();
+    if (caseIsNull) {
+      currentLineage = { sourceAssessmentCaseId: null, sourceAssessmentDecisionId: null };
+    } else {
+      currentLineage = {
+        sourceAssessmentCaseId: id(row.sourceAssessmentCaseId),
+        sourceAssessmentDecisionId: id(row.sourceAssessmentDecisionId),
+      };
+    }
+  }
+  const approvalPurpose = oneOf(row.approvalPurpose, ['implementation_readiness', 'documentation_planning'] as const);
+  const governResolutionId = row.governResolutionId === null ? null : id(row.governResolutionId);
+  if ((approvalPurpose === 'implementation_readiness') !== (governResolutionId !== null)) invalid();
   return {
     publicationId: id(row.publicationId), documentGenerationId: id(row.documentGenerationId), projectId: id(row.projectId),
     artifactId: id(row.artifactId), artifactVersionId: id(row.artifactVersionId), artifactVersion: positive(row.artifactVersion),
     artifactContentHash: row.artifactContentHash as string, sourceProcessId: id(row.sourceProcessId),
-    sourceAssessmentId: id(row.sourceAssessmentId), governResolutionId: id(row.governResolutionId),
+    sourceAssessmentId, ...(currentLineage ?? {}), reviewResolutionId: id(row.reviewResolutionId),
+    governResolutionId,
+    studioHandoffId: id(row.studioHandoffId),
+    approvalPurpose,
     workItemCount: positive(row.workItemCount, 100), workItemDigest: row.workItemDigest as string, publishedAt: iso(row.publishedAt),
   };
 };
 
 export const decodeDeliveryOutcome = (value: unknown): DeliveryOutcome => {
   const row = record(value);
+  const hasDiscoveryResolution = row.discoveryResolution !== undefined;
   exact(row, ['outcomeId', 'version', 'taskId', 'taskVersion', 'projectId', 'status', 'label', 'detail',
+    ...(hasDiscoveryResolution ? ['discoveryResolution'] : []),
     'documentGenerationId', 'studioArtifactId', 'studioArtifactVersionId', 'recordedBy', 'recordedAt']);
   return {
     outcomeId: id(row.outcomeId), version: positive(row.version), taskId: id(row.taskId), taskVersion: positive(row.taskVersion),
     projectId: id(row.projectId), status: oneOf(row.status, STUDIO_DELIVERY_OUTCOME_STATUSES),
-    label: text(row.label, 200), detail: text(row.detail, 4_000), documentGenerationId: id(row.documentGenerationId),
+    label: text(row.label, 200), detail: text(row.detail, 4_000),
+    ...(hasDiscoveryResolution ? { discoveryResolution: row.discoveryResolution === null ? null : decodeDiscoveryResolution(row.discoveryResolution) } : {}),
+    documentGenerationId: id(row.documentGenerationId),
     studioArtifactId: id(row.studioArtifactId), studioArtifactVersionId: id(row.studioArtifactVersionId),
     recordedBy: id(row.recordedBy), recordedAt: iso(row.recordedAt),
   };
@@ -347,7 +460,8 @@ export const decodeStudioDeliveryCommandSuccess = <A extends StudioDeliveryActio
     const payload = command.payload as DeliveryOutcomeRecordPayload;
     if (outcome.taskId !== payload.taskId || outcome.taskVersion !== payload.expectedTaskVersion
       || outcome.version !== (payload.expectedOutcomeVersion ?? 0) + 1 || outcome.status !== payload.status
-      || outcome.label !== payload.label.trim() || outcome.detail !== payload.detail.trim()) invalid();
+      || outcome.label !== payload.label.trim() || outcome.detail !== payload.detail.trim()
+      || payload.discoveryResolution !== undefined && JSON.stringify(outcome.discoveryResolution) !== JSON.stringify(payload.discoveryResolution)) invalid();
   } else {
     const snapshot = resource as DeliveryPackSnapshot;
     const payload = command.payload as DeliveryPackSnapshotPayload;
@@ -364,18 +478,24 @@ export const decodeStudioDeliveryOutcomeQueryResult = (
   request: StudioDeliveryOutcomeQueryRequest,
 ): StudioDeliveryOutcomeQueryResult => {
   const row = record(value);
-  exact(row, ['ok', 'schemaVersion', 'projectId', 'items', 'page']);
+  const hasSourceOptions = row.sourceOptions !== undefined;
+  exact(row, ['ok', 'schemaVersion', 'projectId', 'items', ...(hasSourceOptions ? ['sourceOptions'] : []), 'page']);
   if (row.ok !== true || row.schemaVersion !== STUDIO_DELIVERY_OUTCOME_QUERY_SCHEMA_VERSION || id(row.projectId) !== request.projectId
     || !Array.isArray(row.items) || row.items.length > request.limit) invalid();
   const items = (row.items as unknown[]).map(decodeDeliveryOutcome);
   if (items.some(item => item.projectId !== request.projectId)) invalid();
+  const sourceOptions = hasSourceOptions && Array.isArray(row.sourceOptions) ? (row.sourceOptions as unknown[]).map(value => {
+    const option = record(value); exact(option, ['taskId', 'evidenceAttestationId', 'label']);
+    return { taskId: id(option.taskId), evidenceAttestationId: id(option.evidenceAttestationId), label: text(option.label, 300) };
+  }) : hasSourceOptions ? invalid() : undefined;
+  if (sourceOptions && (sourceOptions.length > 500 || new Set(sourceOptions.map(option => `${option.taskId}:${option.evidenceAttestationId}`)).size !== sourceOptions.length)) invalid();
   const page = record(row.page);
   exact(page, ['limit', 'nextCursor', 'hasMore']);
   if (positive(page.limit, 100) !== request.limit || typeof page.hasMore !== 'boolean') invalid();
   const nextCursor = page.nextCursor === null ? null : id(page.nextCursor);
   if ((nextCursor !== null) !== page.hasMore) invalid();
   return { ok: true, schemaVersion: STUDIO_DELIVERY_OUTCOME_QUERY_SCHEMA_VERSION, projectId: request.projectId,
-    items, page: { limit: request.limit, nextCursor, hasMore: page.hasMore as boolean } };
+    items, ...(sourceOptions ? { sourceOptions } : {}), page: { limit: request.limit, nextCursor, hasMore: page.hasMore as boolean } };
 };
 
 export const decodeStudioDeliveryPackQueryResult = (

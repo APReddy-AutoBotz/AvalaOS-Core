@@ -29,6 +29,14 @@ for(const token of [
   'isCurrent:()=>boolean=()=>mountedRef.current&&accepts(ticket)',
   'const summarySequence=++governedSummarySequenceRef.current',
   'governedSummarySequenceRef.current===summarySequence',
+  'const reconcileCommittedArtifact = useCallback',
+  'await reconcileCommittedArtifact(',
+  'setArtifactSummaries(summaries);',
+  "summary => `${labels[summary.lifecycle]} committed.`",
+  'if (!summary && summaries.offset > 0)',
+  'summaries = await readStudioArtifactSummaries(context, 0, summaries.limit, transport);',
+  'const loaded = await loadGovernedSummary(summary, ticket);',
+  "if (!loaded || !accepts(ticket)) throw new StudioArtifactBoundaryError('AUTHORITY_STALE');",
   "const handoffFailureState=artifact?.readOnly===true||['stale'",
   "setState(current=>current==='loading'?(artifact?.readOnly?'read_only':artifact?.lifecycle??'empty'):current)",
   'studioHandoffLoadMayBegin(activeHandoffCommandRef.current,authorityIdentity)',
@@ -50,6 +58,11 @@ for(const token of [
 ]) assert.ok(source.includes(token),`Studio workspace contract missing: ${token}`);
 assert.ok(!source.includes('Assigned human actor ID'),'free-form reviewer identity must not return');
 assert.ok(source.includes('Business users can review the current document, save changes, view its source, and open its history.'), 'normal Studio introduction must use business wording');
+assert.ok(source.includes('<label className="av-form-label mt-4">Current document<select aria-label="Current document"'), 'artifact selection and its accessible name must use current-document wording');
+assert.ok(source.includes('Current {item.artifactType.toUpperCase()} · {labels[item.lifecycle]}'), 'artifact options must show a business document/status label');
+assert.ok(!source.includes('{item.displayLabel} · {item.lifecycle.replace'), 'artifact options must not expose source-mode revision labels');
+assert.ok(source.includes('`${labels[summary.lifecycle]} committed. Current document and document list refreshed.`'), 'ordinary generation success must use current-document wording');
+assert.ok(!source.includes('committed from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; v2 projection reloaded'), 'ordinary generation success must not expose technical source or projection revisions');
 assert.ok(source.includes('data-testid="studio-current-document-audit"'), 'current technical revision details must remain available under audit');
 assert.ok(source.includes('Aggregate v{artifact.aggregateVersion} · Content v{artifact.currentVersion.version}'), 'audit retains exact aggregate/content revision identity');
 assert.ok(source.includes('data-testid="studio-canonical-json-audit"'), 'canonical JSON import must have a scoped audit disclosure');
@@ -59,6 +72,19 @@ assert.ok(!source.includes('Last committed receipt {receipt.receiptId}') || sour
 const ordinaryEditorActions=structuredEditor.slice(structuredEditor.indexOf('<div className="mt-4 flex justify-end">'));
 assert.equal(ordinaryEditorActions.match(/Save changes/gu)?.length,1,'the ordinary structured editor exposes one Save changes action');
 assert.equal(source.match(/>Save changes<\/button>/gu)?.length??0,0,'technical JSON import must not add another Save changes action');
+for(const token of [
+  "const sourceNeedsReview=",
+  "const selectedRefreshAvailable=Boolean(",
+  "&&can('studio.artifact.draft.revise')",
+  "&&capabilities.includes('studio.artifacts.generate')",
+  "&&!controlledHumanSyntheticGeneration",
+  "&&artifactWorkspace.providerAvailability.available",
+  "&&artifactWorkspace.actions.includes('studio.generation.request')",
+  "onRegenerateSelected={selectedRefreshAvailable?",
+]) assert.ok(source.includes(token),`selected refresh authority gate missing: ${token}`);
+assert.ok(structuredEditor.includes('<strong>Update selected sections.</strong>'),'current-source drafts must expose neutral selective refresh wording');
+assert.ok(structuredEditor.includes('regenerateAfterSaveRef.current = null;'),'failed or ambiguous saves must clear deferred refresh intent');
+assert.ok(structuredEditor.includes('setRefreshRequested(true);'),'selected refresh must lock against duplicate dispatch');
 const offlineBranch=source.indexOf("if (offline)"), ordinaryClearBranch=source.indexOf('if (!preserveProjection)');
 assert.ok(offlineBranch < ordinaryClearBranch&&ordinaryClearBranch < source.indexOf('clearProjection();',ordinaryClearBranch),'offline state must preserve the committed projection for read-only inspection');
 assert.equal(source.match(/clearProjection\(\);/g)?.length, 2, 'only a genuine source/type identity load or rejected cross-authority load may clear the projection');

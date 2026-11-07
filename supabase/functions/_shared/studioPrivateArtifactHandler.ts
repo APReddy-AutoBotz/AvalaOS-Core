@@ -10,6 +10,7 @@ import {
   type StudioPrivateArtifactJson,
   toStudioPrivateArtifactSqlCommand,
 } from './studioPrivateArtifactCommand.ts';
+import { jsonResponse } from './http.ts';
 import {
   decodeStudioDeletionClaim,
   decodeStudioRenditionClaim,
@@ -121,7 +122,7 @@ const committedPending = (
   result: StudioPrivateArtifactAtomicResult,
   resource: StudioPrivateArtifactJson,
 ) =>
-  Response.json(
+  jsonResponse(
     {
       ok: false,
       outcome: 'committed_reconciliation_pending',
@@ -129,7 +130,7 @@ const committedPending = (
       resourceId: result.resourceId,
       resource,
     },
-    { status: 202 },
+    202,
   );
 
 const committedDatabaseResult = (
@@ -137,7 +138,7 @@ const committedDatabaseResult = (
   resource: StudioPrivateArtifactJson,
 ) => {
   const replayed = result.outcome === 'replayed';
-  return Response.json(
+  return jsonResponse(
     {
       ok: true,
       outcome: replayed ? 'replayed' : 'committed',
@@ -145,7 +146,7 @@ const committedDatabaseResult = (
       resourceId: result.resourceId,
       resource,
     },
-    { status: replayed ? 200 : 201 },
+    replayed ? 200 : 201,
   );
 };
 
@@ -230,9 +231,9 @@ export const handleStudioPrivateArtifactCommand = async (
     // An exact replay returns committed state only and can never repeat render,
     // upload, or physical deletion.
     if (result.outcome === 'replayed') {
-      return Response.json(
+      return jsonResponse(
         { ok: true, outcome: 'replayed', ...publicResult(result) },
-        { status: 200 },
+        200,
       );
     }
 
@@ -245,22 +246,22 @@ export const handleStudioPrivateArtifactCommand = async (
         return committedPending(result, committedPublicResource);
       }
       if (external.state === 'failed') {
-        return Response.json(
+        return jsonResponse(
           {
             ok: true,
             outcome: 'rendition_failed',
             ...publicResult(result),
           },
-          { status: 200 },
+          200,
         );
       }
-      return Response.json(
+      return jsonResponse(
         {
           ok: true,
           outcome: 'rendition_available',
           ...publicResult(result, external.resource),
         },
-        { status: 201 },
+        201,
       );
     }
 
@@ -276,28 +277,28 @@ export const handleStudioPrivateArtifactCommand = async (
         return committedPending(result, committedPublicResource);
       }
       if (external.state === 'failed') {
-        return Response.json(
+        return jsonResponse(
           {
             ok: true,
             outcome: 'deletion_failed',
             ...publicResult(result),
           },
-          { status: 200 },
+          200,
         );
       }
-      return Response.json(
+      return jsonResponse(
         {
           ok: true,
           outcome: 'deletion_completed',
           ...publicResult(result, external.resource),
         },
-        { status: 201 },
+        201,
       );
     }
 
-    return Response.json(
+    return jsonResponse(
       { ok: true, outcome: 'committed', ...publicResult(result) },
-      { status: 201 },
+      201,
     );
   } catch (error) {
     if (committed) {
@@ -313,6 +314,6 @@ export const handleStudioPrivateArtifactCommand = async (
       );
     }
     const safe = asStudioPrivateArtifactError(error);
-    return Response.json(studioPrivateArtifactErrorBody(safe), { status: safe.status });
+    return jsonResponse(studioPrivateArtifactErrorBody(safe), safe.status);
   }
 };

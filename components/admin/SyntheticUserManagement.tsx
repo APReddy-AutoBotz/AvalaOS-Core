@@ -9,6 +9,7 @@ import {
 import {
   SYNTHETIC_ADMIN_ROLE_PRESETS,
   SYNTHETIC_ADMIN_PASSWORD_MAX_LENGTH,
+  type SyntheticAdminAssignableRolePreset,
   type SyntheticAdminRolePreset,
   type SyntheticAdminRosterItem,
   type SyntheticAdminResult,
@@ -32,10 +33,11 @@ const strongPassword = (value: string) => value.length >= 12 && value.length <= 
   && /^[\x21-\x7e]+$/.test(value) && /[A-Z]/.test(value) && /[a-z]/.test(value)
   && /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value);
 
-export default function SyntheticUserManagement({ tenantContext, sessionState, transport }: {
+export default function SyntheticUserManagement({ tenantContext, sessionState, transport, onAuthorityChanged }: {
   tenantContext: TenantContextProjection | null;
   sessionState: EnterpriseSessionState;
   transport?: SyntheticAdminTransport;
+  onAuthorityChanged?: () => Promise<void>;
 }) {
   const scope = `${tenantContext?.organizationId ?? ''}:${tenantContext?.workspaceId ?? ''}:${tenantContext?.userId ?? ''}:${tenantContext?.authorizationVersion ?? ''}:${(tenantContext?.capabilities ?? []).slice().sort().join(',')}:${sessionState}`;
   const scopeRef = useRef(scope);
@@ -52,13 +54,14 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
   const [executeUncertain, setExecuteUncertain] = useState(false);
   const [unknownRosterOperation, setUnknownRosterOperation] = useState<{reservationId:string;operation:'assign_role'|'revoke'} | null>(null);
   const [roster, setRoster] = useState<SyntheticAdminRosterItem[]>([]);
-  const [roleEdits, setRoleEdits] = useState<Record<string,SyntheticAdminRolePreset>>({});
+  const [roleEdits, setRoleEdits] = useState<Record<string,SyntheticAdminAssignableRolePreset>>({});
   const [revokePendingId, setRevokePendingId] = useState('');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [displayScope, setDisplayScope] = useState(scope);
+  const operatorHasAssessRead = tenantContext?.capabilities.includes('assess.read') ?? false;
 
   useEffect(() => {
     if (busy) busyStatus.current?.focus();
@@ -162,7 +165,7 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
     } finally { if (scopeRef.current === atScope) setBusy(false); }
   };
 
-  const changeRoster = async (item: SyntheticAdminRosterItem, operation: 'assign_role' | 'revoke', preset?: SyntheticAdminRolePreset) => {
+  const changeRoster = async (item: SyntheticAdminRosterItem, operation: 'assign_role' | 'revoke', preset?: SyntheticAdminAssignableRolePreset) => {
     if (!enabled || !tenantContext || busy || reserveAttempt || executeUncertain || unknownRosterOperation) return;
     const atScope = scope;
     setBusy(true); setError(''); setMessage('');
@@ -184,6 +187,29 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
     } finally { if (scopeRef.current === atScope) setBusy(false); }
   };
 
+  const changeOperatorAssessRead = async (grant: boolean) => {
+    if (!enabled || !tenantContext || busy || reserveAttempt || executeUncertain || unknownRosterOperation) return;
+    const atScope = scope;
+    const operation = grant ? 'grant_operator_assess_read' : 'remove_operator_assess_read';
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const result = await syntheticAdminRequest(tenantContext, operation, {}, transport,
+        newBinding(operation, tenantContext.userId));
+      if (scopeRef.current !== atScope) return;
+      const expected = grant ? 'operator_access_granted' : 'operator_access_removed';
+      if (result.status !== expected) throw new Error('UNCONFIRMED_OPERATOR_ACCESS');
+      setMessage(grant
+        ? 'Assess read access was granted to this provider operator. Refreshing server authority.'
+        : 'Assess read access was removed from this provider operator. Refreshing server authority.');
+      if (onAuthorityChanged) {
+        try { await onAuthorityChanged(); }
+        catch { if (scopeRef.current === atScope) setError('The access change was committed, but the refreshed workspace authority could not be loaded. Reload before continuing.'); }
+      }
+    } catch (cause) {
+      if (scopeRef.current === atScope) setError(syntheticAdminErrorCopy(cause));
+    } finally { if (scopeRef.current === atScope) setBusy(false); }
+  };
+
   if (displayScope !== scope) return <section className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800" data-testid="synthetic-user-management">
     <h2 className="text-lg font-semibold">Synthetic test accounts</h2>
     <p role="status" className="mt-2 text-sm">Checking the selected workspace and account authority.</p>
@@ -197,10 +223,21 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
   return <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-700 dark:bg-slate-800" data-testid="synthetic-user-management" aria-labelledby="synthetic-admin-title" aria-busy={busy}>
     <h2 id="synthetic-admin-title" className="text-lg font-semibold">Synthetic test accounts</h2>
     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Add exploratory accounts to this synthetic workspace with an author, reviewer, approver, or viewer role. These are separate from the fixed acceptance-test accounts.</p>
+    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Account-specific Studio assignments appear only for verified prebound accounts and can be restored to their original role. They cannot be selected while reserving a new account.</p>
     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Choose and save the temporary password privately before activating the account. The form clears it after one submission.</p>
     {message && <p role="status" className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950">{message}</p>}
     {error && <p ref={errorAlert} role="alert" tabIndex={-1} className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {busy && <p ref={busyStatus} role="status" tabIndex={0} className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950 focus:outline-none focus:ring-2 focus:ring-indigo-600">Verifying account operation. Wait for the server result.</p>}
+    <div className="mt-4 rounded-xl border p-3" data-testid="provider-operator-assess-read">
+      <h3 className="text-sm font-bold">Provider operator access</h3>
+      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">This fixed control changes only Assess read access for the existing provider operator. It does not grant authoring, review, approval, Studio, Govern, or Delivery permissions.</p>
+      <p className="mt-2 text-sm font-semibold">Assess read access: {operatorHasAssessRead ? 'Granted' : 'Not granted'}</p>
+      <button type="button" className="mt-2 rounded-lg border px-3 py-1.5 text-sm font-bold disabled:opacity-50"
+        disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation}
+        onClick={() => void changeOperatorAssessRead(!operatorHasAssessRead)}>
+        {operatorHasAssessRead ? 'Remove Assess read access' : 'Grant Assess read access'}
+      </button>
+    </div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm font-semibold">Account label<input className="mt-1 w-full rounded-lg border p-2" maxLength={40} value={label} disabled={busy || !!reserveAttempt || executeUncertain || !!reservation} onChange={event => setLabel(event.target.value)} /></label>
       <label className="text-sm font-semibold">Workspace role<select className="mt-1 w-full rounded-lg border p-2" value={rolePreset} disabled={busy || !!reserveAttempt || executeUncertain || !!reservation} onChange={event => setRolePreset(event.target.value as SyntheticAdminRolePreset)}>{SYNTHETIC_ADMIN_ROLE_PRESETS.map(role => <option key={role} value={role}>{role}</option>)}</select></label>
@@ -225,7 +262,7 @@ export default function SyntheticUserManagement({ tenantContext, sessionState, t
     <div className="mt-6 flex flex-wrap items-center justify-between gap-2"><h3 className="text-base font-bold">Server-confirmed roster</h3><button type="button" className="rounded-lg border px-3 py-1.5 text-sm font-bold disabled:opacity-50" disabled={busy} onClick={() => void reload()}>Reload roster</button></div>
     {unknownRosterOperation && <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><p role="status">An account change has an unknown outcome. Other changes are locked until this operation is reconciled.</p><button type="button" className="mt-2 rounded-lg border px-2 py-1 font-bold disabled:opacity-50" disabled={busy} onClick={() => void reconcile(unknownRosterOperation.reservationId)}>Reconcile roster operation</button></div>}
     <ul className="mt-3 grid gap-3" aria-label="Synthetic account roster">{roster.map(item => <li key={item.reservationId} className="rounded-xl border p-3 text-sm">
-      <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold">{item.label}</p><p className="break-all">Login ID: {item.loginId}</p><p>Role: {item.rolePreset} · State: {item.state} · v{item.version}</p></div>{item.state === 'active' && <div className="flex flex-wrap items-center gap-2"><label className="text-xs font-semibold">New role<select className="ml-2 rounded-lg border p-1" value={roleEdits[item.reservationId] ?? item.rolePreset} disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation} onChange={event => setRoleEdits(previous => ({...previous,[item.reservationId]:event.target.value as SyntheticAdminRolePreset}))}>{SYNTHETIC_ADMIN_ROLE_PRESETS.map(role => <option key={role} value={role}>{role}</option>)}</select></label><button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-50" disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation || !roleEdits[item.reservationId] || roleEdits[item.reservationId] === item.rolePreset} onClick={() => void changeRoster(item,'assign_role',roleEdits[item.reservationId])}>Apply role</button>{revokePendingId === item.reservationId ? <><button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50" disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation} onClick={() => void changeRoster(item,'revoke')}>Confirm revoke</button><button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-50" disabled={busy} onClick={() => setRevokePendingId('')}>Cancel</button></> : <button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50" disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation} onClick={() => setRevokePendingId(item.reservationId)}>Revoke access</button>}</div>}{(item.state === 'ban_required' || item.state === 'ban_uncertain') && <button type="button" className="rounded-lg border border-amber-400 px-2 py-1 text-xs font-bold disabled:opacity-50" disabled={busy} onClick={() => void reconcile(item.reservationId)}>Reconcile Auth ban</button>}</div>
+      <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold">{item.label}</p><p className="break-all">Login ID: {item.loginId}</p><p>Role: {item.rolePreset} · State: {item.state} · v{item.version}</p>{item.studioVariant && <p>Studio assignment: {item.studioVariant} · {item.studioVariantActive ? 'active' : 'available'}</p>}</div>{item.state === 'active' && <div className="flex flex-wrap items-center gap-2"><label className="text-xs font-semibold">New role<select className="ml-2 rounded-lg border p-1" value={roleEdits[item.reservationId] ?? item.rolePreset} disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation} onChange={event => setRoleEdits(previous => ({...previous,[item.reservationId]:event.target.value as SyntheticAdminAssignableRolePreset}))}>{item.assignableRolePresets.map(role => <option key={role} value={role}>{role}</option>)}</select></label><button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-50" disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation || !roleEdits[item.reservationId] || roleEdits[item.reservationId] === item.rolePreset} onClick={() => void changeRoster(item,'assign_role',roleEdits[item.reservationId])}>Apply role</button>{revokePendingId === item.reservationId ? <><button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50" disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation} onClick={() => void changeRoster(item,'revoke')}>Confirm revoke</button><button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-50" disabled={busy} onClick={() => setRevokePendingId('')}>Cancel</button></> : <button type="button" className="rounded-lg border px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50" disabled={busy || !!reserveAttempt || executeUncertain || !!unknownRosterOperation} onClick={() => setRevokePendingId(item.reservationId)}>Revoke access</button>}</div>}{(item.state === 'ban_required' || item.state === 'ban_uncertain') && <button type="button" className="rounded-lg border border-amber-400 px-2 py-1 text-xs font-bold disabled:opacity-50" disabled={busy} onClick={() => void reconcile(item.reservationId)}>Reconcile Auth ban</button>}</div>
     </li>)}</ul>
     {!roster.length && <p className="mt-3 text-sm">No confirmed exploratory accounts in this workspace.</p>}
     {nextCursor && <button type="button" className="mt-3 rounded-lg border px-3 py-1.5 text-sm font-bold disabled:opacity-50" disabled={busy} onClick={() => void reload(nextCursor)}>Load more accounts</button>}

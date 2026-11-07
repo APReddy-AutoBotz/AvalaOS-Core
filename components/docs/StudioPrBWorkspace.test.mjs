@@ -18,6 +18,10 @@ for(const token of ['template.actions.includes','studio.template.approval.resolv
 assert.ok(!templates.includes('Use template for generation'));
 for(const token of ['Exact approved Studio template','selectedTemplateVersionId','sourcePackage.aggregateVersion','sourcePackage.currentVersionId','readStudioArtifactV2'])assert.ok(workspace.includes(token),`workspace exact selector missing ${token}`);
 for(const token of ['Source coverage is incomplete. No command was committed.','governed generation budget is exhausted','Provider unavailable. No artifact version was created.','Receipt finalization failed before a committed result was available.','stateForError(error);'])assert.ok(workspace.includes(token),`workspace safe error mapping missing ${token}`);
+for(const token of ['reviewed_planning','Approve content for planning'])assert.ok(workspace.includes(token),`workspace reviewed-planning purpose missing ${token}`);
+for(const token of ['Reviewed assessment · documentation and planning','implementation readiness is not certified','Audit details'])assert.ok(coverage.includes(token),`coverage reviewed-planning purpose missing ${token}`);
+assert.ok(workspace.includes("(!artifact||legacyProjection)&&<button"),'current v2 artifacts must not expose the legacy Govern-only generation action');
+assert.ok(!workspace.includes('Generate legacy accepted-handoff draft'),'normal Studio wording must not promote the compatibility generator');
 assert.ok(templateRoute.includes('Legacy local templates · read only'));
 assert.ok(!templates.includes('promptInjection'));
-console.log('studio PR B components: 42 structured-editor, source-package, source-coverage, handoff, template, accessibility, safe-error and false-success assertions passed');
+console.log('studio PR B components: structured-editor, source-package, reviewed-planning purpose, source-coverage, handoff, template, accessibility, safe-error and false-success assertions passed');

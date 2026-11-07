@@ -4,7 +4,19 @@ import { Task, Project, TaskStatus, Epic, User } from '../../types';
 import TaskCard from './TaskCard';
 import InlineTaskCreator from './InlineTaskCreator';
 import { ViewBoardsIcon } from '../shared/icons';
-import { canCreateDeliveryTask, canDeleteDeliveryTask, canEditDeliveryTask } from '../../services/deliveryPolicy';
+import {
+    canCreateDeliveryTask,
+    canDeleteDeliveryTask,
+    canEditDeliveryTask,
+    getStatusTransitionViolations,
+    type DeliveryDiscoveryDispositionByTask,
+} from '../../services/deliveryPolicy';
+
+export type DeliveryBoardMutationPolicy = {
+    canChangeStatus: boolean;
+    canCreate: boolean;
+    canDelete: boolean;
+};
 
 interface BoardsViewProps {
     tasks: Task[];
@@ -15,6 +27,9 @@ interface BoardsViewProps {
     users?: User[];
     currentUser?: User;
     showProjectLabel?: boolean;
+    mutationPolicy?: DeliveryBoardMutationPolicy;
+    discoveryDispositions?: DeliveryDiscoveryDispositionByTask;
+    discoveryReadState?: 'loading' | 'ready' | 'unavailable';
     onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
     onSelectTask: (task: Task) => void;
     onAddTask: (taskDetails: Pick<Task, 'title' | 'projectId'> & Partial<Omit<Task, 'title' | 'projectId'>>) => void;
@@ -59,6 +74,9 @@ const BoardsView: React.FC<BoardsViewProps> = ({
     users = [],
     currentUser,
     showProjectLabel = false,
+    mutationPolicy,
+    discoveryDispositions,
+    discoveryReadState,
     onUpdateTaskStatus,
     onSelectTask,
     onAddTask,
@@ -67,6 +85,7 @@ const BoardsView: React.FC<BoardsViewProps> = ({
     const [draggedOverColumn, setDraggedOverColumn] = useState<string | null>(null);
     const [swimlaneBy, setSwimlaneBy] = useState<'epic' | null>('epic');
     const [searchQuery, setSearchQuery] = useState('');
+    const [boardError, setBoardError] = useState('');
 
     const isGrouped = swimlaneBy === 'epic';
 
@@ -74,12 +93,21 @@ const BoardsView: React.FC<BoardsViewProps> = ({
     const getEpicForTask = (epicId: string | undefined) => epicId ? epics.find(epic => epic.id === epicId) : undefined;
     const getSubtasks = (subtaskIds: string[] | undefined) => subtaskIds ? tasks.filter(task => subtaskIds.includes(task.id)) : [];
 
+    const hasStatusAuthority = (task: Task) => mutationPolicy
+        ? mutationPolicy.canChangeStatus
+        : !currentUser || canEditDeliveryTask(currentUser, task);
+
+    const canDragTask = (task: Task) => hasStatusAuthority(task) && statusColumns.some(status =>
+        status !== statusColumnMap[task.status]
+        && getStatusTransitionViolations(task, tasks, status, discoveryDispositions).length === 0);
+
     const handleDragStart = (event: React.DragEvent<HTMLDivElement>, taskId: string) => {
         const task = tasks.find(item => item.id === taskId);
-        if (currentUser && task && !canEditDeliveryTask(currentUser, task)) {
+        if (!task || !canDragTask(task)) {
             event.preventDefault();
             return;
         }
+        setBoardError('');
         event.dataTransfer.setData('taskId', taskId);
     };
 
@@ -89,6 +117,21 @@ const BoardsView: React.FC<BoardsViewProps> = ({
 
     const handleDrop = (event: React.DragEvent<HTMLDivElement>, newStatus: TaskStatus) => {
         const taskId = event.dataTransfer.getData('taskId');
+        const task = tasks.find(item => item.id === taskId);
+        if (!task || !hasStatusAuthority(task)) {
+            setBoardError('Your current server-authorized workspace cannot change this work item status.');
+            setDraggedOverColumn(null);
+            return;
+        }
+        const violations = getStatusTransitionViolations(task, tasks, newStatus, discoveryDispositions);
+        if (violations.length > 0) {
+            setBoardError(task.sourceLineage?.proposalRole === 'discovery' && newStatus === 'Done'
+                ? 'This discovery item remains blocking. Done requires an independently accepted source-backed answer or approved nonblocking scope.'
+                : `Complete accepted prerequisites first: ${violations.map(item => item.title).join(', ')}.`);
+            setDraggedOverColumn(null);
+            return;
+        }
+        setBoardError('');
         onUpdateTaskStatus(taskId, newStatus);
         setDraggedOverColumn(null);
     };
@@ -187,6 +230,9 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                         ))}
                     </div>
                 </div>
+                {discoveryReadState === 'loading' && <p role="status" className="mt-3 text-xs font-semibold text-slate-500">Checking committed discovery dispositions. Dependent advancement remains unavailable until this check completes.</p>}
+                {discoveryReadState === 'unavailable' && <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">Committed discovery dispositions are unavailable. Dependent advancement remains blocked; task status is not substituted as evidence of resolution.</p>}
+                {boardError && <p role="alert" className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-900">{boardError}</p>}
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                     <label className="min-w-[240px] flex-1 sm:max-w-sm">
@@ -293,8 +339,9 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                         users={users}
                                                         subtasks={getSubtasks(task.subtaskIds)}
                                                         showProjectLabel={showProjectLabel}
-                                                        canDrag={!currentUser || canEditDeliveryTask(currentUser, task)}
-                                                        canDelete={!currentUser || canDeleteDeliveryTask(currentUser)}
+                                                        canDrag={canDragTask(task)}
+                                                        canDelete={mutationPolicy ? mutationPolicy.canDelete : !currentUser || canDeleteDeliveryTask(currentUser)}
+                                                        discoveryDisposition={discoveryDispositions?.get(task.id)}
                                                         onDragStart={event => handleDragStart(event, task.id)}
                                                         onSelectTask={() => onSelectTask(task)}
                                                         onDeleteTask={onDeleteTask}
@@ -307,7 +354,7 @@ const BoardsView: React.FC<BoardsViewProps> = ({
                                                     </div>
                                                 )}
 
-                                                {(!currentUser || canCreateDeliveryTask(currentUser)) && (
+                                                {(mutationPolicy ? mutationPolicy.canCreate : !currentUser || canCreateDeliveryTask(currentUser)) && (
                                                     <InlineTaskCreator
                                                         onAddTask={taskTitle => onAddTask({
                                                             title: taskTitle,

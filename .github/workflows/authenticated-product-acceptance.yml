@@ -112,6 +112,7 @@ jobs:
       - name: Feature contracts and evidence rejection
         run: |
           npm run test:authenticated-product:source
+          node scripts/testAuthenticatedSupabaseMultipart.mjs
           node --test scripts/runEnterpriseLifecycleAcceptanceBrowser.test.mjs scripts/connectedBrowserDiagnostics.test.mjs
           node --test scripts/preactivationSignInDiagnostics.test.mjs scripts/preactivationSignInRequestCorrelation.test.mjs
           npm run test:provider-secret-backend
@@ -133,6 +134,7 @@ jobs:
           createdb -h 127.0.0.1 -U postgres avalaos_pilot_synthetic
           npm run test:authenticated-hosted:postgres
           node scripts/studioDeliveryAuthorityPostgres.mjs
+          node --test scripts/studioDeliveryProjectionVolatilityMigration.test.mjs scripts/studioDeliveryProjectionVolatilityPostgres.test.mjs
           node scripts/testAuthenticatedConnectedPostgres.mjs
       - name: Verify fresh-request reviewer replay against PostgreSQL
         env:

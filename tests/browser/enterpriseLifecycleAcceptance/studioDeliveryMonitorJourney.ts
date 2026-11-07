@@ -38,6 +38,7 @@ export type StudioDeliveryDownstreamTask = Readonly<{
   title: string;
   description: string;
   status: string;
+  type: string;
   assigneeIds: readonly string[];
   projectId: string;
   documentGenerationId: string | null;
@@ -45,6 +46,9 @@ export type StudioDeliveryDownstreamTask = Readonly<{
   sourceProcessId: string | null;
   sourceAssessmentId: string | null;
   sourceItemIndex: number | null;
+  studioArtifactId: string | null;
+  studioArtifactVersionId: string | null;
+  studioArtifactVersion: number | null;
   retentionState: string;
 }>;
 
@@ -69,7 +73,7 @@ export type StudioDeliveryDownstreamFrame = Readonly<{
     artifactId: string;
     artifactVersionId: string;
     sourceProcessId: string;
-    sourceAssessmentId: string;
+    sourceAssessmentId: string | null;
     workItemDigest: string;
     workItemCount: number;
   }> | null;
@@ -232,7 +236,15 @@ const protectedTaskBinding = (task: StudioDeliveryDownstreamTask) => ({
 });
 
 const openTask = async (page: Page, title: string) => {
-  await page.getByText(title, { exact: true }).first().click();
+  const taskCard = page.locator('.task-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+  if (await taskCard.count()) {
+    await expect(taskCard).toHaveCount(1);
+    await taskCard.click();
+  } else {
+    const backlogTitle = page.getByText(title, { exact: true });
+    await expect(backlogTitle).toHaveCount(1);
+    await backlogTitle.click();
+  }
   const dialog = page.getByRole('dialog', { name: title, exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -359,23 +371,24 @@ export const runStudioDeliveryMonitorJourney = async ({
   const publisher = page.getByTestId('studio-approved-artifact-publish');
   await expect(publisher).toBeVisible();
   accessibility.push(await scanAffectedSurface(page, 'approved Studio artifact publication', '[data-testid="studio-approved-artifact-publish"]'));
-  const workItems = publisher.getByTestId('studio-approved-work-items').getByRole('group');
-  await expect(workItems).toHaveCount(1);
-  await workItems.nth(0).getByRole('combobox', { name: 'Type', exact: true }).selectOption('Epic');
-  await workItems.nth(0).getByLabel('Title', { exact: true }).fill(itemTitles.epic);
-  await workItems.nth(0).getByLabel('Description', { exact: true }).fill('A human-approved container for the bounded downstream acceptance work.');
-  await workItems.nth(0).getByLabel('Acceptance criteria · one per line', { exact: true }).fill('Exact approved Studio ancestry is retained.');
-  await publisher.getByRole('button', { name: 'Add human-authored work item', exact: true }).click();
-  await publisher.getByRole('button', { name: 'Add human-authored work item', exact: true }).click();
-  await expect(workItems).toHaveCount(3);
+  const workItems = publisher.getByTestId('studio-approved-work-items').getByTestId('studio-approved-work-item');
+  const proposalCount = await workItems.count();
+  expect(proposalCount).toBeGreaterThanOrEqual(3);
+  for (let index = 3; index < proposalCount; index += 1) {
+    await workItems.nth(index).getByLabel('Select for publication', { exact: true }).uncheck();
+  }
+  await workItems.nth(0).getByTestId('studio-approved-work-item-type').selectOption('Epic');
+  await workItems.nth(0).getByTestId('studio-approved-work-item-title').fill(itemTitles.epic);
+  await workItems.nth(0).getByTestId('studio-approved-work-item-description').fill('A human-approved container for the bounded downstream acceptance work.');
+  await workItems.nth(0).getByTestId('studio-approved-work-item-acceptance').fill('Exact approved Studio ancestry is retained.');
   for (const [index, title, detail] of [
     [1, itemTitles.assignment, 'Assign one accountable human owner without changing protected source ancestry.'],
     [2, itemTitles.blocker, 'Resolve the bounded downstream dependency and record its human outcome.'],
   ] as const) {
-    await workItems.nth(index).getByRole('combobox', { name: 'Type', exact: true }).selectOption('Task');
-    await workItems.nth(index).getByLabel('Title', { exact: true }).fill(title);
-    await workItems.nth(index).getByLabel('Description', { exact: true }).fill(detail);
-    await workItems.nth(index).getByLabel('Acceptance criteria · one per line', { exact: true }).fill('The committed result remains visible after reload.');
+    await workItems.nth(index).getByTestId('studio-approved-work-item-type').selectOption('Task');
+    await workItems.nth(index).getByTestId('studio-approved-work-item-title').fill(title);
+    await workItems.nth(index).getByTestId('studio-approved-work-item-description').fill(detail);
+    await workItems.nth(index).getByTestId('studio-approved-work-item-acceptance').fill('The committed result remains visible after reload.');
   }
   const beforePublish = await getFrame(control, projectName);
   const publishResponseStart = productionResponses.length;
@@ -421,11 +434,23 @@ export const runStudioDeliveryMonitorJourney = async ({
   const beforeImport = await getFrame(control, projectName);
   await importDialog.getByRole('button', { name: 'Import 3 Items', exact: true }).click();
   await expect(importDialog).toBeHidden();
-  await expect(page.getByText(itemTitles.assignment, { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(itemTitles.blocker, { exact: true }).first()).toBeVisible();
+  await clickProduct(page, 'Delivery');
+  await expect(page.getByLabel('Delivery work board', { exact: true })).toBeVisible();
+  for (const title of [itemTitles.epic, itemTitles.assignment, itemTitles.blocker]) {
+    await expect(page.locator('.task-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) })).toHaveCount(1);
+  }
   const afterImport = await getFrame(control, projectName);
   expect(afterImport.counts.imports).toBe(beforeImport.counts.imports + 1);
-  expect(afterImport.counts.activeTasks).toBe(beforeImport.counts.activeTasks + 2);
+  expect(afterImport.counts.activeTasks).toBe(beforeImport.counts.activeTasks + 3);
+  const importedEpic = afterImport.tasks.find(task => task.title === itemTitles.epic);
+  expect(importedEpic).toMatchObject({
+    type: 'Epic', projectId: setup.deliveryProject.id,
+    documentGenerationId: afterPublish.publication!.documentGenerationId,
+    studioArtifactId: afterPublish.publication!.artifactId,
+    studioArtifactVersionId: afterPublish.publication!.artifactVersionId,
+    status: 'To Do', retentionState: 'active',
+  });
+  expect(importedEpic!.studioArtifactVersion).toBeGreaterThan(0);
   const importedTask = afterImport.tasks.find(task => task.title === itemTitles.blocker);
   expect(importedTask).toBeDefined();
   expect(importedTask).toMatchObject({
@@ -439,12 +464,22 @@ export const runStudioDeliveryMonitorJourney = async ({
   expectUuid(importedTask!.importId!);
   recordCase(cases, 'DELIVERY-001', beforeImport, afterImport,
     ['Opened the published Docs generation', 'Selected its three structured work items', 'Imported the bounded selection to Delivery'],
-    'The server committed one import and two non-Epic authoritative tasks with exact source lineage.',
+    'The server committed one import and all three selected authoritative work items, including the persistent Epic, with exact source lineage.',
     ['/functions/v1/legacy-delivery-query', '/functions/v1/legacy-delivery-command'], measuredResponses(productionResponses, importResponseStart,
       ['/functions/v1/legacy-delivery-query', '/functions/v1/legacy-delivery-command']),
     beforeImport.lineage.digest, afterImport.lineage.digest);
   observeEvery(observations, 'DELIVERY-001');
 
+  const epicDialog = await openTask(page, itemTitles.epic);
+  const epicSources = epicDialog.getByTestId('delivery-requirement-source-links');
+  await expect(epicSources).toBeVisible();
+  await epicSources.getByText('Open approved source details', { exact: true }).click();
+  await expect(epicSources.getByText(afterPublish.publication!.artifactId, { exact: true })).toBeVisible();
+  await expect(epicSources.getByText(new RegExp(`Revision ${importedEpic!.studioArtifactVersion}`))).toBeVisible();
+  await closeTask(page, itemTitles.epic);
+
+  await clickProduct(page, 'Backlog');
+  await expect(page.getByText('Server context active', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add a task', exact: true }).first().click();
   await page.getByPlaceholder('Enter a title for this task...').fill(itemTitles.created);
   const beforeCreate = await getFrame(control, projectName);
@@ -471,6 +506,12 @@ export const runStudioDeliveryMonitorJourney = async ({
   observeEvery(observations, 'DELIVERY-002');
 
   let taskDialog = await openTask(page, itemTitles.blocker);
+  const requirementSources = taskDialog.getByTestId('delivery-requirement-source-links');
+  await expect(requirementSources).toBeVisible();
+  await requirementSources.getByText('Open approved source details', { exact: true }).click();
+  await expect(requirementSources.getByText(/Approved artifact/i)).toBeVisible();
+  await expect(requirementSources.getByText(/Revision \d+/i)).toBeVisible();
+  await expect(requirementSources.getByText(/Delivery must implement the approved/i)).toBeVisible();
   await taskDialog.getByRole('button', { name: 'Edit', exact: true }).click();
   await taskDialog.getByLabel('Reviewer', { exact: true }).check();
   const beforeAssignment = (await getFrame(control, projectName)).tasks.find(task => task.id === importedTask!.id)!;
@@ -650,7 +691,7 @@ export const runStudioDeliveryMonitorJourney = async ({
     importId: importedTask!.importId,
     artifactVersionId: afterPublish.publication!.artifactVersionId,
   });
-  expect(afterOutcome.lineage).toMatchObject({ chainCount: 2, completeCount: 2, complete: true });
+  expect(afterOutcome.lineage).toMatchObject({ chainCount: 3, completeCount: 3, complete: true });
   expectDigest(afterOutcome.lineage.digest);
   expect(afterOutcome.protections).toEqual({
     publicationImmutable: true,

@@ -25,7 +25,8 @@ export const STUDIO_SOURCE_MODES = [
 ] as const;
 export type StudioSourceMode = (typeof STUDIO_SOURCE_MODES)[number];
 export type StudioAssessmentLabel = 'assessed' | 'mixed' | 'not_assessed';
-export type StudioPlanningLabel = 'governed_assessed' | 'planning_only';
+export type StudioPlanningLabel = 'governed_assessed' | 'reviewed_planning' | 'planning_only';
+export type StudioApprovalPurpose = 'implementation_readiness' | 'documentation_planning';
 
 export const STUDIO_SECTION_NON_SOURCE_LABELS = ['human_authored', 'template_required', 'assumption'] as const;
 export type StudioSectionNonSourceLabel = (typeof STUDIO_SECTION_NON_SOURCE_LABELS)[number];
@@ -174,7 +175,7 @@ interface StudioArtifactAssessAncestryFields {
   decisionId: string;
   decisionVersion: string;
   reviewResolutionId: string;
-  governResolutionId: string;
+  governResolutionId: string | null;
   studioHandoffId: string;
   reviewSchemaVersion: string;
   reviewSequence: number;
@@ -197,7 +198,7 @@ export interface StudioAssessHandoffArtifactAncestryDto
   extends StudioArtifactV2AncestryBaseDto, StudioArtifactAssessAncestryFields {
   sourceMode: 'assess_handoff';
   assessmentLabel: 'assessed';
-  planningLabel: 'governed_assessed';
+  planningLabel: 'governed_assessed' | 'reviewed_planning';
   studioInputBundleId: null;
   studioInputBundleVersionId: null;
   studioInputBundleVersion: null;
@@ -207,7 +208,7 @@ export interface StudioMixedArtifactAncestryDto
   extends StudioArtifactV2AncestryBaseDto, StudioArtifactAssessAncestryFields {
   sourceMode: 'assess_plus_transcript_bundle';
   assessmentLabel: 'mixed';
-  planningLabel: 'governed_assessed';
+  planningLabel: 'governed_assessed' | 'reviewed_planning';
   studioInputBundleId: string;
   studioInputBundleVersionId: string;
   studioInputBundleVersion: number;
@@ -268,11 +269,13 @@ export const decodeStudioArtifactV2Ancestry = (value: unknown): StudioArtifactV2
     || !studioContractHash(value.sourcePackageHash) || !studioContractText(value.sourceSchemaVersion)
     || !studioContractText(value.ruleSetVersion)) throw new Error('INVALID_STUDIO_ARTIFACT_ANCESTRY');
 
-  const hasAssessAncestry = studioContractUuid(value.caseId) && studioContractUuid(value.sourceCaseVersionId)
+  const hasAssessedIdentity = studioContractUuid(value.caseId) && studioContractUuid(value.sourceCaseVersionId)
     && studioContractPositive(value.sourceCaseVersion) && studioContractUuid(value.decisionId)
     && studioContractText(value.decisionVersion) && studioContractUuid(value.reviewResolutionId)
-    && studioContractUuid(value.governResolutionId) && studioContractUuid(value.studioHandoffId)
+    && studioContractUuid(value.studioHandoffId)
     && studioContractText(value.reviewSchemaVersion) && studioContractPositive(value.reviewSequence);
+  const hasGovernedAssessAncestry = hasAssessedIdentity && studioContractUuid(value.governResolutionId);
+  const hasReviewedPlanningAncestry = hasAssessedIdentity && value.governResolutionId === null;
   const hasNoAssessAncestry = [
     value.caseId, value.sourceCaseVersionId, value.sourceCaseVersion, value.decisionId, value.decisionVersion,
     value.reviewResolutionId, value.governResolutionId, value.studioHandoffId, value.reviewSchemaVersion,
@@ -284,11 +287,15 @@ export const decodeStudioArtifactV2Ancestry = (value: unknown): StudioArtifactV2
     && value.studioInputBundleVersionId === null && value.studioInputBundleVersion === null;
 
   const valid = value.sourceMode === 'assess_handoff'
-    ? value.assessmentLabel === 'assessed' && value.planningLabel === 'governed_assessed'
-      && hasAssessAncestry && hasNoStudioBundle
+    ? value.assessmentLabel === 'assessed'
+      && ((value.planningLabel === 'governed_assessed' && hasGovernedAssessAncestry)
+        || (value.planningLabel === 'reviewed_planning' && hasReviewedPlanningAncestry))
+      && hasNoStudioBundle
     : value.sourceMode === 'assess_plus_transcript_bundle'
-      ? value.assessmentLabel === 'mixed' && value.planningLabel === 'governed_assessed'
-        && hasAssessAncestry && hasStudioBundle
+      ? value.assessmentLabel === 'mixed'
+        && ((value.planningLabel === 'governed_assessed' && hasGovernedAssessAncestry)
+          || (value.planningLabel === 'reviewed_planning' && hasReviewedPlanningAncestry))
+        && hasStudioBundle
       : value.sourceMode === 'direct_transcript_bundle'
         ? value.assessmentLabel === 'not_assessed' && value.planningLabel === 'planning_only'
           && hasNoAssessAncestry && hasStudioBundle

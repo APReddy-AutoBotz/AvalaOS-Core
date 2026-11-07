@@ -59,6 +59,11 @@ assert.deepEqual(tolerant.map(section=>section.id),['section-1','section-2']);as
 assert.equal(contentToStructuredSections({})[0].title,'Document overview');
 const serialized=structuredSectionsToContent({retained:true},[{id:'scope',title:'  Scope  ',body:'Body',sourceAnchors:[anchor],labels:['assumption']}]);
 assert.equal(serialized.title,'  Scope  ');assert.equal(serialized.sections[0].title,'Scope');assert.deepEqual(serialized.sections[0].sourceAnchors,[canonicalAnchor]);assert.deepEqual(serialized.sections[0].labels,['assumption']);assert.equal((serialized as Record<string,unknown>).retained,true);
+// Saving or reordering sections must not rename the generated business document.
+const editedDocument=structuredSectionsToContent({title:'Supplier invoice business requirements',summary:'Retained overview'},[{...sections[0],title:'Summary',body:'Corrected two-working-day acknowledgment'}]);
+assert.equal(editedDocument.title,'Supplier invoice business requirements');
+assert.equal((editedDocument as Record<string,unknown>).summary,'Retained overview');
+assert.equal(editedDocument.sections[0].body,'Corrected two-working-day acknowledgment');
 assert.equal('sourceLabel' in serialized.sections[0].sourceAnchors[0],false);assert.equal('sourceVersion' in serialized.sections[0].sourceAnchors[0],false);
 const projected=contentToStructuredSections({sections:[]},[{id:'scope',title:'Projected scope',body:'Body',sourceAnchors:[canonicalAnchor],labels:[]}],[selectedSource]);
 assert.deepEqual(projected[0].sourceAnchors,[anchor]);assert.deepEqual(projected[0].labels,[]);

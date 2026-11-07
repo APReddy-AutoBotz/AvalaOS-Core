@@ -33,6 +33,7 @@ const headers = { 'access-control-allow-origin': '*', 'access-control-allow-head
 
 type FixtureOptions = {
   onCommit(values: { name?: string; description?: string }): number;
+  analyzeOutcome?: 'accepted' | 'all_rejected';
   loseCommitResponse?: boolean;
   featureEnabled?: boolean;
   providerReady?: boolean;
@@ -182,12 +183,13 @@ export const installAssessImportFixture = async (page: Page, options: FixtureOpt
         const normalizedHash = sha256(xlsx.source.text);
         return { id, version:1, catalogId:ids.catalog, targetSelectorId, caseId, caseVersion:committedCaseVersion, inputBundleId:ids.bundle, inputBundleVersionId:ids.bundleVersion, extractionJobId:xlsx.jobId, extractionBindingId:ids.binding, sourceId:source.sourceId, sourceVersionId:source.versionSelector, proposedValue:value, effectiveValue:value, confidence:0.91, rationale:'Grounded synthetic suggestion', sourceAnchor:{ sourceVersionId:source.versionSelector, parserVersion:xlsx.source.parserVersion, locator, anchorHash:sha256(`${source.versionSelector}:${normalizedHash}:${locator}:${excerpt}`), safeExcerpt:excerpt }, status:'suggested' as const, relationship:'supporting' as const, reviewState:'pending' as const };
       };
-      projection.documentMapping.proposals = [proposal(ids.nameProposal,ids.nameTarget,'AI mapped invoice resolution','B1','AI mapped invoice resolution'), proposal(ids.descriptionProposal,ids.descriptionTarget,'AI proposed replacement description','B2','AI proposed replacement description'), proposal(ids.evidenceProposal,ids.evidenceTarget,null,'B3','Evidence-only supporting note')];
+      const allRejected = options.analyzeOutcome === 'all_rejected';
+      projection.documentMapping.proposals = allRejected ? [] : [proposal(ids.nameProposal,ids.nameTarget,'AI mapped invoice resolution','B1','AI mapped invoice resolution'), proposal(ids.descriptionProposal,ids.descriptionTarget,'AI proposed replacement description','B2','AI proposed replacement description'), proposal(ids.evidenceProposal,ids.evidenceTarget,null,'B3','Evidence-only supporting note')];
       if (options.includeHistoricalMappingState) projection.documentMapping.proposals.push({
         ...projection.documentMapping.proposals[0], id:ids.oldProposal, catalogId:ids.oldCatalog,
         targetSelectorId:ids.oldNameTarget, proposedValue:'OLD_HISTORY_PROPOSAL_MUST_NOT_RENDER', effectiveValue:'OLD_HISTORY_PROPOSAL_MUST_NOT_RENDER',
       });
-      const currentRun: AssessMappingRunProjection = { id:ids.run, catalogId:ids.catalog, caseId, caseVersion:committedCaseVersion, inputBundleId:ids.bundle, inputBundleVersionId:ids.bundleVersion, extractionJobIds:analyzed.map(item => item.jobId), state:'review_required', proposalCount:3, projectionComplete:true, warnings:[], analyzedSources:analyzed.map(({source:item}) => ({ sourceId:item.sourceId, sourceVersionId:item.sourceVersionId, parserVersion:item.parserVersion, extractedByteCount:item.extractedByteCount, sheetCount:item.sheetCount, cellCount:item.cellCount, warnings:item.warnings })), updatedAt:'2026-09-16T08:03:00.000Z' };
+      const currentRun: AssessMappingRunProjection = { id:ids.run, catalogId:ids.catalog, caseId, caseVersion:committedCaseVersion, inputBundleId:ids.bundle, inputBundleVersionId:ids.bundleVersion, extractionJobIds:analyzed.map(item => item.jobId), state:'review_required', proposalCount:allRejected ? 0 : 3, projectionComplete:true, warnings:allRejected ? ['PROVIDER_PROPOSAL_REJECTED_TEXT_ANCHOR_AMBIGUOUS:1'] : [], analyzedSources:analyzed.map(({source:item}) => ({ sourceId:item.sourceId, sourceVersionId:item.sourceVersionId, parserVersion:item.parserVersion, extractedByteCount:item.extractedByteCount, sheetCount:item.sheetCount, cellCount:item.cellCount, warnings:item.warnings })), updatedAt:'2026-09-16T08:03:00.000Z' };
       projection.documentMapping.runs = [currentRun, ...(options.includeHistoricalMappingState ? [
         { ...currentRun, id:'a5000000-0000-4000-8000-000000000010', catalogId:ids.oldCatalog, proposalCount:1, warnings:['OLD_HISTORY_RUN_MUST_NOT_RENDER'], updatedAt:'2026-09-16T07:58:00.000Z' },
         { ...currentRun, id:'a5000000-0000-4000-8000-000000000011', inputBundleId:'a3000000-0000-4000-8000-000000000003', inputBundleVersionId:'a3000000-0000-4000-8000-000000000004', proposalCount:0, warnings:['OTHER_BUNDLE_RUN_MUST_NOT_RENDER'], updatedAt:'2026-09-16T08:04:00.000Z' },

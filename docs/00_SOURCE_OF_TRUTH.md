@@ -1,5 +1,87 @@
 # AvalaOS Core Source Of Truth
 
+## Current planning documents and discovery acceptance
+
+The existing project board preserves six historical BRD items and four selected FRD v4 items with two stored prerequisite links. Studio exported all four current approvals, including the FRD’s human-authored appendix and the SDD’s rendered diagrams. The board records independent acceptance for exception routing and nonblocking PATCH exclusion. Planning does not authorize PATCH or confer implementation readiness.
+
+Independent Studio review and approval produced BRD v7, PDD v6, FRD v4 and SDD v7 for supplier invoice query handling. The planning assessment retains its confidence, accepted evidence and unanswered questions. The FRD contains two requirement-linked discovery questions. The [current acceptance plan](planning/process-evidence-to-delivery.md) tracks publication, stored dependencies, independent dispositions and canonical PDF verification.
+
+## Business review of the planning journey
+
+The fresh supplier invoice case reached the existing Delivery board. On candidate `4f0bda98453e93bbf4f70936eaed347d2ce6b404`, all 17 required checks passed. The corrected acknowledgment target persisted through assessment and documentation. Separate actors approved BRD v5, PDD v4, FRD v2 and SDD v5 for documentation and planning. The final Architecture-only refresh preserved the other ten SDD sections, both flows, title and summary. All six pages of the canonical SDD v5 PDF were inspected. The separate order-status case recommended workflow and a read API with no AI selected.
+
+The [business-review correction](planning/process-evidence-to-delivery.md) enforces a reviewed discovery resolution for stored discovery dependencies. It also refreshes Studio document selection after commits, uses the current assessment for catalog counts, and corrects the Delivery assignment read. Migration 132 is installed on the dedicated acceptance backend. Business review uses the retained approved PDFs, a six-item board export, and the selective refresh comparison. Image/PDF flowchart interpretation and graphical diagram editing remain open.
+
+## Four approved planning documents — 6 November 2026 UTC
+
+Candidate `88f1738ef6bd3f7d73c533e92ec80fe8815abc15` passed all 17 required workflows and exact dedicated preview/backend plus 130-migration verification. Real BRD/PDD/FRD/SDD content is saved and independently approved for planning. Six selected requirement-derived board items and the separate no-AI assessment remain verified. The SDD canonical PDF inspection found obscured branch routes, and current-source drafts lack a visible selective-refresh action. The [active milestone](planning/process-evidence-to-delivery.md) owns these focused corrections, their immutable rendition boundary and remaining ordinary-UI proof. Provider execution is disabled and the key binding revoked. The milestone is not complete.
+
+## Synthetic generation compatibility correction — 6 November 2026 UTC
+
+The dedicated `32d3240f` preview/backend and 129-migration inventory verified, and the preview gate passed. Required CI found that the SDD prompt migration omitted the existing authenticated-synthetic constraint branch and transport/permit coupling. The [active milestone](planning/process-evidence-to-delivery.md) owns a narrow additive repair with real PostgreSQL and canonical browser regression coverage. Installed bytes remain immutable. Three approved documents, six board items and the no-AI case remain reviewable. Provider execution is disabled, the key binding is revoked, and no new call occurred; SDD and selective refresh remain incomplete.
+
+## Generated FRD and distinct SDD flow correction — 6 November 2026 UTC
+
+Candidate `4ded34f001a9204951a2bd754d458299b8716c57` passed all 17 required workflows, exact preview/backend verification and the complete 128-migration inventory. Normal UI generation produced FRD version 1; saved requirement-linked criteria and fact/proposal corrections survived reload as version 2, then separate reviewer and approver accounts approved that content for planning. BRD/PDD and the six existing board items remain retained. The no-AI contrast was reverified through normal UI.
+
+The new SDD response duplicated its As-Is and To-Be bodies and was correctly rejected before document creation. Its actual usage was settled and candidate retained; earlier lost-response reservations remain uncertain and counted. Provider execution is disabled and the key binding revoked. Twelve cumulative attempts retain USD 5.6575104 in ledger exposure; the last posted billing display of USD 0.05 had not reflected the latest two requests. The [active milestone](planning/process-evidence-to-delivery.md) owns versioned SDD flow guidance and a bounded cumulative completion allowance. SDD, selective refresh and rendered SDD export remain incomplete.
+
+
+## Studio timeout recovery — 6 November 2026
+
+Candidate `1b0d2c90254947f52550ed8f99e27b7f255885cf` passed all 17 required checks, verified 127 installed migrations and exact nonproduction frontend/backend identity. Normal provider validation succeeded. The subsequent real FRD request hit the 30-second timeout; no candidate, staged response or document version exists. Runtime and permit are disabled, key binding revoked, and ten attempts retain USD 4.714592 in conservative ledger exposure. Actual FRD usage is unknown; last observed posted provider spend was USD 0.04 before this attempt.
+
+The [active milestone](planning/process-evidence-to-delivery.md) owns the narrow Studio-only 60-second timeout / 90-second lease and additive exact-bound timeout disposition. It preserves uncertain reservations, all cumulative allocations, independent approvals and source lineage. BRD/PDD and six board items remain reviewable; FRD/SDD and selective refresh remain incomplete.
+
+
+
+## Selected Delivery work and stale validation recovery — 6 November 2026
+
+Candidate `478b99d33094539f5072058cbfa506abd50a8433` passed all 17 required checks and verified the dedicated preview/backend with 126 migrations. Six reviewed BRD-derived items are imported onto the existing native Delivery board; saved status/details survive reload and repeat import creates no duplicate. BRD/PDD are independently approved for planning with canonical exports inspected. FRD/SDD, selective refresh and full four-document acceptance remain incomplete.
+
+Renewal encountered an expired provider validation before any new provider call. The [active milestone](planning/process-evidence-to-delivery.md) owns the additive repair permitting the remaining real validation while preserving generation freshness, cumulative spend, source lineage and independent approvals. Provider execution is disabled and the key binding revoked. Eight attempts retain USD 3.7716736 in ledger debits/reservations; the refreshed billing UI separately shows USD 0.04 posted usage. No merge or production deployment is authorized.
+
+## Approved documents and requirement publication correction — 6 November 2026
+
+Candidate `c5a6ca187c653dc105972c2809837ff0ff2b0c3d` passed all 17 required workflows and verified the dedicated preview/backend, 125 installed migrations and eight separate actors. BRD v5 and PDD v4 are independently approved for planning; their canonical PDF pages were inspected. The order-status UI shows the supported non-AI design separately from its remaining evidence gaps. Before any board publication, ordinary Studio incorrectly derived work from a Summary paragraph while missing 11 numbered approved requirements. The [active milestone](planning/process-evidence-to-delivery.md) owns the focused client/server recognition repair and additive migration 126. Its verification and actual publication/import remain pending. Provider execution is disabled and the key binding revoked. FRD/SDD generation, selective refresh and the completed document-to-board journey remain outstanding.
+
+## Approved planning content and canonical export correction — 6 November 2026
+
+Candidate `3490f58b68f41ca2024650c8539c25d5c903860b` verified the dedicated preview, 18 backend functions/265 source inputs, 123 installed migrations and eight separate actor sessions. BRD version 5 and PDD version 2 were independently approved for planning after normal UI corrections and reload checks. The canonical BRD PDF downloaded, but inspection of all six pages found structured V2 content serialized as JSON through the legacy renderer. Preserve this rendition and approved content; a new server-owned rendition identity must produce the corrected business export. Sixteen required CI checks passed. The remaining standalone lifecycle test omitted the new exact capture audit; its corrected 16-stage PostgreSQL journey now passes locally. FRD/SDD generation, selective refresh, rendered SDD export and selected board import remain pending. Provider execution is disabled and key binding revoked; no new provider spend is claimed. The [active milestone](planning/process-evidence-to-delivery.md) remains incomplete.
+
+## Generated planning drafts and response recovery — 6 November 2026
+
+Candidate `1870a2a1d23569cc725cd3f648ad02aadae6e077` passed all 17 required workflows and exact nonproduction frontend/backend plus 122-migration verification. The scoped Studio grants, independent planning review and assessed handoffs committed through normal UI/administration. Real BRD and PDD drafts are saved, including the corrected acknowledgment target and human review boundaries. The SDD response was lost between provider return and validated staging; its exact validation/persistence cause is unknown. Provider execution is off and the key binding revoked, with all eight debits preserved. The [active milestone plan](planning/process-evidence-to-delivery.md) owns the bounded recovery repair and remaining FRD/SDD, document approval and board proof. The document-to-board milestone is not complete.
+
+## Dedicated Studio acceptance actors — 6 November 2026
+
+AP authorized account-specific Studio handoff permissions and private rendition generation/download in the dedicated acceptance workspace. The provider operator, Assess route, actor identities and cumulative allowance stay unchanged. Only the existing Studio generation route may be rebound to the same Studio author's exclusive workspace role. Normal Admin assignment, independent document approvals and the existing Delivery board remain required.
+
+The dedicated backend installed both role migrations at `08532f50` while provider execution was disabled. The replacement preview at `04561c63` verified all 18 Edge functions, 265 source files and eight separate actor sessions. Its required CI exposed an ambiguous roster lookup for ordinary accounts. The additive correction `20261106012003` keeps the two installed migrations immutable. The three configured Studio roles are unassigned at this checkpoint; there is no hosted document or Delivery publication from this repair.
+
+The predecessor `1f0d4f6be7ff2b6be5e73c2d13198f67d2365ea1` passed all 17 required CI workflows. The hosted supplier assessment was still in review, with no generated Studio versions, publications or board items. Disposable regressions do not establish hosted generation.
+
+## Independent approval for documentation and planning
+
+On 5 November 2026 AP authorized an assigned independent reviewer to approve a finalized assessment for documentation and planning with explicit evidence gaps. Studio documents, their content approvals, requirement proposals and selected project-board items must carry this purpose and the actual assessed source. The Verified standard and Govern action authority remain separate decisions. The [milestone scope and field diagnosis](planning/process-evidence-to-delivery.md) records what the supplier's 21 unresolved claims affect.
+
+Candidate `99db2d15917c9578b80c08f625c4ee5c1305514b` passed the 17 required workflows with 115 verified nonproduction migrations. The independent supplier reviewer accepted three submitted evidence records. Full assessment approval remained blocked by uncovered fields. Generation, document approval and board import using the new planning purpose require end-to-end evidence.
+
+
+## Finalized source-bound decisions and Govern compatibility — 5 November 2026
+
+All 17 required workflows passed on `ee9f72239b24dab544d3c988995765833ca2c72d`. The dedicated preview and backend matched that commit and all 114 migrations. The repaired extraction produced two grounded suggestions for the supplier case and one for order status. A business author corrected the source-linked description and decision step, saved the seven-step supplier flow, and recorded the two-step order lookup. AP provided a separate dated fictional API supplement. Its own stored version and locked source set accompany the retained original bundles. Both Assess decisions are finalized: supplier source version 5 and order-status source version 4. The latter selects workflow and native API integration but still reports insufficient evidence to conclude AI necessity; no score or recommendation was overridden.
+
+The independent reviewer can open the order-status review. The supplier decision instead returns `PR1E_GOVERN_ACTION_AUTHORITY_INVALID`: its ready GET and prohibited bank-details operation are valid, while the unknown PATCH has no applicable action. The additive compatibility repair must preserve that empty authority and the two sibling boundaries, the decision hash, historical resolutions, grants and actor separation. The editor must allow human-authored evidence to be tied to registered fields and must not prepopulate an invalid claim. These fixes and their fail-closed verification belong to the existing PR #355. Real Studio generation and live board work remain pending. Five cumulative provider effects reserve USD 2.357296; billing posted USD 0.02. Provider execution and key binding were disabled before the repair.
+
+## First retained-source provider run — 5 November 2026
+
+Candidate `f100547a3b1acd12fe05a4a46887ab785b440754` passed all 17 required workflows, including the immutable preview gate. Its dedicated backend verified 113 migrations, 18 functions and 265 source inputs. The operator received only `assess.read` through Users / Roles and validated the configured provider. The separate Assess author analyzed both retained source bundles. Each real request produced one proposed field whose source passage failed the exact-match check, leaving zero accepted facts. The UI incorrectly reported that suggestions were ready. The extractions consumed 25,092 input and 325 output tokens. The ledger retained three cumulative fixed debits totaling USD 1.4143776. Provider execution is disabled and the run key binding was revoked. Generated business documents, independent approvals and live board publication remain pending. The [milestone plan](planning/process-evidence-to-delivery.md) owns the extraction and post-use renewal repair.
+
+## Retained process-evidence acceptance continuation - 5 November 2026
+
+The process-evidence milestone continues in the existing PR stack. The verified `602fbeb8` candidate passed all 17 required workflows and exact hosted source/migration checks; its ordinary UI retained two fresh processes and four source files. Provider calls, generated documents and live board publication remain unverified. AP now authorizes the focused operator-read and retained-permit repairs, bounded recovery and candidate redeployment needed to finish the journey. The [active milestone plan](planning/process-evidence-to-delivery.md#authorized-continuation-and-retained-permit-repair---5-november-2026) records the verified-credit ceiling, independent actors, cumulative-accounting requirements and cleanup. No merge, production, credit purchase or additional hosting cost is authorized.
+
 ## Governed Studio process documentation candidate
 
 The Studio boundary of the [process-evidence milestone](planning/process-evidence-to-delivery.md) introduces a canonical SDD with editable As-Is and To-Be sections. Approved documents remain immutable. The [Studio verification record](planning/process-evidence-studio-sdd-and-flows.md) distinguishes local PostgreSQL and synthetic browser evidence from actual model generation.

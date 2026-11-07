@@ -93,13 +93,17 @@ test('synthetic fixture profile rejects providers and malformed options before c
 });
 
 const mappingHarness=({synthetic=true,exercise})=>{
-  const effects={syntheticProviderCalls:0};let consumed;
+  const effects={syntheticProviderCalls:0};let consumed;const recoveryCalls=[];
   const syntheticModule={consumeAuthenticatedSyntheticStudioPermit:async input=>{consumed=input;return {kind:'studio_deterministic_success'};}};
   const generation=createEnterpriseLifecycleStudioGeneration({serviceQuery:async()=>{throw new Error('UNEXPECTED_SQL');},providerEffects:effects,
-    studioDbModule:{STUDIO_RPC:{},executeStudioGenerationDependency:async(initial,deps)=>deps.execute(initial)},
-    studioGenerationModule:{executeClaimedStudioGeneration:exercise},providerBudgetModule:{},studioProviderModule:{},templateModule:{},
+    studioDbModule:{STUDIO_RPC:{},executeStudioGenerationDependency:async(initial,deps)=>deps.execute(initial),
+      captureStudioGenerationCandidate:async input=>{recoveryCalls.push(['capture',input]);},
+      loadStudioGenerationCandidate:async input=>{recoveryCalls.push(['load',input]);return null;},
+      rejectStudioGenerationCandidate:async input=>{recoveryCalls.push(['reject',input]);}},
+    studioGenerationModule:{executeClaimedStudioGeneration:exercise,studioBudgetRpc:async()=>{throw new Error('UNEXPECTED_BUDGET_RPC');}},
+    providerBudgetModule:{settleProviderBudget:async input=>{recoveryCalls.push(['settle',input]);}},studioProviderModule:{},templateModule:{},
     authenticatedSyntheticModule:synthetic?syntheticModule:null});
-  return {generation,effects,consumed:()=>consumed};
+  return {generation,effects,consumed:()=>consumed,recoveryCalls};
 };
 
 test('synthetic consume wiring forwards the exact production claim authority and fence fields',async()=>{
@@ -120,7 +124,11 @@ test('authenticated synthetic profile fails before entering the fixture provider
 
 test('ordinary fixture profile retains its existing generation dependencies',async()=>{
   const harness=mappingHarness({synthetic:false,exercise:async(_input,deps)=>{
-    assert.equal(Object.hasOwn(deps,'consumeSynthetic'),false);assert.equal(typeof deps.runProvider,'function');return 'ordinary';
+    assert.equal(Object.hasOwn(deps,'consumeSynthetic'),false);assert.equal(typeof deps.runProvider,'function');
+    await deps.captureCandidate({attemptId:'attempt'});await deps.loadCandidate({attemptId:'attempt'});
+    await deps.rejectCandidate({attemptId:'attempt'});await deps.settleCandidate({reservationId:'reservation'});
+    return 'ordinary';
   }});
   assert.equal(await harness.generation.executeClaimedGeneration({}),'ordinary');
+  assert.deepEqual(harness.recoveryCalls.map(([name])=>name),['capture','load','reject','settle']);
 });

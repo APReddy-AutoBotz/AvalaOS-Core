@@ -20,6 +20,31 @@ const database = `authenticated_synthetic_${process.pid}_${Date.now()}`.toLowerC
 assert.match(database, /^[a-z0-9_]+$/u);
 const urlFor = name => { const value = new URL(source); value.pathname = `/${name}`; return value.toString(); };
 const migrations = readdirSync(path.join(root, 'supabase', 'migrations')).filter(name => name.endsWith('.sql')).sort();
+const providerPlanConstraintExpression = migrationSql => {
+  const marker = 'ADD CONSTRAINT studio_generation_provider_plan_check CHECK(';
+  const markerIndex = migrationSql.indexOf(marker);
+  assert.notEqual(markerIndex, -1, 'provider-plan constraint marker must exist');
+  const openingIndex = markerIndex + marker.length - 1;
+  let depth = 0;
+  for (let index = openingIndex; index < migrationSql.length; index += 1) {
+    if (migrationSql[index] === '(') depth += 1;
+    if (migrationSql[index] === ')') depth -= 1;
+    if (depth === 0) return migrationSql.slice(openingIndex + 1, index);
+  }
+  assert.fail('provider-plan constraint must have balanced parentheses');
+};
+const normalizeSql = value => value.replace(/\s+/gu, '').toLowerCase();
+const historicalProviderPlanConstraint = providerPlanConstraintExpression(readFileSync(path.join(root,
+  'supabase', 'migrations', '20261010144356_authenticated_hosted_exercise_authority.sql'), 'utf8'));
+const repairedProviderPlanConstraint = providerPlanConstraintExpression(readFileSync(path.join(root,
+  'supabase', 'migrations', '20261106191539_studio_synthetic_prompt_compatibility.sql'), 'utf8'));
+const expectedProviderPlanConstraint = historicalProviderPlanConstraint.replace(
+  "prompt_version IN('studio-pr-b-1','studio-pr-b-2','studio-pr-b-3')",
+  "prompt_version IN('studio-pr-b-1','studio-pr-b-2','studio-pr-b-3','studio-pr-b-4')");
+assert.notEqual(expectedProviderPlanConstraint, historicalProviderPlanConstraint,
+  'compatibility expectation must add only the bound SDD prompt');
+assert.equal(normalizeSql(repairedProviderPlanConstraint), normalizeSql(expectedProviderPlanConstraint),
+  'compatibility migration must preserve the historical three-branch contract and add only bound prompt-v4');
 const duplicateSafe = new Set([
   '20260923133000_pr1e_evidence_claim_operator_binding.sql',
   '20260923142120_pr1e_govern_control_alias_binding.sql',
@@ -57,6 +82,60 @@ const authority = async (client, sql, parameters = []) => {
     throw error;
   }
 };
+const verifyProviderPlanMatrix = async (client, expectRegression = false) => {
+  const installedConstraint = (await client.query(`SELECT pg_get_constraintdef(constraint_row.oid,false) definition
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid='public.studio_artifact_generation_attempts'::regclass
+      AND constraint_row.conname='studio_generation_provider_plan_check'`)).rows[0].definition;
+  await client.query(`CREATE TEMP TABLE studio_provider_plan_matrix(
+    provider_plan_state text,transport_kind text,provider_route_id uuid,provider_config_id uuid,
+    provider_name text,provider_model text,prompt_key text,prompt_version text,provider_plan_hash text,
+    authenticated_synthetic_permit_id uuid,
+    CONSTRAINT installed_provider_plan_check ${installedConstraint}
+  )`);
+  const insertSql = `INSERT INTO studio_provider_plan_matrix(
+    provider_plan_state,transport_kind,provider_route_id,provider_config_id,provider_name,provider_model,
+    prompt_key,prompt_version,provider_plan_hash,authenticated_synthetic_permit_id)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`;
+  const routeId = '82000000-0000-4000-8000-000000000001';
+  const providerId = '82000000-0000-4000-8000-000000000002';
+  const permitId = '82000000-0000-4000-8000-000000000003';
+  const legacy = ['legacy_unverified', 'provider', null, null, null, null, null, null, null, null];
+  const bound = promptVersion => ['bound', 'provider', routeId, providerId, 'openai', 'fixture-model',
+    'studio-multisource-generation', promptVersion, hash('a'), null];
+  const synthetic = ['authenticated_synthetic', 'authenticated_synthetic', null, null, null, null,
+    'studio-multisource-generation', 'studio-pr-b-1', hash('b'), permitId];
+
+  if (expectRegression) {
+    await assert.rejects(() => client.query(insertSql, synthetic), /installed_provider_plan_check/u,
+      'installed migration 129 rejects the legitimate synthetic row');
+    await client.query('DROP TABLE studio_provider_plan_matrix');
+    return;
+  }
+  await client.query(insertSql, legacy);
+  for (const promptVersion of ['studio-pr-b-1', 'studio-pr-b-2', 'studio-pr-b-3', 'studio-pr-b-4']) {
+    await client.query(insertSql, bound(promptVersion));
+  }
+  await client.query(insertSql, synthetic);
+
+  const rejected = [
+    ['legacy with synthetic transport', [legacy[0], 'authenticated_synthetic', ...legacy.slice(2)]],
+    ['legacy with synthetic permit', [...legacy.slice(0, 9), permitId]],
+    ['bound with synthetic transport', ['bound', 'authenticated_synthetic', ...bound('studio-pr-b-4').slice(2)]],
+    ['bound with synthetic permit', [...bound('studio-pr-b-4').slice(0, 9), permitId]],
+    ['bound without route', ['bound', 'provider', null, ...bound('studio-pr-b-4').slice(3)]],
+    ['synthetic transport with provider-bound state', ['bound', ...synthetic.slice(1)]],
+    ['synthetic plan with provider transport', [synthetic[0], 'provider', ...synthetic.slice(2)]],
+    ['synthetic plan without permit', [...synthetic.slice(0, 9), null]],
+    ['synthetic plan with provider fields', [...synthetic.slice(0, 3), providerId, 'openai', 'fixture-model', ...synthetic.slice(6)]],
+    ['synthetic plan with prompt-v4', [...synthetic.slice(0, 7), 'studio-pr-b-4', ...synthetic.slice(8)]],
+  ];
+  for (const [label, values] of rejected) {
+    await assert.rejects(() => client.query(insertSql, values), /installed_provider_plan_check/u, label);
+  }
+  assert.equal((await client.query('SELECT count(*)::int count FROM studio_provider_plan_matrix')).rows[0].count, 6);
+  await client.query('DROP TABLE studio_provider_plan_matrix');
+};
 
 const admin = new Client({ connectionString: source });
 let db;
@@ -84,7 +163,7 @@ try {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;`);
   for (const name of migrations) {
     if (name === '20261019161723_local_real_backend_authenticated_acceptance.sql') {
-      assert.equal(migrations.at(-1), '20261103103752_process_evidence_studio_sdd_flows.sql', 'full-chain replay must include the exact product successor');
+      assert.equal(migrations.at(-1), '20261107120003_studio_reviewer_display_names.sql', 'full-chain replay must include the exact product successor');
       assert.equal((await db.query(
         'SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
       '20261011053000');
@@ -177,13 +256,26 @@ try {
           WHERE table_schema='public' AND table_name='authenticated_synthetic_exercises' AND column_name='build_digest') build_digest`)).rows[0],
       { execution_kind: true, build_digest: true });
     }
+    if (name === '20261106190001_sdd_completion_allowance.sql') {
+      const regressedConstraint = (await db.query(`SELECT pg_get_constraintdef(constraint_row.oid,false) definition
+        FROM pg_constraint constraint_row
+        WHERE constraint_row.conrelid='public.studio_artifact_generation_attempts'::regclass
+          AND constraint_row.conname='studio_generation_provider_plan_check'`)).rows[0].definition;
+      assert.match(regressedConstraint, /studio-pr-b-4/u);
+      assert.doesNotMatch(regressedConstraint, /authenticated_synthetic/u,
+        'migration 129 must reproduce the removed synthetic branch before the additive repair');
+      await verifyProviderPlanMatrix(db, true);
+    }
+    if (name === '20261106191539_studio_synthetic_prompt_compatibility.sql') {
+      await verifyProviderPlanMatrix(db);
+    }
   }
 
   assert.equal((await db.query('SELECT migration_tip FROM public.hosted_pilot_environment_identity WHERE singleton')).rows[0].migration_tip,
-    '20261103103752');
+    '20261107120003');
   assert.deepEqual((await authority(db,
     'SELECT public.enterprise_provider_secret_backend_capability() value')).rows[0].value, {
-    backendKind: 'supabase_vault', available: false, migrationTip: '20261103103752',
+    backendKind: 'supabase_vault', available: false, migrationTip: '20261107120003',
     exerciseActive: false, providerCallsAuthorized: false,
   });
 
@@ -221,12 +313,12 @@ try {
   await assert.rejects(() => authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://foreign.invalid', `sha256:${hash('b')}`,
-      '20261103103752', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
+      '20261107120003', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]));
   const activated = await authority(db,
     'SELECT public.authenticated_synthetic_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value',
     [ids.exercise, hash('a').slice(0, 40), 'f'.repeat(24), 'https://avalaos-pilot.netlify.app', `sha256:${hash('b')}`,
-      '20261103103752', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
+      '20261107120003', `sha256:${hash('c')}`, `sha256:${hash('d')}`, 'hosted-authenticated-synthetic-profile-v3',
       `sha256:${hash('e')}`, `sha256:${hash('f')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)]);
   assert.equal(activated.rows[0].value.lifecycle, 'active');
   await authority(db, 'SELECT public.authenticated_synthetic_bind_session($1,$2,$3,$4)',
@@ -288,8 +380,18 @@ try {
     [JSON.stringify(studioCommand)])).rows[0].value;
   assert.equal(studioRequested.outcome, 'committed');
   const studioAttempt = (await db.query(`SELECT * FROM public.studio_artifact_generation_attempts WHERE id=$1`, [studioRequested.attemptId])).rows[0];
-  assert.equal(studioAttempt.transport_kind, 'authenticated_synthetic');
-  assert.equal(studioAttempt.provider_route_id, null); assert.equal(studioAttempt.provider_config_id, null);
+  assert.deepEqual({
+    providerPlanState: studioAttempt.provider_plan_state, transportKind: studioAttempt.transport_kind,
+    providerRouteId: studioAttempt.provider_route_id, providerConfigId: studioAttempt.provider_config_id,
+    providerName: studioAttempt.provider_name, providerModel: studioAttempt.provider_model,
+    promptKey: studioAttempt.prompt_key, promptVersion: studioAttempt.prompt_version,
+    permitId: studioAttempt.authenticated_synthetic_permit_id,
+  }, {
+    providerPlanState: 'authenticated_synthetic', transportKind: 'authenticated_synthetic',
+    providerRouteId: null, providerConfigId: null, providerName: null, providerModel: null,
+    promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-1', permitId: ids.studioPermit,
+  });
+  assert.match(studioAttempt.provider_plan_hash, /^[0-9a-f]{64}$/u);
   // The existing immutable-binding trigger rejects route substitution before
   // PostgreSQL evaluates the provider-plan CHECK constraint.
   await assert.rejects(() => db.query('UPDATE public.studio_artifact_generation_attempts SET provider_route_id=$1 WHERE id=$2',
@@ -405,7 +507,7 @@ try {
   const localActivationSql =
     'SELECT public.authenticated_synthetic_local_exercise_activate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) value';
   const localActivation = [ids.localExercise, hash('2').slice(0, 40), `sha256:${hash('3')}`,
-    'http://127.0.0.1:4173', `sha256:${hash('4')}`, '20261103103752', `sha256:${hash('5')}`,
+    'http://127.0.0.1:4173', `sha256:${hash('4')}`, '20261107120003', `sha256:${hash('5')}`,
     `sha256:${hash('6')}`, 'local-real-backend-authenticated-profile-v1', `sha256:${hash('7')}`,
     `sha256:${hash('8')}`, ids.org, ids.workspace, new Date(Date.now() + 3_600_000)];
   assert.deepEqual((await db.query(`SELECT

@@ -1041,6 +1041,23 @@ export function createAuthenticatedHostedPostgresAdapter({ config, db, verifyDep
           processId:project.canonicalCreatedProcessId,
         });
       }
+      if(pathname==='/control/project-studio-handoff-target'){
+        if(!project||!strictUuid(project.processId??'')){
+          throw new Error('AUTHENTICATED_HOSTED_STUDIO_HANDOFF_TARGET_REJECTED');
+        }
+        const targets=(await query(`SELECT handoff.id
+          FROM public.assess_v2_studio_handoffs handoff
+          JOIN public.assess_v2_cases assessed
+            ON assessed.id=handoff.case_id AND assessed.org_id=handoff.org_id
+           AND assessed.workspace_id=handoff.workspace_id
+          WHERE assessed.process_id=$1 AND handoff.org_id=$2 AND handoff.workspace_id=$3
+            AND public.studio_pr_b_upstream_handoff_is_current(handoff.id,$2,$3)`,
+        [project.processId,...scopeParams()])).rows;
+        if(targets.length!==1||!strictUuid(targets[0]?.id??'')){
+          throw new Error('AUTHENTICATED_HOSTED_STUDIO_HANDOFF_TARGET_REJECTED');
+        }
+        return {upstreamHandoffId:targets[0].id};
+      }
       if(pathname==='/control/assess-v2-runtime') {
         if(input.enabled===false){
           if(assessControlLease)throw new Error('AUTHENTICATED_HOSTED_ASSESS_CONTROL_ALREADY_OWNED');

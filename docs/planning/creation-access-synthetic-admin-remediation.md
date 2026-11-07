@@ -1,5 +1,34 @@
 # Creation access and synthetic Admin remediation
 
+## Account-exclusive Studio role variants — 2026-11-06
+
+The approved nonproduction continuation reuses the existing `assign_role` action
+for three fixed account-exclusive values: `studio-author`, `studio-reviewer`, and
+`studio-approver`. They are never reservation presets. A private additive binding
+selects each eligible synthetic account by exact target, account and Auth actor,
+records its legacy base preset and role, and binds at most one matching Studio
+variant role. Labels, email addresses, browser claims and caller-supplied
+capabilities never select a recipient or construct authority.
+
+The normal Admin roster projects the effective role, base preset, nullable bound
+variant, active state and a server-derived assignable list. Unbound accounts retain
+the four legacy choices. A bound account receives exactly its base and its one
+variant, so the UI cannot display another Studio role. Activation and restoration
+both use `assign_role` and the guarded
+`public.synthetic_admin_assign_studio_variant` RPC with the existing actor,
+tenant, authorization-version, request, idempotency, account and expected-version
+arguments. Direct legacy assignment rejects bound accounts. The server retains
+provider-off, exact-recipient, role-content, membership, audit, replay and
+authorization-version checks; the browser exposes no arbitrary actor, role or
+capability editor.
+
+Focused verification covers strict reserve/assign contracts, exact Edge dispatch,
+malformed or authority-bearing response rejection, effective-role decoding,
+Desktop/Pixel eligible-option rendering, activation and restoration. Safe rollback
+disables the additive bindings and variant assignment while preserving the
+original sign-in identities, base roles, immutable receipts and audit history;
+it does not delete accounts or broaden shared presets.
+
 Status: local implementation and verification complete; actual joined exploratory
 browser and independent SQL readback passed on head `3352f5ff`; the two retained CI
 source defects are locally corrected, with 28/28 commands and 156/156 browser

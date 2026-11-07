@@ -49,7 +49,7 @@ const main = async () => {
       queried.push(structuredClone(request));
       return { ok: true, schemaVersion: 'legacy-delivery-query.v1', projectId: ids.project, items: [task],
         page: { limit: 100, nextCursor: null, hasMore: false },
-        source: { id: ids.source, digest: `sha256:${'a'.repeat(64)}`, items: [] } };
+        source: { id: ids.source, digest: `sha256:${'a'.repeat(64)}`, materializesEpics: false, items: [] } };
     },
   };
   const query = await queryLegacyDelivery(scope, { projectId: ids.project, sourceGenerationId: ids.source }, queryTransport);

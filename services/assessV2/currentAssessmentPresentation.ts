@@ -1,7 +1,7 @@
 import type { DecisionPackV2 } from './types';
 
 export type CurrentAssessmentState = 'loading' | 'unavailable' | 'none' | 'working-draft' | 'reviewer-ready';
-export type CurrentReviewStatus = 'reviewer_ready' | 'in_review' | 'approved' | 'changes_requested' | 'rejected';
+export type CurrentReviewStatus = 'reviewer_ready' | 'in_review' | 'approved' | 'planning_approved' | 'changes_requested' | 'rejected';
 
 export interface CurrentAssessmentReviewPresentation {
   scopeKey: string;
@@ -41,10 +41,13 @@ const studioActionForReview = (review?: CurrentAssessmentReviewPresentation): st
   if (!review) return 'Load committed review status before Studio handoff';
   if (review.handoffStatus === 'committed') return 'View committed Studio handoff status';
   if (review.status === 'changes_requested' || review.status === 'rejected') return 'Revise the current assessment before Studio handoff';
+  if (review.status === 'planning_approved') return review.handoffStatus === 'ready'
+    ? 'Create Studio handoff for documentation and planning'
+    : 'Reload committed review state before Studio handoff';
   if (review.status !== 'approved') return 'Complete independent review before Studio handoff';
   if (review.governStatus !== 'resolved') return 'Resolve Govern controls before Studio handoff';
   return review.handoffStatus === 'ready'
-    ? 'Create durable Studio handoff'
+    ? 'Create Studio handoff'
     : 'Reload committed review state before Studio handoff';
 };
 
@@ -98,9 +101,13 @@ export const buildCurrentAssessmentPresentation = ({
   const boundReview = review && review.scopeKey === reviewScopeKey && review.caseId === caseId && review.decisionId === decisionId ? review : undefined;
   const reviewStatusLabel = !boundReview
     ? 'Finalized · review status unavailable'
-    : boundReview.handoffStatus === 'committed'
-      ? 'Studio handoff committed'
-      : boundReview.status === 'approved'
+    : boundReview.status === 'planning_approved'
+      ? (boundReview.handoffStatus === 'committed'
+        ? 'Approved for documentation and planning · Studio handoff committed'
+        : 'Approved for documentation and planning · questions remain')
+      : boundReview.handoffStatus === 'committed'
+        ? 'Studio handoff committed'
+        : boundReview.status === 'approved'
         ? (boundReview.governStatus === 'resolved' ? 'Approved · Govern resolved' : 'Approved · Govern pending')
         : boundReview.status === 'in_review'
           ? 'Finalized · independent review in progress'

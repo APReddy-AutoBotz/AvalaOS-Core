@@ -14,11 +14,13 @@ import {
   type StudioExecutableGenerationClaim,
   type StudioGenerationClaim,
   type StudioGenerationFailureCode,
+  type StudioGenerationProviderCandidate,
 } from './studioArtifactGeneration.ts';
 import {
   callStudioArtifactProvider,
   STUDIO_PROVIDER_PROMPT_KEY,
   STUDIO_PROVIDER_PROMPT_VERSIONS,
+  studioProviderPromptSupportsArtifact,
   type StudioProviderArtifactType,
 } from './studioArtifactProvider.ts';
 import { ENTERPRISE_AI_PROVIDERS } from '../../../services/enterpriseIntelligence.ts';
@@ -34,6 +36,12 @@ import { resolveAuthenticatedSyntheticStudioTransport } from './authenticatedSyn
 
 type StudioBoundProviderPlan = NonNullable<StudioExecutableGenerationClaim['providerPlan']>;
 
+// Keep the server-owned provider deadline inside the shared gateway ceiling and
+// leave a bounded persistence window after the fetch returns. Neither value is
+// accepted from the browser or the generation command.
+export const STUDIO_PROVIDER_TIMEOUT_MS = 60_000;
+export const STUDIO_GENERATION_LEASE_SECONDS = 90;
+
 /** Centralized RPC inventory; migrations and adapters must move in lockstep. */
 export const STUDIO_RPC = {
   authority: 'studio_artifact_authority',
@@ -47,6 +55,9 @@ export const STUDIO_RPC = {
   generationClaim: 'studio_artifact_generation_claim_v2',
   authenticatedSyntheticGenerationClaim: 'studio_artifact_generation_claim_authenticated_synthetic',
   generationStage: 'studio_artifact_generation_stage_v2',
+  generationCandidateCapture: 'studio_artifact_generation_candidate_capture_v1',
+  generationCandidateLoad: 'studio_artifact_generation_candidate_load_v1',
+  generationCandidateReject: 'studio_artifact_generation_candidate_reject_v1',
   generationFinalize: 'studio_artifact_generation_finalize_v2',
   generationCancel: 'studio_artifact_generation_cancel_v2',
   generationTimeout: 'studio_artifact_generation_timeout_v2',
@@ -410,7 +421,7 @@ export async function loadStudioGenerationMaterial(
     || promptKey !== STUDIO_PROVIDER_PROMPT_KEY
     || !STUDIO_PROVIDER_PROMPT_VERSIONS.includes(promptVersion as never)
     || !projectionHash.test(providerPlanHash)
-    || promptVersion !== 'studio-pr-b-1' && artifactType !== 'brd') {
+    || !studioProviderPromptSupportsArtifact(promptVersion as StudioBoundProviderPlan['promptVersion'], artifactType)) {
     throw new StudioArtifactError('PROVIDER_ROUTE_UNAVAILABLE');
   }
   const sourcePackageId = string(field(plan, 'sourcePackageId', 'source_package_id'));
@@ -616,7 +627,8 @@ export const claimStudioGeneration = async (
   const value = object(await invoke<unknown>(syntheticPermitId
     ? STUDIO_RPC.authenticatedSyntheticGenerationClaim
     : STUDIO_RPC.generationClaim, {
-    p_attempt_id: attemptId, p_execution_token: executionToken, p_lease_seconds: 45,
+    p_attempt_id: attemptId, p_execution_token: executionToken,
+    p_lease_seconds: STUDIO_GENERATION_LEASE_SECONDS,
   }));
   const terminalState = field(value, 'state');
   const terminalReplay = field(value, 'outcome') === 'replayed'
@@ -691,7 +703,7 @@ export const claimStudioGeneration = async (
     manualBrief: material.manualBrief,
     providerPlan: material.providerPlan,
     maximumOutputTokens: integer(field(plan, 'maximumOutputTokens', 'maximum_output_tokens'), 1),
-    timeoutMs: 30_000,
+    timeoutMs: STUDIO_PROVIDER_TIMEOUT_MS,
     providerAllowed: field(value, 'providerAllowed', 'provider_allowed') === true,
     reconcileOnly: field(value, 'reconcileOnly', 'reconcile_only') === true,
     ...(field(plan, 'authenticatedSyntheticPermitId', 'authenticated_synthetic_permit_id') ? {
@@ -713,6 +725,95 @@ export const stageStudioGeneration = (input: {
   p_attempt_id: input.attemptId, p_execution_token: input.executionToken, p_execution_fence: input.executionFence,
   p_provider_operation_id: input.providerOperationId ?? null, p_response: input.response,
 });
+
+type CandidateUsage = { inputTokens: number; outputTokens: number; totalTokens: number };
+const candidateUsage = (value: unknown): CandidateUsage => {
+  const usage = object(value);
+  exactProjectionKeys(usage, ['inputTokens', 'outputTokens', 'totalTokens']);
+  const inputTokens = integer(field(usage, 'inputTokens'));
+  const outputTokens = integer(field(usage, 'outputTokens'));
+  const totalTokens = integer(field(usage, 'totalTokens'), 1);
+  if (inputTokens + outputTokens !== totalTokens) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  return { inputTokens, outputTokens, totalTokens };
+};
+const candidateHash = (value: unknown) => {
+  const result = string(value);
+  if (!/^[0-9a-f]{64}$/.test(result)) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  return result;
+};
+
+export const captureStudioGenerationCandidate = async (input: {
+  attemptId: string; executionToken: string; executionFence: number;
+  reservationId: string; providerOperationId?: string; response: JsonObject; usage: CandidateUsage;
+}, invoke: Rpc = rpc): Promise<void> => {
+  const value = object(await invoke<unknown>(STUDIO_RPC.generationCandidateCapture, {
+    p_attempt_id: input.attemptId, p_execution_token: input.executionToken,
+    p_execution_fence: input.executionFence, p_provider_operation_id: input.providerOperationId ?? null,
+    p_response: input.response, p_input_tokens: input.usage.inputTokens,
+    p_output_tokens: input.usage.outputTokens, p_total_tokens: input.usage.totalTokens,
+  }));
+  exactProjectionKeys(value, ['outcome', 'attemptId', 'state', 'reservationId', 'responseHash', 'usage']);
+  const outcome = field(value, 'outcome');
+  if ((outcome !== 'committed' && outcome !== 'replayed')
+    || durableUuid(field(value, 'attemptId')) !== input.attemptId
+    || field(value, 'state') !== 'captured'
+    || durableUuid(field(value, 'reservationId')) !== input.reservationId
+    || !candidateHash(field(value, 'responseHash'))) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  const acknowledgedUsage = candidateUsage(field(value, 'usage'));
+  if (acknowledgedUsage.inputTokens !== input.usage.inputTokens
+    || acknowledgedUsage.outputTokens !== input.usage.outputTokens
+    || acknowledgedUsage.totalTokens !== input.usage.totalTokens) {
+    throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  }
+};
+
+export const loadStudioGenerationCandidate = async (input: {
+  attemptId: string; executionToken: string; executionFence: number;
+}, invoke: Rpc = rpc): Promise<StudioGenerationProviderCandidate | null> => {
+  const raw = await invoke<unknown>(STUDIO_RPC.generationCandidateLoad, {
+    p_attempt_id: input.attemptId, p_execution_token: input.executionToken,
+    p_execution_fence: input.executionFence,
+  });
+  if (raw === null) return null;
+  const value = object(raw);
+  exactProjectionKeys(value, ['attemptId', 'state', 'reservationId', 'response', 'providerOperationId', 'responseHash', 'usage']);
+  if (durableUuid(field(value, 'attemptId')) !== input.attemptId) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  const state = field(value, 'state');
+  if (state !== 'captured' && state !== 'validated' && state !== 'rejected') throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  const response = object(field(value, 'response'));
+  const providerOperationId = field(value, 'providerOperationId');
+  if (providerOperationId !== null && (typeof providerOperationId !== 'string'
+    || !/^[A-Za-z0-9._:-]{1,200}$/.test(providerOperationId))) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  const normalizedProviderOperationId = providerOperationId === null ? undefined : providerOperationId as string;
+  return {
+    state, response, responseHash: candidateHash(field(value, 'responseHash')),
+    reservationId: durableUuid(field(value, 'reservationId')),
+    usage: candidateUsage(field(value, 'usage')),
+    ...(normalizedProviderOperationId === undefined ? {} : { providerOperationId: normalizedProviderOperationId }),
+  };
+};
+
+export const rejectStudioGenerationCandidate = async (input: {
+  attemptId: string; executionToken: string; executionFence: number;
+  failureCode: Extract<StudioGenerationFailureCode,
+    'PROVIDER_OUTPUT_INVALID' | 'PROVIDER_OUTPUT_OVERSIZED' | 'SOURCE_COVERAGE_INCOMPLETE'>;
+}, invoke: Rpc = rpc): Promise<void> => {
+  const value = object(await invoke<unknown>(STUDIO_RPC.generationCandidateReject, {
+    p_attempt_id: input.attemptId, p_execution_token: input.executionToken,
+    p_execution_fence: input.executionFence, p_failure_code: input.failureCode,
+  }));
+  exactProjectionKeys(value, [
+    'outcome', 'attemptId', 'state', 'failureCode', 'reservationId', 'responseHash', 'usage',
+  ]);
+  const outcome = field(value, 'outcome');
+  if ((outcome !== 'committed' && outcome !== 'replayed')
+    || durableUuid(field(value, 'attemptId')) !== input.attemptId
+    || field(value, 'state') !== 'rejected'
+    || field(value, 'failureCode') !== input.failureCode
+    || !durableUuid(field(value, 'reservationId'))
+    || !candidateHash(field(value, 'responseHash'))) throw new StudioArtifactError('COMMAND_UNAVAILABLE');
+  candidateUsage(field(value, 'usage'));
+};
 
 export const finalizeStudioGeneration = async (input: {
   attemptId: string; executionToken: string; executionFence: number;
@@ -803,6 +904,9 @@ export const executeStudioGenerationDependency = async (
   }
   return (dependencies.execute ?? (value => executeClaimedStudioGeneration(value, {
     runProvider: input => callStudioArtifactProvider(input),
+    captureCandidate: input => captureStudioGenerationCandidate(input),
+    loadCandidate: input => loadStudioGenerationCandidate(input),
+    rejectCandidate: input => rejectStudioGenerationCandidate(input),
     stage: input => stageStudioGeneration(input).then(() => undefined),
     finalize: input => finalizeStudioGeneration(input),
     fail: (id, code) => code === 'GENERATION_UNCERTAIN'

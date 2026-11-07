@@ -393,6 +393,7 @@ test('local control wrapper delegates action and case routes to the production c
   assert.match(source, /new AuthenticatedHostedController\(/u);
   assert.match(source, /createAuthenticatedHostedPostgresAdapter\(/u);
   assert.match(source, /controller[.]control\(url[.]pathname, input\)/u);
+  assert.match(source, /'\/control\/project-studio-handoff-target'/u);
   assert.doesNotMatch(source, /beginBrowserAction\s*\(/u);
   assert.doesNotMatch(source, /recordBrowserCase\s*\(/u);
   assert.match(source, /CREATE TABLE IF NOT EXISTS auth[.]sessions/u);

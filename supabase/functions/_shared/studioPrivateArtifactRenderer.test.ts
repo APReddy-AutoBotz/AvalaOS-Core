@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { inspectMermaidFlowcharts } from '../../../services/mermaidFlowchart';
 import {
   StudioRenditionError,
   assertValidStudioPdf,
   inspectStudioDocxEntries,
   normalizeStudioApprovedContent,
+  planStudioPdf3Diagram,
   renderStudioPrivateArtifact,
   sha256Hex,
   validateStudioApprovedContent,
@@ -36,6 +38,79 @@ const render = (value: unknown, format: string) =>
   });
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const errorCode = (code: string) => (error: unknown) => error instanceof StudioRenditionError && error.code === code;
+const exactSections = {
+  brd: [
+    ['summary', 'Summary'], ['objectives', 'Objectives'], ['scope', 'Scope'],
+    ['requirements', 'Requirements'], ['risks', 'Risks'],
+  ],
+  frd: [
+    ['summary', 'Summary'], ['functionalRequirements', 'Functional requirements'],
+    ['rules', 'Rules'], ['interfaces', 'Interfaces'],
+    ['acceptanceCriteria', 'Acceptance criteria'],
+  ],
+  pdd: [
+    ['summary', 'Summary'], ['process', 'Process'], ['roles', 'Roles'],
+    ['controls', 'Controls'], ['exceptions', 'Exceptions'],
+  ],
+  sdd: [
+    ['summary', 'Summary'], ['architecture', 'Architecture'],
+    ['components', 'Components'], ['interfaces', 'Interfaces'],
+    ['dataDesign', 'Data design'], ['asIsFlow', 'As is flow'],
+    ['toBeFlow', 'To be flow'], ['securityControls', 'Security controls'],
+    ['operationalDesign', 'Operational design'],
+    ['designDecisions', 'Design decisions'],
+    ['openQuestionsAndProposals', 'Open questions and proposals'],
+  ],
+} as const;
+const v2Content = (
+  artifactType: keyof typeof exactSections,
+  bodies: Readonly<Record<string, string>> = {},
+) => ({
+  contractVersion: 'studio-artifact-2',
+  title: `Synthetic ${artifactType.toUpperCase()}`,
+  summary: 'Source-grounded planning content.',
+  sections: exactSections[artifactType].map(([id, title]) => ({
+    id,
+    title,
+    body: bodies[id] ?? `${title} business content.`,
+    sourceAnchors: [],
+    labels: ['template_required'],
+  })),
+  coverage: {
+    selectedSourceVersionIds: [],
+    coveredSourceVersionIds: [],
+    complete: true,
+  },
+});
+const renderV2 = (
+  artifactType: keyof typeof exactSections,
+  value: unknown,
+  format: 'markdown' | 'pdf' | 'docx',
+) => renderStudioPrivateArtifact(value, format, {
+  artifactType,
+  contentSchemaVersion: artifactType === 'sdd' ? 'studio-artifact-2' : 'studio-artifact-1',
+  templateVersion: `studio-${artifactType}-1`,
+  rendererVersion: format === 'markdown'
+    ? 'studio-markdown-2'
+    : format === 'pdf'
+      ? 'studio-pdf-2'
+      : 'studio-docx-2',
+});
+const renderSddPdf3 = (value: unknown) => renderStudioPrivateArtifact(value, 'pdf', {
+  artifactType: 'sdd',
+  contentSchemaVersion: 'studio-artifact-2',
+  templateVersion: 'studio-sdd-1',
+  rendererVersion: 'studio-pdf-3',
+});
+const renderPdf4 = (
+  artifactType: keyof typeof exactSections,
+  value: unknown,
+) => renderStudioPrivateArtifact(value, 'pdf', {
+  artifactType,
+  contentSchemaVersion: artifactType === 'sdd' ? 'studio-artifact-2' : 'studio-artifact-1',
+  templateVersion: `studio-${artifactType}-1`,
+  rendererVersion: 'studio-pdf-4',
+});
 
 void test('renderer accepts bounded canonical objects without dropping fields', () => {
   assert.deepEqual(validateStudioApprovedContent(fixture), fixture);
@@ -146,6 +221,307 @@ void test('PDF generation is byte-for-byte deterministic with correct metadata',
   assert.equal(first.filename, 'studio-artifact-rendition.pdf');
   assert.equal(first.rendererVersion, 'studio-pdf-1');
   assert.equal(first.sha256, '2e1fa0766956d060e057bb4af85d9304e80b42560b6a05e9bfaac1df68d7fff7');
+});
+void test('renderer-2 exports schema-1 BRD V2 prose instead of raw JSON', async () => {
+  const content = v2Content('brd', {
+    summary: 'Accounts Payable receives invoice-status enquiries.',
+    requirements: 'Use ready invoice-status GET. Bank-details POST is prohibited. PATCH availability remains unknown.',
+  });
+  const pdf = await renderV2('brd', content, 'pdf');
+  const source = new TextDecoder('latin1').decode(pdf.bytes);
+  assert.equal(pdf.rendererVersion, 'studio-pdf-2');
+  assert.match(source, /Accounts Payable receives invoice-status enquiries/u);
+  assert.match(source, /Bank-details POST is prohibited/u);
+  assert.match(source, /PATCH availability/u);
+  assert.match(source, /remains unknown/u);
+  assert.match(source, /AvalaOS deterministic studio-pdf-2/u);
+  assert.doesNotMatch(source, /sourceAnchors|anchorHash|"contractVersion"|"id"/u);
+
+  const markdown = decode((await renderV2('brd', content, 'markdown')).bytes);
+  assert.match(markdown, /## Requirements/u);
+  assert.doesNotMatch(markdown, /sourceAnchors|anchorHash|contractVersion/u);
+  const docx = inspectStudioDocxEntries((await renderV2('brd', content, 'docx')).bytes);
+  assert.match(decode(docx.get('word/document.xml')!), /PATCH availability remains unknown/u);
+  assert.match(decode(docx.get('docProps/app.xml')!), /studio-docx-2/u);
+});
+void test('renderer-2 requires the frozen V2 system-template dialect', async () => {
+  const valid = v2Content('brd');
+  const mutants: unknown[] = [
+    { ...valid, unexpected: true },
+    { ...valid, sections: valid.sections.slice(0, -1) },
+    { ...valid, sections: valid.sections.map((section, index) => index === 0 ? { ...section, title: 'Overview' } : section) },
+    { ...valid, sections: valid.sections.map((section, index) => index === 0 ? { ...section, labels: [] } : section) },
+    { ...valid, coverage: { ...valid.coverage, complete: false } },
+  ];
+  for (const mutant of mutants) {
+    await assert.rejects(() => renderV2('brd', mutant, 'pdf'), errorCode('INVALID_CONTENT'));
+  }
+  await assert.rejects(
+    () => renderStudioPrivateArtifact(fixture, 'pdf', {
+      artifactType: 'brd', contentSchemaVersion: 'studio-artifact-1',
+      templateVersion: 'studio-brd-1', rendererVersion: 'studio-pdf-2',
+    }),
+    errorCode('INVALID_CONTENT'),
+  );
+});
+void test('renderer-2 binds every selected source to one exact anchor', async () => {
+  const sourceVersionId = '11111111-1111-4111-8111-111111111111';
+  const valid = v2Content('frd');
+  const anchored = {
+    ...valid,
+    sections: valid.sections.map((section, index) => index === 0 ? {
+      ...section,
+      sourceAnchors: [{ sourceVersionId, locator: 'page:1', anchorHash: 'a'.repeat(64) }],
+      labels: [],
+    } : section),
+    coverage: {
+      selectedSourceVersionIds: [sourceVersionId],
+      coveredSourceVersionIds: [sourceVersionId],
+      complete: true,
+    },
+  };
+  await assert.doesNotReject(() => renderV2('frd', anchored, 'markdown'));
+  await assert.rejects(
+    () => renderV2('frd', {
+      ...anchored,
+      coverage: { ...anchored.coverage, coveredSourceVersionIds: [] },
+    }, 'markdown'),
+    errorCode('INVALID_CONTENT'),
+  );
+  await assert.rejects(
+    () => renderV2('frd', {
+      ...anchored,
+      sections: anchored.sections.map((section, index) => index === 0 ? {
+        ...section,
+        sourceAnchors: [{ ...section.sourceAnchors[0], extra: 'not allowed' }],
+      } : section),
+    }, 'markdown'),
+    errorCode('INVALID_CONTENT'),
+  );
+});
+void test('renderer-2 keeps strict SDD flows as bounded vector diagrams', async () => {
+  const content = v2Content('sdd', {
+    asIsFlow: 'flowchart TD\n  A[Request] --> B[Manual review]',
+    toBeFlow: 'flowchart LR\n  A[Request] --> B[Ready GET]\n  B --> C{Exception}\n  C -->|Yes| D[Human judgment]\n  C -->|No| E[Complete]',
+  });
+  const result = await renderV2('sdd', content, 'pdf');
+  const pdf = new TextDecoder('latin1').decode(result.bytes);
+  assert.equal(result.rendererVersion, 'studio-pdf-2');
+  assert.match(pdf, /As is flow/u);
+  assert.match(pdf, /To be flow/u);
+  assert.match(pdf, /Human judgment/u);
+  assert.match(pdf, /\d+ \d+ \d+ \d+ re B/u);
+  assert.doesNotMatch(pdf, /flowchart (?:TD|LR)/u);
+});
+void test('renderer-3 routes every canonical SDD branch visibly and emits a complete transition legend', async () => {
+  const asIsFlow = [
+    'flowchart TD',
+    'A[Receive query and acknowledge within two working days]',
+    'B[Human verifies requester authority]',
+    'C[Analyst identifies stated invoice reference]',
+    'D[Read and verify invoice status]',
+    'E[Human investigates ambiguity or dispute]',
+    'F[Human approves and sends reply]',
+    'G[Record original source and approved reply]',
+    'A --> B', 'B -->|Verified| C', 'B -->|Unresolved| E',
+    'C -->|Exact reference| D', 'C -->|Missing or ambiguous| E',
+    'D -->|Verified status| F', 'D -->|Error or dispute| E',
+    'E -->|Resolved for reply| F', 'F --> G',
+  ].join('\n');
+  const toBeFlow = [
+    'flowchart TD',
+    'A[Proposed workflow capture and acknowledgment]',
+    'B[Human verifies requester authority]',
+    'C[Proposed rules validate exact invoice and supplier references]',
+    'D[Ready read-only GET retrieves invoice status]',
+    'E[Human reviews missing records errors or disputes]',
+    'F[Prepare reply from verified status]',
+    'G[Human approves and sends reply]',
+    'H[Proposed evidence record links source and approved reply]',
+    'A --> B', 'B -->|Verified| C', 'B -->|Unresolved| E',
+    'C -->|Exact match| D', 'C -->|Invalid or ambiguous| E',
+    'D -->|Matching status| F', 'D -->|Not found denied or technical failure| E',
+    'E -->|Resolved for reply| F', 'F --> G', 'G --> H',
+  ].join('\n');
+  const content = v2Content('sdd', { asIsFlow, toBeFlow });
+  const historicalPdf2 = await renderV2('sdd', content, 'pdf');
+  assert.equal(historicalPdf2.sha256, '2781e80ae0c2b702c41c43da2f5d6b1058ca50ce7d49575cac6957f199edb82f');
+  const first = await renderSddPdf3(content);
+  const second = await renderSddPdf3(content);
+  assert.deepEqual(first.bytes, second.bytes);
+  assert.equal(first.rendererVersion, 'studio-pdf-3');
+  const pdf = new TextDecoder('latin1').decode(first.bytes);
+  assert.match(pdf, /AvalaOS deterministic studio-pdf-3/u);
+  assert.equal((pdf.match(/Complete transition legend/g) ?? []).length, 2);
+  for (const expected of [
+    'E3: [B] Human verifies requester authority --Unresolved-->',
+    'E5: [C] Analyst identifies stated invoice reference --Missing or ambiguous-->',
+    'E6: [D] Read and verify invoice status --Verified status-->',
+    'E7: [D] Ready read-only GET retrieves invoice status --Not found denied or technical failure-->',
+  ]) assert.ok(pdf.includes(expected), expected);
+
+  const chart = inspectMermaidFlowcharts(asIsFlow, true)[0];
+  const plan = planStudioPdf3Diagram({
+    kind: 'diagram', title: 'As is flow', chart,
+    nodeIds: chart.nodes.map(node => node.id), part: 1, parts: 1, advance: 472,
+  }, 720);
+  assert.equal(plan.routes.length, chart.edges.length);
+  assert.equal(new Set(plan.routes.map(route => route.edgeId)).size, chart.edges.length);
+  assert.ok(plan.routes.find(route => route.edgeId === 'E3')!.points.length > 2);
+});
+void test('renderer-3 is authorized only for the exact SDD V2 schema and template', async () => {
+  const content = v2Content('sdd', {
+    asIsFlow: 'flowchart TD\nA[Start] --> B[Review]',
+    toBeFlow: 'flowchart TD\nA[Start] --> B[Ready GET]',
+  });
+  await assert.doesNotReject(() => renderSddPdf3(content));
+  for (const authority of [
+    { artifactType: 'brd' as const, contentSchemaVersion: 'studio-artifact-1', templateVersion: 'studio-brd-1' },
+    { artifactType: 'sdd' as const, contentSchemaVersion: 'studio-artifact-1', templateVersion: 'studio-sdd-1' },
+    { artifactType: 'sdd' as const, contentSchemaVersion: 'studio-artifact-2', templateVersion: 'studio-brd-1' },
+  ]) await assert.rejects(() => renderStudioPrivateArtifact(content, 'pdf', {
+    ...authority, rendererVersion: 'studio-pdf-3',
+  }), errorCode('VERSION_MISMATCH'));
+});
+void test('renderer-4 deterministically exports every exact business document while preserving renderer-2 and renderer-3 bytes', async () => {
+  for (const artifactType of ['brd', 'pdd', 'frd'] as const) {
+    const content = v2Content(artifactType, {
+      summary: 'Readable business content with supported facts, proposed choices and unanswered questions.',
+    });
+    const historical = await renderV2(artifactType, content, 'pdf');
+    const historicalReplay = await renderV2(artifactType, content, 'pdf');
+    const current = await renderPdf4(artifactType, content);
+    const currentReplay = await renderPdf4(artifactType, content);
+    assert.deepEqual(historical.bytes, historicalReplay.bytes);
+    assert.deepEqual(current.bytes, currentReplay.bytes);
+    assert.notEqual(current.sha256, historical.sha256);
+    assert.equal(current.rendererVersion, 'studio-pdf-4');
+    const source = new TextDecoder('latin1').decode(current.bytes);
+    assert.match(source, /AvalaOS deterministic studio-pdf-4/u);
+    assert.match(source, /Readable business content/u);
+    assert.doesNotMatch(source.replace(/\([^)]*\)/gu, ''), /\/(?:JavaScript|AcroForm|EmbeddedFiles|URI)\b/u);
+  }
+
+  const sdd = v2Content('sdd', {
+    asIsFlow: 'flowchart TD\nA[Receive query] -->|Verified| B[Human approves reply]',
+    toBeFlow: 'flowchart TD\nA[Capture request] -->|Ready GET| B[Retrieve invoice status]',
+  });
+  const historical = await renderSddPdf3(sdd);
+  const historicalReplay = await renderSddPdf3(sdd);
+  const current = await renderPdf4('sdd', sdd);
+  assert.deepEqual(historical.bytes, historicalReplay.bytes);
+  assert.notEqual(current.sha256, historical.sha256);
+  assert.equal(current.rendererVersion, 'studio-pdf-4');
+});
+
+void test('renderer-4 exports an appended UI-authored planning question without weakening required sections or source binding', async () => {
+  const base = v2Content('frd');
+  const appendix = {
+    id: 'section-dd481ada-5473-40ac-8d25-197c4c4de0a7',
+    title: 'Open questions',
+    body: 'Question: Is invoice PATCH supported and authorized, or must the implementation retain the blocker?',
+    sourceAnchors: [],
+    labels: ['human_authored'],
+  };
+  const current = await renderPdf4('frd', {
+    ...base,
+    sections: [...base.sections, appendix],
+  });
+  const pdf = new TextDecoder('latin1').decode(current.bytes);
+  assert.match(pdf, /Open questions/u);
+  assert.match(pdf, /Is invoice PATCH supported and authorized/u);
+
+  await assert.rejects(() => renderV2('frd', {
+    ...base,
+    sections: [...base.sections, appendix],
+  }, 'pdf'), errorCode('INVALID_CONTENT'));
+
+  for (const rejected of [
+    { ...appendix, id: 'openQuestions' },
+    { ...appendix, labels: ['assumption'] },
+  ]) {
+    await assert.rejects(() => renderPdf4('frd', {
+      ...base,
+      sections: [...base.sections, rejected],
+    }), errorCode('INVALID_CONTENT'));
+  }
+
+  const sourceAnchor = {
+    sourceVersionId: '11111111-1111-4111-8111-111111111111',
+    locator: 'page:1',
+    anchorHash: 'a'.repeat(64),
+  };
+  const sourceBound = {
+    ...base,
+    coverage: {
+      selectedSourceVersionIds: [sourceAnchor.sourceVersionId],
+      coveredSourceVersionIds: [sourceAnchor.sourceVersionId],
+      complete: true,
+    },
+    sections: base.sections.map((section, index) => index === 0
+      ? { ...section, sourceAnchors: [sourceAnchor], labels: [] }
+      : section),
+  };
+  await assert.rejects(() => renderPdf4('frd', {
+    ...sourceBound,
+    sections: [...sourceBound.sections, { ...appendix, sourceAnchors: [sourceAnchor] }],
+  }), errorCode('INVALID_CONTENT'));
+});
+
+void test('renderer-4 keeps retained business flow labels and branch meaning readable without ellipsis', async () => {
+  const asIsFlow = [
+    'flowchart TD',
+    'A[Receive query and acknowledge within two working days]',
+    'B[Human verifies requester authority]',
+    'C[Analyst identifies stated invoice reference]',
+    'D[Read and verify invoice status]',
+    'E[Human investigates ambiguity or dispute]',
+    'F[Human approves and sends reply]',
+    'G[Record original source and approved reply]',
+    'A --> B', 'B -->|Verified| C', 'B -->|Unresolved| E',
+    'C -->|Exact reference| D', 'C -->|Missing or ambiguous| E',
+    'D -->|Verified status| F', 'D -->|Error or dispute| E',
+    'E -->|Resolved for reply| F', 'F --> G',
+  ].join('\n');
+  const toBeFlow = [
+    'flowchart TD',
+    'A[Proposed workflow capture and acknowledgment]',
+    'B[Human verifies requester authority]',
+    'C[Proposed rules validate exact invoice and supplier references]',
+    'D[Ready read-only GET retrieves invoice status]',
+    'E[Human reviews missing records errors or disputes]',
+    'F[Prepare reply from verified status]',
+    'G[Human approves and sends reply]',
+    'H[Proposed evidence record links source and approved reply]',
+    'A --> B', 'B -->|Verified| C', 'B -->|Unresolved| E',
+    'C -->|Exact match| D', 'C -->|Invalid or ambiguous| E',
+    'D -->|Matching status| F', 'D -->|Not found denied or technical failure| E',
+    'E -->|Resolved for reply| F', 'F --> G', 'G --> H',
+  ].join('\n');
+  const first = await renderPdf4('sdd', v2Content('sdd', { asIsFlow, toBeFlow }));
+  const second = await renderPdf4('sdd', v2Content('sdd', { asIsFlow, toBeFlow }));
+  assert.deepEqual(first.bytes, second.bytes);
+  const pdf = new TextDecoder('latin1').decode(first.bytes);
+  for (const text of [
+    'Receive query and acknowledge within two working days',
+    'Proposed rules validate exact invoice and supplier references',
+    'Not found denied or technical failure',
+    'Transition details',
+  ]) assert.ok(pdf.includes(text), text);
+  assert.doesNotMatch(pdf, /\.\.\./u);
+  assert.doesNotMatch(pdf, /flowchart TD/u);
+  assert.match(pdf, /\/F2 9 Tf/u);
+});
+
+void test('renderer-4 rejects non-system, wrong-schema and wrong-template authority', async () => {
+  const content = v2Content('brd');
+  await assert.doesNotReject(() => renderPdf4('brd', content));
+  for (const authority of [
+    { artifactType: 'brd' as const, contentSchemaVersion: 'studio-artifact-2', templateVersion: 'studio-brd-1' },
+    { artifactType: 'brd' as const, contentSchemaVersion: 'studio-artifact-1', templateVersion: 'studio-sdd-1' },
+  ]) await assert.rejects(() => renderStudioPrivateArtifact(content, 'pdf', {
+    ...authority, rendererVersion: 'studio-pdf-4',
+  }), errorCode('VERSION_MISMATCH'));
 });
 void test('canonical SDD schema v2 renders As-Is and To-Be as bounded vector diagrams', async () => {
   const anchor = { sourceVersionId: '11111111-1111-4111-8111-111111111111', locator: 'page:1', anchorHash: 'a'.repeat(64) };

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
-import { buildAuthenticatedSyntheticStudioDraft, executeClaimedStudioGeneration, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
+import { buildAuthenticatedSyntheticStudioDraft, executeClaimedStudioGeneration, preservesOptionalStudioAlternatives, studioBudgetRpc, validateStudioDraft, type StudioExecutableGenerationClaim, type StudioGenerationDependencies, type StudioTerminalGenerationClaim } from './studioArtifactGeneration.ts';
 import { StudioProviderGatewayError, type StudioProviderGatewayResult } from './studioArtifactProvider.ts';
 import { prBAssertion, studioPrBRuntime } from './studioArtifactPrBTestEvidence.ts';
 import { composeStudioBrdSourceFacts, deriveStudioBrdSourceFacts } from './studioBrdSourceFacts.ts';
@@ -186,7 +186,7 @@ const claim: StudioExecutableGenerationClaim = {
     artifactType: 'brd', promptKey: 'studio-multisource-generation', promptVersion: 'studio-pr-b-2',
     providerPlanHash: hash('f'), resolverDecision: decision,
   },
-  maximumOutputTokens: 2_000, timeoutMs: 30_000,
+  maximumOutputTokens: 2_000, timeoutMs: 60_000,
   providerAllowed: true, reconcileOnly: false,
 };
 const providerResult: StudioProviderGatewayResult = {
@@ -267,16 +267,52 @@ void (async () => {
   }));
 
   const events: string[] = []; let providerEffects = 0; let providerInputAnchorsBound = false;
+  let providerTimeoutBound = false;
   const deps = {
     runProvider: async (providerInput: Parameters<StudioGenerationDependencies['runProvider']>[0]) => {
       providerInputAnchorsBound = JSON.stringify(providerInput.canonicalSourceAnchors) === JSON.stringify(canonicalAnchors);
+      providerTimeoutBound = providerInput.timeoutMs === 60_000;
       providerEffects += 1; events.push('provider'); return providerResult;
     },
     stage: async () => { events.push('stage'); },
+    captureCandidate: async () => undefined,
+    loadCandidate: async () => null,
+    rejectCandidate: async (_input: unknown) => { events.push('reject'); },
     finalize: async () => { events.push('finalize'); return { state: 'completed' as const, resource: { artifactId: ids[8], version: 1 } }; },
     fail: async (_attemptId: string, code: string) => { events.push(`fail:${code}`); },
     runBudgeted: executedBudget,
   };
+  const captureRetryEvents: string[] = [];
+  let captureRetryProviderEffects = 0; let captureRetryAttempts = 0;
+  const captureRetryRecovered = await executeClaimedStudioGeneration(claim, {
+    ...deps,
+    runProvider: async () => { captureRetryProviderEffects += 1; return providerResult; },
+    captureCandidate: async () => {
+      captureRetryAttempts += 1; captureRetryEvents.push('capture');
+      if (captureRetryAttempts === 1) throw new Error('capture acknowledgement lost');
+    },
+    stage: async () => { captureRetryEvents.push('stage'); },
+    finalize: async () => { captureRetryEvents.push('finalize'); return { state: 'completed', resource: { version: 1 } }; },
+  });
+  mark(captureRetryRecovered.state === 'completed' && captureRetryProviderEffects === 1
+    && captureRetryAttempts === 2 && captureRetryEvents.join(',') === 'capture,capture,stage,finalize',
+  'IDEMP-002-B', 'generation.candidate-capture-ack-loss-retries-exact-persistence-once-without-provider-retry',
+  'private-candidate-capture-ack-recovery');
+
+  let failedCaptureProviderEffects = 0; let failedCaptureAttempts = 0;
+  const capturePersistenceFailed = await executeClaimedStudioGeneration(claim, {
+    ...deps,
+    runProvider: async () => { failedCaptureProviderEffects += 1; return providerResult; },
+    captureCandidate: async () => { failedCaptureAttempts += 1; throw new Error('candidate persistence unavailable'); },
+    stage: async () => { throw new Error('stage forbidden without durable candidate'); },
+    finalize: async () => { throw new Error('finalize forbidden without durable candidate'); },
+  });
+  mark(capturePersistenceFailed.state === 'uncertain'
+    && capturePersistenceFailed.failureCode === 'GENERATION_UNCERTAIN'
+    && failedCaptureProviderEffects === 1 && failedCaptureAttempts === 2,
+  'STUDIO-TR-009', 'generation.candidate-capture-double-failure-remains-uncertain-without-provider-retry-or-stage',
+  'private-candidate-capture-persistence-failure');
+
   const deterministicDraft = buildAuthenticatedSyntheticStudioDraft('brd', [ids[0]], canonicalAnchors, tenantTemplatePayload);
   mark(validateStudioDraft(deterministicDraft, [ids[0]], canonicalAnchors, tenantTemplatePayload) === deterministicDraft,
     'STUDIO-002', 'generation.authenticated-synthetic-derived-only-from-server-material',
@@ -371,6 +407,8 @@ void (async () => {
     { ...claim, providerPlan: { ...claim.providerPlan, promptVersion: undefined } },
     { ...claim, providerPlan: { ...claim.providerPlan, providerPlanHash: 'bad' } },
     { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'pdd', promptVersion: 'studio-pr-b-2' } },
+    { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'brd', promptVersion: 'studio-pr-b-4' } },
+    { ...claim, providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-3' } },
   ];
   let invalidPromptBudgetEntries = 0; let invalidPromptProviderEffects = 0; let invalidPromptFailureWrites = 0;
   const invalidPromptResults = [];
@@ -385,10 +423,10 @@ void (async () => {
   mark(invalidPromptResults.every(result => result.state === 'failed')
     && invalidPromptBudgetEntries === 0 && invalidPromptProviderEffects === 0
     && invalidPromptFailureWrites === invalidPromptClaims.length,
-  'PROVIDER-009-B', 'generation.invalid-or-non-brd-v2-prompt-plan-fails-before-budget-and-provider',
-  'missing-wrong-prompt-identity-and-v2-non-brd-matrix');
+  'PROVIDER-009-B', 'generation.invalid-artifact-prompt-pairs-fail-before-budget-and-provider',
+  'missing-wrong-prompt-identity-brd-and-sdd-matrix');
   const success = await executeClaimedStudioGeneration(claim, deps);
-  mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound
+  mark(success.state === 'completed' && providerEffects === 1 && providerInputAnchorsBound && providerTimeoutBound
     && events.join(',') === 'provider,stage,finalize',
   'IDEMP-001', 'generation.one-provider-effect-staged-before-finalize', 'provider-success-single-effect');
 
@@ -396,6 +434,217 @@ void (async () => {
   const replay = await executeClaimedStudioGeneration(claim, { ...deps, runBudgeted: replayBudget });
   mark(replay.state === 'completed' && providerEffects === 0 && events.join(',') === 'finalize', 'IDEMP-002-B', 'generation.response-loss-reconciles-staged-effect', 'provider-response-loss-replay');
   mark(providerEffects === 0, 'PROVIDER-009-B', 'generation.replay-zero-provider-effect', 'atomic-budget-provider-replay');
+
+  const candidateReplayEvents: string[] = [];
+  const candidateReplay = await executeClaimedStudioGeneration({
+    ...claim, providerAllowed: false, reconcileOnly: true, executionFence: 3,
+  }, {
+    ...deps,
+    runProvider: async () => { throw new Error('provider forbidden during candidate replay'); },
+    runBudgeted: (async () => { throw new Error('budget reservation forbidden during candidate replay'); }) as unknown as typeof runBudgetedProviderEffect,
+    loadCandidate: async () => {
+      candidateReplayEvents.push('load');
+      return {
+        state: 'captured', response: valid, responseHash: hash('e'), reservationId: ids[3],
+        providerOperationId: 'chatcmpl-recovery-1', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+      };
+    },
+    stage: async input => {
+      candidateReplayEvents.push('stage');
+      assert.equal(input.providerOperationId, 'chatcmpl-recovery-1');
+      assert.deepEqual(input.response, valid);
+    },
+    settleCandidate: async input => {
+      candidateReplayEvents.push('settle');
+      assert.equal(input.reservationId, ids[3]);
+      assert.deepEqual(input.usage, { inputTokens: 20, outputTokens: 10, totalTokens: 30 });
+    },
+    finalize: async () => {
+      candidateReplayEvents.push('finalize');
+      return { state: 'completed', resource: { version: 2 } };
+    },
+  });
+  mark(candidateReplay.state === 'completed'
+    && candidateReplayEvents.join(',') === 'load,stage,settle,finalize',
+  'IDEMP-002-B', 'generation.captured-candidate-revalidates-stages-settles-and-finalizes-with-zero-provider-effect',
+  'private-provider-candidate-recovery');
+
+  const invalidCandidateEvents: string[] = [];
+  const invalidCandidate = { ...valid, sections: [
+    { ...valid.sections[0], sourceAnchors: [{ ...canonicalAnchors[0], sourceVersionId: ids[1] }] },
+    valid.sections[1],
+  ] };
+  const candidateRejected = await executeClaimedStudioGeneration({
+    ...claim, providerAllowed: false, reconcileOnly: true, executionFence: 4,
+  }, {
+    ...deps,
+    runProvider: async () => { throw new Error('provider forbidden during candidate rejection'); },
+    runBudgeted: (async () => { throw new Error('budget reservation forbidden during candidate rejection'); }) as unknown as typeof runBudgetedProviderEffect,
+    loadCandidate: async () => ({
+      state: 'captured', response: invalidCandidate, responseHash: hash('f'), reservationId: ids[3],
+      usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+    }),
+    stage: async () => { invalidCandidateEvents.push('stage-forbidden'); },
+    settleCandidate: async () => { invalidCandidateEvents.push('settle'); },
+    rejectCandidate: async input => { invalidCandidateEvents.push(`reject:${input.failureCode}`); },
+    finalize: async () => { invalidCandidateEvents.push('finalize-forbidden'); return { state: 'completed', resource: {} }; },
+  });
+  mark(candidateRejected.state === 'failed' && candidateRejected.failureCode === 'SOURCE_COVERAGE_INCOMPLETE'
+    && invalidCandidateEvents.join(',') === 'settle,reject:SOURCE_COVERAGE_INCOMPLETE',
+  'STUDIO-TR-009', 'generation.invalid-captured-candidate-settles-actual-usage-and-cannot-stage-or-finalize',
+  'private-provider-candidate-rejection');
+
+  const unsafeFlowEvents: string[] = [];
+  const unsafeFlowResult = await executeClaimedStudioGeneration({
+    ...claim,
+    templatePayload: flowTemplatePayload,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({
+      ...providerResult,
+      providerOperationId: 'chatcmpl-sdd-unsafe-1',
+      content: {
+        ...validFlows,
+        sections: [{ ...validFlows.sections[0], body: 'flowchart TD\n  A[Start] --> B[Review]\n  click A "https://unsafe.example"' }, validFlows.sections[1]],
+      },
+    }),
+    captureCandidate: async input => {
+      unsafeFlowEvents.push('capture');
+      assert.equal(input.providerOperationId, 'chatcmpl-sdd-unsafe-1');
+      assert.equal(input.reservationId, reservation.reservationId);
+      assert.deepEqual(input.usage, providerResult.usage);
+    },
+    stage: async () => { unsafeFlowEvents.push('stage-forbidden'); },
+    rejectCandidate: async input => { unsafeFlowEvents.push(`reject:${input.failureCode}`); },
+    runBudgeted: executedBudget,
+  });
+  mark(unsafeFlowResult.state === 'failed' && unsafeFlowResult.failureCode === 'PROVIDER_OUTPUT_INVALID'
+    && unsafeFlowEvents.join(',') === 'capture,reject:PROVIDER_OUTPUT_INVALID',
+  'STUDIO-TR-008', 'generation.invalid-sdd-flow-is-captured-then-rejected-without-staging',
+  'sdd-unsafe-click-provider-output');
+
+  const duplicateFlowCandidate = {
+    ...validFlows,
+    sections: [validFlows.sections[0], { ...validFlows.sections[1], body: validFlows.sections[0].body }],
+  };
+  const duplicateFlowEvents: string[] = [];
+  const duplicateFlowRejected = await executeClaimedStudioGeneration({
+    ...claim, providerAllowed: false, reconcileOnly: true, executionFence: 6,
+    templatePayload: flowTemplatePayload,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => { throw new Error('provider forbidden during captured SDD rejection'); },
+    runBudgeted: (async () => { throw new Error('budget reservation forbidden during captured SDD rejection'); }) as unknown as typeof runBudgetedProviderEffect,
+    loadCandidate: async () => {
+      duplicateFlowEvents.push('load');
+      return {
+        state: 'captured', response: duplicateFlowCandidate, responseHash: hash('6'), reservationId: ids[3],
+        providerOperationId: 'chatcmpl-sdd-duplicate-sanitized',
+        usage: { inputTokens: 17_808, outputTokens: 1_531, totalTokens: 19_339 },
+      };
+    },
+    settleCandidate: async input => {
+      duplicateFlowEvents.push(`settle:${input.usage.inputTokens}/${input.usage.outputTokens}`);
+    },
+    rejectCandidate: async input => { duplicateFlowEvents.push(`reject:${input.failureCode}`); },
+    stage: async () => { duplicateFlowEvents.push('stage-forbidden'); },
+    finalize: async () => { duplicateFlowEvents.push('finalize-forbidden'); return { state: 'completed', resource: {} }; },
+  });
+  mark(duplicateFlowRejected.state === 'failed'
+    && duplicateFlowRejected.failureCode === 'PROVIDER_OUTPUT_INVALID'
+    && duplicateFlowEvents.join(',') === 'load,settle:17808/1531,reject:PROVIDER_OUTPUT_INVALID',
+  'STUDIO-TR-008', 'generation.captured-sdd-v4-identical-flows-settle-actual-usage-then-reject-without-stage-or-finalize',
+  'sanitized-retained-sdd-duplicate-flow-candidate');
+
+  const distinctFlowEvents: string[] = [];
+  const distinctFlowCompleted = await executeClaimedStudioGeneration({
+    ...claim,
+    templatePayload: flowTemplatePayload,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({
+      ...providerResult, providerOperationId: 'chatcmpl-sdd-distinct-1', content: validFlows,
+    }),
+    captureCandidate: async () => { distinctFlowEvents.push('capture'); },
+    stage: async () => { distinctFlowEvents.push('stage'); },
+    finalize: async () => { distinctFlowEvents.push('finalize'); return { state: 'completed', resource: { version: 1 } }; },
+    runBudgeted: executedBudget,
+  });
+  mark(distinctFlowCompleted.state === 'completed'
+    && distinctFlowEvents.join(',') === 'capture,stage,finalize',
+  'STUDIO-TR-008', 'generation.sdd-v4-materially-distinct-grounded-flows-capture-stage-and-finalize',
+  'sdd-v4-distinct-as-is-to-be-positive');
+
+  const optionalDecisionPackage = {
+    ...claim.sourcePackage,
+    assessPackage: {
+      decision: {
+        composedOperatingModel: [{ primitiveId: ids[16], components: ['Workflow Orchestration', 'Human Approval'] }],
+        candidateEvaluations: [
+          { primitiveId: ids[16], component: 'Document Intelligence', fit: 'Conditional Fit' },
+          { primitiveId: ids[16], component: 'Workflow Orchestration', fit: 'Strong Fit' },
+        ],
+      },
+    },
+  };
+  const optionalAssessAnchor = { ...canonicalAnchors[0], locator: 'assess:accepted-handoff' };
+  const sddSemanticTemplate = { artifactType: 'sdd', sections: ['architecture', 'components'] };
+  const semanticDraft = (architecture: string) => ({
+    ...valid,
+    title: 'SDD planning refresh',
+    sections: [
+      { ...valid.sections[0], id: 'architecture', title: 'Architecture', body: architecture, sourceAnchors: [optionalAssessAnchor] },
+      { ...valid.sections[1], id: 'components', title: 'Components', body: 'Workflow Orchestration and Human Approval are selected.' },
+    ],
+  });
+  const promotedOptional = semanticDraft('The architecture integrates Workflow Orchestration, Human Approval, and Document Intelligence.');
+  const preservedOptional = semanticDraft('Document Intelligence is an optional alternative, not a selected or required dependency.');
+  assert.equal(preservesOptionalStudioAlternatives(promotedOptional, optionalDecisionPackage, 'sdd'), false);
+  assert.equal(preservesOptionalStudioAlternatives(preservedOptional, optionalDecisionPackage, 'sdd'), true);
+  let driftStages = 0; let driftFinalizations = 0; let driftRejections = 0;
+  const driftResult = await executeClaimedStudioGeneration({
+    ...claim,
+    sourcePackage: optionalDecisionPackage,
+    sourceAnchors: [optionalAssessAnchor],
+    templatePayload: sddSemanticTemplate,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({ ...providerResult, content: promotedOptional }),
+    captureCandidate: async () => undefined,
+    stage: async () => { driftStages += 1; },
+    rejectCandidate: async () => { driftRejections += 1; },
+    finalize: async () => { driftFinalizations += 1; return { state: 'completed', resource: {} }; },
+  });
+  assert.deepEqual(
+    { driftResult, driftStages, driftFinalizations, driftRejections },
+    { driftResult: { state: 'failed', failureCode: 'PROVIDER_OUTPUT_INVALID' }, driftStages: 0, driftFinalizations: 0, driftRejections: 1 },
+    'an optional component promoted into selected architecture is rejected before version staging or finalization',
+  );
+  mark(driftResult.state === 'failed' && driftResult.failureCode === 'PROVIDER_OUTPUT_INVALID'
+    && driftStages === 0 && driftFinalizations === 0 && driftRejections === 1,
+  'STUDIO-REFRESH-002', 'generation.optional-document-intelligence-cannot-be-promoted-by-selected-section-refresh',
+  'retained-sdd-v3-to-v4-optional-component-drift');
+  let preservedStage = 0; let preservedFinalize = 0;
+  const preservedResult = await executeClaimedStudioGeneration({
+    ...claim,
+    sourcePackage: optionalDecisionPackage,
+    sourceAnchors: [optionalAssessAnchor],
+    templatePayload: sddSemanticTemplate,
+    providerPlan: { ...claim.providerPlan, artifactType: 'sdd', promptVersion: 'studio-pr-b-4' },
+  }, {
+    ...deps,
+    runProvider: async () => ({ ...providerResult, content: preservedOptional }),
+    captureCandidate: async () => undefined,
+    stage: async () => { preservedStage += 1; },
+    finalize: async () => { preservedFinalize += 1; return { state: 'completed', resource: {} }; },
+  });
+  mark(preservedResult.state === 'completed' && preservedStage === 1 && preservedFinalize === 1,
+  'STUDIO-REFRESH-002', 'generation.optional-document-intelligence-remains-optional-through-refresh',
+  'retained-sdd-v5-optional-component-preserved');
 
   const assessAnchor = { sourceVersionId: ids[0], locator: 'assess:accepted-handoff', anchorHash: hash('d') };
   const fact = (value: boolean | null, status = value === null ? 'unknown' : 'known') => ({ value, status });
@@ -407,7 +656,7 @@ void (async () => {
         agentNecessity: { irreducibleAmbiguity: fact(false), adaptiveNextStep: fact(null) },
       },
       {
-        id: ids[17], type: 'Approve', name: 'Human policy review', description: 'Finance review',
+        id: ids[17], type: 'Approve', name: 'Human policy review', description: "Finance review. Owner's rule (current).",
         inputs: ['Case'], outputs: ['Decision'], rules: ['Approve or Escalate only when evidence is complete'], volumeShare: null, manualEffort: 0,
       },
     ],
@@ -448,6 +697,9 @@ void (async () => {
   }) as unknown as typeof runBudgetedProviderEffect;
   const v3Dependencies: StudioGenerationDependencies = {
     runProvider: async () => { v3ProviderEffects += 1; return v3ProviderResult; },
+    captureCandidate: async () => undefined,
+    loadCandidate: async () => null,
+    rejectCandidate: async () => undefined,
     stage: async input => { v3Stages += 1; stagedV3 = input.response; },
     finalize: async () => { v3Finalizations += 1; return { state: 'completed', resource: { version: 3 } }; },
     fail: async () => { throw new Error('v3 must not fail'); },
@@ -458,7 +710,8 @@ void (async () => {
   const requirements = stagedSections?.find(section => section.id === 'requirements');
   mark(v3Completed.state === 'completed' && v3ProviderEffects === 1 && v3Stages === 1 && v3Finalizations === 1
     && requirements?.body.startsWith('Model omitted source details.\n\n')
-    && requirements.body.includes('Source facts from the accepted Assess handoff (for human review; not model-generated reasoning):')
+    && requirements.body.includes('Readable source references from the accepted Assess handoff:')
+    && requirements.body.includes('Source: accepted Assess handoff (exact version and integrity details are retained in audit details).')
     && requirements.body.includes('Synthetic Finance') && requirements.body.includes('Approve; Escalate')
     && requirements.body.includes('Trigger: Invoice arrives') && requirements.body.includes('Owner: Synthetic Intake')
     && requirements.body.includes('Inputs: Case') && requirements.body.includes('Outputs: Case')
@@ -468,8 +721,13 @@ void (async () => {
     && requirements.body.includes('Resolution primitives: Human policy review')
     && requirements.body.includes('Technical health: unknown')
     && requirements.body.includes('condition: Invoice is complete')
-    && requirements.body.includes('Volume share: 0') && requirements.body.includes('Manual effort: Unknown')
-    && requirements.body.includes('value=false, status=known') && requirements.body.includes('&lt;script&gt;source only&lt;/script&gt;')
+    && requirements.body.includes('&lt;script&gt;source only&lt;/script&gt;')
+    && requirements.body.includes("Finance review. Owner's rule (current).")
+    && !requirements.body.includes('Finance review\\.')
+    && !requirements.body.includes('Volume share:') && !requirements.body.includes('Manual effort:')
+    && !requirements.body.includes('Agent necessity:') && !requirements.body.includes('None stated')
+    && !requirements.body.includes(': null')
+    && !requirements.body.includes('value=') && !requirements.body.includes('status=')
     && !requirements.body.includes('<script>')
     && JSON.stringify(requirements.sourceAnchors) === JSON.stringify([assessAnchor])
     && JSON.stringify(requirements.labels) === JSON.stringify(['template_required']),
@@ -477,6 +735,42 @@ void (async () => {
   'brd-v3-source-fact-retention-and-canonical-anchor');
 
   const sourceFactsBlock = deriveStudioBrdSourceFacts(v3Claim.sourcePackage, v3Claim.sourceAnchors, v3Claim.selectedSourceVersionIds);
+  const v3CandidateEvents: string[] = [];
+  let v3CandidateStage: Record<string, unknown> | undefined;
+  const v3CandidateReplay = await executeClaimedStudioGeneration({
+    ...v3Claim, providerAllowed: false, reconcileOnly: true, executionFence: 5,
+  }, {
+    ...v3Dependencies,
+    runProvider: async () => { throw new Error('provider forbidden during BRD candidate replay'); },
+    runBudgeted: (async () => { throw new Error('budget reservation forbidden during BRD candidate replay'); }) as unknown as typeof runBudgetedProviderEffect,
+    loadCandidate: async () => {
+      v3CandidateEvents.push('load');
+      return {
+        state: 'captured', response: deficientV3Draft, responseHash: hash('7'), reservationId: ids[3],
+        providerOperationId: 'chatcmpl-brd-recovery-1', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+      };
+    },
+    stage: async input => {
+      v3CandidateEvents.push('stage');
+      assert.equal(input.providerOperationId, 'chatcmpl-brd-recovery-1');
+      v3CandidateStage = input.response;
+    },
+    settleCandidate: async () => { v3CandidateEvents.push('settle'); },
+    finalize: async () => {
+      v3CandidateEvents.push('finalize');
+      return { state: 'completed', resource: { version: 4 } };
+    },
+  });
+  const replayedRequirements = (v3CandidateStage?.sections as Array<{ id: string; body: string }>)
+    .find(section => section.id === 'requirements')?.body ?? '';
+  const factsHeading = 'Readable source references from the accepted Assess handoff:';
+  mark(v3CandidateReplay.state === 'completed'
+    && v3CandidateEvents.join(',') === 'load,stage,settle,finalize'
+    && replayedRequirements.split(factsHeading).length - 1 === 1
+    && !JSON.stringify(deficientV3Draft).includes(factsHeading),
+  'IDEMP-002-B', 'generation.brd-v3-candidate-replay-composes-source-facts-exactly-once-before-stage',
+  'brd-v3-private-candidate-recomposition');
+
   const narrativeFallbackTemplate = {
     sectionDefinitions: [
       { id: 'risks', title: 'Risks', required: false, fieldKind: 'risks' },
@@ -500,10 +794,10 @@ void (async () => {
   }, sourceFactsBlock, { artifactType: 'brd', sections: ['summary', 'risks'] });
   const narrativeFallbackSections = narrativeFallback.sections as Array<{ id: string; body: string }>;
   const firstFallbackSections = firstSectionFallback.sections as Array<{ id: string; body: string }>;
-  mark(!narrativeFallbackSections[0].body.includes('Source facts from the accepted Assess handoff')
-    && narrativeFallbackSections[1].body.includes('Source facts from the accepted Assess handoff')
-    && firstFallbackSections[0].body.includes('Source facts from the accepted Assess handoff')
-    && !firstFallbackSections[1].body.includes('Source facts from the accepted Assess handoff'),
+  mark(!narrativeFallbackSections[0].body.includes('Readable source references from the accepted Assess handoff')
+    && narrativeFallbackSections[1].body.includes('Readable source references from the accepted Assess handoff')
+    && firstFallbackSections[0].body.includes('Readable source references from the accepted Assess handoff')
+    && !firstFallbackSections[1].body.includes('Readable source references from the accepted Assess handoff'),
   'STUDIO-TR-008', 'generation.brd-v3-targets-requirements-then-required-narrative-then-first-section',
   'brd-v3-trusted-section-selection-fallbacks');
 
@@ -565,7 +859,7 @@ void (async () => {
   'STUDIO-TR-008', 'generation.brd-v3-malformed-reference-and-oversized-facts-block-before-budget-egress',
   'brd-v3-source-facts-preflight-zero-egress');
 
-  let rejectedDraftStages = 0; let rejectedDraftProviderEffects = 0;
+  let rejectedDraftStages = 0; let rejectedDraftProviderEffects = 0; let rejectedDraftCandidates = 0;
   const postCompositionOversized = {
     ...deficientV3Draft,
     sections: deficientV3Draft.sections.map(section => section.id === 'requirements'
@@ -584,13 +878,16 @@ void (async () => {
       ...v3Dependencies,
       runProvider: async () => { rejectedDraftProviderEffects += 1; return { ...v3ProviderResult, content }; },
       stage: async () => { rejectedDraftStages += 1; },
+      rejectCandidate: async input => {
+        if (input.failureCode === 'PROVIDER_OUTPUT_INVALID') rejectedDraftCandidates += 1;
+      },
       runBudgeted: v3ExecutedBudget,
     }));
   }
-  mark(rejectedDraftResults.every(result => result.state === 'uncertain' && result.failureCode === 'GENERATION_UNCERTAIN')
-    && rejectedDraftProviderEffects === 2 && rejectedDraftStages === 0,
+  mark(rejectedDraftResults.every(result => result.state === 'failed' && result.failureCode === 'PROVIDER_OUTPUT_INVALID')
+    && rejectedDraftProviderEffects === 2 && rejectedDraftStages === 0 && rejectedDraftCandidates === 2,
   'STUDIO-TR-008', 'generation.brd-v3-postcomposition-limit-and-invalid-provider-draft-never-stage',
-  'brd-v3-block-cannot-repair-model-output-or-exceed-document-contract');
+  'brd-v3-candidate-quarantined-and-rejected-with-settled-usage');
 
   let reconcileV3Finalizes = 0;
   const reconcileV3 = await executeClaimedStudioGeneration({ ...malformedV3Claims[0], reconcileOnly: true }, {

@@ -5,6 +5,14 @@ const visibleOptions = select => select.locator('option').evaluateAll(nodes => n
   .map(node => ({ value: node.value, label: node.textContent?.trim() ?? '' }))
   .filter(option => option.value));
 
+const studioDocumentSelect = async workspace => {
+  const current = workspace.getByRole('combobox', { name: 'Current document', exact: true });
+  if (await current.count() === 1) return current;
+  const retained = workspace.getByLabel('Governed artifact', { exact: true });
+  assert.equal(await retained.count(), 1, 'PR_C_SYNTHETIC_BROWSER_STUDIO_DOCUMENT_SELECT_COUNT');
+  return retained;
+};
+
 export const waitForSyntheticDeliveryWorkspace = async page => {
   const workspace = page.getByTestId('governed-delivery-workspace');
   await workspace.waitFor({ state: 'visible' });
@@ -30,14 +38,14 @@ export const prepareSyntheticStudioGeneration = async (page, interactionSequence
   assert(templateLabel, 'PR_C_SYNTHETIC_BROWSER_STUDIO_GENERATION_TEMPLATE_LABEL_MISSING');
   const workspace = page.getByTestId('studio-artifact-workspace');
   await workspace.waitFor({ state: 'visible' });
-  const artifactSelect = workspace.getByLabel('Governed artifact', { exact: true });
+  const artifactSelect = await studioDocumentSelect(workspace);
   await artifactSelect.waitFor({ state: 'visible' });
   const artifactMatches = (await visibleOptions(artifactSelect)).filter(option => option.value === artifactId);
   assert.equal(artifactMatches.length, 1, `PR_C_SYNTHETIC_BROWSER_STUDIO_GENERATION_ARTIFACT_COUNT:${artifactMatches.length}`);
   await artifactSelect.selectOption(artifactId);
   await page.waitForFunction(expectedArtifactId => {
     const root = document.querySelector('[data-testid="studio-artifact-workspace"]');
-    const select = root?.querySelector('select[aria-label="Governed artifact"]');
+    const select = root?.querySelector('select[aria-label="Current document"], select[aria-label="Governed artifact"]');
     return root?.getAttribute('data-studio-usable') === 'true'
       && root.getAttribute('data-studio-projection-state') === 'workspace-ready'
       && select instanceof HTMLSelectElement

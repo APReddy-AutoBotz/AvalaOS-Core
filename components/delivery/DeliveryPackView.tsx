@@ -260,7 +260,7 @@ const DeliveryPackView: React.FC<DeliveryPackViewProps> = ({
             <div className="grid grid-cols-[1fr_140px_140px_120px] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900/60">
               <div>Work Item</div>
               <div>Status</div>
-              <div>Owners</div>
+              <div>Assignees</div>
               <div>Lineage</div>
             </div>
             {pack.workItems.map(item => (

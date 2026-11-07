@@ -285,7 +285,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       readStudioArtifactWorkspace(context, summary.id, 0, 20, transport),
       summary.currentVersionId ? readStudioArtifactV2(context, summary.id, transport) : Promise.resolve(null),
     ]);
-    if (!accepts(ticket)||!summaryIsCurrent()) return;
+    if (!accepts(ticket)||!summaryIsCurrent()) return false;
     if (sourcePackage.artifactId !== summary.id || sourcePackage.aggregateVersion !== summary.aggregateVersion
       || sourcePackage.sourceMode !== summary.sourceMode || sourcePackage.lineageClassification !== summary.lineageClassification
       || sourcePackage.planningOnly !== summary.planningOnly || exactWorkspace.artifact.id !== summary.id
@@ -307,14 +307,44 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       : `${summary.displayLabel} source package reloaded. Select an approved template to generate its first immutable version.`);
     if (value && ['reviewer_ready', 'in_review'].includes(value.lifecycle)) {
       const eligible = await readStudioEligibleReviewers(context, value.id, value.currentVersion.id, transport);
-      if (!accepts(ticket)||!summaryIsCurrent()) return;
+      if (!accepts(ticket)||!summaryIsCurrent()) return false;
       setReviewers(eligible);
       setReviewerId(current => eligible.some(item => item.actorId === current) ? current : (eligible[0]?.actorId ?? ''));
     } else {
       setReviewers([]);
       setReviewerId('');
     }
+    return true;
   }, [accepts, context, transport]);
+
+  const reconcileCommittedArtifact = useCallback(async (
+    artifactId: string,
+    ticket: StudioAuthorityTicket,
+    successMessage: (summary: StudioArtifactSummaryDto) => string,
+  ) => {
+    const retainedPage = artifactSummaries?.items.some(item => item.id === artifactId)
+      ? artifactSummaries
+      : null;
+    let summaries = await readStudioArtifactSummaries(
+      context,
+      retainedPage?.offset ?? 0,
+      retainedPage?.limit ?? 20,
+      transport,
+    );
+    if (!accepts(ticket)) throw new StudioArtifactBoundaryError('AUTHORITY_STALE');
+    let summary = summaries.items.find(item => item.id === artifactId);
+    if (!summary && summaries.offset > 0) {
+      summaries = await readStudioArtifactSummaries(context, 0, summaries.limit, transport);
+      if (!accepts(ticket)) throw new StudioArtifactBoundaryError('AUTHORITY_STALE');
+      summary = summaries.items.find(item => item.id === artifactId);
+    }
+    if (!summary) throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
+    const loaded = await loadGovernedSummary(summary, ticket);
+    if (!loaded || !accepts(ticket)) throw new StudioArtifactBoundaryError('AUTHORITY_STALE');
+    setArtifactSummaries(summaries);
+    setMessage(successMessage(summary));
+    return summary;
+  }, [accepts, artifactSummaries, context, loadGovernedSummary, transport]);
 
   const load = useCallback(async (selected = '', type = artifactType, preserveProjection = true) => {
     const ticket = authorityEpoch.current.issue();
@@ -438,11 +468,11 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
 
   const run = async (commandType: StudioCommandType, payload: Record<string, unknown>) => {
     const ticket = authorityEpoch.current.issue();
-    if (blocked) return;
+    if (blocked) return false;
     if (offline) {
       setState('offline');
       setMessage('Offline. No command was submitted.');
-      return;
+      return false;
     }
     const mutationSequence=beginWorkspaceMutation();
     try{
@@ -450,42 +480,47 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       setMessage('Submitting. Success appears only after commit and projection reload.');
       try {
       const result = await executeStudioArtifactCommand(context, commandType, artifact, payload, crypto.randomUUID(), transport);
-      if (!accepts(ticket)) return;
+      if (!accepts(ticket)) return false;
       setReceipt(result);
       if (result.outcome === 'generation_failed') {
         setState('generation_failed');
         setMessage('Generation attempt was committed and later failed. No artifact version was created.');
-        return;
+        return false;
       }
       try {
-        const value = artifact?.contractVersion==='studio-artifact-2'
-          ? await readStudioArtifactV2(context,artifact.id,transport)
-          : await readStudioArtifact(context, handoffId, artifactType, transport);
-        if (!accepts(ticket)) return;
-        if(artifact?.contractVersion==='studio-artifact-2'&&value.id!==artifact.id)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
-        const exactWorkspace = value.contractVersion === 'studio-artifact-2'
-          ? await readStudioArtifactWorkspace(context, value.id, 0, 20, transport)
-          : null;
-        if (!accepts(ticket)) return;
+        if (artifact?.contractVersion === 'studio-artifact-2') {
+          await reconcileCommittedArtifact(
+            artifact.id,
+            ticket,
+            summary => `${labels[summary.lifecycle]} committed.`,
+          );
+          return true;
+        }
+        const value = await readStudioArtifact(context, handoffId, artifactType, transport);
+        if (!accepts(ticket)) return false;
+        if (!accepts(ticket)) return false;
         setArtifact(value);
-        setArtifactWorkspace(exactWorkspace);
+        setArtifactWorkspace(null);
         setState(value.readOnly ? 'read_only' : value.lifecycle);
         setMessage(`${labels[value.lifecycle]} committed.`);
         if(['reviewer_ready','in_review'].includes(value.lifecycle)){
           const eligible=await readStudioEligibleReviewers(context,value.id,value.currentVersion.id,transport);
-          if (!accepts(ticket)) return;
+          if (!accepts(ticket)) return false;
           setReviewers(eligible);setReviewerId(eligible[0]?.actorId??'');
         }
+        return true;
       } catch {
-        if (!accepts(ticket)) return;
+        if (!accepts(ticket)) return false;
         setState('committed_reload_failed');
         setMessage('Command committed, but projection reload failed. Mutations are blocked.');
+        return false;
       }
       } catch (error) {
-        if (!accepts(ticket)) return;
+        if (!accepts(ticket)) return false;
         const next = stateForError(error, commandType === 'studio.artifact.generation.request');
         setState(next.state);
         setMessage(next.message);
+        return false;
       }
     }finally{finishWorkspaceMutation(mutationSequence);}
   };
@@ -503,7 +538,12 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const reviseStructured = (content: Record<string, unknown>) => {
     setDraft(JSON.stringify(content));
     setDraftValidationError(null);
-    void run('studio.artifact.draft.revise', {artifactId: artifact!.id,parentVersionId:artifact!.currentVersion.id,content});
+    return run('studio.artifact.draft.revise', {artifactId: artifact!.id,parentVersionId:artifact!.currentVersion.id,content});
+  };
+
+  const createWorkingDraft = () => {
+    if (!artifact || artifact.lifecycle !== 'approved' || blocked || !can('studio.artifact.draft.revise')) return;
+    void reviseStructured(artifact.currentVersion.content);
   };
 
   const loadWorkspacePage = async (page: number) => {
@@ -585,7 +625,15 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       if(!projectedPackage||!projectedTemplate||value.contractVersion!=='studio-artifact-2'||!('sourcePackageId' in value.ancestry)||value.id!==sourcePackage.artifactId||value.ancestry.sourcePackageId!==sourcePackage.sourcePackageId||value.ancestry.sourcePackageVersion!==sourcePackage.sourcePackageVersion||value.ancestry.sourcePackageHash!==sourcePackage.sourcePackageHash||projectedPackage.id!==sourcePackage.sourcePackageId||projectedPackage.version!==sourcePackage.sourcePackageVersion||projectedTemplate.templateVersionId!==selectedTemplate.templateVersionId||projectedTemplate.version!==selectedTemplate.version||projectedTemplate.templateHash!==selectedTemplate.templateHash)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
       if(exactWorkspace.artifact.id!==value.id||exactWorkspace.artifact.currentVersionId!==value.currentVersion.id||exactWorkspace.sourcePackage.id!==sourcePackage.sourcePackageId||exactWorkspace.sourcePackage.version!==sourcePackage.sourcePackageVersion||exactWorkspace.sourcePackage.hash!==sourcePackage.sourcePackageHash)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
       if(selectedSectionIds.length&&artifact&&value.currentVersion.parentVersionId!==artifact.currentVersion.id)throw new StudioArtifactBoundaryError('MALFORMED_RESULT');
-      setArtifact(value);setArtifactWorkspace(exactWorkspace);setGovernedSelection({artifactId:sourcePackage.artifactId,sourcePackage});setState(value.readOnly?'read_only':value.lifecycle);setMessage(selectedSectionIds.length?`${labels[value.lifecycle]} committed. Selected sections were regenerated from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; unselected authored sections and their retained citations were carried into a new immutable revision.`:controlledHumanSyntheticGeneration?`${labels[value.lifecycle]} committed as visibly marked synthetic controlled-human output from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; no provider route or provider call was used.`:`${labels[value.lifecycle]} committed from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; v2 projection reloaded.`);
+      await reconcileCommittedArtifact(
+        sourcePackage.artifactId,
+        ticket,
+        summary => selectedSectionIds.length
+          ? `${labels[summary.lifecycle]} committed. Selected sections were regenerated from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; unselected authored sections and their retained citations were carried into a new immutable revision.`
+          : controlledHumanSyntheticGeneration
+            ? `${labels[summary.lifecycle]} committed as visibly marked synthetic controlled-human output from exact Studio Source Package v${sourcePackage.sourcePackageVersion}; no provider route or provider call was used.`
+            : `${labels[summary.lifecycle]} committed. Current document and document list refreshed.`,
+      );
     }catch(error){if(!accepts(ticket))return;if(committed){setState('committed_reload_failed');setMessage('Generation command committed, but the exact v2 projection reload failed or mismatched. Mutations are blocked.');return;}const next=stateForError(error,true);setState(next.state);setMessage(next.message);}
   };
 
@@ -668,6 +716,29 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
   const legacyProjection = Boolean(artifact && artifact.contractVersion !== 'studio-artifact-2');
   const editableArtifact = exact('draft','changes_requested','review_rejected','approval_rejected');
   const showStructuredEditor = Boolean(artifact && (artifact.contractVersion === 'studio-artifact-2' || editableArtifact));
+  const sourceNeedsReview=artifactWorkspace?.sourcePackage.stale===true||Boolean(artifactWorkspace&&artifact&&'sourcePackageId' in artifact.ancestry&&(artifact.ancestry.sourcePackageId!==artifactWorkspace.sourcePackage.id||artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash));
+  const selectedRefreshTemplate=artifact?.template&&workspace?.templates.find(item=>item.templateVersionId===artifact.template!.templateVersionId&&item.templateHash===artifact.template!.templateHash&&String(item.version)===String(artifact.template!.version));
+  const selectedRefreshAvailable=Boolean(
+    artifact&&workspace&&governedSelection&&artifactWorkspace&&editableArtifact&&!blocked
+    &&can('studio.artifact.draft.revise')
+    &&capabilities.includes('studio.artifacts.generate')
+    &&!controlledHumanSyntheticGeneration
+    &&artifact.id===governedSelection.artifactId
+    &&governedSelection.sourcePackage.artifactId===artifact.id
+    &&artifactWorkspace.organizationId===context.organizationId
+    &&artifactWorkspace.workspaceId===context.workspaceId
+    &&artifactWorkspace.artifact.id===artifact.id
+    &&artifactWorkspace.artifact.currentVersionId===artifact.currentVersion.id
+    &&artifactWorkspace.artifact.currentApprovedVersionId===(artifact.currentApprovedVersion?.id??null)
+    &&artifactWorkspace.sourcePackage.id===governedSelection.sourcePackage.sourcePackageId
+    &&artifactWorkspace.sourcePackage.version===governedSelection.sourcePackage.sourcePackageVersion
+    &&artifactWorkspace.sourcePackage.hash===governedSelection.sourcePackage.sourcePackageHash
+    &&artifactWorkspace.providerAvailability.available
+    &&artifactWorkspace.actions.includes('studio.generation.request')
+    &&selectedRefreshTemplate?.lifecycle==='approved'
+    &&selectedRefreshTemplate.actions.includes('studio.generation.request')
+    &&(selectedRefreshTemplate.artifactType===artifact.artifactType||selectedRefreshTemplate.artifactType==='custom')
+  );
   const handoffProjection=handoffReadiness.identity===authorityIdentity?handoffReadiness.projection:null;
   const handoffFailureState=artifact?.readOnly===true||['stale','version_conflict','authorization_revoked','read_only','command_failed','generation_failed','committed_reload_failed'].includes(state);
   const handoffDisabled=!canUseStudioHandoffProjection({readiness:handoffReadiness,currentIdentity:authorityIdentity,context,offline,
@@ -693,15 +764,19 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
       )}
 
       <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[240px_minmax(0,1fr)_280px]">
-        <aside className="space-y-4" aria-label="Studio source context"><div className="av-surface p-4"><p className="av-eyebrow">Source context</p>{artifactSummaries&&<><label className="av-form-label mt-4">Governed artifact<select aria-label="Governed artifact" value={selectedArtifactId} onChange={event=>void selectGovernedArtifact(event.target.value)} disabled={workspaceMutationPending} className="av-input mt-2"><option value="">Select committed artifact</option>{artifactSummaries.items.map(item=><option key={item.id} value={item.id}>{item.displayLabel} · {item.lifecycle.replace('_',' ')}</option>)}</select></label><div className="mt-2 flex items-center justify-between gap-2 text-xs font-semibold text-[var(--av-color-text-muted)]"><button type="button" disabled={workspaceMutationPending||artifactSummaries.offset===0} onClick={()=>void loadArtifactSummaryPage(Math.floor(artifactSummaries.offset/artifactSummaries.limit))} className="btn-ghost min-h-9 px-2 disabled:opacity-50">Previous</button><span>{artifactSummaries.total} governed artifact{artifactSummaries.total===1?'':'s'}</span><button type="button" disabled={workspaceMutationPending||!artifactSummaries.hasMore} onClick={()=>void loadArtifactSummaryPage(Math.floor(artifactSummaries.offset/artifactSummaries.limit)+2)} className="btn-ghost min-h-9 px-2 disabled:opacity-50">Next</button></div></>} {handoffs.length>0&&<label className="av-form-label mt-4">Committed Studio handoff<select aria-label="Committed Studio handoff" value={handoffId} onChange={event => { setHandoffId(event.target.value); void load(event.target.value, artifactType, false); }} disabled={workspaceMutationPending} className="av-input mt-2">{handoffs.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}<label className="av-form-label mt-4">Artifact type<select aria-label="Artifact type" value={artifactType} onChange={event => setArtifactType(event.target.value as StudioArtifactType)} disabled={workspaceMutationPending} className="av-input mt-2">{STUDIO_ARTIFACT_TYPES.map(type => <option key={type} value={type}>{type.toUpperCase()}</option>)}</select></label></div>{artifact && <div className="av-surface p-4"><p className="av-eyebrow">History</p><ol className="mt-3 space-y-2">{[...artifact.versions].reverse().map(version => <li key={version.id} className={`rounded-lg border px-3 py-2 text-xs ${version.id === artifact.currentVersion.id ? 'border-[var(--av-color-brand-primary)] bg-[var(--av-color-bg-subtle)]' : 'border-[var(--av-color-border)]'}`}><p className="font-bold text-[var(--av-color-text)]">v{version.version} · {labels[version.lifecycle]}</p><details className="mt-1 text-[10px] text-[var(--av-color-text-subtle)]"><summary className="cursor-pointer font-semibold">Audit details</summary><p className="mt-1 break-all" title={version.contentHash}>{version.contentHash}</p></details></li>)}</ol></div>}</aside>
+        <aside className="space-y-4" aria-label="Studio source context"><div className="av-surface p-4"><p className="av-eyebrow">Source context</p>{artifactSummaries&&<><label className="av-form-label mt-4">Current document<select aria-label="Current document" value={selectedArtifactId} onChange={event=>void selectGovernedArtifact(event.target.value)} disabled={workspaceMutationPending} className="av-input mt-2"><option value="">Select current document</option>{artifactSummaries.items.map(item=><option key={item.id} value={item.id}>Current {item.artifactType.toUpperCase()} · {labels[item.lifecycle]}</option>)}</select></label><div className="mt-2 flex items-center justify-between gap-2 text-xs font-semibold text-[var(--av-color-text-muted)]"><button type="button" disabled={workspaceMutationPending||artifactSummaries.offset===0} onClick={()=>void loadArtifactSummaryPage(Math.floor(artifactSummaries.offset/artifactSummaries.limit))} className="btn-ghost min-h-9 px-2 disabled:opacity-50">Previous</button><span>{artifactSummaries.total} current document{artifactSummaries.total===1?'':'s'}</span><button type="button" disabled={workspaceMutationPending||!artifactSummaries.hasMore} onClick={()=>void loadArtifactSummaryPage(Math.floor(artifactSummaries.offset/artifactSummaries.limit)+2)} className="btn-ghost min-h-9 px-2 disabled:opacity-50">Next</button></div></>} {handoffs.length>0&&<label className="av-form-label mt-4">Committed Studio handoff<select aria-label="Committed Studio handoff" value={handoffId} onChange={event => { setHandoffId(event.target.value); void load(event.target.value, artifactType, false); }} disabled={workspaceMutationPending} className="av-input mt-2">{handoffs.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}<label className="av-form-label mt-4">Document type<select aria-label="Artifact type" value={artifactType} onChange={event => setArtifactType(event.target.value as StudioArtifactType)} disabled={workspaceMutationPending} className="av-input mt-2">{STUDIO_ARTIFACT_TYPES.map(type => <option key={type} value={type}>{type.toUpperCase()}</option>)}</select></label></div>{artifact && <div className="av-surface p-4"><p className="av-eyebrow">History</p><ol className="mt-3 space-y-2">{[...artifact.versions].reverse().map(version => <li key={version.id} className={`rounded-lg border px-3 py-2 text-xs ${version.id === artifact.currentVersion.id ? 'border-[var(--av-color-brand-primary)] bg-[var(--av-color-bg-subtle)]' : 'border-[var(--av-color-border)]'}`}><p className="font-bold text-[var(--av-color-text)]">v{version.version} · {labels[version.lifecycle]}</p><details className="mt-1 text-[10px] text-[var(--av-color-text-subtle)]"><summary className="cursor-pointer font-semibold">Audit details</summary><p className="mt-1 break-all" title={version.contentHash}>{version.contentHash}</p></details></li>)}</ol></div>}</aside>
 
         <article className="min-w-0" aria-label="Artifact preview"><div className="min-h-[360px] rounded-[var(--av-radius-panel)] border border-[var(--av-color-border)] bg-[var(--av-color-bg)] p-5 sm:p-7">{offline && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">Offline. Committed content remains visible; mutations are blocked.</p>}{(artifact?.readOnly || state === 'read_only') && <p role="status" className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200">Read-only maintenance. Committed canonical artifacts remain available.</p>}<p role="status" aria-live="polite" className="text-sm font-semibold text-[var(--av-color-text-muted)]">{message}</p>{state === 'loading' && <div aria-label="Loading Studio artifact" className="mt-6 h-48 animate-pulse rounded-xl bg-[var(--av-color-bg-subtle)]" />}{state === 'committed_reload_failed' && <button type="button" onClick={() => void load()} className="btn-primary mt-4 min-h-10 px-3 text-sm font-bold">Reload explicitly committed state</button>}{artifact ? <><div className="mt-6 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--av-color-border)] pb-5"><div><p className="av-eyebrow">Current document</p><h3 className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">{artifact.artifactType.toUpperCase()} artifact</h3><p className="mt-1 text-sm text-[var(--av-color-text-muted)]">Version {artifact.currentVersion.version}</p></div><StatusBadge tone={artifact.lifecycle === 'approved' ? 'success' : artifact.lifecycle.includes('reject') ? 'danger' : 'warning'}>{labels[artifact.lifecycle]}</StatusBadge></div><div className="mt-6 grid gap-4 sm:grid-cols-3"><div><p className="av-eyebrow">Lifecycle</p><p className="mt-1 text-sm font-bold text-[var(--av-color-text)]">{labels[artifact.lifecycle]}</p></div><div><p className="av-eyebrow">Current version</p><p className="mt-1 text-sm font-bold text-[var(--av-color-text)]">v{artifact.currentVersion.version}</p></div><div><p className="av-eyebrow">Approved version</p><p className="mt-1 text-sm font-bold text-[var(--av-color-text)]">{artifact.currentApprovedVersion ? `v${artifact.currentApprovedVersion.version}` : 'Not recorded'}</p></div></div><div className="mt-8 rounded-xl border border-[var(--av-color-border)] bg-[var(--av-color-surface)] p-4"><p className="text-sm font-bold text-[var(--av-color-text)]">Current document</p><p className="mt-2 text-sm leading-6 text-[var(--av-color-text-muted)]">This committed version is available for review. Use View source when exact source inspection is required.</p><details className="mt-4"><summary className="cursor-pointer text-sm font-bold text-[var(--av-color-brand-primary)]">View source</summary><pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">{JSON.stringify(artifact.currentVersion.content, null, 2)}</pre></details></div><details data-testid="studio-current-document-audit" className="mt-4 rounded-xl border border-[var(--av-color-border)] p-3"><summary className="cursor-pointer text-sm font-bold text-[var(--av-color-text)]">Audit details</summary><div className="mt-3 space-y-2 text-xs text-[var(--av-color-text-muted)]"><p className="font-bold text-[var(--av-color-text)]">Aggregate v{artifact.aggregateVersion} · Content v{artifact.currentVersion.version}</p><p>Template {artifact.currentVersion.templateVersion}</p><p>Content schema {artifact.currentVersion.contentSchemaVersion} · Projection {artifact.currentVersion.projectionVersion}</p><p className="break-all">Content hash {artifact.currentVersion.contentHash}</p>{receipt && <p className="break-all">Last committed receipt {receipt.receiptId}; resource {receipt.resourceId}</p>}</div></details></> : state === 'empty' ? <div className="grid min-h-[280px] place-items-center text-center"><div><p className="av-eyebrow">No committed artifact</p><h3 className="mt-2 text-xl font-bold text-[var(--av-color-text)]">Select a governed handoff to begin.</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--av-color-text-muted)]">Generation and revision actions appear only when the current authority and lifecycle allow them.</p></div></div> : null}</div></article>
 
         <aside className="space-y-4" aria-label="Artifact governance context"><div className="av-surface p-4"><div className="flex items-start justify-between gap-3"><div><p className="av-eyebrow">Lifecycle status</p><h3 className="mt-2 text-lg font-bold text-[var(--av-color-text)]">{artifact ? labels[artifact.lifecycle] : 'Awaiting source'}</h3></div><span className={`mt-1 h-3 w-3 rounded-full ${artifact?.lifecycle === 'approved' ? 'bg-emerald-500' : artifact ? 'bg-amber-500' : 'bg-slate-300'}`} aria-hidden="true" /></div><div className="mt-5 space-y-3 border-l border-[var(--av-color-border-strong)] pl-4 text-xs font-semibold text-[var(--av-color-text-muted)]">{sequence.map(item => <div key={item} className={artifact && artifact.lifecycle === item ? 'font-bold text-[var(--av-color-brand-primary)]' : ''}>{labels[item]}</div>)}</div></div>{reviewers.length > 0 && <div className="av-surface p-4"><p className="av-eyebrow">Review assignment</p><label className="av-form-label mt-3">Eligible independent reviewer<select aria-label="Eligible independent reviewer" value={reviewerId} onChange={event => setReviewerId(event.target.value)} className="av-input mt-2">{reviewers.map(person => <option key={person.actorId} value={person.actorId}>{person.displayName}</option>)}</select></label></div>}<div className="av-surface p-4"><p className="av-eyebrow">Authority context</p><p className="mt-2 text-sm leading-6 text-[var(--av-color-text-muted)]">{blocked ? 'Mutations are blocked. Existing committed records remain available.' : 'Commands require the current capability, exact version, and a committed projection reload.'}</p></div></aside>
       </div>
 
-      {artifact && showStructuredEditor && <div className="px-4 pb-4 sm:px-5"><StructuredArtifactEditor content={artifact.currentVersion.content} projectedSections={artifactWorkspace?.artifact.id === artifact.id && artifactWorkspace.artifact.currentVersionId === artifact.currentVersion.id ? artifactWorkspace.artifact.sections : artifact.sections} selectedSources={artifactWorkspace?.selectedSources.items} needsReview={artifactWorkspace?.sourcePackage.stale === true||Boolean(artifactWorkspace&&'sourcePackageId' in artifact.ancestry&&(artifact.ancestry.sourcePackageId!==artifactWorkspace.sourcePackage.id||artifact.ancestry.sourcePackageHash!==artifactWorkspace.sourcePackage.hash))} onRegenerateSelected={sectionIds=>void withWorkspaceMutation(()=>generateGovernedPackage(sectionIds))} readOnly={blocked || !can('studio.artifact.draft.revise') || !editableArtifact} saving={state === 'loading'} announceStatus={!legacyProjection} onCommit={reviseStructured} /></div>}
+      {artifact && showStructuredEditor && <div className="px-4 pb-4 sm:px-5"><StructuredArtifactEditor content={artifact.currentVersion.content} projectedSections={artifactWorkspace?.artifact.id === artifact.id && artifactWorkspace.artifact.currentVersionId === artifact.currentVersion.id ? artifactWorkspace.artifact.sections : artifact.sections} selectedSources={artifactWorkspace?.selectedSources.items} needsReview={sourceNeedsReview} onRegenerateSelected={selectedRefreshAvailable?(sectionIds=>void withWorkspaceMutation(()=>generateGovernedPackage(sectionIds))):undefined} readOnly={blocked || !can('studio.artifact.draft.revise') || !editableArtifact} saving={state === 'loading'||state==='generating'||workspaceMutationPending} announceStatus={!legacyProjection} onCommit={reviseStructured} /></div>}
 
+      {artifact?.lifecycle === 'approved' && <div className="px-4 pb-4 sm:px-5">
+        <button type="button" disabled={blocked || !can('studio.artifact.draft.revise')} onClick={createWorkingDraft} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Create working draft</button>
+        <p className="mt-2 text-sm text-[var(--av-color-text-muted)]">The approved document remains in History. Changes to the working draft require independent review and approval.</p>
+      </div>}
       <div className="border-t border-[var(--av-color-border)] bg-[var(--av-color-surface)]/95 p-4 sm:p-5">
         {artifact && <details data-testid="studio-canonical-json-audit" className="mx-auto mb-4 max-w-7xl rounded-xl border border-[var(--av-color-border)] p-3">
           <summary className="cursor-pointer text-sm font-bold text-[var(--av-color-text)]">Audit details</summary>
@@ -728,13 +803,13 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
           </div>
           <div className="flex flex-wrap content-start items-start gap-2">
             <button type="button" disabled={blocked||!capabilities.includes('studio.artifacts.generate')||!governedSelection||!selectedTemplateVersionId||state==='generating'} onClick={()=>void withWorkspaceMutation(generateGovernedPackage)} className="btn-primary min-h-10 px-3 text-xs font-bold disabled:opacity-50">{controlledHumanSyntheticGeneration?'Generate synthetic controlled-human draft':'Generate governed package draft'}</button>
-            <button type="button" disabled={blocked||!handoffId||!can('studio.artifact.generation.request') || state === 'generating' || Boolean(artifact && !['draft', 'changes_requested', 'review_rejected', 'approval_rejected', 'approved'].includes(artifact.lifecycle))} onClick={() => void run('studio.artifact.generation.request', { studioHandoffId: handoffId, artifactType })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">{legacyProjection ? 'Generate draft' : 'Generate legacy accepted-handoff draft'}</button>
+            {(!artifact||legacyProjection)&&<button type="button" disabled={blocked||!handoffId||!can('studio.artifact.generation.request') || state === 'generating' || Boolean(artifact && !['draft', 'changes_requested', 'review_rejected', 'approval_rejected', 'approved'].includes(artifact.lifecycle))} onClick={() => void run('studio.artifact.generation.request', { studioHandoffId: handoffId, artifactType })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Generate draft</button>}
             <button type="button" disabled={!can('studio.artifact.review.submit') || !exact('draft')} onClick={() => void run('studio.artifact.review.submit', { artifactId: artifact!.id, artifactVersionId: artifact!.currentVersion.id })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Submit for review</button>
             <button type="button" disabled={!can('studio.artifact.review.assign') || !exact('reviewer_ready') || !reviewerId} onClick={() => void run('studio.artifact.review.assign', { artifactId: artifact!.id, artifactVersionId: artifact!.currentVersion.id, reviewerId })} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Assign reviewer</button>
             <button type="button" disabled={!can('studio.artifact.review.resolve') || !exact('in_review') || !rationale} onClick={() => void run('studio.artifact.review.resolve', {artifactId: artifact!.id,artifactVersionId: artifact!.currentVersion.id,outcome:'approve',rationale,conditions})} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Approve review</button>
             <button type="button" disabled={!can('studio.artifact.review.resolve') || !exact('in_review') || !rationale} onClick={() => void run('studio.artifact.review.resolve', {artifactId: artifact!.id,artifactVersionId: artifact!.currentVersion.id,outcome:'changes_requested',rationale,conditions})} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Request changes</button>
             <button type="button" disabled={!can('studio.artifact.review.resolve') || !exact('in_review') || !rationale} onClick={() => void run('studio.artifact.review.resolve', {artifactId: artifact!.id,artifactVersionId: artifact!.currentVersion.id,outcome:'reject',rationale,conditions})} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Reject review</button>
-            <button type="button" disabled={!can('studio.artifact.approval.resolve') || !exact('approval_ready') || !rationale} onClick={() => void run('studio.artifact.approval.resolve', {artifactId: artifact!.id,artifactVersionId: artifact!.currentVersion.id,outcome:'approve',rationale,conditions})} className="btn-primary min-h-10 px-3 text-xs font-bold disabled:opacity-50">Final approve</button>
+            <button type="button" disabled={!can('studio.artifact.approval.resolve') || !exact('approval_ready') || !rationale} onClick={() => void run('studio.artifact.approval.resolve', {artifactId: artifact!.id,artifactVersionId: artifact!.currentVersion.id,outcome:'approve',rationale,conditions})} className="btn-primary min-h-10 px-3 text-xs font-bold disabled:opacity-50">{artifact?.planningLabel === 'reviewed_planning' ? 'Approve content for planning' : 'Final approve'}</button>
             <button type="button" disabled={!can('studio.artifact.approval.resolve') || !exact('approval_ready') || !rationale} onClick={() => void run('studio.artifact.approval.resolve', {artifactId: artifact!.id,artifactVersionId: artifact!.currentVersion.id,outcome:'reject',rationale,conditions})} className="btn-ghost min-h-10 px-3 text-xs font-bold disabled:opacity-50">Final reject</button>
           </div>
         </div>
@@ -748,6 +823,7 @@ export default function StudioArtifactWorkspace({ context, capabilities = contex
           scope={{ actorId: context.userId, organizationId: context.organizationId, workspaceId: context.workspaceId, authorizationVersion: context.authorizationVersion }}
           projectId={publicationProjectId}
           artifact={{ artifactId: artifact.id, artifactVersionId: artifact.currentVersion.id, aggregateVersion: artifact.aggregateVersion, title: artifact.artifactType.toUpperCase(), lifecycle: 'approved' }}
+          approvedContent={artifact.currentApprovedVersion.content}
           disabled={blocked || !['studio.artifacts.publish', 'project.manage', 'org.admin', 'security.manage', 'roles.manage'].some(value => capabilities.includes(value))}
           onPublished={onPublished}
         />}

@@ -44,6 +44,35 @@ const task: LegacyDeliveryTaskProjection = {
   createdAt: '2026-10-10T00:00:00Z',
   updatedAt: '2026-10-10T00:00:00Z',
 };
+const nativeLineage = {
+  schemaVersion: 'legacy-delivery-lineage.v1' as const,
+  importId: ids.request,
+  documentGenerationId: ids.source,
+  documentSourceDigest: digest,
+  sourceItemIndex: 0,
+  sourceProcessId: ids.source,
+  sourceAssessmentId: null,
+  sourceAssessmentCaseId: ids.project,
+  sourceAssessmentDecisionId: ids.task,
+  sourceEpicIndex: null,
+  sourceEpicTitle: null,
+  proposalOriginId: digest,
+  proposalRole: 'implementation' as const,
+  studioArtifactId: ids.project,
+  studioArtifactVersionId: ids.request,
+  studioArtifactVersion: 1,
+  requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Preserve exact lineage.' }],
+};
+const projectedLegacyLineage = {
+  ...nativeLineage,
+  sourceAssessmentId: ids.source,
+  sourceAssessmentCaseId: null,
+  sourceAssessmentDecisionId: null,
+};
+const dualLineage = {
+  ...nativeLineage,
+  sourceAssessmentId: ids.source,
+};
 const command: LegacyDeliveryCommandEnvelope<'task.create'> = {
   schemaVersion: 'legacy-delivery-command.v1',
   action: 'task.create',
@@ -96,6 +125,33 @@ const created = decodeLegacyDeliveryCommandSuccess({
   resource: task,
 }, command);
 assert.equal((created.resource as LegacyDeliveryTaskProjection).id, ids.task);
+assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: nativeLineage },
+}, command).resource as LegacyDeliveryTaskProjection).sourceLineage, nativeLineage);
+assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: projectedLegacyLineage },
+}, command).resource as LegacyDeliveryTaskProjection).sourceLineage, projectedLegacyLineage,
+'the current projection keeps nullable V2 fields on exact V1 lineage');
+assert.deepEqual((decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create', resource: { ...task, sourceLineage: dualLineage },
+}, command).resource as LegacyDeliveryTaskProjection).sourceLineage, dualLineage,
+'a governed artifact can retain its V1 assessment while exposing its complete V2 case and decision lineage');
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentCaseId: undefined, sourceAssessmentDecisionId: undefined } },
+}, command), LegacyDeliveryContractError);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...projectedLegacyLineage, sourceAssessmentDecisionId: ids.task } },
+}, command), LegacyDeliveryContractError);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...nativeLineage, sourceAssessmentDecisionId: null } },
+}, command), LegacyDeliveryContractError);
+assert.throws(() => decodeLegacyDeliveryCommandSuccess({
+  ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
+  resource: { ...task, sourceLineage: { ...dualLineage, sourceAssessmentDecisionId: null } },
+}, command), LegacyDeliveryContractError);
 const databaseTimestamp = '2026-10-10T04:22:33.123456+00:00';
 assert.equal((decodeLegacyDeliveryCommandSuccess({
   ok: true, schemaVersion: 'legacy-delivery-command.v1', action: 'task.create',
@@ -117,6 +173,7 @@ const queryResult = decodeLegacyDeliveryQueryResult({
   source: {
     id: ids.source,
     digest,
+    materializesEpics: false,
     items: [{ sourceIndex: 0, type: 'Epic', title: 'Order intake', description: '', acceptanceCriteria: ['Evidence recorded'] }],
   },
 }, query);

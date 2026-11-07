@@ -1,4 +1,7 @@
-import { runBudgetedProviderEffect, type ProviderBudgetReservation, type ProviderBudgetReservationInput } from './providerBudget.ts';
+import {
+  runBudgetedProviderEffect, settleProviderBudget,
+  type ProviderBudgetReservation, type ProviderBudgetReservationInput,
+} from './providerBudget.ts';
 import {
   callStudioArtifactProvider,
   estimateStudioProviderInputTokens,
@@ -108,11 +111,44 @@ export interface StudioGenerationDependencies {
     attemptId: string; executionToken: string; executionFence: number;
     providerOperationId?: string; response: JsonObject;
   }): Promise<void>;
+  captureCandidate?(input: {
+    attemptId: string; executionToken: string; executionFence: number;
+    reservationId: string;
+    providerOperationId?: string; response: JsonObject;
+    usage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  }): Promise<void>;
+  loadCandidate?(input: StudioGenerationExecutionIdentity): Promise<StudioGenerationProviderCandidate | null>;
+  rejectCandidate?(input: StudioGenerationExecutionIdentity & {
+    failureCode: Extract<StudioGenerationFailureCode,
+      'PROVIDER_OUTPUT_INVALID' | 'PROVIDER_OUTPUT_OVERSIZED' | 'SOURCE_COVERAGE_INCOMPLETE'>;
+  }): Promise<void>;
+  settleCandidate?(input: ProviderBudgetReservationInput & {
+    reservationId: string;
+    usage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  }): Promise<void>;
   finalize(input: StudioGenerationFinalizationInput): Promise<{ state: 'completed' | 'stale' | 'in_progress'; resource?: unknown }>;
   fail(attemptId: string, failureCode: StudioGenerationFailureCode): Promise<void>;
   consumeSynthetic?(claim: StudioExecutableGenerationClaim): Promise<AuthenticatedSyntheticConsumedStudioPermit>;
   runBudgeted?: typeof runBudgetedProviderEffect;
   signal?: AbortSignal;
+}
+
+export type StudioGenerationProviderCandidate = Readonly<{
+  state: 'captured' | 'validated' | 'rejected';
+  response: JsonObject;
+  providerOperationId?: string;
+  responseHash: string;
+  reservationId: string;
+  usage: { inputTokens: number; outputTokens: number; totalTokens: number };
+}>;
+
+type StudioCandidateRejectionCode = Extract<StudioGenerationFailureCode,
+  'PROVIDER_OUTPUT_INVALID' | 'PROVIDER_OUTPUT_OVERSIZED' | 'SOURCE_COVERAGE_INCOMPLETE'>;
+
+class StudioPersistencePhaseError extends Error {
+  constructor(readonly phase: 'candidate_capture' | 'validated_stage') {
+    super(phase); this.name = 'StudioPersistencePhaseError';
+  }
 }
 
 type JsonDraft = JsonObject & {
@@ -143,6 +179,78 @@ const validTree = (value: unknown, depth = 0): boolean => depth <= 10 && (
 const FLOW_SECTION_IDS = new Set(['asIsFlow', 'toBeFlow']);
 const validGovernedFlow = (body: string) => {
   try { return inspectMermaidFlowcharts(body, true).length === 1; } catch { return false; }
+};
+
+const optionalAlternativeQualifier = /\b(?:optional|alternative|candidate|not\s+(?:selected|required|part\s+of)|excluded)\b/iu;
+
+/**
+ * Keeps a source-stated optional component from becoming selected architecture
+ * merely because one provider section was refreshed. The comparison uses the
+ * accepted Assess decision in the exact source package. Missing decision
+ * structure stays an explicit unknown and is not interpreted here.
+ */
+export const preservesOptionalStudioAlternatives = (
+  draft: JsonObject,
+  sourcePackage: JsonObject,
+  artifactType: string,
+) => {
+  if (artifactType !== 'sdd') return true;
+  const assessPackage = object(sourcePackage.assessPackage) ? sourcePackage.assessPackage : sourcePackage;
+  if (!object(assessPackage.decision)) return true;
+  const decision = assessPackage.decision;
+  if (!Array.isArray(decision.composedOperatingModel) || !Array.isArray(decision.candidateEvaluations)) return true;
+  const selected = new Set(decision.composedOperatingModel.flatMap(raw => {
+    if (!object(raw) || !Array.isArray(raw.components)) return [];
+    return raw.components.filter((component): component is string => typeof component === 'string');
+  }));
+  const optional = new Set(decision.candidateEvaluations.flatMap(raw => {
+    if (!object(raw)
+      || typeof raw.component !== 'string'
+      || !['Strong Fit', 'Conditional Fit'].includes(String(raw.fit))
+      || selected.has(raw.component)) return [];
+    return [raw.component];
+  }));
+  if (optional.size === 0 || !Array.isArray(draft.sections)) return true;
+  const designBodies = draft.sections.flatMap(raw => object(raw)
+    && ['architecture', 'components'].includes(String(raw.id)) && typeof raw.body === 'string' ? [raw.body] : []);
+  for (const component of optional) {
+    const componentPattern = new RegExp(component.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'iu');
+    const statements = designBodies.flatMap(body => body.split(/(?:[.!?]\s+|\r?\n)+/u))
+      .filter(statement => componentPattern.test(statement));
+    if (statements.some(statement => !optionalAlternativeQualifier.test(statement))) return false;
+  }
+  return true;
+};
+
+const candidateRejectionCode = (
+  value: unknown,
+  selectedSourceVersionIds: readonly string[],
+  allowedSourceAnchors: readonly StudioCanonicalSourceAnchorDto[],
+): StudioCandidateRejectionCode => {
+  let serialized = '';
+  try { serialized = JSON.stringify(value); } catch { return 'PROVIDER_OUTPUT_INVALID'; }
+  if (serialized.length > 500_000) return 'PROVIDER_OUTPUT_OVERSIZED';
+  if (!object(value) || !Array.isArray(value.sections)) return 'PROVIDER_OUTPUT_INVALID';
+  const sections = value.sections as unknown[];
+  if (sections.some(section => object(section) && FLOW_SECTION_IDS.has(String(section.id))
+    && (typeof section.body !== 'string' || !validGovernedFlow(section.body)))) return 'PROVIDER_OUTPUT_INVALID';
+  const selected = new Set(selectedSourceVersionIds);
+  const allowed = new Set(allowedSourceAnchors.map(anchor => `${anchor.sourceVersionId}\u0000${anchor.locator}\u0000${anchor.anchorHash}`));
+  const coverage = object(value.coverage) ? value.coverage : null;
+  if (!coverage || JSON.stringify(coverage.selectedSourceVersionIds) !== JSON.stringify(selectedSourceVersionIds)
+    || JSON.stringify(coverage.coveredSourceVersionIds) !== JSON.stringify(selectedSourceVersionIds)
+    || coverage.complete !== true) return 'SOURCE_COVERAGE_INCOMPLETE';
+  for (const section of sections) {
+    if (!object(section) || !Array.isArray(section.sourceAnchors)) continue;
+    for (const anchor of section.sourceAnchors) {
+      if (!object(anchor) || typeof anchor.sourceVersionId !== 'string' || !selected.has(anchor.sourceVersionId)
+        || typeof anchor.locator !== 'string' || typeof anchor.anchorHash !== 'string'
+        || !allowed.has(`${anchor.sourceVersionId}\u0000${anchor.locator}\u0000${anchor.anchorHash}`)) {
+        return 'SOURCE_COVERAGE_INCOMPLETE';
+      }
+    }
+  }
+  return 'PROVIDER_OUTPUT_INVALID';
 };
 
 const legacyDraft = (value: JsonDraft): JsonObject => {
@@ -341,15 +449,78 @@ export const executeClaimedStudioGeneration = async (
     }
   }
   let stagedContent: JsonObject | undefined;
+  let rejectedCandidate: StudioCandidateRejectionCode | null = null;
   let postEffectPhase = false;
   const runBudgeted = deps.runBudgeted ?? ((input, effect, options) => runBudgetedProviderEffect(
     input, effect, { ...options, invoke: studioBudgetRpc },
   ));
+  const settleCandidate = deps.settleCandidate ?? (async input => {
+    await settleProviderBudget(input, studioBudgetRpc);
+  });
   try {
     if (!claim.providerAllowed || claim.reconcileOnly) {
-      // Reconcile-only claims may already own a staged provider response. Any
-      // finalize ambiguity must preserve that effect for the next fence owner.
+      // A captured provider candidate is private recovery material, never an
+      // artifact. Revalidate it against the freshly loaded exact source and
+      // template before staging, settling usage and finalizing. No transport is
+      // available in this branch.
       postEffectPhase = true;
+      const candidate = claim.reconcileOnly && deps.loadCandidate
+        ? await deps.loadCandidate({
+          attemptId: claim.attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence,
+        })
+        : null;
+      if (candidate && !claim.providerPlan) throw new StudioPersistencePhaseError('candidate_capture');
+      if (candidate?.state === 'rejected') {
+        return { state: 'uncertain', failureCode: 'GENERATION_UNCERTAIN' };
+      }
+      if (candidate?.state === 'captured') {
+        let content: JsonObject;
+        try {
+          content = validateStudioDraft(
+            candidate.response, claim.selectedSourceVersionIds, claim.sourceAnchors, claim.templatePayload,
+          );
+          if (!preservesOptionalStudioAlternatives(
+            content, claim.sourcePackage, claim.providerPlan?.artifactType ?? '',
+          )) throw new Error('invalid');
+          if (claim.providerPlan?.promptVersion === 'studio-pr-b-3') {
+            const facts = deriveStudioBrdSourceFacts(
+              claim.sourcePackage, claim.sourceAnchors, claim.selectedSourceVersionIds,
+            );
+            content = composeStudioBrdSourceFacts(content, facts, claim.templatePayload);
+            content = validateStudioDraft(
+              content, claim.selectedSourceVersionIds, claim.sourceAnchors, claim.templatePayload,
+            );
+          }
+        } catch {
+          const failureCode = candidateRejectionCode(
+            candidate.response, claim.selectedSourceVersionIds, claim.sourceAnchors,
+          );
+          await settleCandidate({ ...budgetInput(claim as StudioExecutableGenerationClaim & { providerPlan: StudioProviderPlan }),
+            reservationId: candidate.reservationId, usage: candidate.usage });
+          if (!deps.rejectCandidate) throw new StudioPersistencePhaseError('candidate_capture');
+          await deps.rejectCandidate({
+            attemptId: claim.attemptId, executionToken: claim.executionToken,
+            executionFence: claim.executionFence, failureCode,
+          });
+          return { state: 'failed', failureCode };
+        }
+        try {
+          await deps.stage({
+            attemptId: claim.attemptId, executionToken: claim.executionToken,
+            executionFence: claim.executionFence, providerOperationId: candidate.providerOperationId,
+            response: content,
+          });
+        } catch { throw new StudioPersistencePhaseError('validated_stage'); }
+        await settleCandidate({ ...budgetInput(claim as StudioExecutableGenerationClaim & { providerPlan: StudioProviderPlan }),
+          reservationId: candidate.reservationId, usage: candidate.usage });
+      }
+      if (candidate?.state === 'validated') {
+        await settleCandidate({ ...budgetInput(claim as StudioExecutableGenerationClaim & { providerPlan: StudioProviderPlan }),
+          reservationId: candidate.reservationId, usage: candidate.usage });
+      }
+      // Legacy attempts and already validated candidates already own a staged
+      // response. Any finalize ambiguity preserves that effect for the next
+      // fence owner.
       const reconciled = await deps.finalize({
         claimKind: 'active',
         attemptId: claim.attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence,
@@ -459,10 +630,26 @@ export const executeClaimedStudioGeneration = async (
       classifyFailure: error => error instanceof StudioProviderGatewayError
         ? { effectMayHaveOccurred: error.effectMayHaveOccurred, failureClass: error.code.toLowerCase() }
         : { effectMayHaveOccurred: true, failureClass: 'studio_provider_unknown' },
-      beforeSettle: async (providerResult: StudioProviderGatewayResult, _reservation: ProviderBudgetReservation) => {
+      classifyBeforeSettleFailure: error => error instanceof StudioPersistencePhaseError
+        ? `studio_${error.phase}_failed`
+        : 'studio_pre_settlement_failed',
+      beforeSettle: async (providerResult: StudioProviderGatewayResult, reservation: ProviderBudgetReservation) => {
         // The provider returned. From here onward a terminal failure write could
         // erase a staged/effected attempt and permit a duplicate provider call.
         postEffectPhase = true;
+        if (!deps.captureCandidate) throw new StudioPersistencePhaseError('candidate_capture');
+        const captureInput = {
+          attemptId: claim.attemptId, executionToken: claim.executionToken,
+          executionFence: claim.executionFence, reservationId: reservation.reservationId,
+          providerOperationId: providerResult.providerOperationId,
+          response: providerResult.content, usage: providerResult.usage,
+        };
+        let captured = false;
+        for (let attempt = 0; attempt < 2 && !captured; attempt += 1) {
+          try { await deps.captureCandidate(captureInput); captured = true; }
+          catch { /* One exact idempotent retry can recover a lost capture acknowledgment. */ }
+        }
+        if (!captured) throw new StudioPersistencePhaseError('candidate_capture');
         let content: JsonObject;
         try {
           content = validateStudioDraft(
@@ -471,6 +658,9 @@ export const executeClaimedStudioGeneration = async (
             claim.sourceAnchors,
             claim.templatePayload,
           );
+          if (!preservesOptionalStudioAlternatives(
+            content, claim.sourcePackage, claim.providerPlan.artifactType,
+          )) throw new Error('invalid');
           if (sourceFacts !== null) {
             content = composeStudioBrdSourceFacts(content, sourceFacts, claim.templatePayload);
             content = validateStudioDraft(
@@ -482,17 +672,29 @@ export const executeClaimedStudioGeneration = async (
           }
         }
         catch {
-          if (JSON.stringify(providerResult.content).length > 500_000) throw new StudioProviderGatewayError('PROVIDER_OUTPUT_INVALID', true);
-          throw new StudioProviderGatewayError('SOURCE_COVERAGE_INCOMPLETE', true);
+          rejectedCandidate = candidateRejectionCode(
+            providerResult.content, claim.selectedSourceVersionIds, claim.sourceAnchors,
+          );
+          return;
         }
         stagedContent = content;
-        await deps.stage({
-          attemptId: claim.attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence,
-          providerOperationId: providerResult.providerOperationId, response: content,
-        });
+        try {
+          await deps.stage({
+            attemptId: claim.attemptId, executionToken: claim.executionToken, executionFence: claim.executionFence,
+            providerOperationId: providerResult.providerOperationId, response: content,
+          });
+        } catch { throw new StudioPersistencePhaseError('validated_stage'); }
       },
     });
     postEffectPhase = true;
+    if (rejectedCandidate) {
+      if (!deps.rejectCandidate) throw new StudioPersistencePhaseError('candidate_capture');
+      await deps.rejectCandidate({
+        attemptId: claim.attemptId, executionToken: claim.executionToken,
+        executionFence: claim.executionFence, failureCode: rejectedCandidate,
+      });
+      return { state: 'failed', failureCode: rejectedCandidate };
+    }
     // A reservation replay means the provider effect is already staged or
     // uncertain. Finalize/reconcile from durable server state only.
     if (execution.kind === 'executed' && !stagedContent) throw new Error('stage missing');

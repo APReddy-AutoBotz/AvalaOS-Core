@@ -55,6 +55,8 @@ assert.throws(
   /Story or Task/,
   'an epic-only selection cannot create an empty authoritative import',
 );
+assert.deepEqual(resolveLegacyDeliveryImportSelection(source, [source[0]], serverSource, true), [0],
+  'requirement-bound publication can materialize an explicitly selected Epic');
 
 const projection: LegacyDeliveryTaskProjection = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -80,6 +82,12 @@ const projection: LegacyDeliveryTaskProjection = {
     sourceAssessmentId: '88888888-8888-4888-8888-888888888888',
     sourceEpicIndex: 0,
     sourceEpicTitle: 'Govern intake',
+    proposalOriginId: `sha256:${'b'.repeat(64)}`,
+    proposalRole: 'implementation',
+    studioArtifactId: '99999999-9999-4999-8999-999999999991',
+    studioArtifactVersionId: '99999999-9999-4999-8999-999999999992',
+    studioArtifactVersion: 4,
+    requirementLinks: [{ sectionId: 'requirements', sectionTitle: 'Requirements', requirementText: 'FR-1: Reviewer must record a decision.' }],
   },
   sourceEpicIndex: 0,
   sourceEpicTitle: 'Govern intake',

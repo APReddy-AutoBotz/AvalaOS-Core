@@ -16,6 +16,7 @@ import { EnterpriseBoundaryError } from './enterpriseAssess';
 import { isEnterpriseObject, readEnterpriseErrorCode } from './enterpriseAssessContract';
 import { buildAssessV2CommandEnvelope } from './assessV2ClientContract';
 import { ASSESS_V2_CAPABILITIES } from './assessV2/capabilities';
+import { selectCurrentAssessmentCases, type CurrentAssessmentCaseSummary, type CurrentAssessmentStatus } from './assessV2/currentAssessmentCatalog';
 
 export type AssessV2CommandType =
   | 'assessment_v2.create'
@@ -79,7 +80,10 @@ export interface AssessV2Transport {
   invoke(body: Record<string, unknown>): Promise<unknown>;
   readCase(caseId: string): Promise<unknown>;
   findCaseForProcess(input: { organizationId: string; workspaceId: string; processId: string }): Promise<unknown>;
+  listCurrentCases(input: { organizationId: string; workspaceId: string; processIds: string[] }): Promise<unknown>;
 }
+
+export type AssessV2CurrentCaseSummary = CurrentAssessmentCaseSummary;
 
 const parseResource = (value: unknown): AssessV2CommandResource => {
   if (!isEnterpriseObject(value) || typeof value.id !== 'string' ||
@@ -259,6 +263,43 @@ export const createAssessV2DefaultTransport = (client = supabase): AssessV2Trans
       },
     };
   },
+  async listCurrentCases({ organizationId, workspaceId, processIds }) {
+    const { data, error } = await client
+      .from('assess_v2_cases')
+      .select('id,process_id,status,version,updated_at,head_version_id')
+      .eq('org_id', organizationId)
+      .eq('workspace_id', workspaceId)
+      .in('process_id', processIds)
+      .is('deleted_at', null)
+      .neq('status', 'superseded')
+      .order('updated_at', { ascending: false })
+      .order('id', { ascending: true })
+      .limit(501);
+    if (error || !Array.isArray(data) || data.length >= 501) {
+      throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    }
+    const selectedRows: typeof data = [];
+    const selectedProcesses = new Set<string>();
+    for (const row of data) {
+      if (typeof row.process_id !== 'string' || selectedProcesses.has(row.process_id)) continue;
+      selectedProcesses.add(row.process_id);
+      selectedRows.push(row);
+    }
+    const sourceVersionIds = selectedRows.map(row => row.head_version_id).filter((id): id is string => typeof id === 'string');
+    if (!sourceVersionIds.length) return selectedRows.map(row => ({ ...row, has_current_decision: false }));
+    const { data: decisions, error: decisionError } = await client
+      .from('assess_v2_decision_versions')
+      .select('case_id,source_version_id')
+      .eq('org_id', organizationId)
+      .eq('workspace_id', workspaceId)
+      .in('source_version_id', sourceVersionIds);
+    if (decisionError || !Array.isArray(decisions)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    const exactDecisionCases = new Set(decisions.map(decision => `${decision.case_id}:${decision.source_version_id}`));
+    return selectedRows.map(row => ({
+      ...row,
+      has_current_decision: exactDecisionCases.has(`${row.id}:${row.head_version_id}`),
+    }));
+  },
   async findCaseForProcess({ organizationId, workspaceId, processId }) {
     const { data, error } = await client
       .from('assess_v2_cases')
@@ -358,6 +399,53 @@ export const findAssessV2CaseForProcess = async (
     throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
   }
   return value.id;
+};
+
+const currentCaseStatuses = new Set<CurrentAssessmentStatus>([
+  'draft', 'reviewer_ready', 'in_review', 'approved', 'planning_approved',
+  'changes_requested', 'rejected', 'govern_resolved', 'handed_off',
+]);
+
+export const listCurrentAssessV2Cases = async (
+  context: TenantContextProjection,
+  processIds: readonly string[],
+  transport: AssessV2Transport = defaultTransport,
+): Promise<AssessV2CurrentCaseSummary[]> => {
+  if (!context.capabilities.includes(ASSESS_V2_CAPABILITIES.read)) {
+    throw new EnterpriseBoundaryError('PERMISSION_DENIED');
+  }
+  const uniqueProcessIds = [...new Set(processIds.filter(processId => processId.trim()))];
+  if (!uniqueProcessIds.length) return [];
+  const chunks = Array.from({ length: Math.ceil(uniqueProcessIds.length / 100) }, (_, index) =>
+    uniqueProcessIds.slice(index * 100, (index + 1) * 100));
+  const value: unknown[] = [];
+  for (const processIdChunk of chunks) {
+    const result = await transport.listCurrentCases({
+      organizationId: context.organizationId,
+      workspaceId: context.workspaceId,
+      processIds: processIdChunk,
+    });
+    if (!Array.isArray(result)) throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    value.push(...result);
+  }
+  const validated: AssessV2CurrentCaseSummary[] = [];
+  for (const row of value) {
+    if (!isEnterpriseObject(row) || typeof row.id !== 'string' || typeof row.process_id !== 'string' ||
+        typeof row.status !== 'string' || !currentCaseStatuses.has(row.status as CurrentAssessmentStatus) ||
+        !Number.isSafeInteger(row.version) || typeof row.updated_at !== 'string' || typeof row.has_current_decision !== 'boolean' ||
+        !uniqueProcessIds.includes(row.process_id)) {
+      throw new EnterpriseBoundaryError('COMMAND_UNAVAILABLE');
+    }
+    validated.push({
+      id: row.id,
+      processId: row.process_id,
+      status: row.status as CurrentAssessmentStatus,
+      version: row.version as number,
+      updatedAt: row.updated_at,
+      hasCurrentDecision: row.has_current_decision,
+    });
+  }
+  return selectCurrentAssessmentCases(validated);
 };
 export const readAssessV2Case = async (
   caseId: string,
