@@ -1567,6 +1567,7 @@ function App() {
             docTemplates={docTemplates} documentGenerations={documentGenerations.filter(g => g.projectId === projectsForScope[0].id)}
             handoffEntries={handoffEntries}
             deliveryBoardAuthority={dataAccess === 'server' && tenantContext ? {
+              refreshKey: selectedTask?.id ?? 'board',
               scope: {
                 actorId: tenantContext.userId,
                 organizationId: tenantContext.organizationId,

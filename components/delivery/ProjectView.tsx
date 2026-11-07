@@ -23,6 +23,7 @@ import type { DeliveryDiscoveryDispositionByTask } from '../../services/delivery
 type DeliveryBoardAuthority = {
     scope: StudioDeliveryScope;
     mutationPolicy: DeliveryBoardMutationPolicy;
+    refreshKey: string;
     loadOutcomes?: (scope: StudioDeliveryScope, projectId: string) => Promise<StudioDeliveryOutcomeQueryResult>;
 };
 
@@ -72,7 +73,7 @@ const ProjectView: React.FC<ProjectViewProps> = (props) => {
 
     const activeTasks = filterActiveDeliveryTasks(tasks);
     const boardAuthorityKey = deliveryBoardAuthority
-        ? `${deliveryBoardAuthority.scope.actorId}:${deliveryBoardAuthority.scope.organizationId}:${deliveryBoardAuthority.scope.workspaceId}:${deliveryBoardAuthority.scope.authorizationVersion}:${project.id}`
+        ? `${deliveryBoardAuthority.scope.actorId}:${deliveryBoardAuthority.scope.organizationId}:${deliveryBoardAuthority.scope.workspaceId}:${deliveryBoardAuthority.scope.authorizationVersion}:${project.id}:${deliveryBoardAuthority.refreshKey}`
         : null;
     const [discoveryState, setDiscoveryState] = useState<{
         key: string;
